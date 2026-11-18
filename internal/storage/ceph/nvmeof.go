@@ -125,7 +125,7 @@ func projectNVMeOFPools(catalog api.Catalog, cluster api.Object, requests []Requ
 func nvmeofUnitObservation(unit ServiceUnit) (int, error) {
 	documents := unitDocuments(Request{Service: &unit})
 	if len(documents) != 1 {
-		return 0, failure("lifecycle.state", "the NVMe-oF service has no frozen placement", "")
+		return 0, cephRequestInvalid.Fail("the NVMe-oF service has no frozen placement", "")
 	}
 	return 640 + 60*len(documents[0].Placement.Hosts) + 60, nil
 }
@@ -291,11 +291,11 @@ func nvmeofBudgets(n *NVMeOFSubsystem) NVMeOFBudgets {
 func nvmeofDeadline(r Request, operation string) (time.Duration, error) {
 	budgets := r.NVMeOF.Budgets
 	if budgets != nvmeofBudgets(r.NVMeOF) {
-		return 0, failure("lifecycle.state", "CephNVMeoFSubsystem "+r.NVMeOF.Name+" froze budgets this build does not derive", "destroy it with the build that applied it, then apply with this build")
+		return 0, cephOtherBuild.Fail("CephNVMeoFSubsystem "+r.NVMeOF.Name+" froze budgets this build does not derive", "destroy it with the build that applied it, then apply with this build")
 	}
 	apply := time.Duration(budgets.Apply) * time.Second
 	if apply > lifecycle.MaxDeadline {
-		return 0, failure("lifecycle.unsupported", fmt.Sprintf("CephNVMeoFSubsystem %s needs a bounded apply deadline of %s, past the 6h0m0s adapter limit", r.NVMeOF.Name, apply), "declare fewer namespaces or initiator hosts in this subsystem")
+		return 0, cephBudgetExceeded.Fail(fmt.Sprintf("CephNVMeoFSubsystem %s needs a bounded apply deadline of %s, past the 6h0m0s adapter limit", r.NVMeOF.Name, apply), "declare fewer namespaces or initiator hosts in this subsystem")
 	}
 	if operation == "apply" {
 		return apply, nil

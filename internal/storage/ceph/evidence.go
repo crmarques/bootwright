@@ -120,7 +120,7 @@ type Evidence struct {
 }
 
 func evidenceFailure() error {
-	return failure("lifecycle.unknown", "Ceph evidence does not prove the frozen ownership and resource scope", "")
+	return cephEvidenceUnproved.Fail("Ceph evidence does not prove the frozen ownership and resource scope", "")
 }
 
 func decodeEvidence(data []byte) (Evidence, error) {

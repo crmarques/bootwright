@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -426,8 +427,8 @@ func validMemberships(memberships []FirewallMembership) bool {
 
 func firewallRefusals(contextName string, request FirewallRequest, removal bool) map[string]error {
 	machine := "Machine/" + request.Identity.Object
-	refused := func(message, remediation string) error {
-		return installation.MachineRefusal(installation.Request{Identity: installation.Identity{Object: request.Identity.Object}})(message, remediation)
+	refused := func(stop diagnostics.Stop, message, remediation string) error {
+		return installation.MachineRefusal(installation.Request{Identity: installation.Identity{Object: request.Identity.Object}}, stop)(message, remediation)
 	}
 	service := func(render func(service FirewallService) error) error {
 		return installation.DetailRefusal{Render: func(detail string) error {
@@ -445,20 +446,20 @@ func firewallRefusals(contextName string, request FirewallRequest, removal bool)
 	again := "then run bootwright " + verb + " --context " + contextName + " again"
 	return map[string]error{
 		"host-firewall-foreign": service(func(s FirewallService) error {
-			return refused(machine+" holds a firewalld service "+s.Name+" this context did not write, so its firewall was left unchanged",
+			return refused(firewallForeignService, machine+" holds a firewalld service "+s.Name+" this context did not write, so its firewall was left unchanged",
 				"remove /etc/firewalld/services/"+s.Name+".xml and its zone memberships from "+machine+" after confirming nothing else uses it, "+again)
 		}),
 		"host-firewall-no-interface": service(func(s FirewallService) error {
-			return refused(machine+" has no interface whose network holds "+strings.Join(s.Networks, " or is ")+", which firewalld service "+s.Name+" admits traffic on",
+			return refused(firewallNoInterface, machine+" has no interface whose network holds "+strings.Join(s.Networks, " or is ")+", which firewalld service "+s.Name+" admits traffic on",
 				"give "+machine+" the declared listener address or required network in its network configuration, "+again)
 		}),
-		"host-firewall-inactive": refused("firewalld is not running on "+machine+", whose install profile enables it",
+		"host-firewall-inactive": refused(firewallInactive, "firewalld is not running on "+machine+", whose install profile enables it",
 			"start firewalld on "+machine+" with systemctl enable --now firewalld, "+again),
 		"host-firewall-failed": installation.DetailRefusal{Render: func(detail string) error {
 			cause := installation.DetailOr(detail, func(value string) bool {
 				return slices.Contains([]string{"tooling", "reload", "zone", "write", "address", "runtime-drift", "enable", "ssh-admission"}, value)
 			})
-			return refused("firewalld refused a change on "+machine+": "+cause, "read the firewalld journal on "+machine+", correct it, "+again)
+			return refused(firewallChangeRefused, "firewalld refused a change on "+machine+": "+cause, "read the firewalld journal on "+machine+", correct it, "+again)
 		}},
 	}
 }

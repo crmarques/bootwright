@@ -728,7 +728,7 @@ func TestAPhysicalBindingHoldsEachSelectionToItsOwnShape(t *testing.T) {
 
 func TestARootSerialRefusalNamesTheMachineAndItsSerialOnlyOnAPhysicalHostThatDeclaresOne(t *testing.T) {
 	host := Host{Name: "ceph-2", Machine: "node-2", Physical: true, RootSerial: "ROOT-2"}
-	refusedWith(t, rootDeviceRefusals(host)["device-root"], "lifecycle.unsupported", "Ceph host ceph-2 of Machine node-2 selects a data, DB or WAL disk that reports the serial number ROOT-2, which Machine node-2 declares for its root disk",
+	refusedStop(t, rootDeviceRefusals(host)["device-root"], cephDeviceRefused, "Ceph host ceph-2 of Machine node-2 selects a data, DB or WAL disk that reports the serial number ROOT-2, which Machine node-2 declares for its root disk",
 		"select another disk for the OSD services on Machine node-2; the root disk, whatever path names it, is never an OSD, DB or WAL device")
 	host.RootSerial = ""
 	if len(rootDeviceRefusals(host)) != 0 {
@@ -744,13 +744,13 @@ func TestSerialDeviceRefusalsNameTheMachineAndEverySerialItsHostSelects(t *testi
 	host := Host{Name: "ceph-2", Machine: "node-2", Physical: true, Devices: []Device{{Path: "/dev/disk/by-id/wwn-0x5000000000000001", WWN: "0x5000000000000001"},
 		{Path: "/dev/disk/by-serial/SER-2", Serial: "SER-2", SizeBytes: 1 << 40}, {Path: "/dev/disk/by-serial/SER-3", Serial: "SER-3", SizeBytes: 1 << 40}}}
 	refusals := serialDeviceRefusals(host)
-	refusedWith(t, refusals["device-serial-absent"], "lifecycle.unsupported", "Ceph host ceph-2 of Machine node-2 presents no whole disk whose serial number is one its OSD services select by serial (SER-2, SER-3)",
+	refusedStop(t, refusals["device-serial-absent"], cephDeviceRefused, "Ceph host ceph-2 of Machine node-2 presents no whole disk whose serial number is one its OSD services select by serial (SER-2, SER-3)",
 		"compare each selected serial number with the disk's sysfs serial attribute or VPD page 0x80 on Machine node-2, and its exact size with the sizeBytes of its hardware.dataDisks entry")
-	refusedWith(t, refusals["device-serial-ambiguous"], "lifecycle.unsupported", "Ceph host ceph-2 of Machine node-2 presents more than one whole disk with a serial number its OSD services select (SER-2, SER-3), such as two paths of one multipath disk, two namespaces of one NVMe controller or a cloned serial",
+	refusedStop(t, refusals["device-serial-ambiguous"], cephDeviceRefused, "Ceph host ceph-2 of Machine node-2 presents more than one whole disk with a serial number its OSD services select (SER-2, SER-3), such as two paths of one multipath disk, two namespaces of one NVMe controller or a cloned serial",
 		"select that disk by its /dev/disk/by-id/wwn-0x path, or detach the duplicate path; Bootwright never chooses between disks that share a serial number")
-	refusedWith(t, refusals["device-serial-mismatch"], "lifecycle.unsupported", "the disk with a serial number that Ceph host ceph-2 of Machine node-2 selects (SER-2, SER-3) is not a fixed, writable sd or nvme disk of the size its hardware.dataDisks entry declares",
+	refusedStop(t, refusals["device-serial-mismatch"], cephDeviceRefused, "the disk with a serial number that Ceph host ceph-2 of Machine node-2 selects (SER-2, SER-3) is not a fixed, writable sd or nvme disk of the size its hardware.dataDisks entry declares",
 		"correct that entry's sizeBytes on Machine node-2 to the disk's exact capacity, as blockdev --getsize64 reports it, or select another disk")
-	refusedWith(t, refusals["device-alias"], "lifecycle.unsupported", "the disk with a serial number that Ceph host ceph-2 of Machine node-2 selects (SER-2, SER-3) has no stable /dev/disk/by-id link to give cephadm",
+	refusedStop(t, refusals["device-alias"], cephDeviceRefused, "the disk with a serial number that Ceph host ceph-2 of Machine node-2 selects (SER-2, SER-3) has no stable /dev/disk/by-id link to give cephadm",
 		"select that disk by its /dev/disk/by-id/wwn-0x path if it has one")
 	host.Devices = host.Devices[:1]
 	if len(serialDeviceRefusals(host)) != 0 {

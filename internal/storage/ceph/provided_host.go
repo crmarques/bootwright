@@ -28,21 +28,21 @@ func (f *HostFIPS) proved() bool {
 func bindProvidedHost(r *Request, c api.Catalog, m api.Object, node api.Value, tiebreaker, bootstrap, addressRef string) error {
 	name := cephcluster.NativeHostname(node)
 	if tiebreaker == "" || node.Get("name").Text() != tiebreaker || node.Get("name").Text() == bootstrap {
-		return failure("lifecycle.unsupported", "Machine/"+m.Name()+" is provided, and a provided Machine joins a Ceph cluster only as its stretch tiebreaker, which runs a MON alone",
+		return cephUnsupportedTopology.Fail("Machine/"+m.Name()+" is provided, and a provided Machine joins a Ceph cluster only as its stretch tiebreaker, which runs a MON alone",
 			"select a Bootwright-installed Machine for Ceph host "+name+", or make it spec.topology.stretch.tiebreaker.node")
 	}
 	fleet, declared := machine.FleetKey(c)
 	if !declared {
-		return failure("lifecycle.unsupported", "the provided tiebreaker Machine/"+m.Name()+" is dialed with the fleet SSH key, and the Environment declares none",
+		return cephUnsupportedTopology.Fail("the provided tiebreaker Machine/"+m.Name()+" is dialed with the fleet SSH key, and the Environment declares none",
 			"set Environment spec.remoteMachinesAccessKey.keyRef to an sshKeyPair Secret and authorize its public half for user "+r.ClusterSSHUser+" on Machine/"+m.Name())
 	}
 	ssh, ok := machine.SSH(m)
 	if !ok || ssh.User != r.ClusterSSHUser || ssh.KnownHostsRef == "" || ssh.PrivateKeyRef == fleet || ssh.PrivateKeyRef == r.ClusterKeyRef {
-		return failure("lifecycle.unsupported", "the provided tiebreaker Machine/"+m.Name()+" needs SSH access as the cluster SSH user with a pinned host key, and Ceph dials it with the fleet key, which the Machine never names",
+		return cephUnsupportedTopology.Fail("the provided tiebreaker Machine/"+m.Name()+" needs SSH access as the cluster SSH user with a pinned host key, and Ceph dials it with the fleet key, which the Machine never names",
 			"declare access.ssh on Machine/"+m.Name()+" with user "+r.ClusterSSHUser+" and knownHostsRef pinning its host key, keep its auth for operator sessions only (operatorIdentity or a key of its own), and authorize the public half of Secret "+fleet+" (bootwright secret show --name "+fleet+" --part public-key) for user "+r.ClusterSSHUser+" on that host")
 	}
 	if len(r.Hosts) > 0 && fleet != r.Hosts[0].SSHKeyRef {
-		return failure("lifecycle.unsupported", "core Ceph currently requires one fleet SSH key for its guests", "declare a shared fleet identity distinct from the native cluster identity")
+		return cephUnsupportedTopology.Fail("core Ceph currently requires one fleet SSH key for its guests", "declare a shared fleet identity distinct from the native cluster identity")
 	}
 	if address, declared := infrastructureservices.AddressOf(m, "fqdn"); declared && address != name {
 		return failure("api.invariant", "native Ceph hostname differs from the provided Machine hostname", "set topology.nodes[].fqdn to the Machine's declared fqdn")
@@ -53,7 +53,7 @@ func bindProvidedHost(r *Request, c api.Catalog, m api.Object, node api.Value, t
 			return err
 		}
 		if address != ssh.Address {
-			return failure("lifecycle.unsupported", "spec.cephadm.addressRef resolves separately from provided Machine "+m.Name()+" fleet SSH", "select an addressRef resolving to the Machine access.ssh.addressRef address; separate orchestration addresses are not implemented")
+			return cephUnsupportedTopology.Fail("spec.cephadm.addressRef resolves separately from provided Machine "+m.Name()+" fleet SSH", "select an addressRef resolving to the Machine access.ssh.addressRef address; separate orchestration addresses are not implemented")
 		}
 	}
 	r.Hosts = append(r.Hosts, Host{Name: name, Machine: m.Name(), Address: ssh.Address, User: ssh.User, Port: ssh.Port, Devices: []Device{}, Labels: node.Get("labels").Strings(),
@@ -62,7 +62,7 @@ func bindProvidedHost(r *Request, c api.Catalog, m api.Object, node api.Value, t
 }
 
 func providedTransport(h Host) error {
-	return failure("lifecycle.unknown", "the Ceph host preparation could not prove its transport boundary with the provided tiebreaker Machine/"+h.Machine+" at "+machine.SSHHost(h.Address, h.Port),
+	return cephTiebreakerUnproved.Fail("the Ceph host preparation could not prove its transport boundary with the provided tiebreaker Machine/"+h.Machine+" at "+machine.SSHHost(h.Address, h.Port),
 		"inspect the retained operation evidence; when the SSH session itself was refused, authorize the public half of the fleet key Secret "+h.SSHKeyRef+" (bootwright secret show --name "+h.SSHKeyRef+" --part public-key) for user "+h.User+" on Machine/"+h.Machine+
 			", check that it offers the host key Secret "+h.KnownHostsRef+" pins and that the controller reaches it, then repeat the operation")
 }
@@ -75,7 +75,7 @@ func pinnedHostKey(h Host, e lifecycle.Execution) (trust.HostKey, error) {
 	defer clear(value)
 	key, err := trust.ParseKnownHostsLine(string(value), h.Address, h.Port)
 	if err != nil {
-		return trust.HostKey{}, failure("lifecycle.state", "the SSH host key Secret "+h.KnownHostsRef+" of Machine/"+h.Machine+" is not one known-hosts entry for "+machine.SSHHost(h.Address, h.Port),
+		return trust.HostKey{}, cephHostKeyInvalid.Fail("the SSH host key Secret "+h.KnownHostsRef+" of Machine/"+h.Machine+" is not one known-hosts entry for "+machine.SSHHost(h.Address, h.Port),
 			"author access.ssh.knownHostsRef on Machine/"+h.Machine+" as one known-hosts entry for "+machine.SSHHost(h.Address, h.Port))
 	}
 	return key, nil

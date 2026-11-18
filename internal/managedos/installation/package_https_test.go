@@ -41,7 +41,7 @@ func TestHTTPSPackageTreeFreezesItsOwnTrustBeforeTheFirstFetch(t *testing.T) {
 
 func TestHTTPSPackageTreeRefusesAMissingTrustBinding(t *testing.T) {
 	_, err := packageSource(Request{Tree: &Publication{URL: "https://artifacts.example.test:7443/tree"}})
-	if err == nil || diagnostics.Of(err)[0].Code != "lifecycle.state" {
+	if err == nil || diagnostics.Of(err)[0].Code != "install.input-invalid" {
 		t.Fatal("an HTTPS tree without its bound serving certificate must refuse")
 	}
 }

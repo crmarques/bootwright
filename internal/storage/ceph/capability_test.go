@@ -214,7 +214,7 @@ func TestPolicyExecutionMatchesItsFrozenIdentity(t *testing.T) {
 		t.Fatalf("a planned policy block did not match its frozen identity: %+v %v", prepared.Policy, err)
 	}
 	e.Block.Object = "example"
-	if _, err := capability.prepare(context.Background(), e); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != "lifecycle.state" {
+	if _, err := capability.prepare(context.Background(), e); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != cephRequestInvalid.Code {
 		t.Fatalf("a policy block named after its cluster matched the policy identity: %v", err)
 	}
 }

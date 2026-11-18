@@ -192,7 +192,7 @@ func TestSettingsIdentity(t *testing.T) {
 	carried.Settings = &Settings{Modules: []string{}}
 	for name, request := range map[string]Request{"settings without its member": unset, "cluster with a settings member": carried} {
 		_, err := New(api.CephCluster, nil).identity(context.Background(), executionFor(t, request))
-		if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "lifecycle.state" || d[0].Message != "Ceph request does not match its frozen resource identity" {
+		if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != cephRequestInvalid.Code || d[0].Message != "Ceph request does not match its frozen resource identity" {
 			t.Fatalf("a %s passes its identity: %+v", name, d)
 		}
 	}

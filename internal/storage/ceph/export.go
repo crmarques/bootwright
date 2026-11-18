@@ -78,38 +78,38 @@ func DecodeConsumerRequest(data []byte) (ConsumerRequest, error) {
 		return r, err
 	}
 	if r.Cluster == "" || r.Controller == "" || !reconciliation.ValidSegment(r.Name) || r.Filesystem == "" || r.Pool == "" || r.DefaultDataPool == "" || !strictlySorted(r.Machines) || !validProvided(r.Machines, r.Provided) || !strictlySorted(r.HostSecretRefs) || len(r.Scope) != 0 || (r.KeyType != "aes" && r.KeyType != "aes256k") {
-		return r, failure("lifecycle.state", "the frozen Ceph consumer request is inconsistent", "")
+		return r, cephRequestInvalid.Fail("the frozen Ceph consumer request is inconsistent", "")
 	}
 	if len(r.Monitors) == 0 || len(r.Monitors) > 64 || !strictlySorted(r.MonitoringHosts) || r.MonitoringPort != 9283 {
-		return r, failure("lifecycle.state", "Ceph consumer monitoring coordinates are inconsistent", "")
+		return r, cephRequestInvalid.Fail("Ceph consumer monitoring coordinates are inconsistent", "")
 	}
 	for name, address := range r.Monitors {
 		if name == "" {
-			return r, failure("lifecycle.state", "Ceph consumer monitor has no name", "")
+			return r, cephRequestInvalid.Fail("Ceph consumer monitor has no name", "")
 		}
 		if _, err := netip.ParseAddr(address); err != nil {
-			return r, failure("lifecycle.state", "Ceph consumer monitor address is invalid", "")
+			return r, cephRequestInvalid.Fail("Ceph consumer monitor address is invalid", "")
 		}
 	}
 	for _, address := range r.MonitoringHosts {
 		if _, err := netip.ParseAddr(address); err != nil {
-			return r, failure("lifecycle.state", "Ceph consumer manager address is invalid", "")
+			return r, cephRequestInvalid.Fail("Ceph consumer manager address is invalid", "")
 		}
 	}
 	if g := r.Gateway; g != nil {
 		if g.Name == "" || g.FQDN == "" || g.Realm == "" || g.Zone == "" || g.ZoneGroup == "" || g.IndexPool == "" || g.Port < 1 || g.Port > 65535 || g.TLS != (g.CertificateRef != "") || !strictlySorted(g.Addresses) {
-			return r, failure("lifecycle.state", "Ceph consumer gateway coordinates are inconsistent", "")
+			return r, cephRequestInvalid.Fail("Ceph consumer gateway coordinates are inconsistent", "")
 		}
 		for _, addr := range g.Addresses {
 			if _, err := netip.ParseAddr(addr); err != nil {
-				return r, failure("lifecycle.state", "Ceph consumer gateway address is invalid", "")
+				return r, cephRequestInvalid.Fail("Ceph consumer gateway address is invalid", "")
 			}
 		}
 	}
 	expected, _ := json.Marshal(exportCaps(r))
 	actual, _ := json.Marshal(r.Principals)
 	if string(expected) != string(actual) {
-		return r, failure("lifecycle.state", "the frozen Ceph consumer principal capabilities are inconsistent", "")
+		return r, cephRequestInvalid.Fail("the frozen Ceph consumer principal capabilities are inconsistent", "")
 	}
 	return r, nil
 }
@@ -140,7 +140,7 @@ func (c ConsumerCapability) ProducedOutputs(block reconciliation.Block) ([]strin
 		return nil, err
 	}
 	if block.Kind != string(api.CephConsumer) || block.Object != r.Name || block.ID != ConsumerBlockID(r.Name) || block.Implementation != ConsumerImplementation {
-		return nil, failure("lifecycle.state", "Ceph consumer output does not match its frozen block identity", "")
+		return nil, cephRequestInvalid.Fail("Ceph consumer output does not match its frozen block identity", "")
 	}
 	return []string{ConsumerOutput}, nil
 }
@@ -156,7 +156,7 @@ func (c ConsumerCapability) Plan(ctx context.Context, input lifecycle.PlanInput)
 		return plan, err
 	}
 	if input.State == nil {
-		return plan, failure("lifecycle.state", "Ceph consumer planning requires compiled state", "")
+		return plan, cephRequestInvalid.Fail("Ceph consumer planning requires compiled state", "")
 	}
 	catalog := input.State.Effective()
 	for _, obj := range catalog.OfKind(api.CephConsumer) {
@@ -169,7 +169,7 @@ func (c ConsumerCapability) Plan(ctx context.Context, input lifecycle.PlanInput)
 		fs, _ := catalog.Find(api.CephFilesystem, refs.Get("filesystemRef").Text())
 		data := filesystemDataPools(fs.Spec())
 		if len(data) == 0 {
-			return plan, failure("lifecycle.state", "Ceph consumer has no filesystem default data pool", "")
+			return plan, cephRequestInvalid.Fail("Ceph consumer has no filesystem default data pool", "")
 		}
 		r := ConsumerRequest{Cluster: cluster.Name(), Controller: input.Controller, DefaultDataPool: nativePoolRef(catalog, data[0]), Filesystem: fs.Name(), KeyType: refs.Get("cephxKeyType").Text(), Machines: requestMachines(base), Name: obj.Name(), HostSecretRefs: hostSecretRefs(base.Hosts), PhysicalHosts: physicalHosts(base.Hosts), Provided: providedMachines(base), Pool: nativePoolRef(catalog, refs.Get("rbdPoolRef").Text()), Version: ConsumerVersion}
 		if err := exportMonitoring(catalog, cluster, &r); err != nil {
@@ -228,7 +228,7 @@ func (c ConsumerCapability) identity(ctx context.Context, e lifecycle.Execution)
 		return r, err
 	}
 	if e.ApplyOperation == "" || e.Block.Kind != string(api.CephConsumer) || e.Block.Object != r.Name || e.Block.ID != ConsumerBlockID(r.Name) || e.Block.Implementation != ConsumerImplementation {
-		return r, failure("lifecycle.state", "Ceph consumer does not match its original apply identity", "")
+		return r, cephRecordsMissing.Fail("Ceph consumer does not match its original apply identity", "")
 	}
 	return r, nil
 }
@@ -245,7 +245,7 @@ func (c ConsumerCapability) runExport(ctx context.Context, e lifecycle.Execution
 		return lifecycle.RunResult{}, r, err
 	}
 	if !slices.Equal(r.Machines, scope.Machines) || !slices.Equal(r.Provided, scope.Provided) || !slices.Equal(r.HostSecretRefs, hostSecretRefs(scope.Scope.Hosts)) {
-		return lifecycle.RunResult{}, r, failure("lifecycle.state", "Ceph consumer host set or its host keys differ from its proved cluster", "")
+		return lifecycle.RunResult{}, r, cephProofMismatch.Fail("Ceph consumer host set or its host keys differ from its proved cluster", "")
 	}
 	if err = bindPhysicalHosts(scope.Scope.Hosts, e, c.proofs); err != nil {
 		return lifecycle.RunResult{}, r, err
@@ -267,7 +267,7 @@ func (c ConsumerCapability) runExport(ctx context.Context, e lifecycle.Execution
 		return lifecycle.RunResult{}, r, err
 	}
 	if c.runner == nil {
-		return lifecycle.RunResult{}, r, failure("lifecycle.state", "the Ceph consumer adapter is not configured", "")
+		return lifecycle.RunResult{}, r, cephUnconfigured.Fail("the Ceph consumer adapter is not configured", "")
 	}
 	deadline := 600 * time.Second
 	if operation == "apply" {
@@ -275,7 +275,7 @@ func (c ConsumerCapability) runExport(ctx context.Context, e lifecycle.Execution
 	}
 	refusals := consumerRefusals()
 	if r.Gateway != nil {
-		refusals["gateway-dns"] = failure("lifecycle.unknown", "object gateway FQDN "+r.Gateway.FQDN+" does not resolve to its declared terminating addresses", "correct DNS resolution on the bootstrap host before continuing")
+		refusals["gateway-dns"] = cephPrerequisite.Fail("object gateway FQDN "+r.Gateway.FQDN+" does not resolve to its declared terminating addresses", "correct DNS resolution on the bootstrap host before continuing")
 	}
 	result, err := c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{Implementation: ConsumerImplementation, Operation: operation, Variable: "bootwright_ceph_export", Canonical: canonical, Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: r.Controller}, Materials: files, Outputs: []lifecycle.OutputFile{{Name: ConsumerOutput, Variable: "externalDetails"}}, Refusals: refusals, NativeErrors: true, Deadline: deadline}))
 	return result, r, err

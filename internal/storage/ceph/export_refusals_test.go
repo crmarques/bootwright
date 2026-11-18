@@ -22,7 +22,7 @@ func TestConsumerRefusalsNameTheMissingPrerequisite(t *testing.T) {
 			runner := &refusingRunner{reason: token}
 			_, _, err := NewConsumer(runner).WithProofs(hostProofs{}).runExport(context.Background(), e, "observe")
 			issues := diagnostics.Of(err)
-			if runner.request.Implementation != ConsumerImplementation || len(issues) != 1 || issues[0].Code != "lifecycle.unknown" || !strings.Contains(issues[0].Message, want) || issues[0].Remediation == "" || strings.Contains(issues[0].Message, "Ceph consumer refused:") {
+			if runner.request.Implementation != ConsumerImplementation || len(issues) != 1 || issues[0].Code != cephPrerequisite.Code || !strings.Contains(issues[0].Message, want) || issues[0].Remediation == "" || strings.Contains(issues[0].Message, "Ceph consumer refused:") {
 				t.Fatalf("%s: %+v", token, issues)
 			}
 		})

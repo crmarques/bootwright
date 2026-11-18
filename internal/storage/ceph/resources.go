@@ -28,11 +28,11 @@ func policyRequest(c api.Catalog, policy api.Object, d derivation) (Request, err
 		if owned == "" {
 			owned = "stretch-rule"
 		}
-		return Request{}, failure("lifecycle.unsupported", "placement policy "+policy.Name()+" places pools on stretch cluster "+cluster.Name()+", whose every pool uses the cluster's own stretch rule "+owned,
+		return Request{}, cephUnsupportedPool.Fail("placement policy "+policy.Name()+" places pools on stretch cluster "+cluster.Name()+", whose every pool uses the cluster's own stretch rule "+owned,
 			"remove CephPlacementPolicy "+policy.Name()+" and every CephPool placementPolicyRef naming it; a pool of a stretch cluster takes the stretch rule and 4/2 protection implicitly")
 	}
 	if domain := s.Get("failureDomain").Text(); domain != "" && domain != "host" {
-		return Request{}, failure("lifecycle.unsupported", "placement policy "+policy.Name()+" selects CRUSH failure domain "+domain+"; only host is realized", "set spec.failureDomain to host or omit it; Bootwright does not support site or rack failure domains yet")
+		return Request{}, cephUnsupportedPool.Fail("placement policy "+policy.Name()+" selects CRUSH failure domain "+domain+"; only host is realized", "set spec.failureDomain to host or omit it; Bootwright does not support site or rack failure domains yet")
 	}
 	r, err := d.base(c, cluster)
 	if err != nil {
@@ -71,19 +71,19 @@ func poolRequest(c api.Catalog, pool api.Object, d derivation) (Request, error) 
 func poolScope(c api.Catalog, pool api.Object) error {
 	s, name := pool.Spec(), pool.Name()
 	if s.Get("role").Text() == "" {
-		return failure("lifecycle.unsupported", "CephPool "+name+" has no role, so no consumer enables its application and the cluster would report POOL_APP_NOT_ENABLED", "set spec.role of CephPool "+name+" to rbd, cephfsMetadata, cephfsData or rgw")
+		return cephUnsupportedPool.Fail("CephPool "+name+" has no role, so no consumer enables its application and the cluster would report POOL_APP_NOT_ENABLED", "set spec.role of CephPool "+name+" to rbd, cephfsMetadata, cephfsData or rgw")
 	}
 	if s.Has("mirroring") && !cephcluster.ReplicationOwnsPool(c, pool.Name()) {
-		return failure("lifecycle.unsupported", "CephPool "+name+" declares mirroring without a CephReplication owner", "declare a CephReplication that names this pool, or remove spec.mirroring")
+		return cephUnsupportedPool.Fail("CephPool "+name+" declares mirroring without a CephReplication owner", "declare a CephReplication that names this pool, or remove spec.mirroring")
 	}
 	if s.Get("autoscale", "mode").Text() == "warn" {
-		return failure("lifecycle.unsupported", "CephPool "+name+" selects autoscale mode warn, whose placement-group health warnings the core readiness never tolerates", "set spec.autoscale.mode to on or off, or omit it (on); Bootwright does not support warn yet")
+		return cephUnsupportedPool.Fail("CephPool "+name+" selects autoscale mode warn, whose placement-group health warnings the core readiness never tolerates", "set spec.autoscale.mode to on or off, or omit it (on); Bootwright does not support warn yet")
 	}
 	if s.Get("erasure", "parameters").Len() != 0 {
-		return failure("lifecycle.unsupported", "CephPool "+name+" declares spec.erasure.parameters; arbitrary native erasure-code parameters are not admitted", "remove spec.erasure.parameters and use the typed erasure fields")
+		return cephUnsupportedPool.Fail("CephPool "+name+" declares spec.erasure.parameters; arbitrary native erasure-code parameters are not admitted", "remove spec.erasure.parameters and use the typed erasure fields")
 	}
 	if root := s.Get("erasure", "crushRoot").Text(); root != "" && root != "default" {
-		return failure("lifecycle.unsupported", "CephPool "+name+" selects CRUSH root "+root+"; only the bootstrap root default is realized", "omit spec.erasure.crushRoot or set it to default; Bootwright does not support other CRUSH roots yet")
+		return cephUnsupportedPool.Fail("CephPool "+name+" selects CRUSH root "+root+"; only the bootstrap root default is realized", "omit spec.erasure.crushRoot or set it to default; Bootwright does not support other CRUSH roots yet")
 	}
 	target := new(big.Int)
 	if text := s.Get("autoscale", "targetSizeBytes").Text(); text != "" {
@@ -333,7 +333,7 @@ func poolClientRequest(c api.Catalog, client api.Object, d derivation) (Request,
 		return Request{}, err
 	}
 	if r.Pool.Type == "erasure" {
-		return Request{}, failure("lifecycle.unsupported", "CephClient "+client.Name()+" names erasure-coded pool "+pool.Name()+"; RBD image headers and the client's pool-scoped caps need a replicated RBD pool", "point spec.poolRef at a replicated rbd pool and name the erasure-coded pool in the spec.dataPoolRef of the CephRBDImages on it; the client's caps then include that data pool")
+		return Request{}, cephUnsupportedPool.Fail("CephClient "+client.Name()+" names erasure-coded pool "+pool.Name()+"; RBD image headers and the client's pool-scoped caps need a replicated RBD pool", "point spec.poolRef at a replicated rbd pool and name the erasure-coded pool in the spec.dataPoolRef of the CephRBDImages on it; the client's caps then include that data pool")
 	}
 	dataPools, err := clientDataPools(c, client.Spec().Get("clusterRef").Text(), pool.Name(), d)
 	if err != nil {
@@ -375,7 +375,7 @@ func rbdImageRequest(c api.Catalog, image api.Object, d derivation) (Request, er
 		return Request{}, err
 	}
 	if r.Pool.Type != "replicated" {
-		return Request{}, failure("lifecycle.unsupported", "CephRBDImage "+image.Name()+" names erasure-coded pool "+pool.Name()+"; an RBD image keeps its header and metadata in a replicated pool", "point spec.poolRef at a replicated rbd pool and name the erasure-coded pool in spec.dataPoolRef")
+		return Request{}, cephUnsupportedPool.Fail("CephRBDImage "+image.Name()+" names erasure-coded pool "+pool.Name()+"; an RBD image keeps its header and metadata in a replicated pool", "point spec.poolRef at a replicated rbd pool and name the erasure-coded pool in spec.dataPoolRef")
 	}
 	dataPool := spec.Get("dataPoolRef").Text()
 	if dataPool != "" {
@@ -434,7 +434,7 @@ func filesystemRequest(c api.Catalog, fs api.Object, d derivation) (Request, err
 			return Request{}, err
 		}
 		if i == 1 && request.Pool.Type != "replicated" {
-			return Request{}, failure("lifecycle.unsupported", "CephFilesystem "+fs.Name()+" names erasure-coded pool "+name+" as its default data pool; ceph fs new refuses it unless forced, and Bootwright never forces it", "mark a replicated cephfsData pool default in spec.dataPoolRefs and attach erasure-coded pools as additional data pools")
+			return Request{}, cephUnsupportedPool.Fail("CephFilesystem "+fs.Name()+" names erasure-coded pool "+name+" as its default data pool; ceph fs new refuses it unless forced, and Bootwright never forces it", "mark a replicated cephfsData pool default in spec.dataPoolRefs and attach erasure-coded pools as additional data pools")
 		}
 		if i == 0 {
 			r = request

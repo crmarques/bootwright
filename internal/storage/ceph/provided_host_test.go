@@ -146,7 +146,7 @@ func TestAProvidedHostRefusesOutsideTheTiebreakerOrWithoutItsPinnedFleetAccess(t
 	} {
 		t.Run(name, func(t *testing.T) {
 			catalog, cluster := tiebreakerCatalog(change)
-			if _, err := boundTiebreaker(catalog, cluster); err == nil || diagnostics.Of(err)[0].Code != "lifecycle.unsupported" {
+			if _, err := boundTiebreaker(catalog, cluster); err == nil || diagnostics.Of(err)[0].Code != cephUnsupportedTopology.Code {
 				t.Fatalf("admitted: %v", err)
 			}
 		})

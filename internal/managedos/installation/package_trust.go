@@ -30,7 +30,7 @@ func packageTrustRefusal(input Installation) error {
 	https := strings.HasPrefix(input.PackageSource, "url --url=https://")
 	scoped := strings.HasSuffix(input.PackageSource, " --sslcacert="+packageTrustPath)
 	if input.PackageTLS != https || scoped != https {
-		return refusal("lifecycle.state", "the HTTPS package source and its installer trust staging disagree", "plan the installation again")
+		return installRequestInvalid.Fail("the HTTPS package source and its installer trust staging disagree", "plan the installation again")
 	}
 	return nil
 }

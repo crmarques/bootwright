@@ -95,12 +95,12 @@ func daemonSpec(r Request, kind string, svc api.Value, hosts []string) (*nativeS
 	switch {
 	case kind == "mds":
 		if svc.Get("spec").Len() != 0 || !svc.Get("service_id").Present() {
-			return nil, failure("lifecycle.unsupported", "core MDS services carry only service_id and placement", "declare the MDS service with its service_id and placement and no spec")
+			return nil, cephUnsupportedService.Fail("core MDS services carry only service_id and placement", "declare the MDS service with its service_id and placement and no spec")
 		}
 	case kind == "mon" && r.Stretch != nil:
 		return stretchMONSpec(r, svc, hosts)
 	case svc.Get("spec").Len() != 0 || svc.Get("service_id").Present():
-		return nil, failure("lifecycle.unsupported", "core MON/MGR service-specific options are not yet qualified", "declare MON/MGR placement without spec or service_id")
+		return nil, cephUnsupportedService.Fail("core MON/MGR service-specific options are not yet qualified", "declare MON/MGR placement without spec or service_id")
 	}
 	return nil, nil
 }
@@ -108,7 +108,7 @@ func daemonSpec(r Request, kind string, svc api.Value, hosts []string) (*nativeS
 func stretchMONSpec(r Request, svc api.Value, hosts []string) (*nativeSpec, error) {
 	derived := monLocations(r, hosts)
 	if !authoredMonLocations(svc, derived) || svc.Get("service_id").Present() {
-		return nil, failure("lifecycle.unsupported", "the MON service of a stretch cluster takes its crush_locations from the stretch topology", "omit the mon service's spec, or set spec.crush_locations to exactly each MON host's failure-domain bucket at its site")
+		return nil, cephUnsupportedService.Fail("the MON service of a stretch cluster takes its crush_locations from the stretch topology", "omit the mon service's spec, or set spec.crush_locations to exactly each MON host's failure-domain bucket at its site")
 	}
 	return &nativeSpec{CrushLocations: derived}, nil
 }
@@ -145,14 +145,14 @@ func fleetHostKey(h Host, security *Security, e lifecycle.Execution, readers Dep
 func stretchRefusals() map[string]error {
 	retire := "take back the whole cluster with bootwright destroy --context <context>, restore or change spec.topology.stretch with bootwright context update, then apply; Bootwright never runs mon disable_stretch_mode and never repeats an interrupted stretch stage"
 	return map[string]error{
-		"stretch-intent":         failure("lifecycle.unsupported", "the CephCluster's spec.topology.stretch, its tiebreaker, failure domain, rule or a host's site differs from the stretch intent the cluster was created with; stretch is frozen day-1 intent", "restore spec.topology.stretch and every node's site as they were applied, or "+retire),
-		"stretch-interrupted":    failure("lifecycle.unknown", "a stretch activation stage was attempted and its readback does not show its result, so its outcome is unknown and Bootwright does not repeat it", "inspect the stage the native error names with ceph osd crush tree, ceph osd crush rule dump, ceph mon dump and ceph osd dump; "+retire),
-		"stretch-location":       failure("lifecycle.unknown", "a Ceph host's CRUSH bucket or a MON's CRUSH location is not the one its site gives, and only a data host's short-name bucket that is absent or directly under root=default and an unset MON location are ever corrected", "inspect ceph osd crush tree and ceph mon dump; move the host bucket the native error names under root=default and its site's failure-domain bucket outside Bootwright, then apply again"),
-		"stretch-weight":         failure("lifecycle.unknown", "the two data sites' failure-domain buckets do not hold equal, positive CRUSH weight, which mon enable_stretch_mode requires; Bootwright refused before enabling stretch mode and never reweights an OSD", "inspect ceph osd crush tree; give both data sites the same OSD capacity, for example the same devices on their hosts, then apply again"),
-		"stretch-rule":           failure("lifecycle.unknown", "a CRUSH rule of the stretch rule's name exists that this operation did not create, or it is not the stretch rule this operation created", "rename spec.topology.stretch.ruleName, or remove the foreign rule outside Bootwright before the cluster is created"),
-		"stretch-foreign":        failure("lifecycle.unknown", "stretch mode is enabled on the cluster without this operation's attempt, or with another tiebreaker, rule or failure domain", "inspect ceph mon dump and ceph osd dump; Bootwright never adopts stretch mode it did not enable; "+retire),
-		"stretch-drift":          failure("lifecycle.unknown", "a stretch activation stage this operation completed no longer holds: a host bucket, a MON location, the stretch rule, the election strategy or stretch mode itself changed", "inspect the stage the native error names with ceph osd crush tree, ceph osd crush rule dump, ceph mon dump and ceph osd dump and restore it outside Bootwright, then apply again; Bootwright never repairs a completed stretch stage"),
-		"stretch-pools":          failure("lifecycle.unknown", "a pool of the stretch cluster is not on its stretch rule at size 4 and min_size 2 after stretch mode was enabled", "inspect ceph osd pool ls detail; a pool on another rule or protection keeps the cluster partial, Bootwright never moves a pool another tool created or a .rgw.root found off the rule; remove or move the pool outside Bootwright, then apply again"),
+		"stretch-intent":         cephStretchIntent.Fail("the CephCluster's spec.topology.stretch, its tiebreaker, failure domain, rule or a host's site differs from the stretch intent the cluster was created with; stretch is frozen day-1 intent", "restore spec.topology.stretch and every node's site as they were applied, or "+retire),
+		"stretch-interrupted":    cephUnproved.Fail("a stretch activation stage was attempted and its readback does not show its result, so its outcome is unknown and Bootwright does not repeat it", "inspect the stage the native error names with ceph osd crush tree, ceph osd crush rule dump, ceph mon dump and ceph osd dump; "+retire),
+		"stretch-location":       cephDrifted.Fail("a Ceph host's CRUSH bucket or a MON's CRUSH location is not the one its site gives, and only a data host's short-name bucket that is absent or directly under root=default and an unset MON location are ever corrected", "inspect ceph osd crush tree and ceph mon dump; move the host bucket the native error names under root=default and its site's failure-domain bucket outside Bootwright, then apply again"),
+		"stretch-weight":         cephPrerequisite.Fail("the two data sites' failure-domain buckets do not hold equal, positive CRUSH weight, which mon enable_stretch_mode requires; Bootwright refused before enabling stretch mode and never reweights an OSD", "inspect ceph osd crush tree; give both data sites the same OSD capacity, for example the same devices on their hosts, then apply again"),
+		"stretch-rule":           cephForeign.Fail("a CRUSH rule of the stretch rule's name exists that this operation did not create, or it is not the stretch rule this operation created", "rename spec.topology.stretch.ruleName, or remove the foreign rule outside Bootwright before the cluster is created"),
+		"stretch-foreign":        cephForeign.Fail("stretch mode is enabled on the cluster without this operation's attempt, or with another tiebreaker, rule or failure domain", "inspect ceph mon dump and ceph osd dump; Bootwright never adopts stretch mode it did not enable; "+retire),
+		"stretch-drift":          cephDrifted.Fail("a stretch activation stage this operation completed no longer holds: a host bucket, a MON location, the stretch rule, the election strategy or stretch mode itself changed", "inspect the stage the native error names with ceph osd crush tree, ceph osd crush rule dump, ceph mon dump and ceph osd dump and restore it outside Bootwright, then apply again; Bootwright never repairs a completed stretch stage"),
+		"stretch-pools":          cephDrifted.Fail("a pool of the stretch cluster is not on its stretch rule at size 4 and min_size 2 after stretch mode was enabled", "inspect ceph osd pool ls detail; a pool on another rule or protection keeps the cluster partial, Bootwright never moves a pool another tool created or a .rgw.root found off the rule; remove or move the pool outside Bootwright, then apply again"),
 		"tiebreaker-foreign":     tiebreakerForeign(placeholderTiebreaker, "<fsid>"),
 		"tiebreaker-unreachable": tiebreakerUnreachable(placeholderTiebreaker),
 	}

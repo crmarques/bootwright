@@ -163,7 +163,7 @@ func TestRetiredDestroyStillRefusesAnotherFrozenIdentity(t *testing.T) {
 	e := retiredExecutions(t)[api.CephCluster]
 	e.Block.Object = "other"
 	result, err := New(api.CephCluster, runner).Destroy(context.Background(), e)
-	if d := diagnostics.Of(err); result.Outcome != reconciliation.OutcomeFailed || len(d) != 1 || d[0].Code != "lifecycle.state" || runner.calls != 0 {
+	if d := diagnostics.Of(err); result.Outcome != reconciliation.OutcomeFailed || len(d) != 1 || d[0].Code != cephRequestInvalid.Code || runner.calls != 0 {
 		t.Fatalf("a mismatched retirement = %+v (%v), runner calls %d", result, err, runner.calls)
 	}
 	e = retiredExecutions(t)[api.CephCluster]

@@ -75,7 +75,7 @@ func failure(code, message, remediation string) error {
 	return diagnostics.NewFailureWithRemediation(code, message, "", remediation)
 }
 func unsupportedFailure() error {
-	return failure("lifecycle.unsupported", unsupportedReason, unsupportedRemedy)
+	return cephUnsupportedRelease.Fail(unsupportedReason, unsupportedRemedy)
 }
 
 func ContentDigest() string {

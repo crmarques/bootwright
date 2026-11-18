@@ -49,7 +49,7 @@ func physicalDevices(c api.Catalog, cluster, m api.Object, node string) ([]Devic
 				case serial != "":
 					sizes[path.Text()] = size
 				case !physicalWWN.MatchString(path.Text()):
-					return nil, failure("lifecycle.unsupported", "physical OSD devices require explicit canonical WWN by-id paths or /dev/disk/by-serial/ paths", "use /dev/disk/by-id/wwn-0x followed by 16 or 32 lowercase hexadecimal digits, or /dev/disk/by-serial/ followed by the serial number of a disk the Machine declares in hardware.dataDisks with a non-retain onRemoval and no wwn; partitions and dynamic selectors are refused")
+					return nil, cephUnsupportedDisk.Fail("physical OSD devices require explicit canonical WWN by-id paths or /dev/disk/by-serial/ paths", "use /dev/disk/by-id/wwn-0x followed by 16 or 32 lowercase hexadecimal digits, or /dev/disk/by-serial/ followed by the serial number of a disk the Machine declares in hardware.dataDisks with a non-retain onRemoval and no wwn; partitions and dynamic selectors are refused")
 				}
 				paths = append(paths, path.Text())
 			}
@@ -72,7 +72,7 @@ func physicalDevices(c api.Catalog, cluster, m api.Object, node string) ([]Devic
 }
 
 func physicalDeviceBudgetFailure(cluster, node string, disks int) error {
-	return failure("lifecycle.unsupported", fmt.Sprintf("CephCluster %s selects %d disks on physical Ceph host %s, past the %d permitted by physical install-time clearing (erase policies allow %d targets)", cluster, disks, node, maxPhysicalDevices, maxEraseTargets),
+	return cephUnsupportedDisk.Fail(fmt.Sprintf("CephCluster %s selects %d disks on physical Ceph host %s, past the %d permitted by physical install-time clearing (erase policies allow %d targets)", cluster, disks, node, maxPhysicalDevices, maxEraseTargets),
 		fmt.Sprintf("select at most %d distinct disks for host %s across the data_devices, db_devices and wal_devices paths of the OSD services of CephCluster %s", maxPhysicalDevices, node, cluster))
 }
 
@@ -81,20 +81,20 @@ func physicalHosts(hosts []Host) bool {
 }
 
 func physicalRemovalRefusal() error {
-	return failure("lifecycle.unsupported", "physical Ceph retirement lacks original disk-erasure authority", "retain this context; automatic retirement requires every selected data, DB and WAL disk in a hardware.dataDisks entry of each Machine, as originally applied, with a non-retain onRemoval")
+	return cephRetirementRefused.Fail("physical Ceph retirement lacks original disk-erasure authority", "retain this context; automatic retirement requires every selected data, DB and WAL disk in a hardware.dataDisks entry of each Machine, as originally applied, with a non-retain onRemoval")
 }
 
 func bindPhysicalHosts(hosts []Host, e lifecycle.Execution, readers DependencyProofs) error {
 	for i := range hosts {
 		host := &hosts[i]
 		if host.Hardware != nil {
-			return failure("lifecycle.state", "physical hardware identity must come from original Machine evidence", "")
+			return cephRecordsMissing.Fail("physical hardware identity must come from original Machine evidence", "")
 		}
 		if !host.Physical {
 			continue
 		}
 		if readers == nil {
-			return failure("lifecycle.state", "physical Machine proof reader is unavailable", "")
+			return cephUnconfigured.Fail("physical Machine proof reader is unavailable", "")
 		}
 		var found *PhysicalIdentity
 		for _, proof := range provedFor(e) {
@@ -109,17 +109,17 @@ func bindPhysicalHosts(hosts []Host, e lifecycle.Execution, readers DependencyPr
 				continue
 			}
 			if found != nil || !hardwareUUID.MatchString(value.UUID) || len(value.MACs) == 0 || len(value.MACs) > 32 || !strictlySorted(value.MACs) {
-				return failure("lifecycle.state", "physical Machine proof is ambiguous or lacks its UUID and complete MAC set", "")
+				return cephRecordsMissing.Fail("physical Machine proof is ambiguous or lacks its UUID and complete MAC set", "")
 			}
 			for _, mac := range value.MACs {
 				if !hardwareMAC.MatchString(mac) {
-					return failure("lifecycle.state", "physical Machine proof has an invalid MAC address", "")
+					return cephProofMismatch.Fail("physical Machine proof has an invalid MAC address", "")
 				}
 			}
 			found = &value
 		}
 		if found == nil {
-			return failure("lifecycle.state", "physical Ceph host lacks original Machine presence evidence", "")
+			return cephRecordsMissing.Fail("physical Ceph host lacks original Machine presence evidence", "")
 		}
 		host.Hardware = found
 		if found.RootWWN != "" {

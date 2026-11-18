@@ -149,32 +149,32 @@ func RenderKickstart(input Installation) (string, error) {
 	// Only a disk its substrate created may be left for the installer to
 	// choose; a physical one is named by its by-id WWN path, serial and size, or volume.
 	if input.Physical && !durableRootDevice(input.RootDevice) && !serialRootInstallation(input) && !input.RootVolume {
-		return "", refusal("lifecycle.state", "a physical installation names no root disk by its /dev/disk/by-id/wwn-0x path, its serial number and size or a logical volume to erase",
+		return "", installRequestInvalid.Fail("a physical installation names no root disk by its /dev/disk/by-id/wwn-0x path, its serial number and size or a logical volume to erase",
 			rootSelectorRemedy(""))
 	}
 	if (input.RootWWN != "" || input.RootSerial != "" || input.RootSizeBytes != 0) && !input.Physical ||
 		input.RootSizeBytes != 0 && !diskselection.ValidSize(input.RootSizeBytes) ||
 		input.RootWWN != "" && "/dev/disk/by-id/wwn-"+input.RootWWN != input.RootDevice ||
 		input.RootSerial != "" && !diskselection.ValidSerial(input.RootSerial) {
-		return "", refusal("lifecycle.state", "the root disk WWN, serial number or size this installation freezes is not one its %pre can compare with the disk its deviceName names",
+		return "", installRequestInvalid.Fail("the root disk WWN, serial number or size this installation freezes is not one its %pre can compare with the disk its deviceName names",
 			"plan the installation again with this release")
 	}
 	if len(input.InventoriedSerials) != 0 && (!serialRootInstallation(input) || !slices.Contains(input.InventoriedSerials, input.RootSerial) ||
 		slices.ContainsFunc(input.InventoriedSerials, func(s string) bool { return !diskselection.ValidSerial(s) })) {
-		return "", refusal("lifecycle.state", "the BMC inventory serial set this installation freezes does not bound its serial-number root", "plan the installation again with this release")
+		return "", installRequestInvalid.Fail("the BMC inventory serial set this installation freezes does not bound its serial-number root", "plan the installation again with this release")
 	}
 	if input.RootVolume && (!input.Physical || input.RootDevice != "" || input.RootSerial != "" || input.RootWWN != "" || input.RootSizeBytes != 0) {
-		return "", refusal("lifecycle.state", "a logical-volume root selects the physical installation target alone", "plan the installation again")
+		return "", installRequestInvalid.Fail("a logical-volume root selects the physical installation target alone", "plan the installation again")
 	}
 	if reason := refusedClearTargets(input); reason != "" {
-		return "", refusal("lifecycle.state", reason, "plan the installation again with this release")
+		return "", installRequestInvalid.Fail(reason, "plan the installation again with this release")
 	}
 	if _, known := deliveredHostKeys[input.HostKeyType]; input.Channel == substrate.ChannelDeliveredKey && !known {
-		return "", refusal("lifecycle.state", "the delivered SSH host key type "+input.HostKeyType+" has no installed path",
+		return "", installRequestInvalid.Fail("the delivered SSH host key type "+input.HostKeyType+" has no installed path",
 			"plan the installation again with this release")
 	}
 	if _, known := guestHostKeys[input.HostKeyType]; input.Channel == substrate.ChannelGuestAgent && !known {
-		return "", refusal("lifecycle.state", "the guest-agent SSH host key type "+input.HostKeyType+" has no generated path",
+		return "", installRequestInvalid.Fail("the guest-agent SSH host key type "+input.HostKeyType+" has no generated path",
 			"plan the installation again with this release")
 	}
 	if input.RootVolume {
@@ -439,12 +439,12 @@ func NetworkLine(input Installation) (string, error) {
 func interfaceFields(input Installation) ([]string, error) {
 	kind, vlan := input.InterfaceType, input.InterfaceType == "vlan"
 	if kind != "ethernet" && kind != "bond" && !vlan {
-		return nil, refusal("lifecycle.state", "the install interface type "+kind+" is not ethernet, bond or vlan", "plan the installation again with this release")
+		return nil, installRequestInvalid.Fail("the install interface type "+kind+" is not ethernet, bond or vlan", "plan the installation again with this release")
 	}
 	bonded := kind == "bond" || vlan && len(input.BondPorts) != 0
 	if vlan && (input.VLANBase == "" || input.VLANID < 1 || input.VLANID > 4094) ||
 		bonded && (len(input.BondPorts) == 0 || len(input.BondOptions) == 0 || !strings.HasPrefix(input.BondOptions[0], "mode=")) {
-		return nil, refusal("lifecycle.state", "the install interface "+input.Interface+" carries an incomplete bond or VLAN", "plan the installation again with this release")
+		return nil, installRequestInvalid.Fail("the install interface "+input.Interface+" carries an incomplete bond or VLAN", "plan the installation again with this release")
 	}
 	device := input.Interface
 	if vlan {

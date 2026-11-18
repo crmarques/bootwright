@@ -86,7 +86,7 @@ func DecodeSMBRequest(data []byte) (SMBRequest, error) {
 		return SMBRequest{}, err
 	}
 	if !r.consistent() {
-		return SMBRequest{}, failure("lifecycle.state", "the frozen Ceph SMB request is inconsistent", "")
+		return SMBRequest{}, cephRequestInvalid.Fail("the frozen Ceph SMB request is inconsistent", "")
 	}
 	return r, nil
 }
@@ -173,7 +173,7 @@ func smbNative(c api.Catalog, cluster, object api.Object) (json.RawMessage, erro
 	value, err := native.NativeChecked(smbNativeOptions)
 	document, mapped := value.(map[string]any)
 	if err != nil || !mapped {
-		return nil, failure("lifecycle.state", "CephSMBResource "+object.Name()+" holds a native value Bootwright cannot freeze", "")
+		return nil, cephUnsupportedService.Fail("CephSMBResource "+object.Name()+" holds a native value Bootwright cannot freeze", "write spec.native as a mapping holding only strings, integers, booleans, lists and mappings")
 	}
 	switch native.Get("resource_type").Text() {
 	case api.SMBCluster:
@@ -334,7 +334,7 @@ func (c SMBCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (lif
 		return plan, err
 	}
 	if input.State == nil {
-		return plan, failure("lifecycle.state", "Ceph planning requires compiled state", "")
+		return plan, cephRequestInvalid.Fail("Ceph planning requires compiled state", "")
 	}
 	catalog := input.State.Effective()
 	for _, object := range catalog.OfKind(api.CephSMBResource) {
@@ -398,10 +398,10 @@ func (SMBCapability) identity(ctx context.Context, e lifecycle.Execution) (SMBRe
 		return SMBRequest{}, err
 	}
 	if e.Block.Kind != string(api.CephSMBResource) || e.Block.Object != r.Object || e.Block.ID != SMBBlockID(r.Object) {
-		return SMBRequest{}, failure("lifecycle.state", "Ceph SMB request does not match its frozen resource identity", "")
+		return SMBRequest{}, cephRequestInvalid.Fail("Ceph SMB request does not match its frozen resource identity", "")
 	}
 	if e.ApplyOperation == "" {
-		return SMBRequest{}, failure("lifecycle.state", "Ceph SMB requires the immutable original apply identity", "")
+		return SMBRequest{}, cephRecordsMissing.Fail("Ceph SMB requires the immutable original apply identity", "")
 	}
 	return r, nil
 }
@@ -416,16 +416,16 @@ func (c SMBCapability) prepare(ctx context.Context, e lifecycle.Execution) (SMBR
 		return SMBRequest{}, ProvedClusterScope{}, err
 	}
 	if !slices.Equal(r.Machines, scope.Machines) || !slices.Equal(r.HostSecretRefs, hostSecretRefs(scope.Scope.Hosts)) {
-		return SMBRequest{}, ProvedClusterScope{}, failure("lifecycle.state", "CephSMBResource "+r.Object+" froze another Machine set or host keys than the creation proof of CephCluster "+r.Cluster, "restore the original apply evidence")
+		return SMBRequest{}, ProvedClusterScope{}, cephProofMismatch.Fail("CephSMBResource "+r.Object+" froze another Machine set or host keys than the creation proof of CephCluster "+r.Cluster, "restore the original apply evidence")
 	}
 	if r.Service != nil && len(r.Images) == 0 {
-		return SMBRequest{}, ProvedClusterScope{}, failure("lifecycle.state", "CephSMBResource "+r.Object+" froze no samba image", "")
+		return SMBRequest{}, ProvedClusterScope{}, cephRecordsMissing.Fail("CephSMBResource "+r.Object+" froze no samba image", "")
 	}
 	for i, image := range r.Images {
 		authored := slices.IndexFunc(scope.Authored, func(a AuxiliaryReference) bool { return a.Name == image.Name })
 		completed := slices.IndexFunc(scope.Scope.Auxiliary, func(a AuxiliaryReference) bool { return a.Name == image.Name })
 		if authored < 0 || completed < 0 || scope.Authored[authored].Image != image.Image {
-			return SMBRequest{}, ProvedClusterScope{}, failure("lifecycle.state", "CephSMBResource "+r.Object+" froze a samba image its CephCluster's settings did not freeze", "restore the original apply evidence")
+			return SMBRequest{}, ProvedClusterScope{}, cephProofMismatch.Fail("CephSMBResource "+r.Object+" froze a samba image its CephCluster's settings did not freeze", "restore the original apply evidence")
 		}
 		r.Images[i].Image = scope.Scope.Auxiliary[completed].Image
 	}
@@ -452,14 +452,14 @@ func smbDeadline(r SMBRequest, operation string) (time.Duration, error) {
 			calls = 2
 		}
 	default:
-		return 0, failure("lifecycle.state", "the Ceph SMB adapter runs no "+operation+" operation", "")
+		return 0, cephRequestInvalid.Fail("the Ceph SMB adapter runs no "+operation+" operation", "")
 	}
 	return time.Duration(calls*nativeCall+waits*readinessWait+60) * time.Second, nil
 }
 
 func (c SMBCapability) run(ctx context.Context, e lifecycle.Execution, operation string, r SMBRequest, scope ProvedClusterScope) (lifecycle.RunResult, error) {
 	if c.runner == nil {
-		return lifecycle.RunResult{}, failure("lifecycle.state", "the Ceph SMB adapter is not configured", "")
+		return lifecycle.RunResult{}, cephUnconfigured.Fail("the Ceph SMB adapter is not configured", "")
 	}
 	canonical, err := r.Canonical()
 	if err != nil {
@@ -490,11 +490,11 @@ func (c SMBCapability) Apply(ctx context.Context, e lifecycle.Execution) (lifecy
 	effect, err := EvaluateSMBEvidence(result.Evidence, r, e.ApplyOperation, FSIDFor(e.ApplyOperation, r.Cluster), e.Block.RequestDigest, false)
 	if err != nil || effect != reconciliation.EffectCompleted || len(result.Produced) != 0 {
 		lifecycle.ClearProduced(result.Produced)
-		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, failure("lifecycle.unknown", "Ceph SMB did not prove the requested postcondition", "")
+		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, cephUnproved.Fail("Ceph SMB did not prove the requested postcondition", "")
 	}
 	outcome, known := result.Outcome, result.Outcome.Settled()
 	if !known {
-		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, failure("lifecycle.unknown", "Ceph SMB returned an unknown outcome", "")
+		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, cephResultInvalid.Fail("Ceph SMB returned an unknown outcome", "")
 	}
 	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil
 }
@@ -511,7 +511,7 @@ func (c SMBCapability) Observe(ctx context.Context, e lifecycle.Execution) (life
 	}
 	if len(result.Produced) != 0 {
 		lifecycle.ClearProduced(result.Produced)
-		return unknown, failure("lifecycle.unknown", "Ceph SMB returned a value it never produces", "")
+		return unknown, cephResultInvalid.Fail("Ceph SMB returned a value it never produces", "")
 	}
 	effect, err := EvaluateSMBEvidence(result.Evidence, r, e.ApplyOperation, FSIDFor(e.ApplyOperation, r.Cluster), e.Block.RequestDigest, false)
 	if err != nil {
@@ -527,7 +527,7 @@ func (c SMBCapability) Destroy(ctx context.Context, e lifecycle.Execution) (life
 	if _, err := c.identity(ctx, e); err != nil {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
 	}
-	return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, failure("lifecycle.unsupported", survivingReason, survivingRemedy)
+	return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, cephHostsSurvive.Fail(survivingReason, survivingRemedy)
 }
 
 func (c SMBCapability) ObserveRemoval(ctx context.Context, e lifecycle.Execution) (lifecycle.Observation, error) {
@@ -538,7 +538,7 @@ func (c SMBCapability) ObserveRemoval(ctx context.Context, e lifecycle.Execution
 	if _, err := c.identity(ctx, e); err != nil {
 		return unknown, err
 	}
-	return unknown, failure("lifecycle.unsupported", survivingReason, survivingRemedy)
+	return unknown, cephHostsSurvive.Fail(survivingReason, survivingRemedy)
 }
 
 func (SMBCapability) Quiescent(ctx context.Context, probe lifecycle.Probe) (lifecycle.Quiescence, error) {

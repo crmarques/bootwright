@@ -128,7 +128,7 @@ func TestOSDClassesRefuseWhereCephadmCannotRealizeThem(t *testing.T) {
 		return osd.WithPath(requestMap("crush_device_class", "fast", "data_devices", requestMap("paths", api.ListValue(requestMap("path", path, "crush_device_class", "slow"), api.StringValue("/dev/vdc"))),
 			"db_devices", requestMap("paths", api.StringList("/dev/vdd"))), "spec")
 	})
-	if d.Code != "lifecycle.unsupported" || !strings.Contains(d.Message, "OSD service osd.data gives its data devices more than one CRUSH device class and declares db_devices or wal_devices") ||
+	if d.Code != cephUnsupportedDisk.Code || !strings.Contains(d.Message, "OSD service osd.data gives its data devices more than one CRUSH device class and declares db_devices or wal_devices") ||
 		d.Remediation != "declare one OSD service per device class, each with its own db_devices and wal_devices" {
 		t.Fatalf("a multi-class OSD service with a DB device planned as %+v", d)
 	}

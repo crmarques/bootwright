@@ -270,7 +270,7 @@ func TestGuestAgentHostKeyTypeEntersThePlacementPolicyCheck(t *testing.T) {
 	notEnabled.Context = "lab-b"
 	_, err = New(refusingRunner{reason: "fips-not-enabled"}).Apply(context.Background(), notEnabled)
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Object == nil || reported[0].Object.Kind != "Machine" || reported[0].Object.Name != "rhel-01" ||
+	if len(reported) != 1 || reported[0].Code != "install.guest-policy-unmet" || reported[0].Object == nil || reported[0].Object.Kind != "Machine" || reported[0].Object.Name != "rhel-01" ||
 		reported[0].Message != "Machine/rhel-01 was installed with FIPS mode enabled, but its kernel or its crypto policy does not report FIPS mode" ||
 		reported[0].Remediation != "take this context back with bootwright destroy --context lab-b, then run bootwright apply --context lab-b; FIPS mode is set only at installation" {
 		t.Fatalf("refusal = %#v", reported)

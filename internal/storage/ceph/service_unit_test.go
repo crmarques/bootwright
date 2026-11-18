@@ -109,7 +109,7 @@ func TestServiceUnitDeadlineIndependentOfHostCount(t *testing.T) {
 	unknown := unitRequest(coreRequest())
 	unknown.Service.Type = "unknown"
 	_, err := cephDeadline(unknown, "apply")
-	if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "lifecycle.state" || d[0].Message != "the Ceph service unit type is not known to this build" {
+	if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != cephRequestInvalid.Code || d[0].Message != "the Ceph service unit type is not known to this build" {
 		t.Fatalf("an unknown unit type gives %+v", d)
 	}
 }
@@ -187,11 +187,11 @@ func planError(t *testing.T, catalog api.Catalog) error {
 
 func TestServiceUnitProjectionRefusesUnrealizedOptions(t *testing.T) {
 	nfs, ingress := haproxyProtocolNFS()[0], haproxyProtocolNFS()[1]
-	refusedWith(t, planError(t, delegatedCatalog([]api.Value{nfs.With("placement", requestMap("label", "mon", "count_per_host", 1)), ingress}, nil)), "lifecycle.unsupported",
+	refusedStop(t, planError(t, delegatedCatalog([]api.Value{nfs.With("placement", requestMap("label", "mon", "count_per_host", 1)), ingress}, nil)), cephUnsupportedService,
 		"the native service nfs.files places more than one daemon of a type per host, which Bootwright does not realize", "omit placement.count_per_host on nfs.files in spec.services")
-	refusedWith(t, planError(t, delegatedCatalog([]api.Value{nfs.With("config", requestMap("log_level", "debug")), ingress}, nil)), "lifecycle.unsupported",
+	refusedStop(t, planError(t, delegatedCatalog([]api.Value{nfs.With("config", requestMap("log_level", "debug")), ingress}, nil)), cephUnsupportedService,
 		"the native service nfs.files carries config, extra container or entrypoint arguments or custom configs, which Bootwright does not realize", "remove those options from nfs.files in spec.services")
-	refusedWith(t, planError(t, delegatedCatalog([]api.Value{nfs, ingress.WithPath(api.BoolValue(true), "spec", "ssl")}, nil)), "lifecycle.unsupported",
+	refusedStop(t, planError(t, delegatedCatalog([]api.Value{nfs, ingress.WithPath(api.BoolValue(true), "spec", "ssl")}, nil)), cephUnsupportedService,
 		"the native service ingress.nfs.files carries spec.ssl, which Bootwright does not realize for this service", "remove spec.ssl from ingress.nfs.files in spec.services")
 	if err := planError(t, delegatedCatalog(haproxyProtocolNFS(), nil)); err != nil {
 		t.Fatalf("the authored unit refuses: %+v", diagnostics.Of(err))
@@ -209,12 +209,12 @@ func TestServiceUnitIdentity(t *testing.T) {
 	carried.Service = r.Service
 	for name, request := range map[string]Request{"service without its member": unset, "cluster with a service member": carried} {
 		_, err := New(api.CephCluster, nil).identity(context.Background(), executionFor(t, request))
-		if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "lifecycle.state" || d[0].Message != "Ceph request does not match its frozen resource identity" {
+		if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != cephRequestInvalid.Code || d[0].Message != "Ceph request does not match its frozen resource identity" {
 			t.Fatalf("a %s passes its identity: %+v", name, d)
 		}
 	}
 	_, err := New(api.CephPool, nil).identity(context.Background(), executionFor(t, r))
-	if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "lifecycle.state" {
+	if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != cephRequestInvalid.Code {
 		t.Fatalf("a pool capability executes a unit request: %+v", d)
 	}
 }

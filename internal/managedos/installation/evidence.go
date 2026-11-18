@@ -119,57 +119,57 @@ func ValidatePresence(data []byte, request Request, digest, marker string) error
 		return err
 	}
 	if !evidence.Postcondition || evidence.Absent {
-		return refusal("lifecycle.state", "the installation adapter did not prove its postcondition", "")
+		return installPostconditionUnmet.Fail("the installation adapter did not prove its postcondition", "")
 	}
 	if evidence.Marker != marker {
-		return refusal("lifecycle.state", "the guest does not hold the marker this operation froze", "")
+		return installEvidenceInvalid.Fail("the guest does not hold the marker this operation froze", "")
 	}
 	if evidence.Address != request.Address {
-		return refusal("lifecycle.state", "the installation evidence names another address", "")
+		return installEvidenceInvalid.Fail("the installation evidence names another address", "")
 	}
 	if evidence.HostKey == "" {
-		return refusal("lifecycle.state", "the installation captured no guest host key", "")
+		return installPostconditionUnmet.Fail("the installation captured no guest host key", "")
 	}
 	if !evidence.Reachable {
-		return refusal("lifecycle.state", "the installed machine did not answer as its fleet account", "")
+		return installPostconditionUnmet.Fail("the installed machine did not answer as its fleet account", "")
 	}
 	if !evidence.Network || !evidence.NetworkReboot || len(evidence.NetworkDifferences) != 0 {
-		return refusal("lifecycle.state", "the installed machine's network does not match its declaration after a reboot", "")
+		return installPostconditionUnmet.Fail("the installed machine's network does not match its declaration after a reboot", "")
 	}
 	if request.Requires.FIPS && !evidence.FIPS {
-		return refusal("lifecycle.state", "the installed machine does not report the FIPS mode its installation enabled", "")
+		return installGuestPolicyUnmet.Fail("the installed machine does not report the FIPS mode its installation enabled", "")
 	}
 	if request.Requires.RootEncryption && !evidence.RootEncryption {
-		return refusal("lifecycle.state", "the installed machine's root filesystem is not on the LUKS device with a TPM2 binding its installation encrypted", "")
+		return installGuestPolicyUnmet.Fail("the installed machine's root filesystem is not on the LUKS device with a TPM2 binding its installation encrypted", "")
 	}
 	if evidence.RootWWN != "" && !request.Requires.RootWWN {
-		return refusal("lifecycle.state", "the installation evidence records a root disk WWN for a root not declared by serial number", "")
+		return installEvidenceInvalid.Fail("the installation evidence records a root disk WWN for a root not declared by serial number", "")
 	}
 	if request.Requires.Registration && evidence.Registration.State != registrationOwned {
-		return refusal("lifecycle.state", "the installed machine is not registered with a subscription consumer this installation created", "")
+		return installPostconditionUnmet.Fail("the installed machine is not registered with a subscription consumer this installation created", "")
 	}
 	if err := updatePresence(evidence.Update, request); err != nil {
 		return err
 	}
 	if evidence.Media != "" {
-		return refusal("lifecycle.state", "the installation left its virtual media inserted", "")
+		return installPostconditionUnmet.Fail("the installation left its virtual media inserted", "")
 	}
 	if evidence.Private {
-		return refusal("lifecycle.state", "the installation left material only its machine may read published", "")
+		return installPostconditionUnmet.Fail("the installation left material only its machine may read published", "")
 	}
 	// A private installer image names the private URL in its Kickstart, so a
 	// completed private installation has withdrawn it with the key.
 	if request.Private != nil && evidence.Image {
-		return refusal("lifecycle.state", "the installation left its private installer image published", "")
+		return installPostconditionUnmet.Fail("the installation left its private installer image published", "")
 	}
 	if evidence.Power != "On" {
-		return refusal("lifecycle.state", "the installed machine is not running", "")
+		return installPostconditionUnmet.Fail("the installed machine is not running", "")
 	}
 	if (request.Private == nil && !evidence.Image) || (request.Tree != nil && !evidence.Tree) {
-		return refusal("lifecycle.state", "the installation did not publish everything its boot needs", "")
+		return installPostconditionUnmet.Fail("the installation did not publish everything its boot needs", "")
 	}
 	if request.TreeMedia != nil && evidence.TreeIdentity != request.TreeMedia.SHA256 {
-		return refusal("lifecycle.state", "the published package tree was extracted from another image than the one this operation froze", "")
+		return installEvidenceInvalid.Fail("the published package tree was extracted from another image than the one this operation froze", "")
 	}
 	return nil
 }
@@ -187,7 +187,7 @@ func HostKeyEvidence(data []byte) (address, hostKey string, err error) {
 		return "", "", err
 	}
 	if evidence.Absent || evidence.HostKey == "" || evidence.Address == "" {
-		return "", "", refusal("lifecycle.state", "the installation evidence proves no host key", "")
+		return "", "", installPostconditionUnmet.Fail("the installation evidence proves no host key", "")
 	}
 	return evidence.Address, evidence.HostKey, nil
 }
@@ -201,10 +201,10 @@ func ValidateAbsence(data []byte, digest string) error {
 		return err
 	}
 	if !evidence.Postcondition || !evidence.Absent {
-		return refusal("lifecycle.state", "the installation adapter did not prove removal", "")
+		return installPostconditionUnmet.Fail("the installation adapter did not prove removal", "")
 	}
 	if evidence.left() {
-		return refusal("lifecycle.state", "the installation removal evidence still reports content it takes back", "")
+		return installPostconditionUnmet.Fail("the installation removal evidence still reports content it takes back", "")
 	}
 	return nil
 }
@@ -219,13 +219,13 @@ func ValidateReleased(data []byte, request Request, digest string, unregisters b
 		if evidence.Registration.State == "" {
 			return nil
 		}
-		return refusal("lifecycle.state", "the installation removal read a subscription registration on a Machine it was not to read", "")
+		return installEvidenceInvalid.Fail("the installation removal read a subscription registration on a Machine it was not to read", "")
 	}
 	switch evidence.Registration.State {
 	case registrationUnregistered, registrationAbsent, registrationRetained, registrationForeign:
 		return nil
 	}
-	return refusal("lifecycle.state", "the installation removal did not prove its machine holds no subscription registration it created", "")
+	return installPostconditionUnmet.Fail("the installation removal did not prove its machine holds no subscription registration it created", "")
 }
 
 func ownRegistration(evidence Evidence) bool {
@@ -242,7 +242,7 @@ func ValidateWithdrawn(data []byte, digest string) error {
 		return err
 	}
 	if evidence.left() {
-		return refusal("lifecycle.state", "the artifact server's host still carries this installation's content", "")
+		return installPostconditionUnmet.Fail("the artifact server's host still carries this installation's content", "")
 	}
 	return nil
 }
@@ -256,7 +256,7 @@ func ValidateWithdrawalUnfinished(data []byte, digest string) error {
 		return err
 	}
 	if !evidence.left() {
-		return refusal("lifecycle.state", "the artifact server's host carries none of this installation's content", "")
+		return installPostconditionUnmet.Fail("the artifact server's host carries none of this installation's content", "")
 	}
 	return nil
 }
@@ -270,10 +270,10 @@ func ValidateNoEffect(data []byte, digest string) error {
 		return err
 	}
 	if evidence.Marker != "" || evidence.published() {
-		return refusal("lifecycle.state", "the machine or the served root still carries this installation", "")
+		return installPostconditionUnmet.Fail("the machine or the served root still carries this installation", "")
 	}
 	if evidence.Power != "Off" {
-		return refusal("lifecycle.state", "the machine is not powered off, so no effect is unproved", "")
+		return installPostconditionUnmet.Fail("the machine is not powered off, so no effect is unproved", "")
 	}
 	return nil
 }
@@ -291,17 +291,17 @@ func ValidatePartial(data []byte, digest, marker string) error {
 		return err
 	}
 	if evidence.Postcondition || evidence.Absent {
-		return refusal("lifecycle.state", "the installation evidence proves a settled state, not a partial one", "")
+		return installPostconditionUnmet.Fail("the installation evidence proves a settled state, not a partial one", "")
 	}
 	if evidence.Marker != "" && evidence.Marker != marker {
-		return refusal("lifecycle.state", "the guest holds an installation this operation did not perform", "")
+		return installForeignState.Fail("the guest holds an installation this operation did not perform", "")
 	}
 	if evidence.Marker == "" {
 		if evidence.Power != "Off" {
-			return refusal("lifecycle.state", "the machine is not powered off, so its installation is unproved", "")
+			return installPostconditionUnmet.Fail("the machine is not powered off, so its installation is unproved", "")
 		}
 		if !evidence.published() {
-			return refusal("lifecycle.state", "the installation evidence reports nothing this operation published", "")
+			return installPostconditionUnmet.Fail("the installation evidence reports nothing this operation published", "")
 		}
 	}
 	if err := foreignRegistration(evidence); err != nil {
@@ -313,15 +313,15 @@ func ValidatePartial(data []byte, digest, marker string) error {
 func updatePresence(update UpdateEvidence, request Request) error {
 	if !request.Requires.Update {
 		if update.State != updateNone {
-			return refusal("lifecycle.state", "the installation evidence reports an update its request does not perform", "")
+			return installEvidenceInvalid.Fail("the installation evidence reports an update its request does not perform", "")
 		}
 		return nil
 	}
 	if update.State != updateComplete || update.Release != request.Update.Release {
-		return refusal("lifecycle.state", "the installed machine has not completed its update within release "+request.Update.Release, "")
+		return installPostconditionUnmet.Fail("the installed machine has not completed its update within release "+request.Update.Release, "")
 	}
 	if !slices.Contains(updatePins(request), update.Pin) {
-		return refusal("lifecycle.state", "the installed machine's update within release "+request.Update.Release+" names a pin its registration does not hold", "")
+		return installPostconditionUnmet.Fail("the installed machine's update within release "+request.Update.Release+" names a pin its registration does not hold", "")
 	}
 	return nil
 }
@@ -338,14 +338,14 @@ func updatePins(request Request) []string {
 
 func foreignUpdate(evidence Evidence) error {
 	if evidence.Update.State == updateForeign {
-		return refusal("lifecycle.state", "the installed machine holds an update record of another installation", "")
+		return installForeignState.Fail("the installed machine holds an update record of another installation", "")
 	}
 	return nil
 }
 
 func foreignRegistration(evidence Evidence) error {
 	if evidence.Registration.State == registrationForeign {
-		return refusal("lifecycle.state", "the installed machine is registered with a subscription consumer this installation did not create", "")
+		return installForeignState.Fail("the installed machine is registered with a subscription consumer this installation did not create", "")
 	}
 	return nil
 }
@@ -359,19 +359,19 @@ func decodeEvidence(data []byte, digest string) (Evidence, error) {
 		return Evidence{}, err
 	}
 	if !wellFormedRegistration(evidence.Registration) {
-		return Evidence{}, refusal("lifecycle.state", "the installation evidence reports a malformed registration", "")
+		return Evidence{}, installEvidenceInvalid.Fail("the installation evidence reports a malformed registration", "")
 	}
 	if !wellFormedUpdate(evidence.Update) {
-		return Evidence{}, refusal("lifecycle.state", "the installation evidence reports a malformed update", "")
+		return Evidence{}, installEvidenceInvalid.Fail("the installation evidence reports a malformed update", "")
 	}
 	if !wellFormedOS(evidence.OS) {
-		return Evidence{}, refusal("lifecycle.state", "the installation evidence reports a malformed release", "")
+		return Evidence{}, installEvidenceInvalid.Fail("the installation evidence reports a malformed release", "")
 	}
 	if !wellFormedRootWWN(evidence.RootWWN) {
-		return Evidence{}, refusal("lifecycle.state", "the installation evidence reports a malformed root disk WWN", "")
+		return Evidence{}, installEvidenceInvalid.Fail("the installation evidence reports a malformed root disk WWN", "")
 	}
 	if evidence.Request != digest {
-		return Evidence{}, refusal("lifecycle.state", "the installation evidence names another request", "")
+		return Evidence{}, installEvidenceInvalid.Fail("the installation evidence names another request", "")
 	}
 	return evidence, nil
 }
@@ -385,7 +385,7 @@ func boundedNetworkDifferences(evidence Evidence) error {
 		}
 	}
 	if !bounded {
-		return refusal("lifecycle.state", "the installation evidence reports unbounded network differences", "")
+		return installEvidenceInvalid.Fail("the installation evidence reports unbounded network differences", "")
 	}
 	return nil
 }
@@ -442,7 +442,7 @@ func RecordedRootWWN(proof lifecycle.BlockEvidence, request Request, digest stri
 		return "", err
 	}
 	if !evidence.Postcondition || evidence.Absent {
-		return "", refusal("lifecycle.state", "the installation's apply record proves no completed installation", "restore the original apply records")
+		return "", installRecordsMissing.Fail("the installation's apply record proves no completed installation", "restore the original apply records")
 	}
 	return evidence.RootWWN, nil
 }

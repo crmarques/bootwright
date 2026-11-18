@@ -64,7 +64,7 @@ func DecodeImageRequest(data []byte) (ImageRequest, error) {
 		return ImageRequest{}, err
 	}
 	if r.Cluster == "" || r.Controller == "" || r.RegistryRef == "" || !strings.HasPrefix(r.Base, r.Registry+"/") || !cephcluster.NativeVersion(r.Release) || r.Base == "" || !validSelection(r.Base, r.Tag, r.Image) || !validAuxiliary(r) {
-		return ImageRequest{}, failure("lifecycle.state", "the frozen Ceph image request has inconsistent coordinates", "")
+		return ImageRequest{}, cephRequestInvalid.Fail("the frozen Ceph image request has inconsistent coordinates", "")
 	}
 	return r, nil
 }
@@ -125,13 +125,13 @@ func decodeImageEvidence(data []byte, digest string) (ImageEvidence, error) {
 		return ImageEvidence{}, err
 	}
 	if digest == "" || evidence.Request != digest {
-		return ImageEvidence{}, failure("lifecycle.state", "Ceph image evidence names another request", "")
+		return ImageEvidence{}, cephEvidenceMismatch.Fail("Ceph image evidence names another request", "")
 	}
 	return evidence, nil
 }
 
 func imageDigestMismatch() error {
-	return failure("lifecycle.unsupported", "the resolved Ceph image or an auxiliary image does not match its authored digest (image-digest-mismatch)", "select the digest of the intended linux/amd64 manifest")
+	return cephImageInvalid.Fail("the resolved Ceph image or an auxiliary image does not match its authored digest (image-digest-mismatch)", "select the digest of the intended linux/amd64 manifest")
 }
 
 func selectedResolution(e ImageEvidence, r ImageRequest) bool {
@@ -161,7 +161,7 @@ func authoredMatches(e ImageEvidence, r ImageRequest) bool {
 
 func resolution(e ImageEvidence, r ImageRequest) error {
 	if !selectedResolution(e, r) {
-		return failure("lifecycle.state", "the resolved image is not the linux/amd64 manifest of the selected artifact", "")
+		return cephEvidenceMismatch.Fail("the resolved image is not the linux/amd64 manifest of the selected artifact", "")
 	}
 	if !authoredMatches(e, r) {
 		return imageDigestMismatch()
@@ -215,7 +215,7 @@ func (c ImageCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (l
 		return plan, err
 	}
 	if input.State == nil {
-		return plan, failure("lifecycle.state", "Ceph planning requires compiled state", "")
+		return plan, cephRequestInvalid.Fail("Ceph planning requires compiled state", "")
 	}
 	catalog := input.State.Effective()
 	for _, object := range catalog.OfKind(api.CephCluster) {
@@ -263,7 +263,7 @@ func (ImageCapability) Removal(ctx context.Context, block reconciliation.Block) 
 func imageRefusals() map[string]error {
 	out := map[string]error{"image-digest-mismatch": imageDigestMismatch()}
 	for _, reason := range []string{"request", "artifact", "material", "discovery", "timeout", "unknown", "adapter-exception"} {
-		out[reason] = failure("lifecycle.unknown", "the selected Ceph image resolution refused its "+reason+" boundary", "inspect the attempt's adapter output, then apply again; resolution changes nothing")
+		out[reason] = cephBoundaryUnproved.Fail("the selected Ceph image resolution refused its "+reason+" boundary", "inspect the attempt's adapter output, then apply again; resolution changes nothing")
 	}
 	return out
 }
@@ -296,10 +296,10 @@ func (c ImageCapability) run(ctx context.Context, e lifecycle.Execution, operati
 		return lifecycle.RunResult{}, r, err
 	}
 	if e.Block.Kind != string(api.CephCluster) || e.Block.Object != r.Cluster {
-		return lifecycle.RunResult{}, r, failure("lifecycle.state", "Ceph image request does not match its frozen resource identity", "")
+		return lifecycle.RunResult{}, r, cephRequestInvalid.Fail("Ceph image request does not match its frozen resource identity", "")
 	}
 	if c.runner == nil {
-		return lifecycle.RunResult{}, r, failure("lifecycle.state", "the Ceph image adapter is not configured", "")
+		return lifecycle.RunResult{}, r, cephUnconfigured.Fail("the Ceph image adapter is not configured", "")
 	}
 	canonical, err := r.Canonical()
 	if err != nil {
@@ -309,7 +309,7 @@ func (c ImageCapability) run(ctx context.Context, e lifecycle.Execution, operati
 	var values map[string]string
 	if operation == "apply" {
 		if c.route == nil {
-			return lifecycle.RunResult{}, r, failure("lifecycle.state", "the Ceph image acquisition route proof is not configured", "use the composed controller capability")
+			return lifecycle.RunResult{}, r, cephUnconfigured.Fail("the Ceph image acquisition route proof is not configured", "use the composed controller capability")
 		}
 		route, err := c.route(r.Controller, e.ApplyProved)
 		if err != nil {
@@ -355,7 +355,7 @@ func (c ImageCapability) mutate(ctx context.Context, e lifecycle.Execution, oper
 		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, imageDigestMismatch()
 	}
 	if !usable || err != nil || !evidence.Postcondition || imageEffect(evidence, r, operation == "destroy") != reconciliation.EffectCompleted {
-		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, failure("lifecycle.unknown", "the Ceph image resolution did not prove its postcondition", "")
+		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, cephUnproved.Fail("the Ceph image resolution did not prove its postcondition", "")
 	}
 	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil
 }
@@ -384,7 +384,7 @@ func (ImageCapability) ObserveRemoval(ctx context.Context, e lifecycle.Execution
 	}
 	evidence, err := json.Marshal(ImageEvidence{Absent: true, Postcondition: true, Request: e.Block.RequestDigest})
 	if err != nil {
-		return unknown, failure("lifecycle.state", "the Ceph image removal evidence cannot be encoded", "")
+		return unknown, cephRequestInvalid.Fail("the Ceph image removal evidence cannot be encoded", "")
 	}
 	return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: evidence}, nil
 }
@@ -416,7 +416,7 @@ func (ImageCapability) Unresolved(verb reconciliation.Verb, block reconciliation
 	}
 	refused := resolution(evidence, r)
 	if refused == nil {
-		refused = failure("lifecycle.state", "the resolution reported a partial or contradictory result", "")
+		refused = cephEvidenceMismatch.Fail("the resolution reported a partial or contradictory result", "")
 	}
 	return lifecycle.Drifted(verb, "the selected Ceph image resolution", "Machine "+r.Controller, refused)
 }
@@ -430,15 +430,15 @@ func provedResolution(proofs []lifecycle.BlockEvidence, cluster string) (ImageRe
 			continue
 		}
 		if found {
-			return ImageRequest{}, ImageEvidence{}, failure("lifecycle.state", "the Ceph image has ambiguous resolution proofs", "")
+			return ImageRequest{}, ImageEvidence{}, cephRecordsMissing.Fail("the Ceph image has ambiguous resolution proofs", "")
 		}
 		r, err := DecodeImageRequest(proof.Block.Request)
 		if err != nil || r.Cluster != cluster {
-			return ImageRequest{}, ImageEvidence{}, failure("lifecycle.state", "the Ceph image resolution proof names another request", "")
+			return ImageRequest{}, ImageEvidence{}, cephProofMismatch.Fail("the Ceph image resolution proof names another request", "")
 		}
 		evidence, err := decodeImageEvidence(proof.Evidence, proof.Block.RequestDigest)
 		if err != nil {
-			return ImageRequest{}, ImageEvidence{}, failure("lifecycle.state", "the Ceph image resolution proof is unreadable", "")
+			return ImageRequest{}, ImageEvidence{}, cephRecordsMissing.Fail("the Ceph image resolution proof is unreadable", "")
 		}
 		if err := resolution(evidence, r); err != nil {
 			return ImageRequest{}, ImageEvidence{}, err
@@ -446,7 +446,7 @@ func provedResolution(proofs []lifecycle.BlockEvidence, cluster string) (ImageRe
 		found, request, resolved = true, r, evidence
 	}
 	if !found {
-		return ImageRequest{}, ImageEvidence{}, failure("lifecycle.state", "Ceph lacks its original apply's image resolution proof", "restore the original apply evidence; the image is resolved once and never again for the same operation")
+		return ImageRequest{}, ImageEvidence{}, cephRecordsMissing.Fail("Ceph lacks its original apply's image resolution proof", "restore the original apply evidence; the image is resolved once and never again for the same operation")
 	}
 	return request, resolved, nil
 }
@@ -457,7 +457,7 @@ func ProvedImage(proofs []lifecycle.BlockEvidence, cluster, authored string) (st
 		return "", err
 	}
 	if r.Image != authored {
-		return "", failure("lifecycle.state", "the Ceph image resolution proof was resolved for another authored image", "")
+		return "", cephProofMismatch.Fail("the Ceph image resolution proof was resolved for another authored image", "")
 	}
 	return r.Base + "@" + evidence.Digest, nil
 }
@@ -484,18 +484,18 @@ func ProvedAuxiliaryImages(proofs []lifecycle.BlockEvidence, cluster string, aut
 }
 
 func auxiliarySetMismatch() error {
-	return failure("lifecycle.state", "the Ceph image resolution proof was resolved for another authored auxiliary image set", "")
+	return cephProofMismatch.Fail("the Ceph image resolution proof was resolved for another authored auxiliary image set", "")
 }
 
 func auxiliaryImage(name, base, version, registryURL string) (AuxiliaryImage, error) {
 	if base != registryURL && !strings.HasPrefix(base, registryURL+"/") {
-		return AuxiliaryImage{}, failure("lifecycle.unsupported", "the auxiliary image "+name+" is not beneath the Entitlement registry "+registryURL, "set spec.images."+name+".base to a repository beneath the Entitlement registry.url")
+		return AuxiliaryImage{}, cephImageInvalid.Fail("the auxiliary image "+name+" is not beneath the Entitlement registry "+registryURL, "set spec.images."+name+".base to a repository beneath the Entitlement registry.url")
 	}
 	if ValidImageDigest(version) {
 		return AuxiliaryImage{Name: name, Base: base, Image: base + "@" + version}, nil
 	}
 	if !cephcluster.NativeVersion(version) {
-		return AuxiliaryImage{}, failure("lifecycle.unsupported", "the auxiliary image "+name+" names neither a tag nor a sha256 digest", "set spec.images."+name+".version to a tag or a sha256 digest")
+		return AuxiliaryImage{}, cephImageInvalid.Fail("the auxiliary image "+name+" names neither a tag nor a sha256 digest", "set spec.images."+name+".version to a tag or a sha256 digest")
 	}
 	return AuxiliaryImage{Name: name, Base: base, Image: base + ":" + version, Tag: version}, nil
 }

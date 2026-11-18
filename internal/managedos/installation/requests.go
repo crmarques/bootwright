@@ -340,13 +340,13 @@ func DecodeRequest(data []byte) (Request, error) {
 		return Request{}, err
 	}
 	if r.Requires != r.requirements() || r.Budgets.Sessions != r.sessions() {
-		return Request{}, refusal("lifecycle.state", "the frozen request's required proofs or session budgets are not those its own fields derive", "")
+		return Request{}, installRequestInvalid.Fail("the frozen request's required proofs or session budgets are not those its own fields derive", "")
 	}
 	if p := r.DiscoveryProof; p != nil {
 		h := r.Target.Hardware
 		if !r.Target.Physical || h == nil || h.RootVolumeRef != nil || p.Validate() != nil ||
 			h.WWN != p.Selected.WWN || h.SerialNumber != p.Selected.SerialNumber || h.SizeBytes != p.Selected.SizeBytes {
-			return Request{}, refusal("lifecycle.state", "the frozen discovery proof does not name the exact installation root", "")
+			return Request{}, installRequestInvalid.Fail("the frozen discovery proof does not name the exact installation root", "")
 		}
 	}
 	return r, nil
@@ -371,7 +371,7 @@ func MarkerFor(request Request, digest string) ([]byte, error) {
 		Machine: request.Identity.Object, Profile: request.Identity.Profile, Request: digest,
 	})
 	if err != nil {
-		return nil, refusal("lifecycle.state", "the install marker cannot be encoded", "")
+		return nil, installRequestInvalid.Fail("the install marker cannot be encoded", "")
 	}
 	return data, nil
 }

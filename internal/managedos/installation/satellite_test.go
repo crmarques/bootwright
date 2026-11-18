@@ -161,7 +161,7 @@ func TestASatelliteBundleOutsideItsGrammarRefusesBeforeEffects(t *testing.T) {
 func TestRegistrationTrustNamesTheSatelliteAndItsBundle(t *testing.T) {
 	refusals := registrationRefusals(testContext, pinnedRequest(t, labCatalog(registeringProfile(), satelliteEntitlement())))
 	reported := diagnostics.Of(refusals["registration-trust"])
-	if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Object == nil || reported[0].Object.Name != "rhel-01" ||
+	if len(reported) != 1 || reported[0].Code != "install.registration-rejected" || reported[0].Object == nil || reported[0].Object.Name != "rhel-01" ||
 		reported[0].Message != "the Satellite satellite.example.test presented a certificate that the CA bundle of Secret/satellite-ca does not verify" ||
 		reported[0].Remediation != "set Secret/satellite-ca to the CA that signs the certificate of satellite.example.test, such as the Satellite's katello-server-ca.crt, then run bootwright apply --context lab again" {
 		t.Fatalf("registration-trust = %#v", reported)

@@ -112,11 +112,11 @@ func unitDependencies(r Request, cluster api.Object) ([]string, error) {
 
 func unitDeadline(r Request, operation string) (time.Duration, error) {
 	if r.Service == nil {
-		return 0, failure("lifecycle.state", "the Ceph service unit type is not known to this build", "")
+		return 0, cephRequestInvalid.Fail("the Ceph service unit type is not known to this build", "")
 	}
 	t, known := unitTypes[r.Service.Type]
 	if !known {
-		return 0, failure("lifecycle.state", "the Ceph service unit type is not known to this build", "")
+		return 0, cephRequestInvalid.Fail("the Ceph service unit type is not known to this build", "")
 	}
 	if r.Service.Type == "nvmeof" {
 		observation, err := nvmeofUnitObservation(*r.Service)
@@ -124,7 +124,7 @@ func unitDeadline(r Request, operation string) (time.Duration, error) {
 			return 0, err
 		}
 		if r.Service.ObserveBudget != observation {
-			return 0, failure("lifecycle.state", "the NVMe-oF service "+r.Service.ID+" froze an observation bound this build does not derive", "destroy it with the build that applied it, then apply with this build")
+			return 0, cephOtherBuild.Fail("the NVMe-oF service "+r.Service.ID+" froze an observation bound this build does not derive", "destroy it with the build that applied it, then apply with this build")
 		}
 		seconds := observation + 20 + 60
 		if operation == "apply" {
@@ -228,7 +228,7 @@ var unitSpecMembers = map[string][]string{
 func unitDocumentOf(cluster api.Object, svc api.Value, spec func(api.Value) any) (json.RawMessage, error) {
 	name := cephcluster.NativeServiceName(svc)
 	if svc.Has("placement", "count_per_host") && !(slices.Contains([]string{"nvmeof", "rgw"}, svc.Get("service_type").Text()) && svc.Get("placement", "count_per_host").Equal(api.IntegerValue("1"))) {
-		return nil, failure("lifecycle.unsupported", "the native service "+name+" places more than one daemon of a type per host, which Bootwright does not realize",
+		return nil, cephUnsupportedService.Fail("the native service "+name+" places more than one daemon of a type per host, which Bootwright does not realize",
 			"omit placement.count_per_host on "+name+" in spec.services")
 	}
 	mounts := proxyCAMount(svc)
@@ -236,7 +236,7 @@ func unitDocumentOf(cluster api.Object, svc api.Value, spec func(api.Value) any)
 		return svc.Get(option).Len() != 0 && (option != "custom_configs" || mounts == nil)
 	}
 	if slices.ContainsFunc([]string{"config", "extra_container_args", "extra_entrypoint_args", "custom_configs"}, carried) || svc.Get("unmanaged").Bool() || svc.Get("preview_only").Bool() {
-		return nil, failure("lifecycle.unsupported", "the native service "+name+" carries config, extra container or entrypoint arguments or custom configs, which Bootwright does not realize",
+		return nil, cephUnsupportedService.Fail("the native service "+name+" carries config, extra container or entrypoint arguments or custom configs, which Bootwright does not realize",
 			"remove those options from "+name+" in spec.services")
 	}
 	t := svc.Get("service_type").Text()
@@ -246,7 +246,7 @@ func unitDocumentOf(cluster api.Object, svc api.Value, spec func(api.Value) any)
 	}
 	for _, member := range svc.Get("spec").Fields() {
 		if !slices.Contains(members, member.Name) {
-			return nil, failure("lifecycle.unsupported", "the native service "+name+" carries spec."+member.Name+", which Bootwright does not realize for this service",
+			return nil, cephUnsupportedService.Fail("the native service "+name+" carries spec."+member.Name+", which Bootwright does not realize for this service",
 				"remove spec."+member.Name+" from "+name+" in spec.services")
 		}
 	}
@@ -461,7 +461,7 @@ func unitBinding(cluster api.Object, binding api.Value) bool {
 }
 
 func unrealizedBinding(ref string) error {
-	return failure("lifecycle.unsupported", "Bootwright does not realize the service binding of "+ref+"; it realizes only the TLS bindings of an rgw service that a CephObjectGateway binds and of the ingress that fronts it, the TLS binding of the management gateway, the credential, TLS and CA bundle bindings of its oauth2-proxy, the credential bindings of the grafana and snmp-gateway services, and the five mTLS bindings of nvmeof",
+	return cephUnsupportedService.Fail("Bootwright does not realize the service binding of "+ref+"; it realizes only the TLS bindings of an rgw service that a CephObjectGateway binds and of the ingress that fronts it, the TLS binding of the management gateway, the credential, TLS and CA bundle bindings of its oauth2-proxy, the credential bindings of the grafana and snmp-gateway services, and the five mTLS bindings of nvmeof",
 		"remove the spec.serviceBindings entry for "+ref)
 }
 

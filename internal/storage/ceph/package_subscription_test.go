@@ -97,7 +97,7 @@ func TestSubscriptionPackageSourceRefusals(t *testing.T) {
 	refused := func(name string, err error, reason string) {
 		t.Helper()
 		var failure *diagnostics.Failure
-		if !errors.As(err, &failure) || len(failure.Diagnostics) != 1 || failure.Diagnostics[0].Code != "lifecycle.unsupported" || !strings.Contains(failure.Diagnostics[0].Message, reason) {
+		if !errors.As(err, &failure) || len(failure.Diagnostics) != 1 || failure.Diagnostics[0].Code != cephPackageSourceUnsupported.Code || !strings.Contains(failure.Diagnostics[0].Message, reason) {
 			t.Fatalf("%s: refusal %v does not say %q", name, err, reason)
 		}
 	}

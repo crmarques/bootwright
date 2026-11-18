@@ -253,12 +253,9 @@ func recoveryMaterial(operation string, request Request) []lifecycle.MaterialFil
 }
 
 func rootEncryptionUnproved(contextName string, request Request) error {
-	return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
-		Severity: "error", Code: "lifecycle.state",
-		Message:     "Machine/" + request.Identity.Object + " was installed with an encrypted root disk, but its root filesystem is not on a LUKS device with a TPM2 binding",
-		Remediation: "take this context back with bootwright destroy --context " + contextName + ", then run bootwright apply --context " + contextName + "; the root disk is encrypted only at installation",
-		Object:      &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Machine), Name: request.Identity.Object},
-	}}}
+	return failOn(installGuestPolicyUnmet, diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Machine), Name: request.Identity.Object},
+		"Machine/"+request.Identity.Object+" was installed with an encrypted root disk, but its root filesystem is not on a LUKS device with a TPM2 binding",
+		"take this context back with bootwright destroy --context "+contextName+", then run bootwright apply --context "+contextName+"; the root disk is encrypted only at installation")
 }
 
 // physicalEncryptionScope proves root and all bindings belong only to the authorized disk.

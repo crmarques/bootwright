@@ -53,7 +53,7 @@ func DecodeTreeRequest(data []byte) (TreeRequest, error) {
 	server := path.Base(r.Server)
 	if !slices.Equal(r.Area, artifactserver.HostedArea()) || r.Server != artifactserver.ContentRoot(r.Identity.Context, server) ||
 		r.ServedRoot != artifactserver.ServedRoot(r.Identity.Context, server) || !strings.HasPrefix(r.Publication.Path, r.ServedRoot+"/") {
-		return TreeRequest{}, refusal("lifecycle.state", "the frozen package tree request's hosted roots are not its artifact server's", "")
+		return TreeRequest{}, installRequestInvalid.Fail("the frozen package tree request's hosted roots are not its artifact server's", "")
 	}
 	return r, nil
 }
@@ -75,7 +75,7 @@ func (c TreeCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 		return lifecycle.CapabilityPlan{}, err
 	}
 	if input.State == nil {
-		return lifecycle.CapabilityPlan{}, refusal("lifecycle.state", "package tree planning requires compiled state", "")
+		return lifecycle.CapabilityPlan{}, installUnconfigured.Fail("package tree planning requires compiled state", "")
 	}
 	catalog := input.State.Effective()
 	requests, _, err := plannedRequests(input, nil, false)
@@ -92,7 +92,7 @@ func (c TreeCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 		}
 		if records == nil {
 			if c.media == nil {
-				return plan, refusal("lifecycle.state", "package tree planning requires the media store reader", "")
+				return plan, installUnconfigured.Fail("package tree planning requires the media store reader", "")
 			}
 			records, err = c.media.MediaRecords(ctx)
 			if err != nil {
@@ -121,7 +121,7 @@ func (c TreeCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 			ServedRoot: artifactserver.ServedRoot(input.Context.Name, server.Name()), Server: artifactserver.ContentRoot(input.Context.Name, server.Name()), Version: TreeImplementation,
 		}
 		if other, exists := paths[request.Publication.Path]; exists && other != media {
-			return plan, refusal("lifecycle.state", "one package tree path names conflicting source pins", "select one source per publication path")
+			return plan, installInputInvalid.Fail("one package tree path names conflicting source pins", "select one source per publication path")
 		}
 		paths[request.Publication.Path], seen[profile.Name()] = media, true
 		if err := appendTreePlan(&plan, catalog, input, request, server.Name()); err != nil {
@@ -140,7 +140,7 @@ func appendTreePlan(plan *lifecycle.CapabilityPlan, catalog api.Catalog, input l
 	}
 	environments := catalog.OfKind(api.Environment)
 	if len(environments) != 1 {
-		return refusal("lifecycle.state", "package tree publication requires one Environment", "")
+		return installInputInvalid.Fail("package tree publication requires one Environment", "")
 	}
 	plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{
 		ID: reconciliation.BlockIdentity("os-package-tree-", request.Identity.Profile), Description: treeDescription(input.Verb), Stage: reconciliation.StageMachines,
@@ -193,7 +193,7 @@ func (c TreeCapability) run(ctx context.Context, execution lifecycle.Execution, 
 		return lifecycle.RunResult{}, request, err
 	}
 	if c.runner == nil {
-		return lifecycle.RunResult{}, request, refusal("lifecycle.state", "the package tree adapter is not configured", "")
+		return lifecycle.RunResult{}, request, installUnconfigured.Fail("the package tree adapter is not configured", "")
 	}
 	canonical, err := request.Canonical()
 	if err != nil {
@@ -222,22 +222,16 @@ func treeRefusals(contextName string, request TreeRequest) map[string]error {
 	profile := diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.MachineInstallProfile), Name: request.Identity.Profile}
 	return map[string]error{
 		"media-changed-tree": changedMedia(contextName, request.Media.Name, profile),
-		"tree-source-drift": &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
-			Severity: "error", Code: "lifecycle.state",
-			Message: "the package tree at " + request.Publication.Path + " was extracted from another image than the " + request.Media.Name +
+		"tree-source-drift": failOn(installSourceChanged, profile,
+			"the package tree at "+request.Publication.Path+" was extracted from another image than the "+request.Media.Name+
 				" this operation froze, so it was left unchanged and nothing was published",
-			Remediation: "take this context back with bootwright destroy --context " + contextName +
-				", which removes that tree, then run bootwright apply --context " + contextName,
-			Object: &profile,
-		}}},
-		"artifact-server-not-applied": &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
-			Severity: "error", Code: "lifecycle.state",
-			Message: "the artifact server that serves the package tree at " + request.Publication.Path +
+			"take this context back with bootwright destroy --context "+contextName+
+				", which removes that tree, then run bootwright apply --context "+contextName),
+		"artifact-server-not-applied": failOn(installArtifactServerNotApplied, profile,
+			"the artifact server that serves the package tree at "+request.Publication.Path+
 				" is not applied on this host: its private directories or its content root are missing, or the content root is not a root-owned directory only root may change, so nothing was published",
-			Remediation: "apply the artifact server with bootwright apply --context " + contextName +
-				" --stage infrastructure-services, then repeat this apply",
-			Object: &profile,
-		}}},
+			"apply the artifact server with bootwright apply --context "+contextName+
+				" --stage infrastructure-services, then repeat this apply"),
 	}
 }
 func (c TreeCapability) Apply(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
@@ -255,7 +249,7 @@ func (c TreeCapability) mutate(ctx context.Context, execution lifecycle.Executio
 	evidence, err := decodeTreeEvidence(result.Evidence, execution.Block.RequestDigest)
 	valid := err == nil && evidence.Postcondition && (operation != "destroy" || evidence.Absent) && treeEffect(evidence, request, operation == "destroy") == reconciliation.EffectCompleted
 	if !usable || !valid {
-		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, refusal("lifecycle.state", "the package tree adapter did not prove its postcondition", "")
+		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, installPostconditionUnmet.Fail("the package tree adapter did not prove its postcondition", "")
 	}
 	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil
 }
@@ -291,5 +285,5 @@ func (TreeCapability) Unresolved(verb reconciliation.Verb, block reconciliation.
 	if err != nil || treeEffect(evidence, request, verb == reconciliation.Destroy) != reconciliation.EffectUnknown {
 		return lifecycle.Unresolved{}, false
 	}
-	return lifecycle.Drifted(verb, "the shared package tree", lifecycle.PlacedOn(request.Placement), refusal("lifecycle.state", "the tree identity differs from the frozen media source", ""))
+	return lifecycle.Drifted(verb, "the shared package tree", lifecycle.PlacedOn(request.Placement), installEvidenceInvalid.Fail("the tree identity differs from the frozen media source", ""))
 }

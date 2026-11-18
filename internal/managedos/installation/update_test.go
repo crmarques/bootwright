@@ -67,7 +67,7 @@ func TestAReleaseOutsideTheGrammarIsNotFrozen(t *testing.T) {
 		profile := updatingProfile()
 		profile = profile.WithSpec(profile.Spec().WithPath(api.StringValue(release), "os", "version"))
 		_, err := updateFor(profile)
-		if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.unsupported" ||
+		if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "install.unsupported" ||
 			!strings.Contains(reported[0].Message, "updates within release "+release+", which is not a <major>.<minor> release") {
 			t.Fatalf("%q: refusal = %#v", release, reported)
 		}
@@ -179,6 +179,10 @@ func TestApplyNamesEveryUpdateRefusalWithItsDetail(t *testing.T) {
 		{"update-failed", "transaction", "the package transaction of " + machine + " failed while it updated within release 9.8: transaction",
 			"run bootwright apply --context lab again once the update sources of " + profile + " offer a consistent transaction, or run bootwright destroy --context lab and set spec.updates.policy to none"},
 	}
+	codes := map[string]string{
+		"update-release-unavailable": "install.update-refused", "update-release-mismatch": "install.update-refused", "update-release-drift": "install.update-refused",
+		"update-no-repository": "install.update-refused", "update-foreign": "install.foreign-record", "update-unavailable": "install.service-unavailable", "update-failed": "install.update-failed",
+	}
 	for _, test := range cases {
 		named, ok := refusals[test.reason]
 		if !ok {
@@ -189,7 +193,7 @@ func TestApplyNamesEveryUpdateRefusalWithItsDetail(t *testing.T) {
 			completed = named.(interface{ WithDetail(string) error }).WithDetail(test.detail)
 		}
 		reported := diagnostics.Of(completed)
-		if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Object == nil || reported[0].Object.Name != "rhel-01" ||
+		if len(reported) != 1 || reported[0].Code != codes[test.reason] || reported[0].Object == nil || reported[0].Object.Name != "rhel-01" ||
 			reported[0].Message != test.message || reported[0].Remediation != test.remediation {
 			t.Errorf("%s with %q = %#v", test.reason, test.detail, reported)
 		}

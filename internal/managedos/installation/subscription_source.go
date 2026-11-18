@@ -61,10 +61,10 @@ func subscriptionValue(read func(KickstartSubscription) string) func(Installatio
 
 func subscriptionSourceRefusal(input Installation) error {
 	if (input.PackageSource == subscriptionSource) != (input.Subscription != nil) {
-		return refusal("lifecycle.state", "the subscription package source and its installer registration disagree", "plan the installation again")
+		return installRequestInvalid.Fail("the subscription package source and its installer registration disagree", "plan the installation again")
 	}
 	if input.Subscription != nil && (input.Subscription.Hostname == "" || input.Subscription.ContentBaseURL == "") {
-		return refusal("lifecycle.state", "the subscription package source names no Satellite host name and content root", "plan the installation again")
+		return installRequestInvalid.Fail("the subscription package source names no Satellite host name and content root", "plan the installation again")
 	}
 	return nil
 }

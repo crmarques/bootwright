@@ -66,7 +66,7 @@ func TestIdentityRefusesEveryForeignArm(t *testing.T) {
 			foreign := executionFor(t, r)
 			foreign.Block.ID, foreign.Block.Kind, foreign.Block.Object = e.Block.ID, e.Block.Kind, e.Block.Object
 			_, err := capability.identity(context.Background(), foreign)
-			if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "lifecycle.state" || d[0].Message != "Ceph request does not match its frozen resource identity" {
+			if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != cephRequestInvalid.Code || d[0].Message != "Ceph request does not match its frozen resource identity" {
 				t.Errorf("a %s request carrying a %s arm passes its identity: %+v", action, arm, d)
 			}
 		}

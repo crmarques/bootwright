@@ -39,7 +39,7 @@ func TestAHostRefusalReachesTheOperatorWithItsRemedy(t *testing.T) {
 	runner := &refusingRunner{reason: "image-pull"}
 	result, err := NewHost(runner).WithProofs(proofs).Apply(context.Background(), e)
 	d := diagnostics.Of(err)
-	if result.Outcome == reconciliation.OutcomeChanged || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
+	if result.Outcome == reconciliation.OutcomeChanged || len(d) != 1 || d[0].Code != cephBoundaryUnproved.Code ||
 		d[0].Message != "the frozen Ceph image or an auxiliary image digest could not be pulled within its three bounded attempts" ||
 		d[0].Remediation != "inspect the attempt's adapter output, then apply again; host preparation resumes from its journal" {
 		t.Fatalf("an image-pull refusal reached the operator as %+v %+v", result, d)
@@ -95,7 +95,7 @@ func TestAForeignClientRefusalNamesTheClientAndFrozenInputRecovery(t *testing.T)
 	e = withMaterial(e, r)
 	_, err := New(api.CephClient, &refusingRunner{reason: "foreign-client"}).Observe(context.Background(), e)
 	d := diagnostics.Of(err)
-	if len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
+	if len(d) != 1 || d[0].Code != cephForeign.Code ||
 		d[0].Message != "Ceph client client.consumer exists that this operation did not create" ||
 		!strings.Contains(d[0].Remediation, "outside Bootwright") ||
 		!strings.Contains(d[0].Remediation, "bootwright destroy --context <context>") ||
@@ -111,7 +111,7 @@ func TestADashboardManagerRefusalNamesTheManagerContainerNotTheAdminUser(t *test
 	runner := &refusingRunner{reason: "dashboard-manager"}
 	observation, err := New(api.CephCluster, runner).Observe(context.Background(), e)
 	d := diagnostics.Of(err)
-	if observation.Effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
+	if observation.Effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != cephDrifted.Code ||
 		d[0].Message != "a Ceph MGR's container or dashboard port no longer matches the deployment this operation recorded" ||
 		!strings.Contains(d[0].Remediation, "ceph orch ps --daemon_type mgr") || strings.Contains(d[0].Message, "admin") {
 		t.Fatalf("a dashboard-manager refusal reached the operator as %+v %+v", observation, d)
@@ -124,7 +124,7 @@ func TestACallHomeUnqualifiedRefusalReachesTheOperatorAsUnsupportedWithItsRemedy
 	runner := &refusingRunner{reason: "call-home-unqualified"}
 	_, err := New(api.CephCluster, runner).Observe(context.Background(), e)
 	d := diagnostics.Of(err)
-	if len(d) != 1 || d[0].Code != "lifecycle.unsupported" || d[0].Message != "IBM Call Home intent has no qualified path on the selected Ceph build" ||
+	if len(d) != 1 || d[0].Code != cephUnqualified.Code || d[0].Message != "IBM Call Home intent has no qualified path on the selected Ceph build" ||
 		d[0].Remediation != "the apply froze this input, so take back what it owns with bootwright destroy --context <context>, "+
 			"correct spec.distribution.ibm.callHome for the selected build with bootwright context update, then apply; see .agents/knowledge/version-specializations.md" {
 		t.Fatalf("a call-home-unqualified refusal reached the operator as %+v", d)
@@ -137,7 +137,7 @@ func TestANativeOptionUndeclaredRefusalNamesTheDestroyItsInputChangeNeeds(t *tes
 	runner := &refusingRunner{reason: "native-option-undeclared"}
 	_, err := New(api.CephCluster, runner).Observe(context.Background(), e)
 	d := diagnostics.Of(err)
-	if len(d) != 1 || d[0].Code != "lifecycle.unsupported" ||
+	if len(d) != 1 || d[0].Code != cephUnqualified.Code ||
 		!strings.HasPrefix(d[0].Remediation, "the apply froze this input, so take back what it owns with bootwright destroy --context <context>, ") ||
 		!strings.Contains(d[0].Remediation, "with bootwright context update, then apply") {
 		t.Fatalf("a native-option-undeclared refusal reached the operator as %+v", d)
@@ -155,7 +155,7 @@ func TestADirtyOSDDiskRefusesByItsOwnNameAndLeavesTheAttemptFailed(t *testing.T)
 	for reason, message := range messages {
 		_, err := New(api.CephCluster, &refusingRunner{reason: reason}).Observe(context.Background(), e)
 		d := diagnostics.Of(err)
-		if len(d) != 1 || d[0].Code != "lifecycle.unsupported" || d[0].Message != message || d[0].Message == generic.Message ||
+		if len(d) != 1 || d[0].Code != cephDeviceRefused.Code || d[0].Message != message || d[0].Message == generic.Message ||
 			!strings.HasPrefix(d[0].Remediation, osdDiskRemedy) || lifecycle.AttemptOutcome(err) != reconciliation.OutcomeFailed {
 			t.Fatalf("a %s refusal reached the operator as %+v", reason, d)
 		}
@@ -185,7 +185,7 @@ func TestAPartialOSDDiskRefusesUnknownAndNamesOnlyTheOwnedClear(t *testing.T) {
 	} {
 		_, err := New(api.CephCluster, &refusingRunner{reason: reason}).Observe(context.Background(), e)
 		d := diagnostics.Of(err)
-		if len(d) != 1 || d[0].Code != "lifecycle.unknown" || strings.Contains(d[0].Message, "could not prove its") ||
+		if len(d) != 1 || d[0].Code != cephOSDUnproved.Code || strings.Contains(d[0].Message, "could not prove its") ||
 			!strings.Contains(d[0].Remediation, step) || lifecycle.AttemptOutcome(err) != reconciliation.OutcomeUnknown {
 			t.Fatalf("a %s refusal reached the operator as %+v", reason, d)
 		}
@@ -202,7 +202,7 @@ func TestAForeignImageRefusalNamesTheSettingAndNeverOverwrites(t *testing.T) {
 	e := withMaterial(executionFor(t, r), r)
 	observation, err := New(api.CephCluster, &refusingRunner{reason: "foreign-image"}).Observe(context.Background(), e)
 	d := diagnostics.Of(err)
-	if observation.Effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
+	if observation.Effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != cephForeign.Code ||
 		d[0].Message != "a cephadm container_image setting of the Ceph cluster holds an image this operation did not freeze, is set outside the mgr section, or no longer holds the frozen image a declared service needs" ||
 		d[0].Remediation != "find the setting the native error names in ceph config dump, then remove it with ceph config rm or set it to the frozen image outside Bootwright and apply again; "+
 			"Bootwright never overwrites a container_image setting it did not write" {
@@ -222,7 +222,7 @@ func TestANFSModuleDisabledRefusalNamesTheSettingsBlock(t *testing.T) {
 	e := withMaterial(executionFor(t, r), r)
 	observation, err := New(api.CephCluster, &refusingRunner{reason: "nfs-module-disabled"}).Observe(context.Background(), e)
 	d := diagnostics.Of(err)
-	if observation.Effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
+	if observation.Effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != cephPrerequisite.Code ||
 		d[0].Message != "the Ceph cluster's nfs manager module is disabled, although the cluster's settings block enabled it for the declared NFS service" ||
 		d[0].Remediation != "enable it again outside Bootwright with ceph mgr module enable nfs, then apply again; the settings block does not run again once it completed, "+
 			"and an NFS service block never enables a manager module" {
@@ -235,7 +235,7 @@ func TestANFSPoolForeignRefusalNamesThePool(t *testing.T) {
 	e := withMaterial(executionFor(t, r), r)
 	observation, err := New(api.CephCluster, &refusingRunner{reason: "nfs-pool-foreign"}).Observe(context.Background(), e)
 	d := diagnostics.Of(err)
-	if observation.Effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
+	if observation.Effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != cephForeign.Code ||
 		d[0].Message != "a Ceph pool named .nfs exists that this operation's NFS services did not create, or it is not the pool they recorded" ||
 		d[0].Remediation != "find the .nfs pool with ceph osd pool ls detail; if nothing uses it, remove it outside Bootwright and apply again, "+
 			"or take back what this context owns with bootwright destroy --context <context>, then apply; Bootwright never adopts a .nfs pool it did not create" {
@@ -255,7 +255,7 @@ func gatewayRefusal(t *testing.T, reason string) (reconciliation.EffectState, []
 
 func TestAnObjectRealmForeignRefusalNamesItsNextStep(t *testing.T) {
 	effect, d := gatewayRefusal(t, "object-realm-foreign")
-	if effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
+	if effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != cephForeign.Code ||
 		d[0].Message != "the cluster holds RGW configuration this operation did not create: a .rgw.root pool without this operation's claim, "+
 			"or a realm, zone group or zone of the CephObjectGateway's names without its creation record, or one it created that is gone or changed" ||
 		d[0].Remediation != "find what the native error names with ceph osd pool ls and radosgw-admin realm list, zonegroup list and zone list; "+
@@ -269,7 +269,7 @@ func TestAnObjectRealmForeignRefusalNamesItsNextStep(t *testing.T) {
 
 func TestAnObjectZonePoolsRefusalNamesItsNextStep(t *testing.T) {
 	effect, d := gatewayRefusal(t, "object-zone-pools")
-	if effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
+	if effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != cephDrifted.Code ||
 		d[0].Message != "the zone a CephObjectGateway created names a pool Bootwright did not plan, or its default placement does not hold the pools the gateway froze" ||
 		d[0].Remediation != "inspect the zone with radosgw-admin zone get --rgw-realm <realm> --rgw-zone <zone>; the native error names the pool; "+
 			"take back what this context owns with bootwright destroy --context <context>, then apply; "+
@@ -280,7 +280,7 @@ func TestAnObjectZonePoolsRefusalNamesItsNextStep(t *testing.T) {
 
 func TestAnObjectEndpointCertificateRefusalNamesItsNextStep(t *testing.T) {
 	effect, d := gatewayRefusal(t, "object-endpoint-certificate")
-	if effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
+	if effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != cephDrifted.Code ||
 		d[0].Message != "a TLS service of a CephObjectGateway holds a certificate or private key other than the one its bound Secret holds" ||
 		d[0].Remediation != "find the service the native error names with ceph orch ls; Bootwright never replaces the certificate of a deployed gateway service: "+
 			"store the deployed certificate and key in the Secret again with bootwright secret set --name <secret> --certificate-file <path> --private-key-file <path>, "+
@@ -300,7 +300,7 @@ func nfsExportRefusal(t *testing.T, reason string) (reconciliation.EffectState, 
 
 func TestANFSExportForeignRefusalNamesItsNextStep(t *testing.T) {
 	effect, d := nfsExportRefusal(t, "nfs-export-foreign")
-	if effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
+	if effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != cephForeign.Code ||
 		d[0].Message != "an NFS export exists at the CephNFSExport's pseudo path on its NFS service that this operation did not create, "+
 			"or the export this operation created is gone or now has another export ID, CephFS principal or S3 key" ||
 		d[0].Remediation != "find the export the native error names with ceph nfs export info <service> <pseudo>; for an export this operation did not create, "+
@@ -313,7 +313,7 @@ func TestANFSExportForeignRefusalNamesItsNextStep(t *testing.T) {
 
 func TestANFSExportApplyRefusalNamesItsNextStep(t *testing.T) {
 	effect, d := nfsExportRefusal(t, "nfs-export-apply")
-	if effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
+	if effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != cephNotReady.Code ||
 		d[0].Message != "the NFS manager did not apply the CephNFSExport's export cleanly: its NFS service is not listed, the apply failed or reported a warning, "+
 			"or the stored export differs from the one applied" ||
 		d[0].Remediation != "read the native error, which holds the NFS manager's answer; check the service with ceph nfs cluster ls and the export with "+
@@ -325,7 +325,7 @@ func TestANFSExportApplyRefusalNamesItsNextStep(t *testing.T) {
 
 func TestANFSExportPathEscapeRefusalNamesItsNextStep(t *testing.T) {
 	effect, d := nfsExportRefusal(t, "nfs-export-path-escape")
-	if effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
+	if effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != cephPrerequisite.Code ||
 		d[0].Message != "the CephNFSExport's spec.native.path does not lie within the CephSubvolume it binds, "+
 			"or its spec.native.fsal.cmount_path is neither / nor the export path or a directory above it" ||
 		d[0].Remediation != "omit spec.native.path so the export serves the subvolume's own path, or set it to the path ceph fs subvolume getpath reports "+
@@ -337,7 +337,7 @@ func TestANFSExportPathEscapeRefusalNamesItsNextStep(t *testing.T) {
 
 func TestANFSExportRealmDefaultRefusalNamesItsNextStep(t *testing.T) {
 	effect, d := nfsExportRefusal(t, "nfs-export-realm-default")
-	if effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
+	if effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != cephPrerequisite.Code ||
 		d[0].Message != "an export of an RGW user needs its CephObjectGateway's realm as the cluster's default realm, through which the NFS manager "+
 			"and NFS-Ganesha find the user, and another realm is the default realm" ||
 		d[0].Remediation != "find the default realm with radosgw-admin realm list on the bootstrap host; when nothing else relies on it, clear it with "+
@@ -358,7 +358,7 @@ func TestAnIngressFirewallRefusalNamesItsNextStep(t *testing.T) {
 	unit := diagnostics.Of(err)
 	effect, gateway := gatewayRefusal(t, "ingress-firewall")
 	for _, d := range [][]diagnostics.Diagnostic{unit, gateway} {
-		if len(d) != 1 || d[0].Code != "lifecycle.unknown" || d[0].Message != message || d[0].Remediation != remedy {
+		if len(d) != 1 || d[0].Code != cephPrerequisite.Code || d[0].Message != message || d[0].Remediation != remedy {
 			t.Fatalf("an ingress-firewall refusal reached the operator as %+v", d)
 		}
 	}
@@ -438,9 +438,9 @@ func TestEachSMBBlockNamesExactlyTheRefusalsItsModuleMayPublish(t *testing.T) {
 func TestResourceRefusalsNameTheirNextStep(t *testing.T) {
 	refusals := adapterRefusals()
 	generic := diagnostics.Of(refusals["native-output"])[0].Remediation
-	for _, reason := range []string{"foreign-pool", "foreign-profile", "foreign-rule", "crush-capacity", "pg-budget", "foreign-rbd-image", "rbd-image-identity", "foreign-subvolume", "subvolume-identity", "pool-drift", "nfs-module-disabled", "nfs-pool-foreign", "object-realm-foreign", "object-zone-pools", "object-endpoint-certificate", "nfs-export-foreign", "nfs-export-apply", "nfs-export-path-escape", "nfs-export-realm-default", "ingress-firewall", "sso-unverified"} {
+	for reason, code := range map[string]string{"foreign-pool": "ceph.identity-foreign", "foreign-profile": "ceph.identity-foreign", "foreign-rule": "ceph.identity-foreign", "crush-capacity": "ceph.prerequisite", "pg-budget": "ceph.prerequisite", "foreign-rbd-image": "ceph.identity-foreign", "rbd-image-identity": "ceph.identity-drifted", "foreign-subvolume": "ceph.identity-foreign", "subvolume-identity": "ceph.identity-drifted", "pool-drift": "ceph.identity-drifted", "nfs-module-disabled": "ceph.prerequisite", "nfs-pool-foreign": "ceph.identity-foreign", "object-realm-foreign": "ceph.identity-foreign", "object-zone-pools": "ceph.identity-drifted", "object-endpoint-certificate": "ceph.identity-drifted", "nfs-export-foreign": "ceph.identity-foreign", "nfs-export-apply": "ceph.not-ready", "nfs-export-path-escape": "ceph.prerequisite", "nfs-export-realm-default": "ceph.prerequisite", "ingress-firewall": "ceph.prerequisite", "sso-unverified": "ceph.prerequisite"} {
 		d := diagnostics.Of(refusals[reason])
-		if len(d) != 1 || d[0].Code != "lifecycle.unknown" || d[0].Remediation == generic || strings.Contains(d[0].Message, "could not prove its") {
+		if len(d) != 1 || d[0].Code != code || !diagnostics.Unproved(refusals[reason]) || d[0].Remediation == generic || strings.Contains(d[0].Message, "could not prove its") {
 			t.Fatalf("%s reaches the operator as %+v", reason, d)
 		}
 	}
@@ -450,7 +450,7 @@ func TestAnUnverifiedSSORefusalNamesTheSkipAndItsRemedies(t *testing.T) {
 	d := diagnostics.Of(adapterRefusals()["sso-unverified"])
 	const message = "an oauth2-proxy daemon of a Ceph management gateway runs with a configuration that skips the identity provider's certificate verification, so Bootwright did not enable the dashboard's single sign-on"
 	const remedy = "the native error names the host, the daemon and where the skip was found; take back what this context owns with bootwright destroy --context <context>, then with bootwright context update either select a Ceph image whose cephadm renders oauth2-proxy without that skip, or remove the oauth2-proxy service, its spec.serviceBindings entries and spec.enable_auth on the mgmt-gateway, then apply; Bootwright never changes an applied management gateway unit, so removing the service without that destroy refuses"
-	if len(d) != 1 || d[0].Code != "lifecycle.unknown" || d[0].Message != message || d[0].Remediation != remedy {
+	if len(d) != 1 || d[0].Code != cephPrerequisite.Code || d[0].Message != message || d[0].Remediation != remedy {
 		t.Fatalf("an sso-unverified refusal reached the operator as %+v", d)
 	}
 }
@@ -458,7 +458,7 @@ func TestAnUnverifiedSSORefusalNamesTheSkipAndItsRemedies(t *testing.T) {
 func TestAPoolDriftRefusalNamesTheSettingsAndBothRemedies(t *testing.T) {
 	d := diagnostics.Of(adapterRefusals()["pool-drift"])
 	const message = "a setting this operation completed on the Ceph pool (size, min_size, a quota, a compression option, erasure-coded overwrites or its application) no longer has the value its CephPool or CephObjectGateway froze"
-	if len(d) != 1 || d[0].Code != "lifecycle.unknown" || d[0].Message != message ||
+	if len(d) != 1 || d[0].Code != cephDrifted.Code || d[0].Message != message ||
 		!strings.Contains(d[0].Remediation, "outside Bootwright") || !strings.Contains(d[0].Remediation, "bootwright destroy --context <context>") {
 		t.Fatalf("a pool-drift refusal reached the operator as %+v", d)
 	}
@@ -487,7 +487,7 @@ func TestSMBRefusalsNameOnlyNextStepsAFailedApplyCanTake(t *testing.T) {
 				"Bootwright never adopts an SMB cluster, service or daemon it did not create"},
 	} {
 		d := smbRefusal(t, reason)
-		if len(d) != 1 || d[0].Code != "lifecycle.unknown" || d[0].Message != want[0] || d[0].Remediation != want[1] {
+		if len(d) != 1 || d[0].Code != map[string]diagnostics.Stop{"smb-identity": cephDrifted, "smb-result": cephNotReady, "foreign-service": cephForeign}[reason].Code || d[0].Message != want[0] || d[0].Remediation != want[1] {
 			t.Errorf("a %s refusal reached the operator as %+v", reason, d)
 		}
 	}
@@ -513,6 +513,8 @@ func TestAnExcludedHostKeyRemedyNamesTheGuestKeyLeverAndDestroyFirst(t *testing.
 	}
 }
 
+var sshPolicyStops = map[string]diagnostics.Stop{"ssh-policy-host-excluded": cephSSHPolicyExcluded, "ssh-policy-unavailable": cephSSHPolicyUnreadable, "tunnel-host-key-excluded": cephSSHPolicyExcluded}
+
 func TestAnSSHPolicyRefusalReachesTheOperatorWithItsRemedy(t *testing.T) {
 	const excluded = "a Ceph host's pinned SSH host key is of a type this controller's SSH crypto policy excludes, so Bootwright opened no session to it"
 	const unavailable = "this controller's SSH crypto policy could not be read or evaluated, so Bootwright opened no Ceph session"
@@ -521,7 +523,7 @@ func TestAnSSHPolicyRefusalReachesTheOperatorWithItsRemedy(t *testing.T) {
 		t.Run(reason, func(t *testing.T) {
 			r := coreRequest()
 			_, err := New(api.CephCluster, &refusingRunner{reason: reason}).Observe(context.Background(), withMaterial(executionFor(t, r), r))
-			if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "lifecycle.unsupported" || d[0].Message != message || d[0].Remediation == "" {
+			if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != sshPolicyStops[reason].Code || d[0].Message != message || d[0].Remediation == "" {
 				t.Fatalf("a cluster %s refusal reached the operator as %+v", reason, d)
 			}
 			if reason == "tunnel-host-key-excluded" {
@@ -529,10 +531,10 @@ func TestAnSSHPolicyRefusalReachesTheOperatorWithItsRemedy(t *testing.T) {
 			}
 			e, _, proofs := hostExecution(t, "node-1")
 			result, err := NewHost(&refusingRunner{reason: reason}).WithProofs(proofs).Apply(context.Background(), e)
-			if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "lifecycle.unsupported" || d[0].Message != message || result.Outcome != reconciliation.OutcomeFailed {
+			if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != sshPolicyStops[reason].Code || d[0].Message != message || result.Outcome != reconciliation.OutcomeFailed {
 				t.Fatalf("a host %s refusal reached the operator as %+v %+v", reason, result, d)
 			}
-			if d := smbRefusal(t, reason); len(d) != 1 || d[0].Code != "lifecycle.unsupported" || d[0].Message != message {
+			if d := smbRefusal(t, reason); len(d) != 1 || d[0].Code != sshPolicyStops[reason].Code || d[0].Message != message {
 				t.Fatalf("an SMB %s refusal reached the operator as %+v", reason, d)
 			}
 		})
@@ -544,7 +546,7 @@ func TestAnOSDClassDriftRefusalNamesTheNativeRepair(t *testing.T) {
 	e := withMaterial(executionFor(t, r), r)
 	_, err := New(api.CephCluster, &refusingRunner{reason: "osd-class-drift"}).Observe(context.Background(), e)
 	d := diagnostics.Of(err)
-	if len(d) != 1 || d[0].Code != "lifecycle.unknown" || !strings.Contains(d[0].Message, "carries a CRUSH device class other than the crush_device_class its OSD service declares") ||
+	if len(d) != 1 || d[0].Code != cephDrifted.Code || !strings.Contains(d[0].Message, "carries a CRUSH device class other than the crush_device_class its OSD service declares") ||
 		!strings.Contains(d[0].Remediation, "ceph osd crush set-device-class <class> osd.<id>") || lifecycle.AttemptOutcome(err) != reconciliation.OutcomeUnknown {
 		t.Fatalf("an osd-class-drift refusal reached the operator as %+v", d)
 	}
@@ -555,7 +557,7 @@ func TestADashboardTLSRefusalNamesTheRetainedPairAndRefusesReset(t *testing.T) {
 	e := withMaterial(executionFor(t, r), r)
 	observation, err := New(api.CephCluster, &refusingRunner{reason: "dashboard-tls-identity"}).Observe(context.Background(), e)
 	d := diagnostics.Of(err)
-	if observation.Effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
+	if observation.Effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != cephDrifted.Code ||
 		!strings.Contains(d[0].Message, "dashboard TLS pair") ||
 		!strings.Contains(d[0].Remediation, "never adopts or resets") || strings.Contains(d[0].Message, "admin") {
 		t.Fatalf("a dashboard TLS refusal reached the operator as %+v %+v", observation, d)

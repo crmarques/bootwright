@@ -92,19 +92,19 @@ func DecodeHostRequest(data []byte) (HostRequest, error) {
 		return HostRequest{}, err
 	}
 	if r.Cluster.Version != Version || r.Cluster.Packages == nil {
-		return HostRequest{}, failure("lifecycle.state", "the frozen Ceph host request does not carry its cluster's package-bearing scope", "")
+		return HostRequest{}, cephRequestInvalid.Fail("the frozen Ceph host request does not carry its cluster's package-bearing scope", "")
 	}
 	if _, ok := r.target(); !ok {
-		return HostRequest{}, failure("lifecycle.state", "the frozen Ceph host request names a host outside its cluster", "")
+		return HostRequest{}, cephRequestInvalid.Fail("the frozen Ceph host request names a host outside its cluster", "")
 	}
 	if _, ok := r.source(); !ok {
-		return HostRequest{}, failure("lifecycle.state", "the frozen Ceph host request has no package source for its host", "")
+		return HostRequest{}, cephRequestInvalid.Fail("the frozen Ceph host request has no package source for its host", "")
 	}
 	if !validPulls(r) {
-		return HostRequest{}, failure("lifecycle.state", "the frozen Ceph host request's image pulls are not its cluster's auxiliary images in bounded name-ordered batches", "")
+		return HostRequest{}, cephRequestInvalid.Fail("the frozen Ceph host request's image pulls are not its cluster's auxiliary images in bounded name-ordered batches", "")
 	}
 	if r.ImagesSeconds != hostImagesBudget {
-		return HostRequest{}, failure("lifecycle.state", "the frozen Ceph host request's image pull budget is not the one this build derives", "")
+		return HostRequest{}, cephRequestInvalid.Fail("the frozen Ceph host request's image pull budget is not the one this build derives", "")
 	}
 	return r, nil
 }
@@ -195,11 +195,11 @@ func decodeHostEvidence(data []byte, digest string) (HostEvidence, error) {
 		return HostEvidence{}, err
 	}
 	if evidence.Version != HostEvidenceVersion || digest == "" || evidence.Request != digest {
-		return HostEvidence{}, failure("lifecycle.state", "Ceph host evidence names another request", "")
+		return HostEvidence{}, cephEvidenceMismatch.Fail("Ceph host evidence names another request", "")
 	}
 	members, err := reconciliation.DecodeEvidence[map[string]json.RawMessage](data, maxHostEvidence, "Ceph host members")
 	if raw, present := members["specializations"]; err != nil || present && (string(raw) == "null" || !validSpecializations(evidence.Specializations)) {
-		return HostEvidence{}, failure("lifecycle.state", "Ceph host evidence names malformed specialization ids", "")
+		return HostEvidence{}, cephEvidenceMismatch.Fail("Ceph host evidence names malformed specialization ids", "")
 	}
 	return evidence, nil
 }
@@ -301,7 +301,7 @@ func (c HostCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 		return plan, err
 	}
 	if input.State == nil {
-		return plan, failure("lifecycle.state", "Ceph planning requires compiled state", "")
+		return plan, cephRequestInvalid.Fail("Ceph planning requires compiled state", "")
 	}
 	catalog := input.State.Effective()
 	for _, object := range catalog.OfKind(api.CephCluster) {
@@ -392,10 +392,10 @@ func (c HostCapability) prepare(ctx context.Context, e lifecycle.Execution) (Hos
 		return HostRequest{}, err
 	}
 	if e.Block.Kind != string(api.CephCluster) || e.Block.Object != r.Cluster.Cluster {
-		return HostRequest{}, failure("lifecycle.state", "Ceph host request does not match its frozen resource identity", "")
+		return HostRequest{}, cephRequestInvalid.Fail("Ceph host request does not match its frozen resource identity", "")
 	}
 	if r.Cluster.Owner != "" || r.Cluster.FSID != "" || e.ApplyOperation == "" {
-		return HostRequest{}, failure("lifecycle.state", "Ceph host preparation requires the immutable original apply identity", "")
+		return HostRequest{}, cephRecordsMissing.Fail("Ceph host preparation requires the immutable original apply identity", "")
 	}
 	if err := bindPhysicalHosts(r.Cluster.Hosts, e, c.proofs); err != nil {
 		return HostRequest{}, err
@@ -434,7 +434,7 @@ func hostRefusals() map[string]error {
 		"runtime-profile":          "the Ceph host's retained runtime profile is missing or contradicts the image it holds",
 		"not-ready":                "the Ceph host preparation did not prove every phase",
 	} {
-		out[reason] = failure("lifecycle.unknown", message, "inspect the attempt's adapter output, then apply again; host preparation resumes from its journal")
+		out[reason] = cephBoundaryUnproved.Fail(message, "inspect the attempt's adapter output, then apply again; host preparation resumes from its journal")
 	}
 	for reason, refusal := range packageRefusals() {
 		out[reason] = refusal
@@ -456,13 +456,13 @@ func serialDeviceRefusals(host Host) map[string]error {
 	}
 	selected, of := strings.Join(serials, ", "), "Ceph host "+host.Name+" of Machine "+host.Machine
 	return map[string]error{
-		"device-serial-absent": failure("lifecycle.unsupported", of+" presents no whole disk whose serial number is one its OSD services select by serial ("+selected+")",
+		"device-serial-absent": cephDeviceRefused.Fail(of+" presents no whole disk whose serial number is one its OSD services select by serial ("+selected+")",
 			"compare each selected serial number with the disk's sysfs serial attribute or VPD page 0x80 on Machine "+host.Machine+", and its exact size with the sizeBytes of its hardware.dataDisks entry"),
-		"device-serial-ambiguous": failure("lifecycle.unsupported", of+" presents more than one whole disk with a serial number its OSD services select ("+selected+"), such as two paths of one multipath disk, two namespaces of one NVMe controller or a cloned serial",
+		"device-serial-ambiguous": cephDeviceRefused.Fail(of+" presents more than one whole disk with a serial number its OSD services select ("+selected+"), such as two paths of one multipath disk, two namespaces of one NVMe controller or a cloned serial",
 			"select that disk by its /dev/disk/by-id/wwn-0x path, or detach the duplicate path; Bootwright never chooses between disks that share a serial number"),
-		"device-serial-mismatch": failure("lifecycle.unsupported", "the disk with a serial number that "+of+" selects ("+selected+") is not a fixed, writable sd or nvme disk of the size its hardware.dataDisks entry declares",
+		"device-serial-mismatch": cephDeviceRefused.Fail("the disk with a serial number that "+of+" selects ("+selected+") is not a fixed, writable sd or nvme disk of the size its hardware.dataDisks entry declares",
 			"correct that entry's sizeBytes on Machine "+host.Machine+" to the disk's exact capacity, as blockdev --getsize64 reports it, or select another disk"),
-		"device-alias": failure("lifecycle.unsupported", "the disk with a serial number that "+of+" selects ("+selected+") has no stable /dev/disk/by-id link to give cephadm",
+		"device-alias": cephDeviceRefused.Fail("the disk with a serial number that "+of+" selects ("+selected+") has no stable /dev/disk/by-id link to give cephadm",
 			"select that disk by its /dev/disk/by-id/wwn-0x path if it has one"),
 	}
 }
@@ -476,26 +476,26 @@ func rootDeviceRefusals(host Host) map[string]error {
 		identity = "WWN " + host.RootWWN
 	}
 	return map[string]error{
-		"device-root": failure("lifecycle.unsupported", "Ceph host "+host.Name+" of Machine "+host.Machine+" selects a data, DB or WAL disk that reports the "+identity+", which Machine "+host.Machine+" declares for its root disk",
+		"device-root": cephDeviceRefused.Fail("Ceph host "+host.Name+" of Machine "+host.Machine+" selects a data, DB or WAL disk that reports the "+identity+", which Machine "+host.Machine+" declares for its root disk",
 			"select another disk for the OSD services on Machine "+host.Machine+"; the root disk, whatever path names it, is never an OSD, DB or WAL device"),
 	}
 }
 
 func packageRefusals() map[string]error {
 	return map[string]error{
-		"packages":            failure("lifecycle.unknown", "the Ceph host package preparation refused its request, source or result", "the adapter detail names the refusing step; check that the declared hosted RHEL DVD tree or Satellite and the IBM Ceph repository serve the authored package selection to the host, then apply again"),
-		"package-artifact":    failure("lifecycle.unknown", "an installed Ceph package header does not match its authenticated payload", "inspect the host's RPM database for the frozen packages; a replaced package is never adopted"),
-		"package-drift":       failure("lifecycle.unknown", "the Ceph host's installed packages no longer match its completed package decision", "inspect the host's installed packages against the retained package decision; Bootwright never installs over a foreign inventory"),
-		"package-host":        failure("lifecycle.unknown", "the Ceph host's /var/lib/ceph tree is not owned and protected as its packages create it", "inspect the owner and mode of /var/lib/ceph and its directories on the host; a foreign or writable tree is never adopted"),
-		"package-journal":     failure("lifecycle.unknown", "the Ceph host's package journal is foreign, locked or contradicts the frozen decision", "inspect the host's package journal under /var/lib/ceph's owned markers; a foreign journal is never adopted"),
-		"package-license":     failure("lifecycle.unsupported", "the IBM Ceph package transaction requires the provider license acceptance", "review the provider license and declare Entitlement.spec.license.accept"),
-		"package-limit":       failure("lifecycle.unknown", "a Ceph package source served more than its bounded acquisition admits", "check that the declared package source serves the pinned repository metadata and payloads, not a larger tree"),
-		"package-platform":    failure("lifecycle.unsupported", "the Ceph host does not provide the required RHEL x86_64 native package tooling", "install the Machine with an owned RHEL x86_64 hosted DVD or subscription profile"),
-		"package-acquisition": failure("lifecycle.unknown", "the connection to a Ceph package source was lost while acquiring the selected artifact, after its bounded attempts", "check the host's network path to the declared hosted RHEL DVD tree or Satellite and the IBM Ceph repository for the artifact the detail names, then apply again; nothing was installed and the package journal resumes from its frozen decision"),
-		"package-timeout":     failure("lifecycle.unknown", "the Ceph package acquisition did not finish within its bounded time", "check the host's reach to the declared package source and the IBM Ceph repository, then apply again; the package journal resumes"),
-		"package-resolution":  failure("lifecycle.unknown", "the frozen Ceph package set could not be resolved from the declared package sources", "check that the declared hosted RHEL DVD tree or Satellite and the IBM Ceph repository serve the authored package selection to the host; the adapter detail names the refusing step"),
-		"package-signature":   failure("lifecycle.unknown", "a Ceph package or publisher key is not the pinned signed artifact", "check that the package sources serve the pinned Red Hat and IBM publisher keys and payloads signed by them; an unsigned or foreign-signed package is never installed"),
-		"package-transaction": failure("lifecycle.unknown", "the native Ceph package transaction did not complete", "inspect the host's dnf log for the frozen transaction, then apply again; the package journal resumes only from the exact authenticated state"),
+		"packages":            cephPackageUnproved.Fail("the Ceph host package preparation refused its request, source or result", "the adapter detail names the refusing step; check that the declared hosted RHEL DVD tree or Satellite and the IBM Ceph repository serve the authored package selection to the host, then apply again"),
+		"package-artifact":    cephPackageUnproved.Fail("an installed Ceph package header does not match its authenticated payload", "inspect the host's RPM database for the frozen packages; a replaced package is never adopted"),
+		"package-drift":       cephPackageUnproved.Fail("the Ceph host's installed packages no longer match its completed package decision", "inspect the host's installed packages against the retained package decision; Bootwright never installs over a foreign inventory"),
+		"package-host":        cephPackageUnproved.Fail("the Ceph host's /var/lib/ceph tree is not owned and protected as its packages create it", "inspect the owner and mode of /var/lib/ceph and its directories on the host; a foreign or writable tree is never adopted"),
+		"package-journal":     cephPackageUnproved.Fail("the Ceph host's package journal is foreign, locked or contradicts the frozen decision", "inspect the host's package journal under /var/lib/ceph's owned markers; a foreign journal is never adopted"),
+		"package-license":     cephLicenseUnaccepted.Fail("the IBM Ceph package transaction requires the provider license acceptance", "review the provider license and declare Entitlement.spec.license.accept"),
+		"package-limit":       cephPackageUnproved.Fail("a Ceph package source served more than its bounded acquisition admits", "check that the declared package source serves the pinned repository metadata and payloads, not a larger tree"),
+		"package-platform":    cephPackageSourceUnsupported.Fail("the Ceph host does not provide the required RHEL x86_64 native package tooling", "install the Machine with an owned RHEL x86_64 hosted DVD or subscription profile"),
+		"package-acquisition": cephPackageUnproved.Fail("the connection to a Ceph package source was lost while acquiring the selected artifact, after its bounded attempts", "check the host's network path to the declared hosted RHEL DVD tree or Satellite and the IBM Ceph repository for the artifact the detail names, then apply again; nothing was installed and the package journal resumes from its frozen decision"),
+		"package-timeout":     cephPackageUnproved.Fail("the Ceph package acquisition did not finish within its bounded time", "check the host's reach to the declared package source and the IBM Ceph repository, then apply again; the package journal resumes"),
+		"package-resolution":  cephPackageUnproved.Fail("the frozen Ceph package set could not be resolved from the declared package sources", "check that the declared hosted RHEL DVD tree or Satellite and the IBM Ceph repository serve the authored package selection to the host; the adapter detail names the refusing step"),
+		"package-signature":   cephPackageUnproved.Fail("a Ceph package or publisher key is not the pinned signed artifact", "check that the package sources serve the pinned Red Hat and IBM publisher keys and payloads signed by them; an unsigned or foreign-signed package is never installed"),
+		"package-transaction": cephPackageUnproved.Fail("the native Ceph package transaction did not complete", "inspect the host's dnf log for the frozen transaction, then apply again; the package journal resumes only from the exact authenticated state"),
 	}
 }
 
@@ -538,10 +538,10 @@ func hostMaterial(e lifecycle.Execution, r HostRequest, operation string, reader
 
 func (c HostCapability) run(ctx context.Context, e lifecycle.Execution, operation string, r HostRequest, removal ...bool) (lifecycle.RunResult, error) {
 	if c.runner == nil {
-		return lifecycle.RunResult{}, failure("lifecycle.state", "the Ceph host adapter is not configured", "")
+		return lifecycle.RunResult{}, cephUnconfigured.Fail("the Ceph host adapter is not configured", "")
 	}
 	if r.Cluster.Controller == "" {
-		return lifecycle.RunResult{}, failure("lifecycle.state", "Ceph host preparation requires its frozen controller identity", "")
+		return lifecycle.RunResult{}, cephRecordsMissing.Fail("Ceph host preparation requires its frozen controller identity", "")
 	}
 	canonical, err := r.canonical()
 	if err != nil {
@@ -597,7 +597,7 @@ func (c HostCapability) Apply(ctx context.Context, e lifecycle.Execution) (lifec
 	outcome, usable := result.Outcome, result.Outcome.Settled()
 	evidence, err := decodeHostEvidence(result.Evidence, e.Block.RequestDigest)
 	if !usable || err != nil || hostEffect(evidence, r) != reconciliation.EffectCompleted {
-		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, failure("lifecycle.unknown", "the Ceph host preparation did not prove its postcondition", "")
+		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, cephUnproved.Fail("the Ceph host preparation did not prove its postcondition", "")
 	}
 	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil
 }
@@ -648,7 +648,7 @@ func (c HostCapability) Destroy(ctx context.Context, e lifecycle.Execution) (lif
 	}
 	evidence, err := decodeHostEvidence(result.Evidence, e.Block.RequestDigest)
 	if err != nil || result.Outcome != reconciliation.OutcomeUnchanged || !retained(evidence, r) {
-		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, failure("lifecycle.unknown", "the Ceph host release did not prove that it made no effect", "")
+		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, cephUnproved.Fail("the Ceph host release did not prove that it made no effect", "")
 	}
 	return lifecycle.Result{Outcome: reconciliation.OutcomeUnchanged, Evidence: result.Evidence}, nil
 }
@@ -696,7 +696,7 @@ func (c HostCapability) ObserveRemoval(ctx context.Context, e lifecycle.Executio
 	}
 	evidence, err := json.Marshal(HostEvidence{Version: HostEvidenceVersion, Request: e.Block.RequestDigest, Host: r.Host, Owner: r.Cluster.Owner, FSID: r.Cluster.FSID, Image: r.Cluster.Image, Removed: true, Devices: []HostDevice{}})
 	if err != nil {
-		return unknown, failure("lifecycle.state", "the Ceph host removal evidence cannot be encoded", "")
+		return unknown, cephRequestInvalid.Fail("the Ceph host removal evidence cannot be encoded", "")
 	}
 	return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: evidence}, nil
 }
@@ -728,7 +728,7 @@ func ProvedHost(proofs []lifecycle.BlockEvidence, cluster, machineName, image st
 	}
 	r.Cluster.Owner, r.Cluster.FSID, r.Cluster.Image = evidence.Owner, evidence.FSID, image
 	if evidence.Image != image || evidence.FSID != FSIDFor(evidence.Owner, cluster) || !evidence.prepared(r) {
-		return HostEvidence{}, failure("lifecycle.state", "the Ceph host preparation proof does not prove the frozen image's runtime", "")
+		return HostEvidence{}, cephEvidenceMismatch.Fail("the Ceph host preparation proof does not prove the frozen image's runtime", "")
 	}
 	return evidence, nil
 }
@@ -742,23 +742,23 @@ func preparedHostProof(proofs []lifecycle.BlockEvidence, cluster, machineName st
 		}
 		r, err := DecodeHostRequest(proof.Block.Request)
 		if err != nil || r.Cluster.Cluster != cluster {
-			return HostRequest{}, HostEvidence{}, failure("lifecycle.state", "a Ceph host preparation proof names another request", "")
+			return HostRequest{}, HostEvidence{}, cephProofMismatch.Fail("a Ceph host preparation proof names another request", "")
 		}
 		host, _ := r.target()
 		if host.Machine != machineName {
 			continue
 		}
 		if found != nil {
-			return HostRequest{}, HostEvidence{}, failure("lifecycle.state", "the Ceph host has ambiguous preparation proofs", "")
+			return HostRequest{}, HostEvidence{}, cephRecordsMissing.Fail("the Ceph host has ambiguous preparation proofs", "")
 		}
 		evidence, err := decodeHostEvidence(proof.Evidence, proof.Block.RequestDigest)
 		if err != nil {
-			return HostRequest{}, HostEvidence{}, failure("lifecycle.state", "the Ceph host preparation proof is unreadable", "")
+			return HostRequest{}, HostEvidence{}, cephRecordsMissing.Fail("the Ceph host preparation proof is unreadable", "")
 		}
 		found, request = &evidence, r
 	}
 	if found == nil {
-		return HostRequest{}, HostEvidence{}, failure("lifecycle.state", "Ceph lacks its original apply's host preparation proof", "restore the original apply evidence; each host is prepared before the cluster block runs")
+		return HostRequest{}, HostEvidence{}, cephRecordsMissing.Fail("Ceph lacks its original apply's host preparation proof", "restore the original apply evidence; each host is prepared before the cluster block runs")
 	}
 	return request, *found, nil
 }
@@ -778,7 +778,7 @@ func (c HostCapability) cleanupPhysicalHost(ctx context.Context, e lifecycle.Exe
 	}
 	evidence, err := decodeHostEvidence(result.Evidence, e.Block.RequestDigest)
 	if err != nil || !evidence.identifies(r) || evidence.NativeRemoved && !retained(evidence, r) || !observe && (!evidence.NativeRemoved || !retained(evidence, r)) {
-		return lifecycle.Result{}, failure("lifecycle.unknown", "the retained-root Ceph host cleanup did not prove native absence", "continue the original removal")
+		return lifecycle.Result{}, cephUnproved.Fail("the retained-root Ceph host cleanup did not prove native absence", "continue the original removal")
 	}
 	outcome, usable := result.Outcome, result.Outcome.Settled()
 	if !usable {

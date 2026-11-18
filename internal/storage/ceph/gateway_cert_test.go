@@ -62,7 +62,7 @@ func TestGatewayCertificateSANMustCoverEndpoint(t *testing.T) {
 	err := capability.ProveBinding(ctx, "example", block, tlsMaterial([]byte("-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n")))
 	refusedWith(t, err, "secret.part", "the certificate of Secret gateway-tls that CephObjectGateway objects binds cannot be read", "store a readable certificate and its private key with "+set+", then apply again")
 	err = capability.ProveBinding(ctx, "example", block, map[string]secrets.Material{})
-	refusedWith(t, err, "lifecycle.state", "the TLS Secret a CephObjectGateway binds is not bound to this apply", "")
+	refusedStop(t, err, cephUnconfigured, "the TLS Secret a CephObjectGateway binds is not bound to this apply", "")
 	plain := reconciliation.Block{BlockDefinition: gatewayBlock(t, planCatalog(3, 3, withPairAndHTTPRGW, objectGateway("objects")))}
 	pool := reconciliation.Block{BlockDefinition: gatewayBlocks(t, directTLSCatalog())[0]}
 	for name, c := range map[string]struct {

@@ -45,5 +45,5 @@ func proveDistinctHostDevices(e lifecycle.Execution, r Request) error {
 }
 
 func sharedPhysicalDevice() error {
-	return failure("lifecycle.state", "physical Ceph hosts report a shared observed WWN or disk serial and size", "select independently owned local disks; Bootwright does not submit OSD services for a disk shared by hosts")
+	return cephDisksShared.Fail("physical Ceph hosts report a shared observed WWN or disk serial and size", "select independently owned local disks; Bootwright does not submit OSD services for a disk shared by hosts")
 }

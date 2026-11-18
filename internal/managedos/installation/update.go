@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/managedos"
 )
 
@@ -44,7 +45,7 @@ func updateFor(profile api.Object) (*Update, error) {
 	}
 	release := profile.Spec().Get("os", "version").Text()
 	if !updateRelease.MatchString(release) {
-		return nil, refusal("lifecycle.unsupported", profile.Identity()+" updates within release "+release+
+		return nil, installUnsupported.Fail(profile.Identity()+" updates within release "+release+
 			", which is not a <major>.<minor> release such as 9.8",
 			"set spec.os.version on "+profile.Identity()+" to the exact release, or set spec.updates.policy to none on "+profile.Identity())
 	}
@@ -82,12 +83,14 @@ func updateRefusals(contextName string, request Request) map[string]error {
 	machine := "Machine/" + request.Identity.Object
 	profile := "MachineInstallProfile/" + request.Identity.Profile
 	release := request.Update.Release
-	refused := MachineRefusal(request)
-	again := "then run bootwright destroy --context " + contextName + " and apply again"
-	fixed := func(message, remediation string) error {
-		return DetailRefusal{Render: func(string) error { return refused(message, remediation) }}
+	refused := func(stop diagnostics.Stop) func(message, remediation string) error {
+		return machineRefusal(request, stop)
 	}
-	caused := func(reason, message, remediation string) error {
+	again := "then run bootwright destroy --context " + contextName + " and apply again"
+	fixed := func(stop diagnostics.Stop, message, remediation string) error {
+		return DetailRefusal{Render: func(string) error { return refused(stop)(message, remediation) }}
+	}
+	caused := func(stop diagnostics.Stop, reason, message, remediation string) error {
 		return DetailRefusal{Render: func(detail string) error {
 			cause := DetailOr(detail, func(value string) bool {
 				for _, known := range updateCause[reason] {
@@ -97,28 +100,28 @@ func updateRefusals(contextName string, request Request) map[string]error {
 				}
 				return false
 			})
-			return refused(message+cause, remediation)
+			return refused(stop)(message+cause, remediation)
 		}}
 	}
 	return map[string]error{
-		"update-release-unavailable": fixed("the subscription service offers no release "+release+" to "+machine,
+		"update-release-unavailable": fixed(installUpdateRefused, "the subscription service offers no release "+release+" to "+machine,
 			"set spec.os.version on "+profile+" to a release the subscription service offers, or set spec.updates.policy to none, "+again),
 		"update-release-mismatch": DetailRefusal{Render: func(detail string) error {
-			return refused(machine+" reports VERSION_ID "+DetailOr(detail, updateFound.MatchString)+", and its installation declares release "+release,
+			return refused(installUpdateRefused)(machine+" reports VERSION_ID "+DetailOr(detail, updateFound.MatchString)+", and its installation declares release "+release,
 				"run bootwright destroy --context "+contextName+", make the update sources of "+profile+" offer release "+release+" alone, and apply again")
 		}},
 		"update-release-drift": DetailRefusal{Render: func(detail string) error {
 			found, repository := driftDetail(detail)
-			return refused("the update of "+machine+" would move redhat-release to "+found+" from repository "+repository+", outside release "+release,
+			return refused(installUpdateRefused)("the update of "+machine+" would move redhat-release to "+found+" from repository "+repository+", outside release "+release,
 				"pin repository "+repository+" of "+profile+" to release "+release+" or disable it, "+again)
 		}},
-		"update-no-repository": fixed(machine+" has no enabled repository to update release "+release+" from",
+		"update-no-repository": fixed(installUpdateRefused, machine+" has no enabled repository to update release "+release+" from",
 			"enable a repository for "+profile+" or set spec.updates.policy to none, "+again),
-		"update-foreign": fixed(machine+" holds an update record of another installation",
+		"update-foreign": fixed(installForeignRecord, machine+" holds an update record of another installation",
 			"run bootwright destroy --context "+contextName+" and apply again"),
-		"update-unavailable": caused("update-unavailable", "a repository did not answer while "+machine+" updated within release "+release+": ",
+		"update-unavailable": caused(installServiceUnavailable, "update-unavailable", "a repository did not answer while "+machine+" updated within release "+release+": ",
 			"restore the route from "+machine+" to its update sources, then run bootwright apply --context "+contextName+" again"),
-		"update-failed": caused("update-failed", "the package transaction of "+machine+" failed while it updated within release "+release+": ",
+		"update-failed": caused(installUpdateFailed, "update-failed", "the package transaction of "+machine+" failed while it updated within release "+release+": ",
 			"run bootwright apply --context "+contextName+" again once the update sources of "+profile+
 				" offer a consistent transaction, or run bootwright destroy --context "+contextName+" and set spec.updates.policy to none"),
 	}

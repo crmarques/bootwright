@@ -68,7 +68,7 @@ func TestUnreachableRegisteredGuestFailsClosedNamingTheStart(t *testing.T) {
 	}
 	for reason, text := range want {
 		reported := diagnostics.Of(refusals[reason])
-		if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != text[0] || reported[0].Remediation != text[1] ||
+		if len(reported) != 1 || reported[0].Code != "install.service-unavailable" || reported[0].Message != text[0] || reported[0].Remediation != text[1] ||
 			reported[0].Object == nil || reported[0].Object.Kind != "Machine" || reported[0].Object.Name != "rhel-01" {
 			t.Fatalf("%s = %#v", reason, reported)
 		}
@@ -91,7 +91,7 @@ func TestProvedMarkerWithUnreadableRegistrationRefusesWithTheManualPath(t *testi
 		t.Fatalf("the destroy reached the adapter %d times", len(runner.requests))
 	}
 	reported := diagnostics.Of(runner.requests[0].Refusals["registration-unreachable"])
-	if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Object == nil || reported[0].Object.Kind != "Machine" || reported[0].Object.Name != "rhel-01" ||
+	if len(reported) != 1 || reported[0].Code != "install.service-unavailable" || reported[0].Object == nil || reported[0].Object.Kind != "Machine" || reported[0].Object.Name != "rhel-01" ||
 		reported[0].Message != "the apply of Machine/rhel-01 proved its install marker before it registered, and Machine/rhel-01 did not answer through its identity channel or its pinned connection, so its subscription registration cannot be read and was not removed" ||
 		reported[0].Remediation != "start Machine/rhel-01 with bootwright machine start --context lab --name rhel-01, then run bootwright destroy --context lab again; if Machine/rhel-01 cannot answer again, remove its consumer with the subscription service's own tools, then run bootwright destroy --context lab --unregistered rhel-01" {
 		t.Fatalf("registration-unreachable = %#v", reported)
@@ -165,7 +165,7 @@ func TestForeignPreparationRefusesBeforeTheRun(t *testing.T) {
 				_, err = New(runner).Destroy(context.Background(), execution)
 			}
 			reported := diagnostics.Of(err)
-			if len(runner.requests) != 0 || len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
+			if len(runner.requests) != 0 || len(reported) != 1 || reported[0].Code != "install.records-missing" ||
 				reported[0].Message != "the apply records of Machine/rhel-01 hold a before-state this executable cannot read" {
 				t.Fatalf("a foreign preparation = %#v, adapter %+v", reported, runner.requests)
 			}

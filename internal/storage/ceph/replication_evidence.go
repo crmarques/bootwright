@@ -29,7 +29,7 @@ type ReplicationEvidence struct {
 
 func EvaluateReplicationEvidence(data []byte, r ReplicationRequest, owner, digest string) (reconciliation.EffectState, error) {
 	bad := func() (reconciliation.EffectState, error) {
-		return reconciliation.EffectUnknown, failure("lifecycle.unknown", "replication evidence does not prove its two original clusters and image identities", "")
+		return reconciliation.EffectUnknown, cephEvidenceUnproved.Fail("replication evidence does not prove its two original clusters and image identities", "")
 	}
 	e, err := reconciliation.DecodeEvidence[ReplicationEvidence](data, 16384, "Ceph replication")
 	fields, ferr := reconciliation.DecodeEvidence[map[string]json.RawMessage](data, 16384, "Ceph replication members")

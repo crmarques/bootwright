@@ -222,7 +222,7 @@ func TestUnreadableProvedRegistrationRefusesBeforeAnyInverse(t *testing.T) {
 	probes := runner.probed.probed()
 	_, err := journey.Service.Destroy(context.Background(), lifecycle.DestroyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true})
 	if !slices.ContainsFunc(diagnostics.Of(err), func(reported diagnostics.Diagnostic) bool {
-		return reported.Code == "lifecycle.state" && reported.Message == unreachableMessage && reported.Object != nil && reported.Object.Name == "rhel-01" &&
+		return reported.Code == "install.service-unavailable" && reported.Message == unreachableMessage && reported.Object != nil && reported.Object.Name == "rhel-01" &&
 			strings.HasSuffix(reported.Remediation, "then run bootwright destroy --context "+lifecycle.JourneyContext+" --unregistered rhel-01")
 	}) {
 		t.Fatalf("the destroy of a stopped registered Machine = %+v (%v)", diagnostics.Of(err), err)

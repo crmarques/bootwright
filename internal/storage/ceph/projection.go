@@ -67,7 +67,7 @@ func projectedEvidence(block reconciliation.Block, evidence json.RawMessage, act
 	}
 	if r.Action != action || e.Version != EvidenceVersion || block.RequestDigest == "" || e.Request != block.RequestDigest || e.Action != action ||
 		!e.Owned || e.Owner == "" || e.FSID != FSIDFor(e.Owner, r.Cluster) || !validReadings(e, r) {
-		return Request{}, Evidence{}, failure("lifecycle.state", "the Ceph evidence of block "+block.ID+" does not prove this context's "+action, "")
+		return Request{}, Evidence{}, cephEvidenceMismatch.Fail("the Ceph evidence of block "+block.ID+" does not prove this context's "+action, "")
 	}
 	return r, e, nil
 }
@@ -79,7 +79,7 @@ func projectPool(applied api.Catalog, block reconciliation.Block, evidence json.
 	}
 	object, found := applied.Find(api.CephPool, block.Object)
 	if !found || r.Pool == nil {
-		return nil, failure("lifecycle.state", "the applied revision does not declare CephPool/"+block.Object, "")
+		return nil, cephRecordsMissing.Fail("the applied revision does not declare CephPool/"+block.Object, "")
 	}
 	if e.Pool == nil {
 		return nil, nil
@@ -172,7 +172,7 @@ func projectCluster(applied api.Catalog, block reconciliation.Block, evidence js
 	}
 	cluster, found := applied.Find(api.CephCluster, block.Object)
 	if !found {
-		return nil, failure("lifecycle.state", "the applied revision does not declare CephCluster/"+block.Object, "")
+		return nil, cephRecordsMissing.Fail("the applied revision does not declare CephCluster/"+block.Object, "")
 	}
 	projections := discoveredPools(applied, block, e.Inventory.Pools)
 	var services *lifecycle.Projection

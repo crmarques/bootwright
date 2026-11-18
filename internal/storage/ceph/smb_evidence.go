@@ -33,7 +33,7 @@ type SMBEvidence struct {
 }
 
 func smbEvidenceFailure() error {
-	return failure("lifecycle.unknown", "Ceph SMB evidence does not prove the frozen ownership and resource scope", "")
+	return cephEvidenceUnproved.Fail("Ceph SMB evidence does not prove the frozen ownership and resource scope", "")
 }
 
 func decodeSMBEvidence(data []byte) (SMBEvidence, bool) {

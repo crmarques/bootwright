@@ -144,7 +144,7 @@ func TestMonitoringProjectionRefusesUnrealizedMembers(t *testing.T) {
 	}
 	prometheus := auxiliaryService("prometheus", "", admitted.With("targets", api.ListValue(api.StringValue("192.0.2.90:9100"))))
 	_, err := monitoringUnits(monitoringCluster(t, []api.Value{prometheus}, nil))
-	refusedWith(t, err, "lifecycle.unsupported", "the native service prometheus carries spec.targets, which Bootwright does not realize for this service",
+	refusedStop(t, err, cephUnsupportedService, "the native service prometheus carries spec.targets, which Bootwright does not realize for this service",
 		"remove spec.targets from prometheus in spec.services")
 }
 
@@ -325,11 +325,11 @@ func TestNoBoundMaterialInPlanRequestEvidence(t *testing.T) {
 	missing := monitoringExecution(t, r)
 	delete(missing.Material, "grafana-admin")
 	_, err = New(api.CephCluster, &recordingRunner{}).WithProofs(dependencyProofs{}).run(context.Background(), missing, "apply", r)
-	refusedWith(t, err, "lifecycle.state", "a required Ceph credential component is not bound", "")
+	refusedStop(t, err, cephUnconfigured, "a required Ceph credential component is not bound", "")
 	foreign := r
 	foreign.Service = &ServiceUnit{Bindings: []ServiceBinding{{Path: "/spec/ssl_cert", SecretRef: "grafana-admin", ServiceRef: "grafana"}}, Documents: unit.Documents, Type: "monitoring"}
 	_, err = New(api.CephCluster, &recordingRunner{}).WithProofs(dependencyProofs{}).run(context.Background(), monitoringExecution(t, foreign), "apply", foreign)
-	refusedWith(t, err, "lifecycle.state", "a Ceph service unit binds a credential leaf this build does not realize", "")
+	refusedStop(t, err, cephRequestInvalid, "a Ceph service unit binds a credential leaf this build does not realize", "")
 }
 
 func TestUnrealizedMonitoringServicesKeepTheCoreRefusal(t *testing.T) {

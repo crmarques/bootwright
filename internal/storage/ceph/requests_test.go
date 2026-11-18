@@ -309,7 +309,7 @@ func TestAnImageBaseThatIsOnlyTheRegistryHostRefusesAtPlanning(t *testing.T) {
 			continue
 		}
 		d := diagnostics.Of(err)
-		if len(d) != 1 || d[0].Code != "lifecycle.unsupported" {
+		if len(d) != 1 || d[0].Code != cephImageInvalid.Code {
 			t.Fatalf("base %q planned as %+v", base, d)
 		}
 		if !strings.Contains(d[0].Remediation, "ceph.image.base") || strings.Contains(d[0].Remediation, "registry.url") || strings.Contains(d[0].Message, "does not match") {

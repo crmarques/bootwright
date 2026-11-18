@@ -22,12 +22,12 @@ func decodeTreeEvidence(data []byte, digest string) (TreeEvidence, error) {
 		return TreeEvidence{}, err
 	}
 	if evidence.Request != digest || evidence.Version != TreeEvidenceVersion {
-		return TreeEvidence{}, refusal("lifecycle.state", "package tree evidence names another request or version", "")
+		return TreeEvidence{}, installEvidenceInvalid.Fail("package tree evidence names another request or version", "")
 	}
 	if evidence.Identity != "" {
 		normalized, ok := managedos.NormalizeMediaDigest(evidence.Identity)
 		if !ok || normalized != evidence.Identity {
-			return TreeEvidence{}, refusal("lifecycle.state", "package tree evidence has an invalid source identity", "")
+			return TreeEvidence{}, installEvidenceInvalid.Fail("package tree evidence has an invalid source identity", "")
 		}
 	}
 	return evidence, nil

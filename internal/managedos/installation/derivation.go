@@ -30,7 +30,7 @@ func InstallationFor(catalog api.Catalog, machine, profile api.Object, request R
 		return Installation{}, err
 	}
 	if reason, remediation := installInterfaceRefusal(catalog, machine, template, iface, hostOfRequest(request.Target)); reason != "" {
-		return Installation{}, refusal("lifecycle.unsupported", reason, remediation)
+		return Installation{}, installUnsupported.Fail(reason, remediation)
 	}
 	hostname, err := machineHostname(machine)
 	if err != nil {
@@ -56,7 +56,7 @@ func InstallationFor(catalog api.Catalog, machine, profile api.Object, request R
 		return Installation{}, err
 	}
 	if reason, remediation := refusedProxy(catalog, machine, profile); reason != "" {
-		return Installation{}, refusal("lifecycle.unsupported", reason, remediation)
+		return Installation{}, installUnsupported.Fail(reason, remediation)
 	}
 	repositories := repositoriesFor(customizations)
 	_, gateway := installGatewayRoute(template, iface)
@@ -144,11 +144,11 @@ func packageSource(request Request) (string, error) {
 		return "cdrom", nil
 	}
 	if request.Tree.URL == "" {
-		return "", refusal("lifecycle.state", "the hosted package tree has no published URL", "")
+		return "", installRequestInvalid.Fail("the hosted package tree has no published URL", "")
 	}
 	if strings.HasPrefix(request.Tree.URL, "https://") {
 		if request.Tree.CertificateRef == "" {
-			return "", refusal("lifecycle.state", "the HTTPS package tree has no bound serving certificate", "select a managed HTTPS artifact endpoint with a serving certificate")
+			return "", installInputInvalid.Fail("the HTTPS package tree has no bound serving certificate", "select a managed HTTPS artifact endpoint with a serving certificate")
 		}
 		return "url --url=" + request.Tree.URL + " --sslcacert=" + packageTrustPath, nil
 	}

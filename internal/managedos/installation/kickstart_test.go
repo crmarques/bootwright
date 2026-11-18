@@ -265,7 +265,7 @@ func TestAPhysicalKickstartNeverClearsADiskItDidNotName(t *testing.T) {
 	if rendered != "" {
 		t.Fatalf("a physical installation naming no disk rendered:\n%s", rendered)
 	}
-	expectRefusal(t, err, "lifecycle.state")
+	expectRefusal(t, err, "install.request-invalid")
 }
 
 // The whole physical Kickstart is fixed, because the installer reads all of it
@@ -457,7 +457,7 @@ func TestADeliveredKeyOfAnUnknownTypeRefuses(t *testing.T) {
 		input := physicalInstallation()
 		input.HostKeyType = keyType
 		_, err := RenderKickstart(input)
-		expectRefusal(t, err, "lifecycle.state")
+		expectRefusal(t, err, "install.request-invalid")
 		if reported := diagnostics.Of(err); !strings.Contains(reported[0].Message, "the delivered SSH host key type "+keyType+" has no installed path") {
 			t.Fatalf("refusal = %q", reported[0].Message)
 		}

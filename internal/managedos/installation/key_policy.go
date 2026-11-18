@@ -40,7 +40,7 @@ func generatedHostKeyType(contextName string, request Request) (string, error) {
 	if _, known := guestHostKeys[request.Target.HostKeyType]; known {
 		return deliveredHostKeys[request.Target.HostKeyType].algorithm, nil
 	}
-	return "", refusal("lifecycle.state", "the frozen guest host key type of Machine/"+request.Identity.Object+" is not one this executable generates",
+	return "", installHostKeyMismatch.Fail("the frozen guest host key type of Machine/"+request.Identity.Object+" is not one this executable generates",
 		"take this context back with bootwright destroy --context "+contextName+", then plan and apply it again")
 }
 
@@ -98,10 +98,7 @@ func rsaModulusBits(encoded string) (int, bool) {
 }
 
 func fipsNotEnabled(contextName string, request Request) error {
-	return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
-		Severity: "error", Code: "lifecycle.state",
-		Message:     "Machine/" + request.Identity.Object + " was installed with FIPS mode enabled, but its kernel or its crypto policy does not report FIPS mode",
-		Remediation: "take this context back with bootwright destroy --context " + contextName + ", then run bootwright apply --context " + contextName + "; FIPS mode is set only at installation",
-		Object:      &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Machine), Name: request.Identity.Object},
-	}}}
+	return failOn(installGuestPolicyUnmet, diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Machine), Name: request.Identity.Object},
+		"Machine/"+request.Identity.Object+" was installed with FIPS mode enabled, but its kernel or its crypto policy does not report FIPS mode",
+		"take this context back with bootwright destroy --context "+contextName+", then run bootwright apply --context "+contextName+"; FIPS mode is set only at installation")
 }

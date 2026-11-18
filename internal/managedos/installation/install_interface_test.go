@@ -257,7 +257,7 @@ func TestABareMetalEthernetInterfaceWithoutAHardwareNICRefuses(t *testing.T) {
 	remedy := "match interface enp2s0 to its hardware NIC in spec.network.interfaceMatches of Machine/metal-01, or mark it absent in its network"
 	two := metalNetwork(declaredInterface("enp1s0", "ethernet"), declaredInterface("enp2s0", "ethernet"))
 	_, _, err := Requests(metalCatalog(metalOn("enp1s0", hardwareNIC("enp1s0", "52:54:00:9a:1b:01")), two), "controller", testContext)
-	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.unsupported" || reported[0].Message != unbound || reported[0].Remediation != remedy {
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "install.unsupported" || reported[0].Message != unbound || reported[0].Remediation != remedy {
 		t.Fatalf("refusal = %#v", reported)
 	}
 	nics := []api.Value{hardwareNIC("enp1s0", "52:54:00:9a:1b:01"), hardwareNIC("enp2s0", "52:54:00:9a:1b:02")}
@@ -514,7 +514,7 @@ func TestTheRequestBuilderRefusesWhatUnsupportedRefuses(t *testing.T) {
 			refused := Refusals(catalog)
 			_, _, err := Requests(catalog, "controller", testContext)
 			reported := diagnostics.Of(err)
-			if len(refused) != 1 || len(reported) != 1 || reported[0].Code != "lifecycle.unsupported" ||
+			if len(refused) != 1 || len(reported) != 1 || reported[0].Code != "install.unsupported" ||
 				reported[0].Message != refused[0].Reason || reported[0].Remediation != refused[0].Remediation {
 				t.Fatalf("refusals = %+v, builder = %#v", refused, reported)
 			}
@@ -542,7 +542,7 @@ func TestTheRendererRefusesAnInstallInterfaceItCannotName(t *testing.T) {
 			test.set(&input)
 			rendered, err := RenderKickstart(input)
 			reported := diagnostics.Of(err)
-			if rendered != "" || len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != test.message ||
+			if rendered != "" || len(reported) != 1 || reported[0].Code != "install.request-invalid" || reported[0].Message != test.message ||
 				reported[0].Remediation != "plan the installation again with this release" {
 				t.Fatalf("rendered %q with %#v", rendered, reported)
 			}
@@ -554,7 +554,7 @@ func TestAnInterfaceNameTheKernelCannotPinRefuses(t *testing.T) {
 	catalog := labCatalog(networkWith(declaredInterface("enp1s0", "ethernet"), declaredInterface("uplink-to-the-core", "ethernet")))
 	_, _, err := Requests(catalog, "controller", testContext)
 	argument := "ifname=uplink-to-the-core:" + substrate.InterfaceMAC(testContext, "rhel-01", "uplink-to-the-core")
-	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "install.input-invalid" ||
 		reported[0].Message != "the installer argument "+argument+" is not an interface name pinned to a hardware address" ||
 		reported[0].Remediation != "correct the interface names in the network of Machine/rhel-01" {
 		t.Fatalf("refusal = %#v", reported)

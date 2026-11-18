@@ -20,7 +20,7 @@ func provedHostKey(h Host, e lifecycle.Execution, readers DependencyProofs) (tru
 		defer clear(value)
 		key, err := trust.ParseAuthorizedKey(string(value))
 		if err != nil {
-			return trust.HostKey{}, failure("lifecycle.state", "the delivered Ceph host public key is invalid", "")
+			return trust.HostKey{}, cephHostKeyInvalid.Fail("the delivered Ceph host public key is invalid", "restore the host key Secret the Machine's installation delivered, then repeat the operation")
 		}
 		return key, nil
 	}
@@ -29,7 +29,7 @@ func provedHostKey(h Host, e lifecycle.Execution, readers DependencyProofs) (tru
 		proofs = e.Proved
 	}
 	if readers == nil {
-		return trust.HostKey{}, failure("lifecycle.state", "Ceph dependency proof readers are not bound", "")
+		return trust.HostKey{}, cephUnconfigured.Fail("Ceph dependency proof readers are not bound", "")
 	}
 	return readers.HostKey(proofs, h.Machine, h.Address)
 }
@@ -39,7 +39,7 @@ func proveFIPS(e lifecycle.Execution, r Request, readers DependencyProofs) error
 		return nil
 	}
 	if readers == nil {
-		return failure("lifecycle.state", "Ceph installation proof readers are not bound", "")
+		return cephUnconfigured.Fail("Ceph installation proof readers are not bound", "")
 	}
 	proofs := e.ApplyProved
 	if len(proofs) == 0 {

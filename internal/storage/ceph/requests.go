@@ -374,7 +374,7 @@ func (r *Request) sources(c api.Catalog, cluster api.Object) error {
 func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request, error) {
 	spec := cluster.Spec()
 	if api.CephDistribution(spec) != "ibm" {
-		return Request{}, failure("lifecycle.unsupported", distributionReason, distributionRemedy)
+		return Request{}, cephUnsupportedProfile.Fail(distributionReason, distributionRemedy)
 	}
 	if err := unresolvedIngressBackend(cluster); err != nil {
 		return Request{}, err
@@ -386,14 +386,14 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 	}
 	ent, _ := c.Find(api.Entitlement, spec.Get("entitlementRef").Text())
 	if !ent.Spec().Get("license", "accept").Bool() {
-		return Request{}, failure("lifecycle.unsupported", "the selected IBM license has not been accepted", "review the provider license and set license.accept on the declared Entitlement")
+		return Request{}, cephLicenseUnaccepted.Fail("the selected IBM license has not been accepted", "review the provider license and set license.accept on the declared Entitlement")
 	}
 	if registry := ent.Spec().Get("registry", "url").Text(); base != registry && !strings.HasPrefix(base, registry+"/") {
-		return Request{}, failure("lifecycle.unsupported", "the Entitlement registry does not match the selected Ceph image registry", "set the Entitlement registry.url to the selected image registry")
+		return Request{}, cephImageInvalid.Fail("the Entitlement registry does not match the selected Ceph image registry", "set the Entitlement registry.url to the selected image registry")
 	}
 	registry, _, _ := strings.Cut(ent.Spec().Get("registry", "url").Text(), "/")
 	if !strings.HasPrefix(base, registry+"/") {
-		return Request{}, failure("lifecycle.unsupported", "the Ceph image base names only the Entitlement registry host, not a repository under it", "set ceph.image.base to a repository under the Entitlement registry, such as "+registry+"/<repository>")
+		return Request{}, cephImageInvalid.Fail("the Ceph image base names only the Entitlement registry host, not a repository under it", "set ceph.image.base to a repository under the Entitlement registry, such as "+registry+"/<repository>")
 	}
 	r := Request{Version: Version, Action: "cluster", Cluster: cluster.Name(), Image: reference,
 		Cephadm: Tool{Path: "/usr/sbin/cephadm", PackageVersion: spec.Get("packageVersion").Text()}, Release: spec.Get("release").Text(), AnsiblePackageVersion: spec.Get("cephadm", "ansible", "packageVersion").Text(), NFSGaneshaPackageVersion: spec.Get("nfsGanesha", "packageVersion").Text(),
@@ -418,7 +418,7 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 		return Request{}, failure("api.invariant", "unknown Ceph SSH transport", "select native or verifiedTunnel; each transport requires artifact qualification")
 	}
 	if r.ClusterSSHUser == "" || r.ClusterKeyRef == "" || r.RegistryRef == "" || spec.Get("security", "cephx", "keyType").Present() && spec.Get("security", "cephx", "keyType").Text() != "aes" {
-		return Request{}, failure("lifecycle.unsupported", "the requested Ceph trust profile is not implemented by the core adapter", "declare the cluster SSH key, registry entitlement and the aes CephX core profile")
+		return Request{}, cephUnsupportedProfile.Fail("the requested Ceph trust profile is not implemented by the core adapter", "declare the cluster SSH key, registry entitlement and the aes CephX core profile")
 	}
 	r.Stretch = stretchOf(cluster)
 	if r.Security, err = securityPolicy(c, spec, r.ClusterKeyRef); err != nil {
@@ -503,10 +503,10 @@ func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string
 		ssh, ok := machine.SSH(m)
 		provider, _ := c.Find(api.InfraProvider, view.ProviderRef)
 		if !ok || !machine.Installed(m) || !substrate.IsRealized(provider) || ssh.PrivateKeyRef == "" || ssh.PasswordRef != "" || ssh.OperatorIdentity || ssh.User != r.ClusterSSHUser || ssh.PrivateKeyRef == r.ClusterKeyRef {
-			return failure("lifecycle.unsupported", "core Ceph requires installed managed hosts and separate fleet and cluster SSH keys", "use the three-node libvirt Ceph example and distinct fleet and orchestration identities")
+			return cephUnsupportedTopology.Fail("core Ceph requires installed managed hosts and separate fleet and cluster SSH keys", "use the three-node libvirt Ceph example and distinct fleet and orchestration identities")
 		}
 		if len(r.Hosts) > 0 && ssh.PrivateKeyRef != r.Hosts[0].SSHKeyRef {
-			return failure("lifecycle.unsupported", "core Ceph currently requires one fleet SSH key for its guests", "declare a shared fleet identity distinct from the native cluster identity")
+			return cephUnsupportedTopology.Fail("core Ceph currently requires one fleet SSH key for its guests", "declare a shared fleet identity distinct from the native cluster identity")
 		}
 		name := cephcluster.NativeHostname(node)
 		fqdn := ""
@@ -520,7 +520,7 @@ func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string
 		}
 		hostKeyRef := m.Spec().Get("os", "install", "hostKeyRef").Text()
 		if ssh.KnownHostsRef != "" {
-			return failure("lifecycle.unsupported", "core Ceph requires its owned managed installation's verified host key", "use captured installation evidence; do not substitute an unrelated knownHostsRef")
+			return cephUnsupportedTopology.Fail("core Ceph requires its owned managed installation's verified host key", "use captured installation evidence; do not substitute an unrelated knownHostsRef")
 		}
 		h := Host{Name: name, Machine: m.Name(), Address: ssh.Address, User: ssh.User, Port: ssh.Port, Devices: []Device{}, Labels: node.Get("labels").Strings(), Location: map[string]string{}, SSHKeyRef: ssh.PrivateKeyRef, HostKeyRef: hostKeyRef}
 		h.Physical = substrate.RealizesPhysicalNICs(provider)
@@ -554,7 +554,7 @@ func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string
 					return err
 				}
 				if r.MonIP != ssh.Address {
-					return failure("lifecycle.unsupported", "CephCluster "+cluster.Name()+" spec.cephadm.bootstrap.addressRef (or inherited spec.cephadm.addressRef) resolves separately from Machine "+m.Name()+" fleet SSH", "select an addressRef resolving to the Machine access.ssh.addressRef address; separate bootstrap enrollment addresses are not implemented")
+					return cephUnsupportedTopology.Fail("CephCluster "+cluster.Name()+" spec.cephadm.bootstrap.addressRef (or inherited spec.cephadm.addressRef) resolves separately from Machine "+m.Name()+" fleet SSH", "select an addressRef resolving to the Machine access.ssh.addressRef address; separate bootstrap enrollment addresses are not implemented")
 				}
 			}
 		} else if addressRef != "" {
@@ -563,7 +563,7 @@ func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string
 				return err
 			}
 			if address != ssh.Address {
-				return failure("lifecycle.unsupported", "CephCluster "+cluster.Name()+" spec.cephadm.addressRef resolves separately from Machine "+m.Name()+" fleet SSH", "select an addressRef resolving to the Machine access.ssh.addressRef address; separate orchestration addresses are not implemented")
+				return cephUnsupportedTopology.Fail("CephCluster "+cluster.Name()+" spec.cephadm.addressRef resolves separately from Machine "+m.Name()+" fleet SSH", "select an addressRef resolving to the Machine access.ssh.addressRef address; separate orchestration addresses are not implemented")
 			}
 		}
 	}
@@ -572,7 +572,7 @@ func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string
 	}
 	slices.SortFunc(r.Hosts, func(a, b Host) int { return strings.Compare(a.Name, b.Name) })
 	if (!r.SingleHostDefaults && len(r.Hosts) < 3) || r.Bootstrap == "" {
-		return failure("lifecycle.unsupported", "the core IBM profile requires at least three owned hosts and a bootstrap host", "declare a provider-supported topology with at least three hosts")
+		return cephUnsupportedTopology.Fail("the core IBM profile requires at least three owned hosts and a bootstrap host", "declare a provider-supported topology with at least three hosts")
 	}
 	return nil
 }
@@ -610,11 +610,11 @@ func checkDevices(r Request, names []string, cluster api.Object, service api.Val
 	osd := cephcluster.NativeServiceName(service)
 	for _, field := range service.Get("spec").Fields() {
 		if !slices.Contains([]string{"data_devices", "db_devices", "wal_devices", "encrypted", "tpm2", "osds_per_device", "crush_device_class"}, field.Name) {
-			return failure("lifecycle.unsupported", "OSD service "+osd+" sets spec."+field.Name+", an OSD allocation option the core adapter does not model", "remove spec."+field.Name+" and use explicit data, DB and WAL paths and one OSD per data disk")
+			return cephUnsupportedDisk.Fail("OSD service "+osd+" sets spec."+field.Name+", an OSD allocation option the core adapter does not model", "remove spec."+field.Name+" and use explicit data, DB and WAL paths and one OSD per data disk")
 		}
 	}
 	if service.Get("spec", "osds_per_device").Present() && service.Get("spec", "osds_per_device").Text() != "1" {
-		return failure("lifecycle.unsupported", "core OSDs require one OSD per data device", "omit osds_per_device or set it to 1")
+		return cephUnsupportedDisk.Fail("core OSDs require one OSD per data device", "omit osds_per_device or set it to 1")
 	}
 	if service.Get("spec", "tpm2").Bool() && !service.Get("spec", "encrypted").Bool() {
 		return failure("api.invariant", "TPM2 OSDs require encryption", "set encrypted: true")
@@ -627,7 +627,7 @@ func checkDevices(r Request, names []string, cluster api.Object, service api.Val
 			continue
 		}
 		if !selector.Has("paths") || selector.Len() != 1 || len(selector.Get("paths").Items()) == 0 {
-			return failure("lifecycle.unsupported", "core OSDs require explicit device paths", "use nonempty data_devices.paths, db_devices.paths and wal_devices.paths without filters")
+			return cephUnsupportedDisk.Fail("core OSDs require explicit device paths", "use nonempty data_devices.paths, db_devices.paths and wal_devices.paths without filters")
 		}
 		for i, path := range selector.Get("paths").Items() {
 			member := field + ".paths[" + strconv.Itoa(i) + "]"
@@ -638,7 +638,7 @@ func checkDevices(r Request, names []string, cluster api.Object, service api.Val
 				continue
 			}
 			if path.Type() != api.String {
-				return failure("lifecycle.unsupported", "OSD service "+osd+" declares "+member+" as something other than a plain device string", "use plain owned data-disk paths: /dev/sd* for explicit-media disks, /dev/vd* otherwise")
+				return cephUnsupportedDisk.Fail("OSD service "+osd+" declares "+member+" as something other than a plain device string", "use plain owned data-disk paths: /dev/sd* for explicit-media disks, /dev/vd* otherwise")
 			}
 			if field == "data_devices" {
 				classes[service.Get("spec", "crush_device_class").Text()] = true
@@ -647,7 +647,7 @@ func checkDevices(r Request, names []string, cluster api.Object, service api.Val
 		}
 	}
 	if len(classes) > 1 && (service.Get("spec", "db_devices").Present() || service.Get("spec", "wal_devices").Present()) {
-		return failure("lifecycle.unsupported", "OSD service "+osd+" gives its data devices more than one CRUSH device class and declares db_devices or wal_devices; the core adapter submits one native OSD document per class, and those documents cannot share DB or WAL devices",
+		return cephUnsupportedDisk.Fail("OSD service "+osd+" gives its data devices more than one CRUSH device class and declares db_devices or wal_devices; the core adapter submits one native OSD document per class, and those documents cannot share DB or WAL devices",
 			"declare one OSD service per device class, each with its own db_devices and wal_devices")
 	}
 	seenPaths := map[string]bool{}
@@ -659,7 +659,7 @@ func checkDevices(r Request, names []string, cluster api.Object, service api.Val
 	}
 	count, hasCount := service.Get("placement", "count").Int64()
 	if hasCount && count != int64(len(names)) {
-		return failure("lifecycle.unsupported", "core OSD allocation requires every explicitly selected host", "omit OSD placement.count or match the full selected host set")
+		return cephUnsupportedDisk.Fail("core OSD allocation requires every explicitly selected host", "omit OSD placement.count or match the full selected host set")
 	}
 	for _, n := range names {
 		native := ""
@@ -752,7 +752,7 @@ func virtualDevices(c api.Catalog, m api.Object, contextName string) ([]Device, 
 	dataDisks := profile.Get("dataDisks").Items()
 	presentations, valid := substrate.DataDiskPresentations(dataDisks)
 	if !valid {
-		return nil, failure("lifecycle.unsupported", "unsupported virtual data disk media or targets", "use the supported libvirt profile disk bound and media")
+		return nil, cephUnsupportedDisk.Fail("unsupported virtual data disk media or targets", "use the supported libvirt profile disk bound and media")
 	}
 	for i, disk := range dataDisks {
 		size, _ := disk.Get("sizeGiB").Int64()
@@ -769,7 +769,7 @@ func validateHostEndpoints(r Request) error {
 	for _, host := range r.Hosts {
 		address, err := netip.ParseAddr(host.Address)
 		if err != nil || address.String() != host.Address || address.Zone() != "" || address.IsUnspecified() || address.IsMulticast() || seen[host.Address] {
-			return failure("lifecycle.unsupported", "verified Ceph transport requires distinct canonical IP endpoints", "declare one distinct canonical management IP per Ceph host")
+			return cephUnsupportedTopology.Fail("verified Ceph transport requires distinct canonical IP endpoints", "declare one distinct canonical management IP per Ceph host")
 		}
 		seen[host.Address] = true
 	}

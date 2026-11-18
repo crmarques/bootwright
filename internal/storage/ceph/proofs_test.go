@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
@@ -24,10 +25,10 @@ func subvolumeProof(t *testing.T, name, group, path string) lifecycle.BlockEvide
 	return lifecycle.BlockEvidence{Block: block, Kind: string(api.CephSubvolume), Object: "docs", Implementation: Implementation, Verb: reconciliation.Apply, State: reconciliation.BlockDone, Evidence: evidenceBytes(t, e)}
 }
 
-func provedFails(t *testing.T, proofs []lifecycle.BlockEvidence, message, remedy string) {
+func provedFails(t *testing.T, stop diagnostics.Stop, proofs []lifecycle.BlockEvidence, message, remedy string) {
 	t.Helper()
 	_, _, _, err := ProvedSubvolume(proofs, "docs")
-	refusedWith(t, err, "lifecycle.state", message, remedy)
+	refusedStop(t, err, stop, message, remedy)
 }
 
 func TestProvedSubvolumeDecodesOnlyOwnerEvidence(t *testing.T) {
@@ -47,13 +48,13 @@ func TestProvedSubvolumeDecodesOnlyOwnerEvidence(t *testing.T) {
 	pending := valid
 	pending.State = reconciliation.BlockFailed
 	for _, ignored := range []lifecycle.BlockEvidence{foreignKind, other, destroy, pending} {
-		provedFails(t, []lifecycle.BlockEvidence{ignored}, lacks, lacksRemedy)
+		provedFails(t, cephRecordsMissing, []lifecycle.BlockEvidence{ignored}, lacks, lacksRemedy)
 	}
-	provedFails(t, nil, lacks, lacksRemedy)
+	provedFails(t, cephRecordsMissing, nil, lacks, lacksRemedy)
 	const restore = "restore the original apply evidence"
-	provedFails(t, []lifecycle.BlockEvidence{subvolumeProof(t, "docs", "csi", "/srv/docs")}, "the creation proof of CephSubvolume docs does not prove a ready subvolume at its reported path", restore)
-	provedFails(t, []lifecycle.BlockEvidence{valid, valid}, "CephSubvolume docs has ambiguous creation proofs", restore)
-	provedFails(t, []lifecycle.BlockEvidence{subvolumeProof(t, "notes", "csi", "/volumes/csi/notes/"+subvolumeID)}, "the creation proof of CephSubvolume docs names another request", restore)
+	provedFails(t, cephProofMismatch, []lifecycle.BlockEvidence{subvolumeProof(t, "docs", "csi", "/srv/docs")}, "the creation proof of CephSubvolume docs does not prove a ready subvolume at its reported path", restore)
+	provedFails(t, cephRecordsMissing, []lifecycle.BlockEvidence{valid, valid}, "CephSubvolume docs has ambiguous creation proofs", restore)
+	provedFails(t, cephProofMismatch, []lifecycle.BlockEvidence{subvolumeProof(t, "notes", "csi", "/volumes/csi/notes/"+subvolumeID)}, "the creation proof of CephSubvolume docs names another request", restore)
 }
 
 func settingsProof(t *testing.T) lifecycle.BlockEvidence {
@@ -79,27 +80,27 @@ func TestProvedClusterDecodesOnlyTheCoreClusterEvidence(t *testing.T) {
 	}
 	const restore = "restore the original apply evidence"
 	const lacks, lacksRemedy = "CephCluster example lacks its applied cluster creation proof", "apply CephCluster example first; an SMB resource takes its cluster's FSID, bootstrap host and images only from that proof"
-	fails := func(proofs []lifecycle.BlockEvidence, owner, message, remedy string) {
+	fails := func(stop diagnostics.Stop, proofs []lifecycle.BlockEvidence, owner, message, remedy string) {
 		t.Helper()
 		_, err := ProvedCluster(proofs, "example", owner)
-		refusedWith(t, err, "lifecycle.state", message, remedy)
+		refusedStop(t, err, stop, message, remedy)
 	}
-	fails([]lifecycle.BlockEvidence{settingsProof(t), unit, image}, "apply-original", lacks, lacksRemedy)
-	fails(append(proofs, coreClusterProof(t, core, nil)), "apply-original", "CephCluster example has ambiguous cluster creation proofs", restore)
-	fails(proofs, "apply-other", "the creation proof of CephCluster example belongs to another operation", restore)
+	fails(cephRecordsMissing, []lifecycle.BlockEvidence{settingsProof(t), unit, image}, "apply-original", lacks, lacksRemedy)
+	fails(cephRecordsMissing, append(proofs, coreClusterProof(t, core, nil)), "apply-original", "CephCluster example has ambiguous cluster creation proofs", restore)
+	fails(cephProofMismatch, proofs, "apply-other", "the creation proof of CephCluster example belongs to another operation", restore)
 	unready := coreClusterProof(t, core, func(e *Evidence) { e.Ready, e.Partial = false, true })
-	fails([]lifecycle.BlockEvidence{unready, image}, "apply-original", "the creation proof of CephCluster example does not prove a ready cluster", restore)
+	fails(cephProofMismatch, []lifecycle.BlockEvidence{unready, image}, "apply-original", "the creation proof of CephCluster example does not prove a ready cluster", restore)
 	pool := coreRequest()
 	pool.Action, pool.Pool = "pool", &Pool{Name: "volumes"}
-	fails([]lifecycle.BlockEvidence{coreClusterProof(t, pool, nil), image}, "apply-original", "the creation proof of CephCluster example names another request", restore)
+	fails(cephProofMismatch, []lifecycle.BlockEvidence{coreClusterProof(t, pool, nil), image}, "apply-original", "the creation proof of CephCluster example names another request", restore)
 	lost := coreRequest()
 	lost.Bootstrap = "node-9"
-	fails([]lifecycle.BlockEvidence{coreClusterProof(t, lost, nil), image}, "apply-original", "the creation proof of CephCluster example names no bootstrap host among its hosts", restore)
+	fails(cephProofMismatch, []lifecycle.BlockEvidence{coreClusterProof(t, lost, nil), image}, "apply-original", "the creation proof of CephCluster example names no bootstrap host among its hosts", restore)
 	destroyed := coreClusterProof(t, core, nil)
 	destroyed.Verb = reconciliation.Destroy
 	other := coreClusterProof(t, core, nil)
 	other.Kind, other.Block.Kind = string(api.CephPool), string(api.CephPool)
 	for _, ignored := range []lifecycle.BlockEvidence{destroyed, other} {
-		fails([]lifecycle.BlockEvidence{ignored, image}, "apply-original", lacks, lacksRemedy)
+		fails(cephRecordsMissing, []lifecycle.BlockEvidence{ignored, image}, "apply-original", lacks, lacksRemedy)
 	}
 }

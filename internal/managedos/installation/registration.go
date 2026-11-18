@@ -39,7 +39,7 @@ func registrationFor(catalog api.Catalog, profile api.Object) (*Registration, er
 		return registration, err
 	}
 	if registration == nil || registration.Satellite == nil || registration.Satellite.ContentView != "" {
-		return nil, refusal("lifecycle.unsupported", "a subscription package source installs from the Satellite a managed registration declares, in the content view its activation key selects, and "+profile.Identity()+" declares no such registration",
+		return nil, installUnsupported.Fail("a subscription package source installs from the Satellite a managed registration declares, in the content view its activation key selects, and "+profile.Identity()+" declares no such registration",
 			"name a managed redhatRhel Entitlement that declares spec.rhsm.satellite without contentView in spec.subscription.entitlementRef on "+profile.Identity()+", or select another package source than "+subscriptionSourceField)
 	}
 	registration.InstallSource = true
@@ -238,7 +238,6 @@ func registrationRefusals(contextName string, request Request) map[string]error 
 	profile := "MachineInstallProfile/" + request.Identity.Profile
 	organization, key := "Secret/"+request.Registration.OrganizationRef, "Secret/"+request.Registration.ActivationKeyRef
 	again := "then run bootwright apply --context " + contextName + " again"
-	refused := MachineRefusal(request)
 	input := "the registration worker on " + machine + " refused the organization or activation key of " + entitlement + " as not one line of printable ASCII without whitespace"
 	selection := request.Registration.Satellite != nil && request.Registration.Satellite.ContentView != ""
 	inputRemedy := "replace " + organization + " or " + key + " with one line of 1 to 255 printable ASCII characters without whitespace, "
@@ -251,39 +250,40 @@ func registrationRefusals(contextName string, request Request) map[string]error 
 		inputRemedy += "or set spec.rhsm.satellite.contentView and spec.rhsm.satellite.lifecycleEnvironment to valid Satellite labels, "
 	}
 	refusals := map[string]error{
-		"registration-input": refused(input, inputRemedy+again),
-		"registration-foreign": refused(machine+" is registered with a subscription consumer this installation did not create, and it was left registered",
+		"registration-input": machineRefusal(request, installRegistrationRejected)(input, inputRemedy+again),
+		"registration-foreign": machineRefusal(request, installForeignRecord)(machine+" is registered with a subscription consumer this installation did not create, and it was left registered",
 			"unregister "+machine+" from its subscription service yourself, "+again+", or take this context back with bootwright destroy --context "+contextName),
-		"registration-refused": refused("the subscription service refused to register "+machine+" with the organization and activation key of "+entitlement,
+		"registration-refused": machineRefusal(request, installRegistrationRejected)("the subscription service refused to register "+machine+" with the organization and activation key of "+entitlement,
 			"check the values of "+organization+" and "+key+", which "+entitlement+" names, "+again),
-		"registration-identity-collision": refused("the subscription service reports another registered host with the hardware identity of "+machine,
+		"registration-identity-collision": machineRefusal(request, installRegistrationRejected)("the subscription service reports another registered host with the hardware identity of "+machine,
 			"remove the subscription service's stale consumer for "+machine+", left by an earlier installation that was not unregistered, "+again),
-		"registration-unavailable": refused("the subscription service, or the registration tooling on "+machine+", did not answer",
+		"registration-unavailable": machineRefusal(request, installServiceUnavailable)("the subscription service, or the registration tooling on "+machine+", did not answer",
 			"restore the route from "+machine+" to the subscription service, "+again),
-		"registration-repositories": refused("the subscription service did not accept "+subscriptionReposField+" of "+profile+" on "+machine,
+		"registration-repositories": machineRefusal(request, installRegistrationRejected)("the subscription service did not accept "+subscriptionReposField+" of "+profile+" on "+machine,
 			"correct the repository IDs in "+subscriptionReposField+" of "+profile+", then take this context back with bootwright destroy --context "+contextName+
 				" and run bootwright apply --context "+contextName+"; a repository edit is another installation"),
 	}
 	if selection {
-		refusals["registration-refused"] = refused("the Satellite did not accept or prove the registration of "+machine+" with the organization, activation key and content selection of "+entitlement,
+		refusals["registration-refused"] = machineRefusal(request, installRegistrationRejected)("the Satellite did not accept or prove the registration of "+machine+" with the organization, activation key and content selection of "+entitlement,
 			"check the values of "+organization+" and "+key+", the published view and environment labels in spec.rhsm.satellite.contentView and spec.rhsm.satellite.lifecycleEnvironment of "+entitlement+
 				", and that the Machine's RHSM registration service supports environment_names, "+again)
 	}
 	if satellite := request.Registration.Satellite; satellite != nil {
 		bundle := "Secret/" + satellite.TrustBundleRef
-		refusals["registration-trust"] = refused("the Satellite "+satellite.Hostname+" presented a certificate that the CA bundle of "+bundle+" does not verify",
+		refusals["registration-trust"] = machineRefusal(request, installRegistrationRejected)("the Satellite "+satellite.Hostname+" presented a certificate that the CA bundle of "+bundle+" does not verify",
 			"set "+bundle+" to the CA that signs the certificate of "+satellite.Hostname+", such as the Satellite's katello-server-ca.crt, "+again)
 	}
 	return refusals
 }
 
-func MachineRefusal(request Request) func(message, remediation string) error {
+func machineRefusal(request Request, stop diagnostics.Stop) func(message, remediation string) error {
 	return func(message, remediation string) error {
-		return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
-			Severity: "error", Code: "lifecycle.state", Message: message, Remediation: remediation,
-			Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Machine), Name: request.Identity.Object},
-		}}}
+		return failOn(stop, diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Machine), Name: request.Identity.Object}, message, remediation)
 	}
+}
+
+func MachineRefusal(request Request, stop diagnostics.Stop) func(message, remediation string) error {
+	return machineRefusal(request, stop)
 }
 
 func unregistrationRefusals(contextName string, request Request) map[string]error {
@@ -292,14 +292,13 @@ func unregistrationRefusals(contextName string, request Request) map[string]erro
 	}
 	machine := "Machine/" + request.Identity.Object
 	again := "then run bootwright destroy --context " + contextName + " again"
-	refused := MachineRefusal(request)
 	return map[string]error{
-		"registration-unreachable": refused("the apply of "+machine+" proved its install marker before it registered, and "+machine+
+		"registration-unreachable": machineRefusal(request, installServiceUnavailable)("the apply of "+machine+" proved its install marker before it registered, and "+machine+
 			" did not answer through its identity channel or its pinned connection, so its subscription registration cannot be read and was not removed",
 			"start "+machine+" with bootwright machine start --context "+contextName+" --name "+request.Identity.Object+", "+again+
 				"; if "+machine+" cannot answer again, remove its consumer with the subscription service's own tools, then run bootwright destroy --context "+
 				contextName+" --unregistered "+request.Identity.Object),
-		"registration-unavailable": refused("the subscription service, or the registration tooling on "+machine+", did not complete the removal of the subscription consumer its installation created",
+		"registration-unavailable": machineRefusal(request, installServiceUnavailable)("the subscription service, or the registration tooling on "+machine+", did not complete the removal of the subscription consumer its installation created",
 			"restore the route from "+machine+" to the subscription service, "+again),
 	}
 }

@@ -35,11 +35,11 @@ func projectServices(r *Request, cluster api.Object) error {
 			continue
 		}
 		if !slices.Contains([]string{"mon", "mgr", "osd", "mds"}, t) {
-			return failure("lifecycle.unsupported", "a selected service has no core lifecycle", "use only MON, MGR, OSD and MDS services until its feature item is delivered")
+			return cephUnsupportedService.Fail("a selected service has no core lifecycle", "use only MON, MGR, OSD and MDS services until its feature item is delivered")
 		}
 		for _, field := range svc.Fields() {
 			if !slices.Contains([]string{"service_type", "service_id", "placement", "spec"}, field.Name) {
-				return failure("lifecycle.unsupported", "a native service option has not been qualified for core execution", "use only service_type, service_id, placement and the supported spec")
+				return cephUnsupportedService.Fail("a native service option has not been qualified for core execution", "use only service_type, service_id, placement and the supported spec")
 			}
 		}
 		names, _ := cephcluster.ResolveServicePlacement(cluster, svc)
@@ -49,7 +49,7 @@ func projectServices(r *Request, cluster api.Object) error {
 		}
 		projected := nativeService{ServiceType: t, ServiceID: svc.Get("service_id").Text(), Placement: nativePlacement{Hosts: hosts}}
 		if t == "mgr" && r.ClusterSSHTransport == "verifiedTunnel" && !slices.Contains(hosts, r.Bootstrap) {
-			return failure("lifecycle.unsupported", "the verifiedTunnel candidate requires bootstrap to be an eligible MGR host", "include the bootstrap host in MGR placement before qualifying this core profile")
+			return cephUnsupportedService.Fail("the verifiedTunnel candidate requires bootstrap to be an eligible MGR host", "include the bootstrap host in MGR placement before qualifying this core profile")
 		}
 		if n, ok := svc.Get("placement", "count").Int64(); ok {
 			projected.Placement.Count = &n
@@ -57,7 +57,7 @@ func projectServices(r *Request, cluster api.Object) error {
 		if n, ok := svc.Get("placement", "count_per_host").Int64(); ok {
 			projected.Placement.CountPerHost = &n
 			if n != 1 {
-				return failure("lifecycle.unsupported", "core placement supports one daemon per selected host", "omit count_per_host or set it to 1")
+				return cephUnsupportedService.Fail("core placement supports one daemon per selected host", "omit count_per_host or set it to 1")
 			}
 		}
 		switch t {
@@ -96,7 +96,7 @@ func projectServices(r *Request, cluster api.Object) error {
 		r.Services = append(r.Services, data)
 	}
 	if len(r.Services) > maxCoreServices {
-		return failure("lifecycle.unsupported", fmt.Sprintf("CephCluster %s declares %d MON, MGR, OSD and MDS services, past the %d one services call submits", cluster.Name(), len(r.Services), maxCoreServices),
+		return cephUnsupportedService.Fail(fmt.Sprintf("CephCluster %s declares %d MON, MGR, OSD and MDS services, past the %d one services call submits", cluster.Name(), len(r.Services), maxCoreServices),
 			fmt.Sprintf("list a host's disks in one OSD service of CephCluster %s instead of one service per disk", cluster.Name()))
 	}
 	return nil
@@ -109,7 +109,7 @@ var delegatedFamilies = []string{"rgw", "ingress", "nfs", "nvmeof"}
 func serviceHosts(cluster api.Object, svc api.Value) ([]string, error) {
 	for _, host := range svc.Get("placement", "hosts").Items() {
 		if strings.ContainsAny(host.Text(), ":=") || host.Get("network").Text() != "" || host.Get("name").Text() != "" {
-			return nil, failure("lifecycle.unsupported", "native service "+cephcluster.NativeServiceName(svc)+" placement.hosts carries an unrealized network or daemon name", "use bare native hostnames or a label in spec.services placement.hosts")
+			return nil, cephUnsupportedService.Fail("native service "+cephcluster.NativeServiceName(svc)+" placement.hosts carries an unrealized network or daemon name", "use bare native hostnames or a label in spec.services placement.hosts")
 		}
 	}
 	names, issues := cephcluster.ResolveServicePlacement(cluster, svc)

@@ -10,7 +10,7 @@ import (
 func TestForeignInstallationRefusalNamesTheMachineAndSafeRecovery(t *testing.T) {
 	request := Request{Identity: Identity{Object: "node-a"}}
 	found := diagnostics.Of(foreignInstallation("example", request))
-	if len(found) != 1 || found[0].Code != "lifecycle.state" || found[0].Object == nil || found[0].Object.Name != "node-a" {
+	if len(found) != 1 || found[0].Code != "install.foreign-installation" || found[0].Object == nil || found[0].Object.Name != "node-a" {
 		t.Fatalf("refusal = %#v", found)
 	}
 	for _, text := range []string{"another installation", "no installer was booted"} {

@@ -105,7 +105,7 @@ func TestOnlyStoreMediaIsSupported(t *testing.T) {
 		text("checksum", strings.Repeat("a", 64)),
 	))
 	_, _, err := Requests(labCatalog(remote), "controller", testContext)
-	expectRefusal(t, err, "lifecycle.state")
+	expectRefusal(t, err, "install.media-unusable")
 }
 
 // A declared checksum is canonicalized and compared with the store's record,
@@ -228,7 +228,7 @@ func TestAPhysicalInstallationWithoutANamedRootDeviceRefuses(t *testing.T) {
 				t.Fatalf("unsupported = %v", unsupported)
 			}
 			_, _, err := Requests(catalog, "controller", testContext)
-			expectRefusal(t, err, "lifecycle.unsupported")
+			expectRefusal(t, err, "install.unsupported")
 			remediation := diagnostics.Of(err)[0].Remediation
 			for _, want := range test.remedy {
 				if !strings.Contains(remediation, want) {
@@ -287,7 +287,7 @@ func TestImportCertificateNeedsAnHttpsImageAndItsCertificate(t *testing.T) {
 			request := importing("https://artifacts.lab.example.test/private/os/metal-01")
 			change(&request)
 			err := mediaTrustRefusal(machine, request)
-			expectRefusal(t, err, "lifecycle.state")
+			expectRefusal(t, err, "install.input-invalid")
 			reported := diagnostics.Of(err)[0]
 			if !strings.Contains(reported.Message, "Machine/metal-01") ||
 				reported.Remediation != "select an https artifactServerEndpoint on a server declaring spec.tls.secretRef" {
@@ -332,7 +332,7 @@ func TestAPrivateInstallationRefusesAnUnverifiedController(t *testing.T) {
 				t.Fatalf("unsupported = %v", unsupported)
 			}
 			_, _, err := Requests(catalog, "controller", testContext)
-			expectRefusal(t, err, "lifecycle.unsupported")
+			expectRefusal(t, err, "install.unsupported")
 			reported := diagnostics.Of(err)[0]
 			if reported.Message != reason || reported.Remediation != remedy {
 				t.Fatalf("refusal = %q / %q", reported.Message, reported.Remediation)
@@ -452,7 +452,7 @@ func TestAnInstallationRefusesARootDeviceHintItCannotCarry(t *testing.T) {
 				t.Fatalf("unsupported = %v", unsupported)
 			}
 			_, _, err := Requests(catalog, "controller", testContext)
-			expectRefusal(t, err, "lifecycle.unsupported")
+			expectRefusal(t, err, "install.unsupported")
 			reported := diagnostics.Of(err)[0]
 			if reported.Message != "a managed-OS installation selects its root disk by wwn, serialNumber and sizeBytes or a volumeRef or bootVolume logical volume, and cannot carry the root-disk hints the Machine declares" {
 				t.Fatalf("message = %q", reported.Message)
@@ -513,7 +513,7 @@ func TestAPhysicalInstallationFreezesTheRootDiskIdentityItDeclares(t *testing.T)
 					t.Fatalf("refusals = %+v", refused)
 				}
 				_, _, err := Requests(catalog, "controller", testContext)
-				expectRefusal(t, err, "lifecycle.unsupported")
+				expectRefusal(t, err, "install.unsupported")
 				return
 			}
 			if refused := Refusals(catalog); len(refused) != 0 {
@@ -720,7 +720,7 @@ func TestTheDeliveredHostKeyTypeIsItsGeneratedKeyType(t *testing.T) {
 
 	_, err := hostKeyType(labCatalog(metalProvider(), machine,
 		sshKeySecret(api.MapValue(field("contextStore", api.MapValue())))), machine, "metal-01-host-key")
-	expectRefusal(t, err, "lifecycle.unsupported")
+	expectRefusal(t, err, "install.unsupported")
 	reported := diagnostics.Of(err)[0]
 	if reported.Message != "a physical installation installs its delivered SSH host key at the path of the type its generated declaration names, "+
 		"and Secret/metal-01-host-key declares no generated source" {

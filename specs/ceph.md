@@ -1005,7 +1005,7 @@ a proved enrollment. The controller calls enrollment again
 while hosts remain, at most once per host. A call that finds at least one
 request host not yet enrolled, and whose remaining worker budget admits none of
 them, refuses before any host attempt or native effect with the named token
-`enrollment-budget`, coded `lifecycle.unknown`;
+`enrollment-budget`, coded `ceph.enrollment-budget`;
 the bootstrap host stays `enrolling` and every other host `prepared`, which the
 next apply continues. A call that finds every request host enrolled admits
 none and completes after readback; on a
@@ -1043,7 +1043,7 @@ selected disk keeps it. Neither does a host's device count: each per-host call
 proves, binds or prepares all of its host's selected disks, so more disks lengthen
 calls, not the call sequence. The six-hour adapter ceiling, per-call budgets, input
 bounds and readiness proofs remain unchanged. A request whose deadline exceeds
-the ceiling refuses at planning, coded `lifecycle.unsupported`, with the
+the ceiling refuses at planning, coded `ceph.budget-exceeded`, with the
 [refusal table](#refusal-table)'s row for more Ceph hosts than the cluster run
 deadline admits.
 
@@ -1083,7 +1083,7 @@ all under the ceiling. A CephFilesystem's apply adds one call per data pool and
 per subvolume group to its 2n + 3 and one more readiness wait when it declares
 a group, so at eleven hosts it fits six data pools without groups, or four
 pools and groups together. One past that refuses at planning, coded
-`lifecycle.unsupported`, with reason
+`ceph.budget-exceeded`, with reason
 `CephFilesystem <filesystem> needs a run deadline of <deadline>, past the 6h0m0s every adapter run is held to: two native calls for each of the <hosts> Ceph hosts of CephCluster <cluster> and one for each of its <pools> data pools and <groups> subvolume groups`
 and remedy
 `declare fewer spec.dataPoolRefs or spec.subvolumeGroups on CephFilesystem <filesystem>, or fewer entries in spec.topology.nodes of CephCluster <cluster>`.
@@ -1093,7 +1093,7 @@ specifications the worker admits, and at eleven hosts P1's physical shape with
 three host-specific OSD specifications per host submits 35. Past 128 MON, MGR,
 OSD and MDS services, which one specification per disk passes from nine
 physical hosts of fifteen disks, planning refuses, coded
-`lifecycle.unsupported`, with reason
+`ceph.unsupported-service`, with reason
 `CephCluster <cluster> declares <services> MON, MGR, OSD and MDS services, past the 128 one services call submits`
 and remedy
 `list a host's disks in one OSD service of CephCluster <cluster> instead of one service per disk`.
@@ -1182,10 +1182,10 @@ cluster's footprint. A direct route publishes none.
 ## Named refusal outcomes
 
 A named refusal of a Ceph block ends the attempt with its entry's code. An
-entry coded `lifecycle.unknown` leaves the block's attempt outcome unknown, so
+entry whose stop is unproved leaves the block's attempt outcome unknown, so
 the next apply observes that block first and resolves it from the observed
-evidence, a host block through its preparation evidence. Only the entries coded
-`lifecycle.unsupported` (`unsupported-release`, `package-license`,
+evidence, a host block through its preparation evidence. Only the entries
+of stops that are not unproved (`unsupported-release`, `package-license`,
 `package-platform`, `dashboard-verify`, `client-quiescence-unqualified`,
 `call-home-unqualified`, `native-option-undeclared`,
 `ssh-policy-host-excluded`, `ssh-policy-unavailable`,
@@ -1235,7 +1235,7 @@ spec keeps no path's class, the adapter submits one native OSD document per
 host and class, with the class at spec level. Read-only readiness requires each
 declared class in `ceph osd tree`; an OSD still starting without it stays
 unready, and a booted OSD of another class refuses `osd-class-drift`
-(`lifecycle.unknown`), because cephadm classes only the OSDs it creates. A
+(`ceph.identity-drifted`), because cephadm classes only the OSDs it creates. A
 class is a native CRUSH name of at most 64 letters, digits, `-`, `_` and `.`;
 a DB or WAL path record's class refuses at validation, since cephadm classes
 only data OSDs, and data devices of more than one class beside DB or WAL
@@ -1286,7 +1286,7 @@ WWN or size. No such disk refuses `device-serial-absent`; more than one, such
 as two paths of a multipath disk, namespaces of one NVMe controller or a
 cloned serial, refuses `device-serial-ambiguous`; a disk of another size or
 kind refuses `device-serial-mismatch`; one without such an alias refuses
-`device-alias`. Each is coded `lifecycle.unsupported` and names the Machine
+`device-alias`. Each is coded `ceph.device-refused` and names the Machine
 and the serials its host selects, and the first binding raises them before
 any disk is written.
 A physical host admits up to 15 distinct local whole disks its OSD services
@@ -1298,7 +1298,7 @@ the 16 targets of its Machine's
 [D252](milestones/backlog.md#d252)). No call, round or deadline grows with the
 device count, since every per-host call proves all of its host's disks at once
 (the [cluster execution budget](#cluster-execution-budget)).
-One disk past it refuses at request planning, coded `lifecycle.unsupported`,
+One disk past it refuses at request planning, coded `ceph.unsupported-disk`,
 with reason
 `CephCluster <cluster> selects <disks> disks on physical Ceph host <host>, past the 15 permitted by physical install-time clearing (erase policies allow 16 targets)`
 and remedy
@@ -1394,7 +1394,7 @@ A declared OSD disk that holds a partition table, filesystem, LVM or other
 signature this operation did not write refuses with the named token
 `device-not-empty`, and one that holds a Ceph OSD of another cluster or one
 this operation did not create, on the disk or in the cluster map, refuses
-`foreign-osd`; both are coded `lifecycle.unsupported`, because no retry clears
+`foreign-osd`; both are coded `ceph.device-refused`, because no retry clears
 them. Their remedy names `wipefs --no-act <disk>` to see what the disk holds
 and, for a disk of a Ceph cluster the operator destroyed or abandoned, either
 declaring it in its Machine's `spec.hardware.dataDisks` with `onInstall: metadataClear`
@@ -1406,7 +1406,7 @@ not reported.
 
 An intent-marked data disk that holds LVM metadata without a complete OSD tag
 set, the shape an interrupted `ceph-volume` creation leaves, refuses
-`osd-partial`, coded `lifecycle.unknown`, because an interrupted creation and a
+`osd-partial`, coded `ceph.osd-unproved`, because an interrupted creation and a
 foreign write cannot be told apart, except in one bounded owned clear. OSD
 preparation clears the disk only when every read-only proof holds: the host's
 OSD device intent record is this operation's; no OSD identity record is
@@ -1436,7 +1436,7 @@ UUID on any disk, it removes only that entry with
 `lvmdevices --yes --delpvid <PV UUID>`; then it records completion. A failed
 zap refuses `osd-clear-failed`; a disk that does not read empty, or a
 devices-file entry that survives, refuses `osd-clear-unproved`. Both are coded
-`lifecycle.unknown` and keep the intent: a replay admits the same disk's PV
+`ceph.osd-unproved` and keep the intent: a replay admits the same disk's PV
 with its volume group and no volume, or without a volume group, zaps it again,
 and settles a disk already empty without a zap. A record whose serial or size
 differs from the disk now behind its alias refuses `osd-partial`. Each disk is
@@ -1470,7 +1470,7 @@ is settled; an OSD of that fsid that never booted (down, `up_from` 0, its state
 `ceph osd purge-new osd.<id> --yes-i-really-mean-it`, then the map must no
 longer hold it, or the call refuses `osd-orphan-unproved`; an OSD of that fsid
 that booted refuses `osd-orphan-booted` with no purge. Both are coded
-`lifecycle.unknown`. Since every OSD preparation reports every completed
+`ceph.osd-unproved`. Since every OSD preparation reports every completed
 clear, a purge that an interrupted, lost or refused services call left
 undone is finished by the next apply. The devices file's
 interaction, the clear and the purge are unqualified on a live RHEL host.

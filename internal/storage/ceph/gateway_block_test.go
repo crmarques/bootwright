@@ -150,11 +150,11 @@ func TestGatewayIdentity(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := capability.identity(context.Background(), e)
-			refusedWith(t, err, "lifecycle.state", "Ceph request does not match its frozen resource identity", "")
+			refusedStop(t, err, cephRequestInvalid, "Ceph request does not match its frozen resource identity", "")
 		})
 	}
 	_, err = New(api.CephPool, nil).identity(context.Background(), gatewayExecution(t, d, nil))
-	refusedWith(t, err, "lifecycle.state", "Ceph request does not match its frozen resource identity", "")
+	refusedStop(t, err, cephRequestInvalid, "Ceph request does not match its frozen resource identity", "")
 }
 
 func gatewayRuntimeRequest() Request {

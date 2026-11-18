@@ -294,7 +294,7 @@ func TestSMBRequestDecodeRefusesInconsistentFrozenRequests(t *testing.T) {
 				t.Fatal(err)
 			}
 			_, err = DecodeSMBRequest(data)
-			refusedWith(t, err, "lifecycle.state", "the frozen Ceph SMB request is inconsistent", "")
+			refusedStop(t, err, cephRequestInvalid, "the frozen Ceph SMB request is inconsistent", "")
 		})
 	}
 }
@@ -436,7 +436,7 @@ func TestSMBSecretValueRefusesBeforeTheRun(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			runner := &recordingRunner{}
 			result, err := NewSMB(runner).Apply(context.Background(), smbExecution(t, r, value))
-			refusedWith(t, err, "lifecycle.unsupported", "the Secret join-password that CephSMBResource smb-join binds at /auth/password is not one line of 1 to 1024 bytes of UTF-8 text",
+			refusedStop(t, err, cephSecretInvalid, "the Secret join-password that CephSMBResource smb-join binds at /auth/password is not one line of 1 to 1024 bytes of UTF-8 text",
 				"store the password in Secret join-password as one line of 1 to 1024 bytes with bootwright secret set, then apply again")
 			if runner.calls != 0 || result.Outcome == reconciliation.OutcomeChanged || value != "" && strings.Contains(diagnostics.Of(err)[0].Message, value) {
 				t.Fatalf("the refusal ran the adapter or names the value: %+v calls %d", result, runner.calls)
@@ -483,11 +483,11 @@ func TestSMBRequestsCarryTheFrozenSambaDigests(t *testing.T) {
 		unfrozen := r
 		unfrozen.Images = nil
 		_, _, err = NewSMB(nil).prepare(context.Background(), smbExecution(t, unfrozen, "pw"))
-		refusedWith(t, err, "lifecycle.state", "CephSMBResource "+name+" froze no samba image", "")
+		refusedStop(t, err, cephRecordsMissing, "CephSMBResource "+name+" froze no samba image", "")
 		foreign := r
 		foreign.Images = []SMBImage{want[0], {Name: "samba_metrics", Image: PinnedRegistry + "/synthetic/other:synthetic-1"}}
 		_, _, err = NewSMB(nil).prepare(context.Background(), smbExecution(t, foreign, "pw"))
-		refusedWith(t, err, "lifecycle.state", "CephSMBResource "+name+" froze a samba image its CephCluster's settings did not freeze", "restore the original apply evidence")
+		refusedStop(t, err, cephProofMismatch, "CephSMBResource "+name+" froze a samba image its CephCluster's settings did not freeze", "restore the original apply evidence")
 	}
 	for _, name := range []string{"smb-users", "smb-join"} {
 		if r := builtSMB(t, catalog, base, name); len(r.Images) != 0 {
@@ -592,9 +592,9 @@ func TestSMBOnlineRemovalRefusesWithB491(t *testing.T) {
 	runner := &recordingRunner{}
 	capability := NewSMB(runner)
 	result, err := capability.Destroy(context.Background(), e)
-	refusedWith(t, err, "lifecycle.unsupported", survivingReason, survivingRemedy)
+	refusedStop(t, err, cephHostsSurvive, survivingReason, survivingRemedy)
 	observed, observeErr := capability.ObserveRemoval(context.Background(), e)
-	refusedWith(t, observeErr, "lifecycle.unsupported", survivingReason, survivingRemedy)
+	refusedStop(t, observeErr, cephHostsSurvive, survivingReason, survivingRemedy)
 	if result.Outcome != reconciliation.OutcomeFailed || observed.Effect != reconciliation.EffectUnknown || runner.calls != 0 || !capability.RequiresOnlineRemoval(e.Block) {
 		t.Fatalf("online removal = %+v / %+v, calls %d", result, observed, runner.calls)
 	}
@@ -617,13 +617,13 @@ func TestSMBIdentity(t *testing.T) {
 			e := smbExecution(t, r, "pw")
 			change(&e)
 			_, err := NewSMB(nil).identity(context.Background(), e)
-			refusedWith(t, err, "lifecycle.state", mismatch, "")
+			refusedStop(t, err, cephRequestInvalid, mismatch, "")
 		})
 	}
 	e := smbExecution(t, r, "pw")
 	e.ApplyOperation = ""
 	_, err := NewSMB(nil).identity(context.Background(), e)
-	refusedWith(t, err, "lifecycle.state", "Ceph SMB requires the immutable original apply identity", "")
+	refusedStop(t, err, cephRecordsMissing, "Ceph SMB requires the immutable original apply identity", "")
 	scoped := r
 	scoped.Scope = json.RawMessage(`{"cluster":"example"}`)
 	e = smbExecution(t, r, "pw")
@@ -631,7 +631,7 @@ func TestSMBIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = NewSMB(nil).identity(context.Background(), e)
-	refusedWith(t, err, "lifecycle.state", "the frozen Ceph SMB request is inconsistent", "")
+	refusedStop(t, err, cephRequestInvalid, "the frozen Ceph SMB request is inconsistent", "")
 	if _, err := NewSMB(nil).identity(context.Background(), smbExecution(t, r, "pw")); err != nil {
 		t.Fatalf("the frozen identity is refused: %+v", diagnostics.Of(err))
 	}

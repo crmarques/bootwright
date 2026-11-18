@@ -93,7 +93,7 @@ func TestASubscriptionSourceWithoutItsRegistrationRefusesAtTheRequest(t *testing
 	} {
 		_, _, err := Requests(catalog, "controller", testContext)
 		reported := diagnostics.Of(err)
-		if len(reported) != 1 || reported[0].Code != "lifecycle.unsupported" || reported[0].Message != want ||
+		if len(reported) != 1 || reported[0].Code != "install.unsupported" || reported[0].Message != want ||
 			!strings.Contains(reported[0].Remediation, "spec.installer.anaconda.packageSource.subscription") {
 			t.Fatalf("%s: refusal = %#v", name, reported)
 		}

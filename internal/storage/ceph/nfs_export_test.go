@@ -261,16 +261,16 @@ func TestNFSExportPrepareBindsTheProvedSubvolumePath(t *testing.T) {
 	e = exportExecution(t, r)
 	e.ApplyProved = append(e.ApplyProved, subvolumeProof(t, "docs", "other", "/volumes/other/docs/"+subvolumeID))
 	_, err = New(api.CephNFSExport, nil).prepare(context.Background(), e)
-	refusedWith(t, err, "lifecycle.state", "the creation proof of CephSubvolume docs names another filesystem or group than CephNFSExport docs froze", "restore the original apply evidence")
+	refusedStop(t, err, cephProofMismatch, "the creation proof of CephSubvolume docs names another filesystem or group than CephNFSExport docs froze", "restore the original apply evidence")
 	e = exportExecution(t, r)
 	e.ApplyProved = append(e.ApplyProved, subvolumeProofOn(t, "other", subvolumeProof(t, "docs", "csi", exact)))
 	if _, filesystem, group, err := ProvedSubvolume(e.ApplyProved, "docs"); err != nil || filesystem != "other" || group != "csi" {
 		t.Fatalf("the foreign-filesystem proof names %q %q (%v)", filesystem, group, diagnostics.Of(err))
 	}
 	_, err = New(api.CephNFSExport, nil).prepare(context.Background(), e)
-	refusedWith(t, err, "lifecycle.state", "the creation proof of CephSubvolume docs names another filesystem or group than CephNFSExport docs froze", "restore the original apply evidence")
+	refusedStop(t, err, cephProofMismatch, "the creation proof of CephSubvolume docs names another filesystem or group than CephNFSExport docs froze", "restore the original apply evidence")
 	_, err = New(api.CephNFSExport, nil).prepare(context.Background(), exportExecution(t, r))
-	refusedWith(t, err, "lifecycle.state", "CephSubvolume docs lacks its applied creation proof", "apply CephSubvolume docs first; a consumer binds the path its creation reported and never constructs one")
+	refusedStop(t, err, cephRecordsMissing, "CephSubvolume docs lacks its applied creation proof", "apply CephSubvolume docs first; a consumer binds the path its creation reported and never constructs one")
 	fs := plannedExport(t, exportCatalog(3, withShares, filesystemExport(exportNative("path", "/"))))
 	if prepared, err := New(api.CephNFSExport, nil).prepare(context.Background(), exportExecution(t, fs)); err != nil || prepared.NFSExport.SubvolumePath != "" {
 		t.Fatalf("the filesystem export prepared %+v (%v)", prepared.NFSExport, diagnostics.Of(err))

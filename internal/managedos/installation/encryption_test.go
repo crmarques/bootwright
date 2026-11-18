@@ -337,7 +337,7 @@ func TestEncryptedCompletionRequiresRootOnLUKSWithATPM2Slot(t *testing.T) {
 		return data
 	}
 	err := ValidatePresence(evidence(encrypted, false), encrypted, "digest", string(marker))
-	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "install.guest-policy-unmet" ||
 		reported[0].Message != "the installed machine's root filesystem is not on the LUKS device with a TPM2 binding its installation encrypted" {
 		t.Fatalf("refusal = %#v", reported)
 	}

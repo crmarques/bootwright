@@ -208,18 +208,18 @@ func TestClientPrepareBindsTheProvedSubvolumePath(t *testing.T) {
 	altered.Client = frozenClient(*r.Client)
 	altered.Client.Caps["mds"] = "allow rw"
 	_, err = New(api.CephClient, nil).identity(context.Background(), cephfsClientExecution(t, altered))
-	refusedWith(t, err, "lifecycle.state", "CephClient writer froze capability grants this build does not derive", "destroy it with the build that applied it, then apply with this build")
+	refusedStop(t, err, cephOtherBuild, "CephClient writer froze capability grants this build does not derive", "destroy it with the build that applied it, then apply with this build")
 	const other, otherRemedy = "the creation proof of CephSubvolume docs names another filesystem or group than CephClient writer froze", "restore the original apply evidence"
 	e = cephfsClientExecution(t, r)
 	e.ApplyProved = append(e.ApplyProved, subvolumeProof(t, "docs", "other", "/volumes/other/docs/"+subvolumeID))
 	_, err = New(api.CephClient, nil).prepare(context.Background(), e)
-	refusedWith(t, err, "lifecycle.state", other, otherRemedy)
+	refusedStop(t, err, cephProofMismatch, other, otherRemedy)
 	e = cephfsClientExecution(t, r)
 	e.ApplyProved = append(e.ApplyProved, subvolumeProofOn(t, "other", subvolumeProof(t, "docs", "csi", clientSubvolumePath)))
 	_, err = New(api.CephClient, nil).prepare(context.Background(), e)
-	refusedWith(t, err, "lifecycle.state", other, otherRemedy)
+	refusedStop(t, err, cephProofMismatch, other, otherRemedy)
 	_, err = New(api.CephClient, nil).prepare(context.Background(), cephfsClientExecution(t, r))
-	refusedWith(t, err, "lifecycle.state", "CephSubvolume docs lacks its applied creation proof", "apply CephSubvolume docs first; a consumer binds the path its creation reported and never constructs one")
+	refusedStop(t, err, cephRecordsMissing, "CephSubvolume docs lacks its applied creation proof", "apply CephSubvolume docs first; a consumer binds the path its creation reported and never constructs one")
 	noGroup := cephfsClientExecution(t, plannedClient(t, noGroupClientCatalog(), "writer"))
 	noGroup.ApplyProved = append(noGroup.ApplyProved, subvolumeProof(t, "docs", "", clientNoGroupPath))
 	if prepared, err := New(api.CephClient, nil).prepare(context.Background(), noGroup); err != nil || prepared.Client.SubvolumePath != clientNoGroupPath {

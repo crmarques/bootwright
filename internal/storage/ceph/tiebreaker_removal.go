@@ -31,7 +31,7 @@ func (c Capability) tiebreaker(ctx context.Context, e lifecycle.Execution, opera
 	}
 	host, removes := removesTiebreaker(r)
 	if !removes {
-		return TiebreakerEvidence{}, failure("lifecycle.state", "only a stretch cluster block removes a provided tiebreaker", "")
+		return TiebreakerEvidence{}, cephRequestInvalid.Fail("only a stretch cluster block removes a provided tiebreaker", "")
 	}
 	refusals := map[string]error{"tiebreaker-foreign": tiebreakerForeign(host, r.FSID), "tiebreaker-unreachable": tiebreakerUnreachable(host), "transport": tiebreakerUnreachable(host)}
 	result, err := c.invoke(ctx, e, operation, r, map[string]string{"retirement": tiebreakerRetirement}, refusals)
@@ -44,7 +44,7 @@ func (c Capability) tiebreaker(ctx context.Context, e lifecycle.Execution, opera
 	}
 	usable := result.Outcome.Settled()
 	if operation == "destroy" && (!usable || !evidence.Removed || !evidence.Attempted && result.Outcome != reconciliation.OutcomeUnchanged) {
-		return TiebreakerEvidence{}, failure("lifecycle.unknown", "the provided tiebreaker Machine/"+host.Machine+"'s removal did not prove its footprint absent", "")
+		return TiebreakerEvidence{}, cephTiebreakerUnproved.Fail("the provided tiebreaker Machine/"+host.Machine+"'s removal did not prove its footprint absent", "")
 	}
 	return evidence, nil
 }
@@ -65,13 +65,13 @@ func decodeTiebreakerEvidence(data []byte, r Request, host Host, digest string) 
 }
 
 func tiebreakerForeign(h Host, fsid string) error {
-	return failure("lifecycle.unknown", "the provided stretch tiebreaker Machine/"+h.Machine+" does not prove that it holds only this cluster's footprint; earlier owned removal steps may already have completed: its owner marker under /var/lib/bootwright/ceph/"+fsid+
+	return cephTiebreakerUnproved.Fail("the provided stretch tiebreaker Machine/"+h.Machine+" does not prove that it holds only this cluster's footprint; earlier owned removal steps may already have completed: its owner marker under /var/lib/bootwright/ceph/"+fsid+
 		" names another cluster, or is missing while that directory holds a record or the host holds this FSID's layout, its cluster-key line or its sshd drop-in, or it holds another FSID's directory under /var/lib/ceph, a daemon other than its own MON and crash collector, or a cluster-key line or registry credential other than the ones this cluster recorded",
 		"inspect Machine/"+h.Machine+" as the native error names; remove what another tool placed there outside Bootwright, then destroy again; Bootwright never removes what it cannot prove its own, and a tiebreaker decommissioned or reinstalled since the cluster was created has no exit yet (B938)")
 }
 
 func tiebreakerUnreachable(h Host) error {
-	return failure("lifecycle.unknown", "the provided stretch tiebreaker Machine/"+h.Machine+" at "+machine.SSHHost(h.Address, h.Port)+" did not answer over the fleet connection, so whether this cluster's footprint remains on it is unknown and the cluster is not retired",
+	return cephTiebreakerUnproved.Fail("the provided stretch tiebreaker Machine/"+h.Machine+" at "+machine.SSHHost(h.Address, h.Port)+" did not answer over the fleet connection, so whether this cluster's footprint remains on it is unknown and the cluster is not retired",
 		"check that Machine/"+h.Machine+" answers SSH, offers the host key Secret "+h.KnownHostsRef+" pins and accepts the fleet key Secret "+h.SSHKeyRef+" for user "+h.User+
 			", then destroy again; an unreachable tiebreaker is never taken as cleaned, and one decommissioned or reinstalled since the cluster was created has no exit yet (B938)")
 }

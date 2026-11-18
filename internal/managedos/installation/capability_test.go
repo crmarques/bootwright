@@ -294,7 +294,7 @@ func TestInstallationMaterialsTakeTheirNamesFromTheMachinePort(t *testing.T) {
 		t.Fatal(err)
 	}
 	call.Block.Request = canonical
-	if _, err := New(runner).Destroy(context.Background(), call); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != "lifecycle.state" {
+	if _, err := New(runner).Destroy(context.Background(), call); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != "install.request-invalid" {
 		t.Fatalf("a port naming no password material was not refused: %v", err)
 	}
 }
@@ -733,7 +733,7 @@ func TestDeliveredKeyMatchesRefusesAnotherType(t *testing.T) {
 		Target:   Target{Channel: substrate.ChannelDeliveredKey, HostKeyRef: "metal-01-host-key", HostKeyType: "rsa"},
 	}
 	err := deliveredKeyMatches(request, "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample metal-01")
-	expectRefusal(t, err, "lifecycle.state")
+	expectRefusal(t, err, "install.host-key-mismatch")
 	reported := diagnostics.Of(err)[0]
 	if reported.Message != "the bound SSH host key of Secret/metal-01-host-key is ssh-ed25519, not the rsa key this operation froze" {
 		t.Fatalf("message = %q", reported.Message)
@@ -751,7 +751,7 @@ func TestDeliveredKeyMatchesRefusesAnotherType(t *testing.T) {
 	if err := deliveredKeyMatches(request, "ecdsa-sha2-nistp256 AAAAE2VjZHNhExample"); err != nil {
 		t.Fatalf("a matching key refused: %v", diagnostics.Of(err))
 	}
-	expectRefusal(t, deliveredKeyMatches(request, "ecdsa-sha2-nistp384 AAAAE2VjZHNhExample"), "lifecycle.state")
+	expectRefusal(t, deliveredKeyMatches(request, "ecdsa-sha2-nistp384 AAAAE2VjZHNhExample"), "install.host-key-mismatch")
 }
 
 // An apply converges the declared network after the installation it proves,

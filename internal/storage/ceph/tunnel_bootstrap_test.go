@@ -49,7 +49,7 @@ func TestTunnelBootstrapEligibilityIsAdmittedBeforeClusterAndChildRequests(t *te
 					continue
 				}
 				issues := diagnostics.Of(err)
-				if len(issues) != 1 || issues[0].Code != "lifecycle.unsupported" || !strings.Contains(issues[0].Message, "eligible MGR host") || issues[0].Remediation == "" {
+				if len(issues) != 1 || issues[0].Code != cephUnsupportedService.Code || !strings.Contains(issues[0].Message, "eligible MGR host") || issues[0].Remediation == "" {
 					t.Fatalf("%s lacks actionable bootstrap placement refusal: %v %+v", object.Identity(), err, issues)
 				}
 				if request.Version != "" || len(request.Services) != 0 {

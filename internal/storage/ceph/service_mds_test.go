@@ -65,7 +65,7 @@ func TestMDSProjectionRefusesSpecAndMissingID(t *testing.T) {
 	} {
 		_, err := clusterRequestWith(t, func(services []api.Value) []api.Value { return append(services, service) })
 		d := diagnostics.Of(err)
-		if len(d) != 1 || d[0].Code != "lifecycle.unsupported" || d[0].Message != "core MDS services carry only service_id and placement" {
+		if len(d) != 1 || d[0].Code != cephUnsupportedService.Code || d[0].Message != "core MDS services carry only service_id and placement" {
 			t.Fatalf("%s: %+v", name, d)
 		}
 	}

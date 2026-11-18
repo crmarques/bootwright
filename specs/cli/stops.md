@@ -148,18 +148,6 @@ refusals of a decision and its plan before any effect.
 | `authorize.relaxation-changed` | operation | none | input | - | fix-then-repeat | an operation continues only under the erase relaxations its plan froze, and the invocation names others | continue it naming the relaxations its plan froze, or replace it with a fresh destroy |
 | `diff.context-moved` | context | none | concurrency | - | repeat | the context changed while diff read it | repeat the diff |
 
-## Host firewall stops
-
-The managed OS host firewall capability's stops (`internal/managedos/hostfirewall`).
-
-| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `firewall.request-invalid` | block | none | defect | - | none | the host firewall request a plan composed breaks its bounds or its shape, so no adapter ran | report the message as a defect |
-| `firewall.unconfigured` | block | none | defect | - | none | the host firewall capability runs without its adapter | report the message as a defect |
-| `firewall.records-missing` | block | none | records | - | abandon-context | the host firewall block names no apply its evidence came from | restore the context store from a backup |
-| `firewall.evidence-mismatch` | block | possible | records | - | repeat | the host firewall evidence names another request or version than the block froze | repeat the operation, which observes the firewall again |
-| `firewall.unproved` | block | unproved | target | - | repeat | the host firewall adapter ended without proving its postcondition | repeat the operation, which observes the firewall before anything else starts |
-
 ## Machine power stops
 
 The Machine power and media eject capability's stops (`internal/machine/power`).
@@ -340,3 +328,93 @@ The libvirt substrate's stops (`internal/substrate/libvirt`).
 | `libvirt.host-silent` | block | possible | target | - | fix-then-repeat | the libvirt connection, a driver or NetworkManager did not answer for what the evidence asks about, so nothing is proved | restore the service the message names on the provider host, then repeat the operation |
 | `libvirt.removal-incomplete` | block | possible | target | - | repeat | removal evidence still reports something the removal owns, or does not prove it gone | repeat the destroy, which takes back what remains |
 | `libvirt.ownership-conflict` | block | possible | target | - | fix-then-repeat | an object of the name the provider uses exists without this context's ownership, so no repeat converges it | remove or rename the object the message names, then repeat the operation |
+
+## Host firewall stops
+
+The host firewall capability's stops (`internal/managedos/hostfirewall`).
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `firewall.request-invalid` | block | none | defect | - | none | the host firewall request a plan composed breaks its bounds or its shape, so no adapter ran | report the message as a defect |
+| `firewall.unconfigured` | block | none | defect | - | none | the host firewall capability runs without its adapter | report the message as a defect |
+| `firewall.records-missing` | block | none | records | - | abandon-context | the host firewall block names no apply its evidence came from | restore the context store from a backup |
+| `firewall.evidence-mismatch` | block | possible | records | - | repeat | the host firewall evidence names another request or version than the block froze | repeat the operation, which observes the firewall again |
+| `firewall.unproved` | block | unproved | target | - | repeat | the host firewall adapter ended without proving its postcondition | repeat the operation, which observes the firewall before anything else starts |
+| `firewall.foreign-service` | adapter-run | none | target | - | fix-then-repeat | the Machine holds a firewalld service of the same name this context did not write, so its firewall was left unchanged | remove the foreign firewalld service, then run the command again |
+| `firewall.no-interface` | adapter-run | none | input | - | change-input | the Machine has no interface on a network a firewalld service admits traffic on, so its firewall was left unchanged | give the Machine the declared listener address or required network, then run the command again |
+| `firewall.inactive` | adapter-run | none | target | - | fix-then-repeat | firewalld is not running on a Machine whose install profile enables it, so its firewall was left unchanged | start firewalld on the Machine, then run the command again |
+| `firewall.change-refused` | adapter-run | possible | target | - | fix-then-repeat | firewalld refused a change on the Machine partway through its apply or removal | read the firewalld journal on the Machine, correct it, then run the command again |
+
+## Managed OS installation stops
+
+The managed OS installation capability's stops (`internal/managedos/installation`).
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `install.unconfigured` | block | none | defect | - | none | the installation capability runs without a compiled state, reader or adapter it needs | report the message as a defect |
+| `install.request-invalid` | block | none | records | - | fix-then-repeat | a frozen installation request holds values its own derivation or this build's Kickstart cannot carry, so nothing began | plan the installation again with this release |
+| `install.input-invalid` | operation | none | input | - | change-input | the declared Machine, profile or package source cannot compose an installation | correct the declaration the message names |
+| `install.media-unusable` | operation | none | input | - | fix-then-repeat | the host media store holds no usable image of the installation media a profile names | import the image again with bootwright media add |
+| `install.unsupported` | operation | none | input | - | change-input | the declared installation names a shape this build cannot install | change the declaration the message names |
+| `install.records-missing` | block | none | records | - | abandon-context | the apply records no longer prove the installation, publication or discovery a later step depends on | restore the original apply records |
+| `install.evidence-invalid` | block | possible | records | - | repeat | the installation evidence is malformed or names another request, address, marker or state than the block froze | repeat the operation, which observes the installation again |
+| `install.postcondition-unmet` | block | possible | target | - | repeat | the installation evidence does not show the state the check requires | repeat the operation, which observes the installation again |
+| `install.foreign-state` | block | possible | target | - | fix-then-repeat | the installed machine holds an installation, registration or update record this installation did not create | take the context back with bootwright destroy and apply again |
+| `install.no-outcome` | block | possible | defect | - | repeat | the installation adapter reported no usable outcome after it ran | repeat the operation, which observes the installation again |
+| `install.host-key-mismatch` | block | none | records | - | abandon-context | the host key type a request froze is not the one the bound Secret or this build delivers | take the context back with bootwright destroy, then plan and apply it again |
+| `install.foreign-installation` | adapter-run | none | target | - | abandon-context | the machine answered with another installation's marker, so no installer was booted | verify the declared Machine and its management controller |
+| `install.source-changed` | adapter-run | none | target | - | abandon-context | an image or package tree no longer has the size and digest the operation froze, so nothing was published | take the context back with bootwright destroy and import the image again |
+| `install.artifact-server-not-applied` | adapter-run | none | target | - | fix-then-repeat | the artifact server that serves the package tree is not applied on this host, so nothing was published | apply the artifact server, then repeat this apply |
+| `install.guest-policy-unmet` | adapter-run | possible | target | - | abandon-context | the installed machine lacks the root encryption or FIPS mode its installation set only at install time | take the context back with bootwright destroy, then apply again |
+| `install.registration-rejected` | adapter-run | possible | input | - | fix-then-repeat | the subscription service or Satellite did not accept the registration the installation declares | correct the registration declaration, then repeat the operation |
+| `install.service-unavailable` | adapter-run | possible | environment | `unreachable` | fix-then-repeat | the subscription service, an update repository or the machine's own tooling did not answer | restore the route from the machine to the service, then repeat the operation |
+| `install.foreign-record` | adapter-run | possible | target | - | fix-then-repeat | the machine holds a subscription registration or update record of another installation | take the context back with bootwright destroy and apply again |
+| `install.update-refused` | adapter-run | possible | input | - | fix-then-repeat | the update sources cannot hold the machine within the release its installation declares | correct the update sources of the install profile, then apply again |
+| `install.update-failed` | adapter-run | possible | target | - | fix-then-repeat | the package transaction of the machine's update failed | repeat the operation once the update sources offer a consistent transaction |
+
+## Ceph stops
+
+The Ceph storage capability's stops (`internal/storage/ceph`).
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `ceph.request-invalid` | block | none | defect | - | none | a Ceph request, its frozen identity or its planning state breaks its bounds or its shape, so no adapter ran | report the message as a defect |
+| `ceph.unconfigured` | block | none | defect | - | none | a Ceph capability runs without an adapter, a proof reader or a bound Secret it needs | report the message as a defect |
+| `ceph.records-missing` | block | none | records | - | abandon-context | a Ceph block holds no original apply, identity or proof that its operation needs, or holds an ambiguous one | restore the context store from a backup |
+| `ceph.evidence-mismatch` | block | possible | records | - | repeat | the evidence a Ceph block holds names another request or does not prove what the block froze | repeat the operation, which observes the Ceph state again |
+| `ceph.proof-mismatch` | block | none | records | - | fix-then-repeat | the proof of an earlier Ceph block names another request, operation or host set than the block that reads it | restore the original apply evidence |
+| `ceph.other-build` | block | none | build | - | registering-build | a Ceph block froze values this build does not derive or read, so no adapter ran | destroy it with the build that applied it, then apply with this build |
+| `ceph.host-key-invalid` | block | none | records | - | fix-then-repeat | the SSH host key a Ceph host delivered or its Secret pins is not one usable entry | bind the host's key through its access.ssh.knownHostsRef, then repeat the operation |
+| `ceph.disks-shared` | block | none | target | - | change-input | physical Ceph hosts report one disk identity, so an OSD service would claim a disk shared by hosts | select independently owned local disks |
+| `ceph.fips-unproved` | adapter-run | possible | target | - | fix-then-repeat | a Ceph host no longer proves the installed FIPS kernel and crypto policy the operation froze | restore the installed FIPS policy |
+| `ceph.unsupported-release` | block | none | input | - | change-input | the selected Ceph coordinates or cluster SSH transport are incomplete or unsafe, so no adapter ran | declare bounded version strings, an image repository and verifiedTunnel transport |
+| `ceph.license-unaccepted` | block | none | input | - | change-input | the IBM license of the Ceph entitlement has not been accepted, so no adapter ran | review the provider license and declare Entitlement.spec.license.accept |
+| `ceph.image-invalid` | block | none | input | - | change-input | a Ceph image or its registry does not match the entitlement or the digest the input authored | select an image beneath the Entitlement registry by a tag or a sha256 digest |
+| `ceph.unsupported-profile` | block | none | input | - | change-input | the requested distribution, trust profile or kind is one the core Ceph adapter does not realize | select the IBM Storage Ceph distribution and the core profile |
+| `ceph.unsupported-topology` | block | none | input | - | change-input | the hosts, SSH keys, addresses or provided Machines a Ceph cluster selects are not a topology the core adapter realizes | declare a topology the core Ceph profile supports |
+| `ceph.unsupported-service` | block | none | input | - | change-input | a native Ceph service selects a type, option, placement or binding the core adapter does not realize | declare only the services and options the core Ceph profile supports |
+| `ceph.unsupported-disk` | block | none | input | - | change-input | an OSD service or disk selection is not one the core adapter allocates | select explicit owned data disks the core Ceph profile supports |
+| `ceph.unsupported-pool` | block | none | input | - | change-input | a Ceph pool, placement policy or consumer names a setting or pool kind the core adapter does not realize | select a replicated pool and the settings the core Ceph profile supports |
+| `ceph.package-source-unsupported` | block | none | input | - | change-input | the package source a Ceph host selects is not one the core adapter can acquire packages from | select the hosted DVD or subscription profile used to install each Ceph Machine |
+| `ceph.budget-exceeded` | block | none | bound | - | change-input | a Ceph operation needs a run deadline past the bound every adapter run is held to, so no adapter ran | declare fewer hosts, namespaces or initiator hosts |
+| `ceph.retirement-refused` | removal-phase | none | input | - | change-input | a physical Ceph host holds no disk-erasure authority that covers every selected disk, so its retirement took nothing back | retain this context and erase every selected Ceph disk |
+| `ceph.hosts-survive` | removal-phase | none | target | - | fix-then-repeat | a Ceph cluster would be removed while hosts that outlive the destroy still run it | remove the cluster in the same destroy as every Bootwright-owned virtual host Machine it runs on |
+| `ceph.secret-invalid` | block | none | input | - | change-input | a Secret bound to a Ceph resource is not a value the adapter can lend | bind a Secret holding one line of 1 to 1024 bytes of UTF-8 text |
+| `ceph.stretch-intent-changed` | adapter-run | none | input | - | change-input | the stretch topology the input declares differs from the intent the cluster was created with | restore the stretch topology the cluster was created with |
+| `ceph.ssh-policy-excluded` | adapter-run | none | input | - | change-input | an SSH crypto policy admits none of the algorithms of a Ceph host's pinned host key, so no session opened | pin a host key the SSH crypto policy admits |
+| `ceph.ssh-policy-unreadable` | adapter-run | none | environment | - | fix-then-repeat | the controller's SSH crypto policy could not be read or evaluated, so no Ceph session opened | restore the controller's SSH crypto policy files, then repeat the operation |
+| `ceph.device-refused` | adapter-run | possible | target | - | fix-then-repeat | a disk a Ceph host selects for an OSD is not one the operation may allocate, so the adapter stopped | select empty disks that the host presents by their declared identity |
+| `ceph.unqualified` | adapter-run | possible | build | - | fix-then-repeat | the selected Ceph build or host lacks a capability the operation needs, so the adapter stopped | select a Ceph build whose release qualification covers the operation |
+| `ceph.identity-foreign` | adapter-run | unproved | target | - | fix-then-repeat | the cluster holds a resource of a declared name that this operation did not create | rename the declared resource, or remove the foreign one outside Bootwright, then apply again |
+| `ceph.identity-drifted` | adapter-run | unproved | target | - | fix-then-repeat | a resource this operation created is gone or no longer matches what the operation froze | restore the resource to its declared state outside Bootwright, then apply again |
+| `ceph.prerequisite` | adapter-run | unproved | target | - | fix-then-repeat | the cluster or its hosts lack a state the operation needs before it may continue | restore the state the message names, then apply again |
+| `ceph.not-ready` | adapter-run | unproved | target | - | fix-then-repeat | a native Ceph command refused the operation or its daemons did not reach readiness within the bound | correct the cause the native error names outside Bootwright, then apply again |
+| `ceph.osd-unproved` | adapter-run | unproved | target | - | fix-then-repeat | an OSD disk this operation prepared or cleared did not prove its state | inspect the disk with wipefs --no-act and lvmdevices, then apply again |
+| `ceph.package-unproved` | adapter-run | unproved | target | - | fix-then-repeat | the Ceph package preparation of a host refused its request, source or result, so the host's packages are unproved | inspect the host's package journal and the declared package sources, then apply again |
+| `ceph.boundary-unproved` | adapter-run | unproved | target | - | repeat | an adapter could not prove one of its boundaries, so what it did is unproved | inspect the retained operation evidence, then repeat the operation |
+| `ceph.enrollment-budget` | adapter-run | unproved | bound | - | repeat | the enrollment worker had too little of its budget left to admit a host | apply again to continue the prepared cluster enrollment |
+| `ceph.consumer-incomplete` | adapter-run | unproved | target | - | repeat | a Ceph consumer created nothing yet or began and did not complete | repeat the operation, which observes the consumer before anything else starts |
+| `ceph.unproved` | block | unproved | target | - | repeat | a Ceph adapter ended without proving its postcondition | repeat the operation, which observes the Ceph state before anything else starts |
+| `ceph.result-invalid` | block | unproved | defect | - | repeat | a Ceph adapter returned an outcome or a value it never produces | repeat the operation, which observes the Ceph state before anything else starts |
+| `ceph.evidence-unproved` | block | unproved | target | - | repeat | the evidence of a Ceph block does not prove the ownership and resource scope the block froze | repeat the operation, which observes the Ceph state before anything else starts |
+| `ceph.tiebreaker-unproved` | block | unproved | target | - | repeat | a provided stretch tiebreaker Machine did not prove its Ceph footprint, its transport boundary or its removal | repeat the operation, which observes the tiebreaker before anything else starts |

@@ -125,7 +125,7 @@ func TestPlanRefusesAnImageMissingFromTheStore(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			_, err := planWith(withoutRecord(test.image), labCatalog())
 			reported := onlyDiagnostic(t, err)
-			if reported.Code != "lifecycle.state" ||
+			if reported.Code != "install.media-unusable" ||
 				reported.Message != "the host media store holds no image "+test.image+", which "+test.owner+" names in "+test.field {
 				t.Fatalf("diagnostic = %+v", reported)
 			}
@@ -183,7 +183,7 @@ func TestPlanRefusesAnImageTheStoreCannotRead(t *testing.T) {
 			records[dvdImageName] = record
 			_, err := planWith(&fixtureMedia{records: records}, labCatalog())
 			reported := onlyDiagnostic(t, err)
-			if reported.Code != "lifecycle.state" || !strings.Contains(reported.Message, dvdImageName) ||
+			if reported.Code != "install.media-unusable" || !strings.Contains(reported.Message, dvdImageName) ||
 				strings.Contains(reported.Message, "no longer has the size") ||
 				(record.Failure != "" && !strings.HasSuffix(reported.Message, ": "+record.Failure)) {
 				t.Fatalf("diagnostic = %+v", reported)
@@ -272,7 +272,7 @@ func TestPlanRefusesAnImageThatIsNotTheDeclaredRelease(t *testing.T) {
 				}
 				for plan, run := range plans {
 					reported := onlyDiagnostic(t, run())
-					if reported.Code != "lifecycle.state" || reported.Message != want || reported.Remediation != remedy ||
+					if reported.Code != "install.media-unusable" || reported.Message != want || reported.Remediation != remedy ||
 						reported.Object == nil || reported.Object.Kind != string(api.MachineInstallProfile) || reported.Object.Name != "rhel-9-8" {
 						t.Fatalf("%s diagnostic = %+v, want %q remedied by %q for %s", plan, reported, want, remedy, profile)
 					}

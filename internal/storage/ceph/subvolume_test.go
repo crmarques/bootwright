@@ -169,11 +169,11 @@ func TestSubvolumeExecutionMatchesItsFrozenIdentity(t *testing.T) {
 		t.Fatalf("a planned subvolume block did not match its frozen identity: %+v %v", prepared.Subvolume, err)
 	}
 	e.Block.Object = "files"
-	if _, err := capability.prepare(context.Background(), e); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != "lifecycle.state" {
+	if _, err := capability.prepare(context.Background(), e); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != cephRequestInvalid.Code {
 		t.Fatalf("a subvolume block named after its filesystem matched the subvolume identity: %v", err)
 	}
 	e.Block.Object, e.Block.Kind = "docs", string(api.CephFilesystem)
-	if _, err := New(api.CephFilesystem, nil).prepare(context.Background(), e); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != "lifecycle.state" {
+	if _, err := New(api.CephFilesystem, nil).prepare(context.Background(), e); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != cephRequestInvalid.Code {
 		t.Fatalf("a filesystem capability accepted a frozen subvolume request: %v", err)
 	}
 }
@@ -181,7 +181,7 @@ func TestSubvolumeExecutionMatchesItsFrozenIdentity(t *testing.T) {
 func TestSubvolumePlanPropagatesFilesystemRefusals(t *testing.T) {
 	ec := childOf(api.CephPool, "fs-data", "role", "cephfsData", "erasure", requestMap("dataChunks", 4, "codingChunks", 2))
 	_, err := planned(t, planCatalog(6, 6, withMDS, cephfsPool("fs-meta", "cephfsMetadata"), ec, filesystemOf(), subvolumeOf()), api.CephSubvolume, "docs")
-	refusedWith(t, err, "lifecycle.unsupported", "CephFilesystem files names erasure-coded pool fs-data as its default data pool; ceph fs new refuses it unless forced, and Bootwright never forces it", "mark a replicated cephfsData pool default in spec.dataPoolRefs and attach erasure-coded pools as additional data pools")
+	refusedStop(t, err, cephUnsupportedPool, "CephFilesystem files names erasure-coded pool fs-data as its default data pool; ceph fs new refuses it unless forced, and Bootwright never forces it", "mark a replicated cephfsData pool default in spec.dataPoolRefs and attach erasure-coded pools as additional data pools")
 	_, err = planned(t, filesystemCatalog(withCorePair, filesystemOf(), subvolumeOf()), api.CephSubvolume, "docs")
 	refusedWith(t, err, "api.invariant", "CephCluster example declares no single MDS service mds.files, which spec.mdsServiceRef of CephFilesystem files names", "declare the mds service entry with service_id files in spec.services")
 }

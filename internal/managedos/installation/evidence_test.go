@@ -171,7 +171,7 @@ func TestEvidenceIsBoundedAndStrictlyShaped(t *testing.T) {
 			unbounded := partial
 			unbounded.NetworkDifferences = differences
 			err := ValidatePartial(encode(t, unbounded), "digest", "{}")
-			expectRefusal(t, err, "lifecycle.state")
+			expectRefusal(t, err, "install.evidence-invalid")
 			if message := diagnostics.Of(err)[0].Message; message != "the installation evidence reports unbounded network differences" {
 				t.Fatalf("refusal = %q", message)
 			}
@@ -274,7 +274,7 @@ func TestPresenceOfAPrivateInstallationRequiresItsImageWithdrawn(t *testing.T) {
 			left := withdrawn
 			test.change(&left)
 			err := ValidatePresence(encode(t, left), private, "digest", "{}")
-			expectRefusal(t, err, "lifecycle.state")
+			expectRefusal(t, err, "install.postcondition-unmet")
 			if reported := diagnostics.Of(err)[0]; reported.Message != test.message {
 				t.Fatalf("message = %q", reported.Message)
 			}
@@ -282,7 +282,7 @@ func TestPresenceOfAPrivateInstallationRequiresItsImageWithdrawn(t *testing.T) {
 	}
 	public := Request{Address: private.Address, Image: &Publication{Path: "/srv/public/os/rhel-01/install.iso"}}
 	err := ValidatePresence(encode(t, withdrawn), public, "digest", "{}")
-	expectRefusal(t, err, "lifecycle.state")
+	expectRefusal(t, err, "install.postcondition-unmet")
 	if reported := diagnostics.Of(err)[0]; reported.Message != "the installation did not publish everything its boot needs" {
 		t.Fatalf("message = %q", reported.Message)
 	}
@@ -325,7 +325,7 @@ func TestPresenceRequiresTheNetworkProvedAfterAReboot(t *testing.T) {
 			unproved := complete
 			change(&unproved)
 			err := ValidatePresence(encode(t, unproved), request, "digest", "{}")
-			expectRefusal(t, err, "lifecycle.state")
+			expectRefusal(t, err, "install.postcondition-unmet")
 			if message := diagnostics.Of(err)[0].Message; message != "the installed machine's network does not match its declaration after a reboot" {
 				t.Fatalf("refusal = %q", message)
 			}

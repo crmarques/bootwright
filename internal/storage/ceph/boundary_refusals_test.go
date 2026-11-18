@@ -20,7 +20,7 @@ func TestBoundaryRefusalsShareOneListAndTemplate(t *testing.T) {
 	} {
 		for _, reason := range adapterBoundaries {
 			d := diagnostics.Of(table.refusals[reason])
-			if len(d) != 1 || d[0].Code != "lifecycle.unknown" || d[0].Message != table.subject+" could not prove its "+reason+" boundary" || d[0].Remediation != remedy {
+			if len(d) != 1 || d[0].Code != cephBoundaryUnproved.Code || d[0].Message != table.subject+" could not prove its "+reason+" boundary" || d[0].Remediation != remedy {
 				t.Fatalf("%s refusal %s is %+v", name, reason, d)
 			}
 		}

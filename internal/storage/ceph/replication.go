@@ -59,21 +59,21 @@ func DecodeReplicationRequest(data []byte) (ReplicationRequest, error) {
 		return r, err
 	}
 	if r.Controller == "" || !reconciliation.ValidSegment(r.Object) || r.Primary.Cluster == "" || r.Secondary.Cluster == "" || r.Primary.Cluster == r.Secondary.Cluster || r.Mode != "image" && r.Mode != "pool" || len(r.Images) < 1 || len(r.Images) > 3 {
-		return r, failure("lifecycle.state", "the frozen Ceph replication request is inconsistent", "")
+		return r, cephRequestInvalid.Fail("the frozen Ceph replication request is inconsistent", "")
 	}
 	for _, end := range []ReplicationEndpoint{r.Primary, r.Secondary} {
 		if len(end.Scope) != 0 || !strictlySorted(end.HostSecretRefs) || !strictlySorted(end.Machines) || !validProvided(end.Machines, end.Provided) || end.Pool.Name != r.Primary.Pool.Name || end.Pool.Type != "replicated" || end.Pool.Role != "rbd" || end.PoolObject == "" || end.Pool.Object != "" && end.Pool.Object != end.PoolObject || end.Pool.Object == "" && end.Pool.Name != end.PoolObject {
-			return r, failure("lifecycle.state", "the frozen replication endpoint is inconsistent", "")
+			return r, cephRequestInvalid.Fail("the frozen replication endpoint is inconsistent", "")
 		}
 	}
 	for _, machine := range r.Primary.Machines {
 		if slices.Contains(r.Secondary.Machines, machine) {
-			return r, failure("lifecycle.state", "replication endpoints must use disjoint Machines", "")
+			return r, cephRequestInvalid.Fail("replication endpoints must use disjoint Machines", "")
 		}
 	}
 	for i, image := range r.Images {
 		if image.Pool != r.Primary.Pool.Name || image.DataPool != "" || !slices.Contains(image.Features, "journaling") || image.SizeBytes < 1 || image.Name == "" || i > 0 && r.Images[i-1].Name >= image.Name {
-			return r, failure("lifecycle.state", "the frozen replicated image is inconsistent", "")
+			return r, cephRequestInvalid.Fail("the frozen replicated image is inconsistent", "")
 		}
 	}
 	return r, nil
@@ -97,7 +97,7 @@ func (c ReplicationCapability) Plan(ctx context.Context, input lifecycle.PlanInp
 		return plan, err
 	}
 	if input.State == nil {
-		return plan, failure("lifecycle.state", "replication planning requires compiled state", "")
+		return plan, cephRequestInvalid.Fail("replication planning requires compiled state", "")
 	}
 	catalog := input.State.Effective()
 	for _, object := range catalog.OfKind(api.CephReplication) {
@@ -178,7 +178,7 @@ func (ReplicationCapability) identity(ctx context.Context, e lifecycle.Execution
 		return r, err
 	}
 	if e.Block.Kind != string(api.CephReplication) || e.Block.Object != r.Object || e.Block.ID != ReplicationBlockID(r.Object) || e.ApplyOperation == "" {
-		return r, failure("lifecycle.state", "replication requires its frozen resource and original apply identity", "")
+		return r, cephRecordsMissing.Fail("replication requires its frozen resource and original apply identity", "")
 	}
 	return r, nil
 }
@@ -194,7 +194,7 @@ func (c ReplicationCapability) prepare(ctx context.Context, e lifecycle.Executio
 			return r, nil, err
 		}
 		if !slices.Equal(proof.Machines, end.Machines) || !slices.Equal(proof.Provided, end.Provided) || !slices.Equal(end.HostSecretRefs, hostSecretRefs(proof.Scope.Hosts)) {
-			return r, nil, failure("lifecycle.state", "replication machines or their host keys do not match original cluster creation evidence", "")
+			return r, nil, cephProofMismatch.Fail("replication machines or their host keys do not match original cluster creation evidence", "")
 		}
 		if err := bindPhysicalHosts(proof.Scope.Hosts, e, c.proofs); err != nil {
 			return r, nil, err
@@ -214,7 +214,7 @@ func replicationMaterial(e lifecycle.Execution, scopes []ClusterScope, readers D
 		prefix := []string{"primary", "secondary"}[i]
 		bootstrap := slices.IndexFunc(scope.Hosts, func(host Host) bool { return host.Name == scope.Bootstrap })
 		if bootstrap < 0 {
-			return e, nil, func() {}, failure("lifecycle.state", "replication bootstrap host is absent from its proved cluster scope", "")
+			return e, nil, func() {}, cephProofMismatch.Fail("replication bootstrap host is absent from its proved cluster scope", "")
 		}
 		files = append(files, lifecycle.MaterialFile{Name: prefix + "-key", Secret: scope.Hosts[bootstrap].SSHKeyRef, Part: secrets.PrivateKeyPart, Variable: prefix + "SSHKey"})
 		if err := known.add(e, scope.Hosts, scope.Security, readers); err != nil {
@@ -239,7 +239,7 @@ func (c ReplicationCapability) run(ctx context.Context, e lifecycle.Execution, o
 		return lifecycle.RunResult{}, r, err
 	}
 	if c.runner == nil {
-		return lifecycle.RunResult{}, r, failure("lifecycle.state", "replication runner is not configured", "")
+		return lifecycle.RunResult{}, r, cephUnconfigured.Fail("replication runner is not configured", "")
 	}
 	canonical, err := r.Canonical()
 	if err != nil {
@@ -261,11 +261,11 @@ func (c ReplicationCapability) Apply(ctx context.Context, e lifecycle.Execution)
 	effect, err := EvaluateReplicationEvidence(result.Evidence, r, e.ApplyOperation, e.Block.RequestDigest)
 	if err != nil || effect != reconciliation.EffectCompleted || len(result.Produced) != 0 {
 		lifecycle.ClearProduced(result.Produced)
-		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, failure("lifecycle.unknown", "replication did not prove both endpoints and initial synchronization", "")
+		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, cephUnproved.Fail("replication did not prove both endpoints and initial synchronization", "")
 	}
 	outcome, known := result.Outcome, result.Outcome.Settled()
 	if !known {
-		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, failure("lifecycle.unknown", "replication returned no known outcome", "")
+		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, cephResultInvalid.Fail("replication returned no known outcome", "")
 	}
 	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil
 }
@@ -276,7 +276,7 @@ func (c ReplicationCapability) Observe(ctx context.Context, e lifecycle.Executio
 	}
 	if len(result.Produced) != 0 {
 		lifecycle.ClearProduced(result.Produced)
-		return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, failure("lifecycle.unknown", "replication returned unexpected private material", "")
+		return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, cephResultInvalid.Fail("replication returned unexpected private material", "")
 	}
 	effect, err := EvaluateReplicationEvidence(result.Evidence, r, e.ApplyOperation, e.Block.RequestDigest)
 	return lifecycle.Observation{Effect: effect, Evidence: result.Evidence}, err
@@ -299,7 +299,7 @@ func (c ReplicationCapability) retirement(ctx context.Context, e lifecycle.Execu
 		return nil, err
 	}
 	if !e.RetiredWithHosts {
-		return nil, failure("lifecycle.unsupported", survivingReason, survivingRemedy)
+		return nil, cephHostsSurvive.Fail(survivingReason, survivingRemedy)
 	}
 	machines := replicationMachines(r)
 	pending, err := pendingPhysicalClusters(e, []string{r.Primary.Cluster, r.Secondary.Cluster}, machines)

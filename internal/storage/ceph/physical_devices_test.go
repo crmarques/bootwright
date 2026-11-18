@@ -108,7 +108,7 @@ func TestPhysicalHostOneDiskPastTheBoundRefusesByTheErasePolicy(t *testing.T) {
 			}
 		}
 		_, err := baseRequest(api.NewCatalog(objects), changed, "synthetic")
-		t.Run(name, func(t *testing.T) { refusedWith(t, err, "lifecycle.unsupported", reason, remedy) })
+		t.Run(name, func(t *testing.T) { refusedStop(t, err, cephUnsupportedDisk, reason, remedy) })
 	}
 }
 
@@ -131,7 +131,7 @@ func TestPhysicalHostsWithManyDisksStillRefuseSharedWWNsAndPartitions(t *testing
 func TestPhysicalClusterAtBothBoundsKeepsItsServicesRequestAndEvidenceBounds(t *testing.T) {
 	catalog, cluster := physicalCatalogOf(maxClusterHosts, maxPhysicalDevices)
 	_, err := baseRequest(catalog, cluster, "synthetic")
-	refusedWith(t, err, "lifecycle.unsupported", fmt.Sprintf("CephCluster example declares %d MON, MGR, OSD and MDS services, past the 128 one services call submits", 2+maxClusterHosts*maxPhysicalDevices),
+	refusedStop(t, err, cephUnsupportedService, fmt.Sprintf("CephCluster example declares %d MON, MGR, OSD and MDS services, past the 128 one services call submits", 2+maxClusterHosts*maxPhysicalDevices),
 		"list a host's disks in one OSD service of CephCluster example instead of one service per disk")
 	catalog, cluster = physicalCatalogPerHost(maxClusterHosts, maxPhysicalDevices)
 	r, err := baseRequest(catalog, cluster, "synthetic")

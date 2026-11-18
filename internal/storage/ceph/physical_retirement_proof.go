@@ -210,7 +210,7 @@ func originalPhysicalDevices(e lifecycle.Execution, cluster string, host Host) (
 			return physicalDiskBinding{}, err
 		}
 		if !unstarted {
-			return physicalDiskBinding{}, failure("lifecycle.state", "physical retirement lacks the original completed Ceph host disk binding", "restore the original apply and removal records")
+			return physicalDiskBinding{}, cephRecordsMissing.Fail("physical retirement lacks the original completed Ceph host disk binding", "restore the original apply and removal records")
 		}
 		for _, device := range host.Devices {
 			found = append(found, HostDevice{Path: device.Path, WWN: device.WWN, Serial: device.Serial, SizeBytes: device.SizeBytes})
@@ -268,7 +268,7 @@ func (c PhysicalRetirementCapability) erasedHost(e lifecycle.Execution, host Hos
 		found = &PhysicalRetirementReceipt{Machine: host.Machine, Block: pair.Applied.Block.ID, Request: pair.Applied.Block.RequestDigest, Digest: hex.EncodeToString(digest[:])}
 	}
 	if found == nil {
-		return PhysicalRetirementReceipt{}, failure("lifecycle.state", "physical Ceph retirement lacks a completed verified erase receipt", "continue the original removal; a stopped Machine or released claim is not erase proof")
+		return PhysicalRetirementReceipt{}, cephRecordsMissing.Fail("physical Ceph retirement lacks a completed verified erase receipt", "continue the original removal; a stopped Machine or released claim is not erase proof")
 	}
 	return *found, nil
 }
@@ -292,13 +292,13 @@ func proveErasedDevices(targets []Device, binding physicalDiskBinding) error {
 		if _, serial := substrate.SerialDevicePath(device.Path); serial {
 			target, found := bySerial[device.Serial]
 			if !found || target.SizeBytes != device.SizeBytes || binding.Observed && target.WWN != "" && comparableWWN(target.WWN) != comparableWWN(device.WWN) {
-				return failure("lifecycle.state", "physical erase does not cover an original Ceph disk's serial number and capacity, or the WWN its erase target declares", "restore the original disk binding and continue the same verified removal")
+				return cephProofMismatch.Fail("physical erase does not cover an original Ceph disk's serial number and capacity, or the WWN its erase target declares", "restore the original disk binding and continue the same verified removal")
 			}
 			continue
 		}
 		target, found := byWWN[device.WWN]
 		if !found || binding.Observed && (target.Serial != device.Serial || target.SizeBytes != device.SizeBytes) {
-			return failure("lifecycle.state", "physical erase does not cover an original Ceph disk's WWN, serial and capacity", "restore the original disk binding and continue the same verified removal")
+			return cephProofMismatch.Fail("physical erase does not cover an original Ceph disk's WWN, serial and capacity", "restore the original disk binding and continue the same verified removal")
 		}
 	}
 	return nil
@@ -417,7 +417,7 @@ func physicalHostCleanupProof(e lifecycle.Execution, cluster string, host Host) 
 		found = hex.EncodeToString(digest[:])
 	}
 	if found == "" {
-		return "", failure("lifecycle.state", "retained-root physical retirement lacks a proved FSID host cleanup", "continue the original removal; disk erasure alone does not remove Ceph host state")
+		return "", cephRecordsMissing.Fail("retained-root physical retirement lacks a proved FSID host cleanup", "continue the original removal; disk erasure alone does not remove Ceph host state")
 	}
 	return found, nil
 }

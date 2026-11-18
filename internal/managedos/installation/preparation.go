@@ -20,7 +20,7 @@ func namesMarker(data json.RawMessage, marker []byte) bool {
 func markerPreparation(marker []byte) func(json.RawMessage) error {
 	return func(data json.RawMessage) error {
 		if !namesMarker(data, marker) {
-			return refusal("lifecycle.state", "the installation's automation published a before-state that does not name this installation's marker", "")
+			return installEvidenceInvalid.Fail("the installation's automation published a before-state that does not name this installation's marker", "")
 		}
 		return nil
 	}
@@ -29,7 +29,7 @@ func markerPreparation(marker []byte) func(json.RawMessage) error {
 func registeredBefore(contextName, machine string, preparations []json.RawMessage, marker []byte) (bool, error) {
 	for _, data := range preparations {
 		if !namesMarker(data, marker) {
-			return false, refusal("lifecycle.state", "the apply records of Machine/"+machine+" hold a before-state this executable cannot read",
+			return false, installRecordsMissing.Fail("the apply records of Machine/"+machine+" hold a before-state this executable cannot read",
 				"review its durable state with bootwright status --context "+contextName)
 		}
 	}

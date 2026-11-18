@@ -60,7 +60,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		return lifecycle.CapabilityPlan{}, err
 	}
 	if input.State == nil {
-		return lifecycle.CapabilityPlan{}, refusal("lifecycle.state", "lifecycle planning requires compiled desired state", "")
+		return lifecycle.CapabilityPlan{}, installUnconfigured.Fail("lifecycle planning requires compiled desired state", "")
 	}
 	catalog := input.State.Effective()
 	requests, requirements, err := ResolvedRequests(ctx, input, c.discoveredRoots)
@@ -69,7 +69,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	}
 	if len(requests) != 0 {
 		if c.media == nil {
-			return lifecycle.CapabilityPlan{}, refusal("lifecycle.state", "this executable has no media store reader, so it cannot pin installation media", "")
+			return lifecycle.CapabilityPlan{}, installUnconfigured.Fail("this executable has no media store reader, so it cannot pin installation media", "")
 		}
 		records, err := c.media.MediaRecords(ctx)
 		if err != nil {
@@ -348,7 +348,7 @@ func (c Capability) mutation(operation string) lifecycle.Mutation[prepared] {
 				Absence: func(evidence []byte) error { return ValidateAbsence(evidence, digest) },
 			}
 		},
-		Unusable: refusal("lifecycle.state", "the installation adapter reported no usable outcome", ""),
+		Unusable: installNoOutcome.Fail("the installation adapter reported no usable outcome", ""),
 	}
 	if operation == string(reconciliation.Destroy) {
 		mutation.Proved = func(execution lifecycle.Execution, call prepared, result lifecycle.RunResult) error {
@@ -490,7 +490,7 @@ func (c Capability) prepare(ctx context.Context, execution lifecycle.Execution) 
 		return Request{}, nil, err
 	}
 	if c.runner == nil {
-		return Request{}, nil, refusal("lifecycle.state", "the installation adapter is not configured", "")
+		return Request{}, nil, installUnconfigured.Fail("the installation adapter is not configured", "")
 	}
 	request, err := DecodeRequest(execution.Block.Request)
 	if err != nil {
@@ -516,7 +516,7 @@ func deliveredKeyMatches(request Request, publicLine string) error {
 	if key, known := deliveredHostKeys[request.Target.HostKeyType]; known && bound == key.algorithm {
 		return nil
 	}
-	return refusal("lifecycle.state", "the bound SSH host key of Secret/"+request.Target.HostKeyRef+" is "+bound+
+	return installHostKeyMismatch.Fail("the bound SSH host key of Secret/"+request.Target.HostKeyRef+" is "+bound+
 		", not the "+request.Target.HostKeyType+" key this operation froze",
 		"take this context back with bootwright destroy --context "+request.Identity.Context+", then plan and apply it again")
 }
@@ -574,7 +574,7 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 	}
 	port := request.Target.MachinePort
 	if port.UserVariable == "" || port.PasswordVariable == "" {
-		return lifecycle.RunResult{}, refusal("lifecycle.state", "the frozen machine port names no controller account material", "")
+		return lifecycle.RunResult{}, installRequestInvalid.Fail("the frozen machine port names no controller account material", "")
 	}
 	materials := []lifecycle.MaterialFile{
 		{Name: "bmc-user", Part: secrets.UsernamePart, Secret: request.Target.Controller.CredentialsRef, Variable: port.UserVariable},
@@ -690,7 +690,7 @@ func (c Capability) pinValues(execution lifecycle.Execution, request Request) (m
 		return nil, nil
 	}
 	if c.identities == nil {
-		return nil, refusal("lifecycle.state",
+		return nil, installUnconfigured.Fail(
 			"the reader of Machine/"+request.Identity.Object+"'s pinned identity is not configured", "")
 	}
 	pin, pinned, err := c.identities.PinnedIdentity(request.Identity.Object, execution.Proved)
@@ -702,7 +702,7 @@ func (c Capability) pinValues(execution lifecycle.Execution, request Request) (m
 	}
 	if hardware := request.Target.Hardware; hardware != nil && hardware.RootVolumeRef != nil {
 		if !pinned || !hardware.RootVolumeRef.Matches(pin.RootVolume) {
-			return nil, refusal("lifecycle.state", "the existing root volume has no matching durable Machine proof", "apply the Machine stage before installing")
+			return nil, installRecordsMissing.Fail("the existing root volume has no matching durable Machine proof", "apply the Machine stage before installing")
 		}
 		for _, target := range hardware.ClearOnInstall {
 			if canonicalWWN(target.WWN) == canonicalWWN(pin.RootVolume.WWN) {

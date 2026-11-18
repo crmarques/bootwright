@@ -97,7 +97,7 @@ func CapacityWrites(sizes MediaSizes) capacity.WriteProjector {
 			case !found || size <= 0:
 				item.write.Unknown = "the media store holds no size for image " + item.image + ", so the bytes the " + item.write.Label + " writes are unknown"
 			case size > math.MaxInt64-item.allowance:
-				return nil, refusal("lifecycle.state", "the recorded size of image "+item.image+" overflows the capacity budget", "")
+				return nil, installRequestInvalid.Fail("the recorded size of image "+item.image+" overflows the capacity budget", "")
 			default:
 				item.write.Bytes = size + item.allowance
 			}

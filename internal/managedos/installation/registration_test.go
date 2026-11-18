@@ -239,7 +239,7 @@ func TestRegistrationMaterialsAreLentOnlyToApply(t *testing.T) {
 			}
 		}
 		reported := diagnostics.Of(run.Refusals["registration-repositories"])
-		if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Object == nil || reported[0].Object.Name != "rhel-01" ||
+		if len(reported) != 1 || reported[0].Code != "install.registration-rejected" || reported[0].Object == nil || reported[0].Object.Name != "rhel-01" ||
 			reported[0].Message != "the subscription service did not accept spec.customizations.repositories.subscription of MachineInstallProfile/rhel-9-8 on Machine/rhel-01" ||
 			reported[0].Remediation != "correct the repository IDs in spec.customizations.repositories.subscription of MachineInstallProfile/rhel-9-8, then take this context back with bootwright destroy --context lab and run bootwright apply --context lab; a repository edit is another installation" {
 			t.Fatalf("registration-repositories = %#v", reported)
@@ -314,7 +314,7 @@ func TestCompletionRequiresAnOwnedRegistration(t *testing.T) {
 	marker, _ := MarkerFor(request, "digest")
 	for _, registration := range []RegistrationEvidence{{}, {State: "absent"}, {Consumer: ownedConsumer, State: "pending"}, {State: "foreign"}} {
 		err := ValidatePresence(registrationEvidence(t, request, string(marker), registration, nil), request, "digest", string(marker))
-		if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
+		if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "install.postcondition-unmet" ||
 			reported[0].Message != "the installed machine is not registered with a subscription consumer this installation created" {
 			t.Fatalf("%+v: refusal = %#v", registration, reported)
 		}

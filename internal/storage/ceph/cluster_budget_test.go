@@ -83,7 +83,7 @@ func TestHostPastTheBoundRefusesClusterAndDependentResources(t *testing.T) {
 				t.Fatalf("%s: %+v", kind, refusals)
 			}
 			_, err := planned(t, catalog, kind, name)
-			refusedWith(t, err, "lifecycle.unsupported", reason, remedy)
+			refusedStop(t, err, cephBudgetExceeded, reason, remedy)
 		}
 	}
 	request := packageRequest(t)
@@ -92,7 +92,7 @@ func TestHostPastTheBoundRefusesClusterAndDependentResources(t *testing.T) {
 		request.Action = action
 		for _, operation := range []string{"apply", "observe", "destroy"} {
 			_, err := cephDeadline(request, operation)
-			refusedWith(t, err, "lifecycle.unsupported", reason, remedy)
+			refusedStop(t, err, cephBudgetExceeded, reason, remedy)
 		}
 	}
 }
@@ -125,7 +125,7 @@ func TestFilesystemDeadlineAtTheBoundRefusesByItsOwnName(t *testing.T) {
 	}
 	request.Filesystem = &Filesystem{Name: "files", DataPools: slices.Repeat([]string{"fs-data"}, 3), Groups: slices.Repeat([]FilesystemGroup{{Name: "csi"}}, 2)}
 	_, err := cephDeadline(request, "apply")
-	refusedWith(t, err, "lifecycle.unsupported",
+	refusedStop(t, err, cephBudgetExceeded,
 		"CephFilesystem files needs a run deadline of 6h1m0s, past the 6h0m0s every adapter run is held to: two native calls for each of the 11 Ceph hosts of CephCluster example and one for each of its 3 data pools and 2 subvolume groups",
 		"declare fewer spec.dataPoolRefs or spec.subvolumeGroups on CephFilesystem files, or fewer entries in spec.topology.nodes of CephCluster example")
 }

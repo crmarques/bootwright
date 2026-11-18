@@ -178,11 +178,11 @@ func TestFilesystemExecutionMatchesItsFrozenIdentity(t *testing.T) {
 		t.Fatalf("a planned filesystem block did not match its frozen identity: %+v %v", prepared.Filesystem, err)
 	}
 	e.Block.Object = "fs-meta"
-	if _, err := capability.prepare(context.Background(), e); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != "lifecycle.state" {
+	if _, err := capability.prepare(context.Background(), e); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != cephRequestInvalid.Code {
 		t.Fatalf("a filesystem block named after its pool matched the filesystem identity: %v", err)
 	}
 	e.Block.Object, e.Block.Kind = "files", string(api.CephPool)
-	if _, err := New(api.CephPool, nil).prepare(context.Background(), e); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != "lifecycle.state" {
+	if _, err := New(api.CephPool, nil).prepare(context.Background(), e); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != cephRequestInvalid.Code {
 		t.Fatalf("a pool capability accepted a frozen filesystem request: %v", err)
 	}
 }
@@ -191,7 +191,7 @@ func TestFilesystemPlanRefusesErasureDefaultAndPropagatesPoolRefusals(t *testing
 	ec := childOf(api.CephPool, "fs-data", "role", "cephfsData", "erasure", requestMap("dataChunks", 4, "codingChunks", 2))
 	catalog := planCatalog(6, 6, withMDS, cephfsPool("fs-meta", "cephfsMetadata"), ec, filesystemOf())
 	_, err := planned(t, catalog, api.CephFilesystem, "files")
-	refusedWith(t, err, "lifecycle.unsupported", "CephFilesystem files names erasure-coded pool fs-data as its default data pool; ceph fs new refuses it unless forced, and Bootwright never forces it", "mark a replicated cephfsData pool default in spec.dataPoolRefs and attach erasure-coded pools as additional data pools")
+	refusedStop(t, err, cephUnsupportedPool, "CephFilesystem files names erasure-coded pool fs-data as its default data pool; ceph fs new refuses it unless forced, and Bootwright never forces it", "mark a replicated cephfsData pool default in spec.dataPoolRefs and attach erasure-coded pools as additional data pools")
 	refs := api.ListValue(requestMap("name", "fs-data", "default", true), api.StringValue("fs-ec"))
 	ec = childOf(api.CephPool, "fs-ec", "role", "cephfsData", "erasure", requestMap("dataChunks", 4, "codingChunks", 2))
 	if r, err := planned(t, planCatalog(6, 6, withMDS, cephfsPool("fs-meta", "cephfsMetadata"), cephfsPool("fs-data", "cephfsData"), ec, filesystemOf("dataPoolRefs", refs)), api.CephFilesystem, "files"); err != nil || !slices.Equal(r.Filesystem.DataPools, []string{"fs-data", "fs-ec"}) {
@@ -200,7 +200,7 @@ func TestFilesystemPlanRefusesErasureDefaultAndPropagatesPoolRefusals(t *testing
 	refs = api.ListValue(requestMap("name", "fs-data", "default", true), api.StringValue("fs-extra"))
 	mirrored := cephfsPool("fs-extra", "cephfsData", "mirroring", requestMap("mode", "image"))
 	_, err = planned(t, filesystemCatalog(withMDS, mirrored, filesystemOf("dataPoolRefs", refs)), api.CephFilesystem, "files")
-	refusedWith(t, err, "lifecycle.unsupported", "CephPool fs-extra declares mirroring without a CephReplication owner", "declare a CephReplication that names this pool, or remove spec.mirroring")
+	refusedStop(t, err, cephUnsupportedPool, "CephPool fs-extra declares mirroring without a CephReplication owner", "declare a CephReplication that names this pool, or remove spec.mirroring")
 	_, err = planned(t, filesystemCatalog(withCorePair, filesystemOf()), api.CephFilesystem, "files")
 	refusedWith(t, err, "api.invariant", "CephCluster example declares no single MDS service mds.files, which spec.mdsServiceRef of CephFilesystem files names", "declare the mds service entry with service_id files in spec.services")
 }
@@ -249,9 +249,9 @@ func TestEvidenceFilesystemIDIsDecimal(t *testing.T) {
 func TestFilesystemRefusalsNameTheirNextStep(t *testing.T) {
 	refusals := adapterRefusals()
 	generic := diagnostics.Of(refusals["native-output"])[0].Remediation
-	for _, reason := range []string{"foreign-filesystem", "filesystem-identity", "filesystem-multiple-disabled", "foreign-subvolume-group", "mds-coverage"} {
+	for reason, code := range map[string]string{"foreign-filesystem": "ceph.identity-foreign", "filesystem-identity": "ceph.identity-drifted", "filesystem-multiple-disabled": "ceph.prerequisite", "foreign-subvolume-group": "ceph.identity-foreign", "mds-coverage": "ceph.prerequisite"} {
 		d := diagnostics.Of(refusals[reason])
-		if len(d) != 1 || d[0].Code != "lifecycle.unknown" || d[0].Remediation == generic || strings.Contains(d[0].Message, "could not prove its") {
+		if len(d) != 1 || d[0].Code != code || !diagnostics.Unproved(refusals[reason]) || d[0].Remediation == generic || strings.Contains(d[0].Message, "could not prove its") {
 			t.Fatalf("%s reaches the operator as %+v", reason, d)
 		}
 	}

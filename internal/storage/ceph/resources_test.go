@@ -3,6 +3,7 @@ package ceph
 import (
 	"bytes"
 	"maps"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -13,6 +14,14 @@ import (
 func corePair() api.Value {
 	return requestMap("osd", requestMap("osd_memory_target_autotune", "false", "osd_memory_target", "2147483648"),
 		"global", requestMap("osd_pool_default_size", "2", "osd_pool_default_min_size", "2"))
+}
+
+func refusedStop(t *testing.T, err error, stop diagnostics.Stop, message, remedy string) {
+	t.Helper()
+	d := diagnostics.Of(err)
+	if len(d) != 1 || !reflect.DeepEqual(d, diagnostics.Of(stop.Fail(message, remedy))) {
+		t.Fatalf("refusal %+v, want %s %q %q", d, stop.Code, message, remedy)
+	}
 }
 
 func planCatalog(hosts, osdHosts int, change func(api.Value) api.Value, children ...api.Object) api.Catalog {
@@ -83,13 +92,13 @@ func TestPoolWithoutSizeTakesTheClusterDefaultPair(t *testing.T) {
 func TestErasureParametersRefusedAtPlan(t *testing.T) {
 	catalog := planCatalog(6, 6, nil, erasurePool("volumes", requestMap("dataChunks", 4, "codingChunks", 2, "parameters", requestMap("l", "3"))))
 	_, err := planned(t, catalog, api.CephPool, "volumes")
-	refusedWith(t, err, "lifecycle.unsupported", "CephPool volumes declares spec.erasure.parameters; arbitrary native erasure-code parameters are not admitted", "remove spec.erasure.parameters and use the typed erasure fields")
+	refusedStop(t, err, cephUnsupportedPool, "CephPool volumes declares spec.erasure.parameters; arbitrary native erasure-code parameters are not admitted", "remove spec.erasure.parameters and use the typed erasure fields")
 }
 
 func TestAutoscaleWarnRefusesAtPlan(t *testing.T) {
 	catalog := planCatalog(3, 3, nil, replicatedPool("volumes", "autoscale", requestMap("mode", "warn")))
 	_, err := planned(t, catalog, api.CephPool, "volumes")
-	refusedWith(t, err, "lifecycle.unsupported", "CephPool volumes selects autoscale mode warn, whose placement-group health warnings the core readiness never tolerates", "set spec.autoscale.mode to on or off, or omit it (on); Bootwright does not support warn yet")
+	refusedStop(t, err, cephUnsupportedPool, "CephPool volumes selects autoscale mode warn, whose placement-group health warnings the core readiness never tolerates", "set spec.autoscale.mode to on or off, or omit it (on); Bootwright does not support warn yet")
 	for _, mode := range []string{"on", "off"} {
 		catalog := planCatalog(3, 3, nil, replicatedPool("volumes", "autoscale", requestMap("mode", mode)))
 		if r, err := planned(t, catalog, api.CephPool, "volumes"); err != nil || r.Pool.Autoscale.Mode != mode {
@@ -101,19 +110,19 @@ func TestAutoscaleWarnRefusesAtPlan(t *testing.T) {
 func TestMirroringRefusesNamingB483(t *testing.T) {
 	catalog := planCatalog(3, 3, nil, replicatedPool("volumes", "mirroring", requestMap("mode", "image")))
 	_, err := planned(t, catalog, api.CephPool, "volumes")
-	refusedWith(t, err, "lifecycle.unsupported", "CephPool volumes declares mirroring without a CephReplication owner", "declare a CephReplication that names this pool, or remove spec.mirroring")
+	refusedStop(t, err, cephUnsupportedPool, "CephPool volumes declares mirroring without a CephReplication owner", "declare a CephReplication that names this pool, or remove spec.mirroring")
 }
 
 func TestPoolWithoutRoleRefusesAtPlan(t *testing.T) {
 	catalog := planCatalog(3, 3, nil, childOf(api.CephPool, "volumes", "replicated", requestMap("size", 2, "minSize", 2)))
 	_, err := planned(t, catalog, api.CephPool, "volumes")
-	refusedWith(t, err, "lifecycle.unsupported", "CephPool volumes has no role, so no consumer enables its application and the cluster would report POOL_APP_NOT_ENABLED", "set spec.role of CephPool volumes to rbd, cephfsMetadata, cephfsData or rgw")
+	refusedStop(t, err, cephUnsupportedPool, "CephPool volumes has no role, so no consumer enables its application and the cluster would report POOL_APP_NOT_ENABLED", "set spec.role of CephPool volumes to rbd, cephfsMetadata, cephfsData or rgw")
 }
 
 func TestNonHostFailureDomainRefuses(t *testing.T) {
 	catalog := planCatalog(3, 3, nil, childOf(api.CephPlacementPolicy, "racks", "ruleName", "racks", "failureDomain", "rack"))
 	_, err := planned(t, catalog, api.CephPlacementPolicy, "racks")
-	refusedWith(t, err, "lifecycle.unsupported", "placement policy racks selects CRUSH failure domain rack; only host is realized", "set spec.failureDomain to host or omit it; Bootwright does not support site or rack failure domains yet")
+	refusedStop(t, err, cephUnsupportedPool, "placement policy racks selects CRUSH failure domain rack; only host is realized", "set spec.failureDomain to host or omit it; Bootwright does not support site or rack failure domains yet")
 	for _, domain := range []any{"host", nil} {
 		pairs := []any{"ruleName", "fast", "crushDeviceClass", "ssd", "replicated", requestMap("size", 2)}
 		if domain != nil {
@@ -131,7 +140,7 @@ func TestNonHostFailureDomainRefuses(t *testing.T) {
 func TestNonDefaultCrushRootRefusesAtPlan(t *testing.T) {
 	catalog := planCatalog(6, 6, nil, erasurePool("volumes", requestMap("dataChunks", 4, "codingChunks", 2, "crushRoot", "fast-root")))
 	_, err := planned(t, catalog, api.CephPool, "volumes")
-	refusedWith(t, err, "lifecycle.unsupported", "CephPool volumes selects CRUSH root fast-root; only the bootstrap root default is realized", "omit spec.erasure.crushRoot or set it to default; Bootwright does not support other CRUSH roots yet")
+	refusedStop(t, err, cephUnsupportedPool, "CephPool volumes selects CRUSH root fast-root; only the bootstrap root default is realized", "omit spec.erasure.crushRoot or set it to default; Bootwright does not support other CRUSH roots yet")
 	catalog = planCatalog(6, 6, nil, erasurePool("volumes", requestMap("dataChunks", 4, "codingChunks", 2, "crushRoot", "default")))
 	if r, err := planned(t, catalog, api.CephPool, "volumes"); err != nil || r.Pool.Erasure.Root != "default" {
 		t.Fatalf("the default root did not plan: %v", err)
@@ -146,7 +155,7 @@ func TestEveryPolicyOfAStretchClusterRefusesForTheStretchRule(t *testing.T) {
 		childOf(api.CephPlacementPolicy, "other", "ruleName", "other"))
 	for _, name := range []string{"stretched", "other"} {
 		_, err := planned(t, catalog, api.CephPlacementPolicy, name)
-		refusedWith(t, err, "lifecycle.unsupported", "placement policy "+name+" places pools on stretch cluster example, whose every pool uses the cluster's own stretch rule stretch-rule",
+		refusedStop(t, err, cephUnsupportedPool, "placement policy "+name+" places pools on stretch cluster example, whose every pool uses the cluster's own stretch rule stretch-rule",
 			"remove CephPlacementPolicy "+name+" and every CephPool placementPolicyRef naming it; a pool of a stretch cluster takes the stretch rule and 4/2 protection implicitly")
 	}
 	_, err := planned(t, catalog, api.CephCluster, "example")
@@ -254,7 +263,7 @@ func TestClientOnErasurePoolRefusesAtPlan(t *testing.T) {
 	catalog := planCatalog(6, 6, nil, erasurePool("volumes", requestMap("dataChunks", 4, "codingChunks", 2)),
 		childOf(api.CephClient, "consumer", "poolRef", "volumes", "access", "readWrite"))
 	_, err := planned(t, catalog, api.CephClient, "consumer")
-	refusedWith(t, err, "lifecycle.unsupported", "CephClient consumer names erasure-coded pool volumes; RBD image headers and the client's pool-scoped caps need a replicated RBD pool", "point spec.poolRef at a replicated rbd pool and name the erasure-coded pool in the spec.dataPoolRef of the CephRBDImages on it; the client's caps then include that data pool")
+	refusedStop(t, err, cephUnsupportedPool, "CephClient consumer names erasure-coded pool volumes; RBD image headers and the client's pool-scoped caps need a replicated RBD pool", "point spec.poolRef at a replicated rbd pool and name the erasure-coded pool in the spec.dataPoolRef of the CephRBDImages on it; the client's caps then include that data pool")
 }
 
 func TestPoolRequestGoldenReplicatedWithPolicy(t *testing.T) {

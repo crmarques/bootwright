@@ -166,7 +166,7 @@ func physicalRetirementRequest(catalog api.Catalog, cluster Request) PhysicalRet
 }
 
 func physicalPolicyFailure() error {
-	return failure("lifecycle.state", "the physical Ceph retirement policy is incomplete or inconsistent", "restore the original apply and removal records")
+	return cephRequestInvalid.Fail("the physical Ceph retirement policy is incomplete or inconsistent", "restore the original apply and removal records")
 }
 
 func (r PhysicalRetirementRequest) authorized() error {
@@ -182,7 +182,7 @@ func (r PhysicalRetirementRequest) authorized() error {
 				return target.Serial == device.Serial && target.SizeBytes == device.SizeBytes
 			})
 			if !covered {
-				return failure("lifecycle.unsupported", "physical Ceph retirement requires explicit erasure of every selected data, DB and WAL disk", "include every selected Ceph disk, by its WWN or its serial number and size, in a hardware.dataDisks entry of each Machine, as originally applied, with a non-retain onRemoval")
+				return cephRetirementRefused.Fail("physical Ceph retirement requires explicit erasure of every selected data, DB and WAL disk", "include every selected Ceph disk, by its WWN or its serial number and size, in a hardware.dataDisks entry of each Machine, as originally applied, with a non-retain onRemoval")
 			}
 		}
 	}

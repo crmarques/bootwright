@@ -74,7 +74,7 @@ func TestGatewayMaterialFilesNeverInRequest(t *testing.T) {
 		t.Fatalf("observation needs the key: %v", err)
 	}
 	_, _, _, err := boundMaterial(e, r, "apply", dependencyProofs{})
-	refusedWith(t, err, "lifecycle.state", "a required Ceph credential component is not bound", "")
+	refusedStop(t, err, cephUnconfigured, "a required Ceph credential component is not bound", "")
 }
 
 func TestMaterialProjectionUsesProvedPublicKeysAndPrivateFiles(t *testing.T) {

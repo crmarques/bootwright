@@ -156,7 +156,7 @@ func TestCephANativeAdminCredentialRefusalReachesTheOperatorByName(t *testing.T)
 	runner := &refusingRunner{reason: "dashboard-identity"}
 	_, err := New(api.CephCluster, runner).PrepareAdminCredential(context.Background(), e)
 	d := diagnostics.Of(err)
-	if len(d) != 1 || d[0].Code != "lifecycle.unknown" || d[0].Message != "the Ceph dashboard user admin or its retained password is not the one this operation created" || runner.request.NativeErrors {
+	if len(d) != 1 || d[0].Code != cephDrifted.Code || d[0].Message != "the Ceph dashboard user admin or its retained password is not the one this operation created" || runner.request.NativeErrors {
 		t.Fatalf("a dashboard-identity refusal reached the operator as %+v", d)
 	}
 }

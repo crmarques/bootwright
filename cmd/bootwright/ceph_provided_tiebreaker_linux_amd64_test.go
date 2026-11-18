@@ -145,7 +145,7 @@ func TestAProvidedTiebreakerRefusesAtPlanWithoutItsHostKeyPinOrTheClusterUser(t 
 		t.Run(name, func(t *testing.T) {
 			_, err := tiebreakerPlan(t, tiebreakerSources(t, access))
 			d := diagnostics.Of(err)
-			if len(d) != 1 || d[0].Code != "lifecycle.unsupported" || !strings.Contains(d[0].Message, "Machine/witness") ||
+			if len(d) != 1 || d[0].Code != "ceph.unsupported-topology" || !strings.Contains(d[0].Message, "Machine/witness") ||
 				!strings.Contains(d[0].Remediation, "user bootwright") || !strings.Contains(d[0].Remediation, "knownHostsRef") {
 				t.Fatalf("plan = %+v", d)
 			}

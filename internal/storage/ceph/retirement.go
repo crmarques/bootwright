@@ -124,11 +124,11 @@ func (c Capability) retirement(ctx context.Context, e lifecycle.Execution) (Requ
 		}
 	}
 	if len(installedMachines(r)) == 0 {
-		return r, nil, failure("lifecycle.state", "a Ceph block retires only with the host Machines its frozen request names", "")
+		return r, nil, cephRequestInvalid.Fail("a Ceph block retires only with the host Machines its frozen request names", "")
 	}
 	evidence, err := json.Marshal(clusterRetirement(r))
 	if err != nil {
-		return r, nil, failure("lifecycle.state", "the Ceph retirement evidence cannot be encoded", "")
+		return r, nil, cephRequestInvalid.Fail("the Ceph retirement evidence cannot be encoded", "")
 	}
 	if _, err := EvaluateRetirement(evidence, r, true); err != nil {
 		return r, nil, err
@@ -147,7 +147,7 @@ func (c Capability) retire(ctx context.Context, e lifecycle.Execution) (lifecycl
 			return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
 		}
 		if !removal.Removed {
-			return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, failure("lifecycle.unknown", "the provided tiebreaker's removal did not prove its footprint absent", "")
+			return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, cephUnproved.Fail("the provided tiebreaker's removal did not prove its footprint absent", "")
 		}
 	}
 	return lifecycle.Result{Outcome: reconciliation.OutcomeChanged, Evidence: evidence}, nil
@@ -199,7 +199,7 @@ func (c SMBCapability) retirement(ctx context.Context, e lifecycle.Execution) (j
 	want.PendingErase = len(pending) != 0
 	evidence, err := json.Marshal(want)
 	if err != nil {
-		return nil, failure("lifecycle.state", "the Ceph retirement evidence cannot be encoded", "")
+		return nil, cephRequestInvalid.Fail("the Ceph retirement evidence cannot be encoded", "")
 	}
 	if _, err := evaluateRetirement(evidence, want, true); err != nil {
 		return nil, err
@@ -274,6 +274,6 @@ func retirementVersionFailure(got, want string) error {
 	if want == "" {
 		want = "no version"
 	}
-	return failure("lifecycle.state", fmt.Sprintf("the Ceph retirement record carries %s, and this build reads only %s", got, want),
+	return cephOtherBuild.Fail(fmt.Sprintf("the Ceph retirement record carries %s, and this build reads only %s", got, want),
 		"continue this operation with the Bootwright build that recorded it")
 }

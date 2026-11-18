@@ -174,7 +174,7 @@ func TestSeparateCephAddressesRefuseByNamedField(t *testing.T) {
 		}
 		_, err := planned(t, api.NewCatalog(objects), api.CephCluster, "example")
 		issues := diagnostics.Of(err)
-		if len(issues) == 0 || issues[0].Code != "lifecycle.unsupported" || !strings.Contains(issues[0].Message, field) {
+		if len(issues) == 0 || issues[0].Code != cephUnsupportedTopology.Code || !strings.Contains(issues[0].Message, field) {
 			t.Errorf("%s refusal: %+v", field, issues)
 		}
 	}

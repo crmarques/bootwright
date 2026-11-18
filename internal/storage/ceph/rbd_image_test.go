@@ -97,13 +97,13 @@ func TestClientOnPoolWithDataPoolImagePlans(t *testing.T) {
 
 func TestRBDImageOnErasurePoolRefusesAtPlan(t *testing.T) {
 	_, err := planned(t, planCatalog(6, 6, nil, ecData(), imageOf("disk", "ec-data")), api.CephRBDImage, "disk")
-	refusedWith(t, err, "lifecycle.unsupported", "CephRBDImage disk names erasure-coded pool ec-data; an RBD image keeps its header and metadata in a replicated pool", "point spec.poolRef at a replicated rbd pool and name the erasure-coded pool in spec.dataPoolRef")
+	refusedStop(t, err, cephUnsupportedPool, "CephRBDImage disk names erasure-coded pool ec-data; an RBD image keeps its header and metadata in a replicated pool", "point spec.poolRef at a replicated rbd pool and name the erasure-coded pool in spec.dataPoolRef")
 }
 
 func TestRBDImagePoolRefusalsPropagate(t *testing.T) {
 	catalog := planCatalog(6, 6, nil, replicatedPool("volumes"), replicatedPool("archive", "mirroring", requestMap("mode", "image")), imageOf("disk", "volumes", "dataPoolRef", "archive"))
 	_, err := planned(t, catalog, api.CephRBDImage, "disk")
-	refusedWith(t, err, "lifecycle.unsupported", "CephPool archive declares mirroring without a CephReplication owner", "declare a CephReplication that names this pool, or remove spec.mirroring")
+	refusedStop(t, err, cephUnsupportedPool, "CephPool archive declares mirroring without a CephReplication owner", "declare a CephReplication that names this pool, or remove spec.mirroring")
 	r := plannedImage(t, replicatedPool("volumes"), ecData(), imageOf("disk", "volumes", "dataPoolRef", "ec-data"))
 	if r.RBD.DataPool != "ec-data" {
 		t.Fatalf("an erasure-coded data pool froze as %q", r.RBD.DataPool)
@@ -151,7 +151,7 @@ func TestRBDImageExecutionMatchesItsFrozenIdentity(t *testing.T) {
 		t.Fatalf("a planned image block did not match its frozen identity: %+v %v", prepared.RBD, err)
 	}
 	e.Block.Object = "volumes"
-	if _, err := capability.prepare(context.Background(), e); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != "lifecycle.state" {
+	if _, err := capability.prepare(context.Background(), e); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != cephRequestInvalid.Code {
 		t.Fatalf("an image block named after its pool matched the image identity: %v", err)
 	}
 }

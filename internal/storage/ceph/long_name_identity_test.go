@@ -84,7 +84,7 @@ func TestFrozenRequestsRefuseANamePastTheLabelBound(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = DecodeReplicationRequest(data)
-	refusedWith(t, err, "lifecycle.state", "the frozen Ceph replication request is inconsistent", "")
+	refusedStop(t, err, cephRequestInvalid, "the frozen Ceph replication request is inconsistent", "")
 	consumer, err := DecodeConsumerRequest(managedExportPlan(t, false).Request)
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
@@ -94,5 +94,5 @@ func TestFrozenRequestsRefuseANamePastTheLabelBound(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = DecodeConsumerRequest(data)
-	refusedWith(t, err, "lifecycle.state", "the frozen Ceph consumer request is inconsistent", "")
+	refusedStop(t, err, cephRequestInvalid, "the frozen Ceph consumer request is inconsistent", "")
 }

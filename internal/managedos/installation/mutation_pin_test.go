@@ -216,7 +216,7 @@ func TestEveryInstallationMutationRefusesWhatItCannotRead(t *testing.T) {
 	cancel()
 	malformed := call
 	malformed.Block.Request = json.RawMessage(`{`)
-	unusableOutcome := described(refusal("lifecycle.state", "the installation adapter reported no usable outcome", ""))
+	unusableOutcome := described(installNoOutcome.Fail("the installation adapter reported no usable outcome", ""))
 	settled := lifecycle.RunResult{Outcome: "changed", Evidence: present}
 	for name, test := range map[string]struct {
 		ctx       context.Context
@@ -231,7 +231,7 @@ func TestEveryInstallationMutationRefusesWhatItCannotRead(t *testing.T) {
 		"runner error":     {context.Background(), &fakeRunner{err: unreachable}, false, call, reconciliation.OutcomeUnknown, described(unreachable), 1, reconciliation.EffectUnknown},
 		"unusable outcome": {context.Background(), &fakeRunner{result: lifecycle.RunResult{Outcome: "", Evidence: present}}, false, call, reconciliation.OutcomeUnknown, unusableOutcome, 1, reconciliation.EffectCompleted},
 		"other outcome":    {context.Background(), &fakeRunner{result: lifecycle.RunResult{Outcome: "skipped", Evidence: present}}, false, call, reconciliation.OutcomeUnknown, unusableOutcome, 1, reconciliation.EffectCompleted},
-		"no adapter":       {context.Background(), nil, true, call, reconciliation.OutcomeFailed, described(refusal("lifecycle.state", "the installation adapter is not configured", "")), 0, reconciliation.EffectUnknown},
+		"no adapter":       {context.Background(), nil, true, call, reconciliation.OutcomeFailed, described(installUnconfigured.Fail("the installation adapter is not configured", "")), 0, reconciliation.EffectUnknown},
 		"cancelled":        {cancelled, &fakeRunner{result: settled}, false, call, reconciliation.OutcomeFailed, described(context.Canceled), 0, reconciliation.EffectUnknown},
 		"malformed":        {context.Background(), &fakeRunner{result: settled}, false, malformed, reconciliation.OutcomeFailed, "", 0, reconciliation.EffectUnknown},
 	} {

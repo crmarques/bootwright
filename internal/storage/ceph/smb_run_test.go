@@ -52,7 +52,7 @@ func TestSMBApplyProvesItsPostcondition(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			runner := &recordingRunner{result: result}
 			got, err := NewSMB(runner).Apply(context.Background(), e)
-			refusedWith(t, err, "lifecycle.unknown", "Ceph SMB did not prove the requested postcondition", "")
+			refusedStop(t, err, cephUnproved, "Ceph SMB did not prove the requested postcondition", "")
 			if got.Outcome != reconciliation.OutcomeUnknown || runner.calls != 1 || len(got.Evidence) != 0 {
 				t.Fatalf("apply = %+v, calls %d", got, runner.calls)
 			}
@@ -64,7 +64,7 @@ func TestSMBApplyProvesItsPostcondition(t *testing.T) {
 	for _, outcome := range []reconciliation.Outcome{"failed", "skipped", ""} {
 		runner := &recordingRunner{result: lifecycle.RunResult{Outcome: outcome, Evidence: smbReady(t, e, r, nil)}}
 		got, err := NewSMB(runner).Apply(context.Background(), e)
-		refusedWith(t, err, "lifecycle.unknown", "Ceph SMB returned an unknown outcome", "")
+		refusedStop(t, err, cephResultInvalid, "Ceph SMB returned an unknown outcome", "")
 		if got.Outcome != reconciliation.OutcomeUnknown {
 			t.Fatalf("outcome %q applies as %+v", outcome, got)
 		}
@@ -109,7 +109,7 @@ func TestSMBObserveReportsTheProvedEffect(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			got, err := NewSMB(&recordingRunner{result: result}).Observe(context.Background(), e)
-			refusedWith(t, err, "lifecycle.unknown", "Ceph SMB evidence does not prove the frozen ownership and resource scope", "")
+			refusedStop(t, err, cephEvidenceUnproved, "Ceph SMB evidence does not prove the frozen ownership and resource scope", "")
 			if got.Effect != reconciliation.EffectUnknown || len(got.Evidence) != 0 {
 				t.Fatalf("tampered observation = %+v", got)
 			}
@@ -117,7 +117,7 @@ func TestSMBObserveReportsTheProvedEffect(t *testing.T) {
 	}
 	produced := smbProduced()
 	got, err := NewSMB(&recordingRunner{result: lifecycle.RunResult{Evidence: smbReady(t, e, r, nil), Produced: produced}}).Observe(context.Background(), e)
-	refusedWith(t, err, "lifecycle.unknown", "Ceph SMB returned a value it never produces", "")
+	refusedStop(t, err, cephResultInvalid, "Ceph SMB returned a value it never produces", "")
 	if got.Effect != reconciliation.EffectUnknown || len(got.Produced) != 0 {
 		t.Fatalf("an observation with produced values = %+v", got)
 	}
@@ -184,7 +184,7 @@ func TestSMBPrepareRefusesAnotherMachineSet(t *testing.T) {
 			changed.Machines = machines
 			runner := &recordingRunner{}
 			got, err := NewSMB(runner).Apply(context.Background(), smbExecution(t, changed, "pw"))
-			refusedWith(t, err, "lifecycle.state", "CephSMBResource smb-docs froze another Machine set or host keys than the creation proof of CephCluster example", "restore the original apply evidence")
+			refusedStop(t, err, cephProofMismatch, "CephSMBResource smb-docs froze another Machine set or host keys than the creation proof of CephCluster example", "restore the original apply evidence")
 			if got.Outcome != reconciliation.OutcomeFailed || runner.calls != 0 {
 				t.Fatalf("apply = %+v, calls %d", got, runner.calls)
 			}
@@ -212,10 +212,12 @@ func TestSMBKnownHostsHoldEveryProvedHostKey(t *testing.T) {
 	}
 	for name, test := range map[string]struct {
 		key     []byte
+		stop    diagnostics.Stop
 		message string
+		remedy  string
 	}{
-		"an unbound key": {nil, "a required Ceph credential component is not bound"},
-		"an invalid key": {[]byte("not-a-key"), "the delivered Ceph host public key is invalid"},
+		"an unbound key": {nil, cephUnconfigured, "a required Ceph credential component is not bound", ""},
+		"an invalid key": {[]byte("not-a-key"), cephHostKeyInvalid, "the delivered Ceph host public key is invalid", "restore the host key Secret the Machine's installation delivered, then repeat the operation"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			e := smbExecution(t, r, "pw")
@@ -226,7 +228,7 @@ func TestSMBKnownHostsHoldEveryProvedHostKey(t *testing.T) {
 			}
 			runner := &capturingRunner{}
 			got, err := NewSMB(runner).Apply(context.Background(), e)
-			refusedWith(t, err, "lifecycle.state", test.message, "")
+			refusedStop(t, err, test.stop, test.message, test.remedy)
 			if runner.calls != 0 || got.Outcome == reconciliation.OutcomeChanged {
 				t.Fatalf("apply = %+v, calls %d", got, runner.calls)
 			}

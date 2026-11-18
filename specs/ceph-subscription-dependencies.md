@@ -18,7 +18,7 @@ this page does not state follows [frozen release and trust](ceph.md#frozen-relea
 
 Each host's source follows its own Machine's install profile, so one cluster
 may mix hosted-DVD and subscription hosts. Any other package source refuses
-`lifecycle.unsupported` at plan, naming both sources as the remedy. A provided
+`ceph.package-source-unsupported` at plan, naming both sources as the remedy. A provided
 host takes the bootstrap Machine's source; a subscription-sourced bootstrap
 profile refuses, because this executable did not register the provided host,
 so its dependencies need the bootstrap Machine's hosted DVD, which a provided

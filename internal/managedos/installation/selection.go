@@ -175,7 +175,7 @@ func IntentRequests(catalog api.Catalog, controllerMachine, contextName string) 
 
 func requestsFor(catalog api.Catalog, controllerMachine, contextName string, proofs map[string]diskselection.Proof, complete bool) ([]Request, []Requirements, error) {
 	if !api.ValidLexical(api.LexicalName, contextName) {
-		return nil, nil, refusal("lifecycle.state", "the lifecycle context identity is invalid", "")
+		return nil, nil, installRequestInvalid.Fail("the lifecycle context identity is invalid", "")
 	}
 	var requests []Request
 	var requirements []Requirements
@@ -197,14 +197,14 @@ func requestsFor(catalog api.Catalog, controllerMachine, contextName string, pro
 func DeriveRequest(catalog api.Catalog, machine api.Object, controllerMachine, contextName string, proof *diskselection.Proof, complete bool) (Request, Requirements, error) {
 	name := machine.Name()
 	if !substrate.SafeSegment(name) {
-		return Request{}, Requirements{}, refusal("lifecycle.state", "the Machine name is not a safe host identifier", "rename "+machine.Identity())
+		return Request{}, Requirements{}, installInputInvalid.Fail("the Machine name is not a safe host identifier", "rename "+machine.Identity())
 	}
 	profile, ok := catalog.Find(api.MachineInstallProfile, api.MachineInstallProfileRef(machine))
 	if !ok {
 		return Request{}, Requirements{}, refusal("api.reference", "the Machine's install profile is not in the selected graph", "declare it or correct spec.os.install.profileRef on "+machine.Identity())
 	}
 	if !substrate.SafeSegment(profile.Name()) {
-		return Request{}, Requirements{}, refusal("lifecycle.state", "the install profile name is not a safe host identifier", "rename "+profile.Identity())
+		return Request{}, Requirements{}, installInputInvalid.Fail("the install profile name is not a safe host identifier", "rename "+profile.Identity())
 	}
 	anaconda := profile.Spec().Get("installer", "anaconda")
 	boot, err := mediaFor(catalog, anaconda.Get("imageRef").Text(), profile.Identity())
@@ -318,7 +318,7 @@ func freezeDiscoveredTarget(machine api.Object, contextName string, proof *disks
 		return nil
 	}
 	if proof == nil || proof.Validate() != nil || target.Hardware == nil {
-		return refusal("lifecycle.state", "Machine/"+machine.Name()+" has no completed disk-discovery proof for this policy", "run bootwright machine discover --context "+contextName+" --name "+machine.Name())
+		return installInputInvalid.Fail("Machine/"+machine.Name()+" has no completed disk-discovery proof for this policy", "run bootwright machine discover --context "+contextName+" --name "+machine.Name())
 	}
 	target.Hardware.RootDevice = substrate.WWNDevicePath(proof.Selected.WWN)
 	target.Hardware.WWN, target.Hardware.SerialNumber, target.Hardware.SizeBytes = proof.Selected.WWN, proof.Selected.SerialNumber, proof.Selected.SizeBytes
@@ -363,7 +363,7 @@ func mediaFor(catalog api.Catalog, reference, identity string) (Media, error) {
 func storeMedia(reference, checksum, field, identity string) (Media, error) {
 	name, local := strings.CutPrefix(reference, "local-media:")
 	if !local || !managedos.ValidMediaName(name) {
-		return Media{}, refusal("lifecycle.state", "this installation supports only media the host store holds",
+		return Media{}, installMediaUnusable.Fail("this installation supports only media the host store holds",
 			"import the image with bootwright media add --name <filename.iso> and set "+field+" to local-media:<filename.iso> on "+identity)
 	}
 	media := Media{Name: name}
@@ -404,25 +404,25 @@ func PinMedia(catalog api.Catalog, request Request, records map[string]MediaReco
 func pinned(media Media, records map[string]MediaRecord, owner, field, image string) (Media, error) {
 	record, ok := records[media.Name]
 	if !ok {
-		return Media{}, refusal("lifecycle.state", "the host media store holds no image "+media.Name+", which "+owner+" names in "+field,
+		return Media{}, installMediaUnusable.Fail("the host media store holds no image "+media.Name+", which "+owner+" names in "+field,
 			"import it with "+mediaAdd(media.Name, "")+", then repeat the command")
 	}
 	if record.Failure != "" {
-		return Media{}, refusal("lifecycle.state", "the host media store cannot read its image "+media.Name+", which "+owner+" names in "+field+": "+record.Failure,
+		return Media{}, installMediaUnusable.Fail("the host media store cannot read its image "+media.Name+", which "+owner+" names in "+field+": "+record.Failure,
 			"inspect it with bootwright media list, remove it with bootwright media delete --name "+media.Name+
 				", import it again with "+mediaAdd(media.Name, "")+", then repeat the command")
 	}
 	if digest, ok := managedos.NormalizeMediaDigest(record.SHA256); !ok || digest == "" || digest != record.SHA256 || record.Size <= 0 {
-		return Media{}, refusal("lifecycle.state", "the host media store's record of "+media.Name+" names no SHA-256 and size a plan can freeze",
+		return Media{}, installMediaUnusable.Fail("the host media store's record of "+media.Name+" names no SHA-256 and size a plan can freeze",
 			"inspect it with bootwright media list, remove it with bootwright media delete --name "+media.Name+
 				", import it again with "+mediaAdd(media.Name, "")+", then repeat the command")
 	}
 	if record.Observed != record.Size {
-		return Media{}, refusal("lifecycle.state", "the host media store's image "+media.Name+" no longer has the size its record names",
+		return Media{}, installMediaUnusable.Fail("the host media store's image "+media.Name+" no longer has the size its record names",
 			"compare it with bootwright media list --checksums and import it again with "+mediaAdd(media.Name, ""))
 	}
 	if media.declared != "" && media.declared != record.SHA256 {
-		return Media{}, refusal("lifecycle.state", "the host media store's image "+media.Name+" has SHA-256 "+record.SHA256+", not the "+
+		return Media{}, installMediaUnusable.Fail("the host media store's image "+media.Name+" has SHA-256 "+record.SHA256+", not the "+
 			media.declared+" spec.checksum declares on "+image,
 			"import the declared image with "+mediaAdd(media.Name, media.declared)+", or correct spec.checksum on "+image)
 	}
@@ -460,9 +460,7 @@ func refusedRelease(image string, records map[string]MediaRecord, profile api.Ob
 		return nil
 	}
 	object := diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.MachineInstallProfile), Name: profile.Name()}
-	return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
-		Severity: "error", Code: "lifecycle.state", Message: message, Remediation: remediation, Object: &object,
-	}}}
+	return failOn(installMediaUnusable, object, message, remediation)
 }
 
 // mediaAdd is the import command a remedy names: media add always takes one
@@ -486,13 +484,10 @@ func mediaRefusals(contextName string, request Request) map[string]error {
 // changedMedia is the diagnostic for a store entry that no longer has the size
 // and SHA-256 its operation froze, refused for the object whose block read it.
 func changedMedia(contextName, name string, object diagnostics.ObjectIdentity) error {
-	return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
-		Severity: "error", Code: "lifecycle.state",
-		Message: "the media store's image " + name + " no longer has the size and SHA-256 this operation froze, so nothing was published or booted",
-		Remediation: "take this context back with bootwright destroy --context " + contextName + ", import the image again with " +
-			mediaAdd(name, "") + ", then run bootwright apply --context " + contextName,
-		Object: &object,
-	}}}
+	return failOn(installSourceChanged, object,
+		"the media store's image "+name+" no longer has the size and SHA-256 this operation froze, so nothing was published or booted",
+		"take this context back with bootwright destroy --context "+contextName+", import the image again with "+
+			mediaAdd(name, "")+", then run bootwright apply --context "+contextName)
 }
 
 type hostedTree struct {
@@ -571,7 +566,7 @@ func targetFor(catalog api.Catalog, machine api.Object, contextName, controllerM
 		return Target{}, err
 	}
 	if reason, remediation := refusedTarget(catalog, machine, derived, privateInstallation(catalog, machine, derived.Identity.Channel)); reason != "" {
-		return Target{}, refusal("lifecycle.unsupported", reason, remediation)
+		return Target{}, installUnsupported.Fail(reason, remediation)
 	}
 	target := Target{
 		Channel: derived.Identity.Channel,
@@ -727,7 +722,7 @@ func hostKeyType(catalog api.Catalog, machine api.Object, reference string) (str
 	}
 	generated := secret.Spec().Get("source", "generated")
 	if !generated.Present() {
-		return "", refusal("lifecycle.unsupported",
+		return "", installUnsupported.Fail(
 			"a physical installation installs its delivered SSH host key at the path of the type its generated declaration names, and Secret/"+reference+" declares no generated source",
 			"declare spec.source.generated.keyType on Secret/"+reference+", or name a generated sshKeyPair Secret in spec.os.install.hostKeyRef on "+machine.Identity())
 	}
@@ -750,7 +745,7 @@ func mediaTrustRefusal(machine api.Object, request Request) error {
 	if strings.HasPrefix(request.installerImage().URL, "https://") && request.TLSCertificateRef != "" {
 		return nil
 	}
-	return refusal("lifecycle.state", "importing the artifact server's certificate into the BMC of "+machine.Identity()+" needs an https installer image and the certificate its server presents",
+	return installInputInvalid.Fail("importing the artifact server's certificate into the BMC of "+machine.Identity()+" needs an https installer image and the certificate its server presents",
 		"select an https artifactServerEndpoint on a server declaring spec.tls.secretRef")
 }
 

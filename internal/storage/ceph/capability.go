@@ -52,7 +52,7 @@ func (c Capability) request(catalog api.Catalog, object api.Object, d derivation
 	case api.CephObjectBucket:
 		return objectBucketRequest(catalog, object, d)
 	}
-	return Request{}, failure("lifecycle.unsupported", "the requested kind has no core Ceph adapter", "")
+	return Request{}, cephUnsupportedProfile.Fail("the requested kind has no core Ceph adapter", "")
 }
 
 func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecycle.CapabilityPlan, error) {
@@ -61,7 +61,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		return plan, err
 	}
 	if input.State == nil {
-		return plan, failure("lifecycle.state", "Ceph planning requires compiled state", "")
+		return plan, cephRequestInvalid.Fail("Ceph planning requires compiled state", "")
 	}
 	catalog := input.State.Effective()
 	for _, object := range catalog.OfKind(c.kind) {
@@ -388,15 +388,15 @@ func (c Capability) identity(ctx context.Context, e lifecycle.Execution) (Reques
 		action = r.Action
 	}
 	if action == "" || r.Action != action || !onlyOwnArm(r) || r.NFSExport != nil && r.NFSExport.SubvolumePath != "" || r.Client != nil && r.Client.SubvolumePath != "" || e.Block.Kind != string(c.kind) || e.Block.Object != object {
-		return Request{}, failure("lifecycle.state", "Ceph request does not match its frozen resource identity", "")
+		return Request{}, cephRequestInvalid.Fail("Ceph request does not match its frozen resource identity", "")
 	}
 	if r.Client != nil {
 		if caps, _ := scopeCaps(*r.Client); !maps.Equal(caps, r.Client.Caps) {
-			return Request{}, failure("lifecycle.state", "CephClient "+r.Client.Name+" froze capability grants this build does not derive", "destroy it with the build that applied it, then apply with this build")
+			return Request{}, cephOtherBuild.Fail("CephClient "+r.Client.Name+" froze capability grants this build does not derive", "destroy it with the build that applied it, then apply with this build")
 		}
 	}
 	if r.Owner != "" || r.FSID != "" || e.ApplyOperation == "" {
-		return Request{}, failure("lifecycle.state", "Ceph requires the immutable original apply identity", "")
+		return Request{}, cephRecordsMissing.Fail("Ceph requires the immutable original apply identity", "")
 	}
 	if err := bindPhysicalHosts(r.Hosts, e, c.proofs); err != nil {
 		return Request{}, err
@@ -443,7 +443,7 @@ func (c Capability) prepare(ctx context.Context, e lifecycle.Execution) (Request
 			return Request{}, err
 		}
 		if filesystem != r.NFSExport.Filesystem || group != r.NFSExport.Group {
-			return Request{}, failure("lifecycle.state", "the creation proof of CephSubvolume "+r.NFSExport.Subvolume+" names another filesystem or group than CephNFSExport "+r.NFSExport.Name+" froze", "restore the original apply evidence")
+			return Request{}, cephProofMismatch.Fail("the creation proof of CephSubvolume "+r.NFSExport.Subvolume+" names another filesystem or group than CephNFSExport "+r.NFSExport.Name+" froze", "restore the original apply evidence")
 		}
 		r.NFSExport.SubvolumePath = path
 	}
@@ -453,7 +453,7 @@ func (c Capability) prepare(ctx context.Context, e lifecycle.Execution) (Request
 			return Request{}, err
 		}
 		if filesystem != r.Client.Filesystem || group != r.Client.Group {
-			return Request{}, failure("lifecycle.state", "the creation proof of CephSubvolume "+r.Client.Subvolume+" names another filesystem or group than CephClient "+r.Client.Name+" froze", "restore the original apply evidence")
+			return Request{}, cephProofMismatch.Fail("the creation proof of CephSubvolume "+r.Client.Subvolume+" names another filesystem or group than CephClient "+r.Client.Name+" froze", "restore the original apply evidence")
 		}
 		client := *r.Client
 		client.SubvolumePath = path
@@ -506,12 +506,12 @@ func (c Capability) mutate(ctx context.Context, e lifecycle.Execution, operation
 	effect, err := evaluateExecutionEvidence(result.Evidence, r, e, operation == "destroy")
 	if err != nil || effect != reconciliation.EffectCompleted {
 		lifecycle.ClearProduced(result.Produced)
-		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, failure("lifecycle.unknown", "Ceph did not prove the requested postcondition", "")
+		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, cephUnproved.Fail("Ceph did not prove the requested postcondition", "")
 	}
 	outcome, usable := result.Outcome, result.Outcome.Settled()
 	if !usable {
 		lifecycle.ClearProduced(result.Produced)
-		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, failure("lifecycle.unknown", "Ceph returned an unknown outcome", "")
+		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, cephResultInvalid.Fail("Ceph returned an unknown outcome", "")
 	}
 	if err := validateProduced(result.Produced, r, operation == "apply"); err != nil {
 		lifecycle.ClearProduced(result.Produced)

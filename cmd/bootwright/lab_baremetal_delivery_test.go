@@ -186,7 +186,7 @@ func TestLabBaremetalExampleRefusesAnUnverifiedController(t *testing.T) {
 				Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "metal"}, State: state, Controller: "controller",
 			})
 			reported := diagnostics.Of(err)
-			if len(reported) != 1 || reported[0].Code != "lifecycle.unsupported" || reported[0].Message != reason || reported[0].Remediation != remedy {
+			if len(reported) != 1 || reported[0].Code != "install.unsupported" || reported[0].Message != reason || reported[0].Remediation != remedy {
 				t.Fatalf("plan refusal = %#v", reported)
 			}
 		})

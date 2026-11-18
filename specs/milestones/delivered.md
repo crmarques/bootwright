@@ -17800,3 +17800,19 @@ stop like the host firewall's. The eight packages leave the ledger except
 physical erase's three authorization refusals. Guarded by
 `TestEveryCatalogedStopIsComposedAndExplained`, the packages' tests and an
 independent Opus review.
+
+## X618 — Ceph's and the installation's failures are stops
+
+### B1609
+
+Under [D276](backlog.md#d276) (audit 006 W2.3), split from
+[B1563](m1.md#b1563). Ceph raises its 332 lifecycle sites from 40
+[Ceph stops](../cli/stops.md#ceph-stops) and the managed OS installation its
+120 from 20 [installation stops](../cli/stops.md#managed-os-installation-stops);
+the host firewall's four adapter refusals, which borrowed the installation's
+Machine refusal, gain [stops](../cli/stops.md#host-firewall-stops) of their
+own. Every site Ceph left unknown raises an `unproved` stop, so outcomes are
+unchanged; messages are unchanged and a site that gave no remedy carries its
+stop's. Both packages leave the ledger. Guarded by
+`TestEveryCatalogedStopIsComposedAndExplained`, the packages' tests and an
+independent Opus review.

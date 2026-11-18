@@ -324,13 +324,13 @@ func installerArguments(catalog api.Catalog, machine api.Object, request Request
 		if request.Target.Hardware != nil {
 			resolved, found := interfaceMAC(machine, request.Target.Hardware.Interfaces, name)
 			if !found {
-				return nil, refusal("lifecycle.unsupported", unboundReason(name, machine.Identity()), unboundRemedy(name, machine.Identity()))
+				return nil, installUnsupported.Fail(unboundReason(name, machine.Identity()), unboundRemedy(name, machine.Identity()))
 			}
 			mac = resolved
 		}
 		argument := "ifname=" + name + ":" + mac
 		if !installerArgument.MatchString(argument) {
-			return nil, refusal("lifecycle.state", "the installer argument "+argument+" is not an interface name pinned to a hardware address",
+			return nil, installInputInvalid.Fail("the installer argument "+argument+" is not an interface name pinned to a hardware address",
 				"correct the interface names in the network of "+machine.Identity())
 		}
 		arguments = append(arguments, argument)
@@ -344,7 +344,7 @@ func installerArguments(catalog api.Catalog, machine api.Object, request Request
 		}
 		argument := "ifname=" + nic + ":" + substrate.InterfaceMAC(request.Identity.Context, machine.Name(), nic)
 		if !installerArgument.MatchString(argument) {
-			return nil, refusal("lifecycle.state", "the installer argument "+argument+" is not an interface name pinned to a hardware address",
+			return nil, installInputInvalid.Fail("the installer argument "+argument+" is not an interface name pinned to a hardware address",
 				"rename NIC "+nic+" in spec.hardware.nics of "+machine.Identity()+" to an interface name the guest may use")
 		}
 		arguments = append(arguments, argument)

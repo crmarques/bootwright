@@ -198,11 +198,11 @@ func TestDerivedZonePoolBlockIdentityIsBoundToItsGateway(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := gateway.identity(context.Background(), e)
-			refusedWith(t, err, "lifecycle.state", "Ceph request does not match its frozen resource identity", "")
+			refusedStop(t, err, cephRequestInvalid, "Ceph request does not match its frozen resource identity", "")
 		})
 	}
 	_, err = New(api.CephPool, nil).identity(context.Background(), execution(definitions[0], nil))
-	refusedWith(t, err, "lifecycle.state", "Ceph request does not match its frozen resource identity", "")
+	refusedStop(t, err, cephRequestInvalid, "Ceph request does not match its frozen resource identity", "")
 	pools, err := kindPlan(api.CephPool, planCatalog(3, 3, withPairAndRGW, rgwPool("index")))
 	if err != nil || len(pools.Definitions) != 1 {
 		t.Fatalf("the declared pool planned %v (%v)", pools.Definitions, err)

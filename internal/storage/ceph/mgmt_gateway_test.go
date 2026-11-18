@@ -103,7 +103,7 @@ func TestGatewayCertificateMustCoverVirtualIP(t *testing.T) {
 	err := capability.ProveBinding(ctx, "example", block, mgmtMaterial([]byte("-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n")))
 	refusedWith(t, err, "secret.part", "the certificate of Secret mgmt-tls that the management gateway of CephCluster example binds cannot be read", "store a readable certificate and its private key with "+gatewaySet+", then apply again")
 	err = capability.ProveBinding(ctx, "example", block, map[string]secrets.Material{})
-	refusedWith(t, err, "lifecycle.state", "the TLS Secret the management gateway of a CephCluster binds is not bound to this apply", "")
+	refusedStop(t, err, cephUnconfigured, "the TLS Secret the management gateway of a CephCluster binds is not bound to this apply", "")
 	plan := cephPlan(t, catalog)
 	for _, id := range []string{"ceph-service-example-monitoring", "ceph-cluster-example"} {
 		if err := capability.ProveBinding(ctx, "example", blockOf(t, plan, id), nil); err != nil {
@@ -320,12 +320,12 @@ func TestSSOUnitRealizesOnlyItsRecordMembers(t *testing.T) {
 	for _, member := range []string{"scope", "email_domains"} {
 		cluster, _ := delegatedCatalog(ssoServices(member, api.StringList("x")), ssoBindings()).Find(api.CephCluster, "example")
 		_, err := gatewayUnits(cluster)
-		refusedWith(t, err, "lifecycle.unsupported", "the native service oauth2-proxy carries spec."+member+", which Bootwright does not realize for this service",
+		refusedStop(t, err, cephUnsupportedService, "the native service oauth2-proxy carries spec."+member+", which Bootwright does not realize for this service",
 			"remove spec."+member+" from oauth2-proxy in spec.services")
 	}
 	cluster, _ := delegatedCatalog(append(ssoServices()[:2], ssoProxy().With("custom_configs", api.ListValue(requestMap("mount_path", "/etc/other.pem")))), nil).Find(api.CephCluster, "example")
 	_, err := gatewayUnits(cluster)
-	refusedWith(t, err, "lifecycle.unsupported", "the native service oauth2-proxy carries config, extra container or entrypoint arguments or custom configs, which Bootwright does not realize",
+	refusedStop(t, err, cephUnsupportedService, "the native service oauth2-proxy carries config, extra container or entrypoint arguments or custom configs, which Bootwright does not realize",
 		"remove those options from oauth2-proxy in spec.services")
 }
 
@@ -397,7 +397,7 @@ func TestGatewayProofIgnoresTheOAuth2ProxyBindings(t *testing.T) {
 		t.Fatalf("a gateway whose own certificate cephadm signs reads the oauth2-proxy bindings: %+v", diagnostics.Of(err))
 	}
 	bound := gatewayUnitBlock(t, gatewayCatalog(t, ssoServices(), append(ssoBindings(), tlsBinding("mgmt-gateway", "mgmt-tls"))))
-	refusedWith(t, capability.ProveBinding(ctx, "example", bound, ca), "lifecycle.state", "the TLS Secret the management gateway of a CephCluster binds is not bound to this apply", "")
+	refusedStop(t, capability.ProveBinding(ctx, "example", bound, ca), cephUnconfigured, "the TLS Secret the management gateway of a CephCluster binds is not bound to this apply", "")
 }
 
 func mgmtGatewayRequest(t *testing.T) Request {
@@ -469,10 +469,10 @@ func TestGatewayProjectionRefusesUnrealizedMembers(t *testing.T) {
 		return object
 	}
 	_, err := gatewayUnits(cluster(mgmtGateway(admitted.With("ssl_session_cache", api.StringValue("shared:SSL:10m"))), mgmtIngress("192.0.2.60")))
-	refusedWith(t, err, "lifecycle.unsupported", "the native service mgmt-gateway carries spec.ssl_session_cache, which Bootwright does not realize for this service",
+	refusedStop(t, err, cephUnsupportedService, "the native service mgmt-gateway carries spec.ssl_session_cache, which Bootwright does not realize for this service",
 		"remove spec.ssl_session_cache from mgmt-gateway in spec.services")
 	_, err = gatewayUnits(cluster(mgmtGateway(admitted), mgmtIngress("192.0.2.60", "frontend_port", 8443)))
-	refusedWith(t, err, "lifecycle.unsupported", "the native service ingress.mgmt carries spec.frontend_port, which Bootwright does not realize for this service",
+	refusedStop(t, err, cephUnsupportedService, "the native service ingress.mgmt carries spec.frontend_port, which Bootwright does not realize for this service",
 		"remove spec.frontend_port from ingress.mgmt in spec.services")
 }
 

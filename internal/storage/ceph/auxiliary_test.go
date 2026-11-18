@@ -152,10 +152,10 @@ func TestAuxiliaryReferencesStayInsideTheEntitlementNamespace(t *testing.T) {
 	}
 	for _, base := range []string{"quay.io/ceph/haproxy", "cp.icr.io/cpx/haproxy"} {
 		_, err := auxiliaryImage("haproxy", base, "synthetic-2", registryURL)
-		refusedWith(t, err, "lifecycle.unsupported", "the auxiliary image haproxy is not beneath the Entitlement registry cp.icr.io/cp", "set spec.images.haproxy.base to a repository beneath the Entitlement registry.url")
+		refusedStop(t, err, cephImageInvalid, "the auxiliary image haproxy is not beneath the Entitlement registry cp.icr.io/cp", "set spec.images.haproxy.base to a repository beneath the Entitlement registry.url")
 	}
 	_, err = auxiliaryImage("haproxy", "cp.icr.io/cp/ibm-ceph/haproxy-synthetic", "", registryURL)
-	refusedWith(t, err, "lifecycle.unsupported", "the auxiliary image haproxy names neither a tag nor a sha256 digest", "set spec.images.haproxy.version to a tag or a sha256 digest")
+	refusedStop(t, err, cephImageInvalid, "the auxiliary image haproxy names neither a tag nor a sha256 digest", "set spec.images.haproxy.version to a tag or a sha256 digest")
 
 	valid := auxiliaryImageRequest(PinnedRepository+":"+PinnedTag, syntheticAuxiliary())
 	data, err := valid.Canonical()
@@ -188,7 +188,7 @@ func TestAuxiliaryReferencesStayInsideTheEntitlementNamespace(t *testing.T) {
 				t.Fatal(err)
 			}
 			_, err = DecodeImageRequest(data)
-			refusedWith(t, err, "lifecycle.state", "the frozen Ceph image request has inconsistent coordinates", "")
+			refusedStop(t, err, cephRequestInvalid, "the frozen Ceph image request has inconsistent coordinates", "")
 		})
 	}
 }
@@ -454,7 +454,7 @@ func TestPrepareFillsTheAuxiliaryDigestsFromTheOriginalResolution(t *testing.T) 
 		t.Run(name, func(t *testing.T) {
 			e.ApplyProved = []lifecycle.BlockEvidence{proof}
 			_, err := New(api.CephCluster, nil).prepare(context.Background(), e)
-			refusedWith(t, err, "lifecycle.state", "the Ceph image resolution proof was resolved for another authored auxiliary image set", "")
+			refusedStop(t, err, cephProofMismatch, "the Ceph image resolution proof was resolved for another authored auxiliary image set", "")
 		})
 	}
 	plain := executionFor(t, coreRequest())

@@ -126,7 +126,7 @@ func TestTheConsumerAndReplicationRetireWithoutReachingTheTiebreaker(t *testing.
 	}
 	e.RetiredWithHosts = false
 	_, err = NewReplication(runner).Destroy(context.Background(), e)
-	refusedWith(t, err, "lifecycle.unsupported", survivingReason, survivingRemedy)
+	refusedStop(t, err, cephHostsSurvive, survivingReason, survivingRemedy)
 }
 
 func TestAReplicationEndpointWhoseProvidedMachinesDifferFromItsClusterProofRefuses(t *testing.T) {
@@ -134,7 +134,7 @@ func TestAReplicationEndpointWhoseProvidedMachinesDifferFromItsClusterProofRefus
 	r.Primary.Provided = []string{r.Primary.Machines[2]}
 	e.Block.Request = mustCanonical(t, r)
 	_, _, err := NewReplication(nil).prepare(context.Background(), e)
-	refusedWith(t, err, "lifecycle.state", "replication machines or their host keys do not match original cluster creation evidence", "")
+	refusedStop(t, err, cephProofMismatch, "replication machines or their host keys do not match original cluster creation evidence", "")
 }
 
 func TestAConsumerWhoseProvidedMachinesDifferFromItsClusterProofRefuses(t *testing.T) {

@@ -1088,7 +1088,7 @@ worker registers only after the runner has recorded it, so an apply whose
 records hold no such preparation never registered. The marker is public, and
 the preparation carries nothing else. A preparation naming anything else is
 never acknowledged, so the worker never registers, and the attempt fails
-`lifecycle.state` with `the installation's automation published a
+`install.evidence-invalid` with `the installation's automation published a
 before-state that does not name this installation's marker`.
 
 **Effect.** Once that proof is recorded, the apply runs the controller module
@@ -1188,7 +1188,7 @@ decides whether the removal reads the guest at all, and tells the automation
 installation whose apply records hold no preparation naming its marker never
 registered, so its removal is `skip`: it never reads, connects to or names the
 guest, records an empty `registration` and withdraws the published content. A
-preparation this executable cannot read refuses `lifecycle.state`, `the apply
+preparation this executable cannot read refuses `install.records-missing`, `the apply
 records of Machine/<machine> hold a before-state this executable cannot read`,
 before the adapter runs. A removal that reads the guest completes only with
 `unregistered`, `absent` or `retained`, and one that does not only with an empty

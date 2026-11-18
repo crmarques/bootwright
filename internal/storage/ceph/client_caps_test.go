@@ -140,7 +140,7 @@ func TestClientPropagatesDataPoolPlanRefusals(t *testing.T) {
 	catalog := planCatalog(6, 6, nil, replicatedPool("volumes"), replicatedPool("archive", "mirroring", requestMap("mode", "image")), consumerClient(),
 		imageOf("disk", "volumes", "dataPoolRef", "archive"))
 	_, err := planned(t, catalog, api.CephClient, "consumer")
-	refusedWith(t, err, "lifecycle.unsupported", "CephPool archive declares mirroring without a CephReplication owner", "declare a CephReplication that names this pool, or remove spec.mirroring")
+	refusedStop(t, err, cephUnsupportedPool, "CephPool archive declares mirroring without a CephReplication owner", "declare a CephReplication that names this pool, or remove spec.mirroring")
 }
 
 func TestUnchangedRequestContinuesAfterImpactText(t *testing.T) {

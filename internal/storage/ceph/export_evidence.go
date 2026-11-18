@@ -38,7 +38,7 @@ type ConsumerEvidence struct {
 func EvaluateExportEvidence(data []byte, r ConsumerRequest, owner, digest string) (reconciliation.EffectState, error) {
 	e, err := reconciliation.DecodeEvidence[ConsumerEvidence](data, 16384, "Ceph consumer")
 	if err != nil || e.Version != ConsumerEvidenceVersion || e.Name != r.Name || e.Owner != owner || e.FSID != FSIDFor(owner, r.Cluster) || e.Request != digest {
-		return reconciliation.EffectUnknown, failure("lifecycle.state", "Ceph consumer evidence does not match its frozen identity", "")
+		return reconciliation.EffectUnknown, cephEvidenceMismatch.Fail("Ceph consumer evidence does not match its frozen identity", "")
 	}
 	prefix := ConsumerPrincipalPrefix(owner, r.Name)
 	principals := map[string]map[string]string{}
@@ -54,7 +54,7 @@ func EvaluateExportEvidence(data []byte, r ConsumerRequest, owner, digest string
 		rgw = prefix + "-ops"
 	}
 	if e.KeyType != r.KeyType || r.Monitors[e.Leader] != e.Address || e.Address == "" || string(want) != string(got) || string(entries) != string(actual) || e.RGWUser != rgw {
-		return reconciliation.EffectUnknown, failure("lifecycle.state", "Ceph consumer evidence does not prove its principals and endpoints", "")
+		return reconciliation.EffectUnknown, cephEvidenceMismatch.Fail("Ceph consumer evidence does not prove its principals and endpoints", "")
 	}
 	if !e.Ready {
 		return reconciliation.EffectPartial, nil
@@ -74,7 +74,7 @@ type exportEntry struct {
 
 func validateExportProduced(produced []lifecycle.Produced, r ConsumerRequest, owner string) error {
 	fail := func() error {
-		return failure("lifecycle.state", "Ceph consumer external details are incomplete or inconsistent", "")
+		return cephEvidenceMismatch.Fail("Ceph consumer external details are incomplete or inconsistent", "")
 	}
 	if len(produced) != 1 || produced[0].Name != ConsumerOutput || !slices.Equal(produced[0].Material.Parts(), []secrets.Part{secrets.ValuePart}) {
 		return fail()
@@ -167,7 +167,7 @@ func (c ConsumerCapability) Apply(ctx context.Context, e lifecycle.Execution) (l
 	outcome, ok := result.Outcome, result.Outcome.Settled()
 	if err != nil || effect != reconciliation.EffectCompleted || !ok {
 		lifecycle.ClearProduced(result.Produced)
-		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, failure("lifecycle.unknown", "Ceph consumer did not prove its complete postcondition", "")
+		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, cephUnproved.Fail("Ceph consumer did not prove its complete postcondition", "")
 	}
 	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence, Produced: result.Produced}, nil
 }
@@ -212,7 +212,7 @@ func (c ConsumerCapability) retirement(ctx context.Context, e lifecycle.Executio
 		return nil, err
 	}
 	if !e.RetiredWithHosts || r.PhysicalHosts {
-		return nil, failure("lifecycle.unsupported", survivingReason, survivingRemedy)
+		return nil, cephHostsSurvive.Fail(survivingReason, survivingRemedy)
 	}
 	pending, err := pendingPhysicalClusters(e, []string{r.Cluster}, r.Machines)
 	if err != nil {
@@ -287,7 +287,7 @@ func exportEntries(r ConsumerRequest, owner string) map[string]string {
 
 func validateExportEntryKeys(byName map[string]exportEntry) error {
 	fail := func() error {
-		return failure("lifecycle.state", "Ceph consumer external details are incomplete or inconsistent", "")
+		return cephEvidenceMismatch.Fail("Ceph consumer external details are incomplete or inconsistent", "")
 	}
 	keySets := map[string][]string{
 		"external-cluster-user-command": {"args"}, "rook-ceph-mon-endpoints": {"data", "mapping", "maxMonId"}, "rook-ceph-mon": {"admin-secret", "fsid", "mon-secret"}, "monitoring-endpoint": {"MonitoringEndpoint", "MonitoringPort"},
@@ -314,7 +314,7 @@ func validateExportEntryKeys(byName map[string]exportEntry) error {
 
 func validateExportGatewayEntries(byName map[string]exportEntry, g *ConsumerGateway) error {
 	fail := func() error {
-		return failure("lifecycle.state", "Ceph consumer external details are incomplete or inconsistent", "")
+		return cephEvidenceMismatch.Fail("Ceph consumer external details are incomplete or inconsistent", "")
 	}
 	if g != nil {
 		endpoint := fmt.Sprintf("%s:%d", g.FQDN, g.Port)

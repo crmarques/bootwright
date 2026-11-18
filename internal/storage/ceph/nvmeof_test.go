@@ -156,7 +156,7 @@ func TestNVMeOFExecutionBoundRefusesOversizedRequest(t *testing.T) {
 		r.NVMeOF.Namespaces = append(r.NVMeOF.Namespaces, r.NVMeOF.Namespaces[0])
 	}
 	r.NVMeOF.Budgets = nvmeofBudgets(r.NVMeOF)
-	if _, err := cephDeadline(r, "apply"); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != "lifecycle.unsupported" {
+	if _, err := cephDeadline(r, "apply"); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != cephBudgetExceeded.Code {
 		t.Fatalf("a request exceeding the six-hour execution ceiling refused with %v", err)
 	}
 }
@@ -171,7 +171,7 @@ func TestNVMeOFRequestFreezesItsBudgetsAndRefusesOthers(t *testing.T) {
 	}
 	for _, stale := range []NVMeOFBudgets{{}, {Apply: 5024, NVMeOF: 1680, NVMeOFObserve: 1024, Observation: 1705}} {
 		r.NVMeOF.Budgets = stale
-		if _, err := cephDeadline(r, "apply"); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != "lifecycle.state" {
+		if _, err := cephDeadline(r, "apply"); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != cephOtherBuild.Code {
 			t.Errorf("budgets %+v were not refused: %v", stale, err)
 		}
 	}
@@ -445,7 +445,7 @@ func TestNVMeOFServiceUnitFreezesItsObservationBound(t *testing.T) {
 	stale := *unit.Service
 	stale.ObserveBudget++
 	unit.Service = &stale
-	if _, err := cephDeadline(unit, "observe"); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != "lifecycle.state" {
+	if _, err := cephDeadline(unit, "observe"); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != cephOtherBuild.Code {
 		t.Fatalf("a stale observation bound was not refused: %v", err)
 	}
 }

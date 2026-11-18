@@ -155,7 +155,7 @@ func (c Capability) ProveBinding(ctx context.Context, contextName string, block 
 	}
 	value, found := material[secret]
 	if !found {
-		return failure("lifecycle.state", "the TLS Secret a CephObjectGateway binds is not bound to this apply", "")
+		return cephUnconfigured.Fail("the TLS Secret a CephObjectGateway binds is not bound to this apply", "")
 	}
 	name, fqdn := r.Gateway.Name, r.Gateway.Endpoint
 	set := secrets.Command(contextName, "set") + " --name " + secret + " --certificate-file <path> --private-key-file <path>"
@@ -188,7 +188,7 @@ func proveGatewayUnit(contextName string, block reconciliation.Block, material m
 	secret := r.Service.Bindings[at].SecretRef
 	value, found := material[secret]
 	if !found {
-		return failure("lifecycle.state", "the TLS Secret the management gateway of a CephCluster binds is not bound to this apply", "")
+		return cephUnconfigured.Fail("the TLS Secret the management gateway of a CephCluster binds is not bound to this apply", "")
 	}
 	set := secrets.Command(contextName, "set") + " --name " + secret + " --certificate-file <path> --private-key-file <path>"
 	leaf, ok := boundLeaf(value)

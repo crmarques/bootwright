@@ -16,7 +16,7 @@ func (c Capability) proveDiscoveredRoot(e lifecycle.Execution, r Request) error 
 		return nil
 	}
 	if c.discoveredRootProof == nil {
-		return refusal("lifecycle.state", "the frozen root has no matching completed inventory dependency", "restore the original discovery proof before continuing installation")
+		return installRecordsMissing.Fail("the frozen root has no matching completed inventory dependency", "restore the original discovery proof before continuing installation")
 	}
 	return c.discoveredRootProof(e, r)
 }

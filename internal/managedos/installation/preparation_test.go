@@ -57,7 +57,7 @@ func TestEveryApplyValidatesItsMarkerPreparation(t *testing.T) {
 	} {
 		err := run.Prepare(context.Background(), json.RawMessage(refused))
 		reported := diagnostics.Of(err)
-		if len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
+		if len(reported) != 1 || reported[0].Code != "install.evidence-invalid" ||
 			reported[0].Message != "the installation's automation published a before-state that does not name this installation's marker" {
 			t.Fatalf("%s was judged %+v (%v)", refused, reported, err)
 		}
@@ -96,7 +96,7 @@ func TestRegisteredBeforeReadsAnyAttempt(t *testing.T) {
 	} {
 		registered, err := registeredBefore(testContext, "rhel-01", []json.RawMessage{proved, unreadable}, marker)
 		reported := diagnostics.Of(err)
-		if registered || len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
+		if registered || len(reported) != 1 || reported[0].Code != "install.records-missing" ||
 			reported[0].Message != "the apply records of Machine/rhel-01 hold a before-state this executable cannot read" ||
 			reported[0].Remediation != "review its durable state with bootwright status --context "+testContext {
 			t.Fatalf("%s was read as %t, %+v", unreadable, registered, reported)
