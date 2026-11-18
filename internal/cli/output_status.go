@@ -129,11 +129,25 @@ type statusBlock struct {
 	State       string            `json:"state"`
 	Attempts    int               `json:"attempts"`
 	Unresolved  *statusUnresolved `json:"unresolved,omitempty"`
+	Failure     *statusFailure    `json:"failure,omitempty"`
 }
 
 type statusUnresolved struct {
 	Reason string `json:"reason"`
 	Remedy string `json:"remedy"`
+}
+
+type statusFailure struct {
+	Diagnostic string `json:"code"`
+	Reason     string `json:"reason"`
+	Remedy     string `json:"remedy,omitempty"`
+}
+
+func displayFailure(failure *lifecycle.BlockFailure) *statusFailure {
+	if failure == nil {
+		return nil
+	}
+	return &statusFailure{Diagnostic: escapeDisplayLine(failure.Code), Reason: escapeDisplayLine(failure.Message), Remedy: escapeDisplayLine(failure.Remedy)}
 }
 
 func displayStatus(result *lifecycle.StatusResult) statusResult {
@@ -174,6 +188,7 @@ func displayStatus(result *lifecycle.StatusResult) statusResult {
 			if block.Unresolved != nil {
 				row.Unresolved = &statusUnresolved{Reason: escapeDisplayLine(block.Unresolved.Reason), Remedy: escapeDisplayLine(block.Unresolved.Remedy)}
 			}
+			row.Failure = displayFailure(block.Failure)
 			blocks = append(blocks, row)
 		}
 		out.Lifecycle = &statusLifecycle{
@@ -390,6 +405,14 @@ func writeStatusLifecycle(text *display, result *lifecycle.StatusResult) {
 	}
 	writeStatusLive(text, summary, result.Context.Name)
 	for _, block := range summary.Blocks {
+		if block.Failure != nil && block.Unresolved == nil {
+			failed := []field{{Label: "Code", Value: block.Failure.Code}, {Label: "Reason", Value: block.Failure.Message}}
+			if block.Failure.Remedy != "" {
+				failed = append(failed, field{Label: "Remedy", Value: block.Failure.Remedy})
+			}
+			text.section("Failed " + block.ID)
+			text.fields(failed...)
+		}
 		if block.Unresolved == nil {
 			continue
 		}

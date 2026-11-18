@@ -316,6 +316,14 @@ func cliGoldens() []cliGolden {
 			Reason: "domain bootwright-lab-rhel-01 on Machine hypervisor at 192.0.2.5 does not carry this context's ownership",
 			Remedy: "remove or rename domain bootwright-lab-rhel-01 on Machine hypervisor at 192.0.2.5, which this context does not own",
 		}
+		for index := range result.Lifecycle.Blocks {
+			if result.Lifecycle.Blocks[index].State == "failed" {
+				result.Lifecycle.Blocks[index].Failure = &lifecycle.BlockFailure{
+					Code: "lifecycle.state", Message: "the adapter operation did not complete",
+					Remedy: "read blocks/proxy-lab-proxy/attempt-000001.output in this operation's Logs directory, as root, for why block proxy-lab-proxy failed",
+				}
+			}
+		}
 		return result
 	}
 	// A context no operation has touched: a binding the first apply

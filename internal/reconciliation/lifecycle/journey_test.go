@@ -2824,6 +2824,44 @@ func TestMissingImplementationRefusesTheBlock(t *testing.T) {
 	}
 }
 
+// The cause a failed attempt reported outlives the invocation: its record,
+// its log and status all say why the block failed.
+func TestAFailedAttemptsCauseIsKeptAndShown(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, "artifact-server-lab")
+	h.capability.errorFor = map[string]error{"artifact-server-lab": diagnostics.NewFailureWithRemediation("lifecycle.state", "the adapter operation did not complete", "", "read its output")}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("a failed block reported success")
+	}
+	operation, states := durableOperation(t, h)
+	if states["artifact-server-lab"] != reconciliation.BlockFailed {
+		t.Fatalf("block states = %v", states)
+	}
+	record, err := lineageReader(h).Attempt(context.Background(), operation.ID, "artifact-server-lab", 1)
+	want := operationstore.ObservationFailure{Code: "lifecycle.state", Message: "the adapter operation did not complete", Remediation: "read its output"}
+	if err != nil || record.Failure == nil || *record.Failure != want {
+		t.Fatalf("the attempt record kept %+v (%v)", record.Failure, err)
+	}
+	events := string(h.workspace.logArea.files[path.Join(operation.ID, "blocks", "artifact-server-lab", "attempt-000001.jsonl")])
+	cause := strings.Index(events, `"event":"cause"`)
+	if cause < 0 || !strings.Contains(events, "lifecycle.state: the adapter operation did not complete") || cause > strings.Index(events, `"event":"outcome"`) {
+		t.Fatalf("the attempt log does not record its cause before its outcome:\n%s", events)
+	}
+	status, err := h.service.Status(context.Background(), StatusRequest{ContextName: "lab"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, block := range status.Lifecycle.Blocks {
+		if block.ID == "artifact-server-lab" {
+			if block.Failure == nil || block.Failure.Code != "lifecycle.state" || block.Failure.Remedy != "read its output" {
+				t.Fatalf("status shows the failed block's cause as %+v", block.Failure)
+			}
+			return
+		}
+	}
+	t.Fatal("status lists no failed block")
+}
+
 // A required-log failure is a durable fault of the operation, not of the
 // invocation that met it: a later invocation starts nothing until it has
 // proved the boundary writable again, and only that proof clears the fault.

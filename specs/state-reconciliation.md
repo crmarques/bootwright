@@ -486,10 +486,14 @@ only when present; one beside a record naming no `predecessor` refuses
 Block records carry the block state and the number of attempts started, one
 less than the next attempt's number; attempt and
 resolution records carry their block, attempt and resolution numbers, phase,
-outcome, effect, bounded evidence and timestamps, and a resolution whose
-observation could not run also carries `failure`, the first diagnostic that
-observation reported, its code, message and remediation, each bounded, an
-optional member no other record carries. A resolution a fresh removal records
+outcome, effect, bounded evidence and timestamps. An effect attempt that ended
+`failed`, `canceled` or `unknown`, and a resolution whose observation could not
+run, also carry `failure`, the first diagnostic that attempt or observation
+reported, its code, message and remediation, each bounded, an optional member
+no settled attempt carries. An attempt logs it as `cause` before its `outcome`;
+`status` reports it as the `failure` of a block that is not `done`, and, for an
+unknown block no resolution read, as the reason
+`its attempt ended <outcome> (<code>: <message>) and no observation has read it yet`. A resolution a fresh removal records
 against an apply's block carries `removal`, so `status` explains it for the
 removal's reading first. Every attempt and
 resolution also names the build it ran under, `build`: the automation digest

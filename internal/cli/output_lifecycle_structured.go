@@ -111,6 +111,7 @@ type operationBlockPresentation struct {
 	Outcome     string            `json:"outcome"`
 	Attempts    int               `json:"attempts"`
 	Unresolved  *statusUnresolved `json:"unresolved,omitempty"`
+	Failure     *statusFailure    `json:"failure,omitempty"`
 }
 
 func displayOperation(result *lifecycle.OperationResult) operationPresentation {
@@ -120,6 +121,7 @@ func displayOperation(result *lifecycle.OperationResult) operationPresentation {
 		if b.Unresolved != nil {
 			block.Unresolved = &statusUnresolved{Reason: escapeDisplayLine(b.Unresolved.Reason), Remedy: escapeDisplayLine(b.Unresolved.Remedy)}
 		}
+		block.Failure = displayFailure(b.Failure)
 		shown.Blocks = append(shown.Blocks, block)
 	}
 	return shown

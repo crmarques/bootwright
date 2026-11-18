@@ -239,6 +239,13 @@ type BlockResult struct {
 	// the operator does about it. Status reports it for each unknown or
 	// running block, and it is nil for every other.
 	Unresolved *Unresolved
+	Failure    *BlockFailure
+}
+
+type BlockFailure struct {
+	Code    string
+	Message string
+	Remedy  string
 }
 
 type OperationResult struct {

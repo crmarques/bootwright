@@ -23,6 +23,14 @@ var unexplained = Unresolved{
 // unobservedBy is what an unproved block says before any resolution observed
 // it: an attempt whose outcome was lost, or whose executor died, is observed
 // by command, the next invocation of its verb, before anything else starts.
+func unobservedAfter(attempt operationstore.Attempt, command string) Unresolved {
+	unobserved := unobservedBy(command)
+	if attempt.Phase == "observed" && attempt.Failure != nil {
+		unobserved.Reason = "its attempt ended " + string(attempt.Outcome) + " (" + attempt.Failure.Code + ": " + attempt.Failure.Message + ") and no observation has read it yet"
+	}
+	return unobserved
+}
+
 func unobservedBy(command string) Unresolved {
 	return Unresolved{
 		Reason: "its attempt's outcome was not recorded and no observation has read it yet",
@@ -136,7 +144,11 @@ func (s Service) unresolvedOf(ctx context.Context, store OperationStore, operati
 		return Unresolved{}, err
 	}
 	if !resolved || resolution.Phase != "observed" {
-		return unobservedBy(command), nil
+		attempt, err := store.Attempt(ctx, operation.ID, block.ID, record.Attempts)
+		if err != nil {
+			return Unresolved{}, err
+		}
+		return unobservedAfter(attempt, command), nil
 	}
 	if failed := resolution.Failure; failed != nil {
 		remedy := failed.Remediation

@@ -116,17 +116,13 @@ func (s Service) attempt(ctx context.Context, run invocation, block reconciliati
 	}
 	// What the attempt produced is in custody before its record says done.
 	outcome, runErr = s.capturedAttempt(ctx, tx, boundary, log, operation.Verb, block, outcome, result.Produced, runErr)
-	_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "outcome", Block: block.ID, Detail: string(outcome)})
-	// A typed failure proves less than completion, so an attempt whose log failed before its outcome was logged records it unknown.
-	if log.Failed() && outcome == reconciliation.OutcomeFailed {
-		outcome = reconciliation.OutcomeUnknown
-	}
+	outcome, failure := logOutcome(ctx, boundary, log, block.ID, outcome, runErr)
 	effect, state, err := reconciliation.AttemptTransition(outcome)
 	if err != nil {
 		return reconciliation.BlockUnknown, err
 	}
 	warned := warnings.reported()
-	if err := store.CompleteAttempt(recording, operation.ID, block.ID, number, outcome, effect, state, result.Evidence, warned...); err != nil {
+	if err := completeAttempt(recording, store, operation.ID, block.ID, number, outcome, effect, state, result.Evidence, failure, warned); err != nil {
 		return reconciliation.BlockUnknown, err
 	}
 	if warn != nil && len(warned) != 0 {
@@ -134,6 +130,29 @@ func (s Service) attempt(ctx context.Context, run invocation, block reconciliati
 	}
 	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Status: string(state), Position: position, Total: total})
 	return state, runErr
+}
+
+func completeAttempt(ctx context.Context, store OperationStore, id, block string, number int, outcome reconciliation.Outcome, effect reconciliation.EffectState, state reconciliation.BlockState, evidence json.RawMessage, failure *operationstore.ObservationFailure, warned []operationstore.Warning) error {
+	if failure != nil {
+		return store.CompleteAttemptWithFailure(ctx, id, block, number, outcome, effect, state, evidence, failure)
+	}
+	return store.CompleteAttempt(ctx, id, block, number, outcome, effect, state, evidence, warned...)
+}
+
+// A typed failure proves less than completion: an attempt whose log failed before its outcome was logged records it unknown.
+func logOutcome(ctx context.Context, boundary *logBoundary, log *operationstore.Log, block string, outcome reconciliation.Outcome, runErr error) (reconciliation.Outcome, *operationstore.ObservationFailure) {
+	var failure *operationstore.ObservationFailure
+	if !outcome.Settled() {
+		failure = observationFailure(runErr)
+	}
+	if failure != nil {
+		_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "cause", Block: block, Detail: failure.Code + ": " + failure.Message})
+	}
+	_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "outcome", Block: block, Detail: string(outcome)})
+	if log.Failed() && outcome == reconciliation.OutcomeFailed {
+		outcome = reconciliation.OutcomeUnknown
+	}
+	return outcome, failure
 }
 
 func (s Service) applyAdmitted(ctx context.Context, plan reconciliation.Plan, capability Capability, execution Execution) (Result, error) {
@@ -937,6 +956,9 @@ func (s Service) recordedBlockResults(ctx context.Context, store OperationStore,
 		attempt, err := store.Attempt(ctx, operation.ID, blocks[i].ID, record.Attempts)
 		if err != nil {
 			return nil, err
+		}
+		if failed := attempt.Failure; failed != nil && blocks[i].State != string(reconciliation.BlockDone) {
+			blocks[i].Failure = &BlockFailure{Code: failed.Code, Message: failed.Message, Remedy: failed.Remediation}
 		}
 		resolution, found, err := store.LastResolution(ctx, operation.ID, blocks[i].ID, record.Attempts)
 		if err != nil {

@@ -100,7 +100,12 @@
           "description": "proxy egress for lab-proxy on controller",
           "stage": "infrastructure-services",
           "state": "failed",
-          "attempts": 1
+          "attempts": 1,
+          "failure": {
+            "code": "lifecycle.state",
+            "reason": "the adapter operation did not complete",
+            "remedy": "read blocks/proxy-lab-proxy/attempt-000001.output in this operation's Logs directory, as root, for why block proxy-lab-proxy failed"
+          }
         },
         {
           "id": "substrate-host-lab-libvirt",

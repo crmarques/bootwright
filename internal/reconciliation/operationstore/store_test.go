@@ -1062,6 +1062,45 @@ func TestAResolutionRecordCarriesABoundedObservationFailureOnly(t *testing.T) {
 	}
 }
 
+// An effect attempt that did not complete keeps the first diagnostic it
+// reported; a settled attempt carries none.
+func TestAnAttemptThatDidNotCompleteKeepsItsCause(t *testing.T) {
+	ctx := context.Background()
+	store, _ := newStore(t)
+	plan := testPlan(t, "alpha")
+	operation := testOperation(t, plan)
+	if _, err := store.Index(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Register(ctx, operation, plan); err != nil {
+		t.Fatal(err)
+	}
+	cause := ObservationFailure{Code: "lifecycle.state", Message: "the adapter operation did not complete", Remediation: "read its output"}
+	for number, outcome := range []reconciliation.Outcome{reconciliation.OutcomeChanged, reconciliation.OutcomeFailed} {
+		if _, err := store.StartAttempt(ctx, operation.ID, "alpha", testBuild); err != nil {
+			t.Fatal(err)
+		}
+		effect, state, _ := reconciliation.AttemptTransition(outcome)
+		err := store.CompleteAttemptWithFailure(ctx, operation.ID, "alpha", number+1, outcome, effect, state, nil, &cause)
+		if outcome.Settled() {
+			if !slices.Equal(diagnostics.Of(err), diagnostics.Of(recordError("lifecycle attempt failure is invalid"))) {
+				t.Fatalf("a settled attempt with a cause = %v", diagnostics.Of(err))
+			}
+			if err := store.CompleteAttempt(ctx, operation.ID, "alpha", number+1, reconciliation.OutcomeFailed, reconciliation.EffectUnknown, reconciliation.BlockFailed, nil); err != nil {
+				t.Fatal(err)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		record, err := store.Attempt(ctx, operation.ID, "alpha", number+1)
+		if err != nil || record.Failure == nil || *record.Failure != cause || record.Outcome != reconciliation.OutcomeFailed {
+			t.Fatalf("the attempt read back as %+v (%v)", record, err)
+		}
+	}
+}
+
 // The last resolution of an attempt is the record that settled its block, so
 // it reads back with the outcome and evidence it was completed with, and one
 // still running reads back running rather than as an earlier one. A record

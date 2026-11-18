@@ -1140,6 +1140,14 @@ func (s *Store) CompleteAttempt(ctx context.Context, id, block string, number in
 	return s.completeRecord(ctx, id, block, path.Join(id, "blocks", block, "attempt-"+name+".json"), number, 0, outcome, effect, state, evidence, nil, warnings)
 }
 
+func (s *Store) CompleteAttemptWithFailure(ctx context.Context, id, block string, number int, outcome reconciliation.Outcome, effect reconciliation.EffectState, state reconciliation.BlockState, evidence json.RawMessage, failure *ObservationFailure) error {
+	name, err := reconciliation.FormatNumber(number)
+	if err != nil {
+		return err
+	}
+	return s.completeRecord(ctx, id, block, path.Join(id, "blocks", block, "attempt-"+name+".json"), number, 0, outcome, effect, state, evidence, failure, nil)
+}
+
 // StartResolution allocates and durably records the resolution identity, naming
 // build, and its log before any observation begins, so an observation can never
 // happen under an identity that was never reserved; removal marks a removal's.

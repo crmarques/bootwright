@@ -205,8 +205,8 @@ type Attempt struct {
 	Updated     string                     `json:"updated"`
 }
 
-// ObservationFailure is the first diagnostic a resolution's observation
-// reported when it could not run. Only an unknown resolution carries one.
+// ObservationFailure is the first diagnostic of an unknown resolution's
+// observation that could not run, or of an attempt that did not complete.
 type ObservationFailure struct {
 	Code        string `json:"code"`
 	Message     string `json:"message"`
@@ -522,7 +522,7 @@ func validateBuild(build Build) error {
 
 func validFailure(record Attempt) bool {
 	failure := record.Failure
-	return record.Resolution != 0 && record.Phase == "observed" && record.Effect == reconciliation.EffectUnknown &&
+	return record.Phase == "observed" && record.Effect == reconciliation.EffectUnknown && (record.Resolution != 0 || !record.Outcome.Settled()) &&
 		failure.Code != "" && len(failure.Code) <= MaxFailureCode &&
 		failure.Message != "" && len(failure.Message) <= MaxFailureText && len(failure.Remediation) <= MaxFailureText &&
 		utf8.ValidString(failure.Code) && utf8.ValidString(failure.Message) && utf8.ValidString(failure.Remediation)
