@@ -1144,6 +1144,24 @@ def native_form(values):
     return result
 
 
+def physical_shape(value):
+    """A physical disk row's closed shape, which a result publisher holding only the request digest still proves: a serial selection
+    records its alias and the WWN it observed, or none; a WWN selection records its WWN and no alias."""
+    fields = {"host", "path", "serial", "deviceID", "wwn", "kernelPath", "sizeBytes", "rotational"}
+    require(isinstance(value, dict) and isinstance(value.get("path"), str), "device-identity")
+    if value["path"].startswith(SERIAL_PREFIX):
+        require(set(value) == fields | {"alias"} and isinstance(value["alias"], str) and ALIAS.fullmatch(value["alias"]) is not None
+                and isinstance(value["wwn"], str) and (value["wwn"] == "" or OBSERVED_WWN.fullmatch(value["wwn"]) is not None), "device-identity")
+    else:
+        require(set(value) == fields and isinstance(value["wwn"], str) and OBSERVED_WWN.fullmatch(value["wwn"]) is not None, "device-identity")
+    require(isinstance(value["serial"], str) and 0 < len(value["serial"]) <= 128
+            and all(33 <= ord(c) <= 126 for c in value["serial"]), "device-identity")
+    require(type(value["sizeBytes"]) is int and 0 < value["sizeBytes"] < 1 << 63 and type(value["rotational"]) is bool, "device-identity")
+    require(isinstance(value["kernelPath"], str)
+            and re.fullmatch(r"/dev/(?:sd[a-z]+|nvme[0-9]+n[0-9]+)", value["kernelPath"]) is not None, "device-identity")
+    require(isinstance(value["deviceID"], str) and DEVICE_ID.fullmatch(value["deviceID"]) is not None, "device-identity")
+
+
 def row(value, request, host):
     require(isinstance(value, dict), "device-identity")
     wanted = [item for item in request["hosts"] if item["name"] == host]
@@ -1151,19 +1169,12 @@ def row(value, request, host):
     devices = [device for device in wanted[0]["devices"] if device["path"] == value.get("path")]
     require(value.get("host") == host and len(devices) == 1, "device-identity")
     if wanted[0].get("physical"):
-        fields = {"host", "path", "serial", "deviceID", "wwn", "kernelPath", "sizeBytes", "rotational"}
+        physical_shape(value)
         if devices[0]["path"].startswith(SERIAL_PREFIX):
-            # A serial selection keeps its declared serial and size and records the WWN it observed, or none, and its alias.
-            require(set(value) == fields | {"alias"} and value["serial"] == devices[0]["serial"] and value["sizeBytes"] == devices[0]["sizeBytes"]
-                    and isinstance(value["wwn"], str) and (value["wwn"] == "" or OBSERVED_WWN.fullmatch(value["wwn"]) is not None)
-                    and isinstance(value["alias"], str) and ALIAS.fullmatch(value["alias"]) is not None, "device-identity")
+            # A serial selection keeps its declared serial and size; a WWN selection keeps its declared WWN.
+            require(value["serial"] == devices[0]["serial"] and value["sizeBytes"] == devices[0]["sizeBytes"], "device-identity")
         else:
-            require(set(value) == fields and value["wwn"] == devices[0]["wwn"], "device-identity")
-        require(isinstance(value["serial"], str) and 0 < len(value["serial"]) <= 128
-                and all(33 <= ord(c) <= 126 for c in value["serial"]), "device-identity")
-        require(type(value["sizeBytes"]) is int and 0 < value["sizeBytes"] < 1 << 63 and type(value["rotational"]) is bool, "device-identity")
-        require(isinstance(value["kernelPath"], str)
-                and re.fullmatch(r"/dev/(?:sd[a-z]+|nvme[0-9]+n[0-9]+)", value["kernelPath"]) is not None, "device-identity")
+            require(value["wwn"] == devices[0]["wwn"], "device-identity")
     else:
         require(set(value) == {"host", "path", "serial", "deviceID"} and value["serial"] == devices[0]["serial"], "device-identity")
     require(isinstance(value["deviceID"], str) and DEVICE_ID.fullmatch(value["deviceID"]) is not None, "device-identity")

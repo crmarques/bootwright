@@ -339,8 +339,9 @@ def host_evidence(value, request_digest, request=None):
                             {"path", "serial", "deviceID", "wwn", "kernelPath", "sizeBytes", "rotational", "alias"}), "evidence")
         ceph_native.require(all(isinstance(device[key], str) for key in ("path", "serial", "deviceID"))
                             and ceph_host_runtime.DEVICE_ID.fullmatch(device["deviceID"]) is not None, "evidence")
-        if "wwn" in device:
-            ceph_native.require(request is not None, "evidence")
+        if "wwn" in device and request is None:
+            ceph_host_runtime.physical_shape(dict(device, host=value["host"]))
+        elif "wwn" in device:
             ceph_host_runtime.row(dict(device, host=value["host"]), request["cluster"], value["host"])
     ceph_native.require(not (value["ready"] and value["removed"]), "evidence")
     if request is not None:

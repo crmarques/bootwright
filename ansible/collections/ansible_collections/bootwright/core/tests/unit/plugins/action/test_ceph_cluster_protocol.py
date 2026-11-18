@@ -8,7 +8,7 @@ import hashlib
 import pytest
 
 from ansible_collections.bootwright.core.plugins.action import ceph_cluster_protocol
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_native
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_host_runtime, ceph_native
 
 LEAF = hashlib.sha256(b"cephadm-signed leaf for node-1").hexdigest()
 
@@ -78,3 +78,42 @@ def test_a_published_observation_carries_its_not_ready_checks():
     result = ceph_cluster_protocol.adapter_protocol.publish(arguments, ceph_cluster_protocol.CAPABILITY, lambda record, **_: records.append(record))
     assert result == {"changed": False}
     assert records[0]["warnings"] == [{"code": "storage.not-ready", "message": "not ready: vip@ingress.rgw.objects.dc1"}]
+
+
+SERIAL_ROW = {"path": "/dev/disk/by-serial/SYNTH-SERIAL-1", "serial": "SYNTH-SERIAL-1", "deviceID": "SYNTHETIC_SYNTH-SERIAL-1", "wwn": "",
+              "kernelPath": "/dev/nvme0n1", "sizeBytes": 1 << 40, "rotational": False, "alias": "/dev/disk/by-id/nvme-SYNTHETIC_SYNTH-SERIAL-1"}
+WWN_ROW = {"path": "/dev/disk/by-id/wwn-0x5000000000000001", "serial": "SYNTH-SERIAL-2", "deviceID": "SYNTHETIC_SYNTH-SERIAL-2",
+           "wwn": "0x5000000000000001", "kernelPath": "/dev/sdb", "sizeBytes": 1 << 40, "rotational": True}
+
+
+def host_evidence(*devices):
+    """A ready physical host's evidence, as its verify step projects its bound disk rows."""
+    return {"version": ceph_host_runtime.EVIDENCE_VERSION, "request": "d" * 64, "host": "node-1", "owner": "apply-123",
+            "fsid": "11111111-1111-4111-8111-111111111111", "image": "registry.example/ceph@sha256:" + "e" * 64, "ready": True, "removed": False,
+            "imageID": "a" * 64, "uid": 167, "gid": 167, "label": ceph_host_runtime.SHARED_LABEL, "policySHA256": "b" * 64, "cephadmSHA256": "c" * 64,
+            "planDigest": "f" * 64, "route": True, "devices": [copy.deepcopy(device) for device in devices]}
+
+
+def test_the_publisher_admits_a_physical_hosts_bound_disks():
+    published, refusal = publish(host_evidence(SERIAL_ROW, WWN_ROW))
+    assert refusal is None and published["devices"] == [SERIAL_ROW, WWN_ROW]
+
+
+@pytest.mark.parametrize("row, changes", [
+    (SERIAL_ROW, {"alias": None}),
+    (WWN_ROW, {"alias": "/dev/disk/by-id/wwn-0x5000000000000001"}),
+    (WWN_ROW, {"wwn": ""}),
+    (SERIAL_ROW, {"wwn": "0x5 0"}),
+    (SERIAL_ROW, {"alias": "/dev/disk/by-serial/SYNTH-SERIAL-1"}),
+    (WWN_ROW, {"kernelPath": "/dev/dm-0"}),
+    (WWN_ROW, {"sizeBytes": True}),
+    (WWN_ROW, {"rotational": 1}),
+    (WWN_ROW, {"serial": "has space"}),
+    (WWN_ROW, {"deviceID": "a b"}),
+    (WWN_ROW, {"kernelPath": None}),
+], ids=["serial-without-alias", "wwn-with-alias", "wwn-without-wwn", "wwn-grammar", "alias-grammar", "kernel-path", "bool-size", "int-rotational",
+        "serial-grammar", "device-id-grammar", "no-kernel-path"])
+def test_the_publisher_holds_a_physical_disk_row_to_its_closed_shape(row, changes):
+    damaged = {key: value for key, value in dict(row, **changes).items() if value is not None}
+    with pytest.raises(ceph_native.Refusal, match="^(evidence|device-identity)$"):
+        publish(host_evidence(damaged))
