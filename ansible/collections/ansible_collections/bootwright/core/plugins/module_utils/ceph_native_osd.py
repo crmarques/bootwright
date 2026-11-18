@@ -93,13 +93,15 @@ class Devices:
         volume = matches[0]
         if spec.get("encrypted"):
             mappings = volume.get("children") or []
-            require(volume.get("fstype") == "crypto_LUKS" and len(mappings) == 1, "foreign-osd")
+            require(volume.get("fstype") in (None, "", "crypto_LUKS"), "foreign-osd")
+            require(len(mappings) == 1, "foreign-osd")
             volume = mappings[0]
             require(volume.get("type") == "crypt"
                     and os.path.realpath(volume.get("path", "")) == os.path.realpath("/dev/mapper/" + row["lv_uuid"]), "foreign-osd")
+            metadata = self.worker.command(["/usr/sbin/cryptsetup", "luksDump", row["lv_path"]], json_result=False)
+            require(isinstance(metadata, bytes) and len(metadata) <= 128 << 10, "native-output")
+            require(re.match(rb"LUKS header information(?: for \S+\n)?\n", metadata) is not None, "foreign-osd")
             if spec.get("tpm2"):
-                metadata = self.worker.command(["/usr/sbin/cryptsetup", "luksDump", row["lv_path"]], json_result=False)
-                require(isinstance(metadata, bytes) and len(metadata) <= 128 << 10, "native-output")
                 tokens = metadata.split(b"Tokens:\n")
                 require(len(tokens) == 2 and re.search(rb"(?m)^\s+[0-9]+: systemd-tpm2\s*$", tokens[1].split(b"Digests:", 1)[0]), "foreign-osd")
         require(not volume.get("children") and not any(volume.get("mountpoints") or [])

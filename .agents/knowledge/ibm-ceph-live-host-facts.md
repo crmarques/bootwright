@@ -66,6 +66,14 @@ operator as a first-call refusal; the slice that records it is named.
   `children` and partitions, OSD LVs and their dm-crypt mappings appear as
   top-level siblings. Synthetic fixtures that nest `children` hide this; the
   worker's `DEVICE_TREE` requests `NAME` first (X261).
+- `lsblk`'s `FSTYPE` comes from the host's udev record, not the device: right
+  after `ceph-volume` formats an encrypted OSD's LV inside the Ceph container,
+  the record may be absent or stale (the container's LVM runs without udev
+  rules, so the host may skip probing the LV). On 2026-11-18 a prd-dc1 run
+  stopped at `foreign-osd@ceph_native_osd.prove_osd_crypto:96`, which also
+  checked the LV's one dm-crypt child, on its own fresh TPM2 OSDs, and the host
+  showed `crypto_LUKS` and that child minutes later. The header proof reads
+  `cryptsetup luksDump` instead (X624).
 - On 20.2.1-405, `fs new … set allow_standby_replay <bool>` aborts the MON
   leader (`std::out_of_range` in `FileSystemCommandHandler::set_val`), and the
   CLI resends it to every restarted MON until systemd stops restarting it;

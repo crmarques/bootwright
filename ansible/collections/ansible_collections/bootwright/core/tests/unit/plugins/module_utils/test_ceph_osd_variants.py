@@ -10,6 +10,14 @@ from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import 
 core_request = fixtures.core_request
 
 
+def luks_dump(tokens=b"  0: systemd-tpm2\n\tKeyslot:    1\n"):
+    """cryptsetup 2.7's non-key luksDump text of a LUKS2 header, its Tokens section holding tokens."""
+    return (b"LUKS header information\nVersion:       \t2\nEpoch:         \t5\nMetadata area: \t16384 [bytes]\n"
+            b"UUID:          \t3f1c2a7e-9d1b-4c55-8a0e-0b4d1e2f3a4b\nLabel:         \t(no label)\n\n"
+            b"Data segments:\n  0: crypt\n\tcipher: aes-xts-plain64\n\nKeyslots:\n  1: luks2\n\tKey:        512 bits\n"
+            b"Tokens:\n" + tokens + b"Digests:\n  0: pbkdf2\n")
+
+
 def variants(request):
     for host in request["hosts"]:
         host["devices"] += [{"path": "/dev/vdc", "serial": host["name"] + "-db", "sizeBytes": 1024 ** 3},
@@ -174,7 +182,8 @@ def test_the_device_tree_requests_the_column_util_linux_draws_its_tree_in():
 
 
 @pytest.mark.parametrize("prepare", [False, True])
-@pytest.mark.parametrize("damage", [None, "encryption", "tpm", "mapping", "token", "db-link", "foreign", "extra", "retained"])
+@pytest.mark.parametrize("damage", [None, "udev", "luks1", "encryption", "tpm", "mapping", "fstype", "header", "token",
+                                    "db-link", "foreign", "extra", "retained"])
 def test_completed_variant_proof_observes_native_crypto_and_auxiliary_identity(core_request, monkeypatch, damage, prepare):
     variants(core_request)
     native, unused = fixtures.worker(core_request, {})
@@ -193,8 +202,14 @@ def test_completed_variant_proof_observes_native_crypto_and_auxiliary_identity(c
                           {"path": "/dev/mapper/" + uuid, "type": "crypt", "fstype": "ceph_bluestore"}]}]})
     if damage in ("encryption", "tpm"):
         rows[0]["tags"]["ceph.encrypted" if damage == "encryption" else "ceph.with_tpm"] = "0"
+    elif damage == "udev":
+        # A volume ceph-volume formatted moments ago inside the Ceph container: udev has not yet recorded its LUKS type.
+        for disk in disks:
+            disk["children"][0]["fstype"] = None
     elif damage == "mapping":
         disks[0]["children"][0]["children"][0]["path"] = "/dev/mapper/foreign"
+    elif damage == "fstype":
+        disks[0]["children"][0]["fstype"] = "xfs"
     elif damage == "db-link":
         rows[0]["tags"]["ceph.db_uuid"] = "foreign"
     elif damage == "foreign":
@@ -216,7 +231,12 @@ def test_completed_variant_proof_observes_native_crypto_and_auxiliary_identity(c
         if argv[:3] == ["/usr/sbin/wipefs", "--no-act", "--json"]:
             return {"signatures": [{"type": "LVM2_member"}]}
         assert argv[:2] == ["/usr/sbin/cryptsetup", "luksDump"]
-        return b"Tokens:\n  0: systemd-tpm2\nDigests:\n" if damage != "token" else b"Tokens:\nDigests:\n"
+        if damage == "header":
+            return luks_dump()[len(b"LUKS header information\n"):]
+        if damage == "luks1":
+            # cryptsetup 2.x names the device on a LUKS1 header's first line and leaves a blank line after it.
+            return luks_dump().replace(b"LUKS header information\n", b"LUKS header information for " + argv[2].encode() + b"\n\n", 1)
+        return luks_dump() if damage != "token" else luks_dump(b"")
 
     native.command = command
     aliases = {"/dev/disk/by-id/virtio-" + d["serial"]: d["path"] for d in host["devices"]}
@@ -225,12 +245,13 @@ def test_completed_variant_proof_observes_native_crypto_and_auxiliary_identity(c
         native.markers.records[native.osd_identity_marker("/dev/vdb")] = {
             "path": "/dev/vdb", "id": 0, "uuid": "6da65e47-8789-4a1c-88e8-3bbd195719a1", "lvUUID": "volume-block"}
     action = native.osd_prepare if prepare else native.prove_completed_osd_variants
-    if damage is None:
+    if damage in (None, "udev", "luks1"):
         result = action()
         if prepare:
             assert result == {"changed": False}
+        assert sum(argv[:2] == ["/usr/sbin/cryptsetup", "luksDump"] for argv in calls) >= 3
     else:
-        with pytest.raises(ceph_native.Refusal):
+        with pytest.raises(ceph_native.Refusal, match="foreign-osd"):
             action()
     assert native.markers.writes == []
     assert all("--dump-master-key" not in argv and "--dump-volume-key" not in argv for argv in calls)

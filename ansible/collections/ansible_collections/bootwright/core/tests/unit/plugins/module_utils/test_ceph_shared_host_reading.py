@@ -361,7 +361,7 @@ def osd_worker(request, monkeypatch):
         if argv[:3] == ["/usr/sbin/wipefs", "--no-act", "--json"]:
             return {"signatures": [{"type": "LVM2_member"}]}
         assert argv[:2] == ["/usr/sbin/cryptsetup", "luksDump"]
-        return b"Tokens:\n  0: systemd-tpm2\nDigests:\n"
+        return osd_variants.luks_dump()
 
     native.command = command
     aliases = {"/dev/disk/by-id/virtio-" + d["serial"]: d["path"] for d in host["devices"]}

@@ -9,6 +9,7 @@ import yaml
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_native
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_tunnel_native as tunnel_native
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_core as fixtures
+from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_osd_variants as osd_variants
 
 core_request = fixtures.core_request
 
@@ -364,7 +365,7 @@ def test_qualified_scsi_ssd_proof_and_osd_submission_use_same_stable_alias(devic
 
 
 @pytest.mark.parametrize("tpm", [False, True])
-@pytest.mark.parametrize("damage", [None, "tag", "child"])
+@pytest.mark.parametrize("damage", [None, "udev", "tag", "child", "header"])
 def test_encrypted_owned_data_recovery_proves_observed_mapping_and_flags(device_world, tpm, damage):
     native, disk, signatures, rows, unused_calls = device_world
     native.request["services"][-1]["spec"].update(encrypted=True, tpm2=tpm)
@@ -378,7 +379,9 @@ def test_encrypted_owned_data_recovery_proves_observed_mapping_and_flags(device_
 
     def command(argv, **kwargs):
         if argv[:2] == ["/usr/sbin/cryptsetup", "luksDump"]:
-            return b"Tokens:\n  0: systemd-tpm2\nDigests:\n"
+            if damage == "header":
+                raise ceph_native.NativeFailure("native-command", "cryptsetup luksDump", b"Device " + argv[2].encode() + b" is not a valid LUKS device.\n")
+            return osd_variants.luks_dump()
         return original(argv, **kwargs)
 
     native.command = command
@@ -386,9 +389,11 @@ def test_encrypted_owned_data_recovery_proves_observed_mapping_and_flags(device_
         rows[0]["lv_tags"] = rows[0]["lv_tags"].replace("ceph.encrypted=1", "ceph.encrypted=0")
     elif damage == "child":
         volume["children"][0]["type"] = "lvm"
-    if damage is None:
+    elif damage == "udev":
+        volume["fstype"] = None
+    if damage in (None, "udev"):
         assert native.osd_prepare() == {"changed": True}
         assert native.osd_prepare() == {"changed": False}
     else:
-        with pytest.raises(ceph_native.Refusal, match="foreign-osd"):
+        with pytest.raises(ceph_native.Refusal, match="native-command" if damage == "header" else "foreign-osd"):
             native.osd_prepare()

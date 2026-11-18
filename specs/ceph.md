@@ -1261,9 +1261,11 @@ its entire allocation belongs to this operation. Partial or foreign DB/WAL
 allocations refuse before submission; [B1084](milestones/m2.md#b1084) owns
 partial recovery. Read-only host readiness also proves completed data/DB/WAL
 allocations by OSD identity and LV UUID relationships. Encryption requires
-matching native `ceph.encrypted` and `ceph.with_tpm` tags and an active LUKS
-mapper for the exact LV; TPM2 also requires a `systemd-tpm2` token in the
-non-key `cryptsetup luksDump` text metadata. A submitted ServiceSpec alone
+matching native `ceph.encrypted` and `ceph.with_tpm` tags, one active mapper
+for the exact LV, and a LUKS header that the LV's non-key `cryptsetup luksDump`
+text metadata reads; the host's udev record of the LV's filesystem type may be
+absent or stale after the container's format, so it never proves the header
+and only a contradicting type refuses. TPM2 also requires a `systemd-tpm2` token in that metadata. A submitted ServiceSpec alone
 does not establish readiness. Encryption keys remain in Ceph's store and
 are never read or exported by Bootwright.
 
