@@ -2,13 +2,17 @@ package ceph
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
@@ -223,6 +227,61 @@ func TestSubscriptionSourceBindsWithoutATreeProofAndLendsItsBundle(t *testing.T)
 			return file.Secret == "satellite-ca" && file.Part == secrets.CertificatePart && file.Variable == packageCertificateVariable(index)
 		}) {
 			t.Fatalf("%s: the Satellite CA bundle is not lent as its package certificate", host.Name)
+		}
+	}
+}
+
+func hostBlockRequirements(t *testing.T, catalog api.Catalog, realized ...string) ([]reconciliation.ObjectRef, error) {
+	t.Helper()
+	cluster, _ := catalog.Find(api.CephCluster, "example")
+	objects := catalog.Objects()
+	for i := range objects {
+		if objects[i].Identity() == cluster.Identity() {
+			objects[i] = cluster.WithSpec(cluster.Spec().WithPath(api.StringValue(PinnedTransport), "cephadm", "clusterSSH", "transport"))
+		}
+	}
+	catalog = api.NewCatalog(objects)
+	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
+	var definitions []reconciliation.BlockDefinition
+	var requires []reconciliation.ObjectRef
+	for _, capability := range []lifecycle.Capability{NewImage(&recordingRunner{}), NewHost(&recordingRunner{})} {
+		plan, err := capability.Plan(context.Background(), input)
+		if err != nil {
+			t.Fatal(diagnostics.Of(err))
+		}
+		for _, definition := range plan.Definitions {
+			if definition.Implementation == HostImplementation {
+				requires = append(requires, definition.Requires...)
+			}
+		}
+		definitions = append(definitions, plan.Definitions...)
+	}
+	for _, block := range append([]string{"Machine/node-1", "Machine/node-2", "Machine/node-3"}, realized...) {
+		kind, name, _ := strings.Cut(block, "/")
+		definitions = append(definitions, reconciliation.BlockDefinition{ID: strings.ToLower(kind) + "-" + name, Description: "synthetic " + name, Stage: reconciliation.StageMachines, Kind: kind, Object: name, Implementation: "synthetic", ContentDigest: strings.Repeat("f", 64), Request: json.RawMessage(`{}`)})
+	}
+	_, err := reconciliation.NewPlan(reconciliation.Apply, definitions)
+	return requires, err
+}
+
+func TestAHostBlockWaitsOnlyForTheProfilesThatPublishATree(t *testing.T) {
+	tree := reconciliation.ObjectRef{Kind: string(api.MachineInstallProfile), Object: "rhel"}
+	subscribed := reconciliation.ObjectRef{Kind: string(api.MachineInstallProfile), Object: "subscribed"}
+	for name, test := range map[string]struct {
+		catalog  api.Catalog
+		realized []string
+		tree     bool
+	}{
+		"every host installs from a subscription": {subscribedCatalog("node-1", "node-2", "node-3"), nil, false},
+		"a mixed cluster":                         {subscribedCatalog("node-2"), []string{"MachineInstallProfile/rhel"}, true},
+		"a hosted tree its Satellite updates":     {updatedTreeCatalog("withinRelease", "managed", true), []string{"MachineInstallProfile/rhel"}, true},
+	} {
+		requires, err := hostBlockRequirements(t, test.catalog, test.realized...)
+		if err != nil {
+			t.Fatalf("%s: the plan refuses: %v", name, diagnostics.Of(err))
+		}
+		if slices.Contains(requires, subscribed) || slices.Contains(requires, tree) != test.tree {
+			t.Fatalf("%s: host blocks require %+v", name, requires)
 		}
 	}
 }

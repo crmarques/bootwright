@@ -334,8 +334,10 @@ func (c HostCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 					requires = append(requires, hostRequirements(cluster.Controller, peer)...)
 				}
 			}
-			for _, profile := range cluster.Packages.Sources {
-				requires = append(requires, reconciliation.ObjectRef{Kind: string(api.MachineInstallProfile), Object: profile.Profile})
+			for _, lent := range cluster.Packages.Sources {
+				if profile, _ := catalog.Find(api.MachineInstallProfile, lent.Profile); profile.Spec().Has("installer", "anaconda", "packageSource", "hostedTree") {
+					requires = append(requires, reconciliation.ObjectRef{Kind: string(api.MachineInstallProfile), Object: lent.Profile})
+				}
 			}
 			slices.SortFunc(requires, func(a, b reconciliation.ObjectRef) int {
 				return strings.Compare(a.Kind+"/"+a.Object, b.Kind+"/"+b.Object)

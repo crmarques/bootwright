@@ -33,7 +33,9 @@ a configured repository takes the Satellite alone
 The frozen source of a subscription host carries its host, its profile, the
 Satellite's `hostname` and `contentBaseURL` and, as `certificateRef`, the
 Entitlement's `spec.rhsm.satellite.trustBundleRef`; it carries no media,
-publication or tree URL, and binding it needs no DVD proof. The CA bundle's
+publication or tree URL, and binding it needs no DVD proof. A host block waits
+for a profile's hosted tree only when that profile publishes one, so a cluster
+whose profiles all install from a subscription plans with no tree block. The CA bundle's
 certificate part reaches the host worker as the hosted DVD's certificate does,
 a trust anchor that names no credential. The worker admits exactly the hosted
 tree's members or these, with a DNS name or IP literal as the host name and an
