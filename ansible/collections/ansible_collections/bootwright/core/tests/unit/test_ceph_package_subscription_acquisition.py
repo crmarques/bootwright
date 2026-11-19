@@ -111,7 +111,8 @@ def test_the_satellite_refuses_a_host_without_the_entitlement_certificate(satell
     records = [dict(r, sslclientcert=str(entitlement / "9999.pem"), sslclientkey=str(entitlement / "9999-key.pem")) for r in satellite.records]
     scratch = tmp_path / "stage"
     scratch.mkdir()
-    with pytest.raises((urllib.error.URLError, sources.ssl.SSLError, OSError)):
+    # Under load the refusal can arrive as a lost connection, which the bounded retry names a transport loss.
+    with pytest.raises((urllib.error.URLError, sources.ssl.SSLError, OSError, sources.AcquisitionLoss)):
         acquisition(satellite, satellite.bundle, records).repositories(str(scratch))
     assert satellite.seen == []
 

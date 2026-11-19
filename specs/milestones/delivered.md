@@ -17908,3 +17908,16 @@ host-wide Podman default in the plan.
 HTTP-only acquisition route and a verified artifact publication. Live
 verification follows the [OpenShift proxy runbook](../../e2e/lab-3-nodes-ocp-features/runbook.md#proxy-route-when-enabled)
 and remains open. In-place changes are [B1611](backlog.md#b1611).
+
+## X628 — A refused Satellite client certificate under load
+
+### B1625
+
+A pre-existing test defect that failed the gate of X627 once under parallel
+load:
+`test_the_satellite_refuses_a_host_without_the_entitlement_certificate`
+accepted the TLS alert of a refused client certificate, but under load the
+server's close can reach the client first as a lost connection, which the acquisition's
+bounded transport retry names `AcquisitionLoss`. Both are refusals and the
+test still proves the Satellite served nothing, so it accepts either. No code,
+behavior or contract changes.
