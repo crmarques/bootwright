@@ -786,17 +786,25 @@ stretch behaviour has no qualified profile.
   application. A claimed `.rgw.root` on another
   rule refuses `stretch-pools`, and the gateway's readiness requires it on
   the rule at 4/2.
-- **Front doors.** An `rgw` service is reached directly or through one
-  ingress per data site. Directly, a daemon runs on every placed host and the
-  endpoint FQDN resolves to every rgw host's public address at both sites,
-  for an operator-owned load balancer or DNS or a declared DNSServer's
-  records ([attached gateway DNS](ceph-resources.md#attached-gateway-dns)).
-  Behind ingresses, each is placed only at its own data site with its own
-  `virtual_ip`, both carry the same `frontend_port`, `ssl` and bound
-  certificate Secret, and the endpoint resolves to both virtual IPs. An rgw
-  ingress whose hosts span both data sites is a stretched VIP and refuses, as
-  does an `rgw` service behind a single ingress, because a floating L2
-  address does not survive the loss of its site.
+- **Front doors.** An `rgw` service is reached directly, through one ingress
+  over both data sites, or through one ingress per data site. Directly, a
+  daemon runs on every placed host and the endpoint FQDN resolves to every
+  rgw host's public address at both sites, for an operator-owned load
+  balancer or DNS or a declared DNSServer's records
+  ([attached gateway DNS](ceph-resources.md#attached-gateway-dns)). One
+  ingress over both sites places hosts at each data site and runs keepalived
+  on every one, so it takes no `count` other than its host count, and its one
+  `virtual_ip` moves to the surviving site; every placed host holds an address
+  in that virtual IP's own subnet, whatever `virtual_interface_networks` says,
+  so the public network is one layer 2 stretched across the sites, and the
+  endpoint resolves to that virtual IP. On an inter-site partition both sides may hold the
+  address until the link heals, while Ceph serves only the side that keeps
+  quorum with the tiebreaker. Per site, each ingress is placed only at its own
+  data site with its own `virtual_ip`, both carry the same `frontend_port`,
+  `ssl` and bound certificate Secret, and the endpoint resolves to both
+  virtual IPs. A single ingress whose hosts stand at one data site refuses,
+  as does an ingress spanning both sites beside another ingress of the same
+  service, because a front door at one site is lost with it.
 - **Readiness.** The gateway is ready when its placement count of rgw
   daemons runs on the frozen image, at both data sites, each answering on its
   frontend port, and, behind ingresses, each ingress's haproxy and keepalived
@@ -2364,8 +2372,8 @@ prints an unexpected form leaves the row unknown, never passed.
 The virtual IP holder proof: a service unit's or gateway's readiness wait
 proves, once its own observation is ready and within the same wait window, that
 each ingress's virtual IP has exactly one holder: each host the observation
-lists running that ingress's keepalived, one ingress per data site on a stretch
-cluster, reports read-only whether one of its interfaces carries the address
+lists running that ingress's keepalived, at both data sites or at one per
+ingress on a stretch cluster, reports read-only whether one of its interfaces carries the address
 (`ip -json address show`), each call bounded by 60 s; an idle placement host is
 not asked. No holder blocks readiness with `noholder@<ingress service>`;
 several holders, the split brain that dropped VRRP leaves, block it with

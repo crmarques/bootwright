@@ -2,6 +2,7 @@ package cephcluster
 
 import (
 	"math/big"
+	"net/netip"
 	"slices"
 	"strconv"
 	"strings"
@@ -20,13 +21,15 @@ func stretchedChildRefusal(kind api.Kind) (message, remedy string, refused bool)
 }
 
 func (a *admission) stretchServices(ceph api.Value, sites []string) {
-	siteOf := map[string]string{}
+	siteOf, nodes := map[string]string{}, map[string]api.Value{}
 	for _, node := range ceph.Get("topology", "nodes").Items() {
-		siteOf[textOf(node, "name")] = textOf(node, "site")
+		siteOf[textOf(node, "name")], nodes[textOf(node, "name")] = textOf(node, "site"), node
 	}
 	services := ceph.Get("services").Items()
 	fronts := map[string][]int{}
 	placedAt := map[int]map[string]int{}
+	reachedBy := map[int]int{}
+	placedHosts := map[int][]string{}
 	for i, service := range services {
 		field, kind := indexed("$.spec.services", i), textOf(service, "service_type")
 		if kind == "nfs" {
@@ -41,7 +44,7 @@ func (a *admission) stretchServices(ceph api.Value, sites []string) {
 		for _, name := range names {
 			perSite[siteOf[name]]++
 		}
-		placedAt[i] = perSite
+		placedAt[i], placedHosts[i] = perSite, names
 		switch {
 		case slices.Contains(stretchHAServices, kind):
 			a.stretchHAService(service, field, kind, perSite, sites)
@@ -50,14 +53,10 @@ func (a *admission) stretchServices(ceph api.Value, sites []string) {
 			if !ok || textOf(backend, "service_type") != "rgw" {
 				continue
 			}
-			reached := 0
 			for _, site := range sites {
 				if perSite[site] > 0 {
-					reached++
+					reachedBy[i]++
 				}
-			}
-			if reached > 1 {
-				a.invalid(field+".placement", "an ingress whose hosts span both data sites floats one virtual IP across sites, which does not survive the loss of a site", "place this ingress only on hosts of one data site, by hosts or a per-site label, and front an rgw service with one ingress per data site")
 			}
 			fronts[NativeServiceName(backend)] = append(fronts[NativeServiceName(backend)], i)
 		}
@@ -72,13 +71,48 @@ func (a *admission) stretchServices(ceph api.Value, sites []string) {
 		case len(ingresses) == 0:
 			names, issues := a.placements().resolve(service)
 			if count := service.Get("placement", "count"); len(issues) == 0 && count.Present() && numeric(count).Cmp(big.NewInt(int64(len(names)))) != 0 {
-				a.invalid(field+".placement.count", "an rgw service of a stretch cluster without ingresses is reached at every host's address, so every placed host runs a daemon", "omit placement.count or set it to the number of placed hosts, or front this service with one ingress per data site")
+				a.invalid(field+".placement.count", "an rgw service of a stretch cluster without ingresses is reached at every host's address, so every placed host runs a daemon", "omit placement.count or set it to the number of placed hosts, or front this service with one ingress over every data site or one per data site")
 			}
+		case len(ingresses) == 1:
+			if reachedBy[ingresses[0]] != len(sites) {
+				a.invalid(indexed("$.spec.services", ingresses[0])+".placement", "rgw service "+name+" of a stretch cluster has one ingress, and its hosts stand at one data site, so its virtual IP is lost with that site", "place this ingress on hosts of every data site ("+strings.Join(sites, ", ")+") on a public network stretched across them, front "+name+" with one ingress per data site, or with none behind an operator-owned load balancer or DNS")
+				continue
+			}
+			a.stretchedIngress(services[ingresses[0]], indexed("$.spec.services", ingresses[0]), placedHosts[ingresses[0]], nodes)
 		case len(sites) == 2 && len(ingresses) == 2:
+			for _, at := range ingresses {
+				if reachedBy[at] > 1 {
+					a.invalid(indexed("$.spec.services", at)+".placement", "an ingress whose hosts span both data sites fronts rgw service "+name+" beside another ingress; per-site ingresses each stand at one data site", "place each ingress of "+name+" only on hosts of one data site, or front it with this one ingress alone over both")
+				}
+			}
 			a.stretchIngressPair(services, ingresses, placedAt, sites)
 		default:
-			a.invalid(indexed("$.spec.services", ingresses[0])+".spec.backend_service", "rgw service "+name+" of a stretch cluster has "+strconv.Itoa(len(ingresses))+" ingresses, not one per data site; a single front door is lost with its site", "front "+name+" with exactly one ingress per data site ("+strings.Join(sites, ", ")+"), or with none behind an operator-owned load balancer or DNS")
+			a.invalid(indexed("$.spec.services", ingresses[0])+".spec.backend_service", "rgw service "+name+" of a stretch cluster has "+strconv.Itoa(len(ingresses))+" ingresses, neither one over every data site nor one per data site", "front "+name+" with one ingress over every data site on a stretched public network, with exactly one ingress per data site ("+strings.Join(sites, ", ")+"), or with none behind an operator-owned load balancer or DNS")
 		}
+	}
+}
+
+func (a *admission) stretchedIngress(service api.Value, field string, hosts []string, nodes map[string]api.Value) {
+	if count := service.Get("placement", "count"); count.Present() && numeric(count).Cmp(big.NewInt(int64(len(hosts)))) != 0 {
+		a.invalid(field+".placement.count", "one ingress over both data sites runs keepalived on every placed host, so its virtual IP has a holder at each site; a count lets cephadm place every one at one site", "omit placement.count on this ingress or set it to the number of placed hosts ("+strconv.Itoa(len(hosts))+")")
+	}
+	vip, ok := ingressAddress(service)
+	if !ok {
+		return
+	}
+	interfaceNetworks := service.Get("spec").Has("virtual_interface_networks")
+	for _, name := range hosts {
+		node := nodes[name]
+		m, found := a.catalog.Find(api.Machine, textOf(node, "machineRef"))
+		if !found {
+			continue
+		}
+		prefixes := machinePrefixes(m, a.catalog)
+		if slices.ContainsFunc(prefixes, func(prefix netip.Prefix) bool { return prefix.Masked().Contains(vip) }) || len(prefixes) != 0 && !interfaceNetworks {
+			continue
+		}
+		a.invalid(field+".spec.virtual_ip", "ingress host "+NativeHostname(node)+" (Machine "+m.Name()+") of one ingress over both data sites holds no address in the virtual IP's subnet, so the virtual IP cannot move to it on a layer 2 stretched across the sites",
+			"declare an address in the virtual IP's subnet on Machine "+m.Name()+", or front the rgw service with one ingress per data site")
 	}
 }
 

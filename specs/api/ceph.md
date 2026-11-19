@@ -474,8 +474,9 @@ checks:
   ([stretch topology](../ceph.md#stretch-topology)); and
 - on a stretch cluster, each `mgr`, `mds` and `rgw` service's resolved hosts
   reach both data sites and its `count` exceeds its hosts at either site;
-  each rgw ingress's hosts lie at one data site, and an `rgw` service has no
-  ingress or one per data site, alike in port, TLS and bound Secret; an
+  an `rgw` service has no ingress, one ingress whose hosts reach both data
+  sites, or one ingress per data site, each with hosts at its site alone and
+  alike in port, TLS and bound Secret; an
   `nvmeof` or `nfs` service, a CephNFSExport and a CephSMBResource refuse
   ([stretch services](../ceph.md#stretch-services-and-front-doors)).
 

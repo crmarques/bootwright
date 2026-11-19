@@ -243,19 +243,24 @@ func TestStretchHAServicesReachBothDataSites(t *testing.T) {
 	}
 }
 
-func TestStretchRGWFrontDoorsArePerSite(t *testing.T) {
+func TestStretchRGWFrontDoorsArePerSiteOrStretched(t *testing.T) {
 	rgw := stretchRGW(m("hosts", fqdns("a1", "a2", "b1", "b2")))
 	ingresses := siteIngresses()
-	cluster, catalog := stretchCatalog(t, addServices(append([]api.Value{rgw}, ingresses...)...))
-	if issues := Validate(cluster, catalog); len(issues) != 0 {
-		t.Fatalf("one ingress per data site refused: %#v", issues)
+	stretched := siteIngress("objects", "192.0.2.100/24", fqdns("a1", "a2", "b1", "b2"))
+	for name, front := range map[string][]api.Value{"one ingress per data site": ingresses, "one ingress over both data sites": {stretched}} {
+		cluster, catalog := stretchCatalog(t, addServices(append([]api.Value{rgw}, front...)...))
+		if issues := Validate(cluster, catalog); len(issues) != 0 {
+			t.Fatalf("%s refused: %#v", name, issues)
+		}
 	}
 	for _, test := range []struct {
 		name, field, message string
 		services             []api.Value
 	}{
-		{"a stretched VIP", "$.spec.services[4].placement", "an ingress whose hosts span both data sites", []api.Value{rgw, siteIngress("objects-a", "192.0.2.100/24", fqdns("a1", "b1")), siteIngress("objects-b", "192.0.2.101/24", fqdns("b2", "b3"), "first_virtual_router_id", 60)}},
-		{"a single site-local ingress", "$.spec.services[4].spec.backend_service", "has 1 ingresses, not one per data site", []api.Value{rgw, ingresses[0]}},
+		{"a stretched VIP beside a per-site one", "$.spec.services[4].placement", "an ingress whose hosts span both data sites fronts rgw service rgw.objects beside another ingress", []api.Value{rgw, siteIngress("objects-a", "192.0.2.100/24", fqdns("a1", "b1")), siteIngress("objects-b", "192.0.2.101/24", fqdns("b2", "b3"), "first_virtual_router_id", 60)}},
+		{"a single site-local ingress", "$.spec.services[4].placement", "has one ingress, and its hosts stand at one data site", []api.Value{rgw, ingresses[0]}},
+		{"a stretched VIP on a count", "$.spec.services[4].placement.count", "a count lets cephadm place every one at one site", []api.Value{rgw, stretched.WithPath(v(2), "placement", "count")}},
+		{"three ingresses", "$.spec.services[4].spec.backend_service", "has 3 ingresses, neither one over every data site nor one per data site", []api.Value{rgw, ingresses[0], ingresses[1], siteIngress("objects-c", "192.0.2.102/24", fqdns("a3", "b3"), "first_virtual_router_id", 61)}},
 		{"two ingresses at one site", "$.spec.services[5].placement", "placed one per data site", []api.Value{rgw, ingresses[0], siteIngress("objects-b", "192.0.2.101/24", fqdns("a2", "a3"), "first_virtual_router_id", 60)}},
 		{"per-site ingresses on two ports", "$.spec.services[5].spec.frontend_port", "they share spec.frontend_port", append([]api.Value{rgw}, siteIngresses("frontend_port", 8081)...)},
 	} {
@@ -263,6 +268,14 @@ func TestStretchRGWFrontDoorsArePerSite(t *testing.T) {
 			cluster, catalog := stretchCatalog(t, addServices(test.services...))
 			requireOnlyIssue(t, clusterIssuesAt(Validate(cluster, catalog), test.field), test.field, test.message)
 		})
+	}
+	offSubnet := siteIngress("objects", "198.51.100.50/24", fqdns("a1", "a2", "b1", "b2"), "virtual_interface_networks", api.StringList("192.0.2.0/24", "198.51.100.0/24"))
+	cluster, catalog := stretchCatalog(t, addServices(rgw, offSubnet))
+	issues := clusterIssuesAt(Validate(cluster, catalog), "$.spec.services[4].spec.virtual_ip")
+	if len(issues) != 4 || slices.ContainsFunc(issues, func(issue api.Issue) bool {
+		return !strings.Contains(issue.Message, "holds no address in the virtual IP's subnet")
+	}) {
+		t.Fatalf("an ingress over both data sites whose hosts are off its virtual IP's subnet behind virtual_interface_networks: %#v", issues)
 	}
 	plain := find(t, fixtureCatalog(), api.CephCluster, "storage")
 	if slices.ContainsFunc(Validate(plain, fixtureCatalog()), func(issue api.Issue) bool { return strings.Contains(issue.Message, "data site") }) {

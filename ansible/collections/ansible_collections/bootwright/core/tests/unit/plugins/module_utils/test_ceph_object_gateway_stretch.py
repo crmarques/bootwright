@@ -1,5 +1,6 @@
 """The object gateway of a stretch cluster: `.rgw.root` created on the stretch rule at 4/2 under the claim and before any radosgw-admin call,
-a claimed one on another rule refused, rgw daemons at both data sites, and one ingress per data site, each proved at its virtual IP.
+a claimed one on another rule refused, rgw daemons at both data sites, and one ingress over both data sites or one per data site, each
+proved at its virtual IP.
 
 The scripted monitor extends test_ceph_object_gateway.py's: `osd crush rule dump <rule>` prints `rule_id` and `rule_name`, `osd pool create`
 places the pool on the named rule at the default 3/2, and `osd pool set` and `osd pool application enable` change the listed pool, the shapes
@@ -157,13 +158,18 @@ def test_stretch_gateway_readiness_needs_rgw_daemons_at_both_data_sites_and_the_
         gw.observe(monitor, markers)
 
 
-def test_per_site_ingresses_are_admitted_one_per_data_site_and_a_stretched_vip_refuses():
+def test_ingresses_are_admitted_one_over_both_data_sites_or_one_per_data_site():
     ceph_native_object.validate(stretch_gateway(per_site()), stretch.request()["hosts"])
-    stretched = [stretch_ingress("a", ["node-1", "node-3"], "192.0.2.50/24"), stretch_ingress("b", SITE_B, "192.0.2.51/24")]
+    ceph_native_object.validate(stretch_gateway([stretch_ingress("all", DATA, "192.0.2.50/24")]), stretch.request()["hosts"])
+    counted = stretch_ingress("all", DATA, "192.0.2.50/24")
+    counted["placement"]["count"] = 2
+    with pytest.raises(ceph_native.Refusal):
+        ceph_native_object.validate(stretch_gateway([counted]), stretch.request()["hosts"])
+    beside = [stretch_ingress("a", ["node-1", "node-3"], "192.0.2.50/24"), stretch_ingress("b", SITE_B, "192.0.2.51/24")]
     one_site = [stretch_ingress("a", SITE_A, "192.0.2.50/24"), stretch_ingress("b", ["node-2"], "192.0.2.51/24")]
     ports = per_site()
     ports[1]["spec"]["frontend_port"] = 8443
-    for ingresses in (stretched, one_site, per_site()[:1], ports):
+    for ingresses in (beside, one_site, per_site()[:1], ports):
         with pytest.raises(ceph_native.Refusal):
             ceph_native_object.validate(stretch_gateway(ingresses), stretch.request()["hosts"])
     secure = stretch_gateway([dict(ingress, spec=dict(ingress["spec"], ssl=True)) for ingress in per_site()])

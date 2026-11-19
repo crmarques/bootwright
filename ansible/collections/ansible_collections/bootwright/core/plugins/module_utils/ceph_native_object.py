@@ -7,8 +7,8 @@ store creates the shared `.rgw.root` pool when it is absent (src/rgw/driver/rado
 src/rgw/driver/rados/rgw_tools.cc:24-52), so the pool is proved absent or claimed through monitor commands, and the
 claim is written, before the first radosgw-admin call; no radosgw-admin call runs while the pool is absent, so a
 recorded realm that is gone refuses with no effect. On a stretch cluster the claiming gateway creates the pool itself, on the stretch rule at
-4/2, before that first call, and one ingress fronts the rgw service at each data site. The gateway's record is written only after every name proof
-passes, before its first create, so a refused name leaves no record. A realm, zone group or zone of the gateway's
+4/2, before that first call, and one ingress fronts the rgw service over both data sites or one at each. The gateway's record is written
+only after every name proof passes, before its first create, so a refused name leaves no record. A realm, zone group or zone of the gateway's
 names is adopted only under this operation's attempt record. The gateway never reads or creates an object user. A TLS service's
 `ssl_cert` and `ssl_key` are bound Secret leaves: the documents are normalized and recorded with fixed placeholders, the leaves are spliced into
 the apply stream in memory only, and readiness proves the served leaf by SHA-256. A user request carries one CephObjectUser in its
@@ -162,7 +162,7 @@ def validate_ingress(spec, backend):
 
 
 def validate_bindings(gateway, documents):
-    """No binding, or both leaves of each TLS service, the one TLS service or every per-site ingress, all of one Secret, with an endpoint its
+    """No binding, or both leaves of each TLS service, the one TLS service or every ingress of a stretch cluster, all of one Secret, with an endpoint its
     certificate names."""
     bindings = gateway["bindings"]
     secure = [ceph_native_units.service_name(document) for document in documents if document["spec"].get("ssl") is True]
@@ -222,8 +222,11 @@ def validate(request, hosts):
         require(isinstance(auxiliary, list) and set(IMAGES) <= {entry.get("name") for entry in auxiliary if isinstance(entry, dict)})
     if stretch is not None and len(documents) > 1:
         sites = [{site_of(request, name) for name in ingress["placement"]["hosts"]} for ingress in documents[1:]]
-        require(len(sites) == len(stretch["dataSites"]) and all(len(held) == 1 for held in sites)
-                and sorted(site for held in sites for site in held) == stretch["dataSites"])
+        stretched = (len(sites) == 1 and sorted(sites[0]) == stretch["dataSites"]
+                     and documents[1]["placement"].get("count", len(documents[1]["placement"]["hosts"])) == len(documents[1]["placement"]["hosts"]))
+        per_site = (len(sites) == len(stretch["dataSites"]) and all(len(held) == 1 for held in sites)
+                    and sorted(site for held in sites for site in held) == stretch["dataSites"])
+        require(stretched or per_site)
     validate_bindings(gateway, documents)
 
 
@@ -430,7 +433,8 @@ def s3_exchange(address, number, method, path, query, body, pair, region, *, pin
 
 
 def frontends(request):
-    """Each ingress that fronts the gateway, one per data site on a stretch cluster, with its client port, the ingress frontend port."""
+    """Each ingress that fronts the gateway, on a stretch cluster one over every data site or one per data site, with its client port, the
+    ingress frontend port."""
     return [(document, document["spec"]["frontend_port"]) for document in request["gateway"]["documents"][1:]]
 
 
@@ -504,7 +508,7 @@ class ObjectWorker(ceph_native_units.UnitWorker):
         return "gateway-" + self.gateway()["name"]
 
     def ingress_frontend(self):
-        """The ingress whose placement holds this host; per-site ingresses hold disjoint hosts."""
+        """The ingress whose placement holds this host; a gateway has one ingress, or per-site ingresses holding disjoint hosts."""
         return next((found for found in frontends(self.request) if self.host["name"] in found[0]["placement"]["hosts"]), None)
 
     def ingress_ports(self):

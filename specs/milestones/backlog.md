@@ -6693,7 +6693,7 @@ DNSServer's records; or exactly one ingress per data site, each placed only at
 its site with its own virtual IP and the same `frontend_port`, `ssl` and bound
 Secret, the endpoint resolving to both virtual IPs. An rgw ingress whose hosts
 span both data sites is a stretched VIP and refuses, as does an rgw backend
-behind one ingress. (5) The gateway's readiness requires its rgw daemons at
+behind one ingress (overturned by the owner in [D278](#d278)). (5) The gateway's readiness requires its rgw daemons at
 both data sites, each answering on its frontend port, and behind ingresses
 every ingress's daemons and every virtual IP answering, over TLS with the
 bound leaf; client I/O during a site loss is B488's operator evidence. (6) The
@@ -9479,3 +9479,17 @@ that declares a key type must declare the same type, so the cluster's proof
 never meets a key Bootwright minted itself; B761's acceptance re-verifies the
 key type the consumer actually declares, not a type-1 key; and the
 consumer's `aes` default is parked for decision as [B1612](#b1612).
+
+### D278
+
+**owner** (2026-11-19): for the seven-node stretch cluster whose two data
+sites share one public layer-2 segment, the owner asked to "use only one rgw
+vip for dc1 and dc2 (they already are in the same network segment)". This
+overturns the part of [D203](#d203) clause (4) that refused an rgw ingress
+spanning both data sites and an rgw backend behind one ingress: an rgw
+service of a stretch cluster may also be fronted by one ingress whose hosts
+reach every data site, and its virtual IP moves to the surviving site. A
+single ingress at one site, and a spanning ingress beside another, still
+refuse. The rule is the
+[stretch front doors](../ceph.md#stretch-services-and-front-doors); the work
+is [B1631](m2.md#b1631).
