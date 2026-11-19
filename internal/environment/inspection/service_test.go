@@ -46,6 +46,7 @@ type fixture struct {
 	objectUsers    map[string]Custodied
 	objectReads    []string
 	objectUnproved bool
+	objectProofErr error
 	logins         map[string]Custodied
 	grafana        *Custodied
 	monitoringRead []string
@@ -170,7 +171,7 @@ func (f *fixture) ObjectUserCredentials(_ context.Context, contextName, user str
 }
 
 func (f *fixture) ObjectUserProved(context.Context, string, api.Catalog, api.Object) (bool, error) {
-	return !f.objectUnproved, nil
+	return !f.objectUnproved, f.objectProofErr
 }
 
 func (f *fixture) service(current string) Service {

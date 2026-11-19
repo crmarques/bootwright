@@ -1,11 +1,13 @@
 package controller_test
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/tooltable"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
@@ -347,5 +349,45 @@ func TestTheImageMirrorCopyToolFollowsTheMirrorRegistrysMachine(t *testing.T) {
 	}
 	if controller.Baseline().ImageMirror() {
 		t.Fatal("context-free scope invented the image mirror's copy tool")
+	}
+}
+
+// An ambient route replaces only the route of a selection no context made: one
+// that named a controller Machine keeps that Machine's proxy choice, and an
+// unconfigured route changes nothing.
+func TestAnAmbientRouteReplacesOnlyAContextFreeSelection(t *testing.T) {
+	ambient, err := controller.RouteFromEnvironment(environment("HTTPS_PROXY", "http://ambient.example.test:3128"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ambient.Origin() != "HTTPS_PROXY" {
+		t.Fatalf("the ambient route's origin reads %q", ambient.Origin())
+	}
+	replaced := controller.Baseline().WithAmbientRoute(ambient)
+	if replaced.Route().HTTPSProxy() != "http://ambient.example.test:3128" || replaced.Route().Direct() || replaced.MachineName() != "" {
+		t.Fatalf("the context-free selection kept %+v", replaced.Route())
+	}
+	if kept := controller.Baseline().WithAmbientRoute(controller.Route{}); !kept.Route().Direct() || kept.Route().HTTPSProxy() != "" {
+		t.Fatalf("an unconfigured route replaced the baseline's: %+v", kept.Route())
+	}
+
+	objects := selectionObjects()
+	objects[1] = objects[1].WithSpec(objects[1].Spec().With("proxy", api.MapValue().With("proxyRef", api.StringValue("egress"))))
+	objects = append(objects, api.NewObject(api.Proxy, "egress", api.Value{}, api.MapValue().With("management", api.StringValue("external")).WithPath(api.StringValue("https://proxy.example.test:3128"), "connection", "httpsProxy")))
+	selected, err := controller.Select(api.NewCatalog(objects))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if selected.EnvironmentName() != "example" || selected.Route().ProxyName() != "egress" || selected.Route().Origin() != "Proxy egress" {
+		t.Fatalf("selection named environment %q, proxy %q, origin %q", selected.EnvironmentName(), selected.Route().ProxyName(), selected.Route().Origin())
+	}
+	if !reflect.DeepEqual(selected.Versions(), tooltable.DefaultDependencyVersions()) {
+		t.Fatalf("selection versions = %+v", selected.Versions())
+	}
+	if still := selected.WithAmbientRoute(ambient); still.Route().HTTPSProxy() != "https://proxy.example.test:3128" || still.Route().ProxyName() != "egress" {
+		t.Fatalf("an ambient route displaced the controller Machine's proxy: %+v", still.Route())
+	}
+	if (controller.Baseline().Route().Origin()) != "" {
+		t.Fatal("the baseline's route claims an origin")
 	}
 }

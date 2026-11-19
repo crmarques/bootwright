@@ -83,6 +83,30 @@ func code(t *testing.T, err error) string {
 	return reported[0].Code
 }
 
+// A request is refused for a verb the command does not take, a context name
+// that is no DNS label and a Machine the catalog does not declare, and a read
+// survey for a context name that is no DNS label or a realization that cannot
+// be read.
+func TestARequestOrSurveyNamesOnlyWhatTheCommandTakes(t *testing.T) {
+	if _, _, _, err := requestFor(catalog(), "lab", "guest", Verb("hibernate"), false, realized()); code(t, err) != powerRequestInvalid.Code {
+		t.Fatalf("an unsupported verb = %v", err)
+	}
+	if _, _, _, err := requestFor(catalog(), "Not_A_Label", "guest", Start, false, realized()); code(t, err) != powerRequestInvalid.Code {
+		t.Fatalf("an invalid context = %v", err)
+	}
+	if _, _, _, err := requestFor(catalog(), "lab", "ghost", Start, false, realized()); err == nil {
+		t.Fatal("an undeclared Machine was requested")
+	}
+	if _, err := readSurveysFor(catalog(), "Not_A_Label", []string{"guest"}, realized(), nil); code(t, err) != powerRequestInvalid.Code {
+		t.Fatalf("a survey of an invalid context = %v", err)
+	}
+	unreadable := errors.New("realization unreadable")
+	failing := realizations(func(string) (machine.OwnershipState, bool, error) { return machine.OwnershipState{}, false, unreadable })
+	if _, err := readSurveysFor(catalog(), "lab", []string{"guest"}, failing, nil); !errors.Is(err, unreadable) {
+		t.Fatalf("a survey over an unreadable realization = %v", err)
+	}
+}
+
 // An emulated controller is reached at its own allocated port, from the host
 // that runs it, and the request names the credential rather than any material.
 func TestAnEmulatedControllerIsReachedFromItsProviderHost(t *testing.T) {

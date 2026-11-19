@@ -566,3 +566,130 @@ func TestStartPowerProvesPhysicalIdentityEvenBeforeProvisioning(t *testing.T) {
 	probe.PreviousEvidence, evidence.Addresses = nil, nil
 	test(lifecycle.Unproved)
 }
+
+// Planning refuses a cancelled context, no compiled state and an invalid
+// context name, and plans nothing for a Machine outside a preparation's
+// targets.
+func TestPlanningRefusesWhatItCannotDeriveAndHonoursPreparationTargets(t *testing.T) {
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	state := compilation.NewState(catalogOf(), catalogOf(), nil)
+	if _, err := NewMachine(nil).Plan(cancelled, lifecycle.PlanInput{State: state}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("a cancelled plan = %v", err)
+	}
+	for name, input := range map[string]lifecycle.PlanInput{
+		"no state":                {Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "lab"}},
+		"an invalid context name": {Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "Not Valid"}, State: state, Controller: "controller"},
+	} {
+		if _, err := NewMachine(nil).Plan(context.Background(), input); err == nil || diagnostics.Of(err)[0].Code != baremetalRequestInvalid.Code {
+			t.Errorf("%s planned (%v)", name, err)
+		}
+	}
+	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "lab"}, State: state, Controller: "controller",
+		Preparation: &reconciliation.PreparationScope{Targets: []string{"another"}}}
+	plan, err := NewMachine(nil).Plan(context.Background(), input)
+	if err != nil || len(plan.Definitions) != 0 || len(plan.Secrets) != 0 || len(plan.Reservations) != 0 {
+		t.Fatalf("a Machine outside the targets planned %+v (%v)", plan, err)
+	}
+	input.Preparation.Targets = []string{"server"}
+	if plan, err := NewMachine(nil).Plan(context.Background(), input); err != nil || len(plan.Definitions) != 1 {
+		t.Fatalf("a targeted Machine planned %+v (%v)", plan, err)
+	}
+}
+
+// The capability claims its provider and every Machine hosted on it, so no
+// other implementation plans them.
+func TestTheCapabilityClaimsItsProviderAndTheMachinesHostedOnIt(t *testing.T) {
+	claimed := NewMachine(nil).Claimed(catalogOf())
+	slices.Sort(claimed)
+	if len(claimed) != 2 || !slices.Contains(claimed, "InfraProvider/floor") || !slices.Contains(claimed, "Machine/server") {
+		t.Fatalf("claimed = %v", claimed)
+	}
+	if other := NewMachine(nil).Claimed(api.NewCatalog(nil)); len(other) != 0 {
+		t.Fatalf("an empty catalog claimed %v", other)
+	}
+}
+
+// A removal, a removal observation and the secret readers refuse a block with
+// no frozen request, and a trust bundle is classed as a trust anchor.
+func TestABlockWithNoFrozenRequestIsRefusedAndABundleIsATrustAnchor(t *testing.T) {
+	empty := reconciliation.Block{}
+	if _, err := NewMachine(nil).Removal(context.Background(), empty); err == nil {
+		t.Fatal("a removal with no request was planned")
+	}
+	if _, err := NewMachine(nil).SecretReferences(empty); err == nil {
+		t.Fatal("references of a block with no request")
+	}
+	if _, err := NewMachine(nil).SecretClasses(empty); err == nil {
+		t.Fatal("classes of a block with no request")
+	}
+	if _, err := NewMachine(nil).StartPowerSecrets(empty); err == nil {
+		t.Fatal("start-power secrets of a block with no request")
+	}
+	definition := planIn(t, reconciliation.Apply, catalogWithControllerTLS(m("trustBundleRef", "server-bmc-ca"))).Definitions[0]
+	block := reconciliation.Block{BlockDefinition: definition}
+	classes, err := NewMachine(nil).SecretClasses(block)
+	if err != nil || !slices.Contains(classes.Named(secrets.TrustAnchor), "server-bmc-ca") {
+		t.Fatalf("trust anchors = %v (%v)", classes.Named(secrets.TrustAnchor), err)
+	}
+	removal, err := NewMachine(nil).Removal(context.Background(), block)
+	if err != nil || removal.Description != "release the claim on server and retain the machine" || len(removal.Impacts) != 0 || len(removal.Groups) != 1 || removal.Groups[0].ID != "release-claim" {
+		t.Fatalf("removal = %+v (%v)", removal, err)
+	}
+	if secretsFor, err := NewMachine(nil).StartPowerSecrets(block); err != nil || !slices.Equal(secretsFor, []string{"server-bmc", "server-bmc-ca"}) {
+		t.Fatalf("start-power secrets = %v (%v)", secretsFor, err)
+	}
+}
+
+// A power read refuses a cancelled context and an unbound adapter, and an
+// adapter that fails or answers with no proof leaves the machine unproved
+// rather than reported on or off; a failure carried by a cancelled context
+// returns that cancellation.
+func TestStartPowerLeavesAnUnansweredMachineUnproved(t *testing.T) {
+	plan, err := reconciliation.NewPlan(reconciliation.Apply, planOf(t, reconciliation.Apply).Definitions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	probe := lifecycle.Probe{Context: "lab", Block: plan.Blocks[0]}
+	if _, err := NewMachine(nil).StartPower(context.Background(), probe); err == nil || diagnostics.Of(err)[0].Code != baremetalUnconfigured.Code {
+		t.Fatalf("an unbound adapter = %v", err)
+	}
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := NewMachine(&scriptedRunner{}).StartPower(cancelled, probe); !errors.Is(err, context.Canceled) {
+		t.Fatalf("a cancelled power read = %v", err)
+	}
+	complete := Evidence{Postcondition: true, Addresses: fixtureRequest(t).Addresses(), UUID: "uuid-1", Serial: "s1", Request: probe.Block.RequestDigest}
+	for name, runner := range map[string]*scriptedRunner{
+		"an adapter that failed":       {err: errors.New("unreachable")},
+		"no proof":                     {result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(t, Evidence{Request: probe.Block.RequestDigest})}},
+		"a power state it cannot name": {result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(t, withPower(complete, "Paused"))}},
+	} {
+		state, err := NewMachine(runner).StartPower(context.Background(), probe)
+		if err != nil || state.State != lifecycle.Unproved || state.Reason == "" || state.Stop != "" {
+			t.Errorf("%s = %+v (%v)", name, state, err)
+		}
+	}
+	probe.PreviousEvidence = []byte(`{}`)
+	runner := &scriptedRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(t, withPower(complete, "Off"))}}
+	if state, err := NewMachine(runner).StartPower(context.Background(), probe); err != nil || state.State != lifecycle.Unproved {
+		t.Fatalf("a previous pin that proves nothing = %+v (%v)", state, err)
+	}
+	probe.PreviousEvidence = encode(t, withPower(complete, "Off"))
+	live := withPower(complete, "On")
+	runner.result = lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(t, live)}
+	state, err := NewMachine(runner).StartPower(context.Background(), probe)
+	if err != nil || state.State != lifecycle.Live || state.Stop != "bootwright machine stop --context lab --name server" {
+		t.Fatalf("a machine reported on = %+v (%v)", state, err)
+	}
+	live.UUID = "uuid-2"
+	runner.result = lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(t, live)}
+	if state, err := NewMachine(runner).StartPower(context.Background(), probe); err != nil || state.State != lifecycle.Unproved || !strings.Contains(state.Reason, "differs") {
+		t.Fatalf("a machine of another UUID = %+v (%v)", state, err)
+	}
+}
+
+func withPower(evidence Evidence, power string) Evidence {
+	evidence.Power = power
+	return evidence
+}

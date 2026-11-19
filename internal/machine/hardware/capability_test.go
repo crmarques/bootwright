@@ -3,7 +3,9 @@ package hardware
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -16,6 +18,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
+	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
 )
 
@@ -244,12 +247,13 @@ func TestTheHardwareReadChangesNothingAndItsReleaseReadsNothing(t *testing.T) {
 
 type scripted struct {
 	result lifecycle.RunResult
+	err    error
 	seen   lifecycle.RunRequest
 }
 
 func (s *scripted) Run(_ context.Context, request lifecycle.RunRequest) (lifecycle.RunResult, error) {
 	s.seen = request
-	return s.result, nil
+	return s.result, s.err
 }
 
 func TestMachineHardwareRequestAndEvidenceGolden(t *testing.T) {
@@ -366,5 +370,239 @@ func TestAHostReportingNoPermanentAddressWarns(t *testing.T) {
 	runner.result = lifecycle.RunResult{Outcome: "unchanged", Evidence: evidenceOf(t, block.RequestDigest, "52:54:00:9a:1b:01")}
 	if _, err := New(runner).Apply(context.Background(), execution); err != nil || len(warned) != 1 {
 		t.Fatalf("a claimed host warned %v (%v)", warned, err)
+	}
+}
+
+func codeOf(t *testing.T, err error) string {
+	t.Helper()
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 {
+		t.Fatalf("diagnostics = %+v (%v)", reported, err)
+	}
+	return reported[0].Code
+}
+
+func blockWithRequest(t *testing.T, block reconciliation.Block, edit func(*Request)) reconciliation.Block {
+	t.Helper()
+	request, err := DecodeRequest(block.Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	edit(&request)
+	block.Request, err = request.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return block
+}
+
+// Planning refuses a cancelled context and a plan with no compiled desired
+// state, and plans no definition either way.
+func TestPlanningRefusesWhatItCannotCompile(t *testing.T) {
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := New(nil).Plan(cancelled, lifecycle.PlanInput{}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("a cancelled plan = %v", err)
+	}
+	plan, err := New(nil).Plan(context.Background(), lifecycle.PlanInput{Verb: reconciliation.Apply})
+	if code := codeOf(t, err); code != hardwareDesiredStateMissing.Code || plan.Definitions == nil || len(plan.Definitions) != 0 {
+		t.Fatalf("plan with no state = %+v, %s", plan, code)
+	}
+}
+
+// The frozen request is refused unless it names a Machine reached over SSH
+// whose block identity is its own, and a run refuses before any adapter
+// starts when the block names another Machine or no adapter is bound.
+func TestARunRefusesARequestThatIsNotItsBlocks(t *testing.T) {
+	block := servicesBlock(t)
+	for name, edit := range map[string]func(*Request){
+		"local placement":        func(r *Request) { r.Placement.Connection = machine.ConnectionLocal },
+		"no known hosts":         func(r *Request) { r.Placement.KnownHostsRef = "" },
+		"no private key":         func(r *Request) { r.Placement.PrivateKeyRef = "" },
+		"no address":             func(r *Request) { r.Placement.Address = "" },
+		"another placed Machine": func(r *Request) { r.Placement.Machine = "other" },
+		"another block":          func(r *Request) { r.Identity.Block = BlockID("other") },
+		"no context":             func(r *Request) { r.Identity.Context = "" },
+	} {
+		if _, err := DecodeRequest(blockWithRequest(t, block, edit).Request); err == nil || codeOf(t, err) != hardwareRequestInvalid.Code {
+			t.Errorf("%s: decoded (%v)", name, err)
+		}
+	}
+	runner := &scripted{}
+	execution := lifecycle.Execution{Block: block, Context: "lab", Attempt: 1}
+	execution.Block.Object = "other"
+	result, err := New(runner).Apply(context.Background(), execution)
+	if code := codeOf(t, err); code != hardwareRequestMismatch.Code || result.Outcome != reconciliation.OutcomeFailed || runner.seen.Operation != "" {
+		t.Fatalf("a mismatched block = %+v, %s, ran %+v", result, code, runner.seen)
+	}
+	execution.Block = block
+	result, err = New(nil).Apply(context.Background(), execution)
+	if code := codeOf(t, err); code != hardwareUnconfigured.Code || result.Outcome != reconciliation.OutcomeFailed {
+		t.Fatalf("an unbound adapter = %+v, %s", result, code)
+	}
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := New(runner).Observe(cancelled, execution); !errors.Is(err, context.Canceled) || runner.seen.Operation != "" {
+		t.Fatalf("a cancelled run = %v, ran %+v", err, runner.seen)
+	}
+}
+
+// An adapter that fails or answers with evidence of another read leaves an
+// apply unknown and an observation unknown, never completed.
+func TestAnAdapterFailureOrUnreadableEvidenceProvesNoRead(t *testing.T) {
+	block := servicesBlock(t)
+	execution := lifecycle.Execution{Block: block, Context: "lab", Attempt: 1}
+	failure := hardwareUnproved.Fail("the adapter ended", "")
+	runner := &scripted{err: failure}
+	if result, err := New(runner).Apply(context.Background(), execution); err == nil || result.Outcome != reconciliation.OutcomeUnknown {
+		t.Fatalf("a failed adapter apply = %+v (%v)", result, err)
+	}
+	if observed, err := New(runner).Observe(context.Background(), execution); err == nil || observed.Effect != reconciliation.EffectUnknown {
+		t.Fatalf("a failed adapter observe = %+v (%v)", observed, err)
+	}
+	runner = &scripted{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: evidenceOf(t, "another", "52:54:00:9a:1b:01")}}
+	result, err := New(runner).Apply(context.Background(), execution)
+	if code := codeOf(t, err); code != hardwareEvidenceIncomplete.Code || result.Outcome != reconciliation.OutcomeUnknown {
+		t.Fatalf("another request's read applied %+v, %s", result, code)
+	}
+	runner.result = lifecycle.RunResult{Outcome: "unchanged", Evidence: evidenceOf(t, block.RequestDigest, "52:54:00:9a:1b:01")}
+	observed, err := New(runner).Observe(context.Background(), execution)
+	if err != nil || observed.Effect != reconciliation.EffectCompleted || observed.Outcome != reconciliation.OutcomeUnchanged || runner.seen.Operation != "observe" {
+		t.Fatalf("observe = %+v (%v), ran %+v", observed, err, runner.seen)
+	}
+	runner.result = lifecycle.RunResult{Outcome: "unchanged", Evidence: []byte(`{"version":"` + EvidenceVersion + `","addresses":["a"]}`)}
+	if result, err := New(runner).Apply(context.Background(), execution); codeOf(t, err) != hardwareEvidenceMalformed.Code || result.Outcome != reconciliation.OutcomeUnknown {
+		t.Fatalf("malformed evidence applied %+v (%v)", result, err)
+	}
+}
+
+// A removal releases the claim and retains the server: its plan names the
+// release with no impact, its destroy completes only on evidence that this
+// request's claim is absent, its observation proves that absence without
+// reading the host, it is always quiescent, and it runs before the controller.
+func TestTheRemovalReleasesTheClaimAndProvesItsAbsence(t *testing.T) {
+	block := servicesBlock(t)
+	capability := New(nil)
+	removal, err := capability.Removal(context.Background(), block)
+	if err != nil || !strings.HasPrefix(removal.Description, "release the claim on the server behind services") || len(removal.Impacts) != 0 ||
+		len(removal.Groups) != 1 || removal.Groups[0].ID != "release-claim" || !slices.Equal(removal.Groups[0].Machines, []string{"services"}) || len(removal.Consumes) != 0 {
+		t.Fatalf("removal = %+v (%v)", removal, err)
+	}
+	if _, err := capability.Removal(context.Background(), reconciliation.Block{}); err == nil {
+		t.Fatal("a removal with no frozen request was planned")
+	}
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := capability.Removal(cancelled, block); !errors.Is(err, context.Canceled) {
+		t.Fatalf("a cancelled removal = %v", err)
+	}
+	if _, err := capability.ObserveRemoval(cancelled, lifecycle.Execution{Block: block}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("a cancelled removal observation = %v", err)
+	}
+	if observed, err := capability.ObserveRemoval(context.Background(), lifecycle.Execution{Block: reconciliation.Block{}}); err == nil || observed.Effect != reconciliation.EffectUnknown {
+		t.Fatalf("a removal observation with no request = %+v (%v)", observed, err)
+	}
+	observed, err := capability.ObserveRemoval(context.Background(), lifecycle.Execution{Block: block})
+	if err != nil || observed.Effect != reconciliation.EffectCompleted {
+		t.Fatalf("observed removal = %+v (%v)", observed, err)
+	}
+	proved, err := decodeEvidence(observed.Evidence)
+	if err != nil || !proved.Absent || !proved.Postcondition || proved.Request != block.RequestDigest || len(proved.Addresses) != 0 {
+		t.Fatalf("removal evidence = %+v (%v)", proved, err)
+	}
+	execution := lifecycle.Execution{Block: block, Context: "lab", Attempt: 1}
+	runner := &scripted{result: lifecycle.RunResult{Outcome: "changed", Evidence: observed.Evidence}}
+	result, err := New(runner).Destroy(context.Background(), execution)
+	if err != nil || result.Outcome != reconciliation.OutcomeChanged || runner.seen.Operation != "destroy" {
+		t.Fatalf("destroy = %+v (%v), ran %+v", result, err, runner.seen)
+	}
+	for name, evidence := range map[string][]byte{
+		"a read of the host": evidenceOf(t, block.RequestDigest, "52:54:00:9a:1b:01"),
+		"another request":    evidenceOf(t, "another"),
+		"malformed":          []byte(`{}`),
+	} {
+		runner.result = lifecycle.RunResult{Outcome: "changed", Evidence: evidence}
+		result, err := New(runner).Destroy(context.Background(), execution)
+		if code := codeOf(t, err); code != hardwareUnproved.Code || result.Outcome != reconciliation.OutcomeUnknown {
+			t.Errorf("destroy on %s = %+v, %s", name, result, code)
+		}
+	}
+	runner.result = lifecycle.RunResult{Outcome: "maybe", Evidence: observed.Evidence}
+	if result, err := New(runner).Destroy(context.Background(), execution); codeOf(t, err) != hardwareUnproved.Code || result.Outcome != reconciliation.OutcomeUnknown {
+		t.Errorf("destroy with no usable outcome = %+v (%v)", result, err)
+	}
+	runner.err = hardwareUnproved.Fail("the adapter ended", "")
+	if result, err := New(runner).Destroy(context.Background(), execution); err == nil || result.Outcome != reconciliation.OutcomeUnknown {
+		t.Fatalf("a failed adapter destroy = %+v (%v)", result, err)
+	}
+	if state, err := capability.Quiescent(context.Background(), lifecycle.Probe{}); err != nil || state.State != lifecycle.Quiescent || !strings.Contains(state.Reason, "retains the server") {
+		t.Fatalf("quiescence = %+v (%v)", state, err)
+	}
+	if !capability.PrecedesController(block.BlockDefinition) || capability.Claimed(api.Catalog{}) != nil {
+		t.Fatal("the hardware read follows the controller or claims a catalog object")
+	}
+}
+
+// A block's secret references are the SSH key and known-hosts Secrets of its
+// placement, classed as an access credential and a trust anchor, and a block
+// with no valid request names none.
+func TestABlocksSecretsAreItsPlacementsSSHSecrets(t *testing.T) {
+	block := servicesBlock(t)
+	references, err := New(nil).SecretReferences(block)
+	if err != nil || !slices.Equal(references, []string{"services-key", "services-known-hosts"}) {
+		t.Fatalf("references = %v (%v)", references, err)
+	}
+	classes, err := New(nil).SecretClasses(block)
+	if want := (secrets.Classes{}).Add(secrets.AccessCredential, "services-key").Add(secrets.TrustAnchor, "services-known-hosts"); err != nil || !maps.Equal(classes, want) {
+		t.Fatalf("classes = %v, want %v (%v)", classes, want, err)
+	}
+	if _, err := New(nil).SecretReferences(reconciliation.Block{}); err == nil {
+		t.Fatal("references of a block with no request")
+	}
+	if _, err := New(nil).SecretClasses(reconciliation.Block{}); err == nil {
+		t.Fatal("classes of a block with no request")
+	}
+	if _, found, err := New(nil).ProvedClaim("lab", reconciliation.Block{}, nil); err == nil || found {
+		t.Fatalf("a claim of a block with no request = %v (%v)", found, err)
+	}
+}
+
+// An apply whose evidence reads as this request's but proves no complete
+// read stays unknown with the drift named on its host; a removal, a missing
+// reading, another request's reading, a complete read and a block with no
+// request are never drift.
+func TestAnIncompleteReadOfThisRequestIsNamedAsDrift(t *testing.T) {
+	block := servicesBlock(t)
+	incomplete := []byte(`{"absent":false,"addresses":[],"postcondition":false,"request":"` + block.RequestDigest + `","version":"` + EvidenceVersion + `"}`)
+	unresolved, drifted := New(nil).Unresolved(reconciliation.Apply, block, incomplete)
+	if !drifted || !strings.Contains(unresolved.Reason, "the network interfaces of Machine services on Machine services at 192.0.2.9") ||
+		!strings.Contains(unresolved.Reason, "is not what its apply froze") || !strings.HasPrefix(unresolved.Remedy, "restore ") {
+		t.Fatalf("unresolved = %+v, %v", unresolved, drifted)
+	}
+	for name, probe := range map[string]struct {
+		verb     reconciliation.Verb
+		block    reconciliation.Block
+		evidence []byte
+	}{
+		"a removal":          {reconciliation.Destroy, block, incomplete},
+		"no reading":         {reconciliation.Apply, block, nil},
+		"malformed reading":  {reconciliation.Apply, block, []byte(`{}`)},
+		"another request":    {reconciliation.Apply, block, evidenceOf(t, "another")},
+		"a complete read":    {reconciliation.Apply, block, evidenceOf(t, block.RequestDigest, "52:54:00:9a:1b:01")},
+		"a block no request": {reconciliation.Apply, reconciliation.Block{}, incomplete},
+	} {
+		if got, drifted := New(nil).Unresolved(probe.verb, probe.block, probe.evidence); drifted || got != (lifecycle.Unresolved{}) {
+			t.Errorf("%s drifted as %+v", name, got)
+		}
+	}
+}
+
+// The stops a package declares are a copy, so a caller sorting or editing
+// them leaves the declared catalog as it was.
+func TestTheDeclaredStopsAreACopy(t *testing.T) {
+	first := Stops()
+	first[0].Code = "edited"
+	if second := Stops(); second[0].Code != hardwareDesiredStateMissing.Code || len(second) != len(stops) {
+		t.Fatalf("stops = %+v", second)
 	}
 }

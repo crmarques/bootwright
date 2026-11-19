@@ -3,6 +3,8 @@
 package stagelocal
 
 import (
+	"context"
+	"errors"
 	"io/fs"
 	"maps"
 	"os"
@@ -198,5 +200,72 @@ func TestADescendantKeepsTheTreeLocked(t *testing.T) {
 	defer last.Release()
 	if exists(filepath.Dir(staged.Path)) {
 		t.Fatal("the sweep left a tree no descendant holds")
+	}
+}
+
+// An admission stages beneath its own job directory with the same source and
+// the same digest proof, and refuses a missing stager or a relative job before
+// it creates anything.
+func TestStageForAdmissionStagesBeneathTheJobDirectory(t *testing.T) {
+	job := t.TempDir()
+	staged, err := NewAutomationStager(stagingAt(t)).StageForAdmission(t.Context(), job)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer staged.Release()
+	stage := filepath.Dir(staged.Path)
+	if filepath.Dir(stage) != filepath.Join(job, "automation") || staged.Digest != ansible.Digest() {
+		t.Fatalf("the tree %s under digest %s is not the embedded automation staged in %s", staged.Path, staged.Digest, job)
+	}
+	if len(stagedFiles(t, staged.Path)) != len(ansible.Automation()) {
+		t.Fatal("the admission tree is not the whole embedded automation")
+	}
+
+	tampered := maps.Clone(ansible.Automation())
+	tampered["ansible.cfg"] = []byte("# changed\n")
+	stager := NewAutomationStager(stagingAt(t))
+	stager.source = tampered
+	other := t.TempDir()
+	_, err = stager.StageForAdmission(t.Context(), other)
+	if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "controller.identity" {
+		t.Fatalf("an admission staged a tree unlike the embedded automation: %+v", found)
+	}
+	if names := stagingEntries(t, filepath.Join(other, "automation")); len(names) != 0 {
+		t.Fatalf("a refused admission left %q", names)
+	}
+
+	for name, call := range map[string]func() error{
+		"a nil stager": func() error { _, err := (*AutomationStager)(nil).StageForAdmission(t.Context(), job); return err },
+		"a relative job": func() error {
+			_, err := NewAutomationStager(stagingAt(t)).StageForAdmission(t.Context(), "job")
+			return err
+		},
+	} {
+		if found := diagnostics.Of(call()); len(found) != 1 || found[0].Code != "controller.install" {
+			t.Fatalf("%s gave %+v", name, found)
+		}
+	}
+}
+
+// A staging that cannot write the tree, a cancelled caller and a nil stager
+// each refuse without leaving a stage behind.
+func TestStageRefusesWhatItCannotWriteOrWasNotAskedFor(t *testing.T) {
+	parent := stagingAt(t)
+	stager := NewAutomationStager(parent)
+	stager.source = map[string][]byte{"file": []byte("x"), "file/inside": []byte("y")}
+	_, err := stager.Stage(t.Context())
+	if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "controller.install" {
+		t.Fatalf("a tree with a file where a directory belongs gave %+v", found)
+	}
+	if names := stagingEntries(t, parent); len(names) != 0 {
+		t.Fatalf("a refused tree left %q", names)
+	}
+	cancelled, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := NewAutomationStager(parent).Stage(cancelled); !errors.Is(err, context.Canceled) || len(stagingEntries(t, parent)) != 0 {
+		t.Fatalf("a cancelled caller gave %v", err)
+	}
+	if found := diagnostics.Of(func() error { _, err := (*AutomationStager)(nil).Stage(t.Context()); return err }()); len(found) != 1 || found[0].Code != "controller.install" {
+		t.Fatalf("a nil stager gave %+v", found)
 	}
 }

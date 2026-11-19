@@ -2,7 +2,10 @@ package inspection
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"slices"
+	"strings"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -136,4 +139,76 @@ func TestObjectUserHandoffReadsOnlyTheSelectedUser(t *testing.T) {
 			first.Clear()
 		})
 	}
+}
+
+// A proof or custody read that fails is returned, custody the store flags as
+// not one S3 credential is refused as corrupt with its material cleared, and
+// a credential outside its bounds is refused.
+func TestObjectUserHandoffReturnsFailedReadsAndRefusesMalformedCredentials(t *testing.T) {
+	setup := func() *fixture {
+		f := newFixture(t)
+		f.catalog = api.NewCatalog(append(f.catalog.Objects(), handoffUser("documents", "storage", "objects"), api.NewObject(api.CephObjectGateway, "objects", api.Value{}, api.MapValue(field("clusterRef", text("storage"))))))
+		return f
+	}
+	ask := func(f *fixture) (*InfoResult, error) {
+		return f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{"storage"}, ObjectUser: "documents"})
+	}
+	failure := errors.New("the store is unreadable")
+	f := setup()
+	f.objectProofErr = failure
+	if result, err := ask(f); result != nil || !errors.Is(err, failure) || len(f.objectReads) != 0 {
+		t.Fatalf("a failing proof = %+v (%v), read %v", result, err, f.objectReads)
+	}
+	f = setup()
+	f.readError = failure
+	f.objectUsers = map[string]Custodied{"documents": {Material: handoffMaterial()}}
+	if result, err := ask(f); result != nil || !errors.Is(err, failure) {
+		t.Fatalf("a failing custody read = %+v (%v)", result, err)
+	}
+	assertHandoffCleared(t, f.objectUsers["documents"].Material)
+	f = setup()
+	f.readError = fmt.Errorf("custody: %w", ErrObjectUserMaterial)
+	f.objectUsers = map[string]Custodied{"documents": {Material: handoffMaterial()}}
+	result, err := ask(f)
+	if reported := diagnostics.Of(err); result != nil || len(reported) != 1 || reported[0].Code != "secret.store.corrupt" || !strings.Contains(reported[0].Message, "documents") {
+		t.Fatalf("flagged material = %+v (%v)", result, err)
+	}
+	assertHandoffCleared(t, f.objectUsers["documents"].Material)
+}
+
+func TestAnS3CredentialIsOneBoundedPrintableLoginOfItsUser(t *testing.T) {
+	login := func(user, password string) secrets.Material {
+		return secrets.NewMaterial(map[secrets.Part][]byte{secrets.UsernamePart: []byte(user), secrets.PasswordPart: []byte(password)})
+	}
+	for name, test := range map[string]struct {
+		material secrets.Material
+		want     bool
+	}{
+		"a login":                {login("ACCESS", "PRIVATE"), true},
+		"the longest value":      {login(strings.Repeat("a", 128), strings.Repeat("b", 128)), true},
+		"an empty user":          {login("", "PRIVATE"), false},
+		"an empty password":      {login("ACCESS", ""), false},
+		"a value past its bound": {login("ACCESS", strings.Repeat("b", 129)), false},
+		"a space":                {login("ACC ESS", "PRIVATE"), false},
+		"a control":              {login("ACCESS", "PRI\nVATE"), false},
+		"a password alone":       {secrets.NewMaterial(map[secrets.Part][]byte{secrets.PasswordPart: []byte("PRIVATE")}), false},
+		"a third part":           {secrets.NewMaterial(map[secrets.Part][]byte{secrets.UsernamePart: []byte("A"), secrets.PasswordPart: []byte("P"), secrets.ValuePart: []byte("V")}), false},
+	} {
+		if got := validObjectCredentials(test.material); got != test.want {
+			t.Errorf("%s valid = %v, want %v", name, got, test.want)
+		}
+	}
+}
+
+// ClearSecrets clears every secret an inspection revealed, a cluster's
+// console password, a dashboard password and the object users' keys
+// included, and passes a storage cluster with no managed Ceph.
+func TestClearSecretsClearsEveryRevealedSecret(t *testing.T) {
+	console, dashboard, keys := handoffMaterial(), handoffMaterial(), handoffMaterial()
+	result := &InfoResult{
+		Clusters: []ContainerEntry{{Name: "edge"}, {Name: "okd", Details: &ContainerDetails{Console: &ConsoleAccess{Password: console}}}},
+		Storage:  []StorageEntry{{Name: "bare"}, {Name: "storage", Ceph: &ManagedCeph{Dashboard: &Dashboard{Password: dashboard}, ObjectUsers: []ObjectUserAccess{{Name: "documents", Credentials: keys}}}}},
+	}
+	ClearSecrets(result)
+	assertHandoffCleared(t, console, dashboard, keys)
 }

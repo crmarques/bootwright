@@ -2,6 +2,7 @@ package power
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"testing"
 
@@ -51,5 +52,39 @@ func TestARealizationIsTheBlockTheBoundImplementationsClaimAndNoOther(t *testing
 				t.Fatalf("realization = %+v, %t (%v) after %v", state, found, err, test.reader.asked)
 			}
 		})
+	}
+}
+
+type failingRealization struct {
+	realizationReader
+	failing string
+	err     error
+}
+
+func (r *failingRealization) Evidence(ctx context.Context, contextName, kind, name string) ([]lifecycle.BlockEvidence, error) {
+	if r.failing == "current" {
+		return nil, r.err
+	}
+	return r.realizationReader.Evidence(ctx, contextName, kind, name)
+}
+
+func (r *failingRealization) AppliedEvidence(ctx context.Context, contextName, kind, name string) ([]lifecycle.BlockEvidence, error) {
+	if r.failing == "applied" {
+		return nil, r.err
+	}
+	return r.realizationReader.AppliedEvidence(ctx, contextName, kind, name)
+}
+
+// A realization that cannot be read from either evidence refuses with that
+// error rather than reading as no realization.
+func TestARealizationThatCannotBeReadRefuses(t *testing.T) {
+	t.Parallel()
+	unreadable := errors.New("evidence unreadable")
+	for _, failing := range []string{"current", "applied"} {
+		reader := &failingRealization{failing: failing, err: unreadable}
+		state, found, err := NewEvidenceRealization(reader, func(string) bool { return true }).Realization(context.Background(), "lab", "node")
+		if !errors.Is(err, unreadable) || found || state != (machine.OwnershipState{}) {
+			t.Errorf("%s evidence failing = %+v, %t (%v)", failing, state, found, err)
+		}
 	}
 }

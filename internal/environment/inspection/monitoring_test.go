@@ -2,6 +2,7 @@ package inspection
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -139,6 +140,42 @@ func TestClearSecretsClearsMonitoringPasswords(t *testing.T) {
 	for _, access := range rows {
 		if !cleared(access.Password) {
 			t.Fatalf("%s kept its password after ClearSecrets", access.Service)
+		}
+	}
+}
+
+// A custody read that fails is returned for the login it read, a Grafana
+// password with no value or beside another part is refused as corrupt, and
+// every value read is cleared.
+func TestSecretsRefusesMonitoringCustodyThatFailsOrIsMalformed(t *testing.T) {
+	f := gatewayFixture(t)
+	f.readError = errors.New("the custody store is unreadable")
+	if result, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{"storage"}, Secrets: true}); result != nil || !errors.Is(err, f.readError) {
+		t.Fatalf("a failing login read = %+v (%v)", result, err)
+	}
+	onlyGrafana := func(f *fixture) {
+		proof := f.cephFor["storage"]
+		proof.Monitoring = []MonitoringAccess{{Service: "grafana", URL: gatewayURL + "grafana/"}}
+		f.cephFor["storage"] = proof
+	}
+	f = gatewayFixture(t)
+	onlyGrafana(f)
+	f.readError = errors.New("the custody store is unreadable")
+	if result, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{"storage"}, Secrets: true}); result != nil || !errors.Is(err, f.readError) {
+		t.Fatalf("a failing Grafana read = %+v (%v)", result, err)
+	}
+	for name, parts := range map[string]map[secrets.Part][]byte{
+		"no value":       {secrets.ValuePart: nil},
+		"another part":   {secrets.PasswordPart: []byte("gr-Secret.99")},
+		"beside a login": {secrets.ValuePart: []byte("gr-Secret.99"), secrets.UsernamePart: []byte("admin")},
+	} {
+		f = gatewayFixture(t)
+		onlyGrafana(f)
+		malformed := Custodied{Material: secrets.NewMaterial(parts)}
+		f.grafana = &malformed
+		result, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{"storage"}, Secrets: true})
+		if reported := diagnostics.Of(err); result != nil || len(reported) != 1 || reported[0].Code != "secret.store.corrupt" || !strings.Contains(reported[0].Message, "CephCluster storage") || !cleared(malformed.Material) {
+			t.Errorf("%s = %+v (%v)", name, result, err)
 		}
 	}
 }
