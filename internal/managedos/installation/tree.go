@@ -111,7 +111,7 @@ func (c TreeCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 		}
 		media, err := pinned(*install.TreeMedia, records, profile.Identity(), "spec.installer.anaconda.packageSource.hostedTree.fromMedia", "")
 		if err == nil {
-			err = refusedRelease(media.Name, records, profile)
+			err = refusedRelease(media.Name, records, profile, true)
 		}
 		if err != nil {
 			return plan, err

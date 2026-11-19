@@ -5,7 +5,8 @@ A profile whose `spec.installer.anaconda.packageSource` selects
 its `spec.subscription` registers with: the installer registers the machine,
 installs every package from the content the activation key selects, and hands
 the registration to the installed system. No DVD and no hosted tree is read;
-the boot image alone names the release ([media store](managed-os.md#media-store)).
+the boot image alone names the release, read from its `.discinfo` when it
+carries no `.treeinfo` ([media store](managed-os.md#media-store)).
 Everything this page does not state follows
 [installation](managed-os.md#installation) and
 [registration](managed-os.md#registration) unchanged.

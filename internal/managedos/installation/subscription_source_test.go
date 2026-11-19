@@ -13,6 +13,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/managedos"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
@@ -75,6 +76,36 @@ func TestASubscriptionSourceFreezesAnInstallerRegistrationAndNoTree(t *testing.T
 	unreleased[bootImageName] = MediaRecord{SHA256: bootDigest, Size: 1105199104, Observed: 1105199104}
 	if err := RefusedReleases(subscriptionSourceCatalog(), request, unreleased); err == nil {
 		t.Fatal("a boot image naming no release was accepted with no other image to name it")
+	}
+}
+
+// A RHEL boot image's .discinfo names a version and arch but no family, which
+// is enough for the boot image a subscription installs from, held to the
+// declared release and arch.
+func TestASubscriptionSourceBootImageMayNameNoFamily(t *testing.T) {
+	request := pinnedRequest(t, subscriptionSourceCatalog())
+	const profile = "MachineInstallProfile/rhel-9-8"
+	for release, want := range map[managedos.MediaRelease]string{
+		{Version: "9.8", Arch: "x86_64"}:                          "",
+		{Version: "9.7", Arch: "x86_64"}:                          bootImageName + " holds release 9.7 and " + profile + " declares spec.os.version 9.8",
+		{Version: "9.8", Arch: "aarch64"}:                         bootImageName + " holds a aarch64 release, and an installation installs only Red Hat Enterprise Linux on x86_64",
+		{Family: "CentOS Stream", Version: "9.8", Arch: "x86_64"}: bootImageName + " holds a CentOS Stream x86_64 release, and an installation installs only Red Hat Enterprise Linux on x86_64",
+	} {
+		records := labRecords()
+		record := records[bootImageName]
+		record.Release = release
+		records[bootImageName] = record
+		err := RefusedReleases(subscriptionSourceCatalog(), request, records)
+		if want == "" {
+			if err != nil {
+				t.Fatalf("%+v was refused: %v", release, diagnostics.Of(err))
+			}
+			continue
+		}
+		reported := diagnostics.Of(err)
+		if len(reported) != 1 || reported[0].Code != "install.media-unusable" || reported[0].Message != want {
+			t.Fatalf("%+v: refusal = %#v, want %q", release, reported, want)
+		}
 	}
 }
 

@@ -221,8 +221,9 @@ func cdromProfile() api.Object {
 // packages from, the boot image of a profile with no package source and a
 // hosted tree's DVD, must name a Red Hat Enterprise Linux x86_64 release of
 // exactly spec.os.version, and the shared tree publication refuses its DVD
-// alike. A hosted tree's boot image is held to it only when its record names
-// a release, because a RHEL boot ISO carries no .treeinfo.
+// alike. A release naming no family, as a .discinfo yields, is refused there
+// with its own remedy. A hosted tree's boot image is held to it only when its
+// record names a release.
 func TestPlanRefusesAnImageThatIsNotTheDeclaredRelease(t *testing.T) {
 	const profile = "MachineInstallProfile/rhel-9-8"
 	for name, test := range map[string]struct {
@@ -230,8 +231,11 @@ func TestPlanRefusesAnImageThatIsNotTheDeclaredRelease(t *testing.T) {
 		message, remediation string
 	}{
 		"no release": {managedos.MediaRelease{},
-			"the media store holds no release for %s, which this build reads from the image's .treeinfo when it is added",
+			"the media store holds no release for %s, which this build reads from the image's .treeinfo or .discinfo when it is added",
 			"bootwright media delete --name %s, then bootwright media add --name %s with this build"},
+		"no family": {managedos.MediaRelease{Version: "9.8", Arch: "x86_64"},
+			"%s names no release family, as a boot image's .discinfo does, and an installation installs packages only from an image whose .treeinfo names Red Hat Enterprise Linux",
+			"import the Red Hat Enterprise Linux DVD with bootwright media add and select it for " + profile + ", or select a subscription package source there"},
 		"another family": {managedos.MediaRelease{Family: "CentOS Stream", Version: "9.8", Arch: "x86_64"},
 			"%s holds a CentOS Stream x86_64 release, and an installation installs only Red Hat Enterprise Linux on x86_64",
 			"import a Red Hat Enterprise Linux x86_64 image with bootwright media add and select it for " + profile},
@@ -260,7 +264,7 @@ func TestPlanRefusesAnImageThatIsNotTheDeclaredRelease(t *testing.T) {
 							return err
 						},
 					}
-					if test.release.Present() {
+					if test.release.Family != "" {
 						plans["installation"] = func() error { _, err := planWith(&fixtureMedia{records: records}, labCatalog()); return err }
 					}
 				}
@@ -284,7 +288,7 @@ func TestPlanRefusesAnImageThatIsNotTheDeclaredRelease(t *testing.T) {
 
 // A RHEL boot ISO carries no .treeinfo, so a hosted tree's boot image with no
 // release plans, bounded by its DVD's release; one that names another release
-// still refuses.
+// or arch, with or without a family, still refuses.
 func TestAHostedTreeBootImageIsComparedOnlyWhenItNamesARelease(t *testing.T) {
 	records := labRecords()
 	record := records[bootImageName]
@@ -293,10 +297,21 @@ func TestAHostedTreeBootImageIsComparedOnlyWhenItNamesARelease(t *testing.T) {
 	if _, err := planWith(&fixtureMedia{records: records}, labCatalog()); err != nil {
 		t.Fatalf("a boot image with no release refused: %v", diagnostics.Of(err))
 	}
-	record.Release = rhelRelease("9.7")
+	record.Release = managedos.MediaRelease{Version: "9.8", Arch: "x86_64"}
 	records[bootImageName] = record
-	_, err := planWith(&fixtureMedia{records: records}, labCatalog())
-	if reported := onlyDiagnostic(t, err); reported.Message != bootImageName+" holds release 9.7 and MachineInstallProfile/rhel-9-8 declares spec.os.version 9.8" {
-		t.Fatalf("diagnostic = %+v", reported)
+	if _, err := planWith(&fixtureMedia{records: records}, labCatalog()); err != nil {
+		t.Fatalf("a boot image naming 9.8 with no family refused: %v", diagnostics.Of(err))
+	}
+	for release, want := range map[managedos.MediaRelease]string{
+		rhelRelease("9.7"):                bootImageName + " holds release 9.7 and MachineInstallProfile/rhel-9-8 declares spec.os.version 9.8",
+		{Version: "9.7", Arch: "x86_64"}:  bootImageName + " holds release 9.7 and MachineInstallProfile/rhel-9-8 declares spec.os.version 9.8",
+		{Version: "9.8", Arch: "aarch64"}: bootImageName + " holds a aarch64 release, and an installation installs only Red Hat Enterprise Linux on x86_64",
+	} {
+		record.Release = release
+		records[bootImageName] = record
+		_, err := planWith(&fixtureMedia{records: records}, labCatalog())
+		if reported := onlyDiagnostic(t, err); reported.Message != want {
+			t.Fatalf("%+v: diagnostic = %+v, want %q", release, reported, want)
+		}
 	}
 }

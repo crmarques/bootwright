@@ -83,6 +83,35 @@ func TestMediaRecordsRoundTripExactlyOneImage(t *testing.T) {
 	}
 }
 
+// A release read from a .discinfo names no family; its record keeps all three
+// keys, family empty.
+func TestAFamilyLessReleaseRoundTripsThroughItsRecord(t *testing.T) {
+	entry := validEntry()
+	entry.Release = MediaRelease{Version: "9.8", Arch: "x86_64"}
+	data, err := EncodeMediaRecord(entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"release":{"family":"","version":"9.8","arch":"x86_64"}}`) {
+		t.Fatalf("record = %s", data)
+	}
+	decoded, err := DecodeMediaRecord(data, entry.Name)
+	if err != nil || decoded != entry {
+		t.Fatalf("decoded = %+v (%v)", decoded, err)
+	}
+	for name, release := range map[string]MediaRelease{
+		"a family without a version": {Family: "Red Hat Enterprise Linux", Arch: "x86_64"},
+		"a family without an arch":   {Family: "Red Hat Enterprise Linux", Version: "9.8"},
+		"a version alone":            {Version: "9.8"},
+		"an arch alone":              {Arch: "x86_64"},
+	} {
+		entry.Release = release
+		if _, err := EncodeMediaRecord(entry); err == nil {
+			t.Errorf("%s was encoded", name)
+		}
+	}
+}
+
 func TestMediaRecordsRefuseNoncanonicalAndUnprovableValues(t *testing.T) {
 	entry := validEntry()
 	canonical, err := EncodeMediaRecord(entry)

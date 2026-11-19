@@ -90,6 +90,23 @@ func isoWith(name []byte, content string) []byte {
 
 func rhelISO() []byte { return isoWith(ucs2(".treeinfo;1"), rhelTreeinfo) }
 
+const bootDiscinfo = "1778519505.201133\n9.8\nx86_64\n"
+
+var bootRelease = MediaRelease{Version: "9.8", Arch: "x86_64"}
+
+func bootISO() []byte { return isoWith(ucs2(".discinfo"), bootDiscinfo) }
+
+// withRootFile adds a second file record to an isoWith image's root directory,
+// its bytes in sectors appended to the image.
+func withRootFile(image, name []byte, content string) []byte {
+	sector := len(image) / isoSector
+	image = append(image, make([]byte, (len(content)/isoSector+1)*isoSector)...)
+	copy(image[sector*isoSector:], content)
+	root := image[rootOffset : rootOffset+isoSector]
+	dirRecord(root[treeinfoEntry-rootOffset+int(root[treeinfoEntry-rootOffset]):], uint32(sector), uint32(len(content)), 0, name)
+	return image
+}
+
 func releaseOf(t *testing.T, image []byte) MediaRelease {
 	t.Helper()
 	release, err := ReadMediaRelease(bytes.NewReader(image), int64(len(image)))
@@ -222,6 +239,104 @@ func TestATreeinfoThatDoesNotNameOneReleaseHoldsNone(t *testing.T) {
 	}
 }
 
+func TestAnImageWithoutATreeinfoNamesTheVersionAndArchOfItsDiscinfo(t *testing.T) {
+	for name, image := range map[string][]byte{
+		"a boot image's three lines":      bootISO(),
+		"a versioned name":                isoWith(ucs2(".discinfo;1"), bootDiscinfo),
+		"a fourth line naming one token":  isoWith(ucs2(".discinfo"), "1778519505.201133\n9.8\nx86_64\nALL\n"),
+		"a whole-second timestamp":        isoWith(ucs2(".discinfo"), "1778519505\n9.8\nx86_64\n"),
+		"a .discinfo beside another file": withRootFile(isoWith(ucs2("images"), ""), ucs2(".discinfo"), bootDiscinfo),
+		"a three-group version":           isoWith(ucs2(".discinfo"), "1778519505.201133\n9.8.0\nx86_64\n"),
+	} {
+		want := bootRelease
+		if name == "a three-group version" {
+			want.Version = "9.8.0"
+		}
+		if got := releaseOf(t, image); got != want {
+			t.Fatalf("%s: release = %+v, want %+v", name, got, want)
+		}
+	}
+}
+
+// A .discinfo names a release only in the shape lorax writes it: a decimal
+// timestamp, a bare dotted version and an architecture, then at most one token.
+func TestADiscinfoNotInItsStrictShapeHoldsNoRelease(t *testing.T) {
+	for name, content := range map[string]string{
+		"a DVD's descriptive release": "1778519505.201133\nRed Hat Enterprise Linux 9.8.0\nx86_64\nALL\n",
+		"a bare major version":        "1778519505.201133\n9\nx86_64\n",
+		"a version with a space":      "1778519505.201133\n9.8 \nx86_64\n",
+		"an empty version group":      "1778519505.201133\n9..8\nx86_64\n",
+		"a leading dot":               "1778519505.201133\n.9.8\nx86_64\n",
+		"a lettered version":          "1778519505.201133\n9.8b\nx86_64\n",
+		"a timestamp that is no time": "yesterday\n9.8\nx86_64\n",
+		"a timestamp with two dots":   "1778519505.2.1\n9.8\nx86_64\n",
+		"a timestamp ending in a dot": "1778519505.\n9.8\nx86_64\n",
+		"an empty timestamp":          "\n9.8\nx86_64\n",
+		"an empty arch":               "1778519505.201133\n9.8\n\n",
+		"an arch with a space":        "1778519505.201133\n9.8\n x86_64\n",
+		"an over-long arch":           "1778519505.201133\n9.8\n" + strings.Repeat("a", MaxMediaReleaseValue+1) + "\n",
+		"a fourth line of two tokens": "1778519505.201133\n9.8\nx86_64\nALL more\n",
+		"an empty fourth line":        "1778519505.201133\n9.8\nx86_64\n\n",
+		"five lines":                  "1778519505.201133\n9.8\nx86_64\nALL\nmore\n",
+		"two lines":                   "1778519505.201133\n9.8\n",
+		"an unterminated last line":   "1778519505.201133\n9.8\nx86_64",
+		"CRLF lines":                  "1778519505.201133\r\n9.8\r\nx86_64\r\n",
+		"a NUL byte":                  "1778519505.201133\n9.8\x00\nx86_64\n",
+		"a tab":                       "1778519505.201133\n9.8\nx86\t64\n",
+		"a non-ASCII arch":            "1778519505.201133\n9.8\nx86_64é\n",
+		"an empty file":               "",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := releaseOf(t, isoWith(ucs2(".discinfo"), content)); got.Present() {
+				t.Fatalf("release = %+v, want none", got)
+			}
+		})
+	}
+	for name, mutate := range map[string]func([]byte) []byte{
+		"an upper-case file name":     func([]byte) []byte { return isoWith(ucs2(".DISCINFO"), bootDiscinfo) },
+		"a directory named .discinfo": func(image []byte) []byte { image[treeinfoEntry+25] = 0x02; return image },
+		"a multi-extent file":         func(image []byte) []byte { image[treeinfoEntry+25] = 0x80; return image },
+		"an interleaved file":         func(image []byte) []byte { image[treeinfoEntry+26] = 1; return image },
+		"extended attributes":         func(image []byte) []byte { image[treeinfoEntry+1] = 1; return image },
+		"a file larger than its bound": func([]byte) []byte {
+			return isoWith(ucs2(".discinfo"), bootDiscinfo+strings.Repeat("x", MaxDiscinfo))
+		},
+		"two .discinfo records": func(image []byte) []byte { return withRootFile(image, ucs2(".discinfo;1"), bootDiscinfo) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := releaseOf(t, mutate(bootISO())); got.Present() {
+				t.Fatalf("release = %+v, want none", got)
+			}
+		})
+	}
+}
+
+// An image that holds a .treeinfo record is read from it alone, whether or not
+// it names a release.
+func TestAnImageWithATreeinfoIgnoresItsDiscinfo(t *testing.T) {
+	if got := releaseOf(t, withRootFile(rhelISO(), ucs2(".discinfo"), bootDiscinfo)); got != rhelRelease {
+		t.Fatalf("release = %+v, want the .treeinfo's %+v", got, rhelRelease)
+	}
+	for name, image := range map[string][]byte{
+		"a .treeinfo naming no release": withRootFile(isoWith(ucs2(".treeinfo"), "[general]\nversion = 9.8\n"), ucs2(".discinfo"), bootDiscinfo),
+		"a .treeinfo that is a directory": func() []byte {
+			image := withRootFile(rhelISO(), ucs2(".discinfo"), bootDiscinfo)
+			image[treeinfoEntry+25] = 0x02
+			return image
+		}(),
+		"a .treeinfo larger than its bound": func() []byte {
+			image := withRootFile(rhelISO(), ucs2(".discinfo"), bootDiscinfo)
+			image = append(image, make([]byte, MaxTreeinfo+isoSector)...)
+			bothEndian32(image[treeinfoEntry+10:], MaxTreeinfo+1)
+			return image
+		}(),
+	} {
+		if got := releaseOf(t, image); got.Present() {
+			t.Fatalf("%s: release = %+v, want none", name, got)
+		}
+	}
+}
+
 type failingImage struct {
 	image []byte
 	at    int64
@@ -246,15 +361,22 @@ func TestOnlyTheStoresReadFailureIsAnError(t *testing.T) {
 	if _, err := ReadMediaRelease(bytes.NewReader(image[:treeinfoOffset]), int64(len(image))); !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
 		t.Fatalf("bytes shorter than their measured size reported %v, want a short read", err)
 	}
+	boot := bootISO()
+	if _, err := ReadMediaRelease(failingImage{image: boot, at: treeinfoOffset}, int64(len(boot))); err == nil || err.Error() != "input/output error" {
+		t.Fatalf("a .discinfo read failing reported %v, want the store's error", err)
+	}
 }
 
 // Random damage to the descriptors, the root directory and the file never
 // fails the read and never yields a release outside its contract.
 func TestRandomlyDamagedImagesNeverFailTheRead(t *testing.T) {
 	random := rand.New(rand.NewSource(1))
-	regions := [][2]int{{16 * isoSector, 19 * isoSector}, {rootOffset, rootOffset + isoSector}, {treeinfoOffset, treeinfoOffset + len(rhelTreeinfo)}}
-	for range 2000 {
-		image := rhelISO()
+	images := []func() []byte{rhelISO, bootISO}
+	files := []int{len(rhelTreeinfo), len(bootDiscinfo)}
+	for range 4000 {
+		which := random.Intn(len(images))
+		image := images[which]()
+		regions := [][2]int{{16 * isoSector, 19 * isoSector}, {rootOffset, rootOffset + isoSector}, {treeinfoOffset, treeinfoOffset + files[which]}}
 		region := regions[random.Intn(len(regions))]
 		for range 1 + random.Intn(8) {
 			image[region[0]+random.Intn(region[1]-region[0])] = byte(random.Intn(256))

@@ -46,20 +46,39 @@ frozen. A mismatch, an over-bound image, a non-regular source or an interrupted
 transfer publishes nothing. A mismatch names the image, its origin and both
 the expected and the computed digest.
 
-After the digest, `media add` reads the image's release from its `/.treeinfo`:
-the file at the root of the ISO 9660 image's Joliet directory, read from the
-staged bytes through the add's own descriptor, at most 1 MiB, never mounting
-the image or executing anything from it. The record gains the optional member
-`release`, `{family, version, arch}`, the `family`, `version` and `arch` keys
-of that file's `[general]` section, each one line of at most 128 printable
-bytes. An image with no Joliet directory, no `/.treeinfo`, a larger or
-fragmented one, or a `[general]` section missing any of the three keys, or one
-its strict reading refuses (a repeated section or key, a value continued onto
-another line), is published with no `release`; `media add` never refuses for
+After the digest, `media add` reads the image's release from its `/.treeinfo`
+or, when the root holds none, from its `/.discinfo` as the next paragraph
+states: the file at the root of the ISO 9660 image's Joliet directory, read
+from the staged bytes through the add's own descriptor, at most 1 MiB, never
+mounting the image or executing anything from it. The record gains the
+optional member `release`, `{family, version, arch}`, the `family`, `version`
+and `arch` keys of that file's `[general]` section, each one line of at most
+128 printable bytes; `family` is empty for a release read from `/.discinfo`.
+An image with no Joliet directory, neither a `/.treeinfo` nor a `/.discinfo`
+naming a release, a larger or fragmented record, or a `[general]` section
+missing any of the three keys, or one its strict reading refuses (a repeated
+section or key, a value continued onto another line), is published with no
+`release`; `media add` never refuses for
 it, and refuses only when it cannot read back its own staged bytes, as the
 store's failure. Source:
 [productmd treeinfo 1.0](https://release-engineering.github.io/productmd/treeinfo-1.0.html),
 whose `[general]` keys equal `[release] name` and `version` and `[tree] arch`.
+
+An image whose Joliet root holds no `.treeinfo` record, as a RHEL boot ISO
+does not, has its release read from `/.discinfo` in the same root instead,
+through the same reader and the same checks of one regular, unfragmented
+record, at most 1 KiB. An image with a `.treeinfo` record is read from it
+alone, whether or not it yields a release. The `.discinfo` names a release
+only when it is three or four LF-terminated lines of printable ASCII: a
+decimal timestamp, optionally with one fractional part; a version of two or
+more decimal groups joined by dots and nothing else; an architecture of at
+most 128 printable bytes; and, when present, one more token with no space.
+That release is `{family: "", version, arch}`: a `.discinfo` names no
+family. Any other content, such as a DVD's descriptive second line `Red Hat
+Enterprise Linux 9.8.0`, a CR or another control byte, or more lines, is
+published with no `release`, never refused. Source: lorax
+[`DiscInfo`](https://github.com/weldr/lorax/blob/master/src/pylorax/discinfo.py),
+which writes the timestamp, release and architecture one per line.
 
 A failed download names its own cause: a redirect, with its status and its
 target without the query; the name that did not resolve; the certificate the
@@ -122,19 +141,31 @@ packages from, the boot image of a profile with no `packageSource` and a
 hosted tree's DVD, it also refuses, naming the image and the
 `MachineInstallProfile`: a record with no `release`,
 `the media store holds no release for <image>, which this build reads from the
-image's .treeinfo when it is added`, remedied by `bootwright media delete
---name <image>, then bootwright media add --name <image> with this build`; a
-release `family` other than `Red Hat Enterprise Linux`, or an `arch` other
-than `x86_64`, `<image> holds a <family> <arch> release, and an installation
-installs only Red Hat Enterprise Linux on x86_64`, remedied by `import a Red
-Hat Enterprise Linux x86_64 image with bootwright media add and select it for
-<profile>`; and a release `version` other than the
+image's .treeinfo or .discinfo when it is added`, remedied by `bootwright media
+delete --name <image>, then bootwright media add --name <image> with this
+build`; a `release` that names no `family`, `<image> names no release family,
+as a boot image's .discinfo does, and an installation installs packages only
+from an image whose .treeinfo names Red Hat Enterprise Linux`, remedied by
+`import the Red Hat Enterprise Linux DVD with bootwright media add and select
+it for <profile>, or select a subscription package source there`; a release
+`family` other than `Red Hat Enterprise Linux`, or an `arch`
+other than `x86_64`, `<image> holds a <family> <arch> release, and an
+installation installs only Red Hat Enterprise Linux on x86_64`, remedied by
+`import a Red Hat Enterprise Linux x86_64 image with bootwright media add and
+select it for <profile>`; and a release `version` other than the
 profile's `spec.os.version`, `<image> holds release <found> and
 <profile> declares spec.os.version <declared>`, remedied by `set
 spec.os.version on <profile> to <found>, or import the <declared> image`. A
-hosted tree's boot image is refused only by the family, arch and version
-refusals, and only when its record names a release: a RHEL boot ISO carries
-no `.treeinfo`, so it is accepted without one, bounded by the installed system's `VERSION_ID` that
+RHEL boot ISO carries no `.treeinfo` and names its version and arch in its
+`.discinfo`, with no family. A boot image that only boots the installer is
+held to the family refusal only when its release names a family, and to the
+arch and version refusals always; for a release with no family the arch
+message names only `<arch>`. The boot image of a
+[subscription](managed-os-subscription-source.md) profile, from which the
+installation installs nothing, is refused with no `release` as above and then
+held so. A hosted tree's boot image is held so only when its record names a
+release, so a boot image with no release is bounded by its DVD's release and
+the installed system's `VERSION_ID` that
 [update within release](#update-within-release) proves. A plan therefore never
 installs one minor under a profile declaring another.
 

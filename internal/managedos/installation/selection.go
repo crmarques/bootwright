@@ -433,25 +433,28 @@ func pinned(media Media, records map[string]MediaRecord, owner, field, image str
 func RefusedReleases(catalog api.Catalog, request Request, records map[string]MediaRecord) error {
 	profile, _ := catalog.Find(api.MachineInstallProfile, request.Identity.Profile)
 	if request.TreeMedia == nil {
-		return refusedRelease(request.BootMedia.Name, records, profile)
+		return refusedRelease(request.BootMedia.Name, records, profile, !subscriptionSourced(profile))
 	}
 	if records[request.BootMedia.Name].Release.Present() {
-		if err := refusedRelease(request.BootMedia.Name, records, profile); err != nil {
+		if err := refusedRelease(request.BootMedia.Name, records, profile, false); err != nil {
 			return err
 		}
 	}
-	return refusedRelease(request.TreeMedia.Name, records, profile)
+	return refusedRelease(request.TreeMedia.Name, records, profile, true)
 }
 
-func refusedRelease(image string, records map[string]MediaRecord, profile api.Object) error {
+func refusedRelease(image string, records map[string]MediaRecord, profile api.Object, packages bool) error {
 	release, declared := records[image].Release, profile.Spec().Get("os", "version").Text()
 	var message, remediation string
 	switch {
 	case !release.Present():
-		message = "the media store holds no release for " + image + ", which this build reads from the image's .treeinfo when it is added"
+		message = "the media store holds no release for " + image + ", which this build reads from the image's .treeinfo or .discinfo when it is added"
 		remediation = "bootwright media delete --name " + image + ", then bootwright media add --name " + image + " with this build"
-	case release.Family != "Red Hat Enterprise Linux" || release.Arch != "x86_64":
-		message = image + " holds a " + release.Family + " " + release.Arch + " release, and an installation installs only Red Hat Enterprise Linux on x86_64"
+	case packages && release.Family == "":
+		message = image + " names no release family, as a boot image's .discinfo does, and an installation installs packages only from an image whose .treeinfo names Red Hat Enterprise Linux"
+		remediation = "import the Red Hat Enterprise Linux DVD with bootwright media add and select it for " + profile.Identity() + ", or select a subscription package source there"
+	case release.Family != "" && release.Family != "Red Hat Enterprise Linux" || release.Arch != "x86_64":
+		message = image + " holds a " + strings.TrimSpace(release.Family+" "+release.Arch) + " release, and an installation installs only Red Hat Enterprise Linux on x86_64"
 		remediation = "import a Red Hat Enterprise Linux x86_64 image with bootwright media add and select it for " + profile.Identity()
 	case release.Version != declared:
 		message = image + " holds release " + release.Version + " and " + profile.Identity() + " declares spec.os.version " + declared

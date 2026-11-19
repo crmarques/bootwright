@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"slices"
 	"strings"
 )
 
@@ -13,24 +14,27 @@ const (
 	maxVolumeDescriptors = 32
 	maxTreeinfoDirectory = 1 << 20
 	MaxTreeinfo          = 1 << 20
+	MaxDiscinfo          = 1 << 10
 )
 
-var errNoRelease = errors.New("the image holds no readable release")
+var (
+	errNoRelease = errors.New("the image holds no readable release")
+	errNoRecord  = errors.New("the image's root directory names no such file")
+)
 
 type MediaBytes interface {
 	ReadAt([]byte, int64) (int, error)
 }
 
 func ReadMediaRelease(image MediaBytes, size int64) (MediaRelease, error) {
-	data, err := readTreeinfo(image, size)
-	if errors.Is(err, errNoRelease) {
+	release, err := readRelease(image, size)
+	if errors.Is(err, errNoRelease) || errors.Is(err, errNoRecord) {
 		return MediaRelease{}, nil
 	}
 	if err != nil {
 		return MediaRelease{}, err
 	}
-	release, ok := parseTreeinfo(data)
-	if !ok || !ValidMediaRelease(release) {
+	if !ValidMediaRelease(release) {
 		return MediaRelease{}, nil
 	}
 	return release, nil
@@ -56,21 +60,34 @@ func (i isoImage) read(offset, length int64) ([]byte, error) {
 	return nil, err
 }
 
-func readTreeinfo(reader MediaBytes, size int64) ([]byte, error) {
+func readRelease(reader MediaBytes, size int64) (MediaRelease, error) {
 	image := isoImage{reader: reader, size: size}
 	root, err := jolietRoot(image)
 	if err != nil {
-		return nil, err
+		return MediaRelease{}, err
 	}
 	directory, err := image.read(root.offset, root.length)
 	if err != nil {
-		return nil, err
+		return MediaRelease{}, err
 	}
-	file, err := treeinfoRecord(directory)
+	parse := parseTreeinfo
+	file, err := rootFile(directory, treeinfoNames, MaxTreeinfo)
+	if errors.Is(err, errNoRecord) {
+		parse = parseDiscinfo
+		file, err = rootFile(directory, discinfoNames, MaxDiscinfo)
+	}
 	if err != nil {
-		return nil, err
+		return MediaRelease{}, err
 	}
-	return image.read(file.offset, file.length)
+	data, err := image.read(file.offset, file.length)
+	if err != nil {
+		return MediaRelease{}, err
+	}
+	release, ok := parse(data)
+	if !ok {
+		return MediaRelease{}, errNoRelease
+	}
+	return release, nil
 }
 
 type isoExtent struct {
@@ -140,7 +157,10 @@ func recordExtent(record []byte) (isoExtent, bool) {
 	return isoExtent{offset: int64(location) * isoSector, length: int64(length), flags: record[25]}, true
 }
 
-var treeinfoNames = [][]byte{ucs2(".treeinfo"), ucs2(".treeinfo;1")}
+var (
+	treeinfoNames = [][]byte{ucs2(".treeinfo"), ucs2(".treeinfo;1")}
+	discinfoNames = [][]byte{ucs2(".discinfo"), ucs2(".discinfo;1")}
+)
 
 func ucs2(name string) []byte {
 	encoded := make([]byte, 0, 2*len(name))
@@ -150,7 +170,7 @@ func ucs2(name string) []byte {
 	return encoded
 }
 
-func treeinfoRecord(directory []byte) (isoExtent, error) {
+func rootFile(directory []byte, names [][]byte, bound int64) (isoExtent, error) {
 	var found []isoExtent
 	for position := 0; position < len(directory); {
 		if directory[position] == 0 {
@@ -164,14 +184,17 @@ func treeinfoRecord(directory []byte) (isoExtent, error) {
 		}
 		position += len(record)
 		name := record[33 : 33+int(record[32])]
-		if !bytes.Equal(name, treeinfoNames[0]) && !bytes.Equal(name, treeinfoNames[1]) {
+		if !bytes.Equal(name, names[0]) && !bytes.Equal(name, names[1]) {
 			continue
 		}
 		extent, ok := recordExtent(record)
-		if !ok || extent.flags&0xfe != 0 || record[1] != 0 || record[26] != 0 || record[27] != 0 || extent.length > MaxTreeinfo {
+		if !ok || extent.flags&0xfe != 0 || record[1] != 0 || record[26] != 0 || record[27] != 0 || extent.length > bound {
 			return isoExtent{}, errNoRelease
 		}
 		found = append(found, extent)
+	}
+	if len(found) == 0 {
+		return isoExtent{}, errNoRecord
 	}
 	if len(found) != 1 {
 		return isoExtent{}, errNoRelease
@@ -220,4 +243,34 @@ func parseTreeinfo(data []byte) (MediaRelease, bool) {
 	}
 	release := MediaRelease{Family: general["family"], Version: general["version"], Arch: general["arch"]}
 	return release, release.Family != "" && release.Version != "" && release.Arch != ""
+}
+
+func parseDiscinfo(data []byte) (MediaRelease, bool) {
+	text, terminated := strings.CutSuffix(string(data), "\n")
+	lines := strings.Split(text, "\n")
+	if !terminated || len(lines) < 3 || len(lines) > 4 {
+		return MediaRelease{}, false
+	}
+	for index := range len(text) {
+		if text[index] != '\n' && (text[index] < 0x20 || text[index] > 0x7e) {
+			return MediaRelease{}, false
+		}
+	}
+	whole, fraction, dotted := strings.Cut(lines[0], ".")
+	if !decimal(whole) || dotted && !decimal(fraction) || !dottedVersion(lines[1]) || !validReleaseValue(lines[2]) {
+		return MediaRelease{}, false
+	}
+	if len(lines) == 4 && (lines[3] == "" || strings.Contains(lines[3], " ")) {
+		return MediaRelease{}, false
+	}
+	return MediaRelease{Version: lines[1], Arch: lines[2]}, true
+}
+
+func dottedVersion(value string) bool {
+	groups := strings.Split(value, ".")
+	return len(groups) >= 2 && !slices.ContainsFunc(groups, func(group string) bool { return !decimal(group) })
+}
+
+func decimal(value string) bool {
+	return value != "" && strings.Trim(value, "0123456789") == ""
 }

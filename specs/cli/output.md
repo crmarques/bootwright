@@ -591,8 +591,9 @@ Each `media` entry of `media list` orders its fields as follows:
 otherwise; with `name` they are that record: its name, its size in bytes, its
 hexadecimal SHA-256, its credential-free origin and its time of publication.
 `release` is the record's `{family, version, arch}` read from the image's
-`.treeinfo` ([media store](../managed-os.md#media-store)), present only when
-the record holds one. `reservedBy` is the array of contexts that reserve the image, sorted and empty
+`.treeinfo` or `.discinfo` ([media store](../managed-os.md#media-store)),
+present only when the record holds one; `family` is empty for a release read
+from `.discinfo`. `reservedBy` is the array of contexts that reserve the image, sorted and empty
 when none does, and `frozen` is `true` exactly when it is not empty. `verified`
 is `mismatch` when the bytes the store holds no longer have the size the record
 states and, with `--checksums`, also when their computed digest differs from

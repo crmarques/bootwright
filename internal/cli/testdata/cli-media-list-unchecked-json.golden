@@ -12,7 +12,7 @@
         "source": "file:///srv/images/rhel-9.8-x86_64-boot.iso",
         "added": "2026-09-20T08:15:00Z",
         "release": {
-          "family": "Red Hat Enterprise Linux",
+          "family": "",
           "version": "9.8",
           "arch": "x86_64"
         },

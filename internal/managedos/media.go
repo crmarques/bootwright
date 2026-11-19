@@ -54,7 +54,7 @@ func ValidMediaRelease(release MediaRelease) bool {
 	if !release.Present() {
 		return true
 	}
-	return validReleaseValue(release.Family) && validReleaseValue(release.Version) && validReleaseValue(release.Arch)
+	return (release.Family == "" || validReleaseValue(release.Family)) && validReleaseValue(release.Version) && validReleaseValue(release.Arch)
 }
 
 func validReleaseValue(value string) bool {
