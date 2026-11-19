@@ -1,5 +1,5 @@
 implementation: os-install-anaconda-v1
-content-digest: 45baeff08c06011433ca9773f0efcb1df0704c97ae2c8b8f8eb5f2edd32b8c41
+content-digest: 57afe6119999fc952aceb4c58e0ba2ddd04609a38181c06571cf97fa9ed0c633
 request-version: os-install-anaconda-v1
 automation-formats: none
 mark-formats: none
@@ -18,6 +18,7 @@ effect-pins:
   verified-media-default
   anaconda-home-partition-policy
   subscription-package-source
+  explicit-repository-proxy-policy
 request-identity:
   identity.context
   identity.object

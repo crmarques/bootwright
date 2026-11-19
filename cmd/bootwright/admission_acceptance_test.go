@@ -328,6 +328,9 @@ func TestReferenceReadmeListsExactlyTheReferenceRefusals(t *testing.T) {
 			return d.kind == "OpenShiftCluster" && strings.HasPrefix(d.field, "$.spec.install.endpoints.")
 		},
 		"Manager-module intent.": modules,
+		"Proxy choices on RHEL Machines with no configured repositories.": func(d diagnosticTuple) bool {
+			return d.code == "api.deferred" && d.kind == "Machine" && d.field == "$.spec.proxy"
+		},
 		"Unqualified global Ceph options, including missing members of the currently qualified pool-default pair.": global,
 	}
 	data, err := os.ReadFile(filepath.Join(examplePath(t, "multidc-platform"), "README.md"))
@@ -404,6 +407,9 @@ func referenceRefusals() []diagnosticTuple {
 		{"api.required", storageClusterKind, multidcCluster, "$.spec.config.global.osd_pool_default_size"},
 		cluster("$.spec.mgrModules"),
 	}
+	for _, name := range []string{"storage-a-01", "storage-a-02", "storage-a-03", "storage-b-01", "storage-b-02", "storage-b-03"} {
+		result = append(result, diagnosticTuple{"api.deferred", "Machine", name, "$.spec.proxy"})
+	}
 	return result
 }
 
@@ -419,6 +425,7 @@ func expandedRefusals() []diagnosticTuple {
 		diagnosticTuple{"api.invariant", "CephSMBResource", "acceptance-smb-users", "$.spec.clusterRef"},
 		diagnosticTuple{"api.invariant", "CephSMBResource", "acceptance-smb", "$.spec.clusterRef"},
 		diagnosticTuple{"api.deferred", "CustomPlaybook", "acceptance-playbook", laterServiceRefusal},
+		diagnosticTuple{"api.deferred", "Machine", "acceptance-clone-node", "$.spec.proxy"},
 		diagnosticTuple{"api.unrealized", "InfraProvider", "acceptance-vsphere", "$.spec.vsphere"},
 		diagnosticTuple{"api.unrealized", "MachineInstallProfile", "acceptance-clone", "$.spec.installer.templateClone"},
 		diagnosticTuple{"api.unrealized", "LoadBalancer", "acceptance-load-balancer", "$.spec.management"},
@@ -511,14 +518,27 @@ func TestActualAdmissibleProjectionAdmitsEveryKindButTheRefusedFamilies(t *testi
 	if report.Counts != (compilation.Counts{FilesSeen: 91, ObjectsDecoded: 130}) {
 		t.Errorf("projection counts: %#v", report.Counts)
 	}
-	var warned []diagnostics.Diagnostic
-	for _, d := range report.Diagnostics {
-		if d.Code != "api.unrealized" {
-			warned = append(warned, d)
+	wantAdvisories := map[diagnosticTuple]bool{}
+	for _, issue := range expandedRefusals() {
+		if issue.code == "api.deferred" {
+			wantAdvisories[issue] = true
 		}
 	}
-	if len(warned) != 1 || warned[0].Code != "api.deferred" || warned[0].Object == nil || warned[0].Object.Name != "acceptance-playbook" {
-		t.Errorf("the projection raised a diagnostic besides the reserved playbook's and the unrealized warnings: %+v", report.Diagnostics)
+	for _, d := range report.Diagnostics {
+		if d.Code == "api.unrealized" {
+			continue
+		}
+		tuple := diagnosticTuple{code: d.Code, field: d.Field}
+		if d.Object != nil {
+			tuple.kind, tuple.name = d.Object.Kind, d.Object.Name
+		}
+		if !wantAdvisories[tuple] {
+			t.Errorf("unexpected projection diagnostic: %s", tuple)
+		}
+		delete(wantAdvisories, tuple)
+	}
+	if len(wantAdvisories) != 0 {
+		t.Errorf("missing projection advisories: %v", wantAdvisories)
 	}
 	installed := requireObject(t, state.Effective(), api.Machine, "storage-a-01")
 	if installed.Spec().Get("access", "ssh", "user").Text() != "bootwright" || installed.Spec().Get("access", "ssh", "auth", "privateKeyRef").Text() != "bootwright-machine-key" {

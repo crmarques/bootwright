@@ -176,3 +176,15 @@ def test_an_unclaimed_host_holding_this_clusters_route_is_traced(routed, monkeyp
     directory.mkdir(mode=0o755)
     path_of(directory, native).write_bytes(expected(PROXY))
     assert ceph_native_stretch.TiebreakerRemoval.traced(removal) is True
+
+
+@pytest.mark.parametrize("direct", [False, True])
+def test_another_bootwright_podman_route_refuses_before_publication(routed, direct):
+    native, directory, unused = routed
+    if direct:
+        del native.request["registryProxy"]
+    directory.mkdir()
+    (directory / ("90-bootwright-ceph-" + "0" * 64 + ".conf")).write_text("other cluster owns this")
+    with pytest.raises(ceph_native.Refusal, match="^registry-ownership$"):
+        native.prepare_route()
+    assert native.markers.writes == []

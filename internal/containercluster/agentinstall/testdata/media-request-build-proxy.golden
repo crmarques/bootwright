@@ -71,7 +71,10 @@
   "buildEgress": {
     "HTTPS_PROXY": "http://build.example.test:3128",
     "HTTP_PROXY": "http://build.example.test:3128",
-    "NO_PROXY": "localhost"
+    "NO_PROXY": "localhost",
+    "http_proxy": "http://build.example.test:3128",
+    "https_proxy": "http://build.example.test:3128",
+    "no_proxy": "localhost"
   },
   "deliveryKind": "fetch",
   "identity": {

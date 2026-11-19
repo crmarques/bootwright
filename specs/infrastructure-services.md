@@ -38,29 +38,26 @@ or creates a log.
 
 ### Refusal table
 
-Each row is one refusal of a managed service capability.
-`TestArtifactServerRefusalTableMatchesUnsupported` holds the artifact server's
-`Unsupported` to every row except the endpoint-address bound, which only a
-Proxy, DNSServer, NTPServer or Registry declares, and
-`TestManagedServiceRefusalTableMatchesUnsupported` holds the Proxy, DNSServer,
-NTPServer and Registry capabilities' to every row except the artifact socket bound,
-which only an ArtifactServer declares. Reason and
-remedy are the diagnostic's message and remediation (`plan.object-unsupported` on
-the refused service), in which `<server>` is the refused service, `<machine>`
-its placement Machine and `<proxy>` the Proxy that Machine selects. The
-installed-host rows hold the ArtifactServer alone, except the firewall row, and
-the own-installation row the DNSServer and NTPServer alone; `<profile>`,
-`<kind>`, `<consumer>` and `<provider>` name the install profile, the
-service's kind, the publishing object and the provider; the image copy tool
-row holds the Registry alone. A placement
-Machine that is the Environment's controller is reached locally, so the SSH
-rows never refuse a service placed there.
+Each row is a managed service refusal, held to its capability's `Unsupported`
+by `TestArtifactServerRefusalTableMatchesUnsupported` for the ArtifactServer,
+every row but the endpoint-address bound, and by
+`TestManagedServiceRefusalTableMatchesUnsupported` for the Proxy, DNSServer,
+NTPServer and Registry, every row but the artifact socket bound. Reason and
+remedy are the message and remediation of `plan.object-unsupported` on the
+refused service `<server>`; `<machine>` is its placement Machine, `<proxy>` the
+Proxy it selects, and `<profile>`, `<kind>`, `<consumer>` and `<provider>` the
+install profile, service kind, publishing object and provider. The
+installed-host rows but the firewall's hold the ArtifactServer alone, the
+own-installation row the DNSServer and NTPServer, and the image copy tool row
+the Registry. The SSH rows never refuse a service on the controller, which is
+reached locally.
 
 | Refusal | Path | Reason | Remedy |
 | --- | --- | --- | --- |
 | Managed Proxy egress | `spec.proxy.proxyRef` of the placement `Machine` names a managed `Proxy` | `this executable acquires a managed service's image only directly or through an external Proxy that is already ready, and <machine>, where <server> runs, selects the managed <proxy> in spec.proxy.proxyRef` | `select direct: {} or an external Proxy in spec.proxy on <machine>, or place <server> on another Machine` |
 | Proxy authentication | `spec.connection.auth.proxyAuthRef` on the external `Proxy` the placement `Machine` selects | `this executable acquires a managed service's image through no authenticated proxy, and <proxy>, which <machine> selects for <server>, sets spec.connection.auth.proxyAuthRef` | `select direct: {} or an external Proxy that needs no authentication in spec.proxy on <machine>` |
 | Private trust | `spec.connection.trustBundleRef` on the external `Proxy` the placement `Machine` selects | `this executable acquires a managed service's image with the host's system trust store alone, and <proxy>, which <machine> selects for <server>, sets spec.connection.trustBundleRef` | `select direct: {} or an external Proxy without spec.connection.trustBundleRef in spec.proxy on <machine>` |
+| HTTP proxy alone | `spec.connection.httpsProxy` absent on the external `Proxy` the placement `Machine` selects | `HTTPS acquisition for <server> requires spec.connection.httpsProxy on <proxy>` | `set spec.connection.httpsProxy on <proxy>, or select direct access on <machine>` |
 | Operator SSH identity | `spec.access.ssh.auth.operatorIdentity` on a placement `Machine` other than the controller, the default of a provided Machine without authored access included | `this executable reaches a placement host other than the controller only with a bound SSH private key, and <machine>, where <server> runs, uses spec.access.ssh.auth.operatorIdentity` | `author spec.access.ssh.auth.privateKeyRef and spec.access.ssh.knownHostsRef on <machine>, or place <server> on the controller Machine` |
 | Password SSH authentication | `spec.access.ssh.auth.passwordRef` on a placement `Machine` other than the controller | `this executable reaches a placement host other than the controller only with a bound SSH private key, and <machine>, where <server> runs, uses spec.access.ssh.auth.passwordRef` | `author spec.access.ssh.auth.privateKeyRef and spec.access.ssh.knownHostsRef on <machine>, or place <server> on the controller Machine` |
 | No bound host key | `spec.access.ssh` without `knownHostsRef` on a placement `Machine` other than the controller | `this executable connects to a placement host other than the controller only against a bound SSH host key, and <machine>, where <server> runs, declares no spec.access.ssh.knownHostsRef` | `author spec.access.ssh.knownHostsRef on <machine>, or place <server> on the controller Machine` |
@@ -400,7 +397,8 @@ declared [image mirror](api/environment.md#image-mirror), a `public` or
 compiled reference of a public origin is pulled from the mirror instead.
 Image acquisition uses the placement Machine's normalized
 [proxy choice](api/machines.md#machine-proxy) and no ambient proxy variable;
-a managed, authenticated or private-trust Proxy refuses before registration, as
+a managed, authenticated or private-trust Proxy, or an external Proxy without
+`connection.httpsProxy`, refuses before registration, as
 the [refusal table](#refusal-table) states.
 `retention` admits `persistent` alone: the server keeps its published content
 until destroy.
@@ -987,7 +985,7 @@ block, and publishes beneath the server's served root at
 `mirror/<environment>/<kind>/<release>/<file>`, the path the controller stage
 reads. Each file is read from its publisher over verified HTTPS through the
 mirror host's frozen egress route, direct or an external Proxy and never an
-ambient proxy, into a temporary file whose SHA-256 must equal the build's pin
+ambient proxy, into a temporary file whose size and SHA-256 must equal the build's pin
 before it is renamed into place, owned by root, mode `0644` and labeled like
 the served root. A file already present at its pinned size and SHA-256 is not
 read again, so a replay copies nothing and reports unchanged. A file whose
@@ -999,6 +997,9 @@ names, in request order, each file the mirror holds and whether its size and
 SHA-256 match the pin; a held file the request does not name in that place is
 unknown (`TestTheFillReadsItsEffectFromTheFilesTheMirrorHolds`). The fill's
 removal deletes `mirror/<environment>` alone, before the server's own removal.
+The publisher downloader uses urllib3 on the mirror host and evaluates the
+bypass list again for every permitted HTTPS redirect. The controller runtime
+ships urllib3. On a remote mirror host its Ansible Python must provide it.
 No Secret material reaches the mirror host beyond its placement's SSH access.
 
 **Image fill.** One block of the same family, implementation
@@ -1049,7 +1050,8 @@ references, is copied over, while a mirror the host cannot read or one holding
 another release at the pin refuses. Otherwise it reads
 `openshift-client-linux-<version>.tar.gz` from the source the controller
 stage reads that client from and `sha256sum.txt` from its publisher's release
-directory on `mirror.openshift.com`, through the frozen egress route over
+directory on `mirror.openshift.com`, through the frozen egress route selected
+for each URL by urllib3 on the mirror host over
 verified HTTPS, and extracts `oc` only when the archive's SHA-256 is the one
 listed, then runs `oc adm release mirror -a <auth> --from=<release>
 --to=<location>/<components> --to-release-image=<location>/<release

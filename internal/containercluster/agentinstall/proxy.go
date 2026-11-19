@@ -8,6 +8,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	environmentdomain "github.com/crmarques/bootwright/internal/environment"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 )
 
 // InstallProxy freezes endpoints with an explicit authentication placeholder.
@@ -35,7 +36,11 @@ func installationProxy(catalog api.Catalog, cluster api.Object) (*InstallProxy, 
 		if err != nil {
 			return nil, "", err
 		}
-		result.HTTPProxy = "http://" + infrastructureservices.HostPort(address, 3128)
+		port, err := managedservice.Port(proxy.Spec(), proxy.Identity())
+		if err != nil {
+			return nil, "", err
+		}
+		result.HTTPProxy = "http://" + infrastructureservices.HostPort(address, port)
 		result.HTTPSProxy, managed = result.HTTPProxy, required
 	} else {
 		connection := proxy.Spec().Get("connection")
@@ -43,13 +48,16 @@ func installationProxy(catalog api.Catalog, cluster api.Object) (*InstallProxy, 
 			return nil, "", refusal("api.invariant", "the installation proxy trust bundle is not selected by the cluster", "add Secret "+trust+" to install.additionalTrustBundleRefs on "+cluster.Identity())
 		}
 		result.HTTPProxy, result.HTTPSProxy = connection.Get("httpProxy").Text(), connection.Get("httpsProxy").Text()
-		if result.HTTPProxy == "" {
+		if strings.HasPrefix(result.HTTPProxy, "https:") {
+			return nil, "", refusal("api.value", "the installer HTTP proxy requires an http:// endpoint", "correct connection.httpProxy on "+proxy.Identity())
+		}
+		if result.HTTPProxy == "" && strings.HasPrefix(result.HTTPSProxy, "http:") {
 			result.HTTPProxy = result.HTTPSProxy
 		}
 		if result.HTTPSProxy == "" {
 			result.HTTPSProxy = result.HTTPProxy
 		}
-		if result.HTTPProxy == "" {
+		if result.HTTPSProxy == "" {
 			return nil, "", refusal("api.required", "the installation proxy declares no endpoint", "correct the selected Proxy connection")
 		}
 		result.CredentialsRef = connection.Get("auth", "proxyAuthRef").Text()
@@ -61,6 +69,10 @@ func installationProxy(catalog api.Catalog, cluster api.Object) (*InstallProxy, 
 			return nil, "", err
 		}
 		entries = append(entries, translated)
+	}
+	if slices.Contains(entries, "*") {
+		result.NoProxy = "*"
+		return result, managed, nil
 	}
 	for _, node := range cluster.Spec().Get("nodes").Items() {
 		machine, ok := catalog.Find(api.Machine, node.Get("machineRef").Text())

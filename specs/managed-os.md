@@ -319,25 +319,14 @@ letters refuses at plan. Formats equal to the language, the admission default,
 render nothing. `additionalLocales` gains no langpack beyond what
 `lang --addsupport` installs.
 
-Configured repositories are the installed system's own and never install
-sources: the packages come from the install source alone, and no `repo`
-directive is rendered. The `%post` writes each, in ID order, as
-`/etc/yum.repos.d/bootwright-<id>.repo` with mode 0644, holding its `[<id>]`
-section, `name` (its `displayName`), `baseurl`, `enabled` and `gpgcheck` as
-`1` or `0`, `gpgkey` when `gpgKeyURL` is set and `proxy` when the installed
-system reaches it through one; a disabled repository is written with
-`enabled=0`. The renderer refuses an ID dnf would not accept, as admission
-does. The proxy is the Machine's effective proxy choice: none for
-`direct` or an absent choice; otherwise the selected external Proxy's
-`httpsProxy` for an `https` base URL and `httpProxy` for an `http` one, each
-falling back to the other when only one is declared. A repository on the host
-of the installation's own installer image or package tree URL is reached
-directly, because the installation fetches only its artifact endpoints and
-those are exempt, as is one whose host a `noProxy` entry of the choice covers:
-`*` covers every host, a `.domain` or `*.domain` suffix the domain and its
-subdomains, an IP address or CIDR block the IP literals it equals or contains,
-and any other entry the host it names, its `:port` ignored, all compared
-without case. The `.repo` file is the only place the proxy is written.
+The `%post` writes installed repositories in ID order as mode-0644
+`/etc/yum.repos.d/bootwright-<id>.repo` files. Each holds its ID, name,
+base URL, enabled and GPG-check flags, optional key URL, and the proxy
+selected for the base URL's scheme, falling back to the other endpoint.
+A direct choice, an installation artifact host or a matching
+[proxy bypass](api/infrastructure-services.md#proxy-choice) writes `proxy=`
+with an empty value to override dnf's main configuration. Configured
+repositories are installed-system policy. The installer uses its own source.
 
 Each selected DNS or NTP address is a managed server's endpoint address, or an
 external server's declared `address`.

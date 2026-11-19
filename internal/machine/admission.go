@@ -971,6 +971,14 @@ func validateServices(o api.Object, c api.Catalog) []api.Issue {
 	s := o.Spec()
 	issues := validateServiceIntent(o)
 	issues = api.AppendIssues(issues, infrastructureservices.ValidateProxy(s.Get("proxy"), c, "$.spec.proxy", installed(o))...)
+	if installed(o) && s.Has("proxy", "proxyRef") {
+		if profile, found := c.Find(api.MachineInstallProfile, api.MachineInstallProfileRef(o)); found &&
+			profile.Spec().Get("customizations", "repositories", "configure").Len() == 0 {
+			issues = api.AppendIssues(issues, api.Issue{Code: "api.deferred", Field: "$.spec.proxy",
+				Message:     "the install profile declares no configured repository to receive this Machine's proxy",
+				Remediation: "declare customizations.repositories.configure on " + profile.Identity() + " if its installed repositories need this proxy"})
+		}
+	}
 	issues = api.AppendIssues(issues, infrastructureservices.ValidateServerSelections(s.Get("os", "install", "ntp"), c, api.NTPServer, "$.spec.os.install.ntp")...)
 	return issues
 }

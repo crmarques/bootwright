@@ -9,3 +9,9 @@ def test_proxy_credentials_are_encoded_and_input_is_unchanged():
     assert result["proxy"]["httpsProxy"] == "https://a%40b:p%3A%2F%20%23@proxy.example.test"
     assert result["proxy"]["noProxy"] == "*"
     assert config["proxy"]["httpProxy"] == "http://[2001:db8::1]:3128"
+
+
+def test_https_only_proxy_credentials_leave_the_http_field_absent():
+    config = {"proxy": {"httpsProxy": "https://proxy.example.test", "noProxy": "*"}}
+    result = installer_proxy_credentials(config, {"credentialsRef": "auth"}, "user", "password")
+    assert result["proxy"] == {"httpsProxy": "https://user:password@proxy.example.test", "noProxy": "*"}

@@ -1189,7 +1189,11 @@ stands. The file is root's, its directory writable by root alone, and its
 record is durable before it; a name no record binds, other bytes, a link or a
 direct route with a record refuses `registry-ownership`. Every registry proof
 proves it, and a tiebreaker or retained-root removal removes it as part of the
-cluster's footprint. A direct route publishes none.
+cluster's footprint. A direct route publishes none. The host apply plan
+names this host-wide Podman default. Other root Podman invocations may use
+the engine environment defaults, and the setting changes the container
+proxy-variable forwarding default. Authorization and proof refuse a competing
+Bootwright Ceph route, including on a host with a direct selection.
 
 ## Named refusal outcomes
 

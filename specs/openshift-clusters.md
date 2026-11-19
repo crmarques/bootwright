@@ -455,8 +455,12 @@ and a physical node's pre-boot proof reads one enabled.
 
 **Installation proxy.** `install-config` carries the selected Proxy as
 `proxy.httpProxy`, `proxy.httpsProxy` and `proxy.noProxy`, its credentials
-substituted by the attempt, the choice's `noProxy` followed by every
-`networking.machineNetwork` CIDR and the cluster's own domain. A proxy's trust bundle must be
+substituted by the attempt. A managed proxy uses its effective listener port.
+An external TLS-only proxy leaves `httpProxy` absent. The HTTP destination
+field accepts an `http://` endpoint. A lone `*` bypasses all addresses. Other
+bypass lists contain the translated authored entries followed by every
+`networking.machineNetwork` CIDR and the cluster's own domain. An authored
+port-qualified bypass refuses at its entry. A proxy's trust bundle must be
 one the cluster selects. The image build reaches the release payload through the
 controller Machine's own proxy choice.
 

@@ -12,7 +12,7 @@ import pytest
 
 from ansible_collections.bootwright.core.plugins.modules import infrastructureservices_mirror_release as module
 
-READ = {"release": {"version": "4.21.0"}, "client": {"name": "oc"}, "mirror": "mirror.example.test:8443", "egress": {"httpProxy": ""},
+READ = {"release": {"version": "4.21.0"}, "client": {"name": "oc"}, "mirror": "mirror.example.test:8443", "egress": {"noProxy": []},
         "username": "lent-user", "password": "lent-secret", "trust": "-----BEGIN CERTIFICATE-----\nlent\n"}
 PREPARE = dict(READ, mode="prepare", auth="lent-auth", scratch="/run/lent/scratch")
 

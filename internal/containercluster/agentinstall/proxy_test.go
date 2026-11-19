@@ -16,7 +16,7 @@ func proxyCatalog(managed bool) api.Catalog {
 	}
 	spec := api.MapValue(text("management", "external"), field("connection", api.MapValue(text("httpProxy", "http://proxy.example.test:3128"), field("auth", api.MapValue(text("proxyAuthRef", "proxy-auth"))))))
 	if managed {
-		spec = api.MapValue(text("management", "managed"), text("machineRef", "controller"), field("endpoints", api.ListValue(api.MapValue(text("name", "ip"), text("addressRef", "ip")))))
+		spec = api.MapValue(text("management", "managed"), field("port", api.IntegerValue("8443")), text("machineRef", "controller"), field("endpoints", api.ListValue(api.MapValue(text("name", "ip"), text("addressRef", "ip")))))
 	}
 	return api.NewCatalog(append(objects, api.NewObject(api.Proxy, "egress", api.Value{}, spec)))
 }
@@ -34,6 +34,9 @@ func TestInstallationProxyGolden(t *testing.T) {
 				t.Fatal(err)
 			}
 			matchesGolden(t, "media-request-proxy-"+name, data, false)
+			if managed && !strings.HasSuffix(media.InstallProxy.HTTPSProxy, ":8443") {
+				t.Fatalf("managed listener port was lost: %s", media.InstallProxy.HTTPSProxy)
+			}
 			if _, err := DecodeMediaRequest(data); err != nil {
 				t.Fatal(err)
 			}
@@ -100,5 +103,22 @@ func TestAuthoredMachineNetworksReachInstallConfigAndNoProxy(t *testing.T) {
 	}
 	if !strings.HasSuffix(media.InstallProxy.NoProxy, "2001:db8::1,203.0.113.0/24,198.51.100.0/24,.sno.lab.example.test") {
 		t.Fatal(media.InstallProxy.NoProxy)
+	}
+}
+
+func TestHTTPSOnlyInstallationProxyWithWildcard(t *testing.T) {
+	objects := proxyCatalog(false).Objects()
+	for i, object := range objects {
+		switch object.Kind() {
+		case api.Proxy:
+			objects[i] = object.WithSpec(object.Spec().With("connection", api.MapValue(text("httpsProxy", "https://proxy.example.test:8443"))))
+		case api.OpenShiftCluster:
+			objects[i] = object.WithSpec(object.Spec().WithPath(api.StringList("*"), "install", "proxy", "noProxy"))
+		}
+	}
+	media, _, _ := onlyRequests(t, api.NewCatalog(objects))
+	proxy := media.InstallConfig["proxy"].(map[string]any)
+	if _, found := proxy["httpProxy"]; found || proxy["httpsProxy"] != "https://proxy.example.test:8443" || proxy["noProxy"] != "*" {
+		t.Fatalf("invalid native proxy: %#v", proxy)
 	}
 }

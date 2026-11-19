@@ -5,19 +5,9 @@ infrastructureservices_mirror_fill_served_root: >-
      ~ '/services/artifact-server/' ~ bootwright_mirror_files_request.identity.server ~ '/public' }}
 infrastructureservices_mirror_fill_root: >-
   {{ infrastructureservices_mirror_fill_served_root ~ '/mirror/' ~ bootwright_mirror_files_request.identity.environment }}
-# Every publisher is HTTPS, so only the frozen HTTPS proxy routes a download;
-# without one the download ignores any ambient proxy variable. A redirect to
-# plain HTTP takes the same proxy, never a direct route.
-infrastructureservices_mirror_fill_proxied: "{{ (bootwright_mirror_files_request.egress.httpsProxy | default('')) != '' }}"
-infrastructureservices_mirror_fill_environment:
-  https_proxy: "{{ bootwright_mirror_files_request.egress.httpsProxy | default('') }}"
-  HTTPS_PROXY: "{{ bootwright_mirror_files_request.egress.httpsProxy | default('') }}"
-  http_proxy: "{{ bootwright_mirror_files_request.egress.httpsProxy | default('') }}"
-  HTTP_PROXY: "{{ bootwright_mirror_files_request.egress.httpsProxy | default('') }}"
-  no_proxy: "{{ bootwright_mirror_files_request.egress.noProxy | join(',') }}"
-  NO_PROXY: "{{ bootwright_mirror_files_request.egress.noProxy | join(',') }}"
-# The seconds one publisher read may stall before the fill names it unreachable.
-infrastructureservices_mirror_fill_download_timeout: 120
+# The seconds one file's whole acquisition may take before the fill names it
+# unreachable: the per-file budget the fill's block deadline reserves.
+infrastructureservices_mirror_fill_download_timeout: 600
 infrastructureservices_mirror_fill_directories: >-
   {{ [infrastructureservices_mirror_fill_served_root ~ '/mirror', infrastructureservices_mirror_fill_root]
      + bootwright_mirror_files_request.files | map(attribute='path') | map('dirname') | unique

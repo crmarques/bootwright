@@ -17,6 +17,8 @@ Alias cell.
 
 | ID | Alias | Kind | Owner | Outcome | Why parked |
 | --- | --- | --- | --- | --- | --- |
+| [B1611](#b1611) | new, 2026-11-18 (proxy audit) | product | Managed OS, Container cluster and State reconciliation | Observe installed proxy drift and support an owned transition between direct and proxy | Changing a completed installation needs a separate rollout and recovery contract |
+| [B1619](#b1619) | new, 2026-11-18 (proxy review) | defect | Infrastructure services | One bypass grammar with one address comparison in Go and Python | Fails closed: a non-canonical address rule sends a request through the proxy |
 | [B82](#b82) | C5; moved from M4 on 2026-10-10 (D128); parked on 2026-10-11 (D129) | product | Managed OS | One more image, profile or entitlement variant | No concrete additional OS variant beyond the qualified M2 matrix |
 | [B96](#b96) | Y3 | enabling | Architecture | Collection metadata and naming polish | Pruned from M1 on 2026-09-28 |
 | [B97](#b97) | A8 (kind tables) | enabling | Desired state and Workspace | Kind field-table parity and a path checker | Pruned from M1 on 2026-09-28 |
@@ -3939,6 +3941,36 @@ and are open; an answer that adopts new work opens its item.
 | Q132 | How does a host with partial OSD DB/WAL metadata recover? | (a) Classify first, then a journaled clear of narrowly enumerated owned shapes whose device identity is proved.; (b) A documented operator repair procedure only; Bootwright keeps refusing. | (a), narrowly; foreign or unknown metadata keeps refusing. | [B662](m2.md#b662) | open |
 | Q133 | Is owned storage removed while its hosts survive? | (a) Per family, with client quiescence or fencing, exact native inverses and data-loss authorization, one family per slice.; (b) Keep refusing removal while hosts survive. | (a), incrementally, after primary-source research. | [B491](m2.md#b491) | open |
 | Q134 | What does a supported store restore guarantee about rolled-back seal counters? | (a) An explicit complete-store restore that validates a coherent snapshot and activates a fresh sealing key before any write.; (b) (a) plus an external monotonic anchor that detects out-of-band rollback.; (c) Keep no supported restore. | (a) | [B103](#b103) | open |
+
+### B1611
+
+**Owner:** Managed OS, Container cluster and State reconciliation.
+**Kind:** product. **Requires:** an approved transition including node rollout
+and recovery. **Definition:** Needs definition.
+
+**Outcome:** distinguish initial installation proxy intent from an owned change
+to an existing system. Read RHEL repository policy and OpenShift's
+`Proxy/cluster` without disclosing proxy credentials. Define the continuation
+and rollback behavior for enabling, replacing and removing a proxy on an
+already-installed target.
+
+**Exit evidence:** drift and unreadable-state tests and operator runs of
+direct to proxy, proxy replacement and proxy to direct, each with interruption
+and recovery evidence.
+
+### B1619
+
+**Owner:** Infrastructure services. **Kind:** defect. **Requires:** none.
+**Definition:** Specified.
+
+**Outcome:** the collection's bypass matcher (`bypass_matches` in
+`controller_files.py`) compares a port-qualified address rule such as
+`[2001:db8:0::1]:443` to the target host as text, while Go's
+`ParseProxyBypass` compares parsed addresses, so a non-canonical spelling
+bypasses in Go and not on the host. Compare parsed addresses on both sides.
+
+**Exit evidence:** one shared table of rule and target spellings that both
+matchers' tests read and agree on.
 
 ## Retired
 

@@ -44,6 +44,20 @@ options:
     description: The frozen route, with httpProxy, httpsProxy and noProxy.
     type: dict
     required: false
+    suboptions:
+      httpProxy:
+        description: The proxy for HTTP requests; empty or omitted when none.
+        type: str
+        default: ''
+      httpsProxy:
+        description: The proxy for HTTPS requests; empty or omitted for direct access.
+        type: str
+        default: ''
+      noProxy:
+        description: The destinations reached directly despite the proxy.
+        type: list
+        elements: str
+        required: true
   username:
     description: The mirror's user name. Never returned or logged.
     type: str
@@ -113,6 +127,7 @@ reason:
   type: str
 """
 
+import contextlib
 import gzip
 import hashlib
 import json
@@ -129,7 +144,7 @@ from urllib.error import HTTPError, URLError
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.urls import open_url
-from ansible_collections.bootwright.core.plugins.module_utils import private_files
+from ansible_collections.bootwright.core.plugins.module_utils import controller_files, private_files
 
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 MIRROR = re.compile(r"([a-z0-9]([a-z0-9.-]*[a-z0-9])?|\[[0-9a-f:.]+\]):[0-9]{1,5}\Z")
@@ -358,15 +373,16 @@ def scratch_checked(scratch):
 
 def download(fetch, client, scratch):
     """The client archive, read once, checked against the publisher's list, then its oc alone."""
-    listed = fetch(client["checksums"], MAX_CHECKSUMS).read(MAX_CHECKSUMS + 1)
+    with contextlib.closing(fetch(client["checksums"], MAX_CHECKSUMS)) as stream:
+        listed = stream.read(MAX_CHECKSUMS + 1)
     if len(listed) > MAX_CHECKSUMS:
         raise Refused("client-digest-mismatch", "the publisher's checksum list is larger than its bound")
     expected = publisher_checksum(listed, client["file"])
     archive = os.path.join(scratch, "client.tar.gz")
     digest = hashlib.sha256()
     descriptor = os.open(archive, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
-    with os.fdopen(descriptor, "wb") as target:
-        stream, size = fetch(client["url"], MAX_CLIENT), 0
+    with os.fdopen(descriptor, "wb") as target, contextlib.closing(fetch(client["url"], MAX_CLIENT)) as stream:
+        size = 0
         for chunk in iter(lambda: stream.read(CHUNK), b""):
             size += len(chunk)
             if size > MAX_CLIENT:
@@ -454,13 +470,6 @@ def clean(scratch, lent="", secrets_base=SECRETS_BASE):
             os.unlink(path)
 
 
-def route(egress, mirror):
-    host = mirror.rsplit(":", 1)[0]
-    bypass = ",".join(list(egress.get("noProxy") or []) + [host, host.strip("[]")])
-    values = {"http_proxy": egress.get("httpProxy") or "", "https_proxy": egress.get("httpsProxy") or "", "no_proxy": bypass}
-    return dict(values, **{key.upper(): value for key, value in values.items()})
-
-
 def mirror_reads(username, password, trust, timeout, base):
     """A GET and a HEAD of the mirror with the lent credential, verified against the anchor alone."""
     scratch = tempfile.mkdtemp(prefix="bootwright-release-trust-", dir=base)
@@ -496,14 +505,48 @@ def mirror_reads(username, password, trust, timeout, base):
     return get, head, scratch
 
 
-def publisher_fetch(egress, mirror, timeout):
-    """A GET of the vendor origin through the frozen route, with the system trust."""
-    os.environ.update(route(egress, mirror))
+class PublisherBody:
+    """A publisher response whose failed reads refuse like its failed request."""
 
+    def __init__(self, response):
+        self.response = response
+
+    def read(self, size):
+        try:
+            return self.response.read(size)
+        except Exception as error:
+            raise controller_files.refused(error, "the publisher could not be read through the declared route") from None
+
+    def close(self):
+        self.response.close()
+
+
+def publisher_fetch(egress, routes, timeout):
+    """Fetch each publisher URL through its explicitly selected route."""
     def fetch(url, _bound):
-        return open_url(url, method="GET", validate_certs=True, use_proxy=True, follow_redirects="none", timeout=timeout)
+        try:
+            target = controller_files.endpoint(url)
+            manager = routes.manager(controller_files.proxy_for(egress, target), target.hostname)
+            response = manager.request("GET", url, preload_content=False, redirect=False,
+                                       timeout=timeout, headers={"Accept-Encoding": "identity"})
+            if response.status != 200 or response.headers.get("Content-Encoding"):
+                response.close()
+                raise Refused("client-unreachable", "the publisher did not return the requested file")
+            return PublisherBody(response)
+        except Refused:
+            raise
+        except Exception as error:
+            raise controller_files.refused(error, "the publisher could not be read through the declared route") from None
 
     return fetch
+
+
+# Go omits an empty proxy endpoint, so each defaults to empty and proxy_for sees the complete route.
+EGRESS_OPTIONS = {
+    "httpProxy": {"type": "str", "default": ""},
+    "httpsProxy": {"type": "str", "default": ""},
+    "noProxy": {"type": "list", "elements": "str", "required": True},
+}
 
 
 def main():
@@ -511,7 +554,7 @@ def main():
     module = AnsibleModule(argument_spec={
         "mode": {"type": "str", "required": True, "choices": ["read", "prepare", "clean"]},
         "release": {"type": "dict", "required": False}, "client": {"type": "dict", "required": False},
-        "mirror": {"type": "str", "required": False}, "egress": {"type": "dict", "required": False},
+        "mirror": {"type": "str", "required": False}, "egress": {"type": "dict", "required": False, "options": EGRESS_OPTIONS},
         "username": secret, "password": secret, "trust": secret, "auth": secret, "scratch": {"type": "path", "required": False},
         "lent": {"type": "path", "required": False, "default": ""},
         "timeout": {"type": "int", "default": 60},
@@ -531,8 +574,9 @@ def main():
     try:
         if params["mode"] == "prepare":
             checked(params["release"], params["mirror"])
-            fetch = publisher_fetch(params["egress"], params["mirror"], params["timeout"])
-            lent = prepare(fetch, params["client"], params["scratch"], params["auth"], params["trust"])
+            with controller_files.Routes() as routes:
+                fetch = publisher_fetch(params["egress"], routes, params["timeout"])
+                lent = prepare(fetch, params["client"], params["scratch"], params["auth"], params["trust"])
             module.exit_json(changed=True, lent=lent)
         digest, components, missing = held(get, head, params["mirror"], params["release"])
     except Refused as refused:

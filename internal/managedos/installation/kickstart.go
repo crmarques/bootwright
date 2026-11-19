@@ -634,9 +634,7 @@ func repositoryFileLines(repository Repository) []string {
 	if repository.GPGKeyURL != "" {
 		lines = append(lines, "gpgkey="+repository.GPGKeyURL)
 	}
-	if repository.Proxy != "" {
-		lines = append(lines, "proxy="+repository.Proxy)
-	}
+	lines = append(lines, "proxy="+repository.Proxy)
 	return append(lines, "BOOTWRIGHT_REPOSITORY_EOF", "chmod 0644 "+path)
 }
 

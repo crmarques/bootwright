@@ -136,7 +136,7 @@ func (r ReleaseRequest) SecretClasses() secrets.Classes {
 }
 
 func ReleaseContentDigest() string {
-	return reconciliation.ContentDigestOf("bootwright.infrastructureservices.mirror-fill-v1", ReleaseImplementation, ReleaseEvidenceVersion)
+	return reconciliation.ContentDigestOf("bootwright.infrastructureservices.mirror-fill-v1", ReleaseImplementation, ReleaseEvidenceVersion, "explicit-https-route-for-client-downloads")
 }
 
 func ReleaseBlockID(cluster string) string {

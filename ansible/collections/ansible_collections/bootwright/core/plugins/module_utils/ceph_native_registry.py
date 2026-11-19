@@ -99,6 +99,12 @@ def route_directory(create=False):
         os.close(directory)
 
 
+def require_exclusive_route(directory, name):
+    with os.scandir(directory) as files:
+        require(not any(file.name != name and file.name.startswith(ROUTE_PREFIX) and file.name.endswith(".conf")
+                        for file in files), "registry-ownership")
+
+
 def route_read(directory, name):
     """A drop-in's bytes, read once without following a link, or None when the name is absent; any other kind of file refuses."""
     try:
@@ -277,8 +283,10 @@ class Registry:
         owned = self.worker.markers.read(ROUTE_MARKER)
         require(owned is None or owned == record, "registry-ownership")
         if record is None:
+            self.prove_route()
             return False
         with route_directory(create=True) as directory:
+            require_exclusive_route(directory, record["name"])
             existing = route_read(directory, record["name"])
             require(existing is None or owned == record and existing == content, "registry-ownership")
             if owned is None:
@@ -292,12 +300,13 @@ class Registry:
         """The recorded route still holds exactly its bytes; a direct route holds no record."""
         record, content = route_record(self.worker.request)
         require(self.worker.markers.read(ROUTE_MARKER) == record, "registry-ownership")
-        if record is not None:
-            try:
-                with route_directory() as directory:
+        try:
+            with route_directory() as directory:
+                require_exclusive_route(directory, record["name"] if record is not None else None)
+                if record is not None:
                     require(route_read(directory, record["name"]) == content, "registry-ownership")
-            except FileNotFoundError:
-                raise Refusal("registry-ownership") from None
+        except FileNotFoundError:
+            require(record is None, "registry-ownership")
 
     def provider_registry_absent(self):
         # Reading names avoids disclosing values. Any stored credential would

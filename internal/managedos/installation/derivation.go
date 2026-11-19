@@ -1,7 +1,6 @@
 package installation
 
 import (
-	"net/netip"
 	"net/url"
 	"slices"
 	"strings"
@@ -386,7 +385,7 @@ func (r proxyRoute) proxyFor(baseURL string, request Request) string {
 		}
 	}
 	for _, entry := range r.noProxy {
-		if noProxyMatches(entry, host) {
+		if rule, ok := infrastructureservices.ParseProxyBypass(entry); ok && rule.Matches(parsed) {
 			return ""
 		}
 	}
@@ -402,39 +401,4 @@ func artifactURLs(request Request) []string {
 		urls = append(urls, request.Tree.URL)
 	}
 	return urls
-}
-
-// noProxyMatches reports whether one bypass entry covers a lowercase host
-// without brackets: '*' covers every host, a '.domain' or '*.domain' suffix
-// the domain and its subdomains, an IP or CIDR the IP literals it equals or
-// contains, and any other entry the host it names, its port ignored.
-func noProxyMatches(entry, host string) bool {
-	entry = strings.ToLower(strings.TrimSpace(entry))
-	if entry == "*" {
-		return true
-	}
-	if prefix, err := netip.ParsePrefix(strings.Trim(entry, "[]")); err == nil {
-		address, err := netip.ParseAddr(host)
-		return err == nil && prefix.Contains(address.Unmap())
-	}
-	if address, err := netip.ParseAddr(strings.Trim(entry, "[]")); err == nil {
-		literal, err := netip.ParseAddr(host)
-		return err == nil && literal.Unmap() == address.Unmap()
-	}
-	if strings.HasPrefix(entry, "[") {
-		if end := strings.Index(entry, "]"); end > 0 {
-			entry = entry[1:end]
-		}
-	} else if strings.Count(entry, ":") == 1 {
-		entry, _, _ = strings.Cut(entry, ":")
-	}
-	if address, err := netip.ParseAddr(entry); err == nil {
-		literal, err := netip.ParseAddr(host)
-		return err == nil && literal.Unmap() == address.Unmap()
-	}
-	entry = strings.TrimPrefix(entry, "*")
-	if suffix, found := strings.CutPrefix(entry, "."); found {
-		return host == suffix || strings.HasSuffix(host, entry)
-	}
-	return host == entry
 }

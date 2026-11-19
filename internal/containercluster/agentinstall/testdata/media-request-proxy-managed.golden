@@ -114,16 +114,16 @@
       "none": {}
     },
     "proxy": {
-      "httpProxy": "http://192.0.2.1:3128",
-      "httpsProxy": "http://192.0.2.1:3128",
+      "httpProxy": "http://192.0.2.1:8443",
+      "httpsProxy": "http://192.0.2.1:8443",
       "noProxy": ".example.test,2001:db8::1,198.51.100.0/24,.sno.lab.example.test"
     },
     "pullSecret": "",
     "sshKey": ""
   },
   "installProxy": {
-    "httpProxy": "http://192.0.2.1:3128",
-    "httpsProxy": "http://192.0.2.1:3128",
+    "httpProxy": "http://192.0.2.1:8443",
+    "httpsProxy": "http://192.0.2.1:8443",
     "noProxy": ".example.test,2001:db8::1,198.51.100.0/24,.sno.lab.example.test"
   },
   "manifests": [],

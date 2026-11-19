@@ -11,7 +11,7 @@ profile](../../../specs/milestones/backlog.md#b1250) owns its acceptance.
 
 - `mirror` (`mirror.lab.example.test`, `203.0.113.20`) is an OS-ready Machine
   reached as root over SSH with a bound host key. It reaches the publishers
-  directly and runs `podman`; nothing else on it is managed.
+  directly, runs `podman`, and has `python3-urllib3` for the mirror downloader.
 - `mirror-artifacts` is a managed ArtifactServer on `mirror` serving HTTPS on
   `443`, the one port the controller stage reads a mirror on. The Environment
   names it in `spec.mirror.artifacts.serverRef` and `endpointRef`, so the

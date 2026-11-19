@@ -1,12 +1,12 @@
 implementation: mirror-release-v1
-content-digest: 89a5d0852835510f616ddcae6a812a292bfa70e2a031fdccfef5fdb8b6340610
+content-digest: 27d9509c78b99d6a48e06a4fd4c323842671c278518708bbb62770041b532a71
 request-version: mirror-release-v1
 automation-formats: none
 mark-formats: none
 proof-ids: none
 fixed-places: none
 effect-pins:
-  none
+  explicit-https-route-for-client-downloads
 request-identity:
   identity.context
   identity.cluster

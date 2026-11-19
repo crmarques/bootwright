@@ -314,6 +314,39 @@ read -r -p "Full /dev/... path of the crypto_LUKS root partition on $NODE: " LUK
 oc debug "node/$NODE" -- chroot /host clevis luks list -d "${LUKS_PARTITION:?Set LUKS_PARTITION to the full /dev/... path of the observed crypto_LUKS root partition}"
 ```
 
+### Proxy configuration acceptance
+
+Use a fresh install per row, retaining the consumed routes and observed result.
+For a non-default listener, set both the managed `Proxy.spec.port` and the
+lab firewall's listener port before installation.
+
+| Row | Controller build | Cluster system egress | Evidence |
+| --- | --- | --- | --- |
+| Direct, omitted | direct | direct | Installation succeeds and `Proxy/cluster` has no HTTP or HTTPS endpoint. |
+| Direct, explicit | external | `direct: {}` overriding the cluster default | Controller downloads use the external proxy. The cluster has no HTTP or HTTPS endpoint. |
+| Managed proxy | direct | managed proxy at a non-default port | The Squid listener and both cluster endpoints use the declared port. |
+| External proxy | direct | external HTTPS endpoint with a bound credential and CA | The cluster sets its HTTPS endpoint and trusted CA. A TLS-only endpoint leaves the cluster's HTTP field absent. |
+| Split proxy routes | external proxy | a different external or managed proxy | Controller downloads and node pulls reach their respective listeners. |
+
+Read live proxy settings without writing userinfo to the acceptance record:
+
+```bash
+oc get proxy/cluster -o json | jq '{
+  httpProxy: ((.spec.httpProxy // "") | sub("://[^/]*@"; "://")),
+  httpsProxy: ((.spec.httpsProxy // "") | sub("://[^/]*@"; "://")),
+  noProxy: (.status.noProxy // ""),
+  trustedCA: (.spec.trustedCA.name // "")
+}'
+```
+
+With direct publisher access blocked, repeat the pull with its proxy up and
+down. A bypassed local endpoint should still answer while the proxy is down.
+For a RHEL Machine using the same external proxy, read the `proxy=` entries
+in Bootwright's repository files and verify package metadata from one proxied
+repository and one explicitly direct or bypassed repository. For the release
+mirror case, record whether a build with an unreadable mirror also contacted
+the publisher, the behavior tracked in [B1326](../../specs/milestones/backlog.md#b1326).
+
 ### Proxy route (when enabled)
 
 B721's outcome is that the cluster installs through the proxy. With

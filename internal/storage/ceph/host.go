@@ -131,7 +131,7 @@ func (r HostRequest) source() (int, bool) {
 }
 
 func HostContentDigest() string {
-	d := sha256.Sum256([]byte(HostImplementation + "\x00" + HostVersion + "\x00" + HostEvidenceVersion + "\x00" + "selected-packages-repository-proxy-runtime-placement-pulls-profile-route-devices-v1\x00pull-registration-and-joined-cancellation-v1"))
+	d := sha256.Sum256([]byte(HostImplementation + "\x00" + HostVersion + "\x00" + HostEvidenceVersion + "\x00" + "selected-packages-repository-proxy-runtime-placement-pulls-profile-route-devices-v1\x00pull-registration-and-joined-cancellation-v1\x00exclusive-podman-proxy-default"))
 	return hex.EncodeToString(d[:])
 }
 
@@ -325,6 +325,9 @@ func (c HostCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 				return plan, err
 			}
 			description, impacts := hostDescription(input.Verb, cluster.Cluster, host.Name)
+			if input.Verb == reconciliation.Apply && cluster.RegistryProxy != "" {
+				impacts = append(impacts, "set host-wide Podman proxy defaults on "+host.Machine)
+			}
 			requires := hostRequirements(cluster.Controller, host)
 			for _, peer := range cluster.Hosts {
 				if peer.Physical {

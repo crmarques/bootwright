@@ -98,7 +98,7 @@ func safePath(path string) bool {
 func (r FilesRequest) SecretReferences() []string { return r.Placement.SecretReferences() }
 
 func FilesContentDigest() string {
-	return reconciliation.ContentDigestOf("bootwright.infrastructureservices.mirror-fill-v1", FilesImplementation, FilesEvidenceVersion)
+	return reconciliation.ContentDigestOf("bootwright.infrastructureservices.mirror-fill-v1", FilesImplementation, FilesEvidenceVersion, "explicit-https-route-for-each-publisher-hop")
 }
 
 func FilesBlockID(environment string) string {

@@ -36,7 +36,7 @@ func repositoryProxies(t *testing.T, catalog api.Catalog) []string {
 	var proxies []string
 	for _, block := range strings.Split(kickstart, "<<'BOOTWRIGHT_REPOSITORY_EOF'\n")[1:] {
 		block = block[:strings.Index(block, "BOOTWRIGHT_REPOSITORY_EOF")]
-		proxy := ""
+		proxy := "omitted"
 		for _, line := range strings.Split(block, "\n") {
 			if value, found := strings.CutPrefix(line, "proxy="); found {
 				proxy = value
@@ -85,24 +85,27 @@ func TestNoProxyEntriesExemptARepository(t *testing.T) {
 		entry, baseURL string
 		exempt         bool
 	}{
-		"exact host":          {"mirror.example.test", "https://mirror.example.test/a", true},
-		"exact host, other":   {"mirror.example.test", "https://other.example.test/a", false},
-		"exact host, case":    {"Mirror.Example.Test", "https://mirror.example.test/a", true},
-		"suffix":              {".example.test", "https://mirror.example.test/a", true},
-		"suffix, bare domain": {".example.test", "https://example.test/a", true},
-		"suffix, other":       {".example.test", "https://mirror.example.org/a", false},
-		"wildcard suffix":     {"*.example.test", "https://mirror.example.test/a", true},
-		"suffix, no dot":      {".example.test", "https://badexample.test/a", false},
-		"ip":                  {"203.0.113.7", "https://203.0.113.7/a", true},
-		"ip, other":           {"203.0.113.7", "https://203.0.113.8/a", false},
-		"cidr":                {"203.0.113.0/24", "https://203.0.113.9/a", true},
-		"cidr, name":          {"203.0.113.0/24", "https://mirror.example.test/a", false},
-		"ipv6":                {"2001:db8::7", "https://[2001:db8::7]/a", true},
-		"ipv6 cidr":           {"2001:db8::/32", "https://[2001:db8::9]/a", true},
-		"star":                {"*", "https://mirror.example.test/a", true},
-		"host with port":      {"mirror.example.test:443", "https://mirror.example.test/a", true},
-		"ip with port":        {"203.0.113.7:443", "https://203.0.113.7/a", true},
-		"ipv6 with port":      {"[2001:db8::7]:443", "https://[2001:db8::7]/a", true},
+		"exact host":                      {"mirror.example.test", "https://mirror.example.test/a", true},
+		"host, other":                     {"mirror.example.test", "https://other.example.test/a", false},
+		"exact host, case":                {"Mirror.Example.Test", "https://mirror.example.test/a", true},
+		"suffix":                          {".example.test", "https://mirror.example.test/a", true},
+		"suffix, bare domain":             {".example.test", "https://example.test/a", false},
+		"suffix, other":                   {".example.test", "https://mirror.example.org/a", false},
+		"wildcard suffix":                 {"*.example.test", "https://mirror.example.test/a", true},
+		"suffix, no dot":                  {".example.test", "https://badexample.test/a", false},
+		"ip":                              {"203.0.113.7", "https://203.0.113.7/a", true},
+		"ip, other":                       {"203.0.113.7", "https://203.0.113.8/a", false},
+		"cidr":                            {"203.0.113.0/24", "https://203.0.113.9/a", true},
+		"cidr, name":                      {"203.0.113.0/24", "https://mirror.example.test/a", false},
+		"ipv6":                            {"2001:db8::7", "https://[2001:db8::7]/a", true},
+		"ipv6 cidr":                       {"2001:db8::/32", "https://[2001:db8::9]/a", true},
+		"star":                            {"*", "https://mirror.example.test/a", true},
+		"host with port":                  {"mirror.example.test:443", "https://mirror.example.test/a", true},
+		"host with another port":          {"mirror.example.test:443", "https://mirror.example.test:8443/a", false},
+		"HTTP default port":               {"mirror.example.test:80", "http://mirror.example.test/a", true},
+		"bare domain includes subdomains": {"example.test", "https://mirror.example.test/a", true},
+		"ip with port":                    {"203.0.113.7:443", "https://203.0.113.7/a", true},
+		"ipv6 with port":                  {"[2001:db8::7]:443", "https://[2001:db8::7]/a", true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			got := repositoryProxies(t, labCatalog(corporate, proxiedGuest(test.entry), repositoryProfile(test.baseURL)))
@@ -119,7 +122,7 @@ func TestNoProxyEntriesExemptARepository(t *testing.T) {
 
 // A Machine that selects direct access, or no proxy at all, writes no proxy
 // even when the profile selects one.
-func TestADirectMachineRendersNoProxy(t *testing.T) {
+func TestADirectMachineDisablesTheRepositoryProxy(t *testing.T) {
 	profile := repositoryProfile("https://mirror.example.test/a")
 	profile = profile.WithSpec(profile.Spec().With("proxy", api.MapValue(text("proxyRef", "corporate"))))
 	direct := guest(field("proxy", api.MapValue(field("direct", api.MapValue()))))

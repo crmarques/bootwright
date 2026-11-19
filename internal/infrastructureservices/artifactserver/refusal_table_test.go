@@ -35,7 +35,7 @@ func TestArtifactServerRefusalTableMatchesUnsupported(t *testing.T) {
 	socketRow := "Artifact sockets beyond the host reservation"
 	socketCatalog, socketValues, _ := boundRowGraph(socketRow, api.ArtifactServer)
 	cases[socketRow] = refusalCase{socketCatalog, "ArtifactServer/lab-artifacts", socketValues}
-	for _, row := range []string{"Managed Proxy egress", "Proxy authentication", "Private trust", "Operator SSH identity", "Password SSH authentication", "No bound host key"} {
+	for _, row := range []string{"Managed Proxy egress", "Proxy authentication", "Private trust", "HTTP proxy alone", "Operator SSH identity", "Password SSH authentication", "No bound host key"} {
 		catalog, values, _ := placementRowGraph(row, placedArtifactServer)
 		cases[row] = refusalCase{catalog, "ArtifactServer/lab-artifacts", values}
 	}

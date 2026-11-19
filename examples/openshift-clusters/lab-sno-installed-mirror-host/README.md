@@ -10,7 +10,7 @@ profile](../../../specs/milestones/backlog.md#b1250) owns its acceptance.
 ## Worth noting
 
 - `mirror` (`mirror.lab.example.test`, `198.51.100.20`) is a `lab-libvirt`
-  guest installed from `rhel-9-8-mirror`, which adds `podman` and disables the
+  guest installed from `rhel-9-8-mirror`, which adds `podman` and `python3-urllib3` and disables the
   host firewall, because no managed service opens a firewall port yet. It
   authors no `access.ssh`: the server and the fill reach it as `bootwright`
   with the Environment's fleet key `bootwright-machine-key`, become root

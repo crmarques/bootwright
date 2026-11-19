@@ -2,13 +2,13 @@ package controller
 
 import (
 	"errors"
-	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 )
 
 // ProxyEnvironmentNames are the only variables a context-free acquisition reads,
@@ -22,7 +22,7 @@ var (
 	ErrProxyBypass   = errors.New("proxy bypass entry is outside the qualified host, IP or CIDR grammar")
 )
 
-const maxProxyBypassEntries = 128
+const maxProxyBypassEntries = infrastructureservices.MaxAcquisitionBypassEntries
 
 // ProxySelector answers the route one exact target takes. A nil result is
 // direct access. DNS is not consulted to evaluate bypass entries.
@@ -42,9 +42,9 @@ func NewProxySelector(httpProxy, httpsProxy string, bypass []string) (ProxySelec
 	if len(bypass) > maxProxyBypassEntries {
 		return nil, ErrProxyBypass
 	}
-	rules := make([]bypassRule, len(bypass))
+	rules := make([]infrastructureservices.ProxyBypassRule, len(bypass))
 	for index, value := range bypass {
-		rule, ok := parseBypass(value)
+		rule, ok := infrastructureservices.ParseProxyBypass(value)
 		if !ok {
 			return nil, ErrProxyBypass
 		}
@@ -55,7 +55,7 @@ func NewProxySelector(httpProxy, httpsProxy string, bypass []string) (ProxySelec
 			return nil
 		}
 		for _, rule := range rules {
-			if rule.matches(target) {
+			if rule.Matches(target) {
 				return nil
 			}
 		}
@@ -219,70 +219,4 @@ func environmentFault(err error) error {
 
 func routeFailure(message, remediation string) error {
 	return diagnostics.NewFailureWithRemediation("controller.unsupported", message, "", remediation)
-}
-
-type bypassRule struct {
-	all        bool
-	host       string
-	port       string
-	subdomains bool
-	prefix     netip.Prefix
-}
-
-// parseBypass builds the rule of an entry in the proxy-bypass grammar
-// admission and selection check; it refuses whatever that grammar refuses and
-// nothing else.
-func parseBypass(value string) (bypassRule, bool) {
-	if !api.ValidLexical(api.LexicalProxyBypass, value) {
-		return bypassRule{}, false
-	}
-	if value == "*" {
-		return bypassRule{all: true}, true
-	}
-	if prefix, err := netip.ParsePrefix(value); err == nil {
-		return bypassRule{prefix: prefix.Masked()}, true
-	}
-	if address, err := netip.ParseAddr(value); err == nil {
-		return bypassRule{host: address.String()}, true
-	}
-	rule := bypassRule{}
-	if strings.Contains(value, ":") {
-		value, rule.port = splitBypassPort(value)
-	}
-	value = strings.ToLower(value)
-	if strings.HasPrefix(value, "*.") {
-		value = strings.TrimPrefix(value, "*")
-	}
-	rule.subdomains = strings.HasPrefix(value, ".")
-	rule.host = strings.TrimPrefix(value, ".")
-	return rule, true
-}
-
-// splitBypassPort splits an admitted entry into its host and port.
-func splitBypassPort(value string) (string, string) {
-	if bracketed, ok := strings.CutPrefix(value, "["); ok {
-		host, port, _ := strings.Cut(bracketed, "]:")
-		return host, port
-	}
-	host, port, _ := strings.Cut(value, ":")
-	return host, port
-}
-
-func (r bypassRule) matches(target *url.URL) bool {
-	if r.all {
-		return true
-	}
-	host := strings.ToLower(target.Hostname())
-	port := target.Port()
-	if port == "" {
-		port = "443"
-	}
-	if r.port != "" && r.port != port {
-		return false
-	}
-	if r.prefix.IsValid() {
-		address, err := netip.ParseAddr(host)
-		return err == nil && r.prefix.Contains(address)
-	}
-	return !r.subdomains && host == r.host || strings.HasSuffix(host, "."+r.host)
 }

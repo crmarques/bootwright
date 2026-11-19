@@ -56,18 +56,15 @@
 - name: Fetch and verify each client file from its publisher
   block:
     - name: Download each file by its pinned SHA-256 and publish it by rename
-      ansible.builtin.get_url:
-        url: '{{ item.source }}'
+      bootwright.core.infrastructureservices_mirror_file:
+        source:
+          id: '{{ item.sha256 }}'
+          url: '{{ item.source }}'
+          bytes: '{{ item.bytes }}'
+          sha256: '{{ item.sha256 }}'
+        egress: '{{ bootwright_mirror_files_request.egress }}'
         dest: '{{ infrastructureservices_mirror_fill_root }}/{{ item.path }}'
-        checksum: 'sha256:{{ item.sha256 }}'
-        owner: root
-        group: root
-        mode: '0644'
-        use_proxy: '{{ infrastructureservices_mirror_fill_proxied | bool }}'
-        validate_certs: true
-        follow_redirects: safe
-        timeout: '{{ infrastructureservices_mirror_fill_download_timeout | int }}'
-      environment: '{{ infrastructureservices_mirror_fill_environment if (infrastructureservices_mirror_fill_proxied | bool) else {} }}'
+        seconds: '{{ infrastructureservices_mirror_fill_download_timeout | int }}'
       loop: '{{ bootwright_mirror_files_request.files }}'
       loop_control:
         label: '{{ item.path }}'

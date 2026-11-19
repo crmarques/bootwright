@@ -1,16 +1,4 @@
-"""The artifact mirror fill publishes only what it verified, through its frozen route.
-
-Each file is read from its publisher by ansible.builtin.get_url, which checks
-the downloaded temporary file against the pinned SHA-256 before it moves it
-into place and fetches nothing for a destination that already matches
-(ansible/modules/get_url.py, main, ansible-core 2.21), so a replay copies
-nothing and a file of another digest publishes nothing. The route is the frozen
-egress alone: with no HTTPS proxy the download ignores every proxy variable,
-and with one the task sets both spellings of it. The refusals the rescue names
-are exactly those the protocol admits, and a removal deletes the Environment's
-mirror subtree and nothing beside it. The role's defaults are evaluated here as
-Ansible does, against a request of the frozen shape.
-"""
+"""Check artifact mirror fill request projection and role wiring."""
 from __future__ import annotations
 
 import pathlib
@@ -70,25 +58,13 @@ def test_a_file_that_could_leave_the_root_or_names_no_digest_is_not_valid():
 
 def test_each_file_is_published_only_at_its_pinned_digest_over_verified_tls():
     task = download()[1]
-    arguments = task["ansible.builtin.get_url"]
-    assert arguments["checksum"] == "sha256:{{ item.sha256 }}"
-    assert arguments["validate_certs"] is True and arguments["mode"] == "0644" and arguments["owner"] == "root"
+    arguments = task["bootwright.core.infrastructureservices_mirror_file"]
+    assert arguments["source"] == {
+        "id": "{{ item.sha256 }}", "url": "{{ item.source }}", "bytes": "{{ item.bytes }}", "sha256": "{{ item.sha256 }}",
+    }
     assert arguments["dest"] == "{{ infrastructureservices_mirror_fill_root }}/{{ item.path }}"
-    assert "force" not in arguments, "a forced download would fetch a file that already matches its pin"
-
-
-def test_the_download_takes_its_route_from_the_frozen_egress_alone():
-    task = download()[1]
-    for egress, proxied in (({"noProxy": []}, False), ({"httpsProxy": "http://proxy.example.test:3128", "noProxy": [".lab"]}, True)):
-        values = templar(dict(REQUEST, egress=egress))
-        assert values.template(task["ansible.builtin.get_url"]["use_proxy"]) is proxied
-        environment = values.template(task["environment"])
-        if proxied:
-            assert environment["https_proxy"] == environment["HTTPS_PROXY"] == egress["httpsProxy"]
-            assert environment["http_proxy"] == environment["HTTP_PROXY"] == egress["httpsProxy"], "a redirect to HTTP would go direct"
-            assert environment["no_proxy"] == environment["NO_PROXY"] == ".lab"
-        else:
-            assert environment == {}
+    assert arguments["egress"] == "{{ bootwright_mirror_files_request.egress }}"
+    assert "environment" not in task
 
 
 def test_the_rescue_names_only_the_refusals_the_protocol_admits():

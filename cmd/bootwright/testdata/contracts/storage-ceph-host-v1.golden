@@ -1,5 +1,5 @@
 implementation: storage-ceph-host-v1
-content-digest: 6b788b28f193d3cdf8b5b4873453ffa95bde5aecd04804a5362c7bf4ebdde8d3
+content-digest: 2f788749c33c8f705bdd415ce61f447dc8243d57cf090062c22807170481df7d
 request-version: ceph-host-v1
 automation-formats: bootwright.native-plan-v1, ceph-crypto-policy-v1, ceph-device-identities-v1, ceph-host-route-v1, ceph-package-artifacts-v1, ceph-package-complete-v1, ceph-package-decision-v1, ceph-physical-device-binding-v1, ceph-runtime-profile-v1
 mark-formats: none
@@ -8,6 +8,7 @@ fixed-places: /var/lib/bootwright/ceph-host, /var/lib/bootwright/ceph-packages
 effect-pins:
   selected-packages-repository-proxy-runtime-placement-pulls-profile-route-devices-v1
   pull-registration-and-joined-cancellation-v1
+  exclusive-podman-proxy-default
 request-identity:
   host
   cluster.cluster

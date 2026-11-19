@@ -575,6 +575,7 @@ name=debug
 baseurl=http://mirror.example.test/debug
 enabled=0
 gpgcheck=0
+proxy=
 BOOTWRIGHT_REPOSITORY_EOF
 chmod 0644 '/etc/yum.repos.d/bootwright-debug.repo'
 cat > '/etc/yum.repos.d/bootwright-extras.repo' <<'BOOTWRIGHT_REPOSITORY_EOF'
@@ -584,6 +585,7 @@ baseurl=https://mirror.example.test/extras
 enabled=1
 gpgcheck=1
 gpgkey=https://mirror.example.test/RPM-GPG-KEY
+proxy=
 BOOTWRIGHT_REPOSITORY_EOF
 chmod 0644 '/etc/yum.repos.d/bootwright-extras.repo'
 install -d -m 0750 /etc/sudoers.d

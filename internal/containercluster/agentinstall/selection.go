@@ -358,7 +358,12 @@ func projectMediaFeatures(catalog api.Catalog, cluster api.Object, controllerMac
 		if egress.HTTPSProxy == "" {
 			egress.HTTPSProxy = egress.HTTPProxy
 		}
-		buildEgress = map[string]string{"HTTP_PROXY": egress.HTTPProxy, "HTTPS_PROXY": egress.HTTPSProxy, "NO_PROXY": strings.Join(egress.NoProxy, ",")}
+		bypass := strings.Join(egress.NoProxy, ",")
+		buildEgress = map[string]string{
+			"HTTP_PROXY": egress.HTTPProxy, "http_proxy": egress.HTTPProxy,
+			"HTTPS_PROXY": egress.HTTPSProxy, "https_proxy": egress.HTTPSProxy,
+			"NO_PROXY": bypass, "no_proxy": bypass,
+		}
 	}
 	request.RegistryMirror, request.InstallProxy = mirror, proxy
 	if _, managed := MirroredRelease(catalog, cluster); managed {

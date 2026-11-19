@@ -81,7 +81,11 @@ func installConfig(catalog api.Catalog, cluster api.Object, nodes []nodeProjecti
 		return nil, err
 	}
 	if proxy != nil {
-		config["proxy"] = map[string]any{"httpProxy": proxy.HTTPProxy, "httpsProxy": proxy.HTTPSProxy, "noProxy": proxy.NoProxy}
+		fields := map[string]any{"httpsProxy": proxy.HTTPSProxy, "noProxy": proxy.NoProxy}
+		if proxy.HTTPProxy != "" {
+			fields["httpProxy"] = proxy.HTTPProxy
+		}
+		config["proxy"] = fields
 	}
 	return config, nil
 }

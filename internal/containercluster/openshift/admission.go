@@ -301,6 +301,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 		}
 	}
 	issues = api.AppendIssues(issues, infrastructureservices.ValidateProxy(install.Get("proxy"), c, "$.spec.install.proxy", false)...)
+	issues = api.AppendIssues(issues, validateInstallationProxy(install.Get("proxy"), c)...)
 	issues = api.AppendIssues(issues, infrastructureservices.ValidateServerSelections(install.Get("ntp"), c, api.NTPServer, "$.spec.install.ntp")...)
 	issues = api.AppendIssues(issues, infrastructureservices.ValidateRegistrySelection(install.Get("registries", "mirror"), c, "$.spec.install.registries.mirror")...)
 	if install.Has("additionalTrustBundlePolicy") && install.Get("additionalTrustBundleRefs").Len() == 0 {
@@ -913,4 +914,20 @@ func invariantRemediation(field, message, remediation string) api.Issue {
 	issue := invariant(field, message)
 	issue.Remediation = remediation
 	return issue
+}
+
+func validateInstallationProxy(choice api.Value, c api.Catalog) []api.Issue {
+	var issues []api.Issue
+	for index, entry := range choice.Get("noProxy").Strings() {
+		if rule, ok := infrastructureservices.ParseProxyBypass(entry); ok && rule.PortQualified() {
+			issues = api.AppendIssues(issues, invariantRemediation(fmt.Sprintf("$.spec.install.proxy.noProxy[%d]", index),
+				"the OpenShift installer accepts a bypass without a port", "remove the port or that bypass entry"))
+		}
+	}
+	if proxy, found := c.Find(api.Proxy, choice.Get("proxyRef").Text()); found &&
+		strings.HasPrefix(proxy.Spec().Get("connection", "httpProxy").Text(), "https:") {
+		issues = api.AppendIssues(issues, invariantRemediation("$.spec.install.proxy.proxyRef",
+			"the OpenShift HTTP proxy field requires an http:// endpoint", "use an http:// endpoint in connection.httpProxy on "+proxy.Identity()+", or declare only connection.httpsProxy"))
+	}
+	return issues
 }

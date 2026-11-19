@@ -289,7 +289,11 @@ field. Empty objects, null, empty references, conflicting choices, and the
 former `none` selector are invalid. Each `noProxy[]` entry is `*`, a host
 name, a `.domain` or `*.domain` suffix, an IP address or a CIDR block, each
 name or address optionally with `:port` and an IPv6 address bracketed before
-one, in at most 1024 bytes. Validate refuses another at `noProxy[<i>]` of
+one, in at most 1024 bytes. An IP or CIDR matches an IP literal without
+DNS. A bare host matches itself and its subdomains. A leading dot or
+wildcard dot matches subdomains. An optional port restricts the match to
+that port, including the URL scheme's default. Validate refuses another at
+`noProxy[<i>]` of
 whichever consumer declares the choice: a Machine, a MachineInstallProfile or a
 OpenShiftCluster installation.
 

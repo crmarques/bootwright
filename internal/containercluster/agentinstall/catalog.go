@@ -98,7 +98,7 @@ func WorkRoot(contextName, cluster string) string {
 // layout invalidates a frozen plan.
 func MediaContentDigest() string {
 	return reconciliation.ContentDigestOf("bootwright.containercluster.media-agent-v1",
-		MediaImplementation, mediaRequestVersion, consumerPrefix, ImageFile, HostedRoot, clustersArea, installerTool, rebuildRule)
+		MediaImplementation, mediaRequestVersion, consumerPrefix, ImageFile, HostedRoot, clustersArea, installerTool, rebuildRule, "native-proxy-endpoint-and-bypass")
 }
 
 func InstallContentDigest() string {

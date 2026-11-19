@@ -99,8 +99,11 @@ func EgressFor(catalog api.Catalog, machine api.Object) (Egress, error) {
 	}
 	egress.HTTPProxy = connection.Get("httpProxy").Text()
 	egress.HTTPSProxy = connection.Get("httpsProxy").Text()
-	if egress.HTTPProxy == "" && egress.HTTPSProxy == "" {
-		return Egress{}, Refusal("api.value", "the selected external Proxy declares no proxy URL", "set connection.httpProxy or connection.httpsProxy on "+proxy.Identity())
+	if egress.HTTPSProxy == "" {
+		return Egress{}, serviceEgressUnsupported.Fail("HTTPS acquisition through "+proxy.Identity()+" requires spec.connection.httpsProxy", "set spec.connection.httpsProxy on "+proxy.Identity()+", or select direct access on "+machine.Identity())
+	}
+	if choice.Get("noProxy").Len() > infrastructureservices.MaxAcquisitionBypassEntries {
+		return Egress{}, serviceEgressUnsupported.Fail("the egress bypass list on "+machine.Identity()+" exceeds the acquisition limit", "keep at most 128 entries in spec.proxy.noProxy on "+machine.Identity())
 	}
 	for _, value := range choice.Get("noProxy").Strings() {
 		egress.NoProxy = append(egress.NoProxy, value)

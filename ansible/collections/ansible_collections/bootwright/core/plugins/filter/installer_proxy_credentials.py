@@ -55,6 +55,8 @@ def installer_proxy_credentials(config, proxy, username="", password=""):
         result = dict(config)
         endpoints = dict(config["proxy"])
         for name in ("httpProxy", "httpsProxy"):
+            if name not in endpoints:
+                continue
             parsed = urlsplit(endpoints[name])
             if not parsed.hostname or parsed.username is not None:
                 raise ValueError()

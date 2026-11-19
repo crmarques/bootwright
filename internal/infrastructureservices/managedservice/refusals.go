@@ -37,6 +37,10 @@ func PlacementRefusals(catalog api.Catalog, service api.Object) []lifecycle.Refu
 				refuse("this executable acquires a managed service's image through no authenticated proxy, and "+egress+", which "+host+" selects for "+server+", sets spec.connection.auth.proxyAuthRef",
 					"select direct: {} or an external Proxy that needs no authentication in spec.proxy on "+host)
 			}
+			if !connection.Has("httpsProxy") {
+				refuse("HTTPS acquisition for "+server+" requires spec.connection.httpsProxy on "+egress,
+					"set spec.connection.httpsProxy on "+egress+", or select direct access on "+host)
+			}
 			if connection.Has("trustBundleRef") {
 				refuse("this executable acquires a managed service's image with the host's system trust store alone, and "+egress+", which "+host+" selects for "+server+", sets spec.connection.trustBundleRef",
 					"select direct: {} or an external Proxy without spec.connection.trustBundleRef in spec.proxy on "+host)

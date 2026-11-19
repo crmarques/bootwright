@@ -142,6 +142,7 @@ spec:
       install:
         - chrony
         - podman
+        - python3-urllib3
         - qemu-guest-agent
       excludeDocs: true
       installWeakDeps: false

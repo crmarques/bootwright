@@ -39,6 +39,7 @@ The expected result is failure with explicit diagnostics for:
 
 - External endpoint sources on the two baremetal OpenShiftClusters.
 - Manager-module intent.
+- Proxy choices on RHEL Machines with no configured repositories.
 - Unqualified global Ceph options, including missing members of the currently
   qualified pool-default pair.
 

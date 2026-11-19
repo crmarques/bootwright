@@ -1047,7 +1047,8 @@ covers, as the
 [derived installation](../managed-os.md#installation) states. A Machine whose
 profile configures a repository refuses while its effective proxy names a
 Proxy with `spec.connection.auth` or `spec.connection.trustBundleRef`, or one
-with no proxy URL; with no configured repository such a Proxy is accepted.
+with no proxy URL; with no configured repository such a Proxy is accepted and validate warns that
+the installed repositories receive no configuration.
 
 Machine proxy precedence and applicability belong to
 [the Machine proxy field](#machine-proxy). Profile proxy policy is inherited

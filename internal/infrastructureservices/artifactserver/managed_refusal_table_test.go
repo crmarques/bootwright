@@ -143,6 +143,8 @@ func placementRowGraph(row string, place func(machine string) api.Object) (api.C
 		objects = []api.Object{selecting, externalEgress(field("auth", api.MapValue(text("proxyAuthRef", "proxy-credentials"))))}
 	case "Private trust":
 		objects = []api.Object{selecting, externalEgress(text("trustBundleRef", "corporate-ca"))}
+	case "HTTP proxy alone":
+		objects = []api.Object{selecting, egressProxy(api.MapValue(text("management", "external"), field("connection", api.MapValue(text("httpProxy", "http://proxy.example.test:3128")))))}
 	case "Operator SSH identity":
 		machine, objects = "host", []api.Object{controller(), sshHost(ssh(field("auth", api.MapValue(field("operatorIdentity", api.MapValue()))), knownHosts))}
 	case "Password SSH authentication":
@@ -235,8 +237,8 @@ func TestEachPlacementRowRefusesWhatItsPlanBackstopRefuses(t *testing.T) {
 			t.Fatalf("the %q graph is refused before registration yet its plan backstop accepts it", row.name)
 		}
 	}
-	if rows != 6 {
-		t.Fatalf("the table holds %d placement rows, want 6", rows)
+	if rows != 7 {
+		t.Fatalf("the table holds %d placement rows, want 7", rows)
 	}
 }
 

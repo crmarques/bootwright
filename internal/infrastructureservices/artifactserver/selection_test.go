@@ -249,6 +249,10 @@ func TestEgressFollowsThePlacementMachineProxyChoice(t *testing.T) {
 	if _, err := Requests(catalogOf(host, managed, artifactServer()), "controller", testContext); err == nil {
 		t.Fatal("a managed Proxy was accepted as service egress")
 	}
+	httpOnly := external.WithSpec(external.Spec().With("connection", api.MapValue(text("httpProxy", "http://proxy.example.test:3128"))))
+	if _, err := Requests(catalogOf(host, httpOnly, artifactServer()), "controller", testContext); err == nil {
+		t.Fatal("an HTTP-only Proxy was accepted for HTTPS image acquisition")
+	}
 	authenticated := api.NewObject(api.Proxy, "egress", api.Value{}, api.MapValue(
 		text("management", "external"),
 		field("connection", api.MapValue(

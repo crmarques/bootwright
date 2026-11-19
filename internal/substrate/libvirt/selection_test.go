@@ -443,15 +443,15 @@ func TestTheEmulatorPullEgressesThroughItsHostMachinesProxyChoice(t *testing.T) 
 		spec := host.Spec().With("proxy", api.MapValue(text("proxyRef", "lab-proxy"),
 			field("noProxy", api.StringList("192.0.2.0/24", "lab.example.test"))))
 		proxy := api.NewObject(api.Proxy, "lab-proxy", api.Value{}, api.MapValue(text("management", management),
-			field("connection", api.MapValue(text("httpProxy", "http://proxy.example.test:3128")))))
+			field("connection", api.MapValue(text("httpsProxy", "http://proxy.example.test:3128")))))
 		return catalogOf(api.NewObject(api.Machine, "controller", api.Value{}, spec), proxy, provider(), networkConfig(), guest("rhel-01"))
 	}
 	requests, err = MachineRequests(proxied("external"), "controller", testContext)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := managedservice.Egress{HTTPProxy: "http://proxy.example.test:3128", NoProxy: []string{"192.0.2.0/24", "lab.example.test"}}
-	if got := requests[0].Egress; got.HTTPProxy != want.HTTPProxy || got.HTTPSProxy != "" || !slices.Equal(got.NoProxy, want.NoProxy) {
+	want := managedservice.Egress{HTTPSProxy: "http://proxy.example.test:3128", NoProxy: []string{"192.0.2.0/24", "lab.example.test"}}
+	if got := requests[0].Egress; got.HTTPProxy != "" || got.HTTPSProxy != want.HTTPSProxy || !slices.Equal(got.NoProxy, want.NoProxy) {
 		t.Fatalf("egress = %#v, want %#v", got, want)
 	}
 	_, err = MachineRequests(proxied("managed"), "controller", testContext)

@@ -17892,3 +17892,19 @@ no-selection refusal stays `context.state`, which every command raises
 byte-identically. Guarded by `TestEveryCatalogedStopIsComposedAndExplained`,
 `TestDiagnosticCodesMatchOutputSpec`, the race runs of the engine and the
 runner and an independent Opus review.
+
+## X619 — Proxy acquisition and installation corrections
+
+### B1610
+
+**Owner:** Infrastructure services, Managed OS, Container cluster and Storage.
+**Kind:** defect.
+
+**Outcome:** resolve HTTPS acquisition, repository bypass and OpenShift
+installer projection according to their owning contracts. Name Ceph's
+host-wide Podman default in the plan.
+
+**Exit evidence:** route and projection regressions, including a refused
+HTTP-only acquisition route and a verified artifact publication. Live
+verification follows the [OpenShift proxy runbook](../../e2e/lab-3-nodes-ocp-features/runbook.md#proxy-route-when-enabled)
+and remains open. In-place changes are [B1611](backlog.md#b1611).

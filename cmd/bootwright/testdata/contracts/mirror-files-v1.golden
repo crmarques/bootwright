@@ -1,12 +1,12 @@
 implementation: mirror-files-v1
-content-digest: 7f421389ad05c85f01d902ce68f64cb09332ca6d734b7fa7268c72eac8b5206f
+content-digest: ce33d640a520fceeb13e5f0fb6a694a7ad2778a1317c8d888d386d3e7569ed3f
 request-version: mirror-files-v1
 automation-formats: none
 mark-formats: none
 proof-ids: none
 fixed-places: none
 effect-pins:
-  none
+  explicit-https-route-for-each-publisher-hop
 request-identity:
   identity.context
   identity.environment

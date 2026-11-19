@@ -240,10 +240,23 @@ def test_prepare_refuses_a_run_directory_another_user_could_read_or_one_already_
             mirror_release.prepare(Publisher().fetch, CLIENT, str(scratch), AUTH, "anchor", secrets_base=str(tmp_path))
 
 
-def test_the_route_reaches_the_mirror_directly_and_the_origins_through_the_frozen_proxy():
-    route = mirror_release.route({"httpsProxy": "http://proxy.example.test:3128", "noProxy": [".example.test"]}, "[2001:db8::20]:5000")
-    assert route["HTTPS_PROXY"] == route["https_proxy"] == "http://proxy.example.test:3128"
-    assert route["no_proxy"].split(",") == [".example.test", "[2001:db8::20]", "2001:db8::20"]
+def test_publisher_fetch_selects_the_route_for_the_exact_url():
+    from types import SimpleNamespace
+
+    seen = []
+
+    class Routes:
+        def manager(self, route, host):
+            seen.append((route, host))
+            return SimpleNamespace(request=lambda *_args, **_kwargs: SimpleNamespace(status=200, headers={}))
+
+    proxy = "http://proxy.example.test:3128"
+    fetch = mirror_release.publisher_fetch({"httpProxy": "", "httpsProxy": proxy,
+                                            "noProxy": ["192.0.2.0/24", "*.example.test", "exact.test:8443"]}, Routes(), 1)
+    for url in ("https://192.0.2.8/client", "https://sub.example.test/client",
+                "https://example.test/client", "https://exact.test/client"):
+        fetch(url, 4096)
+    assert seen == [(None, "192.0.2.8"), (None, "sub.example.test"), (proxy, "example.test"), (proxy, "exact.test")]
 
 
 def test_clean_removes_the_lent_directory_and_empties_the_run_directory_without_following_a_link(tmp_path):
@@ -257,3 +270,61 @@ def test_clean_removes_the_lent_directory_and_empties_the_run_directory_without_
     assert os.listdir(scratch) == [] and not os.path.exists(lent) and (outside / "kept").read_text() == "kept"
     with pytest.raises(ValueError):
         mirror_release.clean(scratch, str(outside), secrets_base=str(tmp_path / "run"))
+
+
+@pytest.mark.parametrize(("egress", "route"), [
+    ({"noProxy": []}, None),
+    ({"httpsProxy": "http://proxy.example.test:3128", "noProxy": []}, "http://proxy.example.test:3128"),
+    ({"httpsProxy": "http://proxy.example.test:3128", "noProxy": ["mirror.openshift.com"]}, None),
+])
+def test_prepare_selects_a_route_from_the_egress_go_freezes_without_its_empty_endpoints(tmp_path, monkeypatch, run_module, egress, route):
+    from types import SimpleNamespace
+
+    seen = []
+
+    class Routes:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+        def manager(self, selected, _host):
+            seen.append(selected)
+            return SimpleNamespace(request=lambda *_args, **_kwargs: SimpleNamespace(status=200, headers={}))
+
+    def prepare(fetch, client, *_args):
+        fetch(client["url"], 4096)
+        return "/run/lent"
+
+    reads = tmp_path / "reads"
+    reads.mkdir()
+    monkeypatch.setattr(mirror_release.controller_files, "Routes", Routes)
+    monkeypatch.setattr(mirror_release, "checked", lambda *_args: None)
+    monkeypatch.setattr(mirror_release, "mirror_reads", lambda *_args: (None, None, str(reads)))
+    monkeypatch.setattr(mirror_release, "prepare", prepare)
+    result = run_module(mirror_release, {
+        "mode": "prepare", "release": RELEASE, "client": CLIENT, "mirror": MIRROR, "egress": egress,
+        "username": "mirror", "password": "s3cret", "trust": "anchor", "auth": AUTH, "scratch": str(tmp_path / "run"),
+    })
+    assert result["lent"] == "/run/lent" and seen == [route]
+
+
+def test_a_publisher_body_that_fails_mid_read_refuses_through_the_declared_route():
+    from types import SimpleNamespace
+
+    class ReadTimeoutError(Exception):
+        pass
+
+    def read(_size):
+        raise ReadTimeoutError("read timed out")
+
+    class Routes:
+        def manager(self, _route, _host):
+            response = SimpleNamespace(status=200, headers={}, read=read, close=lambda: None)
+            return SimpleNamespace(request=lambda *_args, **_kwargs: response)
+
+    body = mirror_release.publisher_fetch({"httpProxy": "", "httpsProxy": "", "noProxy": []}, Routes(), 1)(CLIENT["url"], 4096)
+    with pytest.raises(mirror_release.controller_files.AcquisitionRefused) as refused:
+        body.read(4096)
+    assert str(refused.value) == "the publisher could not be read through the declared route"

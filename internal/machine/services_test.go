@@ -19,7 +19,7 @@ func TestInstallServiceProfileInheritanceAndOverrides(t *testing.T) {
 	if !inherited.Spec().Get("proxy").Equal(profile.Spec().Get("proxy")) || inherited.Spec().Get("os", "install", "ntp").Items()[0].Get("endpointRef").Text() != "installation" {
 		t.Fatal("profile policy or endpoint choice not inherited")
 	}
-	if issues := validateServices(inherited, c); len(issues) != 0 {
+	if issues := validateServices(inherited, c); len(issues) != 1 || issues[0].Code != "api.deferred" || issues[0].Field != "$.spec.proxy" {
 		t.Fatal(issues)
 	}
 	if original.Spec().Has("proxy") || original.Spec().Has("os", "install", "ntp") || profile.Spec().Get("ntp").Items()[0].Has("endpointRef") {
