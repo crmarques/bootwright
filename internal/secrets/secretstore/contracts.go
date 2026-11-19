@@ -87,6 +87,7 @@ type StoreSession interface {
 	// Withdraw removes every produced entry in one publication, and reports
 	// false without publishing when there is none.
 	Withdraw(context.Context) (bool, error)
+	Discard(ctx context.Context, block, name string) (bool, error)
 	ReadProduced(ctx context.Context, block, name string) (ProducedMaterial, bool, error)
 	Close() error
 }

@@ -297,7 +297,7 @@ and their output goldens:
 | `cluster keyring`, `cluster kubeconfig`, `completion bash`, `completion fish`, `completion powershell`, `completion zsh`, `secret show` | `export` |
 | `cluster kubectl`, `cluster oc` | `context`, `cluster`, `client`, `arguments`, `kubeconfigCommand`, `instructions` |
 | `cluster list` | `context`, `clusters` |
-| `cluster update-admin-credentials` | `context`, `cluster`, `user` |
+| `cluster update-admin-creds` | `context`, `cluster`, `logins` |
 | `context current`, `context use` | `context` |
 | `context delete` | `name`, `outcome`, `currentCleared`, `orphansAbandoned`, `releasedReservations` |
 | `context init`, `context update` | `context`, `counts`, `filesCopied`, `inputChanged` |
@@ -839,9 +839,13 @@ and `passwordValue` to each `monitoring` row, or `anonymous: true` to a
 `grafana` row with no bound admin password; these are the only fields that
 carry a secret. Text output lists them under Custody after the dashboard's
 user and password, as `<Service> user` and `<Service> password`, Grafana's as
-`Grafana initial password`, or `Grafana login anonymous access; no admin
+`Grafana password`, or `Grafana login anonymous access; no admin
 password is bound`. Their contract, refusals and warnings are the
-[storage dashboard access](../cli.md#storage-dashboard-access).
+[storage dashboard access](../cli.md#storage-dashboard-access). Because a
+monitoring `user` is secret, the
+[`cluster update-admin-creds` result](cluster-admin-credentials.md#administrator-credential-updates)
+omits a Prometheus or Alertmanager login's `user`, and its text shows
+`<Service> login  updated` instead.
 
 `accessCommands` contains exactly one entry for each canonical command, ordered
 `cluster exec`, `cluster keyring`, `cluster kubeconfig`, `cluster kubectl`,

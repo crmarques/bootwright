@@ -126,7 +126,7 @@ func TestClusterInfoSecretsShowsEachMonitoringLogin(t *testing.T) {
 	lines := strings.Split(out.String(), "\n")
 	for _, want := range [][]string{
 		{"Alertmanager", "user", "am-admin"}, {"Alertmanager", "password", "am-Secret.42"},
-		{"Grafana", "user", "admin"}, {"Grafana", "initial", "password", "gr-Secret.99"},
+		{"Grafana", "user", "admin"}, {"Grafana", "password", "gr-Secret.99"},
 		{"Prometheus", "user", "pr-admin"}, {"Prometheus", "password", "pr-Secret.17"},
 	} {
 		if !hasFields(lines, want...) {

@@ -64,7 +64,7 @@ func TestCephPrepareAdminCredentialCrossesTheReadOnlyRunAndKeepsOnlyTheGuard(t *
 	e := credentialExecution(t)
 	produced := credentialOutputs()
 	runner := &credentialRunner{result: lifecycle.RunResult{Evidence: credentialProof(e, true), Produced: produced}}
-	guard, err := New(api.CephCluster, runner).PrepareAdminCredential(context.Background(), e)
+	guard, err := New(api.CephCluster, runner).PrepareAdminCredential(context.Background(), e, dashboardLogin)
 	if err != nil {
 		t.Fatalf("prepare: %v", err)
 	}
@@ -92,7 +92,7 @@ func TestCephUpdateAdminCredentialLendsTheUpdateAndClearsWhatItProduced(t *testi
 	produced := credentialOutputs()
 	runner := &credentialRunner{result: lifecycle.RunResult{Evidence: credentialProof(e, true), Produced: produced}}
 	update := secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("candidate")})
-	if err := New(api.CephCluster, runner).UpdateAdminCredential(context.Background(), e, update); err != nil {
+	if err := New(api.CephCluster, runner).UpdateAdminCredential(context.Background(), e, dashboardLogin, update); err != nil {
 		t.Fatalf("update: %v", err)
 	}
 	cleared(t, produced)
@@ -113,14 +113,14 @@ func TestCephAnUnprovedAdminCredentialRunRefusesAndClears(t *testing.T) {
 	e := credentialExecution(t)
 	produced := credentialOutputs()
 	capability := New(api.CephCluster, &credentialRunner{result: lifecycle.RunResult{Evidence: credentialProof(e, false), Produced: produced}})
-	guard, err := capability.PrepareAdminCredential(context.Background(), e)
+	guard, err := capability.PrepareAdminCredential(context.Background(), e, dashboardLogin)
 	if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "engine.credential-preparation-invalid" || d[0].Message != "the administrator credential preparation was not proved" || guard.Size() != 0 {
 		t.Fatalf("an unproved prepare returned %+v", d)
 	}
 	cleared(t, produced)
 	produced = credentialOutputs()
 	capability = New(api.CephCluster, &credentialRunner{result: lifecycle.RunResult{Evidence: []byte(`{"proved":true,"request":"other"}`), Produced: produced}})
-	err = capability.UpdateAdminCredential(context.Background(), e, secrets.Material{})
+	err = capability.UpdateAdminCredential(context.Background(), e, dashboardLogin, secrets.Material{})
 	if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "engine.credential-update-unproved" || d[0].Message != "the administrator credential update was not proved" {
 		t.Fatalf("an unproved update returned %+v", d)
 	}
@@ -130,7 +130,7 @@ func TestCephAnUnprovedAdminCredentialRunRefusesAndClears(t *testing.T) {
 func TestCephAPreparationWithoutAGuardRefusesAndAFailedRunClears(t *testing.T) {
 	e := credentialExecution(t)
 	produced := credentialOutputs()[1:]
-	_, err := New(api.CephCluster, &credentialRunner{result: lifecycle.RunResult{Evidence: credentialProof(e, true), Produced: produced}}).PrepareAdminCredential(context.Background(), e)
+	_, err := New(api.CephCluster, &credentialRunner{result: lifecycle.RunResult{Evidence: credentialProof(e, true), Produced: produced}}).PrepareAdminCredential(context.Background(), e, dashboardLogin)
 	if d := diagnostics.Of(err); len(d) != 1 || d[0].Message != "Ceph returned no administrator credential identity" {
 		t.Fatalf("a guardless prepare returned %+v", d)
 	}
@@ -140,9 +140,9 @@ func TestCephAPreparationWithoutAGuardRefusesAndAFailedRunClears(t *testing.T) {
 		produced = credentialOutputs()
 		capability := New(api.CephCluster, &credentialRunner{result: lifecycle.RunResult{Produced: produced}, err: failed})
 		if operation == "prepare" {
-			_, err = capability.PrepareAdminCredential(context.Background(), e)
+			_, err = capability.PrepareAdminCredential(context.Background(), e, dashboardLogin)
 		} else {
-			err = capability.UpdateAdminCredential(context.Background(), e, secrets.Material{})
+			err = capability.UpdateAdminCredential(context.Background(), e, dashboardLogin, secrets.Material{})
 		}
 		if !errors.Is(err, failed) {
 			t.Fatalf("%s returned %v", operation, err)
@@ -154,7 +154,7 @@ func TestCephAPreparationWithoutAGuardRefusesAndAFailedRunClears(t *testing.T) {
 func TestCephANativeAdminCredentialRefusalReachesTheOperatorByName(t *testing.T) {
 	e := credentialExecution(t)
 	runner := &refusingRunner{reason: "dashboard-identity"}
-	_, err := New(api.CephCluster, runner).PrepareAdminCredential(context.Background(), e)
+	_, err := New(api.CephCluster, runner).PrepareAdminCredential(context.Background(), e, dashboardLogin)
 	d := diagnostics.Of(err)
 	if len(d) != 1 || d[0].Code != cephDrifted.Code || d[0].Message != "the Ceph dashboard user admin or its retained password is not the one this operation created" || runner.request.NativeErrors {
 		t.Fatalf("a dashboard-identity refusal reached the operator as %+v", d)
@@ -164,12 +164,14 @@ func TestCephANativeAdminCredentialRefusalReachesTheOperatorByName(t *testing.T)
 func TestCephAnUnconfiguredRunnerRefusesTheAdminCredentialRun(t *testing.T) {
 	e := credentialExecution(t)
 	capability := New(api.CephCluster, nil)
-	_, err := capability.PrepareAdminCredential(context.Background(), e)
+	_, err := capability.PrepareAdminCredential(context.Background(), e, dashboardLogin)
 	if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "engine.request-defect" || d[0].Message != "the Ceph adapter is not configured" {
 		t.Fatalf("prepare without a runner returned %+v", d)
 	}
-	err = capability.UpdateAdminCredential(context.Background(), e, secrets.Material{})
+	err = capability.UpdateAdminCredential(context.Background(), e, dashboardLogin, secrets.Material{})
 	if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "engine.request-defect" || d[0].Message != "the Ceph adapter is not configured" {
 		t.Fatalf("update without a runner returned %+v", d)
 	}
 }
+
+var dashboardLogin = lifecycle.AdminLogin{Name: "dashboard", User: DashboardUser, Output: AdminPasswordOutput, Seed: DashboardOutput, Custody: lifecycle.AdminProducedPassword}

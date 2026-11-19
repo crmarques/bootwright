@@ -24,3 +24,8 @@ allows a repeated command to finish after an interrupted remote update.
 Synthetic evidence lives in `internal/reconciliation/lifecycle/admin_credentials_test.go`,
 `internal/environment/inspection/console_test.go` and the native credential
 tests under `ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/module_utils/`.
+
+`bootwright cluster update-admin-creds` updates these two logins and, for a
+managed Ceph cluster behind a management gateway, the Prometheus, Alertmanager
+and Grafana logins too; their upstream facts are in
+[Ceph monitoring](ibm-ceph-monitoring.md#monitoring-basic-auth-logins).

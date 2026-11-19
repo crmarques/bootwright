@@ -379,7 +379,7 @@ func dispatchFlags() *pflag.FlagSet {
 		"username": "", "input-dir": "inputs", "output-dir": "artifacts",
 		"stage": "infrastructure-services,substrates", "until": "compact.gitops",
 		"operation": "", "block": "", "attempt": "", "run": "", "install": "",
-		"parallelism": "16",
+		"parallelism": "16", "login": "prometheus,grafana",
 	} {
 		flags.String(name, value, "")
 	}
@@ -410,5 +410,5 @@ func (s machineDiscoverySpy) PlanDiscovery(ctx context.Context, r diskdiscovery.
 }
 
 func (s environmentSpy) UpdateAdminCredentials(ctx context.Context, request lifecycle.UpdateAdminCredentialsRequest) (*lifecycle.UpdateAdminCredentialsResult, error) {
-	return s.record.result.adminCredentials, s.record.called(ctx, "cluster update-admin-credentials", request)
+	return s.record.result.adminCredentials, s.record.called(ctx, "cluster update-admin-creds", request)
 }

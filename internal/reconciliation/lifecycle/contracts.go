@@ -797,11 +797,40 @@ type AdminCredentialRunner interface {
 	Run(context.Context, RunRequest) (RunResult, error)
 }
 
+type AdminCustody string
+
+const (
+	AdminProducedPassword AdminCustody = "producedPassword"
+	AdminProducedLogin    AdminCustody = "producedLogin"
+	AdminBoundSecret      AdminCustody = "boundSecret"
+)
+
+type AdminLogin struct {
+	Name, User, Output, Seed, Secret string
+	Custody                          AdminCustody
+}
+
+func pendingEntry(l AdminLogin) string {
+	if l.Custody == AdminProducedPassword {
+		return l.Output + "-update"
+	}
+	return l.Name + "-update"
+}
+
+var AdminLoginNames = []string{"console", "dashboard", "prometheus", "alertmanager", "grafana"}
+
 type AdminCredentialUpdater interface {
-	AdminCredentialIdentity(context.Context, Execution) (string, error)
-	AdminCredentialSeed(reconciliation.Block) string
-	AdminCredentialMayBeMissing() bool
-	AdminCredential(reconciliation.Block) (output, user string, applicable bool, err error)
-	PrepareAdminCredential(context.Context, Execution) (secrets.Material, error)
-	UpdateAdminCredential(context.Context, Execution, secrets.Material) error
+	AdminLogins(reconciliation.Block) ([]AdminLogin, error)
+	AdminCredentialIdentity(context.Context, Execution, AdminLogin) (string, error)
+	AdminCredentialMayBeMissing(AdminLogin) bool
+	GenerateAdminCredential(context.Context, AdminLogin, reconciliation.Entropy) (secrets.Material, error)
+	PrepareAdminCredential(context.Context, Execution, AdminLogin) (secrets.Material, error)
+	UpdateAdminCredential(context.Context, Execution, AdminLogin, secrets.Material) error
+}
+
+type CredentialVersionBinder interface {
+	GenerateCredential(ctx context.Context, contextName, secret string) (secrets.Material, error)
+	PrepareCredentialVersion(context.Context, custody.RebindRequest) (custody.ScopedCredentialVersion, error)
+	ReleaseInArea(ctx context.Context, selected secretstore.Context, area secretstore.Area, binding string) (bool, error)
+	DiscardProduced(ctx context.Context, selected secretstore.Context, area secretstore.Area, block, name string) (bool, error)
 }

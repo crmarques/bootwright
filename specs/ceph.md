@@ -1760,7 +1760,16 @@ dashboard's standby behaviour itself, and the cluster's dashboard phase keeps
 its own publication and readback.
 
 A running management gateway turns on cephadm's monitoring security, which
-puts Prometheus and Alertmanager behind basic authentication. When the unit's
+puts Prometheus and Alertmanager behind basic authentication, with the login
+`admin`/`admin` for a service cephadm holds none for. So that a cluster never
+serves that default, the unit's first apply claims a login for each listed
+`prometheus` or `alertmanager` before the gateway deploys, while the unit's
+attempt record is absent, it sets the user `admin` and a
+generated password of 32 dashboard-alphabet characters with `orch <service>
+set-credentials -i -`, on standard input only, replacing any default an earlier
+Prometheus deploy stored. Cephadm keeps it until the read below captures it.
+
+When the unit's
 frozen `monitoring` lists `prometheus` or `alertmanager`, its apply runs, after
 readiness on the bootstrap host, `orch <service> get-credentials` over the
 verified administrative channel for those services only, because that command
@@ -1768,8 +1777,9 @@ stores the default `admin`/`admin` for a service cephadm holds no login for.
 A recorded, non-removal observation proving the unit ready asks only when
 `orch ps` shows a daemon proving cephadm already stores each login (v20.2.1
 stores both before it configures a Prometheus daemon, Prometheus's before a
-Grafana daemon); otherwise it reads and recaptures none. Residual: a login
-removed outside cephadm after that is stored again as the default. A `user` or
+Grafana daemon); otherwise it reads and recaptures none. Residual: a cluster
+an older build realized may hold the default; `cluster update-admin-creds --login
+prometheus,alertmanager` replaces it. A `user` or
 `password` that is not a nonempty string, or an empty answer (security off),
 refuses `material`; one outside 1 to 128 visible ASCII characters other than
 `&`, `<` and `>` refuses `monitoring-login-unsupported`, naming the service and

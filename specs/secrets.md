@@ -407,7 +407,10 @@ version its operation bound. An access credential rotated at its endpoint is
 presented at its current version only through the recorded
 [access-credential rebind](state-reconciliation.md#access-credential-rebind),
 which issues a new binding version; effect material and a trust anchor refuse
-it (`TestAHostRebindsNoTrustAnchor`).
+it (`TestAHostRebindsNoTrustAnchor`). The one other recorded binding change is
+an [administrator credential update](cli/cluster-admin-credentials.md#grafana-administrator-password)
+that has proved its effect: its new version of the Secret it updated is pinned in
+a new binding version that the operation record names.
 
 A Secret declaration's fingerprint drops its provenance and covers type,
 source and parameters only (D71), so an identical import from another
@@ -422,13 +425,18 @@ keyring and never exposes prior keyring material;
 
 ### Effect material under a live binding
 
-While a binding that no completed removal released holds an effect-material
-Secret's current version, nothing replaces that version, because no command
-reveals a bound version ([D160](milestones/backlog.md#d160)) and the current
-one is then the only copy the operator can read. `secret generate --renew` or
+While a binding that no completed removal released pins any version of an
+effect-material Secret, nothing replaces the Secret's current version, because
+no command reveals a bound version ([D160](milestones/backlog.md#d160)) and the
+current one is then the only copy the operator can read. `secret generate --renew` or
 a stale regeneration naming the Secret, and a `secret set` replacement,
 refuse with `secret.store.conflict` and write nothing, before any prompt or
-input read and again under the lease. The refusal names the Secret and the
+input read and again under the lease. The administrator credential update is the
+one writer of a held Secret: inside one lease it writes a new current version in
+one store session, rebinds to it in a second and then names the new binding in
+the operation record; until that record names it, the replaced binding still
+pins the earlier version, so the Secret stays held in both windows and the
+update's repeat converges. The refusal names the Secret and the
 operation holding it, and its remedy takes the context back with
 `bootwright destroy --context <context>`, which releases the binding. An
 unnamed generation skips such a Secret and reports it unchanged.
@@ -452,6 +460,7 @@ not list it yet as the command read the holds, before any prompt or input
 read, and whenever the lifecycle records cannot be read; beside a context at
 rest it holds nothing
 (`TestRenewRefusesALiveEffectMaterialBinding`,
+`TestACredentialVersionOverTheRealKeyringIsCurrentPinnedAndHeldInEveryWindow`,
 `TestAnUnnamedBindingHoldsWhileAnApplyRegisters`,
 `TestSecretHoldsNameTheEffectMaterialACompletedApplyBound`,
 `TestSecretHoldsCoverEffectMaterialAlone`,
@@ -467,8 +476,10 @@ leaves, such as the administrator kubeconfig a
 copy of it a removal keeps unproved (D124, below).
 It is keyed by the block that captured it and the output's name, never by a
 Secret declaration. Only the lifecycle holds and withdraws it: the engine
-publishes a block's outputs in one publication, and withdraws every entry of
-the context in one publication, through the secret area the
+publishes a block's outputs in one publication, withdraws every entry of
+the context in one publication, and discards one entry, a
+[credential update](cli/cluster-admin-credentials.md#monitoring-logins)'s
+retained candidate that nothing holds, in one publication, through the secret area the
 [Workspace lends its transaction](contexts.md#storage-locking-and-publication)
 ([capture and withdrawal](state-reconciliation.md#produced-material-custody)).
 A recapture of equal bytes publishes nothing; different bytes of the same
@@ -494,18 +505,20 @@ of the same name. Only these outputs are revealed, each through its named comman
 | `admin-password` (an OpenShiftCluster or managed CephCluster) | `cluster info --secrets`, under the same disclosure boundaries | `passwordValue` of `console` or `dashboard` | console refused; dashboard revealed with one `access.unproved` warning |
 | `object-user` (a CephObjectUser) | `cluster info --object-user <name>`, same boundary | `accessKey` and `secretKey` of the one entry of `objectUsers` | refused `access.unavailable`, with no partial output |
 
-The protected `admin-password-update` candidate is never revealed. An
+The protected candidates `admin-password-update`, `prometheus-update`,
+`alertmanager-update` and `grafana-update` are never revealed. An
 [unfinished update](cli/cluster-admin-credentials.md#administrator-credential-updates)
-refuses administrator password disclosure until repetition proves completion.
+refuses the disclosure of its login until repetition proves completion.
 No other output is revealed: a Ceph consumer's `external-details` reach only
 the consuming cluster's [placed Secret](#material-placed-in-a-cluster). Beside
-these outputs, `cluster info --secrets` also reveals the current version of the
-Secret a managed CephCluster's frozen monitoring unit binds as Grafana's
-`/spec/initial_admin_password`. Custody records no per-unit applied version, so
-the reveal reads the current one: once the unit applied it, the operation's
-binding holds that version and [nothing replaces it](#effect-material-under-a-live-binding),
-so it is the version the unit applied; before then it is the version the unit
-will apply. The
+these outputs, `cluster info --secrets` also reveals the Secret a managed
+CephCluster's frozen monitoring unit binds as Grafana's
+`/spec/initial_admin_password`, at the version the binding holds: the one the
+unit applied, or the one a later credential update proved. Once the unit applied
+it, the operation's binding holds that version and
+[nothing replaces it](#effect-material-under-a-live-binding) but that update;
+before then, with no apply owning the block, it is the current version, which the
+unit will apply. The
 `object-user` reveal is authorized (D183, Q100). A dashboard whose evidence
 does not prove it reachable and whose password carries no mark is revealed with
 `dashboard.status` `unproved` and its reason, and no warning (D183, Q101).

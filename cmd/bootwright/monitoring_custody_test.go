@@ -49,7 +49,7 @@ func TestGrafanaPasswordComesFromItsBoundSecret(t *testing.T) {
 	frozen := []reconciliation.Block{monitoringBlock(t, "other", ceph.ServiceBinding{Path: bound.Path, SecretRef: "foreign", ServiceRef: "grafana"}), monitoringBlock(t, "storage", other, bound)}
 	reader := &readerFake{resources: &lifecycle.StorageResourcesResult{Frozen: frozen}}
 	current := &currentFake{material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("gr-Secret.99")})}
-	got, found, err := (inspectionCustody{frozen: reader, current: current}).GrafanaPassword(context.Background(), "lab", "storage")
+	got, found, err := (inspectionCustody{frozen: reader, administrator: adminPasswordReaderFake{current: current}}).GrafanaPassword(context.Background(), "lab", "storage")
 	value, _ := got.Material.Part(secrets.ValuePart)
 	if err != nil || !found || got.Unproved || string(value) != "gr-Secret.99" || !slices.Equal(current.reads, []string{"lab/grafana-admin"}) {
 		t.Fatalf("Grafana custody = %q %t (%v) after %v", value, found, err, current.reads)
@@ -57,11 +57,11 @@ func TestGrafanaPasswordComesFromItsBoundSecret(t *testing.T) {
 	got.Material.Clear()
 	anonymous := &readerFake{resources: &lifecycle.StorageResourcesResult{Frozen: []reconciliation.Block{monitoringBlock(t, "storage", other)}}}
 	current = &currentFake{}
-	if _, found, err := (inspectionCustody{frozen: anonymous, current: current}).GrafanaPassword(context.Background(), "lab", "storage"); found || err != nil || len(current.reads) != 0 {
+	if _, found, err := (inspectionCustody{frozen: anonymous, administrator: adminPasswordReaderFake{current: current}}).GrafanaPassword(context.Background(), "lab", "storage"); found || err != nil || len(current.reads) != 0 {
 		t.Fatalf("an unbound Grafana read %v (%t, %v)", current.reads, found, err)
 	}
 	failure := errors.New("the keyring is locked")
-	if _, _, err := (inspectionCustody{frozen: reader, current: &currentFake{failed: failure}}).GrafanaPassword(context.Background(), "lab", "storage"); !errors.Is(err, failure) {
+	if _, _, err := (inspectionCustody{frozen: reader, administrator: adminPasswordReaderFake{current: &currentFake{failed: failure}}}).GrafanaPassword(context.Background(), "lab", "storage"); !errors.Is(err, failure) {
 		t.Fatalf("a custody failure = %v", err)
 	}
 }
@@ -71,7 +71,7 @@ func TestMonitoringCustodyReadsTheGatewayBlocksEntry(t *testing.T) {
 	value := `{"alertmanager":{"password":"am-Secret.42","user":"am-admin"},"prometheus":{"password":"pr-Secret.17","user":"pr-admin"}}`
 	material := secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(value)})
 	reader := &producedFake{material: material, found: true, unproved: true}
-	got, found, err := (inspectionCustody{reader: reader}).MonitoringCredentials(context.Background(), "lab", "storage", "prometheus")
+	got, found, err := (inspectionCustody{administrator: adminPasswordReaderFake{reader: reader}}).MonitoringCredentials(context.Background(), "lab", "storage", "prometheus")
 	user, _ := got.Material.Part(secrets.UsernamePart)
 	password, _ := got.Material.Part(secrets.PasswordPart)
 	if err != nil || !found || !got.Unproved || string(user) != "pr-admin" || string(password) != "pr-Secret.17" || !zeroed(material) ||
@@ -80,10 +80,10 @@ func TestMonitoringCustodyReadsTheGatewayBlocksEntry(t *testing.T) {
 	}
 	got.Material.Clear()
 	foreign := secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(`{"alertmanager":{"password":"am-Secret.42","user":"am-admin"}}`)})
-	if _, found, err := (inspectionCustody{reader: &producedFake{material: foreign, found: true}}).MonitoringCredentials(context.Background(), "lab", "storage", "prometheus"); !found || !errors.Is(err, inspection.ErrMonitoringMaterial) || !zeroed(foreign) {
+	if _, found, err := (inspectionCustody{administrator: adminPasswordReaderFake{reader: &producedFake{material: foreign, found: true}}}).MonitoringCredentials(context.Background(), "lab", "storage", "prometheus"); !found || !errors.Is(err, inspection.ErrMonitoringMaterial) || !zeroed(foreign) {
 		t.Fatalf("a login without prometheus = %t (%v)", found, err)
 	}
-	if _, found, err := (inspectionCustody{reader: &producedFake{}}).MonitoringCredentials(context.Background(), "lab", "storage", "prometheus"); found || err != nil {
+	if _, found, err := (inspectionCustody{administrator: adminPasswordReaderFake{reader: &producedFake{}}}).MonitoringCredentials(context.Background(), "lab", "storage", "prometheus"); found || err != nil {
 		t.Fatalf("an absent entry = %t (%v)", found, err)
 	}
 }

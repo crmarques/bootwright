@@ -470,14 +470,14 @@ type completedRefusal interface{ WithDetail(detail string) error }
 
 func refusalDetail(named error, detail string) error {
 	if completed, ok := named.(completedRefusal); ok && detail != "" {
-		return completed.WithDetail(detail)
+		return keepSignals(named, completed.WithDetail(detail))
 	}
 	found := diagnostics.Of(named)
 	if detail == "" || len(found) == 0 {
 		return named
 	}
 	found[0].Message += " (adapter detail: " + detail + ")"
-	return &diagnostics.Failure{Diagnostics: found, Usage: diagnostics.IsUsage(named)}
+	return keepSignals(named, &diagnostics.Failure{Diagnostics: found, Usage: diagnostics.IsUsage(named)})
 }
 
 func refusalNative(named error, native *adapterprotocol.NativeError) error {
@@ -486,7 +486,14 @@ func refusalNative(named error, native *adapterprotocol.NativeError) error {
 		return named
 	}
 	found[0].Message += " (selected " + native.Coordinate + ": " + native.Cause + ")"
-	return &diagnostics.Failure{Diagnostics: found, Usage: diagnostics.IsUsage(named)}
+	return keepSignals(named, &diagnostics.Failure{Diagnostics: found, Usage: diagnostics.IsUsage(named)})
+}
+
+func keepSignals(named, rewritten error) error {
+	if _, plain := named.(*diagnostics.Failure); plain {
+		return rewritten
+	}
+	return errors.Join(rewritten, named)
 }
 
 func warnings(reported []adapterprotocol.Warning) []operationstore.Warning {

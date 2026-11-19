@@ -411,8 +411,10 @@ type monitoringLeaf struct {
 	Observed bool
 }
 
+const grafanaPasswordVariable = "grafanaAdminPassword"
+
 var monitoringLeaves = map[string]monitoringLeaf{
-	"grafana /spec/initial_admin_password":                 {Part: secrets.ValuePart, Variable: "grafanaAdminPassword", File: "grafana-admin-password"},
+	"grafana /spec/initial_admin_password":                 {Part: secrets.ValuePart, Variable: grafanaPasswordVariable, File: "grafana-admin-password"},
 	"snmp-gateway /spec/credentials/snmp_community":        {Part: secrets.ValuePart, Variable: "snmpCommunity", File: "snmp-community"},
 	"snmp-gateway /spec/credentials/snmp_v3_auth_username": {Part: secrets.UsernamePart, Variable: "snmpAuthUsername", File: "snmp-auth-username"},
 	"snmp-gateway /spec/credentials/snmp_v3_auth_password": {Part: secrets.PasswordPart, Variable: "snmpAuthPassword", File: "snmp-auth-password"},

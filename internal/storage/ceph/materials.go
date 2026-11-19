@@ -3,6 +3,7 @@ package ceph
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"time"
@@ -116,7 +117,7 @@ func unitMaterial(e lifecycle.Execution, r Request, operation string) ([]lifecyc
 		if !known {
 			return nil, cephRequestInvalid.Fail("a Ceph service unit binds a credential leaf this build does not realize", "")
 		}
-		if operation != "apply" && !leaf.Observed {
+		if operation == loginPhase && leaf.Variable != grafanaPasswordVariable || operation != loginPhase && operation != "apply" && !leaf.Observed {
 			continue
 		}
 		value, err := materialPart(e.Material, b.SecretRef, leaf.Part)
@@ -346,6 +347,22 @@ func foreignClientRefusal(name string) error {
 	return cephForeign.Fail("Ceph client client."+name+" exists that this operation did not create",
 		"inspect the foreign client's consumers and authorization outside Bootwright; if it can be removed safely, remove it outside Bootwright, then apply again with the same input; "+
 			"to use another CephClient name, first take back what this context owns with bootwright destroy --context <context>, then rename the CephClient with bootwright context update and apply; Bootwright never adopts a client it did not create")
+}
+
+func loginRefusals() map[string]error {
+	out := adapterRefusals()
+	grafanaSpec := "set initial_admin_password in cephadm's Grafana spec back with ceph orch ls grafana --export, then ceph orch apply -i, to "
+	boundValue := "the value of the Secret the monitoring unit binds, which bootwright secret show --part value --name <Secret> reveals"
+	out["monitoring-login-drift"] = errors.Join(cephDrifted.Fail("a Prometheus or Alertmanager login that cephadm holds is neither the custodied login nor the retained candidate, so it was changed outside Bootwright; the update set nothing and discarded the candidate",
+		"set that service's login back to the one bootwright cluster info --secrets --name <cluster> reveals with ceph orch prometheus set-credentials -i - or ceph orch alertmanager set-credentials -i -"), lifecycle.ErrAdminCandidateUnapplied)
+	out["grafana-login-drift"] = cephDrifted.Fail("cephadm's stored Grafana spec holds a password other than the bound admin password and the retained candidate while a Grafana daemon or the dashboard already holds the candidate, or a Grafana daemon answers its admin login as another user, so it was changed outside Bootwright",
+		grafanaSpec+boundValue+", and keep each Grafana daemon's administrator named admin")
+	out["grafana-login-drift-unapplied"] = errors.Join(cephDrifted.Fail("cephadm's stored Grafana spec holds a password other than the bound admin password and the retained candidate, so it was changed outside Bootwright; no Grafana daemon, spec or dashboard held the candidate, so the update changed nothing and discarded it",
+		grafanaSpec+"the one bootwright cluster info --secrets --name <cluster> reveals"), lifecycle.ErrAdminCandidateUnapplied)
+	out["grafana-login-refused"] = cephUnproved.Fail("a Grafana daemon refuses both the bound admin password and the retained candidate; Grafana answers a login its failed-login protection locked exactly like a wrong password",
+		"wait five minutes for Grafana's failed-login lockout to lapse; if the same refusal follows that wait, first reset that daemon's admin password to "+boundValue+", with grafana cli admin reset-admin-password inside its container")
+	out["monitoring-login-unproved"] = cephUnproved.Fail("the monitoring login update was applied but its daemons did not prove the new login within the bound", lifecycle.RepeatAdminCredentialUpdate)
+	return out
 }
 
 func adapterRefusals() map[string]error {

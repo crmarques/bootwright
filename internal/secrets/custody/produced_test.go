@@ -30,6 +30,13 @@ func (s *serviceSession) Withdraw(context.Context) (bool, error) {
 	return withdrawn, nil
 }
 
+func (s *serviceSession) Discard(_ context.Context, block, name string) (bool, error) {
+	s.writes++
+	before := len(s.snapshot.Produced)
+	s.snapshot.Produced = slices.DeleteFunc(s.snapshot.Produced, func(entry secretstore.Produced) bool { return entry.Block == block && entry.Name == name })
+	return len(s.snapshot.Produced) != before, nil
+}
+
 func (s *serviceSession) ReadProduced(_ context.Context, block, name string) (secretstore.ProducedMaterial, bool, error) {
 	s.reads++
 	for _, entry := range s.snapshot.Produced {

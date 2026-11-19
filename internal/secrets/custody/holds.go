@@ -69,8 +69,14 @@ func (h holdIndex) holder(snapshot secretstore.Snapshot, name string) (string, b
 	if !exists || current.Declaration.Type == "caBundle" {
 		return "", false
 	}
+	versions := map[string]bool{}
+	for _, version := range snapshot.Versions {
+		if version.Declaration.Name == name && version.Declaration.Source != "produced" {
+			versions[version.ID] = true
+		}
+	}
 	for _, binding := range snapshot.Bindings {
-		if !slices.Contains(binding.Versions, current.ID) {
+		if !slices.ContainsFunc(binding.Versions, func(id string) bool { return versions[id] }) {
 			continue
 		}
 		hold, named := h.bindings[binding.ID]

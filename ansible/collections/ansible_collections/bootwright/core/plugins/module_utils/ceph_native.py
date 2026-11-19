@@ -3001,8 +3001,10 @@ def dispatch(envelope):
     envelope, options = services_arguments(phase, envelope)
     require(isinstance(envelope, dict) and set(envelope) == {"request", "host", "phase", "private"})
     require(isinstance(envelope["private"], dict))
-    from ansible_collections.bootwright.core.plugins.module_utils import ceph_admin_credentials_native, ceph_export_native, ceph_smb_native
-    for delegate in (ceph_admin_credentials_native, ceph_export_native, ceph_smb_native):
+    from ansible_collections.bootwright.core.plugins.module_utils import (
+        ceph_admin_credentials_native, ceph_export_native, ceph_monitoring_logins_native, ceph_smb_native,
+    )
+    for delegate in (ceph_admin_credentials_native, ceph_monitoring_logins_native, ceph_export_native, ceph_smb_native):
         if phase in delegate.PHASES:
             return delegate.dispatch(envelope)
     request = envelope["request"]

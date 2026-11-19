@@ -991,6 +991,26 @@ func TestANamedRefusalCarriesItsAdapterDetail(t *testing.T) {
 	}
 }
 
+func TestANamedRefusalKeepsItsCallersSignalThroughEveryRewrite(t *testing.T) {
+	named := errors.Join(diagnostics.NewFailureWithRemediation("ceph.identity-drifted", "the login drifted", "", "set it back"), lifecycle.ErrAdminCandidateUnapplied)
+	judge := &lifecycleJudge{request: lifecycle.RunRequest{Refusals: map[string]error{"monitoring-login-drift": named}, NativeErrors: true}, loaded: true}
+	for _, record := range []adapterprotocol.Record{
+		{Phase: "refused", Reason: "monitoring-login-drift"},
+		{Phase: "refused", Reason: "monitoring-login-drift", Detail: "prometheus"},
+		{Phase: "refused", Reason: "monitoring-login-drift", NativeError: &adapterprotocol.NativeError{Coordinate: "ceph-0", Cause: "prometheus holds neither login"}},
+		{Phase: "refused", Reason: "monitoring-login-drift", Detail: "prometheus", NativeError: &adapterprotocol.NativeError{Coordinate: "ceph-0", Cause: "prometheus holds neither login"}},
+	} {
+		verdict := judge.Judge(context.Background(), record, adapterprotocol.Moment{Open: true})
+		reported := diagnostics.Of(verdict.Failure)
+		if !verdict.Valid || !errors.Is(verdict.Failure, lifecycle.ErrAdminCandidateUnapplied) || len(reported) != 1 || reported[0].Code != "ceph.identity-drifted" || reported[0].Remediation != "set it back" {
+			t.Fatalf("record %+v gave %+v (%v)", record, reported, verdict.Failure)
+		}
+		if record.NativeError != nil && !strings.Contains(reported[0].Message, "(selected ceph-0: prometheus holds neither login)") {
+			t.Fatalf("the native error was lost: %+v", reported)
+		}
+	}
+}
+
 // A token the caller gives no remedy reaches the operator as the caller's
 // unknown refusal with the token in its detail; the token itself is no reason.
 func TestAnUnnamedRefusalTokenReachesTheOperatorInTheUnknownDetail(t *testing.T) {

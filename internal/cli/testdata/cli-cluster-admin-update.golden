@@ -1,3 +1,3 @@
   ✓ Updated administrator credentials for edge
-      User  kubeadmin
-      Next  bootwright cluster info --context lab --name edge --secrets
+      Console user  kubeadmin
+      Next          bootwright cluster info --context lab --name edge --secrets

@@ -91,7 +91,7 @@ func TestInstallPrepareAdminCredentialHashesTheGuardedPassword(t *testing.T) {
 	execution, kubeconfig := credentialExecution(t)
 	produced := credentialOutputs(preparedGuard())
 	runner := &credentialRunner{result: lifecycle.RunResult{Evidence: credentialProof(true), Produced: produced}}
-	guard, err := NewInstall(runner).WithPasswordHash(hashed).PrepareAdminCredential(context.Background(), execution)
+	guard, err := NewInstall(runner).WithPasswordHash(hashed).PrepareAdminCredential(context.Background(), execution, consoleLogin)
 	if err != nil {
 		t.Fatalf("prepare: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestInstallUpdateAdminCredentialLendsTheUpdateAndClearsWhatItProduced(t *te
 	produced := credentialOutputs(preparedGuard())
 	runner := &credentialRunner{result: lifecycle.RunResult{Evidence: credentialProof(true), Produced: produced}}
 	update := secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("candidate")})
-	if err := NewInstall(runner).UpdateAdminCredential(context.Background(), execution, update); err != nil {
+	if err := NewInstall(runner).UpdateAdminCredential(context.Background(), execution, consoleLogin, update); err != nil {
 		t.Fatalf("update: %v", err)
 	}
 	cleared(t, append(producedMaterials(produced), kubeconfig)...)
@@ -141,14 +141,14 @@ func TestInstallAnUnprovedAdminCredentialRunRefusesAndClears(t *testing.T) {
 	execution, _ := credentialExecution(t)
 	produced := credentialOutputs(preparedGuard())
 	capability := NewInstall(&credentialRunner{result: lifecycle.RunResult{Evidence: credentialProof(false), Produced: produced}}).WithPasswordHash(hashed)
-	guard, err := capability.PrepareAdminCredential(context.Background(), execution)
+	guard, err := capability.PrepareAdminCredential(context.Background(), execution, consoleLogin)
 	if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "engine.credential-preparation-invalid" || d[0].Message != "the administrator credential preparation was not proved" || guard.Size() != 0 {
 		t.Fatalf("an unproved prepare returned %+v", d)
 	}
 	cleared(t, producedMaterials(produced)...)
 	produced = credentialOutputs(preparedGuard())
 	capability = NewInstall(&credentialRunner{result: lifecycle.RunResult{Evidence: []byte(`{"proved":true,"request":"other"}`), Produced: produced}})
-	err = capability.UpdateAdminCredential(context.Background(), execution, secrets.Material{})
+	err = capability.UpdateAdminCredential(context.Background(), execution, consoleLogin, secrets.Material{})
 	if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "engine.credential-update-unproved" || d[0].Message != "the administrator credential update was not proved" {
 		t.Fatalf("an unproved update returned %+v", d)
 	}
@@ -170,7 +170,7 @@ func TestInstallAnInvalidOrMissingGuardRefusesAndClears(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			capability := NewInstall(&credentialRunner{result: lifecycle.RunResult{Evidence: credentialProof(true), Produced: test.produced}}).WithPasswordHash(test.hash)
-			_, err := capability.PrepareAdminCredential(context.Background(), execution)
+			_, err := capability.PrepareAdminCredential(context.Background(), execution, consoleLogin)
 			if d := diagnostics.Of(err); len(d) != 1 || d[0].Message != test.message {
 				t.Fatalf("prepare returned %+v", d)
 			}
@@ -187,9 +187,9 @@ func TestInstallAFailedAdminCredentialRunClearsWhatItProduced(t *testing.T) {
 		capability := NewInstall(&credentialRunner{result: lifecycle.RunResult{Produced: produced}, err: failed}).WithPasswordHash(hashed)
 		var err error
 		if operation == "prepare" {
-			_, err = capability.PrepareAdminCredential(context.Background(), execution)
+			_, err = capability.PrepareAdminCredential(context.Background(), execution, consoleLogin)
 		} else {
-			err = capability.UpdateAdminCredential(context.Background(), execution, secrets.Material{})
+			err = capability.UpdateAdminCredential(context.Background(), execution, consoleLogin, secrets.Material{})
 		}
 		if !errors.Is(err, failed) {
 			t.Fatalf("%s returned %v", operation, err)
@@ -201,7 +201,7 @@ func TestInstallAFailedAdminCredentialRunClearsWhatItProduced(t *testing.T) {
 func TestInstallANamedAdminCredentialRefusalReachesTheOperatorByName(t *testing.T) {
 	execution, _ := credentialExecution(t)
 	runner := &credentialRunner{reason: nodeRefusal("controller-read", 0)}
-	_, err := NewInstall(runner).WithPasswordHash(hashed).PrepareAdminCredential(context.Background(), execution)
+	_, err := NewInstall(runner).WithPasswordHash(hashed).PrepareAdminCredential(context.Background(), execution, consoleLogin)
 	d := diagnostics.Of(err)
 	if len(d) != 1 || d[0].Code != "openshift.node-refused" || !strings.Contains(d[0].Message, "the management controller did not answer a complete node state read") {
 		t.Fatalf("a named refusal reached the operator as %+v", d)
@@ -211,11 +211,11 @@ func TestInstallANamedAdminCredentialRefusalReachesTheOperatorByName(t *testing.
 func TestInstallAnUnconfiguredRunnerRefusesTheAdminCredentialRun(t *testing.T) {
 	execution, kubeconfig := credentialExecution(t)
 	capability := NewInstall(nil).WithPasswordHash(hashed)
-	_, err := capability.PrepareAdminCredential(context.Background(), execution)
+	_, err := capability.PrepareAdminCredential(context.Background(), execution, consoleLogin)
 	if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "engine.request-defect" || d[0].Message != "the installation adapter is not configured" {
 		t.Fatalf("prepare without a runner returned %+v", d)
 	}
-	err = capability.UpdateAdminCredential(context.Background(), execution, secrets.Material{})
+	err = capability.UpdateAdminCredential(context.Background(), execution, consoleLogin, secrets.Material{})
 	if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "engine.request-defect" || d[0].Message != "the installation adapter is not configured" {
 		t.Fatalf("update without a runner returned %+v", d)
 	}
@@ -223,3 +223,5 @@ func TestInstallAnUnconfiguredRunnerRefusesTheAdminCredentialRun(t *testing.T) {
 		t.Fatal("an unconfigured runner borrowed the kubeconfig")
 	}
 }
+
+var consoleLogin = lifecycle.AdminLogin{Name: "console", User: "kubeadmin", Output: AdminPasswordOutput, Seed: ConsolePasswordOutput, Custody: lifecycle.AdminProducedPassword}

@@ -46,7 +46,7 @@ func UpdateAdminCredential(ctx context.Context, a AdminCredentialCall, e Executi
 		return err
 	}
 	if !AdminCredentialProved(result.Evidence, e.Block.RequestDigest) {
-		return engineCredentialUpdateUnproved.Fail("the administrator credential update was not proved", "repeat bootwright cluster update-admin-credentials to finish the retained update")
+		return engineCredentialUpdateUnproved.Fail("the administrator credential update was not proved", RepeatAdminCredentialUpdate)
 	}
 	return nil
 }

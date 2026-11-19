@@ -35,8 +35,8 @@
                identity; confirm or refuse an unproved host key and return the client's exit
                status
 
-  ○ Command | update-admin-credentials
-      PURPOSE  Generate and update the console or dashboard administrator password
+  ○ Command | update-admin-creds
+      PURPOSE  Generate and update a cluster's administrator logins
 
   Common flags
       --ascii       Use ASCII status markers

@@ -2,9 +2,11 @@ package cli
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"sync"
 
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -245,6 +247,12 @@ func contextFileFlag() flagSpec {
 func stageFlag() flagSpec {
 	flag := stringFlag("stage", "Select comma-separated stages to start (default: all)")
 	flag.enum, flag.enumList, flag.nameList = []string{"controller", "infrastructure-services", "substrates", "machines", "clusters", "add-ons"}, true, true
+	return flag
+}
+
+func loginFlag() flagSpec {
+	flag := stringFlag("login", "Select comma-separated administrator logins to update (default: all the cluster has)")
+	flag.enum, flag.enumList, flag.nameList = slices.Clone(lifecycle.AdminLoginNames), true, true
 	return flag
 }
 

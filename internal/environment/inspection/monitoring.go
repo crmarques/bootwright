@@ -31,7 +31,7 @@ func (s Service) revealMonitoring(ctx context.Context, selected string, entry St
 			clear(value)
 			if empty || !slices.Equal(custodied.Material.Parts(), []secrets.Part{secrets.ValuePart}) {
 				custodied.Material.Clear()
-				return failure("secret.store.corrupt", "the Secret bound as Grafana's initial admin password of "+entry.Kind+" "+entry.Name+" holds no value", "restore the original context custody before continuing")
+				return failure("secret.store.corrupt", "the Secret bound as Grafana's admin password of "+entry.Kind+" "+entry.Name+" holds no value", "restore the original context custody before continuing")
 			}
 			access.User, access.Password, access.Revealed = GrafanaUser, custodied.Material, true
 			continue

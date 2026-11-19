@@ -178,6 +178,89 @@ and `native_login` in
 held by
 [test_ceph_monitoring_credentials.py](../../ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/module_utils/test_ceph_monitoring_credentials.py).
 
+Setting a login: `ceph orch prometheus set-credentials -i -` and `ceph orch
+alertmanager set-credentials -i -` read the JSON `{"username", "password"}`
+from the input buffer only, so the value never reaches an argument
+([orchestrator/module.py](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/orchestrator/module.py),
+`_get_credentials`). `set_prometheus_access_info` and
+`set_alertmanager_access_info` only store the user and password
+([cephadm/module.py](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/module.py)).
+Each daemon's dependencies hash its login
+(`PrometheusService.get_dependencies`, `AlertmanagerService.get_dependencies`),
+so cephadm's own serve loop reconfigures the daemon and re-renders `web.yml`
+within one serve interval; Grafana's dependencies hash Prometheus's login, so a
+Prometheus update also reconfigures Grafana and re-sends the spec's value to the
+dashboard ([Grafana admin password](#grafana-admin-password)). `orch ps`
+reports each daemon's `last_configured`, which can lag the real
+reconfiguration by one host refresh.
+
+Behind a running gateway Prometheus and Alertmanager always require a client
+certificate the cephadm root CA verifies (`enable_mtls` follows the gateway;
+`web.yml.j2` sets `RequireAndVerifyClientCert`), and basic authentication only
+while no oauth2-proxy runs (`enable_basic_auth: not oauth2_enabled`,
+[services/monitoring.py](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/monitoring.py)).
+With an oauth2-proxy the login therefore guards nothing at the daemon. They serve
+under `/prometheus/` and `/alertmanager`
+([cephadmlib/daemons/monitoring.py](https://github.com/ceph/ceph/blob/v20.2.1/src/cephadm/cephadmlib/daemons/monitoring.py)),
+with a server certificate naming the host's inventory address.
+`ceph orch certmgr generate-certificates prometheus` returns a cephadm-signed
+client pair and stores nothing. The dashboard reads both logins from cephadm per
+request, cached for one minute
+([dashboard/controllers/prometheus.py](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/dashboard/controllers/prometheus.py),
+`get_access_info`), so a login update needs no dashboard write.
+
+Decision (updates): the native update replaces the login only when cephadm's
+stored one is the custodied login or the retained candidate, and proves it by
+the daemons' reconfiguration plus a `200` for the new login and a `401` for the
+old one, skipping the `401` under an oauth2-proxy
+([administrator credential updates](../../specs/cli/cluster-admin-credentials.md#monitoring-logins)).
+The code is
+[ceph_monitoring_logins_native.py](../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_monitoring_logins_native.py).
+
+Decision (first install): asking for a missing login stores `admin`/`admin`,
+and a gateway daemon that then runs requires it, so the unit's first apply sets
+a generated login for each listed service before the gateway deploys
+(`gateway_claim` in
+[ceph_native_observability.py](../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native_observability.py)),
+while its attempt record is absent. Cephadm keeps that login until the existing
+post-readiness read captures it, and `monitoring_credentials_held` is
+unchanged. A cluster an older build realized may hold the default until
+`cluster update-admin-creds --login prometheus,alertmanager` replaces it
+([storage](../../specs/ceph.md#resources-readiness-and-access)).
+
+## Grafana admin password
+
+Observation: cephadm renders the spec's `initial_admin_password` into
+`grafana.ini` as `admin_password`, which Grafana reads only when it creates its
+database, so changing the Secret or the spec changes no running Grafana
+([grafana.ini.j2](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/templates/services/grafana/grafana.ini.j2)).
+Every Grafana configuration generation, including one a Prometheus login change
+causes, runs `dashboard set-grafana-api-password` with the spec's value when the
+dashboard module is enabled
+(`GrafanaService.generate_config` in
+[services/monitoring.py](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/monitoring.py)),
+so a changed live password alone is reverted in the dashboard on the next
+reconfiguration. Each Grafana daemon keeps its own database. Grafana's HTTP API
+changes a password with `PUT /api/user/password` and the body `oldPassword`,
+`newPassword`, `confirmNew`, under basic authentication
+([Grafana user API](https://grafana.com/docs/grafana/latest/developers/http_api/user/#change-password)).
+Behind a management gateway Grafana serves from the `/grafana` sub path
+(`serve_from_sub_path`); `[auth] disable_login_form` for an oauth2-proxy turns off
+only the login form, so basic authentication still works. The dashboard has the
+generated getter `dashboard get-grafana-api-password`
+([dashboard/settings.py](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/dashboard/settings.py),
+`GRAFANA_API_PASSWORD`).
+
+Decision: a Grafana update changes three things: every running daemon's live
+password through the API, cephadm's stored spec leaf (the unit's frozen Grafana
+document re-applied with the new value, which is at most a reconfiguration), and
+the dashboard's Grafana API password, read back and compared in memory. The
+value also becomes a new version of the Secret the unit binds, held by a rebind
+of the apply's binding
+([Grafana administrator password](../../specs/cli/cluster-admin-credentials.md#grafana-administrator-password)).
+The IBM Storage Ceph build has not been checked live; the owner's acceptance of
+the update is owed under [B1632](../../specs/milestones/m2.md#b1632).
+
 ## Alertmanager webhooks
 
 [`generate_config`](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/monitoring.py#L312-L324)

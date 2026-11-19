@@ -199,6 +199,9 @@ var (
 	engineCredentialClusterUnknown = diagnostics.Stop{Code: "engine.credential-cluster-unknown", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
 		Meaning: "an administrator credential update names a cluster the context does not select", Remedy: "bootwright cluster info lists the selected clusters"}
+	engineCredentialLoginInapplicable = diagnostics.Stop{Code: "engine.credential-login-inapplicable", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
+		Meaning: "a credential update names a login the cluster does not have", Remedy: "bootwright cluster info --name <cluster> shows its logins"}
 	engineCredentialExternal = diagnostics.Stop{Code: "engine.credential-external-cluster", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
 		Meaning: "an administrator credential update names an external cluster, whose credentials its own administrator keeps", Remedy: "update the credentials through the external cluster's administrator"}
@@ -207,13 +210,13 @@ var (
 		Meaning: "the custody of a cluster administrator credential is missing, unproved or invalid, so its update changed nothing", Remedy: "restore the original credential custody"}
 	engineCredentialPending = diagnostics.Stop{Code: "engine.credential-update-pending", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryOtherVerb,
-		Meaning: "an administrator credential update was left pending, so custody holds no credential proved current", Remedy: "finish the retained update with bootwright cluster update-admin-credentials"}
+		Meaning: "an administrator credential update was left pending, so custody holds no credential proved current", Remedy: "finish the retained update with bootwright cluster update-admin-creds"}
 	engineCredentialPreparationInvalid = diagnostics.Stop{Code: "engine.credential-preparation-invalid", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
 		Meaning: "the cluster's read-only preparation of an administrator credential update was not proved or returned no valid update, so nothing changed", Remedy: "check the cluster's original administrator account"}
 	engineCredentialUpdateUnproved = diagnostics.Stop{Code: "engine.credential-update-unproved", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyPossible,
 		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryRepeat,
-		Meaning: "the adapter that updates a cluster administrator credential ended without proving the update", Remedy: "repeat bootwright cluster update-admin-credentials to finish the retained update"}
+		Meaning: "the adapter that updates a cluster administrator credential ended without proving the update", Remedy: RepeatAdminCredentialUpdate}
 	engineControllerUnprepared = diagnostics.Stop{Code: "engine.controller-unprepared", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseEnvironment, Recovery: diagnostics.RecoveryFixThenRepeat,
 		Meaning: "this host has no completed controller setup, so nothing ran", Remedy: "run bootwright controller install"}
@@ -284,7 +287,7 @@ var stops = []diagnostics.Stop{engineRecordsFull, engineRecordsReadOnly, engineR
 	prepareRefused, prepareUnsupported,
 	engineBorrowedSSH, engineConfirmationRequired, engineInputInvalid, engineCredentialMoved, engineFinalizationIncomplete,
 	destroyReleaseIncomplete, destroyUnprovedEffects, engineOutcomeUnknown, authorizeRelaxationChanged, diffContextMoved,
-	engineCredentialUnapplied, engineCredentialClusterUnknown, engineCredentialExternal, engineCredentialCustody, engineCredentialPending,
+	engineCredentialUnapplied, engineCredentialClusterUnknown, engineCredentialLoginInapplicable, engineCredentialExternal, engineCredentialCustody, engineCredentialPending,
 	engineCredentialPreparationInvalid, engineCredentialUpdateUnproved, engineControllerUnprepared, engineControllerUnbound, engineControllerOtherHost,
 	engineRuntimeUnprepared, engineClientNotInstalled, engineWiringMissing, engineLogUnmaintained, engineProducedNameInvalid,
 	planControllerOrder, planReservationKeyTooLong, planHostKeyUnreadable, planSocketConflict, planTemplateValue, planObjectUnsupported,

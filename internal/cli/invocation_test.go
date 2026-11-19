@@ -183,7 +183,7 @@ func TestOnlyContextFreeAcquisitionConsumesTheInvokingEnvironment(t *testing.T) 
 		{"machine restart", []string{"--name", "demo"}, ignoresRoute},
 		{"machine eject-media", []string{"--name", "demo"}, ignoresRoute},
 		{"machine trust", nil, ignoresRoute},
-		{"cluster update-admin-credentials", nil, ignoresRoute},
+		{"cluster update-admin-creds", nil, ignoresRoute},
 		{"cluster list", nil, ignoresRoute},
 		{"cluster info", nil, ignoresRoute},
 		{"cluster rsh", []string{"--name", "demo"}, ignoresRoute},

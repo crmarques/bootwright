@@ -11,14 +11,28 @@
     phase: loaded
   no_log: true
 
-- name: Prove the dashboard administrator credential
+- name: Prove the administrator login
   bootwright.core.ceph_admin_credentials:
+    login: '{{ bootwright_ceph_material.login }}'
     operation: update
     request: '{{ bootwright_ceph_request }}'
     material: '{{ bootwright_ceph_material }}'
   register: storage_ceph_admin_credentials_result
+  failed_when: false
   no_log: true
   diff: false
+
+- name: Publish the fixed administrator login refusal
+  bootwright.core.storage_ceph_admin_protocol:
+    phase: refused
+    reason: '{{ storage_ceph_admin_credentials_result.reason }}'
+  when: storage_ceph_admin_credentials_result.reason is defined
+  no_log: true
+
+- name: Refuse an unproved administrator login
+  ansible.builtin.fail:
+    msg: The administrator login could not be proved or updated
+  when: storage_ceph_admin_credentials_result.proved is not defined
 
 - name: Publish bounded credential proof
   bootwright.core.storage_ceph_admin_protocol:

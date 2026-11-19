@@ -250,6 +250,36 @@ func TestWithdrawRemovesEveryEntryAndCollectsItsParts(t *testing.T) {
 	}
 }
 
+func TestDiscardRemovesOneEntryAndKeepsTheBlocksOthers(t *testing.T) {
+	h := newIntegrationStore(t)
+	h.produce(producedBlock, map[string]string{producedName: firstKubeconfig, "pending": "candidate"})
+	parts := h.partFiles()
+	discard := func(name string) bool {
+		var discarded bool
+		if err := h.mutate(func(session secretstore.StoreSession) error {
+			var err error
+			discarded, err = session.Discard(context.Background(), producedBlock, name)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return discarded
+	}
+	if !discard("pending") {
+		t.Fatal("discarding a held entry reported none")
+	}
+	if _, found := h.readProduced(producedBlock, "pending"); found || h.partFiles() != parts-1 {
+		t.Fatalf("the discarded entry is still read or its part kept: %d parts, want %d", h.partFiles(), parts-1)
+	}
+	if value, found := h.readProduced(producedBlock, producedName); !found || value != firstKubeconfig {
+		t.Fatal("the block's other entry was lost")
+	}
+	record := h.storeRecord()
+	if discard("pending") || !bytes.Equal(h.storeRecord(), record) {
+		t.Fatal("discarding an absent entry published")
+	}
+}
+
 func TestAProducedEntryTakesNoOrdinalFromTheSecretSeries(t *testing.T) {
 	h := newIntegrationStore(t)
 	h.produce(producedBlock, map[string]string{producedName: firstKubeconfig})

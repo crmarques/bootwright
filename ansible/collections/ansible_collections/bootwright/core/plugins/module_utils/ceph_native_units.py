@@ -216,7 +216,7 @@ def validate_bindings(unit):
 
 def material_names(request, phase="unit"):
     """The runner material variables the unit's bindings name that a phase holds: every one on its apply phase, the observed leaves on
-    observation and removal, none otherwise."""
+    observation and removal, the bound Grafana password on a monitoring unit's login phases, none otherwise."""
     unit = request["service"]
     leaves = UNIT_TYPES[unit["type"]].leaves
     types = {service_name(document): document["service_type"] for document in unit["documents"]}
@@ -225,6 +225,8 @@ def material_names(request, phase="unit"):
         return names
     if phase == "sso_config":
         return names & {"oauth2ProxyCABundle"}
+    if phase in ("login_prepare", "login_update"):
+        return names & {"grafanaAdminPassword"}
     return names & ceph_native_observability.OBSERVED_LEAVES if phase in ("observe", "destroy") else frozenset()
 
 
@@ -762,7 +764,9 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
 
     def monitoring_credentials_held(self):
         """An observation's read of the same logins, only once cephadm must already hold each: a deployed daemon of a type whose
-        configuration stores that login proves it, so the read stores none. Otherwise it reads none and answers no private member."""
+        configuration stores that login proves it, so the read stores none. Otherwise it reads none and answers no private member. The
+        gateway's first apply sets a generated login for each declared service before its stream (gateway_claim), so the login read here
+        is that one, or the one a later credential update set, never cephadm's admin/admin default."""
         services = self.login_services()
         rows = self.manager_retry(self.ceph, "orch", "ps")
         require(isinstance(rows, list) and all(isinstance(row, dict) for row in rows), "native-output")

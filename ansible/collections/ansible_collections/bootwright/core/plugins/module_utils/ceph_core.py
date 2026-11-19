@@ -73,6 +73,12 @@ CLUSTER_REASONS = (
     "stretch-drift", "tiebreaker-foreign", "tiebreaker-unreachable", "device-not-empty", "foreign-osd",
     "osd-partial", "osd-clear-failed", "osd-clear-unproved", "osd-orphan-booted", "osd-orphan-unproved", "osd-class-drift",
 )
+# The refusals an administrator login's module may publish, each one its Go caller names (loginRefusals in internal/storage/ceph).
+ADMIN_REASONS = (
+    "dashboard-identity", "dashboard-drift", "dashboard-policy", "dashboard-verify",
+    "monitoring-login-drift", "grafana-login-drift", "grafana-login-drift-unapplied", "grafana-login-refused", "monitoring-login-unproved",
+    "monitoring-login-unsupported",
+)
 SMB_REASONS = (
     "request", "artifact", "ownership", "evidence", "material", "transport", "remote-refusal", "adapter-exception", "native-command",
     "native-timeout", "native-output", "unknown", "foreign-cluster", "foreign-image", "foreign-service", "smb-identity", "smb-result",

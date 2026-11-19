@@ -1,12 +1,27 @@
 {
   "schemaVersion": "v1alpha1",
-  "command": "cluster update-admin-credentials",
+  "command": "cluster update-admin-creds",
   "ok": true,
   "exitCode": 0,
   "result": {
     "context": "lab",
     "cluster": "storage",
-    "user": "admin"
+    "logins": [
+      {
+        "login": "dashboard",
+        "user": "admin"
+      },
+      {
+        "login": "prometheus"
+      },
+      {
+        "login": "alertmanager"
+      },
+      {
+        "login": "grafana",
+        "user": "admin"
+      }
+    ]
   },
   "diagnostics": [],
   "logs": []

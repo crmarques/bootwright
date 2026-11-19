@@ -14,6 +14,7 @@ import (
 	"github.com/crmarques/bootwright/internal/machine/inventory"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 	"github.com/crmarques/bootwright/internal/storage/ceph"
@@ -63,7 +64,10 @@ type inspectionCustody struct {
 }
 
 func (d inspectionCustody) MonitoringCredentials(ctx context.Context, contextName, cluster, service string) (inspection.Custodied, bool, error) {
-	read, found, err := d.reader.ReadProduced(ctx, contextName, ceph.GatewayBlock(cluster), ceph.MonitoringOutput)
+	if d.administrator == nil {
+		return inspection.Custodied{}, false, availability.ErrNotImplemented
+	}
+	read, found, err := d.administrator.MonitoringLogin(ctx, contextName, cluster, ceph.GatewayBlock(cluster), ceph.MonitoringOutput, service)
 	if err != nil || !found {
 		return inspection.Custodied{Material: read.Material, Unproved: read.Unproved}, found, err
 	}
@@ -76,7 +80,7 @@ func (d inspectionCustody) MonitoringCredentials(ctx context.Context, contextNam
 }
 
 func (d inspectionCustody) GrafanaPassword(ctx context.Context, contextName, cluster string) (inspection.Custodied, bool, error) {
-	if d.frozen == nil || d.current == nil {
+	if d.frozen == nil || d.administrator == nil {
 		return inspection.Custodied{}, false, availability.ErrNotImplemented
 	}
 	resources, err := d.frozen.StorageResources(ctx, contextName)
@@ -87,17 +91,15 @@ func (d inspectionCustody) GrafanaPassword(ctx context.Context, contextName, clu
 	if !bound {
 		return inspection.Custodied{}, false, nil
 	}
-	read, err := d.current.ReadCurrent(ctx, custody.ReadCurrentRequest{ContextName: contextName, Names: []string{secret}})
+	read, found, err := d.administrator.GrafanaPassword(ctx, contextName, cluster, ceph.MonitoringBlock(cluster), secret)
 	if err != nil {
+		read.Clear()
 		return inspection.Custodied{}, false, err
 	}
-	if len(read) != 1 {
-		for _, item := range read {
-			item.Material.Clear()
-		}
+	if !found {
 		return inspection.Custodied{}, false, inspection.ErrMonitoringMaterial
 	}
-	return inspection.Custodied{Material: read[0].Material}, true, nil
+	return inspection.Custodied{Material: read}, true, nil
 }
 
 func (d inspectionCustody) ObjectUserCredentials(ctx context.Context, contextName, user string) (inspection.Custodied, bool, error) {
@@ -117,7 +119,7 @@ func (d inspectionCustody) DashboardPassword(ctx context.Context, contextName, c
 	if d.administrator == nil {
 		return inspection.Custodied{}, false, availability.ErrNotImplemented
 	}
-	read, found, err := d.administrator.AdministratorPassword(ctx, contextName, cluster, ceph.DashboardBlock(cluster), ceph.DashboardOutput)
+	read, found, err := d.administrator.AdministratorPassword(ctx, contextName, cluster, ceph.DashboardBlock(cluster), ceph.DashboardOutput, "dashboard")
 	return inspection.Custodied{Material: read.Material, Unproved: read.Unproved}, found, err
 }
 
@@ -288,10 +290,12 @@ func (d inspectionCustody) ConsolePassword(ctx context.Context, contextName, clu
 	if d.administrator == nil {
 		return inspection.Custodied{}, false, availability.ErrNotImplemented
 	}
-	read, found, err := d.administrator.AdministratorPassword(ctx, contextName, cluster, agentinstall.InstallBlockID(cluster), agentinstall.ConsolePasswordOutput)
+	read, found, err := d.administrator.AdministratorPassword(ctx, contextName, cluster, agentinstall.InstallBlockID(cluster), agentinstall.ConsolePasswordOutput, "console")
 	return inspection.Custodied{Material: read.Material, Unproved: read.Unproved}, found, err
 }
 
 type administratorPasswordReader interface {
-	AdministratorPassword(context.Context, string, string, string, string) (secretstore.ProducedMaterial, bool, error)
+	AdministratorPassword(context.Context, string, string, string, string, string) (secretstore.ProducedMaterial, bool, error)
+	MonitoringLogin(ctx context.Context, contextName, cluster, block, output, service string) (secretstore.ProducedMaterial, bool, error)
+	GrafanaPassword(ctx context.Context, contextName, cluster, block, secret string) (secrets.Material, bool, error)
 }

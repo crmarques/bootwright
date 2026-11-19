@@ -19,6 +19,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
+	"github.com/crmarques/bootwright/internal/secrets/custody"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 	"github.com/crmarques/bootwright/internal/storage/ceph"
 )
@@ -423,9 +424,25 @@ func inspectedResourceRows(t *testing.T) {
 	}
 }
 
-type adminPasswordReaderFake struct{ reader *producedFake }
+type adminPasswordReaderFake struct {
+	reader  *producedFake
+	current *currentFake
+}
 
-func (f adminPasswordReaderFake) AdministratorPassword(ctx context.Context, selected, _ string, block, seed string) (secretstore.ProducedMaterial, bool, error) {
+func (f adminPasswordReaderFake) MonitoringLogin(ctx context.Context, selected, _, block, output, _ string) (secretstore.ProducedMaterial, bool, error) {
+	read, found, err := f.reader.ReadProduced(ctx, selected, block, output)
+	return secretstore.ProducedMaterial{Material: read.Material, Unproved: read.Unproved}, found, err
+}
+
+func (f adminPasswordReaderFake) GrafanaPassword(ctx context.Context, selected, _, _, secret string) (secrets.Material, bool, error) {
+	read, err := f.current.ReadCurrent(ctx, custody.ReadCurrentRequest{ContextName: selected, Names: []string{secret}})
+	if err != nil || len(read) == 0 {
+		return secrets.Material{}, false, err
+	}
+	return read[0].Material, true, nil
+}
+
+func (f adminPasswordReaderFake) AdministratorPassword(ctx context.Context, selected, _ string, block, seed, _ string) (secretstore.ProducedMaterial, bool, error) {
 	read, found, err := f.reader.ReadProduced(ctx, selected, block, seed)
 	return secretstore.ProducedMaterial{Material: read.Material, Unproved: read.Unproved}, found, err
 }

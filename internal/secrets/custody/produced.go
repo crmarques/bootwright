@@ -56,6 +56,25 @@ func (s Service) Withdraw(ctx context.Context, selected secretstore.Context, are
 	return withdrawn, err
 }
 
+func (s Service) DiscardProduced(ctx context.Context, selected secretstore.Context, area secretstore.Area, block, name string) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	if s.access == nil {
+		return false, secretstore.Failure("store.implementation", "secret service is not configured")
+	}
+	discarded := false
+	err := s.access.MutateArea(ctx, selected, area, func(session secretstore.StoreSession, _ secretstore.Selection) error {
+		if session == nil {
+			return nil
+		}
+		var err error
+		discarded, err = session.Discard(ctx, block, name)
+		return err
+	})
+	return discarded, err
+}
+
 // Holds reports, through the lent area, whether custody holds the produced
 // entry of block and name, proved or not. A store never initialized holds
 // none. It reads the entry's material only to prove the entry readable, and

@@ -40,7 +40,7 @@ import stat
 import time
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_monitoring_template, ceph_native_nfs
-from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import NativeFailure, Refusal, canonical, require
+from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import NativeFailure, Refusal, canonical, dashboard_password, require
 
 MONITORING_TYPES = (
     "alertmanager",
@@ -108,6 +108,8 @@ GATEWAY_IMAGES = {"mgmt-gateway": "nginx", "keepalived": "keepalived", "oauth2-p
 # before (src/pybind/mgr/orchestrator/module.py, _get_prometheus_access_info and _get_alertmanager_access_info; src/pybind/mgr/cephadm/
 # module.py, get_prometheus_access_info and _get_security_config). cephadm stores admin/admin when it holds none, so an answer is a write.
 CREDENTIAL_SERVICES = ("alertmanager", "prometheus")
+# The user of the login the gateway's first apply generates for each of them.
+GENERATED_USER = "admin"
 LOGIN_MEMBERS = frozenset(("password", "user"))
 ACCESS_MEMBERS = LOGIN_MEMBERS | {"certificate"}
 MAX_LOGIN = 128
@@ -465,8 +467,26 @@ def gateway_check(worker, unit):
 
 
 def gateway_claim(worker, unit, checked):
-    """The management gateway unit claims nothing before its apply."""
-    del worker, unit, checked
+    """Before the gateway's first stream, while its attempt record is absent: set a generated login, user admin and a 32-character
+    password of the dashboard alphabet, for each declared service cephadm keeps one for. Once a gateway daemon runs, Prometheus and
+    Alertmanager require the login cephadm holds, which is admin/admin when none was set (src/pybind/mgr/cephadm/module.py,
+    _get_prometheus_credentials and _get_alertmanager_credentials), so a cluster never serves the default. `set-credentials` reads its
+    {"username", "password"} only from standard input (src/pybind/mgr/orchestrator/module.py, _get_credentials) and stores it; cephadm
+    keeps it until the unit's post-readiness read captures it. A repeat after the attempt record is written sets nothing."""
+    del checked
+    if worker.markers.read("service-" + GATEWAY_TYPES[0] + "-attempt.json") is not None:
+        return False
+    changed = False
+    for service in credential_services(unit):
+        password = dashboard_password()
+        data = bytearray(canonical({"password": password, "username": GENERATED_USER}))
+        try:
+            worker.manager_declare(worker.tunnel_effect, "orch", service, "set-credentials", "-i", "-", data=bytes(data), json_result=False,
+                                   secrets=(password,))
+        finally:
+            data[:] = bytes(len(data))
+        changed = True
+    return changed
 
 
 def gateway_settle(worker, unit):

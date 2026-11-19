@@ -1,0 +1,6 @@
+  ✓ Updated administrator credentials for storage
+      Dashboard user      admin
+      Prometheus login    updated
+      Alertmanager login  updated
+      Grafana user        admin
+      Next                bootwright cluster info --context lab --name storage --secrets

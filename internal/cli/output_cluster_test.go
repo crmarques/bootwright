@@ -183,16 +183,19 @@ func clusterGoldens() []cliGolden {
 	gatewaySecrets := func(r *dispatchRecord) { r.result.clusterInfo = storageOnly(revealedGatewayCeph(false, false)) }
 	revealed := func(r *dispatchRecord) { r.result.clusterInfo = storageOnly(revealedCeph(false)) }
 	unproved := func(r *dispatchRecord) { r.result.clusterInfo = storageOnly(revealedCeph(true)) }
+	cephAdminUpdate := func(r *dispatchRecord) {
+		r.result.adminCredentials = &lifecycle.UpdateAdminCredentialsResult{Context: "lab", Cluster: "storage", Logins: []lifecycle.AdminLoginResult{
+			{Login: "dashboard", User: "admin"}, {Login: "prometheus", User: "prometheus-secret-user"}, {Login: "alertmanager", User: "alertmanager-secret-user"}, {Login: "grafana", User: "admin"}}}
+	}
 	warning := "  warning  access.unproved\n" +
 		"    the dashboard administrator password of CephCluster storage was kept from an apply that\n" +
 		"    never proved the dashboard reachable, so the access it grants was not proved\n"
 	return []cliGolden{
-		{golden: "cli-cluster-admin-update", args: "cluster update-admin-credentials --name edge --yes", record: func(r *dispatchRecord) {
-			r.result.adminCredentials = &lifecycle.UpdateAdminCredentialsResult{Context: "lab", Cluster: "edge", User: "kubeadmin"}
+		{golden: "cli-cluster-admin-update", args: "cluster update-admin-creds --name edge --yes", record: func(r *dispatchRecord) {
+			r.result.adminCredentials = &lifecycle.UpdateAdminCredentialsResult{Context: "lab", Cluster: "edge", Logins: []lifecycle.AdminLoginResult{{Login: "console", User: "kubeadmin"}}}
 		}},
-		{golden: "cli-cluster-admin-update-json", args: "cluster update-admin-credentials --name storage --yes --output json", record: func(r *dispatchRecord) {
-			r.result.adminCredentials = &lifecycle.UpdateAdminCredentialsResult{Context: "lab", Cluster: "storage", User: "admin"}
-		}},
+		{golden: "cli-cluster-admin-update-json", args: "cluster update-admin-creds --name storage --yes --output json", record: cephAdminUpdate},
+		{golden: "cli-cluster-admin-update-ceph", args: "cluster update-admin-creds --name storage --yes", record: cephAdminUpdate},
 		{golden: "cli-cluster-info-console-secrets", args: "cluster info --name edge --secrets", record: console},
 		{golden: "cli-cluster-info-console-secrets-json", args: "cluster info --name edge --secrets --output json", record: console},
 

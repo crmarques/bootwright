@@ -337,9 +337,6 @@ func monitoringCustodyFields(rows []inspection.MonitoringAccess) []field {
 			continue
 		}
 		label := title + " password"
-		if access.Service == "grafana" {
-			label = title + " initial password"
-		}
 		value, _ := access.Password.Part(secrets.ValuePart)
 		fields = append(fields, field{Label: title + " user", Value: access.User, Tone: "identity"}, field{Label: label, Value: string(value), Tone: "identity"})
 		clear(value)

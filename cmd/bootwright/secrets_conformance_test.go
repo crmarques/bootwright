@@ -336,6 +336,17 @@ func (s *memorySession) Withdraw(ctx context.Context) (bool, error) {
 	return true, s.publish(ctx)
 }
 
+func (s *memorySession) Discard(ctx context.Context, block, name string) (bool, error) {
+	if err := s.authorized(); err != nil {
+		return false, err
+	}
+	if _, exists := s.state.produced[block+"/"+name]; !exists {
+		return false, nil
+	}
+	delete(s.state.produced, block+"/"+name)
+	return true, s.publish(ctx)
+}
+
 func (s *memorySession) ReadProduced(ctx context.Context, block, name string) (secretstore.ProducedMaterial, bool, error) {
 	entry, exists := s.state.produced[block+"/"+name]
 	if !exists {

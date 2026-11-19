@@ -24,7 +24,7 @@ func (s Service) revealConsole(ctx context.Context, selected string, entry *Cont
 	if !found || held.Unproved {
 		held.Material.Clear()
 		return failure("access.unavailable", "this context holds no proved console administrator password for "+entry.Kind+" "+entry.Name,
-			"use the original installation directory's auth/kubeadmin-password or run bootwright cluster update-admin-credentials --context "+selected+" --name "+entry.Name)
+			"use the original installation directory's auth/kubeadmin-password or run bootwright cluster update-admin-creds --context "+selected+" --name "+entry.Name+" --login console")
 	}
 	password, ok := held.Material.Part(secrets.ValuePart)
 	defer clear(password)

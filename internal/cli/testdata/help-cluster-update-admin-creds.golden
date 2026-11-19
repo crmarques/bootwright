@@ -1,0 +1,37 @@
+  bootwright / cluster update-admin-creds
+      Generate a fresh password for each administrator login of one cluster and update it in
+      the running environment: the console administrator of OpenShift or OKD; the dashboard
+      administrator, the Prometheus and Alertmanager logins behind the management gateway, and
+      the Grafana admin password of a managed Ceph cluster. --login takes a comma-separated
+      list of console, dashboard, prometheus, alertmanager and grafana (default: every login
+      the cluster has); a listed login the cluster does not have refuses before anything
+      changes. Requires a completed apply and the original administrator access. Runs the
+      logins in that order, each retaining its candidate before updating the cluster; a failure
+      stops the run, and its remedy names the logins left to update. Repeat an interrupted
+      command to finish the same update. A Grafana update writes the new password as a new
+      version of its bound Secret and holds that version in the apply's binding. Refuses
+      removed accounts and external Ceph. Retrieve the updated credentials with cluster info
+      --secrets --name <cluster>. --yes skips ordinary confirmation.
+
+  Usage
+    bootwright cluster update-admin-creds [flags]
+
+  Command flags
+      --login  Select comma-separated administrator logins to update (default: all the cluster
+               has) (values: console, dashboard, prometheus, alertmanager, grafana)
+      --name   Select the exact object name (required)
+      --yes    Confirm the command's ordinary confirmation
+
+  Common flags
+      --ascii       Use ASCII status markers
+      --color       Select terminal colors (values: auto, always, never) · default auto
+      --context     Select a context (default: current context)
+      --detail      Select human detail (values: compact, full) · default compact
+      -h, --help    Show help for this command
+      -o, --output  Select output mode (values: text, json, yaml) · default text
+      --progress    Select progress animation (values: auto, always, never) · default auto
+      --width       Set presentation width (0: automatic) · default 0
+
+  Examples
+    bootwright cluster update-admin-creds --context lab --name cluster --login
+    prometheus,alertmanager

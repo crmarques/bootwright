@@ -36,7 +36,7 @@ MODULES = ("native_diagnostics", "native_specializations", "canonical_json", "ce
            "ceph_native_registry", "ceph_native_osd", "ceph_native_dashboard", "ceph_native_bootstrap", "ceph_native_validate",
            "ceph_host_device_probe", "ceph_host_image_probe", "ceph_host_label_probe", "ceph_host_route_probe", "ceph_pull_broker",
            "physical_machine_identity", "physical_erase_worker",
-           "ceph_host_runtime", "ceph_admin_credentials_native")
+           "ceph_host_runtime", "ceph_admin_credentials_native", "ceph_monitoring_logins_native")
 MAX_INPUT = 2 << 20
 MAX_SOURCE = 1 << 20
 MAX_RESULT = 1 << 20

@@ -631,7 +631,7 @@ def test_private_input_is_opened_without_links_and_not_in_argv(core_request, tmp
                                             "ceph_tunnel_staging",
                                             "ceph_tunnel_custody", "ceph_host_device_probe", "ceph_host_image_probe", "ceph_host_label_probe",
                                             "ceph_host_route_probe",
-                                            "ceph_host_runtime", "ceph_admin_credentials_native",
+                                            "ceph_host_runtime", "ceph_admin_credentials_native", "ceph_monitoring_logins_native",
                                             "native_diagnostics",
                                             "canonical_json", "bounded_process", "tls_trust", "ceph_monitoring_template",
                                             "native_specializations", "ceph_pull_broker", "held_directory", "registry_auth", "private_files",

@@ -21,17 +21,40 @@ type credentialCapability struct {
 	remote            string
 	fail, strict      bool
 	pending           func() bool
+	// logins names each block's logins; a block it does not name has the
+	// console login. lent is every update's lent JSON, by login, and
+	// generated counts each produced login's generated candidates.
+	logins    map[string][]AdminLogin
+	lent      map[string][]string
+	failing   map[string]bool
+	refusals  map[string]error
+	generated int
+	order     []string
 }
 
-func (c *credentialCapability) AdminCredentialSeed(reconciliation.Block) string { return "seed" }
-func (c *credentialCapability) AdminCredential(reconciliation.Block) (string, string, bool, error) {
-	return "admin-password", "kubeadmin", true, nil
+var consoleLogin = AdminLogin{Name: "console", User: "kubeadmin", Output: "admin-password", Seed: "seed", Custody: AdminProducedPassword}
+
+func (c *credentialCapability) AdminLogins(block reconciliation.Block) ([]AdminLogin, error) {
+	if logins, named := c.logins[block.ID]; named {
+		return logins, nil
+	}
+	return []AdminLogin{consoleLogin}, nil
 }
-func (c *credentialCapability) AdminCredentialIdentity(context.Context, Execution) (string, error) {
-	return "original-cluster-admin", nil
+func (c *credentialCapability) AdminCredentialIdentity(_ context.Context, _ Execution, login AdminLogin) (string, error) {
+	if login.Custody == AdminProducedPassword {
+		return "original-cluster-admin", nil
+	}
+	return "", nil
 }
-func (c *credentialCapability) PrepareAdminCredential(context.Context, Execution) (secrets.Material, error) {
+func (c *credentialCapability) GenerateAdminCredential(_ context.Context, login AdminLogin, _ reconciliation.Entropy) (secrets.Material, error) {
+	c.generated++
+	return secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(fmt.Sprintf("generated-%s-%023d", login.Name, c.generated))}), nil
+}
+func (c *credentialCapability) PrepareAdminCredential(_ context.Context, _ Execution, login AdminLogin) (secrets.Material, error) {
 	c.prepares++
+	if login.Custody != AdminProducedPassword {
+		return secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(`{"login":"` + login.Name + `"}`)}), nil
+	}
 	password := fmt.Sprintf("synthetic-password-%015d", c.prepares)
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
@@ -40,14 +63,21 @@ func (c *credentialCapability) PrepareAdminCredential(context.Context, Execution
 	encoded, _ := json.Marshal(adminUpdate{Guard: json.RawMessage(`{"uid":"original"}`), Password: password, Hash: string(hash)})
 	return secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: encoded}), nil
 }
-func (c *credentialCapability) UpdateAdminCredential(_ context.Context, _ Execution, material secrets.Material) error {
+func (c *credentialCapability) UpdateAdminCredential(_ context.Context, _ Execution, login AdminLogin, material secrets.Material) error {
 	if c.pending != nil && !c.pending() {
 		return errors.New("remote update preceded durable candidate")
 	}
 	c.updates++
+	c.order = append(c.order, login.Name)
 	value, _ := material.Part(secrets.ValuePart)
 	defer clear(value)
-	var candidate adminUpdate
+	if c.lent == nil {
+		c.lent = map[string][]string{}
+	}
+	c.lent[login.Name] = append(c.lent[login.Name], string(value))
+	var candidate struct {
+		Password string `json:"password"`
+	}
 	if err := json.Unmarshal(value, &candidate); err != nil {
 		return err
 	}
@@ -55,6 +85,14 @@ func (c *credentialCapability) UpdateAdminCredential(_ context.Context, _ Execut
 	if c.fail {
 		c.fail = false
 		return errors.New("lost remote reply")
+	}
+	if c.failing[login.Name] {
+		delete(c.failing, login.Name)
+		return engineCredentialUpdateUnproved.Fail("the "+login.Name+" update was not proved", "")
+	}
+	if refused := c.refusals[login.Name]; refused != nil {
+		delete(c.refusals, login.Name)
+		return refused
 	}
 	return nil
 }
@@ -136,7 +174,7 @@ func TestAdminCredentialUpdateRefusesBeforeAnApplyOrForAnUnknownCluster(t *testi
 	}
 }
 
-func (c *credentialCapability) AdminCredentialMayBeMissing() bool { return !c.strict }
+func (c *credentialCapability) AdminCredentialMayBeMissing(AdminLogin) bool { return !c.strict }
 
 func TestAdminCredentialUpdateReportsAFailedOrCancelledCustodyReadAsItself(t *testing.T) {
 	t.Parallel()
@@ -204,7 +242,7 @@ func TestAdministratorPasswordRefusesIncompleteOrCorruptUpdates(t *testing.T) {
 				delete(h.binder.produced, pendingKey)
 			}
 			h.binder.unproved = map[string]bool{pendingKey: test.unproved}
-			read, found, err := h.service.AdminCredentials().AdministratorPassword(context.Background(), testContextName, "edge", "credential-cluster", "seed")
+			read, found, err := h.service.AdminCredentials().AdministratorPassword(context.Background(), testContextName, "edge", "credential-cluster", "seed", "console")
 			defer read.Material.Clear()
 			if test.want {
 				if err != nil || !found {

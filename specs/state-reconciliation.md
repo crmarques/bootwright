@@ -3014,7 +3014,9 @@ as a management controller's password, a provider's kubeconfig, a vCenter
 login or a registry login, would strand that operation's continuation and
 removal, because both present the bound version, which the endpoint now
 refuses. The access-credential rebind is the one recorded exit beside the two
-a [lost binding](#continuation-and-removal) names (D37), and it is not the
+a [lost binding](#continuation-and-removal) names (D37) and the rebind of an
+[administrator credential update](cli/cluster-admin-credentials.md#grafana-administrator-password),
+and it is not the
 bounded run's rebind, which binds nothing and names no operation. An `apply`
 or `destroy` that continues an operation or removes one names each such Secret
 with `--authorize rebind=<secret>` (D183, Q70). Before anything is confirmed,
