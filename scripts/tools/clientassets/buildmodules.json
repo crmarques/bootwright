@@ -3,9 +3,9 @@
   "releases": [
     {
       "kind": "virtctl",
-      "version": "1.9.1",
-      "bytes": 10705,
-      "sha256": "c1858cbf6b469dd6f5baab5e8d22f5303e1227e635172b32779eb23888a97b61"
+      "version": "1.10.0",
+      "bytes": 10864,
+      "sha256": "c1c0788c2fe7ffdc80a338a6f9c1744b5319e5af3226c5d28d87c05db9aeea79"
     }
   ]
 }

@@ -100,8 +100,8 @@ For example:
 spec:
   dependencyVersions:
     libvirt: latest
-    helm: "4.3.1"
-    virtctl: "1.9.1"
+    helm: "4.3.2"
+    virtctl: "1.10.0"
 ```
 
 These fields follow the normal `defaults.Environment` inheritance rules.
@@ -360,8 +360,8 @@ a vendor origin, the OpenShift clients and installer, stays on its vendor.
 Each mirrored client is read from
 `<url>/<kind>/<release>/<file>`, its release with the `v` prefix and its file
 the publisher's own file name, for example
-`<url>/helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz` and
-`<url>/virtctl/v1.9.1/virtctl-v1.9.1-linux-amd64`.
+`<url>/helm/v4.3.2/helm-v4.3.2-linux-amd64.tar.gz` and
+`<url>/virtctl/v1.10.0/virtctl-v1.10.0-linux-amd64`.
 
 Because a client behind the mirror is acquired only by the size and SHA-256
 the build's [tool table](../controller.md#the-tool-table) pins, the stage
