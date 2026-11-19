@@ -14,7 +14,7 @@ import re
 import sys
 from xml.etree import ElementTree
 
-from ansible_collections.bootwright.core.plugins.module_utils import bounded_process
+from ansible_collections.bootwright.core.plugins.module_utils import bounded_process, held_directory
 from ansible_collections.bootwright.core.plugins.module_utils.libvirt_firewall_ready import observe as observe_firewall_ready
 from ansible_collections.bootwright.core.plugins.module_utils.libvirt_nm_connections import observe as observe_connections
 from ansible_collections.bootwright.core.plugins.module_utils.libvirt_routing import forwarding_required
@@ -914,6 +914,77 @@ def trunk_guests(runner, request, trunks, answers, context):
             entry["guests"], entry["guestsAnswered"] = guests or [], guests is not None
         found.append(entry)
     return found
+
+
+def unused_domain_storage():
+    """A clean host has neither domain storage directory, persistent or runtime."""
+    for parent in ("/etc/libvirt", "/run/libvirt"):
+        with held_directory.hold(parent, {0}, absent=True, prove=True) as directory:
+            if directory is not None and held_directory.exists(directory, "qemu"):
+                return False
+    return True
+
+
+def no_hypervisor_process(proc="/proc"):
+    """A removed package can leave its process running. Inspect the host's root-owned process namespace."""
+    if os.geteuid() != 0 or os.path.basename(os.readlink(proc + "/1/exe")) != "systemd":
+        return False
+    if os.readlink(proc + "/self/ns/pid") != os.readlink(proc + "/1/ns/pid"):
+        return False
+    with os.scandir(proc) as processes:
+        for index, process in enumerate(processes):
+            if index > 32768:
+                return False
+            if not process.name.isdecimal():
+                continue
+            try:
+                target = os.path.basename(os.readlink(process.path + "/exe")).removesuffix(" (deleted)")
+            except FileNotFoundError:
+                # A disappearing process, zombie or kernel thread has no user executable.
+                try:
+                    with open(process.path + "/stat", "rb") as source:
+                        status = source.read(4097)
+                except FileNotFoundError:
+                    continue
+                fields = status.rpartition(b") ")[2].split()
+                if len(status) > 4096 or len(fields) < 7 or (fields[0] not in (b"Z", b"X") and not int(fields[6]) & 0x00200000):
+                    return False
+                continue
+            if target.startswith(("qemu-", "qemu:", "virtqemud", "virtproxyd", "libvirtd")) or target in ("kvm", "qemu"):
+                return False
+    return True
+
+
+def unprovisioned_hypervisor(runner):
+    """Prove a pristine native host from its RPM database, domain storage and process inventory."""
+    packages = ("libvirt-daemon-driver-qemu", "qemu-kvm-core")
+    argv = [RPM, "--query", "--queryformat", "%{NAME}\n", "rpm", *packages]
+    code, out, err = runner(argv, check_rc=False, environ_update=ENVIRONMENT)
+    expected = ["rpm"] + ["package %s is not installed" % package for package in packages]
+    return code != 0 and not err and sorted(out.splitlines()) == sorted(expected) and unused_domain_storage() and no_hypervisor_process()
+
+
+def observe_machine_power(runner, request, *, bootstrap=False):
+    """Read only the domain identity and power, without waking an inactive hypervisor."""
+    identity = request["identity"]
+    if request["uri"] != "qemu:///system":
+        raise ValueError("unsupported power admission URI")
+    if not any(unit_state(runner, unit) == "active" for unit in ("virtqemud.service", "libvirtd.service")):
+        # An idle socket-activated daemon exits once no guest runs; waking it could autostart one.
+        if bootstrap and unprovisioned_hypervisor(runner):
+            return {"absent": True, "answered": True, "domain": "", "hostIdle": False, "owned": False, "state": "", "uuid": ""}
+        idle = no_hypervisor_process()
+        return {"absent": False, "answered": idle, "domain": "", "hostIdle": idle, "owned": False, "state": "", "uuid": ""}
+    metadata = domain_metadata(runner, request["uri"], request["domain"], identity["context"], identity["object"], request["uuid"])
+    return {
+        "hostIdle": False,
+        "absent": metadata["answered"] and not metadata["present"],
+        "answered": metadata["answered"],
+        "domain": request["domain"] if metadata["present"] else "",
+        "owned": metadata["owned"],
+        "state": domain_state(runner, request["uri"], metadata["uuid"]) if metadata["owned"] else "",
+        "uuid": metadata["uuid"],
+    }
 
 
 def observe_machine(runner, request, read=None):

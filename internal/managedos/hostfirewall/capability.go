@@ -218,7 +218,14 @@ func (c Capability) Destroy(ctx context.Context, execution lifecycle.Execution) 
 		}
 		return lifecycle.Result{Outcome: reconciliation.OutcomeChanged, Evidence: evidence}, nil
 	}
-	return c.mutate(ctx, execution, "destroy")
+	request, err := DecodeFirewallRequest(execution.Block.Request)
+	if err != nil {
+		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
+	}
+	if request.Direct {
+		return c.mutate(ctx, execution, "destroy")
+	}
+	return c.removeFromInstalled(ctx, execution, request)
 }
 
 func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
@@ -242,7 +249,13 @@ func (c Capability) ObserveRemoval(ctx context.Context, execution lifecycle.Exec
 		}
 		return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: evidence}, nil
 	}
-	return c.observe(ctx, execution, true)
+	if receipt, err := removalReceipt(execution); err != nil || receipt != nil {
+		if err != nil {
+			return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, err
+		}
+		return lifecycle.Observation{Effect: reconciliation.EffectPartial, Evidence: receipt}, nil
+	}
+	return c.observeInstalledRemoval(ctx, execution)
 }
 
 func retainedFirewall(execution lifecycle.Execution) (json.RawMessage, bool, error) {

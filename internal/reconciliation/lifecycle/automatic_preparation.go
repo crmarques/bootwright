@@ -86,9 +86,10 @@ func (s Service) applyPrepared(ctx context.Context, request ApplyRequest, select
 		}
 	}
 	result, err := s.mutate(ctx, reconciliation.Apply, request.ContextName, selection, request.Authorizations, nil, request.SkipConfirmation, request.Unattended, request.SSH.Borrowed(), prepared)
-	if err != nil || !automatic || result == nil || result.Receipt.State != string(reconciliation.OperationDone) || !selection.Stages.Selects(reconciliation.StageMachines) {
+	if err != nil || !automatic || result == nil || result.Recovered == RecoveredBeforeStart || result.Receipt.State != string(reconciliation.OperationDone) || !selection.Stages.Selects(reconciliation.StageMachines) {
 		return result, err
 	}
+	s.completedPreparation = result.Receipt.Operation
 	next, err := s.mutate(ctx, reconciliation.Apply, request.ContextName, selection, request.Authorizations, nil, request.SkipConfirmation, request.Unattended, request.SSH.Borrowed(), nil)
 	if next == nil && err != nil {
 		return result, err

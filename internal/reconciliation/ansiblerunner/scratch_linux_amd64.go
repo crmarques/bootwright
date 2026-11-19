@@ -16,14 +16,14 @@ const (
 	statNoexec    = 0x8
 )
 
-func (r Runner) ensureScratchParent() error {
+func (r Runner) ensureScratchParent(create bool) error {
 	owner := uint32(os.Geteuid())
 	if r.stagingParent != "" {
-		if !r.ownedDirectory(r.stagingParent, 0711, owner, func(mode fs.FileMode) bool { return mode&0022 == 0 }) {
+		if !r.ownedDirectory(create, r.stagingParent, 0711, owner, func(mode fs.FileMode) bool { return mode&0022 == 0 }) {
 			return r.unsafeParent(r.stagingParent, owner, "0711")
 		}
 	}
-	if !r.ownedDirectory(r.scratchParent, 0700, owner, func(mode fs.FileMode) bool { return mode == 0700 }) {
+	if !r.ownedDirectory(create, r.scratchParent, 0700, owner, func(mode fs.FileMode) bool { return mode == 0700 }) {
 		return r.unsafeParent(r.scratchParent, owner, "0700")
 	}
 	statfs := r.statfs
@@ -41,9 +41,11 @@ func (r Runner) ensureScratchParent() error {
 	return nil
 }
 
-func (r Runner) ownedDirectory(path string, mode fs.FileMode, owner uint32, admits func(fs.FileMode) bool) bool {
-	if err := os.Mkdir(path, mode); err != nil && !errors.Is(err, fs.ErrExist) {
-		return false
+func (r Runner) ownedDirectory(create bool, path string, mode fs.FileMode, owner uint32, admits func(fs.FileMode) bool) bool {
+	if create {
+		if err := os.Mkdir(path, mode); err != nil && !errors.Is(err, fs.ErrExist) {
+			return false
+		}
 	}
 	listed, err := os.Lstat(path)
 	if err != nil || !listed.IsDir() {

@@ -631,6 +631,46 @@ def settled(evidence, request):
     return evidence
 
 
+def power_object(host, resource, vm, kind):
+    """Only NotFound for the exact named resource proves absence, including when a CRD is missing."""
+    status, body = host.client.request("GET", resource, idempotent=True)
+    if not isinstance(body, dict):
+        raise Refused("the host did not identify the machine resource")
+    if status == 404:
+        details = body.get("details")
+        if (isinstance(details, dict) and body.get("kind") == "Status" and body.get("reason") == "NotFound" and details.get("name") == vm
+                and details.get("group") == "kubevirt.io" and details.get("kind") == kind.lower() + "s"):
+            return None
+    if status != 200:
+        raise Answered(status, body)
+    metadata = (body or {}).get("metadata") or {}
+    if (body.get("apiVersion") != "kubevirt.io/v1" or body.get("kind") != kind or metadata.get("namespace") != host.namespace
+            or metadata.get("name") != vm or not uid(body)):
+        raise Refused("the host answered with a different machine object")
+    return body
+
+
+def observe_power(host, request):
+    """Admission reads exact objects without acquiring access, checking storage or changing the cluster."""
+    vm = request["name"]
+    result = base_evidence(host.client.server)
+    result["kubeSystemUID"] = host.cluster_uid()
+    live = power_object(host, host.vm(vm), vm, "VirtualMachine")
+    instance = power_object(host, host.vmi(vm), vm, "VirtualMachineInstance")
+    result["answered"] = True
+    if live is None:
+        result["absent"] = instance is None
+        result["foreign"] = instance is not None
+        return result
+    result["virtualMachine"] = vm
+    # Under any other run strategy KubeVirt may start an absent or final instance on its own.
+    held_off = (live.get("spec") or {}).get("runStrategy") in ("Manual", "Halted")
+    result["foreign"] = not held_off or not derives(live, vm) or (instance is not None and not controlled_by(instance, uid(live)))
+    result["instance"] = phase_of(instance)
+    result["receipts"] = [{"kind": "VirtualMachine", "name": vm, "uid": uid(live), "basis": "observed"}]
+    return result
+
+
 def observe(host, request, context):
     return settled(read_machine(host, request, context, [dict(r) for r in context["pinned"]["receipts"]], prove_shape=True), request)
 

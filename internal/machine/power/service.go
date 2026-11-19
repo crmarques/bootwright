@@ -506,8 +506,7 @@ func readInvocation(runtime lifecycle.Runtime, frozen ReadSurvey, canonical []by
 	}
 }
 
-func invocation(runtime lifecycle.Runtime, frozen Request, canonical []byte, digest string, pin machine.HardwareIdentity,
-	progress func(context.Context, string, string, lifecycle.ByteProgress)) lifecycle.RunRequest {
+func driveMaterials(frozen Request) []lifecycle.MaterialFile {
 	user, password := substrate.ControllerCredential(frozen.Arm)
 	port := frozen.MachinePort
 	materials := []lifecycle.MaterialFile{{Name: "bmc-user", Part: user, Secret: credentialSecret(frozen.Controller), Variable: port.UserVariable}}
@@ -518,6 +517,11 @@ func invocation(runtime lifecycle.Runtime, frozen Request, canonical []byte, dig
 		materials = append(materials,
 			lifecycle.MaterialFile{Name: "bmc-ca", Part: secrets.CertificatePart, Secret: frozen.Controller.TrustBundleRef, Variable: port.CAVariable})
 	}
+	return materials
+}
+
+func invocation(runtime lifecycle.Runtime, frozen Request, canonical []byte, digest string, pin machine.HardwareIdentity,
+	progress func(context.Context, string, string, lifecycle.ByteProgress)) lifecycle.RunRequest {
 	request := lifecycle.RunRequest{
 		Context:           runtime.Context.Name,
 		Repeat:            powerCommand(runtime.Context.Name, frozen),
@@ -528,7 +532,7 @@ func invocation(runtime lifecycle.Runtime, frozen Request, canonical []byte, dig
 		Digest:            digest,
 		Canonical:         canonical,
 		Placement:         frozen.Placement,
-		Materials:         append(materials, lifecycle.Materials(frozen.Placement)...),
+		Materials:         append(driveMaterials(frozen), lifecycle.Materials(frozen.Placement)...),
 		MaterialValues:    pinValues(pin),
 		Launch:            runtime.Launch,
 		Material:          runtime.Material,
@@ -612,9 +616,7 @@ func pinValues(pin machine.HardwareIdentity) map[string]string {
 	return pin.PinValues("")
 }
 
-// ContentDigest binds a power request to the exact behavior this build
-// implements, so evidence returned for one request shape can never satisfy
-// another.
+// ContentDigest binds a power request to this implementation.
 func ContentDigest() string {
 	return reconciliation.ContentDigestOf(
 		"bootwright.machine.power-v1", Implementation, RequestVersion, Operation, Variable,

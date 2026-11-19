@@ -416,6 +416,41 @@ def proved_host():
     return api
 
 
+def test_admission_requires_not_found_for_each_exact_named_object_and_only_reads():
+    api = FakeAPI()
+    h = host(api)
+    with pytest.raises(kapi.Answered):
+        arm.observe_power(h, request())
+
+    def transport(method, target, headers, payload):
+        assert method == "GET"
+        if target in (h.vm(VM), h.vmi(VM)) and target not in api.objects:
+            return 404, json.dumps({"kind": "Status", "reason": "NotFound",
+                                    "details": {"group": "kubevirt.io", "name": VM, "kind": target.split("/")[-2]}}).encode()
+        return api(method, target, headers, payload)
+
+    h.client.transport = transport
+    assert arm.observe_power(h, request())["absent"]
+    live = {"apiVersion": "kubevirt.io/v1", "kind": "VirtualMachine",
+            "metadata": {"namespace": "guests", "name": VM, "uid": "one", "labels": arm.labels("lab", "master-0")},
+            "spec": {"runStrategy": "Manual"}}
+    api.put(h.vm(VM), live)
+    off = arm.observe_power(h, request())
+    assert off["answered"] and not off["absent"] and not off["foreign"] and off["instance"] == ""
+    for strategy in ("Always", "RerunOnFailure", "Once", None):
+        live["spec"]["runStrategy"] = strategy
+        assert arm.observe_power(h, request())["foreign"]
+    live["spec"]["runStrategy"] = "Halted"
+    assert not arm.observe_power(h, request())["foreign"]
+    live["spec"]["runStrategy"] = "Manual"
+    instance = {"apiVersion": "kubevirt.io/v1", "kind": "VirtualMachineInstance", "status": {"phase": "Running"},
+                "metadata": {"namespace": "guests", "name": VM, "uid": "inst", "ownerReferences": [{"uid": "one", "controller": True}]}}
+    api.put(h.vmi(VM), instance)
+    assert arm.observe_power(h, request())["instance"] == "Running"
+    instance["metadata"]["ownerReferences"] = []
+    assert arm.observe_power(h, request())["foreign"]
+
+
 def test_the_provider_proof_holds_only_when_every_check_reads():
     api = proved_host()
     evidence = arm.proof(client(api), proof_request())

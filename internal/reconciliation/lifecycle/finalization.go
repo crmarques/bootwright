@@ -157,7 +157,7 @@ func (s Service) finalize(ctx context.Context, name string, decided operationPla
 		held = s.held(ctx, name)
 	}
 	var completion removalCompletion
-	err := s.workspace.MutateLifecycle(ctx, name, func(tx Transaction) error {
+	err := s.mutateAdmitted(ctx, name, s.startCheck, func(tx Transaction) error {
 		store := s.store(tx)
 		changed := func(current basis) error { return contextChanged(decided.verb, decided.basis, current) }
 		operation, frozen, states, err := s.verifyBasis(ctx, store, decided.basis, changed)

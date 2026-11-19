@@ -2,7 +2,6 @@ package lifecycle
 
 import (
 	"context"
-	"maps"
 	"slices"
 
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -32,12 +31,16 @@ func (s Service) execute(ctx context.Context, name string, decided operationPlan
 			return nil, s.unregistered(ctx, name, decided, "", record, err)
 		}
 		decided = protected
+		s.startCheck = nil
 	}
 	rebound, err := s.rebind(ctx, name, decided)
 	if err != nil {
 		return nil, s.unregistered(ctx, name, decided, "", record, err)
 	}
 	decided = rebound
+	if decided.rebound.binding != "" {
+		s.startCheck = nil
+	}
 	binding, material, err := s.bind(ctx, name, decided)
 	if err != nil {
 		return nil, s.unregistered(ctx, name, decided, binding, record, err)
@@ -51,7 +54,7 @@ func (s Service) execute(ctx context.Context, name string, decided operationPlan
 	var unreleased error
 	var kept []string
 	var keptErr error
-	err = s.workspace.MutateLifecycle(ctx, name, func(tx Transaction) error {
+	err = s.mutateAdmitted(ctx, name, s.startCheck, func(tx Transaction) error {
 		result, err = s.run(ctx, tx, decided, binding, material, record)
 		if decided.fresh && decided.verb == reconciliation.Apply && record.outcome == registered {
 			kept, keptErr = lineageBindings(recordingContext(ctx), s.store(tx), record.operation)
@@ -166,19 +169,9 @@ func (s Service) run(ctx context.Context, tx Transaction, decided operationPlan,
 	if err != nil {
 		return nil, err
 	}
-	if decided.fresh && decided.verb == reconciliation.Destroy {
-		if err := s.proveRemovable(ctx, tx, store, located, decided, material); err != nil {
-			return nil, err
-		}
-		skip := maps.Clone(decided.phases.machines)
-		maps.Copy(skip, decided.phases.preStopMachines)
-		held, err := sourceLineage(ctx, store, decided.source)
-		if err != nil {
-			return nil, err
-		}
-		if err := s.proveQuiescent(ctx, store, tx.Identity().Name, located, decided.plan, decided.phases, material, held, skip); err != nil {
-			return nil, err
-		}
+	stopGroups, err := s.removalStart(ctx, tx, store, located, decided, material)
+	if err != nil {
+		return nil, err
 	}
 	operation, plan, log, err := s.register(ctx, tx, store, decided, binding, material, record, located)
 	if err != nil {
@@ -213,7 +206,7 @@ func (s Service) run(ctx context.Context, tx Transaction, decided operationPlan,
 	if err != nil {
 		return result, err
 	}
-	boundary, warned, cause := s.converge(work, invocation{tx: tx, store: store, approved: located, boundary: logging, operation: operation, plan: plan, material: material}, decided.phases, states, decided.selection)
+	boundary, warned, cause := s.converge(work, invocation{stopGroups: stopGroups, tx: tx, store: store, approved: located, boundary: logging, operation: operation, plan: plan, material: material}, decided.phases, states, decided.selection)
 	result.Warnings = warned
 	logging.close(ctx, log)
 	final, terminal := s.finish(recordingContext(ctx), tx, store, operation, plan, states, boundary, logging.faulted(), result)

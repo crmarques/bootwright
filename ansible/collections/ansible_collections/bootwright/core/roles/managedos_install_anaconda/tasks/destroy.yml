@@ -56,8 +56,10 @@
         scope: managedos-install
       register: managedos_install_anaconda_scratch_ready
 
-    - name: Read the machine through its own identity channel
+    - name: Wait for the started guest to answer through its own identity channel
       ansible.builtin.include_tasks: identity.yml
+      vars:
+        managedos_install_anaconda_identity_retries: '{{ bootwright_os_install_request.budgets.identity.attempts | int }}'
 
     - name: Name a machine that did not answer
       bootwright.core.managedos_install_protocol:
@@ -77,6 +79,29 @@
       when: >-
         not (managedos_install_anaconda_answered | bool)
         or (managedos_install_anaconda_ours | bool and managedos_install_anaconda_host_key | default('') | trim | length == 0)
+
+    - name: Wait for the fleet account on the installed host key before subscription cleanup
+      ansible.builtin.include_tasks: reachable.yml
+      vars:
+        managedos_install_anaconda_reachable_retries: '{{ bootwright_os_install_request.budgets.reachability.attempts | int }}'
+        managedos_install_anaconda_reachable_pause: '{{ bootwright_os_install_request.budgets.reachability.delaySeconds | int }}'
+      when: managedos_install_anaconda_ours | bool
+
+    - name: Refuse a guest that did not become reachable on its proved host key
+      bootwright.core.managedos_install_protocol:
+        phase: refused
+        reason: registration-unreachable
+      when:
+        - managedos_install_anaconda_ours | bool
+        - managedos_install_anaconda_reachable.rc | default(1) != 0
+      no_log: true
+
+    - name: Require the pinned guest to answer before withdrawing a subscription
+      ansible.builtin.assert:
+        that:
+          - managedos_install_anaconda_reachable.rc | default(1) == 0
+        quiet: true
+      when: managedos_install_anaconda_ours | bool
 
     - name: Unregister the consumer this installation created
       ansible.builtin.include_tasks: unregister.yml

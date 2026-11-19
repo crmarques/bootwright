@@ -427,6 +427,7 @@ func lifecycleOptions(deps lifecycleDependencies, clock systemClock, runner ansi
 	return lifecycle.Options{
 		Contracts:       currentExecutionContract,
 		PasswordMatches: material.BcryptPasswordMatches,
+		DriveMachine:    registeredMachineDriver(runner),
 		Confirmer:       deps.Confirmer, Presenter: deps.Presenter, Progress: deps.Progress,
 		Clock: clock, Entropy: rand.Read, Selection: currentSelection(deps.Selection),
 		BeginInvocation: runner.BeginInvocation, EffectBearing: effectBearing,

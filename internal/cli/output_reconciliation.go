@@ -371,6 +371,8 @@ func writeLifecycleOperationAs(out io.Writer, result *lifecycle.OperationResult,
 // completed blocks reads as though this invocation did that work.
 func settledNote(verb, recovered string) string {
 	switch recovered {
+	case lifecycle.RecoveredBeforeStart:
+		return "This invocation completed an interrupted finalization. Review the plan and repeat your original command to start the new operation."
 	case lifecycle.RecoveredFinalization:
 		if verb == destroyVerb {
 			return "Nothing to remove: this invocation only completed an interrupted finalization."

@@ -57,3 +57,9 @@ machine_power_media_changed: >-
 machine_power_access: >-
   {{ bootwright_machine_power_request.machinePort
      | bootwright.core.machine_port_access(bootwright_machine_power_material) }}
+
+machine_power_check_boot_media: >-
+  {{ bootwright_machine_power_material.lifecyclePower | default(false) | bool and bootwright_machine_power_request.verb == 'start' }}
+
+machine_power_prove_system: >-
+  {{ machine_power_physical | bool or bootwright_machine_power_material.proveControllerSystem | default(false) | bool }}

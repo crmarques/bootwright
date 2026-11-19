@@ -1,5 +1,5 @@
 implementation: os-host-firewall-v1
-content-digest: ef74fbe8098b01389b0dcef264da682b89702c0bc590db7d5a40412626a3c9cd
+content-digest: e2caf6dca8f1803cfb52b4c0acecdfaca45a5a691558021fdce62facb88c310d
 request-version: os-host-firewall-v1
 automation-formats: none
 mark-formats: none
@@ -10,6 +10,7 @@ effect-pins:
   bootwright-host-firewall context=context block=os-firewall-machine apply=operation
   bootwright-context-publisher
   e04c153c9c84d6a73bfb3f05e09e0e7b4f4104332ee1d318cc4b3021570dc1a5
+  power-cycled-guest-removal
 request-identity:
   identity.context
   identity.object

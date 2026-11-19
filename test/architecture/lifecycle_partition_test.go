@@ -29,7 +29,7 @@ func lifecycleFileClasses() map[string]string {
 		"access_tool.go": "reader", "attempts.go": "executor", "evidence.go": "executor", "executor.go": "executor", "frozenbinding.go": "executor",
 		"installed_placement.go": "executor", "invocation.go": "executor", "logging.go": "executor", "mutation.go": "executor", "online_gates.go": "executor", "produced.go": "executor",
 		"rebind.go": "executor", "register_run.go": "executor", "registration.go": "executor",
-		"removal_evidence.go": "executor", "removal_gates.go": "executor", "runtime.go": "executor",
+		"registered_power.go": "executor", "removal_evidence.go": "executor", "removal_gates.go": "executor", "removal_machine_power.go": "executor", "start_power.go": "orchestrator", "runtime.go": "executor",
 		"scheduler.go": "executor", "scheduler_priority.go": "executor", "stops.go": "shared", "scheduler_readiness.go": "executor", "settle.go": "executor",
 		"automatic_preparation.go": "orchestrator", "preparation.go": "orchestrator", "execution.go": "orchestrator", "finalization.go": "orchestrator",
 		"diff.go": "reader", "diff_verdict.go": "reader", "diff_attribution.go": "reader", "diff_compare.go": "reader", "diff_overlay.go": "reader", "diff_observe.go": "reader", "shared_readings.go": "reader", "handoff.go": "reader",

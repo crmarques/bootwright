@@ -768,9 +768,9 @@ confirmation. A required token not
 supplied, or a supplied one the whole frozen plan does not require, then
 refuses `authorize.missing` or `authorize.unneeded`, naming the consuming steps by their number
 in that plan and their description and the exact command that passes, before
-the ordinary confirmation and before registration. A fresh `destroy`'s plan
-also closes with `Stop first`, naming the Machines whose removal its quiescence
-gate observes on the host; that gate and the resolution of every effect the
+the ordinary confirmation and before registration. A new apply or destroy requires its managed Machines stopped or absent
+under the [initial power check](state-reconciliation.md#power-before-a-new-apply-or-destroy).
+The plan names Machines under `Stop first`; that gate and the resolution of every effect the
 removal takes back need the exclusive lock, so they follow the prompt and
 still refuse before registration. The
 [finalization](state-reconciliation.md#lifecycle-unit) of an interrupted

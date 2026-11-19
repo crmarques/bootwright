@@ -93,6 +93,10 @@ func (*Store) RunLifecycle(ctx context.Context, _ string, _ func(lifecycle.RunVi
 	return unsupported(ctx)
 }
 
+func (*Store) AdmitLifecycle(ctx context.Context, _ string, _ func(lifecycle.View) error, _ func(lifecycle.Transaction) error) error {
+	return unsupported(ctx)
+}
+
 func (*Store) MutateLifecycle(ctx context.Context, _ string, _ func(lifecycle.Transaction) error) error {
 	return unsupported(ctx)
 }

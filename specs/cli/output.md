@@ -958,9 +958,7 @@ operation; steps 2, 3 run under this build`, `step 2 runs under this build` for
 one, and `another build registered this operation` first when no executable is
 recorded. Steps that are done or not selected are left out, and a fresh plan, a
 finalization, a continuation under the registering build and a continuation
-with no step left to run under this build carry no such field. A fresh
-`destroy`'s plan, previewed or presented, adds a `Stop first` field naming in
-plan order the Machines whose initial removal quiescence gate observes on the host,
+with no step left to run under this build carry no such field. A new apply or destroy plan adds a `Stop first` field naming the managed Machines checked on entry,
 as `Stop first  rhel-01, rhel-02`, because that gate follows the prompt; a
 continuation is not gated again and carries none. An additive apply's plan
 opens with `adds to operation <id>; runs none of its blocks`, and a `destroy`
@@ -989,10 +987,7 @@ token and names the block description and its outcome; its
 preview and a refusal have no progress, result rows or log reference.
 
 A removal with online cleanup also names `Stop after online cleanup`: those
-Machines stay reachable for online storage cleanup or for an installation's
-unregistration from its subscription service, then destroy pauses with their
-stop commands before deleting any of their disks. Repeating destroy after the
-operator stops them resumes the registered removal. The field is absent when
+Machines need a further stop proof after online cleanup. Registered guest cleanup starts and then stops the Machines it needs. Destroy proves the required boundary before deleting disks. The field is absent when
 no such boundary exists.
 
 `status` is the machine-readable view of the same durable state and performs no
@@ -1134,6 +1129,7 @@ carries in its envelope's `diagnostics`.
 ## Diagnostic taxonomy and order
 
 Diagnostic codes are stable machine identifiers. The codes of declared stops
+include `lifecycle.start-power` when initial machine power cannot be proved. These codes
 are registered in the [stop catalog](stops.md#catalog), not in this table, and
 each fires with its row's remedy when its raiser gives none. Include an object identity
 only when its kind and name form a valid API identity; malformed names are

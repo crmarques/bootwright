@@ -7,8 +7,12 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/internal/controller/stagelocal"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
@@ -134,5 +138,72 @@ func TestALendRunsInsideAReadOnlyOrUnrecordedExecution(t *testing.T) {
 	revoke.Outputs = outputs
 	if admitted.checkReadOnly(revoke) == nil {
 		t.Fatal("an unrecorded revoke took over an output")
+	}
+}
+
+func TestAdmissionDoesNotCollectPriorRunsOrCreateSharedStaging(t *testing.T) {
+	for _, existing := range []bool{false, true} {
+		name := "no permanent staging"
+		if existing {
+			name = "orphaned scratch"
+		}
+		t.Run(name, func(t *testing.T) {
+			runner, started := readOnlyRunner(t)
+			runner.stagingParent = filepath.Join(t.TempDir(), "staging")
+			runner.scratchParent = filepath.Join(runner.stagingParent, "runs")
+			runner.stager = stagelocal.NewAutomationStager(runner.stagingParent)
+			stale := plantJob(t, runner.jobParent, jobPrefix+"1")
+			var orphan string
+			if existing {
+				orphan = plant(t, filepath.Join(runner.scratchParent, scratchPrefix+"2-3"), map[string]string{"kept": "unaltered"})
+			}
+			r := adapterRequest(t, &bytes.Buffer{})
+			r.Operation, r.Admission, r.ReadOnly, r.Unrecorded = lifecycle.ObserveOperation, true, true, true
+			command := runner.command
+			var child *exec.Cmd
+			runner.command = func(file string, args ...string) *exec.Cmd { child = command(file, args...); return child }
+			if _, err := runner.Run(t.Context(), r); err != nil || *started != 1 {
+				t.Fatalf("observe = %v, started %d", err, *started)
+			}
+			if names := runNames(t, runner.jobParent); !slices.Equal(names, []string{filepath.Base(stale)}) {
+				t.Fatalf("remaining jobs %v", names)
+			}
+			if got, err := os.ReadFile(filepath.Join(stale, "id")); err != nil || string(got) != "PRIVATE KEY" {
+				t.Fatalf("stale job changed: %q %v", got, err)
+			}
+			if existing {
+				if got, err := os.ReadFile(filepath.Join(orphan, "kept")); err != nil || string(got) != "unaltered" {
+					t.Fatalf("orphan changed: %q %v", got, err)
+				}
+				if names := runNames(t, runner.scratchParent); !slices.Equal(names, []string{filepath.Base(orphan)}) {
+					t.Fatalf("remaining scratch %v", names)
+				}
+			} else if _, err := os.Lstat(runner.stagingParent); !os.IsNotExist(err) {
+				t.Fatalf("shared staging created: %v", err)
+			}
+			for _, prefix := range []string{"HOME=", "ANSIBLE_HOME="} {
+				if !slices.ContainsFunc(child.Env, func(v string) bool { return strings.HasPrefix(v, prefix+runner.jobParent+"/"+jobPrefix) }) {
+					t.Fatalf("observer cache outside job: missing %s", prefix)
+				}
+			}
+		})
+	}
+}
+
+func TestAdmissionHonorsExistingAdapterLocksBeforeStaging(t *testing.T) {
+	runner, started := readOnlyRunner(t)
+	stale := plantJob(t, runner.jobParent, jobPrefix+"1")
+	held := plantJob(t, runner.jobParent, jobPrefix+"2")
+	defer holdLock(t, filepath.Join(held, lockName))()
+	r := adapterRequest(t, &bytes.Buffer{})
+	r.Operation, r.Admission, r.ReadOnly, r.Unrecorded = lifecycle.ObserveOperation, true, true, true
+	result, err := runner.Run(t.Context(), r)
+	if code, _ := codeOf(err); code != "runner.adapter-running" || !result.NotStarted || *started != 0 {
+		t.Fatalf("locked observer = %+v, %v", result, err)
+	}
+	for _, path := range []string{stale, held} {
+		if _, err := os.Stat(filepath.Join(path, "id")); err != nil {
+			t.Fatal(err)
+		}
 	}
 }

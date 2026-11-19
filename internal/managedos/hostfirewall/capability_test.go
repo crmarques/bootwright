@@ -411,14 +411,36 @@ func TestAFirewallObservationAndRemovalReadTheGuest(t *testing.T) {
 	removed := firewallServiceEvidence(t, block, "absent")
 	removed.Absent, removed.Postcondition = true, true
 	runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: mustJSON(t, removed)}}
-	result, err := New(runner).Destroy(context.Background(), firewallExecution(t, block))
+	execution := firewallExecution(t, block)
+	var transitions []bool
+	execution.PowerMachine = func(_ context.Context, machine string, on bool) error {
+		if machine != firewallMachine {
+			t.Fatalf("power targeted %s", machine)
+		}
+		transitions = append(transitions, on)
+		return nil
+	}
+	var receipt json.RawMessage
+	execution.PrepareRemoval = func(_ context.Context, saved json.RawMessage) error {
+		receipt = slices.Clone(saved)
+		return nil
+	}
+	result, err := New(runner).Destroy(context.Background(), execution)
 	if err != nil || result.Outcome != reconciliation.OutcomeChanged || runner.requests[0].Operation != "destroy" {
 		t.Fatalf("destroy = %+v, %v", result, diagnostics.Of(err))
 	}
+	if !slices.Equal(transitions, []bool{true, false}) || len(receipt) == 0 {
+		t.Fatalf("power transitions %v, receipt %s", transitions, receipt)
+	}
+	execution.RemovalPreparations = []json.RawMessage{receipt}
+	if _, err := New(runner).Destroy(context.Background(), execution); err != nil || len(runner.requests) != 1 || !slices.Equal(transitions, []bool{true, false, false}) {
+		t.Fatalf("retry repeated guest cleanup or failed to stop the machine: %v, %v", transitions, err)
+	}
+	execution.RemovalPreparations = nil
 	left := firewallServiceEvidence(t, block, "written")
 	left.Absent, left.Postcondition = true, true
 	runner = &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: mustJSON(t, left)}}
-	if result, err := New(runner).Destroy(context.Background(), firewallExecution(t, block)); err == nil || result.Outcome != reconciliation.OutcomeUnknown {
+	if result, err := New(runner).Destroy(context.Background(), execution); err == nil || result.Outcome != reconciliation.OutcomeUnknown {
 		t.Fatalf("a destroy that left an owned service completed: %+v", result)
 	}
 }

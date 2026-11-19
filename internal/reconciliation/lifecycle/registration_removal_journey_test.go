@@ -3,6 +3,7 @@ package lifecycle_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"slices"
 	"strings"
@@ -26,8 +27,11 @@ type registeringRunner struct {
 	runs     []string
 	// unprepared fails the apply before it records its marker proof, as an
 	// installation that never reached registration does.
-	unprepared bool
-	probed     *probedMachines
+	unprepared  bool
+	unreachable bool
+	failStart   bool
+	failStop    bool
+	probed      *probedMachines
 }
 
 func (r *registeringRunner) Run(ctx context.Context, run lifecycle.RunRequest) (lifecycle.RunResult, error) {
@@ -64,11 +68,15 @@ func (r *registeringRunner) Run(ctx context.Context, run lifecycle.RunRequest) (
 		if r.request.Update != nil {
 			evidence.Update = installation.UpdateEvidence{Kernel: "5.14.0-611.5.1.el9_7.x86_64", Release: r.request.Update.Release, State: "complete"}
 		}
+	case "observe":
+		if run.MaterialValues["unregister"] == "guest" {
+			evidence.Power = map[bool]string{true: "On", false: "Off"}[running]
+		}
 	case "destroy":
 		if run.MaterialValues["unregister"] == "skip" {
 			break
 		}
-		if !running && r.request.Registration != nil {
+		if (!running || r.unreachable) && r.request.Registration != nil {
 			return lifecycle.RunResult{}, run.Refusals["registration-unreachable"]
 		}
 		if r.request.Registration != nil {
@@ -80,6 +88,17 @@ func (r *registeringRunner) Run(ctx context.Context, run lifecycle.RunRequest) (
 }
 
 // probedMachines counts the stop proofs the engine asks of the Machine.
+func (m *probedMachines) StartPowerSecrets(reconciliation.Block) ([]string, error) { return nil, nil }
+
+func (m *probedMachines) StartPower(ctx context.Context, probe lifecycle.Probe) (lifecycle.Quiescence, error) {
+	return m.fleetMachines.Quiescent(ctx, probe)
+}
+
+func (m *probedMachines) Apply(ctx context.Context, e lifecycle.Execution) (lifecycle.Result, error) {
+	setRunning(m.fleetMachines, true)
+	return m.fleetMachines.Apply(ctx, e)
+}
+
 type probedMachines struct {
 	*fleetMachines
 	probes int
@@ -133,7 +152,7 @@ func boundInstallation(t *testing.T, golden string, unprepared bool, objects ...
 	if err != nil {
 		t.Fatal(err)
 	}
-	probed := &probedMachines{fleetMachines: &fleetMachines{running: true}}
+	probed := &probedMachines{fleetMachines: &fleetMachines{}}
 	machines := probed.fleetMachines
 	runner := &registeringRunner{machines: machines, request: request, unprepared: unprepared, probed: probed}
 	definitions := []reconciliation.BlockDefinition{}
@@ -146,9 +165,21 @@ func boundInstallation(t *testing.T, golden string, unprepared bool, objects ...
 				ContentDigest: installation.ContentDigest(), Request: canonical})
 	}
 	journey := lifecycle.NewBoundJourney(t, []lifecycle.BoundCapability{
-		{Binding: lifecycle.CapabilityBinding{Kind: string(api.Machine), Implementation: fleetMachineImplementation}, Capability: probed},
+		{Binding: lifecycle.CapabilityBinding{Kind: string(api.Machine), Implementation: fleetMachineImplementation, Family: reconciliation.ManagedMachineFamily}, Capability: probed},
 		{Binding: lifecycle.CapabilityBinding{Kind: installation.Kind, Implementation: installation.Implementation}, Capability: installation.New(runner)},
 	}, lifecycle.CapabilityPlan{Definitions: definitions, Secrets: request.SecretReferences()})
+	journey.WithMachineDriver(func(_ context.Context, _ lifecycle.Execution, _ lifecycle.BlockEvidence, start bool) error {
+		runner.mutex.Lock()
+		defer runner.mutex.Unlock()
+		if start && runner.failStart {
+			return errors.New("power start response lost")
+		}
+		if !start && runner.failStop {
+			return errors.New("shutdown did not settle")
+		}
+		setRunning(machines, start)
+		return nil
+	})
 	holdInstallationSecrets(journey, request)
 	return journey, runner, machines
 }
@@ -176,15 +207,15 @@ func TestRegisteredInstallationUnregistersBeforeItsMachineStops(t *testing.T) {
 	t.Run("registered", func(t *testing.T) {
 		journey, runner, machines := installationJourney(t, "request-lab-rhel-registered.golden")
 		preview, err := journey.Service.Plan(context.Background(), lifecycle.PlanRequest{ContextName: lifecycle.JourneyContext})
-		if err != nil || len(preview.Stops) != 0 || !slices.Equal(preview.StopsAfterOnline, []string{"rhel-01"}) {
+		if err != nil || !slices.Equal(preview.Stops, []string{"rhel-01"}) || !slices.Equal(preview.StopsAfterOnline, []string{"rhel-01"}) {
 			t.Fatalf("the registered preview stops %v first and %v after (%v)", preview.Stops, preview.StopsAfterOnline, err)
 		}
 		_, err = journey.Service.Destroy(context.Background(), destroy)
 		reported := diagnostics.Of(err)
-		if len(reported) == 0 || reported[0].Code != "destroy.in-use" || !strings.Contains(reported[0].Remediation, stop) {
+		if len(reported) == 0 || reported[0].Code != "lifecycle.start-power" || !strings.Contains(reported[0].Remediation, stop) {
 			t.Fatalf("the first destroy = %+v (%v), want lifecycle.live naming the stop", reported, err)
 		}
-		if runs := runner.took(); !slices.Equal(runs, []string{"destroy:running:guest"}) || len(machines.removed) != 0 {
+		if runs := runner.took(); len(runs) != 0 || len(machines.removed) != 0 {
 			t.Fatalf("the first destroy ran %v and removed %v", runs, machines.removed)
 		}
 		setRunning(machines, false)
@@ -193,7 +224,7 @@ func TestRegisteredInstallationUnregistersBeforeItsMachineStops(t *testing.T) {
 		if err != nil || result.Receipt.State != string(reconciliation.OperationDone) {
 			t.Fatalf("the destroy after the stop = %+v, %+v (%v)", result, diagnostics.Of(err), err)
 		}
-		if runs := runner.took(); len(runs) != 0 || !slices.Equal(machines.removed, []string{"rhel-01"}) {
+		if runs := runner.took(); !slices.Equal(runs, []string{"destroy:running:guest"}) || !slices.Equal(machines.removed, []string{"rhel-01"}) {
 			t.Fatalf("the destroy after the stop ran %v and removed %v", runs, machines.removed)
 		}
 	})
@@ -204,7 +235,7 @@ func TestRegisteredInstallationUnregistersBeforeItsMachineStops(t *testing.T) {
 			t.Fatalf("the preview stops %v first and %v after (%v)", preview.Stops, preview.StopsAfterOnline, err)
 		}
 		_, err = journey.Service.Destroy(context.Background(), destroy)
-		if reported := diagnostics.Of(err); len(reported) == 0 || reported[0].Code != "destroy.in-use" || !strings.Contains(reported[0].Remediation, stop) {
+		if reported := diagnostics.Of(err); len(reported) == 0 || reported[0].Code != "lifecycle.start-power" || !strings.Contains(reported[0].Remediation, stop) {
 			t.Fatalf("the destroy = %+v (%v), want lifecycle.live naming the stop", reported, err)
 		}
 		if runs := runner.took(); len(runs) != 0 || len(machines.removed) != 0 {
@@ -219,7 +250,7 @@ func TestUnreadableProvedRegistrationRefusesBeforeAnyInverse(t *testing.T) {
 	t.Parallel()
 	journey, runner, machines := installationJourney(t, "request-lab-rhel-registered.golden")
 	setRunning(machines, false)
-	probes := runner.probed.probed()
+	runner.unreachable = true
 	_, err := journey.Service.Destroy(context.Background(), lifecycle.DestroyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true})
 	if !slices.ContainsFunc(diagnostics.Of(err), func(reported diagnostics.Diagnostic) bool {
 		return reported.Code == "install.service-unavailable" && reported.Message == unreachableMessage && reported.Object != nil && reported.Object.Name == "rhel-01" &&
@@ -227,8 +258,8 @@ func TestUnreadableProvedRegistrationRefusesBeforeAnyInverse(t *testing.T) {
 	}) {
 		t.Fatalf("the destroy of a stopped registered Machine = %+v (%v)", diagnostics.Of(err), err)
 	}
-	if runs := runner.took(); !slices.Equal(runs, []string{"destroy:stopped:guest"}) || len(machines.removed) != 0 || runner.probed.probed() != probes {
-		t.Fatalf("the destroy ran %v, removed %v and proved the stop %d times", runs, machines.removed, runner.probed.probed()-probes)
+	if runs := runner.took(); !slices.Equal(runs, []string{"destroy:running:guest"}) || len(machines.removed) != 0 {
+		t.Fatalf("the destroy ran %v, removed %v and proved the stop %d times", runs, machines.removed, runner.probed.probed())
 	}
 }
 
@@ -256,14 +287,16 @@ func TestUnregisteredFlagLetsTheRerunProceed(t *testing.T) {
 	t.Parallel()
 	journey, runner, machines := installationJourney(t, "request-lab-rhel-registered.golden")
 	setRunning(machines, false)
+	runner.unreachable = true
 	destroy := lifecycle.DestroyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true}
 	if _, err := journey.Service.Destroy(context.Background(), destroy); err == nil {
 		t.Fatal("the destroy of an unanswering registered Machine completed")
 	}
-	if runs := runner.took(); !slices.Equal(runs, []string{"destroy:stopped:guest"}) {
+	if runs := runner.took(); !slices.Equal(runs, []string{"destroy:running:guest"}) {
 		t.Fatalf("the refused destroy ran %v", runs)
 	}
 	holdInstallationSecrets(journey, runner.request)
+	setRunning(machines, false)
 	destroy.Unregistered = []string{"rhel-01"}
 	result, err := journey.Service.Destroy(context.Background(), destroy)
 	if err != nil || result.Receipt.State != string(reconciliation.OperationDone) {
@@ -357,16 +390,57 @@ func TestUnregisteredFlagRefusesAMachineThePlanDoesNotUnregister(t *testing.T) {
 
 func TestUnregisteredFlagReleasesOnlyTheNamedMachine(t *testing.T) {
 	t.Parallel()
-	journey, runner, _ := boundInstallation(t, "request-lab-rhel-registered.golden", false, "rhel-01", "rhel-02")
+	journey, runner, machines := boundInstallation(t, "request-lab-rhel-registered.golden", false, "rhel-01", "rhel-02")
 	if _, err := journey.Service.Apply(context.Background(), lifecycle.ApplyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true}); err != nil {
 		t.Fatalf("the apply = %+v (%v)", diagnostics.Of(err), err)
 	}
 	runner.took()
+	setRunning(machines, false)
 	holdInstallationSecrets(journey, runner.request)
 	_, _ = journey.Service.Destroy(context.Background(), lifecycle.DestroyRequest{ContextName: lifecycle.JourneyContext, Unregistered: []string{"rhel-02"}, SkipConfirmation: true})
 	runs := runner.took()
 	slices.Sort(runs)
-	if !slices.Equal(runs, []string{"destroy:running:guest", "destroy:running:skip"}) {
+	if len(runs) != 2 || !slices.Contains(runs, "destroy:running:guest") || !slices.ContainsFunc(runs, func(run string) bool { return strings.HasSuffix(run, ":skip") }) {
 		t.Fatalf("the destroy naming rhel-02 ran %v", runs)
+	}
+}
+
+func TestReleasedRegistrationFinishesShutdownAfterItsAttemptLosesPowerResponse(t *testing.T) {
+	journey, runner, machines := installationJourney(t, "request-lab-rhel-registered.golden")
+	setRunning(machines, false)
+	runner.failStop = true
+	request := lifecycle.DestroyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true}
+	if _, err := journey.Service.Destroy(context.Background(), request); err == nil {
+		t.Fatal("the unproved shutdown completed")
+	}
+	if runs := runner.took(); !slices.Equal(runs, []string{"destroy:running:guest"}) || len(machines.removed) != 0 {
+		t.Fatalf("a failed shutdown ran %v and removed %v", runs, machines.removed)
+	}
+	holdInstallationSecrets(journey, runner.request)
+	runner.failStop = false
+	result, err := journey.Service.Destroy(context.Background(), request)
+	if err != nil || result.Receipt.State != string(reconciliation.OperationDone) || len(runner.took()) != 0 || !slices.Equal(machines.removed, []string{"rhel-01"}) {
+		t.Fatalf("resuming shutdown = %+v (%v, %v), removed %v", result, err, diagnostics.Of(err), machines.removed)
+	}
+}
+
+func TestRegisteredDestroyResumesAfterAnUnprovedColdStart(t *testing.T) {
+	for _, running := range []bool{false, true} {
+		t.Run(map[bool]string{true: "on", false: "off"}[running], func(t *testing.T) {
+			journey, runner, machines := installationJourney(t, "request-lab-rhel-registered.golden")
+			request := lifecycle.DestroyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true}
+			setRunning(machines, false)
+			runner.failStart = true
+			if _, err := journey.Service.Destroy(context.Background(), request); err == nil || len(runner.took()) != 0 {
+				t.Fatal("the failed cold start reached registration cleanup")
+			}
+			setRunning(machines, running)
+			runner.failStart = false
+			holdInstallationSecrets(journey, runner.request)
+			result, err := journey.Service.Destroy(context.Background(), request)
+			if err != nil || result.Receipt.State != string(reconciliation.OperationDone) || !slices.Contains(runner.took(), "destroy:running:guest") {
+				t.Fatalf("resumed cleanup = %+v (%v, %v)", result, err, diagnostics.Of(err))
+			}
+		})
 	}
 }

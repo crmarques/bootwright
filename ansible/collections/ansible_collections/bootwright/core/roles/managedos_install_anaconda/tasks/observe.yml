@@ -160,13 +160,13 @@
     bootwright_machine_arm: '{{ bootwright_os_install_request.target.substrate }}'
     bootwright_machine_port: >-
       {{ managedos_install_anaconda_port_access | combine({'media': true}) }}
-  when: not (managedos_install_anaconda_observes_removal | bool)
+  when: not (managedos_install_anaconda_observes_removal | bool) or managedos_install_anaconda_unregisters | bool
 
 - name: Retain the machine port answer
   ansible.builtin.set_fact:
     managedos_install_anaconda_controller: "{{ substrate_machine_port_result }}"
   no_log: true
-  when: not (managedos_install_anaconda_observes_removal | bool)
+  when: not (managedos_install_anaconda_observes_removal | bool) or managedos_install_anaconda_unregisters | bool
 
 # Always the presence form, which carries the power the controller reported:
 # a powered-off machine holding no marker with nothing published is how an

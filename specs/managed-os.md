@@ -639,20 +639,16 @@ its own on removal. Destroy touches no management controller: a virtual-media
 trust an interrupted attempt left set, a certificate imported or verification
 turned off, is settled by the next apply's eject, which converges to the
 frozen target rather than undoing its own writes.
-A registering installation is a pre-stop removal
-([removal gate](state-reconciliation.md#quiescence-before-removal)): its
-inverse runs while its Machine still runs, and first reads the preparations its
-own apply's attempts recorded. When none names this installation's marker, the
-installation never registered, because its apply registers only after it
-records that proof, so the inverse does not read the guest and only withdraws
-the published content. Otherwise it reads the Machine through its identity
-channel and, when it holds this installation's marker, unregisters this
-installation's consumer through the registration worker over the pinned fleet
-connection before it withdraws the published content. A foreign registration is
-retained and recorded `retained`; a Machine that answers with another marker or
-none holds nothing of this installation; a Machine that does not answer
-refuses `registration-unreachable` before any effect, naming `bootwright
-machine start`, and withdraws nothing.
+A registering installation uses the [pre-stop phase](state-reconciliation.md#quiescence-before-removal).
+If an apply preparation proves the install marker, destroy starts the identified
+Machine, reads its marker through the identity channel, and unregisters its
+consumer over the pinned fleet connection. It retains a foreign registration.
+A different or missing marker leaves no consumer of this installation to remove.
+An unreachable guest refuses `registration-unreachable` before withdrawal.
+With no marker preparation the inverse skips the guest and withdraws only
+published content. Once the guest cleanup and withdrawal are proved, destroy
+records the release, gracefully stops the Machine and verifies shutdown. A
+retry with that receipt finishes shutdown without another guest visit.
 
 ### Unknown resolution
 
@@ -1160,8 +1156,7 @@ with `Machine <machine> was not registered with its subscription service:
 is resolved by observation. Nothing is installed again on a retry: the
 registration is all the next apply repeats.
 
-**Removal.** Destroy unregisters before it withdraws anything, while the
-Machine still runs, as the inverse in [Installation](#installation) states; no organization or
+**Removal.** Destroy unregisters before withdrawal as the [inverse](#inverse) requires; no organization or
 activation key is lent to it or to any observation. The worker's `unregister`
 operation removes only a consumer this installation's record names, owned or
 `pending`, with `subscription-manager unregister`, proves the consumer
@@ -1186,11 +1181,9 @@ answer through its identity channel or its pinned connection refuses
 `registration-unreachable`: `the apply of Machine/<machine> proved its install
 marker before it registered, and Machine/<machine> did not answer through its
 identity channel or its pinned connection, so its subscription registration
-cannot be read and was not removed`, remedied by `start Machine/<machine> with
-bootwright machine start --context <context> --name <machine>, then run
-bootwright destroy --context <context> again; if Machine/<machine> cannot answer
-again, remove its consumer with the subscription service's own tools, then run
-bootwright destroy --context <context> --unregistered <machine>`. A worker or subscription service
+cannot be read and was not removed`, remedied by restoring the guest's identity channel and pinned SSH access and
+repeating the registered destroy. If the guest cannot answer, the operator
+can remove its consumer externally as described below. A worker or subscription service
 that did not complete the removal refuses `registration-unavailable`: `the
 subscription service, or the registration tooling on Machine/<machine>, did not
 complete the removal of the subscription consumer its installation created`,
@@ -2203,9 +2196,11 @@ it and its file only when it bears the mark, then reloads; it also reloads
 while any zone still lists a service at runtime, so a removal that ended
 between its delete and its reload completes on retry. A Machine the same
 removal deletes or erases takes its services with its disks, so the block is
-retired with it without contacting the guest; on a retained Machine the removal
-runs while the guest answers, and an unreachable guest fails it and keeps the
-Machine's removal waiting, as an installation's unregistration does.
+retired with it without contacting the guest. On a retained Machine the removal
+starts the stopped guest through its identified power path, removes the
+services, records its receipt and stops the guest again, so a retry after the
+receipt only stops it; an unreachable guest fails it and keeps the Machine's
+removal waiting, as an installation's unregistration does.
 
 **Evidence.** `installation.FirewallEvidence` proves current daemon readiness and lists, per service in request
 order, its name, its state (`owned`, `absent` or `foreign`), the SHA-256 of the

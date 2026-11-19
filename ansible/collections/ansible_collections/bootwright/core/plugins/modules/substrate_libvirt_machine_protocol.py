@@ -15,6 +15,10 @@ extends_documentation_fragment:
   - bootwright.core.protocol.completion
   - bootwright.core.protocol.phase
 options:
+  power_only:
+    description: Report the domain identity and power from a native read for lifecycle admission.
+    type: bool
+    required: false
   observation:
     description: The bounded host observation completion evidence is built from.
     type: dict

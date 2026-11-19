@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"sync"
 	"syscall"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -78,13 +79,15 @@ type scheduler struct {
 
 // invocation is what each attempt and resolution runs under; once boundary latches a fault, nothing further is admitted.
 type invocation struct {
-	tx        Transaction
-	store     OperationStore
-	approved  approved
-	boundary  *logBoundary
-	operation operationstore.Operation
-	plan      reconciliation.Plan
-	material  map[string]secrets.Material
+	stopGroups    []*removalMachineGroup
+	clusterStarts *sync.Map
+	tx            Transaction
+	store         OperationStore
+	approved      approved
+	boundary      *logBoundary
+	operation     operationstore.Operation
+	plan          reconciliation.Plan
+	material      map[string]secrets.Material
 }
 
 // removalReading reads a block by the block of plan that takes it back, when plan is set.
@@ -102,6 +105,9 @@ type positionedWarning struct {
 // reports whether it stopped at a stage or operator-stop boundary and what any
 // block that did not complete reported.
 func (s Service) converge(ctx context.Context, work invocation, phases removalPhases, states map[string]reconciliation.BlockState, selection reconciliation.Selection) (bool, []diagnostics.Diagnostic, error) {
+	if work.operation.Verb == reconciliation.Apply && work.operation.Predecessor != "" {
+		work.clusterStarts = &sync.Map{}
+	}
 	run := s.newScheduler(work, states, selection, phases, removalPhases{})
 	boundary, err := run.converge(ctx)
 	slices.SortStableFunc(run.warned, func(first, second positionedWarning) int { return first.position - second.position })

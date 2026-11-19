@@ -36,6 +36,9 @@ func (r Runner) AdmitReadOnly(operations ...string) Runner {
 }
 
 func (r Runner) checkReadOnly(request lifecycle.RunRequest) error {
+	if request.Admission && (!request.ReadOnly || !request.Unrecorded || request.Operation != lifecycle.ObserveOperation || len(request.Outputs) != 0 || request.Prepare != nil) {
+		return runnerRequestInvalid.Fail("power admission requires an unrecorded observation with no outputs or preparation", "")
+	}
 	lend := request.Operation == lifecycle.LendOperation
 	revoke := (request.Operation == lifecycle.RevokeOperation || request.Operation == "prepare_credentials") && r.readOnly[request.Implementation+"/"+request.Operation]
 	if request.ReadOnly && request.Operation != lifecycle.ObserveOperation && !lend && !revoke {

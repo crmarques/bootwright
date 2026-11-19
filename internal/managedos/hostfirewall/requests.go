@@ -114,7 +114,7 @@ func FirewallContentDigest() string {
 	}, mark)))
 	return reconciliation.ContentDigestOf(
 		"bootwright.managedos.host-firewall-v1", FirewallImplementation, FirewallEvidenceVersion, FirewallServiceRoot,
-		mark, name, hex.EncodeToString(sample[:]),
+		mark, name, hex.EncodeToString(sample[:]), "power-cycled-guest-removal",
 	)
 }
 

@@ -34,6 +34,10 @@ func proving(t *testing.T, execution lifecycle.Execution, request Request) lifec
 		t.Fatal(err)
 	}
 	quoted, _ := json.Marshal(string(marker))
+	execution.Block.Object = request.Identity.Object
+	execution.PowerMachine = func(context.Context, string, bool) error { return nil }
+	execution.Attempt = 1
+	execution.PrepareRemoval = func(context.Context, json.RawMessage) error { return nil }
 	execution.ApplyPreparations = []json.RawMessage{json.RawMessage(`{"marker":` + string(quoted) + `}`)}
 	return execution
 }
@@ -55,7 +59,7 @@ func TestUnreachableRegisteredGuestFailsClosedNamingTheStart(t *testing.T) {
 	want := map[string][2]string{
 		"registration-unreachable": {
 			"the apply of Machine/rhel-01 proved its install marker before it registered, and Machine/rhel-01 did not answer through its identity channel or its pinned connection, so its subscription registration cannot be read and was not removed",
-			"start Machine/rhel-01 with bootwright machine start --context lab --name rhel-01, then run bootwright destroy --context lab again; if Machine/rhel-01 cannot answer again, remove its consumer with the subscription service's own tools, then run bootwright destroy --context lab --unregistered rhel-01",
+			"restore the installed guest's identity channel and pinned SSH access on Machine/rhel-01, then run bootwright destroy --context lab again; if Machine/rhel-01 cannot answer again, remove its consumer with the subscription service's own tools, then run bootwright destroy --context lab --unregistered rhel-01",
 		},
 		"registration-unavailable": {
 			"the subscription service, or the registration tooling on Machine/rhel-01, did not complete the removal of the subscription consumer its installation created",
@@ -93,7 +97,7 @@ func TestProvedMarkerWithUnreadableRegistrationRefusesWithTheManualPath(t *testi
 	reported := diagnostics.Of(runner.requests[0].Refusals["registration-unreachable"])
 	if len(reported) != 1 || reported[0].Code != "install.service-unavailable" || reported[0].Object == nil || reported[0].Object.Kind != "Machine" || reported[0].Object.Name != "rhel-01" ||
 		reported[0].Message != "the apply of Machine/rhel-01 proved its install marker before it registered, and Machine/rhel-01 did not answer through its identity channel or its pinned connection, so its subscription registration cannot be read and was not removed" ||
-		reported[0].Remediation != "start Machine/rhel-01 with bootwright machine start --context lab --name rhel-01, then run bootwright destroy --context lab again; if Machine/rhel-01 cannot answer again, remove its consumer with the subscription service's own tools, then run bootwright destroy --context lab --unregistered rhel-01" {
+		reported[0].Remediation != "restore the installed guest's identity channel and pinned SSH access on Machine/rhel-01, then run bootwright destroy --context lab again; if Machine/rhel-01 cannot answer again, remove its consumer with the subscription service's own tools, then run bootwright destroy --context lab --unregistered rhel-01" {
 		t.Fatalf("registration-unreachable = %#v", reported)
 	}
 }
@@ -181,12 +185,14 @@ func TestRemovalResolutionReadsTheGuestOnlyWhenRegistrationIsFrozen(t *testing.T
 		evidence Evidence
 		want     reconciliation.EffectState
 	}{
-		"withdrawn and absent":          {registering, Evidence{Registration: RegistrationEvidence{State: "absent"}}, reconciliation.EffectCompleted},
-		"withdrawn and unregistered":    {registering, Evidence{Registration: RegistrationEvidence{Consumer: ownedConsumer, State: "unregistered"}}, reconciliation.EffectCompleted},
-		"withdrawn and retained":        {registering, Evidence{Registration: RegistrationEvidence{State: "retained"}}, reconciliation.EffectCompleted},
-		"withdrawn and foreign":         {registering, Evidence{Registration: RegistrationEvidence{State: "foreign"}}, reconciliation.EffectCompleted},
+		"withdrawn and absent":          {registering, Evidence{Registration: RegistrationEvidence{State: "absent"}}, reconciliation.EffectPartial},
+		"withdrawn and unregistered":    {registering, Evidence{Registration: RegistrationEvidence{Consumer: ownedConsumer, State: "unregistered"}}, reconciliation.EffectPartial},
+		"withdrawn and retained":        {registering, Evidence{Registration: RegistrationEvidence{State: "retained"}}, reconciliation.EffectPartial},
+		"withdrawn and foreign":         {registering, Evidence{Registration: RegistrationEvidence{State: "foreign"}}, reconciliation.EffectPartial},
 		"withdrawn and still owned":     {registering, Evidence{Registration: RegistrationEvidence{Consumer: ownedConsumer, State: "owned"}}, reconciliation.EffectPartial},
 		"withdrawn and unread":          {registering, Evidence{}, reconciliation.EffectInconclusive},
+		"withdrawn and booting":         {registering, Evidence{Power: "On"}, reconciliation.EffectPartial},
+		"withdrawn and stopped":         {registering, Evidence{Power: "Off"}, reconciliation.EffectPartial},
 		"content left and unread":       {registering, Evidence{Image: true}, reconciliation.EffectPartial},
 		"not registering, withdrawn":    {plain, Evidence{}, reconciliation.EffectCompleted},
 		"not registering, content left": {plain, Evidence{Image: true}, reconciliation.EffectPartial},
@@ -240,8 +246,8 @@ func TestRegisteringRemovalNamesItsUnregistrationFirst(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(groupIDs(removal.Groups), []string{"unregister-subscription", "remove-published", "verify-absence"}) ||
-		removal.Groups[0].Description != "remove the subscription consumer this installation registered the machine with" ||
+	if !slices.Equal(groupIDs(removal.Groups), []string{"power-on", "unregister-subscription", "remove-published", "verify-absence", "power-off"}) ||
+		removal.Groups[1].Description != "remove the subscription consumer this installation registered the machine with" ||
 		!slices.Equal(removal.Groups[0].Machines, []string{"rhel-01"}) {
 		t.Fatalf("registering removal groups = %+v", removal.Groups)
 	}
@@ -306,5 +312,16 @@ func TestTheInstallationRemovalDeclaresItselfReplaySafe(t *testing.T) {
 	removal, err := New(nil).Removal(context.Background(), call.Block)
 	if err != nil || !removal.ReplaySafe {
 		t.Fatalf("removal = %+v (%v)", removal, err)
+	}
+}
+
+func TestRegistrationShutdownRequiresTheExactReleasedReceipt(t *testing.T) {
+	r := pinnedRequest(t, labCatalog(registeringProfile(), rhelEntitlement()))
+	e := proving(t, encryptionExecution(t, r, nil), r)
+	runner := removalRunner(t, RegistrationEvidence{Consumer: ownedConsumer, State: registrationUnregistered})
+	e.RemovalPreparations = []json.RawMessage{encode(t, Evidence{Absent: true, Postcondition: true, Request: "another", Registration: RegistrationEvidence{State: registrationAbsent}})}
+	e.PowerMachine = func(context.Context, string, bool) error { t.Fatal("a foreign receipt reached power"); return nil }
+	if _, err := New(runner).Destroy(context.Background(), e); err == nil || len(runner.requests) != 0 {
+		t.Fatalf("foreign receipt reached cleanup: %#v (%v)", runner.requests, err)
 	}
 }

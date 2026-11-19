@@ -850,7 +850,7 @@ func (s *Store) Inspect(ctx context.Context, scope string, callback func(context
 	if callback == nil {
 		return state("context inspection callback is missing")
 	}
-	return s.transactHeld(ctx, false, true, nil, scope, func(tx *transaction) error {
+	return s.transactHeld(ctx, false, inspectTransaction, nil, scope, func(tx *transaction) error {
 		if scope != "" {
 			return callback(&deletionTransaction{tx: tx, name: scope})
 		}
@@ -881,13 +881,21 @@ func (s *Store) TransactDeletion(ctx context.Context, name string, callback func
 // transact waits out a shorter root holder, then holds the exclusive root lock
 // across one registry transaction. scope names a deletion's unverified context.
 func (s *Store) transact(ctx context.Context, create bool, inputs []string, scope string, callback func(*transaction) error) error {
-	return s.transactHeld(ctx, create, false, inputs, scope, callback)
+	return s.transactHeld(ctx, create, collectBeforeMutation, inputs, scope, callback)
 }
+
+type transactionMode uint8
+
+const (
+	collectBeforeMutation transactionMode = iota
+	inspectTransaction
+	collectAfterAdmission
+)
 
 // transactHeld holds the root lock across one registry transaction: the
 // exclusive one, or the shared one of a transaction that only reads, which
 // collects nothing.
-func (s *Store) transactHeld(ctx context.Context, create, shared bool, inputs []string, scope string, callback func(*transaction) error) error {
+func (s *Store) transactHeld(ctx context.Context, create bool, mode transactionMode, inputs []string, scope string, callback func(*transaction) error) error {
 	root, err := s.openRoot(ctx, create, inputs)
 	if !create && errors.Is(err, syscall.ENOENT) {
 		return emptyStore()
@@ -897,7 +905,7 @@ func (s *Store) transactHeld(ctx context.Context, create, shared bool, inputs []
 	}
 	defer root.File.Close()
 	hold := func(dir *directory) error { return awaitRoot(ctx, s, dir, syscall.LOCK_EX) }
-	if shared {
+	if mode == inspectTransaction {
 		hold = kernel.LockShared
 	}
 	if err := hold(root); err != nil {
@@ -930,7 +938,7 @@ func (s *Store) transactHeld(ctx context.Context, create, shared bool, inputs []
 	if err != nil {
 		return safeError(err)
 	}
-	if !shared {
+	if mode == collectBeforeMutation {
 		if err := s.collectControllerStages(ctx, root, registry); err != nil {
 			return safeError(err)
 		}
@@ -942,7 +950,7 @@ func (s *Store) transactHeld(ctx context.Context, create, shared bool, inputs []
 	if err != nil {
 		return safeError(err)
 	}
-	tx := &transaction{store: s, root: root, registry: registry, mappings: mappings, leases: make(map[string]*directory), evidence: make(map[string][]byte), shared: shared}
+	tx := &transaction{store: s, root: root, registry: registry, mappings: mappings, leases: make(map[string]*directory), evidence: make(map[string][]byte), shared: mode == inspectTransaction, deferCollection: mode == collectAfterAdmission}
 	tx.expected = expected
 	defer tx.close()
 	if callback == nil {
@@ -955,6 +963,7 @@ func (s *Store) transactHeld(ctx context.Context, create, shared bool, inputs []
 }
 
 type transaction struct {
+	deferCollection    bool
 	store              *Store
 	root               *directory
 	container          *directory
@@ -1180,7 +1189,7 @@ func (t *transaction) admitLease(ctx context.Context, dir *directory, name strin
 	if err != nil {
 		return err
 	}
-	if record.DirectoryInode != 0 && !t.shared {
+	if record.DirectoryInode != 0 && !t.shared && !t.deferCollection {
 		if err := t.store.collectContextStages(ctx, dir, true); err != nil {
 			return err
 		}

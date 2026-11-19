@@ -17921,3 +17921,26 @@ server's close can reach the client first as a lost connection, which the acquis
 bounded transport retry names `AcquisitionLoss`. Both are refusals and the
 test still proves the Satellite served nothing, so it accepts either. No code,
 behavior or contract changes.
+
+## X627 — Power before a new apply or destroy
+
+### B1621
+
+**Owner:** Reconciliation and Substrate, with Managed OS.
+**Kind:** safety.
+
+**Outcome:** a new apply or destroy first proves every managed target Machine
+powered off or absent, under the
+[lifecycle admission rule](../state-reconciliation.md#power-before-a-new-apply-or-destroy),
+and a refusal changes nothing; continuing an unfinished flow is admitted at
+either power state. Registered guest cleanup starts the identified Machine,
+records its release and stops it again before removal continues.
+
+**Exit evidence:** repeated refusals leaving the workspace and environment
+untouched, native power and identity readings for libvirt, KubeVirt and
+Redfish, and recovery after a subscription release whose shutdown did not
+finish, all against simulated machines. Live verification on each substrate
+remains open. A hosted KubeVirt Machine refuses new work until
+[B1622](backlog.md#b1622); explicit discovery's check is
+[B1623](backlog.md#b1623) and the automatic preparation's `Stop first` list
+[B1624](backlog.md#b1624).

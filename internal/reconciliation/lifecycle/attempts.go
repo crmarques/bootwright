@@ -104,7 +104,7 @@ func (s Service) attempt(ctx context.Context, run invocation, block reconciliati
 			return capability.Destroy(inner, execution)
 		}
 		execution.Warn = warnings.collect
-		return s.applyAdmitted(inner, plan, capability, execution)
+		return s.applyAdmitted(inner, plan, capability, execution, operation.Predecessor != "")
 	})
 	runErr = stageReading(runErr, block, operation.Verb, tx.Identity().Name)
 	outcome := result.Outcome
@@ -155,9 +155,14 @@ func logOutcome(ctx context.Context, boundary *logBoundary, log *operationstore.
 	return outcome, failure
 }
 
-func (s Service) applyAdmitted(ctx context.Context, plan reconciliation.Plan, capability Capability, execution Execution) (Result, error) {
+func (s Service) applyAdmitted(ctx context.Context, plan reconciliation.Plan, capability Capability, execution Execution, adds bool) (Result, error) {
 	if s.options.BlockAdmission != nil {
 		if err := s.options.BlockAdmission(ctx, plan, execution.Block); err != nil {
+			return Result{Outcome: reconciliation.OutcomeFailed}, err
+		}
+	}
+	if adds {
+		if err := s.startClusterNodes(ctx, capability, execution); err != nil {
 			return Result{Outcome: reconciliation.OutcomeFailed}, err
 		}
 	}
@@ -542,19 +547,35 @@ func (s Service) invoke(ctx context.Context, run invocation, block reconciliatio
 					Completed: len(settled), Declared: len(block.Groups), Bytes: bytes})
 			},
 		}
-		if err := populateRemovalExecution(ctx, store, operation, plan, &execution); err != nil {
-			return err
-		}
-		release, lendErr := s.prepareProducedExecution(ctx, tx, store, operation, plan, &execution)
-		if lendErr != nil {
-			return lendErr
-		}
-		defer release()
-		value, callErr := call(ctx, execution)
+		value, callErr := s.callBlock(ctx, run, execution, call)
 		result = value
 		return callErr
 	})
 	return result, err
+}
+
+func (s Service) callBlock(ctx context.Context, run invocation, execution Execution, call func(context.Context, Execution) (Result, error)) (Result, error) {
+	if err := s.populateRemovalExecution(ctx, run.store, run.operation, run.plan, &execution); err != nil {
+		return Result{Outcome: reconciliation.OutcomeUnknown}, err
+	}
+	release, lendErr := s.prepareProducedExecution(ctx, run.tx, run.store, run.operation, run.plan, &execution)
+	if lendErr != nil {
+		return Result{Outcome: reconciliation.OutcomeUnknown}, lendErr
+	}
+	defer release()
+	if run.operation.Verb == reconciliation.Destroy {
+		execution.MachineStopped = s.machineStopped(run, execution)
+	}
+	if !ReadOnlyRun(execution) {
+		execution.PowerMachine = s.machinePower(run, execution)
+		for _, group := range run.stopGroups {
+			group.once.Do(func() { group.err = s.stopRemovalGroup(ctx, run, execution, group) })
+			if group.err != nil {
+				return Result{Outcome: reconciliation.OutcomeFailed}, group.err
+			}
+		}
+	}
+	return call(ctx, execution)
 }
 
 type invokeRecords struct {

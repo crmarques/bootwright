@@ -295,7 +295,7 @@ func unregistrationRefusals(contextName string, request Request) map[string]erro
 	return map[string]error{
 		"registration-unreachable": machineRefusal(request, installServiceUnavailable)("the apply of "+machine+" proved its install marker before it registered, and "+machine+
 			" did not answer through its identity channel or its pinned connection, so its subscription registration cannot be read and was not removed",
-			"start "+machine+" with bootwright machine start --context "+contextName+" --name "+request.Identity.Object+", "+again+
+			"restore the installed guest's identity channel and pinned SSH access on "+machine+", "+again+
 				"; if "+machine+" cannot answer again, remove its consumer with the subscription service's own tools, then run bootwright destroy --context "+
 				contextName+" --unregistered "+request.Identity.Object),
 		"registration-unavailable": machineRefusal(request, installServiceUnavailable)("the subscription service, or the registration tooling on "+machine+", did not complete the removal of the subscription consumer its installation created",

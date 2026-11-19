@@ -19,6 +19,9 @@ Alias cell.
 | --- | --- | --- | --- | --- | --- |
 | [B1611](#b1611) | new, 2026-11-18 (proxy audit) | product | Managed OS, Container cluster and State reconciliation | Observe installed proxy drift and support an owned transition between direct and proxy | Changing a completed installation needs a separate rollout and recovery contract |
 | [B1619](#b1619) | new, 2026-11-18 (proxy review) | defect | Infrastructure services | One bypass grammar with one address comparison in Go and Python | Fails closed: a non-canonical address rule sends a request through the proxy |
+| [B1622](#b1622) | new, 2026-11-18 (X627 review) | product | Substrate and Reconciliation | Prove a hosted KubeVirt Machine off or absent without creating access on its host cluster | Fails closed: a context with a hosted KubeVirt Machine refuses every new apply and destroy |
+| [B1623](#b1623) | new, 2026-11-18 (X627 review) | safety | Reconciliation and Machine | Decide whether explicit `machine discover` and `machine inventory` take the power entry check | The owner's request named apply and destroy only |
+| [B1624](#b1624) | new, 2026-11-18 (X627 review) | product | Reconciliation, with CLI | `Stop first` names the whole fleet an automatic preparation's entry check reads | The refusal already names every blocking Machine |
 | [B82](#b82) | C5; moved from M4 on 2026-10-10 (D128); parked on 2026-10-11 (D129) | product | Managed OS | One more image, profile or entitlement variant | No concrete additional OS variant beyond the qualified M2 matrix |
 | [B96](#b96) | Y3 | enabling | Architecture | Collection metadata and naming polish | Pruned from M1 on 2026-09-28 |
 | [B97](#b97) | A8 (kind tables) | enabling | Desired state and Workspace | Kind field-table parity and a path checker | Pruned from M1 on 2026-09-28 |
@@ -3971,6 +3974,45 @@ bypasses in Go and not on the host. Compare parsed addresses on both sides.
 
 **Exit evidence:** one shared table of rule and target spellings that both
 matchers' tests read and agree on.
+
+### B1622
+
+**Owner:** Substrate and Reconciliation. **Kind:** product. **Requires:** none.
+**Definition:** Specified.
+
+**Outcome:** the [power entry check](../state-reconciliation.md#power-before-a-new-apply-or-destroy)
+reads a hosted KubeVirt Machine (`hostClusterRef`) without the per-lend Secret
+its [hosted access](../substrates.md) creates, so that topology can start an
+apply or destroy again. Until then its reader answers unproved.
+
+**Exit evidence:** a hosted Machine admitted off and absent with the host
+cluster unchanged, and refused live or unread.
+
+### B1623
+
+**Owner:** Reconciliation and Machine. **Kind:** safety. **Requires:** none.
+**Definition:** Specified.
+
+**Outcome:** an explicit `machine discover` or `machine inventory` registers
+an apply-verb preparation that boots Machines without the
+[power entry check](../state-reconciliation.md#power-before-a-new-apply-or-destroy);
+only automatic preparation shares it. The owner decides whether those commands
+take the check.
+
+**Exit evidence:** the decision, and when it applies, a running target refused
+before the preparation registers.
+
+### B1624
+
+**Owner:** Reconciliation, with CLI. **Kind:** product. **Requires:** none.
+**Definition:** Specified.
+
+**Outcome:** a plan whose apply runs automatic preparation lists under
+`Stop first` only the Machines its frozen plan selects, while the entry check
+reads every managed Machine of the fleet. List the fleet the check reads.
+
+**Exit evidence:** a plan golden for an automatic preparation naming every
+fleet Machine under `Stop first`.
 
 ## Retired
 

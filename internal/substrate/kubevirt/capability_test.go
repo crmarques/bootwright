@@ -404,3 +404,44 @@ func TestThePinIsTheClusterAndVirtualMachineTheBlockRecorded(t *testing.T) {
 		t.Fatal("another Machine's record pins this one")
 	}
 }
+
+func TestStartPowerRequiresClusterAndVMIdentityAndNeverLendsHostedAccess(t *testing.T) {
+	block := machineBlock(t)
+	request := machineRequest(t)
+	probe := lifecycle.Probe{Context: testContext, Block: block}
+	run := &runner{}
+	capability := NewMachine(run)
+	observed := MachineEvidence{Request: block.RequestDigest, Answered: true, Absent: true, Server: "https://host.example.test", KubeSystemUID: "cluster-1"}
+	test := func(want string) {
+		t.Helper()
+		run.result = lifecycle.RunResult{Outcome: "unchanged", Evidence: encoded(t, observed)}
+		state, err := capability.StartPower(context.Background(), probe)
+		if err != nil || state.State != want || len(run.requests) != 1 {
+			t.Fatalf("start power = %+v, %v", state, err)
+		}
+		if call := run.requests[0]; !call.ReadOnly || !call.Unrecorded || call.Operation != "observe" || call.MaterialValues["startPower"] != "true" {
+			t.Fatal("admission made a different request than the external read")
+		}
+		run.requests = nil
+	}
+	test(lifecycle.Quiescent)
+	observed.Answered = false
+	test(lifecycle.Unproved)
+	observed.Answered, observed.Absent, observed.Owned, observed.VirtualMachine = true, false, true, request.Name
+	observed.Receipts = []Receipt{{Kind: "VirtualMachine", Name: request.Name, UID: "vm-1"}}
+	test(lifecycle.Unproved)
+	probe.PreviousEvidence = encoded(t, observed)
+	test(lifecycle.Quiescent)
+	observed.Instance = "Running"
+	test(lifecycle.Live)
+	observed.Instance, observed.Foreign = "Succeeded", true
+	test(lifecycle.Unproved)
+	observed.Instance, observed.Foreign, observed.KubeSystemUID = "", false, "cluster-2"
+	test(lifecycle.Unproved)
+	request.HostCluster, request.KubeconfigRef = "managed", ""
+	probe.Block.Request, _ = request.Canonical()
+	state, err := capability.StartPower(context.Background(), probe)
+	if err != nil || state.State != lifecycle.Unproved || len(run.requests) != 0 {
+		t.Fatalf("hosted access was lent before registration: %+v, %v", state, err)
+	}
+}

@@ -287,14 +287,29 @@ func (s *Store) readOperationIndex(ctx context.Context, dir *directory, name str
 
 // MutateLifecycle snapshots under the root lock, then holds only its context lease during effects.
 func (s *Store) MutateLifecycle(ctx context.Context, name string, callback func(lifecycle.Transaction) error) error {
+	return s.mutateLifecycle(ctx, name, nil, callback)
+}
+
+// AdmitLifecycle holds the context lease through inspection, collection and mutation.
+func (s *Store) AdmitLifecycle(ctx context.Context, name string, admit func(lifecycle.View) error, callback func(lifecycle.Transaction) error) error {
+	if admit == nil {
+		return state("lifecycle admission callback is missing")
+	}
+	return s.mutateLifecycle(ctx, name, admit, callback)
+}
+
+func (s *Store) mutateLifecycle(ctx context.Context, name string, admit func(lifecycle.View) error, callback func(lifecycle.Transaction) error) error {
 	if callback == nil {
 		return state("lifecycle mutation callback is missing")
 	}
 	if !contextName(name) {
 		return state("lifecycle mutation requires an explicit context name")
 	}
-	err := s.Transact(ctx, false, nil, func(base contexts.Transaction) error {
-		t := base.(*transaction)
+	mode := collectBeforeMutation
+	if admit != nil {
+		mode = collectAfterAdmission
+	}
+	err := s.transactHeld(ctx, false, mode, nil, "", func(t *transaction) error {
 		record, err := lifecycleRecord(t.registry, name)
 		if err != nil {
 			return err
@@ -346,12 +361,48 @@ func (s *Store) MutateLifecycle(ctx context.Context, name string, callback func(
 		if err := syscall.Flock(int(t.root.File.Fd()), syscall.LOCK_UN); err != nil {
 			return err
 		}
+		if admit != nil {
+			if err := leased.admit(ctx, admit); err != nil {
+				return err
+			}
+		}
 		return callback(leased)
 	})
 	if errors.Is(err, contexts.ErrNoContexts) {
 		return contexts.AbsentContext(name)
 	}
 	return err
+}
+
+func (l *leasedLifecycle) admit(ctx context.Context, check func(lifecycle.View) error) error {
+	t := l.base
+	active := true
+	defer func() { active = false }()
+	live := func() bool { return active }
+	view := l.lifecycleView
+	view.operations = &operationArea{store: t.store, subtree: "operations", context: l.context, name: l.record.Name, active: live, readOnly: true}
+	view.logs = &operationArea{store: t.store, subtree: operationLogs, context: l.context, name: l.record.Name, active: live, readOnly: true, logged: true}
+	view.revision = retainedReader(t.root, l.record, view.inputs, live)
+	var bundles openedBundles
+	defer bundles.closeAll()
+	t.store.inspectControllerBundles(t.root, t.registry, l.stored, &view.controller, live, &bundles)
+	if err := check(&view); err != nil {
+		return err
+	}
+	active = false
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return l.shared(ctx, func(ctx context.Context) error {
+		if err := t.store.collectControllerStages(ctx, t.root, t.registry); err != nil {
+			return err
+		}
+		if err := t.store.collectRegistryStages(ctx, t.root); err != nil {
+			return err
+		}
+		t.deferCollection = false
+		return t.admitLease(ctx, l.context, l.record.Name)
+	})
 }
 
 // PublishEvidence replaces the context's mutation record atomically after

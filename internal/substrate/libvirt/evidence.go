@@ -120,6 +120,9 @@ type MachineEvidence struct {
 	Controller string         `json:"controller"`
 	Disks      []DiskEvidence `json:"disks"`
 	Domain     string         `json:"domain"`
+	// HostIdle is a power admission's proof that no hypervisor daemon or guest
+	// process runs on the provider host, so no domain there can be running.
+	HostIdle bool `json:"hostIdle,omitempty"`
 	// Listener is whether anything listens on the controller's socket. Alone
 	// it is not proved to be this Machine's, so only absence reads it: a
 	// removal releases the socket only once nothing listens on it. Evidence

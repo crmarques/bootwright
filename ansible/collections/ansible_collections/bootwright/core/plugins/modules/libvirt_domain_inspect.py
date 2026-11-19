@@ -27,6 +27,14 @@ description:
     domain proves nothing.
   - Performs no change and is safe to repeat.
 options:
+  bootstrap:
+    description: Admit a positively identified pristine provider host on the first apply.
+    type: bool
+    default: false
+  power_only:
+    description: Read only the native domain identity and power for lifecycle admission.
+    type: bool
+    default: false
   request:
     description: The frozen machine request.
     type: dict
@@ -55,16 +63,20 @@ observation:
 """
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.bootwright.core.plugins.module_utils.substrate_libvirt import command_runner, observe_machine
+from ansible_collections.bootwright.core.plugins.module_utils.substrate_libvirt import command_runner, observe_machine, observe_machine_power
 
 
 def main():
     module = AnsibleModule(
-        argument_spec={"request": {"type": "dict", "required": True}},
+        argument_spec={"request": {"type": "dict", "required": True}, "power_only": {"type": "bool", "default": False},
+                       "bootstrap": {"type": "bool", "default": False}},
         supports_check_mode=True,
     )
     try:
-        observation = observe_machine(command_runner(), module.params["request"])
+        if module.params["power_only"]:
+            observation = observe_machine_power(command_runner(), module.params["request"], bootstrap=module.params["bootstrap"])
+        else:
+            observation = observe_machine(command_runner(), module.params["request"])
     except (OSError, ValueError, KeyError) as failure:
         module.fail_json(msg="the machine could not be observed: %s" % type(failure).__name__)
         return

@@ -44,6 +44,9 @@ var (
 	destroyIncomplete = diagnostics.Stop{Code: "destroy.incomplete", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyPossible,
 		Cause: diagnostics.CauseUnclassified, Recovery: diagnostics.RecoveryRepeat,
 		Meaning: "the destroy ended with blocks not proved gone; the diagnostics before it say why", Remedy: "repeat the destroy once each cause is fixed"}
+	startPowerRefused = diagnostics.Stop{Code: "lifecycle.start-power", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "a new apply or destroy could not prove every managed machine powered off or absent", Remedy: "stop the named machines or restore access to their power state and repeat the command"}
 	destroyInUse = diagnostics.Stop{Code: "destroy.in-use", Level: diagnostics.LevelRemoval, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
 		Meaning: "a removal would take back state that is still in use, so it takes back nothing at that boundary",
@@ -271,7 +274,7 @@ var (
 )
 
 var stops = []diagnostics.Stop{engineRecordsFull, engineRecordsReadOnly, engineRecordsDenied, engineRecordsDevice, engineEscaped, engineStartUnrecorded,
-	applyUnresolved, destroyUnresolved, applyIncomplete, destroyIncomplete, destroyInUse, destroyConsumerSurvives,
+	applyUnresolved, destroyUnresolved, applyIncomplete, destroyIncomplete, startPowerRefused, destroyInUse, destroyConsumerSurvives,
 	engineFinalizationDue, engineRecordsContradict, engineOtherVerbIncomplete, applyRecordsMissing, destroyRecordsMissing, applyInputChanged,
 	applyNotAnAddition, applyPrerequisiteLost, applyNothingDeclared, applyStageEmpty, applyStageExcludesRetry, applyUntilUnknown,
 	planInputUncompilable, planCapabilityMissing, planCapabilityDefect, planHostKeyUnbound, planEnvironmentInvalid,

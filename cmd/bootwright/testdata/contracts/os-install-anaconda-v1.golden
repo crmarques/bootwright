@@ -1,5 +1,5 @@
 implementation: os-install-anaconda-v1
-content-digest: 57afe6119999fc952aceb4c58e0ba2ddd04609a38181c06571cf97fa9ed0c633
+content-digest: aa6502872414cbb6385203565bca0b74aca545f8aa1b6b88053e5fd2fe6e610b
 request-version: os-install-anaconda-v1
 automation-formats: none
 mark-formats: none
@@ -19,6 +19,7 @@ effect-pins:
   anaconda-home-partition-policy
   subscription-package-source
   explicit-repository-proxy-policy
+  power-cycled-guest-removal
 request-identity:
   identity.context
   identity.object

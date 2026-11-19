@@ -78,9 +78,15 @@ def runs(task, variables):
                for condition in (conditions if isinstance(conditions, list) else [conditions]))
 
 
-def machine_reads(scoped="not (managedos_install_anaconda_observes_removal | bool)"):
+APPLY = "not (managedos_install_anaconda_observes_removal | bool)"
+# The controller's power reading also serves an unregistering removal, which
+# starts the guest only when the controller reports it off.
+CONTROLLER = APPLY + " or managedos_install_anaconda_unregisters | bool"
+
+
+def machine_reads(scoped=APPLY):
     """The tasks of one scope that read the machine rather than the published content."""
-    found = [task for task in tasks() if scoped in task["when"]]
+    found = [task for task in tasks() if scoped in task["when"] or scoped == APPLY and CONTROLLER in task["when"]]
     found = [task for task in found
              if (task.get("ansible.builtin.include_role") or {}).get("tasks_from") == "state_read"
              or task.get("ansible.builtin.include_tasks") in (
@@ -103,7 +109,8 @@ def test_an_apply_observation_reads_the_machine(observes):
 
 def test_a_removal_observation_reads_only_the_published_content():
     variables = scope("removal", managedos_install_anaconda_host_key="ssh-ed25519 AAAAHOST")
-    assert not any(runs(task, variables) for task in machine_reads())
+    assert [runs(task, variables) for task in machine_reads()] == [CONTROLLER in task["when"] for task in machine_reads()]
+    assert not any(runs(task, scope("removal", "skip")) for task in machine_reads())
     assert not any(runs(task, variables) for task in machine_reads(REMOVAL))
     kept = [task for task in tasks() if runs(task, variables)]
     assert any(INSPECT in task for task in kept)
@@ -122,7 +129,7 @@ def test_a_registering_removal_observation_reads_the_guest_registration_alone():
     variables["bootwright_os_install_material"]["marker"] = marker
     variables.update(next(task for task in LOADER.load_from_file(str(ROLE / "tasks" / "observe.yml"), trusted_as_template=True)
                           if task.get("name") == "Read the registration a removal takes back")["vars"])
-    assert not any(runs(task, variables) for task in machine_reads())
+    assert [runs(task, variables) for task in machine_reads()] == [CONTROLLER in task["when"] for task in machine_reads()]
     assert all(runs(task, variables) for task in machine_reads(REMOVAL))
 
 
@@ -263,7 +270,7 @@ def test_removal_observation_reads_the_guest_only_when_told_to_unregister(unregi
         return
     reads = [runs(task, variables) for task in machine_reads(REMOVAL)]
     assert all(reads) if unregister == "guest" else not any(reads)
-    assert not any(runs(task, variables) for task in machine_reads())
+    assert [runs(task, variables) for task in machine_reads()] == [unregister == "guest" and CONTROLLER in task["when"] for task in machine_reads()]
     completion = tasks()[-1][PUBLISH]
     rendered = {key: Templar(loader=LOADER, variables=variables).template(completion[key]) for key in ("requires", "observesRemoval", "unregisters")}
     required = protocol.registration_required(rendered, rendered["requires"])

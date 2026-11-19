@@ -892,3 +892,13 @@ def test_carrier_policy_evidence_is_required_and_pending_is_never_complete():
     left = dict(observed["carrierPolicy"], present=True, owned=True, definition=False)
     assert not substrate_host_protocol.absence(removed_host(carrierPolicy=left), DIGEST)["postcondition"]
     assert "VLAN carrier policy" in substrate_host_protocol.remaining(removed_host(carrierPolicy=left))
+
+
+def test_a_power_reading_publishes_only_the_domain_and_whether_the_host_is_idle():
+    idle = {"absent": False, "answered": True, "domain": "", "hostIdle": True, "owned": False, "state": "", "uuid": ""}
+    evidence, unmet = substrate_libvirt_machine_protocol.concluded({"power_only": True, "observed": True, "observation": idle, "digest": DIGEST})
+    assert unmet is None and evidence["hostIdle"] is True and evidence["answered"] is True and not evidence["absent"]
+    busy = dict(idle, hostIdle="yes")
+    assert substrate_libvirt_machine_protocol.concluded({"power_only": True, "observed": True, "observation": busy, "digest": DIGEST})[0]["hostIdle"] is False
+    with pytest.raises(ValueError):
+        substrate_libvirt_machine_protocol.concluded({"power_only": True, "observed": True, "removed": True, "observation": idle, "digest": DIGEST})

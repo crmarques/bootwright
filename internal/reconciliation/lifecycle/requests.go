@@ -269,7 +269,7 @@ type OperationResult struct {
 	// nothing at all. It is never set on a result that performed work.
 	Recovered string
 	// NextCommand is the exact command an operator runs for an operation that
-	// is paused, failed, unknown or running, and empty for any other result.
+	// is paused, failed, unknown or running, or to review a fresh start following recovered finalization.
 	NextCommand string
 	Warnings    []diagnostics.Diagnostic
 	Receipt     Receipt
@@ -279,6 +279,7 @@ type OperationResult struct {
 // no effect: a finalization records what the block records already prove, and
 // a release returns what an interrupted registration left unowned.
 const (
+	RecoveredBeforeStart  = "finalization-before-start"
 	RecoveredFinalization = "finalization"
 	RecoveredRelease      = "release"
 )

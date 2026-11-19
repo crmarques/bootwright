@@ -18,13 +18,14 @@
 - name: Run the observe operation through the host cluster's API
   bootwright.core.substrate_kubevirt_api:
     operation: observe
+    power_only: '{{ bootwright_substrate_kubevirt_machine_material.startPower | default(false) | bool }}'
     kubeconfig: '{{ bootwright_substrate_kubevirt_machine_material.kubeconfig }}'
     scratch: '{{ bootwright_run_scratch }}'
     request: '{{ bootwright_substrate_kubevirt_machine_request }}'
-    apply_operation: '{{ bootwright_substrate_kubevirt_machine_material.operation }}'
-    block: '{{ bootwright_substrate_kubevirt_machine_material.block }}'
-    registered: '{{ bootwright_substrate_kubevirt_machine_material.registered }}'
-    pinned: '{{ bootwright_substrate_kubevirt_machine_material.pinned | from_json }}'
+    apply_operation: '{{ bootwright_substrate_kubevirt_machine_material.operation | default("") }}'
+    block: '{{ bootwright_substrate_kubevirt_machine_material.block | default("") }}'
+    registered: '{{ bootwright_substrate_kubevirt_machine_material.registered | default("") }}'
+    pinned: '{{ bootwright_substrate_kubevirt_machine_material.pinned | default("{}") | from_json }}'
     seconds: '{{ substrate_kubevirt_machine_seconds }}'
   register: substrate_kubevirt_machine_result
   failed_when: false

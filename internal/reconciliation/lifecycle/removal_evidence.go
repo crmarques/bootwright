@@ -15,7 +15,7 @@ type RemovalEvidence struct {
 	Applied BlockEvidence
 }
 
-func removalRecords(ctx context.Context, store recordReader, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block) ([]RemovalEvidence, []json.RawMessage, error) {
+func removalRecords(ctx context.Context, store recordReader, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block, carry bool) ([]RemovalEvidence, []json.RawMessage, error) {
 	if operation.Verb != reconciliation.Destroy {
 		return nil, nil, nil
 	}
@@ -35,11 +35,11 @@ func removalRecords(ctx context.Context, store recordReader, operation operation
 	if err != nil {
 		return nil, nil, err
 	}
-	replaced, err := replacedProofs(ctx, store, held, operation, plan, block.ID)
+	replaced, prior, err := replacedProofs(ctx, store, held, operation, plan, block, carry && len(preparations) == 0)
 	if err != nil {
 		return nil, nil, err
 	}
-	return append(proofs, replaced...), preparations, nil
+	return append(proofs, replaced...), append(prior, preparations...), nil
 }
 
 func removalClosure(plan reconciliation.Plan, dependencies []string) (map[string]bool, error) {
@@ -64,37 +64,44 @@ func removalClosure(plan reconciliation.Plan, dependencies []string) (map[string
 // replacedProofs lends a replacement, nearest first, the dependency removals
 // of its block that the same-source removals it replaces proved and that no
 // nearer removal carries.
-func replacedProofs(ctx context.Context, store recordReader, held lineage, operation operationstore.Operation, plan reconciliation.Plan, block string) ([]RemovalEvidence, error) {
+func replacedProofs(ctx context.Context, store recordReader, held lineage, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block, carry bool) ([]RemovalEvidence, []json.RawMessage, error) {
 	carried := map[string]bool{}
 	for _, candidate := range plan.Blocks {
 		carried[candidate.ID] = true
 	}
 	var proofs []RemovalEvidence
+	var preparations []json.RawMessage
 	seen := map[string]bool{operation.ID: true}
 	for id := operation.Replaces; id != ""; {
 		if seen[id] || len(seen) > operationstore.MaxOperations {
-			return nil, engineRecordsDamaged.Fail("the removals this operation replaces name one another in a cycle or exceed the operations a context retains", "restore the context store")
+			return nil, nil, engineRecordsDamaged.Fail("the removals this operation replaces name one another in a cycle or exceed the operations a context retains", "restore the context store")
 		}
 		seen[id] = true
 		record, err := store.ReadOperation(ctx, id)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if record.Verb != reconciliation.Destroy || record.Source != operation.Source {
-			return nil, engineRecordsDamaged.Fail("the operation this removal replaces is no removal of the same apply", "restore the context store")
+			return nil, nil, engineRecordsDamaged.Fail("the operation this removal replaces is no removal of the same apply", "restore the context store")
 		}
 		frozen, err := store.ReadPlan(ctx, id)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		if own, found := frozen.Block(block); found {
+		if own, found := frozen.Block(block.ID); found {
+			if carry && len(preparations) == 0 && own.RequestDigest == block.RequestDigest {
+				preparations, err = attemptPreparations(ctx, store, id, own.ID)
+				if err != nil {
+					return nil, nil, err
+				}
+			}
 			wanted, err := removalClosure(frozen, own.Dependencies)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			lent, err := provedRemovals(ctx, store, held, id, frozen, wanted, carried)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			proofs = append(proofs, lent...)
 		}
@@ -103,7 +110,7 @@ func replacedProofs(ctx context.Context, store recordReader, held lineage, opera
 		}
 		id = record.Replaces
 	}
-	return proofs, nil
+	return proofs, preparations, nil
 }
 
 func provedRemovals(ctx context.Context, store recordReader, held lineage, operation string, plan reconciliation.Plan, wanted, carried map[string]bool) ([]RemovalEvidence, error) {
@@ -208,8 +215,10 @@ func originalRemovalDependents(ctx context.Context, store recordReader, operatio
 	return proved, nil
 }
 
-func populateRemovalExecution(ctx context.Context, store OperationStore, operation operationstore.Operation, plan reconciliation.Plan, execution *Execution) error {
-	proved, preparations, err := removalRecords(ctx, store, operation, plan, execution.Block)
+func (s Service) populateRemovalExecution(ctx context.Context, store OperationStore, operation operationstore.Operation, plan reconciliation.Plan, execution *Execution) error {
+	capability, _ := s.capabilities.Resolve(execution.Block.Kind, execution.Block.Implementation)
+	carrier, carries := capability.(RemovalPreparationCarrier)
+	proved, preparations, err := removalRecords(ctx, store, operation, plan, execution.Block, carries && carrier.CarryRemovalPreparation())
 	if err != nil {
 		return err
 	}

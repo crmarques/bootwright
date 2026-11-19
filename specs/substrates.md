@@ -921,6 +921,13 @@ removal over them is unfinished, not unknown.
 
 ## Machine realization
 
+For lifecycle power admission, libvirt queries the active system driver's domain
+inventory and never wakes an inactive one, whose start could autostart a guest.
+An inactive driver reads the target stopped only when the host's own process
+namespace runs no QEMU, KVM or libvirt daemon process. On first apply it proves
+a bare provider when its QEMU packages and native domain directories are
+absent as well. Missing command output alone leaves the target unproved.
+
 The block `machine-<machine>` realizes one Machine's virtual hardware together
 with its own management controller, and requires its provider host block. It
 also requires the host block of each other provider on the same host whose
@@ -1614,7 +1621,7 @@ token is never evidence,
 custody, a record or a log, and every continuation, observation, probe and
 removal that reaches the host mints again, the proof's removal reaching
 nothing; the evidence (`substrate-access-kubevirt-evidence-v1`)
-names the server, the per-lend Secret and the granted lifetime. A host the
+names the server, the per-lend Secret and the granted lifetime. The [initial power check](state-reconciliation.md#power-before-a-new-apply-or-destroy) must leave the host unchanged. A hosted Machine requiring this lend therefore refuses new lifecycle work before registration. A host the
 lend cannot reach leaves
 the block unknown, never absent, as every unanswered host does.
 

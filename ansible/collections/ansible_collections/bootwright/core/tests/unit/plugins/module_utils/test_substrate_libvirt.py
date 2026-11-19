@@ -17,8 +17,10 @@ from ansible_collections.bootwright.core.plugins.module_utils.substrate_libvirt 
     listening,
     network_guests,
     network_state,
+    no_hypervisor_process,
     observe_host,
     observe_machine,
+    observe_machine_power,
     packages_present,
     pool_state,
     unit_enabled,
@@ -673,6 +675,69 @@ def test_a_machine_observation_reports_whether_the_hypervisor_answered():
     })
     observation = observe_machine(defined, machine_request(), reader())
     assert (observation["answered"], observation["domain"], observation["state"]) == (True, "bootwright-lab-rhel-01", "running")
+
+
+def test_admission_reads_only_the_named_domain_and_the_proved_uuid():
+    calls = []
+    answers = {"virtqemud.service": (0, "LoadState=loaded\nActiveState=active\n", ""),
+               "dumpxml bootwright-lab-rhel-01": (0, OWNED_DOMAIN, ""), "domstate " + DOMAIN_UUID: (0, "shut off", "")}
+
+    def run(argv, **options):
+        calls.append(argv)
+        return runner_for(answers)(argv, **options)
+
+    answer = observe_machine_power(run, machine_request())
+    assert answer["answered"] and answer["owned"] and answer["state"] == "shut off"
+    assert len(calls) == 3 and calls[2][-2:] == ["domstate", DOMAIN_UUID]
+
+
+def test_admission_on_an_inactive_host_never_wakes_the_hypervisor(monkeypatch):
+    from ansible_collections.bootwright.core.plugins.module_utils import substrate_libvirt
+
+    calls = []
+    clean = {"storage": True, "processes": True, "rpm": True}
+    monkeypatch.setattr(substrate_libvirt, "unused_domain_storage", lambda: clean["storage"])
+    monkeypatch.setattr(substrate_libvirt, "no_hypervisor_process", lambda: clean["processes"])
+
+    def run(argv, **unused_options):
+        calls.append(argv)
+        if argv[0] == substrate_libvirt.SYSTEMCTL:
+            return 0, "LoadState=not-found\nActiveState=inactive\n", ""
+        assert argv[0] == substrate_libvirt.RPM
+        return 2, "rpm\npackage libvirt-daemon-driver-qemu is not installed\npackage qemu-kvm-core is not installed\n" if clean["rpm"] else "", ""
+
+    idle = observe_machine_power(run, machine_request())
+    assert idle["answered"] and idle["hostIdle"] and not idle["absent"]
+    assert observe_machine_power(run, machine_request(), bootstrap=True)["absent"]
+    for key in clean:
+        clean[key] = False
+        answer = observe_machine_power(run, machine_request(), bootstrap=True)
+        assert not answer["absent"] and answer["answered"] is answer["hostIdle"] is clean["processes"]
+        clean[key] = True
+    clean["processes"] = False
+    assert not observe_machine_power(run, machine_request())["answered"]
+    assert all(argv[0] in (substrate_libvirt.SYSTEMCTL, substrate_libvirt.RPM) for argv in calls)
+
+
+def test_cold_host_proof_refuses_a_hidden_or_unlinked_running_hypervisor(tmp_path, monkeypatch):
+    from ansible_collections.bootwright.core.plugins.module_utils import substrate_libvirt
+
+    monkeypatch.setattr(substrate_libvirt.os, "geteuid", lambda: 0)
+    for name in ("1", "self"):
+        root = tmp_path / name
+        (root / "ns").mkdir(parents=True)
+        (root / "ns" / "pid").symlink_to("pid:[42]")
+    (tmp_path / "1" / "exe").symlink_to("/usr/lib/systemd/systemd")
+    assert no_hypervisor_process(str(tmp_path))
+    process = tmp_path / "2"
+    process.mkdir()
+    (process / "exe").symlink_to("/usr/libexec/qemu-kvm (deleted)")
+    assert not no_hypervisor_process(str(tmp_path))
+    (process / "exe").unlink()
+    (process / "stat").write_text("2 (unknown) R 0 0 0 0 0 0")
+    assert not no_hypervisor_process(str(tmp_path))
+    (process / "stat").write_text("2 (kthreadd) S 0 0 0 0 0 2097152")
+    assert no_hypervisor_process(str(tmp_path))
 
 
 # The observation decides ownership from the request's own context, Machine and

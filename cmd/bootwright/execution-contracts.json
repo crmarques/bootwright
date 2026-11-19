@@ -45,7 +45,7 @@
   },
   "machine-libvirt-v1": {
     "contentDigest": "27d017d249d6121f4e3dab49d246824d3c5a534fa867a2a923ce49ca5748381f",
-    "fingerprint": "06f7cd0c33899ed31b1bc415518a2f4ebdaaae5262083520ad4d736cb973f4f6"
+    "fingerprint": "2e9c2a626380008ea1e0c474c7d09cb10954acca80c11c3d52757ea2e5019da0"
   },
   "mirror-files-v1": {
     "contentDigest": "ce33d640a520fceeb13e5f0fb6a694a7ad2778a1317c8d888d386d3e7569ed3f",
@@ -68,12 +68,12 @@
     "fingerprint": "c623a7b6d4e51e0fd1f6347e44dd249f969ad7e1d6805a0956646c1a53d03a1e"
   },
   "os-host-firewall-v1": {
-    "contentDigest": "ef74fbe8098b01389b0dcef264da682b89702c0bc590db7d5a40412626a3c9cd",
-    "fingerprint": "c772f9d0c7030f5f8a98e059a0c7f38e17226fcc1394030955ba29cff88b8cf5"
+    "contentDigest": "e2caf6dca8f1803cfb52b4c0acecdfaca45a5a691558021fdce62facb88c310d",
+    "fingerprint": "31953cc71bafc791b01a244fbe241b8843786261d2fd526d38aba574aab24f54"
   },
   "os-install-anaconda-v1": {
-    "contentDigest": "57afe6119999fc952aceb4c58e0ba2ddd04609a38181c06571cf97fa9ed0c633",
-    "fingerprint": "367a53617a7d8782d5cd6553611fa2c1132d3913386f193e86bd2a7b03e77c15"
+    "contentDigest": "aa6502872414cbb6385203565bca0b74aca545f8aa1b6b88053e5fd2fe6e610b",
+    "fingerprint": "9044a762ea0fa1b499cb334e9f3ebddb5c6fb73e00ba6b26cbb88974796e7ab5"
   },
   "os-package-tree-v1": {
     "contentDigest": "62218223d7cca3604594c231a1265d351e6c12e0e9d6d8b31f2f51086a839445",

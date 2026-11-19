@@ -93,3 +93,8 @@ func MachineBoundsFor(arm Arm) (MachineBounds, bool) {
 	}
 	return bounds, true
 }
+
+func PhysicalController(arm Arm) bool {
+	bounds, found := MachineBoundsFor(arm)
+	return found && bounds.ControllerKind == "physical"
+}

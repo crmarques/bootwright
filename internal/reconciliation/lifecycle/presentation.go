@@ -37,6 +37,16 @@ func (s Service) presentation(decided operationPlan) PlanResult {
 	if decided.fresh && decided.verb == reconciliation.Destroy {
 		result.Stops = s.stopsFirst(decided.plan, decided.phases)
 	}
+	if s.startsFlow(decided) {
+		bindings := s.capabilities.Bindings()
+		for _, block := range decided.removed().Blocks {
+			if managedPowerTarget(bindings, block) {
+				result.Stops = append(result.Stops, block.Object)
+			}
+		}
+		slices.Sort(result.Stops)
+		result.Stops = slices.Compact(result.Stops)
+	}
 	if decided.verb == reconciliation.Destroy {
 		result.StopsAfterOnline = stopsAfterOnline(decided.plan, decided.phases, decided.states)
 	}

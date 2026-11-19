@@ -29,6 +29,13 @@ func TestTheRoleReportsEveryGroupThePlanDeclares(t *testing.T) {
 			declared = append(declared, group.ID)
 		}
 		running, settled := reportedGroups(t, roleTasks+file)
+		if verb == reconciliation.Destroy {
+			const power = "collections/ansible_collections/bootwright/core/roles/machine_power/tasks/"
+			start, started := reportedGroups(t, power+"start.yml")
+			stop, stopped := reportedGroups(t, power+"stop.yml")
+			running = append(append(start, running...), stop...)
+			settled = append(append(started, settled...), stopped...)
+		}
 		if !slices.Equal(running, declared) {
 			t.Errorf("%s reports groups running in the order %q, and the plan declares %q", file, running, declared)
 		}
@@ -53,7 +60,11 @@ func reportedGroups(t *testing.T, path string) (running, settled []string) {
 	var walk func([]map[string]any)
 	walk = func(listed []map[string]any) {
 		for _, task := range listed {
-			if report, ok := task["bootwright.core.managedos_install_protocol"].(map[string]any); ok && report["phase"] == "group" {
+			report, ok := task["bootwright.core.managedos_install_protocol"].(map[string]any)
+			if !ok {
+				report, _ = task["bootwright.core.machine_power_protocol"].(map[string]any)
+			}
+			if report["phase"] == "group" {
 				group, _ := report["group"].(string)
 				switch report["status"] {
 				case "running":

@@ -848,3 +848,48 @@ func TestHostQuiescenceIsDerivedFromItsMachines(t *testing.T) {
 		t.Fatalf("a derived quiescence ran %d adapter invocations", len(runner.requests))
 	}
 }
+
+func TestStartPowerRequiresAPositiveDomainInventoryOrAnIdentifiedStoppedDomain(t *testing.T) {
+	requests, err := MachineRequests(labCatalog(), "controller", testContext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := requests[0]
+	canonical, err := request.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	probe := lifecycle.Probe{Context: "lab", Block: reconciliation.Block{
+		BlockDefinition: reconciliation.BlockDefinition{ID: "machine-node", Request: canonical}, RequestDigest: "digest",
+	}}
+	off := MachineEvidence{Request: "digest", Answered: true, Domain: request.Domain, Owned: true, System: request.UUID, State: domainOff}
+	for _, tc := range []struct {
+		name   string
+		change func(*MachineEvidence)
+		state  string
+	}{
+		{"off", func(e *MachineEvidence) {}, lifecycle.Quiescent},
+		{"running", func(e *MachineEvidence) { e.State = "running" }, lifecycle.Live},
+		{"foreign", func(e *MachineEvidence) { e.Owned = false }, lifecycle.Unproved},
+		{"unanswered", func(e *MachineEvidence) { e.Answered = false; e.Power = "Off" }, lifecycle.Unproved},
+		{"absent", func(e *MachineEvidence) { *e = MachineEvidence{Request: "digest", Answered: true, Absent: true} }, lifecycle.Quiescent},
+		{"unreported", func(e *MachineEvidence) { *e = MachineEvidence{Request: "digest", Answered: true} }, lifecycle.Unproved},
+		{"idle host", func(e *MachineEvidence) { *e = MachineEvidence{Request: "digest", Answered: true, HostIdle: true} }, lifecycle.Quiescent},
+		{"idle host unanswered", func(e *MachineEvidence) { *e = MachineEvidence{Request: "digest", HostIdle: true} }, lifecycle.Unproved},
+		{"idle host naming a domain", func(e *MachineEvidence) { e.HostIdle = true }, lifecycle.Unproved},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			evidence := off
+			tc.change(&evidence)
+			runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(t, evidence)}}
+			state, err := NewMachine(runner).StartPower(context.Background(), probe)
+			if err != nil || state.State != tc.state || len(runner.requests) != 1 {
+				t.Fatalf("start power = %+v, %v", state, err)
+			}
+			run := runner.requests[0]
+			if !run.ReadOnly || !run.Unrecorded || run.MaterialValues["startPower"] != "true" || len(run.Materials) != len(lifecycle.Materials(request.Placement)) {
+				t.Fatal("admission opened more than read-only access to the hypervisor")
+			}
+		})
+	}
+}

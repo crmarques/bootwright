@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
 // The substrate arms an InfraProvider may declare. The arm is authored intent
@@ -21,7 +22,7 @@ const (
 	ArmKubeVirt  Arm = "kubevirt"
 )
 
-const MachineFamily = "substrate-machine"
+const MachineFamily = reconciliation.ManagedMachineFamily
 
 // Arms lists every arm an InfraProvider may declare, in the order admission
 // reads them. Declaring more than one selects none.

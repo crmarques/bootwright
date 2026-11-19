@@ -14,6 +14,8 @@
 
 - name: Observe the machine without changing any of it
   bootwright.core.libvirt_domain_inspect:
+    bootstrap: '{{ bootwright_substrate_machine_material.bootstrap | default(false) | bool }}'
+    power_only: '{{ bootwright_substrate_machine_material.startPower | default(false) | bool }}'
     request: '{{ bootwright_substrate_machine_request }}'
   register: substrate_libvirt_machine_observed
 
@@ -25,6 +27,7 @@
     verify: true
     ca_data: '{{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerCertificate, rstrip=false) }}'
     media: false
+  when: not (bootwright_substrate_machine_material.startPower | default(false) | bool)
   register: substrate_libvirt_machine_controller
   failed_when: false
   no_log: true
@@ -33,6 +36,7 @@
   bootwright.core.substrate_libvirt_machine_protocol:
     phase: completed
     observed: true
+    power_only: '{{ bootwright_substrate_machine_material.startPower | default(false) | bool }}'
     outcome: unchanged
     digest: '{{ bootwright_substrate_machine_digest }}'
     observation: '{{ substrate_libvirt_machine_observed.observation }}'

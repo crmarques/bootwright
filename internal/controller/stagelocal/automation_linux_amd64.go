@@ -38,6 +38,15 @@ type AutomationStager struct {
 
 var _ prerequisites.AutomationStager = (*AutomationStager)(nil)
 
+func (a *AutomationStager) StageForAdmission(ctx context.Context, job string) (prerequisites.StagedAutomation, error) {
+	if a == nil || !path.IsAbs(job) {
+		return prerequisites.StagedAutomation{}, stagingRefused()
+	}
+	temporary := NewAutomationStager(path.Join(job, "automation"))
+	temporary.source = a.source
+	return temporary.Stage(ctx)
+}
+
 func NewAutomationStager(parent string) *AutomationStager {
 	return &AutomationStager{staging: NewStaging(parent)}
 }

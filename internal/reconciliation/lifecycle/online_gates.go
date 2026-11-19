@@ -39,6 +39,7 @@ func (c *scheduler) proveOnlineBoundary(ctx context.Context, block reconciliatio
 			skip[candidate.ID] = true
 		}
 	}
+	c.deferMachineGroup(skip)
 	held, err := appliedLineage(ctx, c.store, c.operation)
 	if err == nil {
 		err = c.service.proveQuiescent(ctx, c.store, c.tx.Identity().Name, c.approved, c.plan, c.phases, c.material, held, skip)
@@ -71,6 +72,7 @@ func (c *scheduler) provePreStopBoundary(ctx context.Context, block reconciliati
 	if len(c.running) != 0 {
 		return false
 	}
+	c.deferMachineGroup(skip)
 	held, err := appliedLineage(ctx, c.store, c.operation)
 	if err == nil {
 		err = c.service.proveQuiescent(ctx, c.store, c.tx.Identity().Name, c.approved, c.plan, c.phases, c.material, held, skip)

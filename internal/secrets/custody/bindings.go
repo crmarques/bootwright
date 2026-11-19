@@ -43,26 +43,55 @@ func (s Service) Rebind(ctx context.Context, request RebindRequest) (secretstore
 	}
 	var result secretstore.Binding
 	err = s.access.Mutate(ctx, selected, func(session secretstore.StoreSession, _ secretstore.Selection) error {
-		rebinder, ok := session.(secretstore.Rebinder)
-		if !ok {
-			return secretstore.Failure("store.implementation", "the secret store cannot rebind a binding")
-		}
-		selection, err := s.readCurrent(ctx, session, selected.Name, requested)
-		if err != nil {
-			return err
-		}
-		defer clearCurrent(selection)
-		inputs := make([]secretstore.BoundInput, 0, len(selection))
-		for _, item := range selection {
-			inputs = append(inputs, secretstore.BoundInput{Declaration: item.declaration, Version: item.version.ID, Material: item.material})
-		}
-		result, err = rebinder.Rebind(ctx, request.BindingID, inputs)
+		result, err = s.rebindSelected(ctx, session, selected.Name, request.BindingID, requested)
 		return err
 	})
 	if err != nil {
 		return secretstore.Binding{}, err
 	}
 	return result, nil
+}
+
+type ScopedRebind func(context.Context, secretstore.Context, secretstore.Area) (secretstore.Binding, error)
+
+// PrepareRebind resolves declarations before the admitted lifecycle transaction lends its keyring.
+func (s Service) PrepareRebind(ctx context.Context, request RebindRequest) (ScopedRebind, error) {
+	expected, requested, err := s.requested(ctx, request.ContextName, request.Names)
+	if err != nil {
+		return nil, err
+	}
+	return func(ctx context.Context, selected secretstore.Context, area secretstore.Area) (secretstore.Binding, error) {
+		if selected != expected {
+			return secretstore.Binding{}, secretstore.Failure("store.conflict", "the context changed before the credential rebind")
+		}
+		var result secretstore.Binding
+		err := s.access.MutateArea(ctx, selected, area, func(session secretstore.StoreSession, _ secretstore.Selection) error {
+			var err error
+			result, err = s.rebindSelected(ctx, session, selected.Name, request.BindingID, requested)
+			return err
+		})
+		if err != nil {
+			return secretstore.Binding{}, err
+		}
+		return result, nil
+	}, nil
+}
+
+func (s Service) rebindSelected(ctx context.Context, session secretstore.StoreSession, name, binding string, requested []secrets.Declaration) (secretstore.Binding, error) {
+	rebinder, ok := session.(secretstore.Rebinder)
+	if !ok {
+		return secretstore.Binding{}, secretstore.Failure("store.implementation", "the secret store cannot rebind a binding")
+	}
+	selection, err := s.readCurrent(ctx, session, name, requested)
+	if err != nil {
+		return secretstore.Binding{}, err
+	}
+	defer clearCurrent(selection)
+	inputs := make([]secretstore.BoundInput, 0, len(selection))
+	for _, item := range selection {
+		inputs = append(inputs, secretstore.BoundInput{Declaration: item.declaration, Version: item.version.ID, Material: item.material})
+	}
+	return rebinder.Rebind(ctx, binding, inputs)
 }
 
 // requested resolves what one bind or bounded read names: a ready context and

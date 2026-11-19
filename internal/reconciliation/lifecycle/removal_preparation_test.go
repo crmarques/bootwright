@@ -230,7 +230,7 @@ func TestAReplacementLendsWhatEachRemovalItReplacesProvedNearestFirst(t *testing
 		{"cycle", cycle, "name one another in a cycle"},
 	} {
 		store := &sourceStore{recordReader: records, operations: map[string]operationstore.Operation{chain[0].ID: test.record}}
-		_, _, err := removalRecords(ctx, store, replacement, plan, alpha)
+		_, _, err := removalRecords(ctx, store, replacement, plan, alpha, false)
 		t.Run(test.name, func(t *testing.T) { requireStateRefusal(t, err, test.message) })
 	}
 }

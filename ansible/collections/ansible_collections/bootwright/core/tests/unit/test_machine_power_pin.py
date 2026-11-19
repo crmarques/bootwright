@@ -148,7 +148,7 @@ def test_the_identity_is_read_and_compared_before_any_power_request():
     assert "machine_power_access" in arguments and "'inspect': true" in arguments
     retained = loaded[read + 1]
     assert IDENTITY in retained["ansible.builtin.set_fact"] and retained["no_log"] is True
-    assert retained["when"] == loaded[read]["when"] == "machine_power_physical | bool"
+    assert retained["when"] == loaded[read]["when"] == "machine_power_prove_system | bool"
     assert loaded[compared][ASSERT]["quiet"] is True
     assert "no_log" not in loaded[compared]
     # The read tolerates its own failure only so that the controller's message
@@ -391,3 +391,20 @@ def test_a_port_pinned_machine_leaves_the_comparison_to_its_port(tmp_path):
     variables = scope(tmp_path, None, UUID, SERIAL, physical=False)
     assert gated(variables) is False and names_the_refusal(variables) is False
     assert Templar(loader=LOADER, variables=variables).template(variables["machine_power_access"])["pinned_serial_base64"] == encoded(SERIAL)
+
+
+@pytest.mark.parametrize(("power", "media", "safe"), [
+    ("Off", "none", True),
+    ("Off", "unknown", False),
+    ("Off", "foreign", False),
+    ("PoweringOn", "none", False),
+    ("On", "foreign", True),
+])
+def test_a_lifecycle_start_checks_stable_power_and_the_cold_boot_media(tmp_path, power, media, safe):
+    variables = scope(tmp_path, lifecyclePower="true")
+    variables["bootwright_machine_power_request"]["verb"] = "start"
+    variables["machine_power_before"] = {"power": power, "media_state": media}
+    guard = indexed(lambda task: task.get("name") == "Prove a lifecycle power request can safely use the installed guest", "prove boot media")
+    start = indexed(lambda task: task.get("ansible.builtin.include_tasks") == "start.yml", "start the machine")
+    assert guard < start
+    assert holds(variables, tasks()[guard]) is safe

@@ -88,6 +88,50 @@ func expectRefusal(t *testing.T, err error, message string) {
 	}
 }
 
+func TestAdmissionPreservesAbandonedPublicationsUntilAccepted(t *testing.T) {
+	t.Parallel()
+	store, _ := lifecycleFixture(t)
+	root := store.options.Root
+	paths := []string{
+		filepath.Join(root, plantedStageName(1, ".json")),
+		filepath.Join(contextStatePath(store), plantedStageName(2, ".json")),
+	}
+	for _, path := range paths {
+		plantStage(t, path, []byte("interrupted"))
+	}
+	ctx := context.Background()
+	live := state("machine is running")
+	for range 2 {
+		called := false
+		err := store.AdmitLifecycle(ctx, checkpointContext, func(view lifecycle.View) error {
+			if err := view.Operations().WriteExclusive(ctx, "probe.json", []byte("{}\n")); err == nil {
+				t.Fatal("admission permitted an operation write")
+			}
+			return live
+		}, func(lifecycle.Transaction) error { called = true; return nil })
+		expectRefusal(t, err, "machine is running")
+		if called {
+			t.Fatalf("refused admission ran mutation=%v, error=%v", called, err)
+		}
+		for _, path := range paths {
+			if data, err := os.ReadFile(path); err != nil || string(data) != "interrupted" {
+				t.Fatalf("admission changed %s: %q (%v)", path, data, err)
+			}
+		}
+	}
+	err := store.AdmitLifecycle(ctx, checkpointContext, func(lifecycle.View) error { return nil }, func(lifecycle.Transaction) error {
+		for _, path := range paths {
+			if _, err := os.Stat(path); !errors.Is(err, fs.ErrNotExist) {
+				t.Fatalf("accepted admission left %s (%v)", path, err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 // A kill leaves complete and torn stages in the state directory and in the
 // operation and trust areas; the next command that takes the lease
 // removes every one before it verifies the layout.

@@ -2406,6 +2406,34 @@ block per native name, under the cluster's
 [claims](ceph.md#claims-and-throttle); a writer outside Bootwright on a managed
 cluster is outside the guarantee, and adoption never authorizes a removal.
 
+### Power before a new apply or destroy
+
+The operator stops every managed target Machine before starting either flow.
+Under the exclusive context lease, the Machine implementation must identify
+the target and observe it off, or prove the virtual Machine absent at its
+provider. A physical Machine must answer even before its first installation.
+Provided infrastructure and the controller stay available. A failed or
+ambiguous reading refuses the complete flow before any registration,
+credential issue, recovery write or cleanup. It leaves existing records,
+logs, staged files and subscriptions intact. Repeating the command checks
+again. Authorization and `--unregistered` leave this condition in force.
+
+A staged or additive apply checks its managed fleet. A destroy derives its
+targets from the frozen work it takes back. Destroy over an incomplete apply
+starts a new flow. Continuing the same registered flow, including replacing
+a failed destroy over its remaining work, proceeds from the durable records
+at either power state. If interrupted bookkeeping must finish before a different
+new operation can start, the command checks the targets, finishes that bookkeeping
+and names the next command. That command makes its own entry proof. A settled verb needs no reading. Automatic preparation
+and its immediately following installation share the entry check.
+
+After admission a registered attempt may start an identified Machine to reach
+a guest or cluster that its work needs. Cleanup revalidates identity, records
+its release before shutting down the Machine, and proves the required power
+state before destructive work continues. An interruption after release can
+therefore repeat shutdown without registering or unregistering the consumer
+again. A power reading supplies neither ownership nor authority to erase.
+
 ### Quiescence before removal
 
 The engine supports the online ordering below. Candidate Ceph capabilities
@@ -2443,9 +2471,10 @@ remain reachable. Only Machine blocks whose inverse dependency closure contains
 such an effect defer the initial stop proof. The plan lists them under
 `Stop after online cleanup`; unrelated Machines retain `Stop first`. The
 engine durably completes every required online effect before probing all
-remaining deferred Machines. A live or unproved target pauses the registered
-removal before any deferred Machine inverse. After the operator stops those
-Machines, repeating destroy continues the same removal. It never repeats an
+remaining deferred Machines. A deferred Machine still running is stopped
+gracefully through its identified power path and proved stopped; an unproved
+target blocks every deferred Machine inverse, and repeating destroy continues
+the registered removal once the stop can be proved. It never repeats an
 online effect already durably completed. Unknown or failed online cleanup
 cannot admit Machine or substrate deletion.
 
@@ -2495,9 +2524,7 @@ through the active operation store, without reopening the workspace lock. Contex
 Ceph incarnation or substitute a currently observed host key. Missing original
 evidence refuses before dependent effects.
 
-Stopping is never a side effect of removal. The operator uses
-[Machine power commands](cli/commands.md#command-and-flag-catalog) or their own
-means. `data-loss` acknowledges destruction; quiescence independently proves
+The operator supplies the initial stop under the [power entry rule](#power-before-a-new-apply-or-destroy). A registered cleanup may subsequently start its Machine and stop it gracefully before removal continues. `data-loss` acknowledges destruction; quiescence independently proves
 nothing is using the data. A native daemon list alone proves neither consumer
 quiescence nor the removal of OSD data, credentials and SSH authorization.
 The [storage contract](ceph.md) owns those additional proofs.

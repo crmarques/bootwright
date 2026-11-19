@@ -35,6 +35,8 @@ def block(operation, client, arguments, clock=time.time, sleep=time.sleep):
     host = arm.Host(client, request["namespace"], clock() + int(arguments.get("seconds", 600)), clock, sleep)
     if operation == "proof":
         return False, arm.proof(client, request, clock, sleep)
+    if operation == "observe" and arguments.get("power_only"):
+        return False, arm.observe_power(host, request)
     context = {"operation": arguments["apply_operation"], "block": arguments["block"], "registered": arguments["registered"],
                "pinned": arguments["pinned"]}
     if operation == "observe":

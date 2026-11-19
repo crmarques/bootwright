@@ -252,6 +252,7 @@ func impacts(verb reconciliation.Verb, request Request) []string {
 		action := "register-subscription "
 		if verb == reconciliation.Destroy {
 			action = "unregister-subscription "
+			impacts = append(impacts, "power-on "+request.Identity.Object, "power-off "+request.Identity.Object)
 		}
 		impacts = append(impacts, action+request.Identity.Object)
 	}
@@ -286,7 +287,11 @@ func groups(verb reconciliation.Verb, request Request) []reconciliation.Group {
 			{"verify-absence", "verify every published file is gone"},
 		}
 		if request.Registration != nil {
-			steps = append([][2]string{{"unregister-subscription", "remove the subscription consumer this installation registered the machine with"}}, steps...)
+			steps = append([][2]string{
+				{"power-on", "start the installed guest if its subscription needs removal"},
+				{"unregister-subscription", "remove the subscription consumer this installation registered the machine with"},
+			}, steps...)
+			steps = append(steps, [2]string{"power-off", "shut down the guest after its subscription cleanup"})
 		}
 	}
 	return lifecycle.StepGroups(steps, machines)
@@ -319,7 +324,7 @@ func (c Capability) Apply(ctx context.Context, execution lifecycle.Execution) (l
 }
 
 func (c Capability) Destroy(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
-	return c.mutate(ctx, execution, "destroy")
+	return c.removeInstallation(ctx, execution)
 }
 
 func (c Capability) mutate(ctx context.Context, execution lifecycle.Execution, operation string) (lifecycle.Result, error) {
@@ -460,6 +465,22 @@ func (c Capability) observe(ctx context.Context, execution lifecycle.Execution, 
 	}
 	observes := ""
 	if verb == reconciliation.Destroy {
+		receipt, err := releasedReceipt(execution, request)
+		if err != nil {
+			return unknown, err
+		}
+		if receipt != nil {
+			if execution.MachineStopped != nil {
+				stopped, err := execution.MachineStopped(ctx, request.Identity.Object)
+				if err != nil {
+					return unknown, err
+				}
+				if stopped {
+					return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: receipt}, nil
+				}
+			}
+			return lifecycle.Observation{Effect: reconciliation.EffectPartial, Evidence: receipt}, nil
+		}
 		observes = observesRemoval
 	}
 	unregister, err := unregisters(execution, request, marker)
@@ -471,6 +492,18 @@ func (c Capability) observe(ctx context.Context, execution lifecycle.Execution, 
 		return unknown, err
 	}
 	effect, _ := decidedEffect(verb, result.Evidence, request, execution.Block.RequestDigest, string(marker), unregister)
+	if verb == reconciliation.Destroy && unregister && effect == reconciliation.EffectInconclusive {
+		if observed, err := decodeEvidence(result.Evidence, execution.Block.RequestDigest); err == nil && (observed.Power == "Off" || observed.Power == "On") {
+			// The owning registration still needs an online check. Only a
+			// subsequent attempt can ensure the pinned guest is on and wait for it.
+			effect = reconciliation.EffectPartial
+		}
+	}
+	if verb == reconciliation.Destroy && unregister && effect == reconciliation.EffectCompleted {
+		// The guest may have been released just before a crash prevented
+		// publication of its cleanup receipt. Shutdown is still owed.
+		effect = reconciliation.EffectPartial
+	}
 	if verb == reconciliation.Apply && effect == reconciliation.EffectNoEffect {
 		proved, err := registeredBefore(execution.Context, request.Identity.Object, execution.ApplyPreparations, marker)
 		if err != nil {

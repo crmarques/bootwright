@@ -104,15 +104,22 @@ func (r sharedResolver) Bindings() []CapabilityBinding {
 
 func (r sharedResolver) Resolve(kind, implementation string) (Capability, bool) {
 	position := slices.IndexFunc(r.bound, func(bound BoundCapability) bool {
-		return bound.Binding == CapabilityBinding{Kind: kind, Implementation: implementation}
+		return bound.Binding.Kind == kind && bound.Binding.Implementation == implementation
 	})
-	switch {
-	case position < 0:
+	if position < 0 {
 		return nil, false
-	case position == 0:
-		return plannedCapability{Capability: r.bound[0].Capability, plan: r.plan, peers: r.bound}, true
 	}
-	return plannedCapability{Capability: r.bound[position].Capability, plan: CapabilityPlan{Definitions: []reconciliation.BlockDefinition{}}}, true
+	p := plannedCapability{Capability: r.bound[position].Capability, plan: CapabilityPlan{Definitions: []reconciliation.BlockDefinition{}}}
+	if position == 0 {
+		p.plan, p.peers = r.plan, r.bound
+	}
+	if reader, ok := p.Capability.(MachineStartPower); ok {
+		return struct {
+			plannedCapability
+			MachineStartPower
+		}{p, reader}, true
+	}
+	return p, true
 }
 
 // Replan makes the next invocation another build that plans these definitions.
@@ -298,3 +305,12 @@ func (p plannedCapability) StageTail(block reconciliation.BlockDefinition) (reco
 }
 
 func (p plannedCapability) RetiresOffline() bool { return retiresOffline(p.Capability) }
+
+func (j *CapabilityJourney) WithMachineDriver(drive func(context.Context, Execution, BlockEvidence, bool) error) {
+	j.Service.options.DriveMachine = drive
+}
+
+func (p plannedCapability) CarryRemovalPreparation() bool {
+	carry, ok := p.Capability.(RemovalPreparationCarrier)
+	return ok && carry.CarryRemovalPreparation()
+}

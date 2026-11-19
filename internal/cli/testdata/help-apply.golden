@@ -1,5 +1,7 @@
   bootwright / apply
-      Realize the complete selected Environment, or continue the exact operation an
+      Before starting a new apply, stop every managed Machine that already exists. Bootwright
+      checks their power before changing state. An unfinished apply continues from its recorded
+      work. Realize the complete selected Environment, or continue the exact operation an
       interruption left behind. Missing disk inventory is prepared automatically before
       installation is planned; the resolved installation needs separate data-loss
       authorization. Each phase has a complete plan; --stage only gates which blocks this

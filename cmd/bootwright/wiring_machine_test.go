@@ -335,3 +335,47 @@ func TestAHostedPowerLendBorrowsOnlyTheHostsProvedKubeconfig(t *testing.T) {
 		t.Fatal("a power lend borrowed another cluster's kubeconfig")
 	}
 }
+
+func TestRegisteredMachineRequestBindsTheFrozenPlacementCredentialAndPin(t *testing.T) {
+	for _, tc := range []struct {
+		arm, implementation, name, request, evidence, digest, ca string
+	}{
+		{"baremetal", baremetal.Implementation, "server", "request-claim-bundle.golden", "evidence-proved.golden",
+			"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "server-bmc-ca"},
+		{"libvirt", libvirt.MachineImplementation, "rhel-01", "request-machine-ssd.golden", "evidence-machine-ssd.golden",
+			"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "lab-bmc-tls"},
+	} {
+		t.Run(tc.arm, func(t *testing.T) {
+			read := func(name string) []byte {
+				t.Helper()
+				data, err := os.ReadFile(filepath.Join("..", "..", "internal", "substrate", tc.arm, "testdata", name))
+				if err != nil {
+					t.Fatal(err)
+				}
+				var compact bytes.Buffer
+				if err := json.Compact(&compact, data); err != nil {
+					t.Fatal(err)
+				}
+				return compact.Bytes()
+			}
+			proof := lifecycle.BlockEvidence{Operation: "op-1", Kind: "Machine", Object: tc.name, Implementation: tc.implementation,
+				Verb: reconciliation.Apply, State: reconciliation.BlockDone, Evidence: read(tc.evidence),
+				Block: reconciliation.Block{RequestDigest: tc.digest, BlockDefinition: reconciliation.BlockDefinition{
+					ID: "machine-" + tc.name, Kind: "Machine", Object: tc.name, Implementation: tc.implementation, Request: read(tc.request),
+				}}}
+			got, pin, err := registeredMachineRequest(proof, power.Stop)
+			if err != nil || got.Force || got.Placement.Machine == "" || pin.UUID == "" || got.Identity.Object != tc.name ||
+				got.Controller.TrustBundleRef != tc.ca || !got.Controller.TLSVerify || got.Controller.Endpoint != got.MachinePort.Endpoint {
+				t.Fatalf("registered request = %+v, pin = %+v, %v", got, pin, err)
+			}
+			proof.State = reconciliation.BlockPending
+			if _, _, err := registeredMachineRequest(proof, power.Start); err == nil {
+				t.Fatal("pending machine supplied a power request")
+			}
+			proof.State, proof.Block.RequestDigest = reconciliation.BlockDone, "different"
+			if _, _, err := registeredMachineRequest(proof, power.Start); err == nil {
+				t.Fatal("evidence from a different request supplied a power request")
+			}
+		})
+	}
+}

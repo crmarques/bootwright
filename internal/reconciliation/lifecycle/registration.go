@@ -109,20 +109,12 @@ func (s Service) settle(ctx context.Context, tx Transaction, verb reconciliation
 	return tx.PublishEvidence(ctx, data)
 }
 
-// protect is a fresh apply's first transaction. Once the state and input it
-// was planned from are re-proved, it claims the operation's directory and then
-// raises the running evidence, before the apply binds a Secret, claims the
-// controller host or reserves anything, so none of those is ever held under
-// evidence that lets the context be updated or deleted. The claim comes first
-// so that no raise, even one interrupted before it returns, ever lands without
-// adding a directory an older apply still in flight re-proves. A claim
-// that fails may have created its directory, and that directory makes every
-// older apply refuse, so the evidence is then this invocation's to give back
-// unless a listing proves the directory absent. The transition it returns
-// requires that evidence and that claim when it registers.
+// protect re-proves and claims a fresh apply before raising its evidence. An
+// interrupted claim may already exclude older applies; its listing determines
+// who must restore the evidence if registration fails.
 func (s Service) protect(ctx context.Context, name string, decided operationPlan, record *registering) (operationPlan, error) {
 	protected := decided
-	err := s.workspace.MutateLifecycle(ctx, name, func(tx Transaction) error {
+	err := s.mutateAdmitted(ctx, name, s.startCheck, func(tx Transaction) error {
 		store := s.store(tx)
 		if _, err := s.verifyFreshApply(ctx, tx, store, decided); err != nil {
 			return err

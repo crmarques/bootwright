@@ -255,6 +255,13 @@ type QuiescenceProber interface {
 	ProbesQuiescence() bool
 }
 
+// MachineStartPower observes an exact substrate target without changing the machine,
+// its provider or the workspace. Only positive off or native absence admits it.
+type MachineStartPower interface {
+	StartPowerSecrets(reconciliation.Block) ([]string, error)
+	StartPower(context.Context, Probe) (Quiescence, error)
+}
+
 // OnlineRemoval defers quiescence only for Machines following its effects in
 // the removal graph. Every online effect must be proved removed before their
 // inverses; the operator, never destroy, stops Machines that remain live.
@@ -267,6 +274,11 @@ type OnlineRemoval interface {
 // Machine's guest and published content and that no other block's inverse or retirement reads.
 type PreStopRemoval interface {
 	RequiresPreStopRemoval(reconciliation.Block) bool
+}
+
+// RemovalPreparationCarrier inherits the most recent receipt from the same-source, same-request inverse.
+type RemovalPreparationCarrier interface {
+	CarryRemovalPreparation() bool
 }
 
 type RemovalRelaxer interface {
@@ -311,6 +323,8 @@ type Removal struct {
 
 // Probe reads quiescence without mutation, attempt, log or before-state hooks.
 type Probe struct {
+	Admission        bool
+	PreviousEvidence json.RawMessage
 	// ApplyOperation remains stable across context renames and replacement removals.
 	ApplyOperation string
 	// ApplyProved follows Execution.ApplyProved; probes never refresh that identity.
@@ -326,7 +340,7 @@ type Probe struct {
 
 // Execution presents a read-only adapter call without effect-attempt hooks.
 func (p Probe) Execution() Execution {
-	return Execution{ApplyOperation: p.ApplyOperation, ApplyProved: p.ApplyProved, Context: p.Context, Block: p.Block, Launch: p.Launch, Material: p.Material, RetiredWithHosts: p.RetiredWithHosts, LendProduced: p.LendProduced}
+	return Execution{Admission: p.Admission, PreviousEvidence: p.PreviousEvidence, ApplyOperation: p.ApplyOperation, ApplyProved: p.ApplyProved, Context: p.Context, Block: p.Block, Launch: p.Launch, Material: p.Material, RetiredWithHosts: p.RetiredWithHosts, LendProduced: p.LendProduced}
 }
 
 // QuiescenceState is what a probe proved about one block's targets.
@@ -639,6 +653,9 @@ type SSHReservation struct {
 
 // Execution lends bounded material for one frozen attempt and clears it afterward.
 type Execution struct {
+	Admission        bool
+	MachineStopped   func(context.Context, string) (bool, error)
+	PowerMachine     func(context.Context, string, bool) error
 	LendProduced     func(context.Context, ProducedInput) (secrets.Material, error)
 	PreviousEvidence json.RawMessage
 	ApplyRegistered  string

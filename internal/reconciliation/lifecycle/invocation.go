@@ -106,6 +106,7 @@ type RunRequest struct {
 	// frozen request budgets, and the runner honors it as stated. Zero keeps
 	// the runner's default.
 	Deadline   time.Duration
+	Admission  bool
 	ReadOnly   bool
 	Unrecorded bool
 	Prepare    func(context.Context, json.RawMessage) error
@@ -224,6 +225,7 @@ func RunFor(execution Execution, invocation Invocation) RunRequest {
 		Groups:            slices.Clone(invocation.Groups),
 		GroupNote:         invocation.GroupNote,
 		Deadline:          invocation.Deadline,
+		Admission:         execution.Admission,
 		ReadOnly:          readOnly,
 		Unrecorded:        !Recorded(execution),
 		Prepare:           prepare,

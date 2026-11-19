@@ -58,10 +58,7 @@ func (r Runner) claimRun(request lifecycle.RunRequest) (string, *os.File, *os.Fi
 			return "", nil, nil, runnerInvocationEnded.Fail("the lifecycle adapter invocation has ended", "")
 		}
 	}
-	if err := r.ensureScratchParent(); err != nil {
-		return "", nil, nil, err
-	}
-	if err := r.sweepLocked(request.Context); err != nil {
+	if err := r.checkExistingRuns(request); err != nil {
 		return "", nil, nil, err
 	}
 	job, err := os.MkdirTemp(r.jobParent, jobPrefix)

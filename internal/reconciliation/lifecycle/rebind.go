@@ -11,6 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
 
 const RebindAuthorization = "rebind="
@@ -141,7 +142,14 @@ func (s Service) rebind(ctx context.Context, name string, decided operationPlan)
 		return decided, nil
 	}
 	replaced := frozenBinding(decided)
-	issued, err := s.binder.Rebind(ctx, custody.RebindRequest{ContextName: name, BindingID: replaced, Names: decided.rebinds})
+	request := custody.RebindRequest{ContextName: name, BindingID: replaced, Names: decided.rebinds}
+	var issued secretstore.Binding
+	var err error
+	if s.startCheck != nil {
+		issued, err = s.admittedRebind(ctx, request)
+	} else {
+		issued, err = s.binder.Rebind(ctx, request)
+	}
 	if err != nil {
 		return operationPlan{}, err
 	}
@@ -163,4 +171,26 @@ type rebinding struct {
 func (r rebinding) record() operationstore.LogRecord {
 	return operationstore.LogRecord{Event: "rebind",
 		Detail: "Secret binding " + r.replaced + " rebound as " + r.binding + " at the current version of " + strings.Join(r.secrets, ", ")}
+}
+
+func (s Service) admittedRebind(ctx context.Context, request custody.RebindRequest) (secretstore.Binding, error) {
+	binder, ok := s.binder.(interface {
+		PrepareRebind(context.Context, custody.RebindRequest) (custody.ScopedRebind, error)
+	})
+	if !ok {
+		return secretstore.Binding{}, engineRequestDefect.Fail("the credential store cannot rebind inside the admitted transaction", "")
+	}
+	issue, err := binder.PrepareRebind(ctx, request)
+	if err != nil {
+		return secretstore.Binding{}, err
+	}
+	var issued secretstore.Binding
+	err = s.mutateAdmitted(ctx, request.ContextName, s.startCheck, func(tx Transaction) error {
+		return tx.Secrets(ctx, func(selected secretstore.Context, area secretstore.Area) error {
+			var err error
+			issued, err = issue(ctx, selected, area)
+			return err
+		})
+	})
+	return issued, err
 }

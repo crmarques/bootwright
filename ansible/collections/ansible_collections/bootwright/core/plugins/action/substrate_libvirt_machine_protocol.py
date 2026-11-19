@@ -208,6 +208,13 @@ def completion(arguments):
 
 def concluded(arguments):
     """The evidence one completion publishes, or the refusal naming what is unmet."""
+    if arguments.get("power_only"):
+        if not arguments.get("observed") or arguments.get("removed"):
+            raise ValueError("a power reading is read-only")
+        observed = arguments["observation"]
+        return {"absent": observed["absent"], "answered": observed["answered"], "domain": observed["domain"],
+                "hostIdle": observed["hostIdle"] is True, "owned": observed["owned"], "state": state(observed["state"]), "system": observed["uuid"],
+                "request": adapter_protocol.request_digest(arguments["digest"])}, None
     evidence, unmet, verb = completion(arguments)
     if publishes(evidence, arguments.get("observed")):
         return evidence, None

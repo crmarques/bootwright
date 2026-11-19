@@ -15,6 +15,10 @@ description:
   - Block operations return the observation the protocol publishes; port
     operations return the machine port's answer.
 options:
+  power_only:
+    description: During observation, read only exact VM and instance identities and power.
+    type: bool
+    required: false
   operation:
     description: The block operation or machine port entry point.
     type: str

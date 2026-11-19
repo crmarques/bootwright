@@ -539,3 +539,30 @@ func TestTwoSpellingsOfOneUUIDLessServerConflict(t *testing.T) {
 		t.Fatalf("diagnostic = %+v", diagnostic)
 	}
 }
+
+func TestStartPowerProvesPhysicalIdentityEvenBeforeProvisioning(t *testing.T) {
+	plan, err := reconciliation.NewPlan(reconciliation.Apply, planOf(t, reconciliation.Apply).Definitions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	probe := lifecycle.Probe{Context: "lab", Block: plan.Blocks[0]}
+	evidence := Evidence{Postcondition: true, Addresses: fixtureRequest(t).Addresses(), UUID: "uuid-1", Serial: "s1", Power: "Off", Request: probe.Block.RequestDigest}
+	runner := &scriptedRunner{}
+	test := func(want string) {
+		t.Helper()
+		runner.result = lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(t, evidence)}
+		state, err := NewMachine(runner).StartPower(context.Background(), probe)
+		run := runner.requests[len(runner.requests)-1]
+		if err != nil || state.State != want || !run.ReadOnly || !run.Unrecorded || run.Operation != "observe" {
+			t.Fatalf("start power = %+v, %v, read-only = %v", state, err, run.ReadOnly)
+		}
+	}
+	test(lifecycle.Quiescent)
+	probe.PreviousEvidence = encode(t, evidence)
+	evidence.Power = "On"
+	test(lifecycle.Live)
+	evidence.Power, evidence.Serial = "Off", "replaced"
+	test(lifecycle.Unproved)
+	probe.PreviousEvidence, evidence.Addresses = nil, nil
+	test(lifecycle.Unproved)
+}

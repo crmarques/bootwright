@@ -52,8 +52,7 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 	if err != nil {
 		return nil, err
 	}
-	// A destroy lists the context's bindings before it decides, so one that
-	// settles releases only what existed before it read pristine evidence.
+	// A settle can release only bindings listed before it read pristine evidence.
 	var stranded []string
 	if verb == reconciliation.Destroy {
 		stranded = s.held(ctx, name)
@@ -62,12 +61,16 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 	if err != nil {
 		return nil, err
 	}
-	// An operation its block records already prove complete is finalized
-	// before anything is authorized, presented or confirmed, because doing so
-	// performs no effect: only the record, releases and projection those
-	// records prove. The verb then decides again from what that leaves.
+	// If finalization leads to a new flow, guard even its bookkeeping writes.
 	finalized := decided.finalize
 	if decided.finalize {
+		s.startCheck, err = s.startAfterFinalization(ctx, identity, verb, selection, scope, decided)
+		if err != nil {
+			return nil, err
+		}
+		if s.startCheck != nil {
+			return s.finishBeforeStart(ctx, identity, decided, selection)
+		}
 		if decided, identity, err = s.finalizeFirst(ctx, name, verb, selection, decided, scope); err != nil {
 			return nil, err
 		}
@@ -75,9 +78,7 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 	if err := s.refuseInapplicableRelaxations(name, decided); err != nil {
 		return nil, err
 	}
-	// What an interrupted registration left with no operation to own it is
-	// released the same way, for the same reason: it performs no effect, only
-	// the releases and the pristine evidence that no operation's records need.
+	// Recover abandoned registration without starting an operation.
 	if decided.unclaimed {
 		if err := s.releaseUnclaimed(ctx, name, decided); err != nil {
 			return nil, err
@@ -97,9 +98,7 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 	if err := s.admitApply(ctx, name, decided); err != nil {
 		return nil, err
 	}
-	// The plan is presented before authorization refuses, so a refusal names
-	// steps the operator has just read; both precede the prompt and
-	// registration.
+	// An authorization refusal names steps the operator has already seen.
 	if err := s.present(ctx, name, decided); err != nil {
 		return nil, err
 	}
@@ -125,6 +124,12 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 			return nil, engineConfirmationRequired.Fail("this operation requires confirmation", remedy)
 		}
 		if err := s.options.Confirmer.Confirm(ctx, string(verb), name); err != nil {
+			return nil, err
+		}
+	}
+	if s.startsFlow(decided) {
+		s.startCheck, err = s.startFor(ctx, identity, decided)
+		if err != nil {
 			return nil, err
 		}
 	}

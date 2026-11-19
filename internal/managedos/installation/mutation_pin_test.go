@@ -148,14 +148,14 @@ func TestEveryRegisteringInstallationMutationAndResolutionReadsItsRegistration(t
 		apply    reconciliation.EffectState
 		removal  reconciliation.EffectState
 	}{
-		"unregistered":                   {true, registered("unregistered"), reconciliation.OutcomeChanged, reconciliation.EffectUnknown, reconciliation.EffectCompleted},
-		"absent":                         {true, registered("absent"), reconciliation.OutcomeChanged, reconciliation.EffectUnknown, reconciliation.EffectCompleted},
+		"unregistered":                   {true, registered("unregistered"), reconciliation.OutcomeChanged, reconciliation.EffectUnknown, reconciliation.EffectPartial},
+		"absent":                         {true, registered("absent"), reconciliation.OutcomeChanged, reconciliation.EffectUnknown, reconciliation.EffectPartial},
 		"unread, proved":                 {true, unread, reconciliation.OutcomeUnknown, reconciliation.EffectUnknown, reconciliation.EffectInconclusive},
 		"owned, proved":                  {true, owned, reconciliation.OutcomeUnknown, reconciliation.EffectPartial, reconciliation.EffectPartial},
 		"unread, never prepared":         {false, unread, reconciliation.OutcomeChanged, reconciliation.EffectUnknown, reconciliation.EffectCompleted},
 		"registration read, unprepared":  {false, registered("absent"), reconciliation.OutcomeUnknown, reconciliation.EffectUnknown, reconciliation.EffectInconclusive},
 		"nothing yet, never prepared":    {false, fresh, reconciliation.OutcomeUnknown, reconciliation.EffectNoEffect, reconciliation.EffectCompleted},
-		"nothing yet, registered before": {true, fresh, reconciliation.OutcomeUnknown, reconciliation.EffectPartial, reconciliation.EffectInconclusive},
+		"nothing yet, registered before": {true, fresh, reconciliation.OutcomeUnknown, reconciliation.EffectPartial, reconciliation.EffectPartial},
 	} {
 		t.Run(name, func(t *testing.T) {
 			call := encryptionExecution(t, request, nil)

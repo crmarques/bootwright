@@ -65,6 +65,20 @@ func New(playbooks map[string]string, stager prerequisites.AutomationStager) Run
 	return Runner{jobParent: "/run", scratchParent: scratchParent, stagingParent: stagingParent, owner: 0, command: exec.Command, playbooks: maps.Clone(playbooks), stager: stager}
 }
 
+func checkRequest(request lifecycle.RunRequest) (string, error) {
+	if err := checkOutputs(request); err != nil {
+		return "", err
+	}
+	if err := checkMaterials(request); err != nil {
+		return "", err
+	}
+	pinned, err := checkHostKey(request)
+	if err != nil {
+		return "", err
+	}
+	return pinned, checkIdentity(request)
+}
+
 func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (result lifecycle.RunResult, err error) {
 	launched := false
 	defer func() {
@@ -85,25 +99,19 @@ func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (result l
 	if err := ctx.Err(); err != nil {
 		return lifecycle.RunResult{}, err
 	}
-	if err := checkOutputs(request); err != nil {
-		return lifecycle.RunResult{}, err
-	}
-	if err := checkMaterials(request); err != nil {
-		return lifecycle.RunResult{}, err
-	}
-	pinned, err := checkHostKey(request)
+	pinned, err := checkRequest(request)
 	if err != nil {
-		return lifecycle.RunResult{}, err
-	}
-	if err := checkIdentity(request); err != nil {
 		return lifecycle.RunResult{}, err
 	}
 	r.invocation, _ = ctx.Value(invocationKey{}).(*invocationScope)
-	automation, err := r.stage(ctx)
-	if err != nil {
-		return lifecycle.RunResult{}, err
+	var automation stagedAutomation
+	if !request.Admission {
+		automation, err = r.stage(ctx)
+		if err != nil {
+			return lifecycle.RunResult{}, err
+		}
+		defer automation.release()
 	}
-	defer automation.release()
 	job, lock, holder, err := r.claimRun(request)
 	if err != nil {
 		return lifecycle.RunResult{}, err
@@ -112,6 +120,12 @@ func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (result l
 	// hold the job lock.
 	scratch := ""
 	defer func() { r.release(job, scratch, lock, holder) }()
+	if request.Admission {
+		if automation, err = r.admissionAutomation(ctx, job, &request); err != nil {
+			return lifecycle.RunResult{}, err
+		}
+		defer automation.release()
+	}
 	scratch, err = os.MkdirTemp(r.scratchParent, scratchPrefix+strings.TrimPrefix(filepath.Base(job), jobPrefix)+"-")
 	if err != nil {
 		return lifecycle.RunResult{}, runnerStorage.Fail("private adapter staging storage is unavailable", "")
@@ -644,7 +658,10 @@ func (r Runner) stage(ctx context.Context) (stagedAutomation, error) {
 }
 
 func (r Runner) extract(ctx context.Context) (stagedAutomation, error) {
-	staged, err := r.stager.Stage(ctx)
+	return verifiedAutomation(r.stager.Stage(ctx))
+}
+
+func verifiedAutomation(staged prerequisites.StagedAutomation, err error) (stagedAutomation, error) {
 	if err != nil {
 		return stagedAutomation{}, err
 	}

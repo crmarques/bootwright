@@ -41,7 +41,7 @@
   vars:
     bootwright_machine_arm: '{{ bootwright_machine_power_request.arm }}'
     bootwright_machine_port: >-
-      {{ machine_power_access | combine({'media': false}) }}
+      {{ machine_power_access | combine({'media': machine_power_check_boot_media | bool}) }}
 
 - name: Retain the machine port answer
   ansible.builtin.set_fact:
@@ -82,12 +82,12 @@
     bootwright_machine_arm: '{{ bootwright_machine_power_request.arm }}'
     bootwright_machine_port: >-
       {{ machine_power_access | combine({'media': false, 'inspect': true}) }}
-  when: machine_power_physical | bool
+  when: machine_power_prove_system | bool
 
 - name: Retain the machine port answer
   ansible.builtin.set_fact:
     machine_power_identity: "{{ substrate_machine_port_result }}"
-  when: machine_power_physical | bool
+  when: machine_power_prove_system | bool
   no_log: true
 
 - name: Stop at an identity read the management controller did not answer
@@ -173,7 +173,7 @@
     phase: refused
     reason: identity-mismatch
   when: >-
-    (machine_power_physical | bool)
+    (machine_power_prove_system | bool)
     and ((bootwright_machine_power_material.pinnedUUIDBase64 | default('') | length > 0)
     or (bootwright_machine_power_material.pinnedSerialBase64 | default('') | length > 0))
     and not (machine_power_answers_as_pinned | bool)
@@ -204,9 +204,21 @@
       power request was sent. Correct spec.hardware.bmc.address, or destroy and apply
       this context so the machine is proved again.
   when: >-
-    (machine_power_physical | bool)
+    (machine_power_prove_system | bool)
     and ((bootwright_machine_power_material.pinnedUUIDBase64 | default('') | length > 0)
     or (bootwright_machine_power_material.pinnedSerialBase64 | default('') | length > 0))
+
+- name: Prove a lifecycle power request can safely use the installed guest
+  ansible.builtin.assert:
+    that:
+      - machine_power_before.power | default('') in ['On', 'Off']
+      - not (machine_power_check_boot_media | bool) or machine_power_before.power == 'On'
+        or machine_power_before.media_state | default('unknown') == 'none'
+    fail_msg: >-
+      Machine/{{ bootwright_machine_power_request.identity.object }} did not prove
+      a stable power state and an empty media device for a new boot.
+    quiet: true
+  when: bootwright_machine_power_material.lifecyclePower | default(false) | bool
 
 - name: Stop the machine and poll it to off
   ansible.builtin.include_tasks: stop.yml

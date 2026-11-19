@@ -86,6 +86,8 @@ type Block struct {
 	RequestDigest string `json:"requestDigest"`
 }
 
+const ManagedMachineFamily = "substrate-machine"
+
 type Plan struct {
 	Preparation *PreparationScope `json:"preparation,omitempty"`
 	Verb        Verb              `json:"verb"`

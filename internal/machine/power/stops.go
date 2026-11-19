@@ -24,3 +24,8 @@ var (
 var stops = []diagnostics.Stop{powerRequestInvalid, powerIdentityChanged, powerEvidenceMismatch, powerUnproved}
 
 func Stops() []diagnostics.Stop { return slices.Clone(stops) }
+
+// UnprovedRegisteredMachine refuses a lifecycle power request without the original machine and access proof.
+func UnprovedRegisteredMachine() error {
+	return powerIdentityChanged.Fail("the owning apply did not prove the machine and access needed for this power transition", "restore its original machine proof and supported management access")
+}

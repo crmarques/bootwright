@@ -31,6 +31,7 @@ type ExecutionContract struct {
 }
 
 type Options struct {
+	DriveMachine      func(context.Context, Execution, BlockEvidence, bool) error
 	PasswordMatches   func([]byte, []byte) bool
 	Contracts         func(reconciliation.Block) (ExecutionContract, bool)
 	Preparations      []PreparationDefinition
@@ -62,15 +63,18 @@ type Options struct {
 }
 
 type Service struct {
-	workspace    Workspace
-	compiler     Compiler
-	binder       SecretBinder
-	host         HostIdentity
-	automation   AutomationIdentity
-	guard        ExecutionGuard
-	capabilities CapabilityResolver
-	options      Options
-	relaxing     eraseRelaxing
+	startCheck func(View) error
+	// Only the installation phase following this invocation's completed preparation inherits admission.
+	completedPreparation string
+	workspace            Workspace
+	compiler             Compiler
+	binder               SecretBinder
+	host                 HostIdentity
+	automation           AutomationIdentity
+	guard                ExecutionGuard
+	capabilities         CapabilityResolver
+	options              Options
+	relaxing             eraseRelaxing
 }
 
 func New(workspace Workspace, compiler Compiler, binder SecretBinder, host HostIdentity, automation AutomationIdentity, guard ExecutionGuard, capabilities CapabilityResolver, options Options) Service {
@@ -213,15 +217,26 @@ func (s Service) preview(ctx context.Context, decision decider, view View, selec
 	if err := s.refuseInapplicableRelaxations(view.Identity().Name, decided); err != nil {
 		return nil, operationPlan{}, basis{}, err
 	}
+	guardedFinalization := false
+	if finalizes && s.startsFlow(decided) {
+		blocks, err := s.startBlocks(ctx, view, decided)
+		if err != nil {
+			return nil, operationPlan{}, basis{}, err
+		}
+		guardedFinalization = len(blocks) != 0
+	}
 	var result PlanResult
 	switch {
-	case decided.noop:
+	case decided.noop || guardedFinalization:
 		// Only a finalization leads here, because no verb a preview decides as
 		// settles over a record whose finalization is not due. What it calls
 		// for is read from the record it finalizes, not the one it leaves.
-		result = planPreview(decided.plan, decided.states, reconciliation.Selection{}, s.Throttle())
+		result = planPreview(marked.plan, marked.states, reconciliation.Selection{}, s.Throttle())
 		result.Verb, result.Continuation, result.Finalizes = string(verb), true, true
-		result.Receipt = Receipt{Operation: decided.operation.ID, Verb: "plan", State: "preview", Next: nextAction(marked.operation, marked.plan, marked.states)}
+		result.Receipt = Receipt{Operation: marked.operation.ID, Verb: "plan", State: "preview", Next: string(verb)}
+		if !guardedFinalization {
+			result.Receipt.Next = nextAction(marked.operation, marked.plan, marked.states)
+		}
 	case decided.fresh:
 		result = s.presentation(decided)
 		result.Receipt = Receipt{Operation: "none", Verb: "plan", State: "preview", Next: string(decided.verb)}

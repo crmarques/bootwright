@@ -390,7 +390,7 @@ def test_destroy_leaves_a_foreign_registration():
 
 
 def test_destroy_names_an_unanswered_machine_unreachable():
-    named = destroy_tasks(lambda task: (task.get(PROTOCOL) or {}).get("reason") == "registration-unreachable",
+    named = destroy_tasks(lambda task: task.get("name") == "Name a machine that did not answer",
                           "name an unanswered machine")
     refused = destroy_tasks(lambda task: FAIL in task and "did not answer" in task[FAIL]["msg"], "refuse an unanswered machine")
     assert named["no_log"] is True and named["when"] == refused["when"]

@@ -156,6 +156,9 @@ func (r Runner) release(job, scratch string, lock, holder *os.File) {
 	held, statErr := lock.Stat()
 	closeOutsideForks(lock)
 	unlockAndClose(holder)
+	if scratch == "" {
+		r.scratchParent = r.jobParent
+	}
 	dirs, err := r.openRunDirectories()
 	if statErr != nil || err != nil {
 		return
