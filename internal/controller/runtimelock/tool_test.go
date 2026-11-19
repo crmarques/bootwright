@@ -162,7 +162,8 @@ func pinnedPython(t *testing.T) string {
 	}
 	interpreter := filepath.Join(strings.TrimSpace(string(cache)), "ansible-check", "venv", "bin", "python")
 	if _, err := os.Stat(interpreter); err != nil {
-		if output, err := exec.Command(filepath.Join(scripts, "ansible-check"), "--help").CombinedOutput(); err != nil {
+		output, _ := exec.Command(filepath.Join(scripts, "ansible-check"), "--help").CombinedOutput()
+		if _, err := os.Stat(interpreter); err != nil {
 			t.Fatalf("preparing the pinned python with scripts/ansible-check: %v\n%s", err, output)
 		}
 	}

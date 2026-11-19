@@ -18010,3 +18010,30 @@ also reads `cmd/`.
 **Exit evidence:** the delivering commit records the package tests, the
 collection units, the unchanged contract goldens, `make check` and
 `make race`. No host state changes and no operator gate applies.
+
+## X635 — The CI race and coverage jobs
+
+**Owner:** Architecture; **items:** B1636 and B1637 (defect); **authority:**
+the owner's request to fix what the pushed build finds, under
+[D279](backlog.md#d279).
+
+### B1636
+
+A pre-existing test defect that failed every CI `race` and `cover` run since
+2026-11-16: on a runner whose cache holds no Ansible check interpreter, the
+tests that need the pinned Python prepare it with `scripts/ansible-check
+--help`, which bootstraps the interpreter and then exits 1 because the tool
+admits no `--help`; the tests read that status as a failed preparation. They
+now require the interpreter the bootstrap leaves, whatever the status.
+
+**Exit evidence:** `TestTheRuntimeLockToolRoundTrips` and
+`TestE2EWorkloadsPassTheirUnitTests` pass against an empty cache directory.
+
+### B1637
+
+With the `cover` job stopped by B1636, commits since 2026-11-17 left fourteen
+packages below their coverage floors. Tests of the contracts those commits
+added restore each package to its floor; the floors themselves do not move
+down.
+
+**Exit evidence:** `make cover` passes.

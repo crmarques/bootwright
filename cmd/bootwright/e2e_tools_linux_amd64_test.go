@@ -40,11 +40,9 @@ func pinnedPython(t *testing.T) string {
 	defer pinnedToolsLock.Unlock()
 	interpreter := filepath.Join(e2eCacheDirectory(t), "ansible-check", "venv", "bin", "python")
 	if _, err := os.Stat(interpreter); err != nil {
-		if output, err := exec.Command(filepath.Join("..", "..", "scripts", "ansible-check"), "--help").CombinedOutput(); err != nil {
-			t.Fatalf("preparing the pinned python with scripts/ansible-check: %v\n%s", err, output)
-		}
+		output, _ := exec.Command(filepath.Join("..", "..", "scripts", "ansible-check"), "--help").CombinedOutput()
 		if _, err := os.Stat(interpreter); err != nil {
-			t.Fatalf("scripts/ansible-check left no pinned python: %v", err)
+			t.Fatalf("scripts/ansible-check left no pinned python: %v\n%s", err, output)
 		}
 	}
 	return interpreter
