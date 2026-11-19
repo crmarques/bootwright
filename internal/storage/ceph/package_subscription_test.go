@@ -97,6 +97,28 @@ func TestSubscriptionHostsFreezeTheirSatelliteAndTreeHostsKeepTheirBytes(t *test
 	}
 }
 
+func TestAProvidedHostTakesTheBootstrapMachinesSatelliteOrHostedDVD(t *testing.T) {
+	provided := func(r *Request) { r.Hosts[1].Provided = true }
+	r, err := subscribedRequest(t, subscribedCatalog("node-1", "node-2", "node-3"), provided)
+	if err != nil {
+		t.Fatalf("a provided host under a subscription-sourced bootstrap refused: %+v", diagnostics.Of(err))
+	}
+	source := r.Packages.Sources[1]
+	want := PackageSource{Host: r.Hosts[1].Name, Profile: "subscribed", CertificateRef: "satellite-ca",
+		Subscription: &SubscriptionSource{Hostname: "satellite.example.test", ContentBaseURL: "https://satellite.example.test/pulp/content"}}
+	if source.Subscription == nil || *source.Subscription != *want.Subscription || source.Media != "" || source.PublicationPath != "" || source.URL != "" ||
+		source.Host != want.Host || source.Profile != want.Profile || source.CertificateRef != want.CertificateRef {
+		t.Fatalf("the provided host did not take the bootstrap Machine's Satellite: %+v", source)
+	}
+	r, err = subscribedRequest(t, subscribedCatalog("node-2"), provided)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tree := packageRequest(t).Packages.Sources[1]; r.Packages.Sources[1] != tree {
+		t.Fatalf("a provided host left the bootstrap Machine's hosted DVD for its own profile: %+v, want %+v", r.Packages.Sources[1], tree)
+	}
+}
+
 func TestSubscriptionPackageSourceRefusals(t *testing.T) {
 	refused := func(name string, err error, reason string) {
 		t.Helper()
@@ -105,8 +127,6 @@ func TestSubscriptionPackageSourceRefusals(t *testing.T) {
 			t.Fatalf("%s: refusal %v does not say %q", name, err, reason)
 		}
 	}
-	_, err := subscribedRequest(t, subscribedCatalog("node-1", "node-2", "node-3"), func(r *Request) { r.Hosts[1].Provided = true })
-	refused("provided host", err, "takes its dependencies from the bootstrap Machine's hosted DVD")
 	if _, err := subscribedRequest(t, subscribedCatalog("node-1", "node-2", "node-3"), nil); err != nil {
 		t.Fatalf("an all-subscription cluster refused: %v", err)
 	}
@@ -144,7 +164,7 @@ func TestSubscriptionPackageSourceRefusals(t *testing.T) {
 			objects[i] = object.WithSpec(object.Spec().WithPath(requestMap("url", requestMap("url", "https://mirror.example.test/rhel")), "installer", "anaconda", "packageSource"))
 		}
 	}
-	_, err = subscribedRequest(t, api.NewCatalog(objects), nil)
+	_, err := subscribedRequest(t, api.NewCatalog(objects), nil)
 	refused("another source", err, "hosted DVD or its Satellite subscription")
 }
 

@@ -207,6 +207,40 @@ func TestAProvidedHostsFailedFleetConnectionNamesTheKeyToAuthorize(t *testing.T)
 	}
 }
 
+// A provided host reaches the Satellite through a registration its operator
+// made, so its refused package preparation names that registration.
+func TestAProvidedHostsRefusedSatellitePackagesNameItsRegistration(t *testing.T) {
+	satellite := SubscriptionSource{Hostname: "satellite.example.test", ContentBaseURL: "https://satellite.example.test/pulp/content"}
+	host := Host{Name: "tie", Machine: "tie", Address: tieAddress, Port: 22, User: "bootwright", SSHKeyRef: "fleet-key", KnownHostsRef: "tie-known-hosts", Provided: true, Devices: []Device{}}
+	r := HostRequest{Version: HostVersion, Host: "tie", Cluster: ClusterScope{Controller: "controller", Hosts: []Host{host},
+		Packages: &PackageRequest{Sources: []PackageSource{{Host: "tie", Profile: "subscribed", CertificateRef: "satellite-ca", Subscription: &satellite}}}}}
+	specialized := func(d []diagnostics.Diagnostic) bool {
+		return len(d) == 1 && d[0].Code == cephPackageUnproved.Code && strings.Contains(d[0].Message, "Machine/tie") && strings.Contains(d[0].Message, "Satellite satellite.example.test") &&
+			strings.Contains(d[0].Remediation, "register Machine/tie with the Satellite satellite.example.test") && strings.Contains(d[0].Remediation, "beneath https://satellite.example.test/pulp/content") &&
+			strings.Contains(d[0].Remediation, "Bootwright never registers a provided host")
+	}
+	if d := diagnostics.Of(providedRegistration(host, satellite)); !specialized(d) {
+		t.Fatalf("registration refusal = %+v", d)
+	}
+	runner := &refusingRunner{reason: "packages"}
+	if _, err := NewHost(runner).run(context.Background(), lifecycle.Execution{}, "destroy", r); !specialized(diagnostics.Of(err)) {
+		t.Fatalf("a provided Satellite host's packages refusal = %+v", diagnostics.Of(err))
+	}
+	want := diagnostics.Of(hostRefusals()["packages"])[0]
+	generic := func(d []diagnostics.Diagnostic) bool {
+		return len(d) == 1 && d[0].Code == want.Code && d[0].Message == want.Message && d[0].Remediation == want.Remediation
+	}
+	r.Cluster.Packages.Sources[0] = PackageSource{Host: "tie", Profile: "rhel", CertificateRef: "serving-tls", Media: "rhel-dvd.iso", URL: "https://192.0.2.10:8443/os/rhel/tree"}
+	if _, err := NewHost(runner).run(context.Background(), lifecycle.Execution{}, "destroy", r); !generic(diagnostics.Of(err)) {
+		t.Fatalf("a provided hosted-DVD host's packages refusal = %+v", diagnostics.Of(err))
+	}
+	r.Cluster.Packages.Sources[0] = PackageSource{Host: "tie", Profile: "subscribed", CertificateRef: "satellite-ca", Subscription: &satellite}
+	r.Cluster.Hosts[0].Provided = false
+	if _, err := NewHost(runner).run(context.Background(), lifecycle.Execution{}, "destroy", r); !generic(diagnostics.Of(err)) {
+		t.Fatalf("an installed Satellite host's packages refusal = %+v", diagnostics.Of(err))
+	}
+}
+
 func TestAFIPSClusterBindsAProvidedTiebreakerWithoutAnInstallProfile(t *testing.T) {
 	catalog, cluster := tiebreakerCatalog(func(m, c api.Value) (api.Value, api.Value) {
 		return m, c.WithPath(api.BoolValue(true), "security", "fips", "enabled")

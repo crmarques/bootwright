@@ -80,7 +80,7 @@ func packageSources(c api.Catalog, r Request, contextName string) (*PackageReque
 		}
 		var source PackageSource
 		if profile.Spec().Has("installer", "anaconda", "packageSource", "subscription") || !host.Provided && updatesFromSatellite(c, profile) {
-			source, err = subscriptionPackageSource(c, profile, host)
+			source, err = subscriptionPackageSource(c, profile)
 		} else {
 			source, err = treePackageSource(c, profile, contextName)
 		}
@@ -119,11 +119,7 @@ func treePackageSource(c api.Catalog, profile api.Object, contextName string) (P
 	return PackageSource{Media: media, PublicationPath: publication.Path, URL: endpoint + "/os/" + profile.Name() + "/tree", CertificateRef: certificate}, nil
 }
 
-func subscriptionPackageSource(c api.Catalog, profile api.Object, host Host) (PackageSource, error) {
-	if host.Provided {
-		return PackageSource{}, cephPackageSourceUnsupported.Fail("provided Ceph host "+host.Name+" takes its dependencies from the bootstrap Machine's hosted DVD, and "+profile.Identity()+" installs from a subscription",
-			"install the bootstrap Machine with a hostedTree profile, or make "+host.Name+" a Machine this context installs")
-	}
+func subscriptionPackageSource(c api.Catalog, profile api.Object) (PackageSource, error) {
 	entitlement, found := c.Find(api.Entitlement, profile.Spec().Get("subscription", "entitlementRef").Text())
 	satellite := entitlement.Spec().Get("rhsm", "satellite")
 	source := PackageSource{CertificateRef: satellite.Get("trustBundleRef").Text(),

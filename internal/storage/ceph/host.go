@@ -566,6 +566,9 @@ func (c HostCapability) run(ctx context.Context, e lifecycle.Execution, operatio
 	if host.Provided {
 		refusals["fips-not-enabled"] = fipsNotEnabled(host.Machine)
 		refusals["transport"] = providedTransport(host)
+		if index, ok := r.source(); ok && r.Cluster.Packages.Sources[index].Subscription != nil {
+			refusals["packages"] = providedRegistration(host, *r.Cluster.Packages.Sources[index].Subscription)
+		}
 	}
 	maps.Copy(refusals, serialDeviceRefusals(host))
 	maps.Copy(refusals, rootDeviceRefusals(host))

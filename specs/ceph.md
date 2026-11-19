@@ -636,9 +636,11 @@ topology; this section owns what the plan derives and realizes (D196).
   Machine, the fleet key Secret, the user and the pinned host key beside the
   retained evidence to inspect. A tiebreaker without that user or pin, or with no fleet
   key declared, refuses at plan. It holds no device and no erase claim, needs
-  no Machine block, and takes its OS dependency packages from the hosted DVD of the bootstrap
-  host's install profile; a host whose release that tree cannot serve fails
-  the native package resolution. Its FIPS proof is
+  no Machine block, and takes its OS dependency packages from the source
+  its bootstrap host's install profile selects, as
+  [selection and request](ceph-subscription-dependencies.md#selection-and-request)
+  states; a hosted tree that cannot serve the host's release fails the native
+  package resolution. Its FIPS proof is
   [observed](#frozen-release-and-trust).
 - **Networks.** `networks.publicCIDRs` may list several CIDRs, rendered as
   one comma-separated `public_network`; every MON host's address lies inside

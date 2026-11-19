@@ -19,10 +19,14 @@ this page does not state follows [frozen release and trust](ceph.md#frozen-relea
 Each host's source follows its own Machine's install profile, so one cluster
 may mix hosted-DVD and subscription hosts. Any other package source refuses
 `ceph.package-source-unsupported` at plan, naming both sources as the remedy. A provided
-host takes the bootstrap Machine's source; a subscription-sourced bootstrap
-profile refuses, because this executable did not register the provided host,
-so its dependencies need the bootstrap Machine's hosted DVD, which a provided
-host under a Satellite-updated `hostedTree` profile keeps. A subscription
+host takes the source the bootstrap Machine's install profile selects. Under a subscription-sourced
+bootstrap profile that is the profile's Satellite, reached through the
+registration the host's operator made, because this executable registers no
+provided host and unregisters none; such a host holding no repository the
+[Repositories](#repositories) section admits beneath that content root refuses
+`packages`, its remedy naming the Machine, the Satellite and the registration
+to make. Under a Satellite-updated `hostedTree` profile a provided host keeps
+the bootstrap Machine's hosted DVD. A subscription
 profile whose Entitlement is external, or declares no `spec.rhsm.satellite`
 with its `trustBundleRef`, refuses at plan. A `hostedTree` profile updating
 within its release from the CDN, an external registration or a configured
@@ -30,7 +34,8 @@ repository keeps its hosted DVD, and one updating from a managed Satellite and
 a configured repository takes the Satellite alone
 ([B1552](milestones/backlog.md#b1552)).
 
-The frozen source of a subscription host carries its host, its profile, the
+The frozen source of a subscription host carries its host, its profile (a
+provided host's names the bootstrap Machine's profile), the
 Satellite's `hostname` and `contentBaseURL` and, as `certificateRef`, the
 Entitlement's `spec.rhsm.satellite.trustBundleRef`; it carries no media,
 publication or tree URL, and binding it needs no DVD proof. A host block waits

@@ -120,6 +120,56 @@ func TestAProvidedTiebreakerValidatesAndPlansWithTheFleetIdentity(t *testing.T) 
 	}
 }
 
+// A tiebreaker the operator installed and registered takes its RHEL
+// dependencies from the Satellite of the bootstrap host's subscription
+// profile, with that Satellite's trust bundle and no hosted DVD.
+func TestAProvidedTiebreakerUnderASubscriptionProfilePlansWithItsSatellite(t *testing.T) {
+	t.Parallel()
+	sources := tiebreakerSources(t, witnessAccess)
+	root := sources.Roots[0]
+	profile := filepath.Join(root, "infra/os/rhel-9-8.yaml")
+	index := slices.IndexFunc(sources.Files, func(f desiredstate.SourceFile) bool { return f.Path() == profile })
+	if index < 0 {
+		t.Fatal("the example has no install profile")
+	}
+	body := mustReplaceOnce(t, profile, string(sources.Files[index].Bytes()),
+		"      packageSource:\n        hostedTree:\n          fromMedia: local-media:rhel-9.8-x86_64-dvd.iso\n\n          artifactServerEndpoint:\n            serverRef: lab-artifacts\n            endpointRef: ip-http\n",
+		"      packageSource:\n        subscription: {}\n")
+	sources.Files[index] = desiredstate.NewSourceFile(profile, []byte(body+"\n  subscription:\n    entitlementRef: rhel-satellite\n"))
+	sources.Files = append(sources.Files,
+		desiredstate.NewSourceFile(filepath.Join(root, "storage/rhel-satellite.yaml"), []byte("apiVersion: bootwright.io/v1alpha1\nkind: Entitlement\nmetadata:\n  name: rhel-satellite\n\nspec:\n  type: redhatRhel\n\n"+
+			"  rhsm:\n    management: managed\n    organizationRef: satellite-org\n    activationKeyRef: satellite-activation-key\n\n"+
+			"    satellite:\n      hostname: satellite.lab.example.test\n      trustBundleRef: satellite-ca-bundle\n      contentBaseURL: https://satellite.lab.example.test/pulp/content\n")))
+	for name, kind := range map[string]string{"satellite-org": "opaque", "satellite-activation-key": "token", "satellite-ca-bundle": "caBundle"} {
+		sources.Files = append(sources.Files, desiredstate.NewSourceFile(filepath.Join(root, "secret-descriptors/"+name+".yaml"),
+			[]byte("apiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata:\n  name: "+name+"\n\nspec:\n  type: "+kind+"\n\n  source:\n    contextStore: {}\n")))
+	}
+	definitions, err := tiebreakerPlan(t, sources)
+	if err != nil {
+		t.Fatalf("the plan refuses: %+v", diagnostics.Of(err))
+	}
+	if _, err := reconciliation.NewPlan(reconciliation.Apply, definitions); err != nil {
+		t.Fatal(err)
+	}
+	block := slices.IndexFunc(definitions, func(d reconciliation.BlockDefinition) bool { return d.ID == ceph.HostBlockID("ceph-lab", "witness") })
+	if block < 0 {
+		t.Fatal("no host block for the provided tiebreaker")
+	}
+	request, err := ceph.DecodeHostRequest(definitions[block].Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := slices.IndexFunc(request.Cluster.Packages.Sources, func(s ceph.PackageSource) bool { return s.Host == request.Host })
+	if source < 0 {
+		t.Fatalf("the tiebreaker %s has no package source: %+v", request.Host, request.Cluster.Packages.Sources)
+	}
+	got := request.Cluster.Packages.Sources[source]
+	if got.Subscription == nil || got.Subscription.Hostname != "satellite.lab.example.test" || got.Subscription.ContentBaseURL != "https://satellite.lab.example.test/pulp/content" ||
+		got.CertificateRef != "satellite-ca-bundle" || got.Media != "" || got.URL != "" || got.PublicationPath != "" {
+		t.Fatalf("the tiebreaker's package source = %+v", got)
+	}
+}
+
 func TestATiebreakerAuthoringTheFleetKeyIsRefusedWithTheRemedy(t *testing.T) {
 	t.Parallel()
 	access := strings.Replace(witnessAccess, "operatorIdentity: {}", "privateKeyRef: bootwright-machine-key", 1)

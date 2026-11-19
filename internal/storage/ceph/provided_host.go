@@ -67,6 +67,12 @@ func providedTransport(h Host) error {
 			", check that it offers the host key Secret "+h.KnownHostsRef+" pins and that the controller reaches it, then repeat the operation")
 }
 
+func providedRegistration(h Host, satellite SubscriptionSource) error {
+	return cephPackageUnproved.Fail("the Ceph host package preparation refused its request, source or result on the provided tiebreaker Machine/"+h.Machine+", which takes its RHEL dependencies from the Satellite "+satellite.Hostname+" through its own registration",
+		"the adapter detail names the refusing step; register Machine/"+h.Machine+" with the Satellite "+satellite.Hostname+" so that /etc/yum.repos.d/redhat.repo holds exactly one enabled BaseOS and one enabled AppStream repository beneath "+satellite.ContentBaseURL+
+			", check that the IBM Ceph repository serves the authored package selection to the host, then apply again; Bootwright never registers a provided host")
+}
+
 func pinnedHostKey(h Host, e lifecycle.Execution) (trust.HostKey, error) {
 	value, err := materialPart(e.Material, h.KnownHostsRef, secrets.ValuePart)
 	if err != nil {
