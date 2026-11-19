@@ -141,6 +141,43 @@ an enable step.
 The exporter on its default port without a Prometheus service is parked
 ([B684](../../specs/milestones/backlog.md#b684)).
 
+## Monitoring basic-auth logins
+
+Observation: once a `mgmt-gateway` daemon runs, cephadm's monitoring security
+is on (`_get_security_config` counts the gateway's daemons), and Prometheus and
+Alertmanager require basic authentication. `ceph orch prometheus
+get-credentials` and `ceph orch alertmanager get-credentials` are write
+commands (`_cli_write_command`) that print `json.dumps` of
+`{"user", "password", "certificate"}`, the last being cephadm's root CA in
+PEM, and `{}` while security is off; they take no `--format`. Asked about a
+service whose login it does not hold, cephadm stores and returns
+`admin`/`admin` (`_get_prometheus_credentials`,
+`_get_alertmanager_credentials`), so asking is a write. Upstream v20.2.1:
+[orchestrator/module.py](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/orchestrator/module.py)
+(`_get_prometheus_access_info`, `_get_alertmanager_access_info`) and
+[cephadm/module.py](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/module.py)
+(`get_prometheus_access_info`, `get_alertmanager_access_info`,
+`_get_security_config`). The IBM Storage Ceph build has not been checked live;
+the owner's live check of `cluster info --secrets` is owed under
+[B1629](../../specs/milestones/m2.md#b1629).
+
+Decision: the management gateway unit asks only for a listed `prometheus` or
+`alertmanager`, after readiness, requires `user` and `password`, discards
+`certificate`, refuses `{}` as `material`, and keeps the logins as its produced
+output `monitoring`
+([management gateway unit](../../specs/ceph.md#resources-readiness-and-access)).
+A recorded observation asks only once a deployed daemon proves the login is
+stored: `PrometheusService.generate_config` reads both logins and
+`GrafanaService.get_dependencies` reads Prometheus's, each storing the default
+when absent
+([services/monitoring.py](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/monitoring.py)).
+The code is `monitoring_credentials` and `monitoring_credentials_held` in
+[ceph_native_units.py](../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native_units.py)
+and `native_login` in
+[ceph_native_observability.py](../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native_observability.py),
+held by
+[test_ceph_monitoring_credentials.py](../../ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/module_utils/test_ceph_monitoring_credentials.py).
+
 ## Alertmanager webhooks
 
 [`generate_config`](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/monitoring.py#L312-L324)

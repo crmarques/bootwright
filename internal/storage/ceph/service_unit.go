@@ -25,8 +25,10 @@ type ServiceUnit struct {
 	Bindings      []ServiceBinding             `json:"bindings,omitempty"`
 	Config        map[string]map[string]string `json:"config,omitempty"`
 	Documents     []json.RawMessage            `json:"documents"`
+	Endpoint      string                       `json:"endpoint,omitempty"`
 	ID            string                       `json:"id"`
 	IngressPorts  []int                        `json:"ingressPorts,omitempty"`
+	Monitoring    []string                     `json:"monitoring,omitempty"`
 	ObserveBudget int                          `json:"observeBudget,omitempty"`
 	ScrapeIngress map[string]string            `json:"scrapeIngress,omitempty"`
 	Type          string                       `json:"type"`
@@ -51,7 +53,7 @@ type unitType struct {
 var unitTypes = map[string]unitType{
 	"nvmeof":       {units: nvmeofUnits, dependencies: nvmeofDependencies, impacts: noUnitImpacts, apply: unitBudget{calls: 2, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
 	"crash":        {units: crashUnits, dependencies: noUnitDependencies, impacts: noUnitImpacts, apply: unitBudget{calls: 2, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
-	"mgmt-gateway": {units: gatewayUnits, dependencies: gatewayDependencies, impacts: gatewayImpacts, apply: unitBudget{calls: 3, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
+	"mgmt-gateway": {units: gatewayUnits, dependencies: gatewayDependencies, impacts: gatewayImpacts, apply: unitBudget{calls: 4, waits: 1}, observe: unitBudget{calls: 2}, destroy: unitBudget{calls: 2}},
 	"monitoring":   {units: monitoringUnits, dependencies: noUnitDependencies, impacts: monitoringImpacts, apply: unitBudget{calls: 2, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
 	"nfs":          {units: nfsUnits, dependencies: ingressDependencies, impacts: noUnitImpacts, apply: unitBudget{calls: 3, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
 	"rbd-mirror":   {units: mirrorUnits, dependencies: noUnitDependencies, impacts: noUnitImpacts, apply: unitBudget{calls: 2, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
@@ -637,7 +639,7 @@ func gatewayUnits(cluster api.Object) ([]ServiceUnit, error) {
 	if !slices.ContainsFunc(services, func(svc api.Value) bool { return svc.Get("service_type").Text() == "mgmt-gateway" }) {
 		return []ServiceUnit{}, nil
 	}
-	unit := ServiceUnit{Documents: []json.RawMessage{}, Type: "mgmt-gateway"}
+	unit := ServiceUnit{Documents: []json.RawMessage{}, Endpoint: cluster.Spec().Get("managementGateway", "fqdn").Text(), Monitoring: gatewayMonitoring(cluster), Type: "mgmt-gateway"}
 	slices.SortStableFunc(services, func(a, b api.Value) int {
 		return strings.Compare(cephcluster.NativeServiceName(a), cephcluster.NativeServiceName(b))
 	})
@@ -665,6 +667,19 @@ func gatewayUnits(cluster api.Object) ([]ServiceUnit, error) {
 		unit.Bindings = append(unit.Bindings, ServiceBinding(binding))
 	}
 	return []ServiceUnit{unit}, nil
+}
+
+var gatewayMonitored = []string{"alertmanager", "grafana", "prometheus"}
+
+func gatewayMonitoring(cluster api.Object) []string {
+	var monitored []string
+	for _, svc := range cluster.Spec().Get("services").Items() {
+		if serviceType := svc.Get("service_type").Text(); slices.Contains(gatewayMonitored, serviceType) && !slices.Contains(monitored, serviceType) {
+			monitored = append(monitored, serviceType)
+		}
+	}
+	slices.Sort(monitored)
+	return monitored
 }
 
 func gatewayDependencies(cluster api.Object, _ ServiceUnit) ([]string, error) {

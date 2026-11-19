@@ -20,6 +20,7 @@ const (
 
 	DashboardReady    = "ready"
 	DashboardUnproved = "unproved"
+	DashboardGateway  = "gateway"
 	DashboardActive   = "active"
 	DashboardStandby  = "standby"
 
@@ -101,9 +102,20 @@ type ManagedCeph struct {
 	Reason          string
 	Remedy          string
 	Dashboard       *Dashboard
+	Monitoring      []MonitoringAccess
 	Resources       []Resource
 	Endpoints       []Endpoint
 	ObjectUsers     []ObjectUserAccess
+}
+
+type MonitoringAccess struct {
+	Service   string
+	URL       string
+	User      string
+	Password  secrets.Material
+	Revealed  bool
+	Anonymous bool
+	Warn      bool
 }
 
 type ObjectUserAccess struct {

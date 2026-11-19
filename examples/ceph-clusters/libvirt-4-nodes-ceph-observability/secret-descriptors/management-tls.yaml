@@ -8,10 +8,10 @@ spec:
 
   source:
     generated:
-      commonName: management.lab.example.test
+      commonName: mgr.ceph-lab.lab.example.test
 
       dnsNames:
-        - management.lab.example.test
+        - mgr.ceph-lab.lab.example.test
 
       ipAddresses:
         - 198.51.100.50

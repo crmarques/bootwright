@@ -63,6 +63,7 @@ type managedCephPresentation struct {
 	Reason          string                   `json:"reason,omitempty"`
 	Remedy          string                   `json:"remedy,omitempty"`
 	Dashboard       *dashboardPresentation   `json:"dashboard,omitempty"`
+	Monitoring      []monitoringPresentation `json:"monitoring,omitempty"`
 	Resources       []resourcePresentation   `json:"resources"`
 	Endpoints       []endpointPresentation   `json:"endpoints"`
 	ObjectUsers     []objectUserPresentation `json:"objectUsers,omitempty"`
@@ -98,6 +99,14 @@ type dashboardPresentation struct {
 	URLs              []dashboardURLPresentation `json:"urls"`
 	CertificateSHA256 string                     `json:"certificateSHA256"`
 	PasswordValue     string                     `json:"passwordValue,omitempty"`
+}
+
+type monitoringPresentation struct {
+	Service       string `json:"service"`
+	URL           string `json:"url"`
+	Anonymous     bool   `json:"anonymous,omitempty"`
+	User          string `json:"user,omitempty"`
+	PasswordValue string `json:"passwordValue,omitempty"`
 }
 
 type dashboardURLPresentation struct {
@@ -171,7 +180,7 @@ func validManagedCeph(ceph *inspection.ManagedCeph) bool {
 	if ceph == nil {
 		return true
 	}
-	if ceph.Dashboard != nil && !validDashboard(ceph.Dashboard) {
+	if ceph.Dashboard != nil && !validDashboard(ceph.Dashboard) || !validMonitoring(ceph) {
 		return false
 	}
 	if !validResources(ceph.Resources) || !validEndpoints(ceph.Endpoints) {
@@ -188,7 +197,7 @@ func validManagedCeph(ceph *inspection.ManagedCeph) bool {
 			ceph.Dashboard != nil
 	case inspection.StatusUnavailable:
 		return ceph.Reason != "" && ceph.Remedy != "" && ceph.FSID == "" && ceph.Image == nil && len(ceph.Monitors) == 0 && ceph.CephCommand == "" &&
-			len(ceph.Endpoints) == 0 && (ceph.Dashboard == nil || ceph.Dashboard.Revealed)
+			len(ceph.Endpoints) == 0 && len(ceph.Monitoring) == 0 && (ceph.Dashboard == nil || ceph.Dashboard.Revealed)
 	}
 	return false
 }
@@ -235,12 +244,16 @@ func validDashboard(d *inspection.Dashboard) bool {
 		d.Status == inspection.DashboardUnproved && d.Reason == "" || d.Status != inspection.DashboardReady && d.Status != inspection.DashboardUnproved {
 		return false
 	}
+	gated := len(d.URLs) != 0 && d.URLs[0].Role == inspection.DashboardGateway
 	for index, url := range d.URLs {
 		role := inspection.DashboardStandby
-		if index == 0 {
+		switch {
+		case gated && index == 0:
+			role = inspection.DashboardGateway
+		case gated && index == 1, !gated && index == 0:
 			role = inspection.DashboardActive
 		}
-		if url.Host == "" || url.Role != role || !strings.HasPrefix(url.URL, "https://") {
+		if url.Host == "" || url.Role != role || !strings.HasPrefix(url.URL, "https://") || gated && role == inspection.DashboardStandby {
 			return false
 		}
 	}
@@ -252,12 +265,103 @@ func validDashboard(d *inspection.Dashboard) bool {
 	return present && len(value) > 0 && len(value) <= 128 && slices.Equal(d.Password.Parts(), []secrets.Part{secrets.ValuePart})
 }
 
+var monitoredServices = []string{"alertmanager", "grafana", "prometheus"}
+
+func validMonitoring(ceph *inspection.ManagedCeph) bool {
+	if len(ceph.Monitoring) == 0 {
+		return true
+	}
+	if ceph.Dashboard == nil || len(ceph.Dashboard.URLs) == 0 || ceph.Dashboard.URLs[0].Role != inspection.DashboardGateway {
+		return false
+	}
+	for index, access := range ceph.Monitoring {
+		if !slices.Contains(monitoredServices, access.Service) || index > 0 && ceph.Monitoring[index-1].Service >= access.Service || !strings.HasPrefix(access.URL, "https://") {
+			return false
+		}
+		if access.Anonymous && (access.Service != "grafana" || access.Revealed) || access.Warn && !access.Revealed {
+			return false
+		}
+		if !access.Revealed {
+			if len(access.Password.Parts()) != 0 || access.User != "" {
+				return false
+			}
+			continue
+		}
+		value, present := access.Password.Part(secrets.ValuePart)
+		clear(value)
+		if access.User == "" || !present || !slices.Equal(access.Password.Parts(), []secrets.Part{secrets.ValuePart}) {
+			return false
+		}
+	}
+	return true
+}
+
+func displayMonitoring(rows []inspection.MonitoringAccess) []monitoringPresentation {
+	if len(rows) == 0 {
+		return nil
+	}
+	shown := make([]monitoringPresentation, 0, len(rows))
+	for _, access := range rows {
+		row := monitoringPresentation{Service: escapeDisplayLine(access.Service), URL: escapeDisplayLine(access.URL), Anonymous: access.Anonymous}
+		if access.Revealed {
+			value, _ := access.Password.Part(secrets.ValuePart)
+			row.User, row.PasswordValue = escapeDisplayLine(access.User), escapeDisplayLine(string(value))
+			clear(value)
+		}
+		shown = append(shown, row)
+	}
+	return shown
+}
+
+func monitoringAccessFields(rows []inspection.MonitoringAccess) []field {
+	fields := make([]field, 0, len(rows))
+	for _, access := range rows {
+		fields = append(fields, field{Label: monitoringTitle(access.Service), Value: access.URL, Tone: "accent"})
+	}
+	return fields
+}
+
+func monitoringTitle(service string) string {
+	return strings.ToUpper(service[:1]) + service[1:]
+}
+
+func monitoringCustodyFields(rows []inspection.MonitoringAccess) []field {
+	fields := []field{}
+	for _, access := range rows {
+		title := monitoringTitle(access.Service)
+		if access.Anonymous {
+			fields = append(fields, field{Label: title + " login", Value: "anonymous access; no admin password is bound", Tone: "muted"})
+			continue
+		}
+		if !access.Revealed {
+			continue
+		}
+		label := title + " password"
+		if access.Service == "grafana" {
+			label = title + " initial password"
+		}
+		value, _ := access.Password.Part(secrets.ValuePart)
+		fields = append(fields, field{Label: title + " user", Value: access.User, Tone: "identity"}, field{Label: label, Value: string(value), Tone: "identity"})
+		clear(value)
+	}
+	return fields
+}
+
 func dashboardWarnings(result *inspection.InfoResult) []diagnostic {
 	var warnings []diagnostic
 	for _, cluster := range result.Storage {
 		if cluster.Ceph != nil && cluster.Ceph.Dashboard != nil && cluster.Ceph.Dashboard.Warn {
 			warnings = append(warnings, diagnostic{Severity: "warning", Code: "access.unproved", Message: "the dashboard administrator password of CephCluster " +
 				cluster.Name + " was kept from an apply that never proved the dashboard reachable, so the access it grants was not proved"})
+		}
+		if cluster.Ceph == nil {
+			continue
+		}
+		for _, access := range cluster.Ceph.Monitoring {
+			if access.Warn {
+				warnings = append(warnings, diagnostic{Severity: "warning", Code: "access.unproved", Message: "the " + monitoringTitle(access.Service) + " login of CephCluster " +
+					cluster.Name + " was kept from a removal that never proved the management gateway, so the access it grants was not proved"})
+			}
 		}
 	}
 	return warnings
@@ -305,7 +409,7 @@ func displayManagedCeph(ceph *inspection.ManagedCeph) *managedCephPresentation {
 		Management: escapeDisplayLine(ceph.Management), Release: escapeDisplayLine(ceph.Release), FSID: escapeDisplayLine(ceph.FSID),
 		AdminNode: escapeDisplayLine(ceph.AdminNode), CephCommand: escapeDisplayLine(ceph.CephCommand),
 		Status: escapeDisplayLine(ceph.Status), Reason: escapeDisplayLine(ceph.Reason), Remedy: escapeDisplayLine(ceph.Remedy),
-		Dashboard: displayDashboard(ceph.Dashboard), Resources: make([]resourcePresentation, 0, len(ceph.Resources)),
+		Dashboard: displayDashboard(ceph.Dashboard), Monitoring: displayMonitoring(ceph.Monitoring), Resources: make([]resourcePresentation, 0, len(ceph.Resources)),
 		Endpoints: make([]endpointPresentation, 0, len(ceph.Endpoints)),
 	}
 	for _, user := range ceph.ObjectUsers {
@@ -474,7 +578,10 @@ func writeManagedCeph(text *display, contextName, cluster string, ceph *inspecti
 		text.mutedVerbatimFields(field{Label: "Ceph command", Value: ceph.CephCommand, Tone: "command"})
 	}
 	if ceph.Dashboard != nil {
-		text.mutedFields(dashboardAccessFields(ceph.Dashboard)...)
+		text.mutedFields(dashboardAccessFields(ceph.Dashboard, ceph.Endpoints)...)
+	}
+	if len(ceph.Monitoring) != 0 {
+		text.mutedFields(monitoringAccessFields(ceph.Monitoring)...)
 	}
 	if rows := endpointAccessFields(ceph.Endpoints, full); len(rows) != 0 {
 		text.mutedFields(rows...)
@@ -502,7 +609,7 @@ func writeManagedCeph(text *display, contextName, cluster string, ceph *inspecti
 			clear(value)
 		}
 		text.emphasizedSubsection("Custody")
-		text.mutedFields(field{Label: "User", Value: d.User, Tone: "identity"}, field{Label: "Password", Value: password, Tone: passwordTone})
+		text.mutedFields(append([]field{{Label: "User", Value: d.User, Tone: "identity"}, {Label: "Password", Value: password, Tone: passwordTone}}, monitoringCustodyFields(ceph.Monitoring)...)...)
 	}
 	for _, user := range ceph.ObjectUsers {
 		access, _ := user.Credentials.Part(secrets.UsernamePart)
@@ -537,27 +644,56 @@ func writeResources(text *display, resources []inspection.Resource, full bool) {
 	text.mutedFields(rows...)
 }
 
-func dashboardAccessFields(d *inspection.Dashboard) []field {
+const selfSignedNote = "(self-signed; compare before accepting the browser warning)"
+
+func dashboardAccessFields(d *inspection.Dashboard, endpoints []inspection.Endpoint) []field {
 	if d == nil {
 		return nil
 	}
 	fields := []field{}
+	gated := len(d.URLs) != 0 && d.URLs[0].Role == inspection.DashboardGateway
 	for index, url := range d.URLs {
 		label, note := "", "(standby "+url.Host+"; redirects to the active MGR)"
-		if index == 0 {
+		switch {
+		case url.Role == inspection.DashboardGateway:
+			label, note = "Dashboard", "(via management gateway)"
+		case index == 1 && url.Role == inspection.DashboardActive:
+			label, note = "Direct", "(active MGR "+url.Host+" at last observation)"
+		case index == 0:
 			label, note = "Dashboard", "(active MGR "+url.Host+" at last observation)"
 		}
 		fields = append(fields, field{Label: label, Value: url.URL, Tone: "accent", Note: "  " + note})
+		switch {
+		case gated && url.Role == inspection.DashboardGateway:
+			fields = append(fields, gatewayCertificateFields(endpoints)...)
+		case gated && url.Role == inspection.DashboardActive && d.CertificateSHA256 != "":
+			fields = append(fields, field{Label: "Direct SHA-256", Value: colonHex(d.CertificateSHA256) + "  " + selfSignedNote, Tone: "muted"})
+		}
 	}
 	note := ""
 	if d.Reason != "" {
 		note = ": " + d.Reason
 	}
 	fields = append(fields, field{Label: "Dashboard status", Value: d.Status, Tone: "state", Note: note})
-	if d.CertificateSHA256 != "" {
-		fields = append(fields, field{Label: "Certificate SHA-256", Value: colonHex(d.CertificateSHA256) + "  (self-signed; compare before accepting the browser warning)", Tone: "muted"})
+	if !gated && d.CertificateSHA256 != "" {
+		fields = append(fields, field{Label: "Certificate SHA-256", Value: colonHex(d.CertificateSHA256) + "  " + selfSignedNote, Tone: "muted"})
 	}
 	return fields
+}
+
+func gatewayCertificateFields(endpoints []inspection.Endpoint) []field {
+	index := slices.IndexFunc(endpoints, func(e inspection.Endpoint) bool { return e.Service == "mgmt-gateway" })
+	if index < 0 || endpoints[index].Status != inspection.EndpointReady || endpoints[index].CertificateSHA256 == "" {
+		return nil
+	}
+	return []field{{Label: "Certificate SHA-256", Value: colonHex(endpoints[index].CertificateSHA256) + "  " + issuerNote(endpoints[index].Issuer), Tone: "muted"}}
+}
+
+func issuerNote(issuer string) string {
+	if issuer == inspection.IssuerCephadm {
+		return "(cephadm-signed; compare before accepting the browser warning)"
+	}
+	return "(bound certificate)"
 }
 
 func endpointAccessFields(endpoints []inspection.Endpoint, full bool) []field {
@@ -575,11 +711,7 @@ func endpointAccessFields(endpoints []inspection.Endpoint, full bool) []field {
 			fields = append(fields, field{Value: url, Tone: "accent"})
 		}
 		if e.CertificateSHA256 != "" {
-			note := "(bound certificate)"
-			if e.Issuer == inspection.IssuerCephadm {
-				note = "(cephadm-signed; compare before accepting the browser warning)"
-			}
-			fields = append(fields, field{Value: colonHex(e.CertificateSHA256) + "  " + note, Tone: "muted"})
+			fields = append(fields, field{Value: colonHex(e.CertificateSHA256) + "  " + issuerNote(e.Issuer), Tone: "muted"})
 		}
 	}
 	return fields

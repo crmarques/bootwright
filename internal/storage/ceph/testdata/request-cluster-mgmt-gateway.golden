@@ -175,9 +175,14 @@
         }
       }
     ],
+    "endpoint": "mgr.example.ceph.example.test",
     "id": "",
     "ingressPorts": [
       29443
+    ],
+    "monitoring": [
+      "grafana",
+      "prometheus"
     ],
     "type": "mgmt-gateway"
   },

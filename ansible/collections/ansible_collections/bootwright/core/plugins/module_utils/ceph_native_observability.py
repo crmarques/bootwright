@@ -31,6 +31,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import ipaddress
+import json
 import os
 import re
 import socket
@@ -39,7 +40,7 @@ import stat
 import time
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_monitoring_template, ceph_native_nfs
-from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import NativeFailure, Refusal, require
+from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import NativeFailure, Refusal, canonical, require
 
 MONITORING_TYPES = (
     "alertmanager",
@@ -102,6 +103,15 @@ GATEWAY_LEAVES = (
 OBSERVED_LEAVES = frozenset(("mgmtGatewayCertificate",))
 GATEWAY_DAEMON_TYPES = ("mgmt-gateway", "keepalived", "oauth2-proxy")
 GATEWAY_IMAGES = {"mgmt-gateway": "nginx", "keepalived": "keepalived", "oauth2-proxy": "oauth2_proxy"}
+# The monitored services behind a management gateway whose basic-auth login cephadm keeps and answers through `orch <service>
+# get-credentials` as {user, password, certificate} once its monitoring security is enabled, which a running gateway enables, and as {}
+# before (src/pybind/mgr/orchestrator/module.py, _get_prometheus_access_info and _get_alertmanager_access_info; src/pybind/mgr/cephadm/
+# module.py, get_prometheus_access_info and _get_security_config). cephadm stores admin/admin when it holds none, so an answer is a write.
+CREDENTIAL_SERVICES = ("alertmanager", "prometheus")
+LOGIN_MEMBERS = frozenset(("password", "user"))
+ACCESS_MEMBERS = LOGIN_MEMBERS | {"certificate"}
+MAX_LOGIN = 128
+MAX_LOGINS = 4096
 # Where the identity provider's CA bundle is mounted into the oauth2-proxy container: a file in a directory Go's system trust store
 # reads, as the Go planner's storage.OAuth2ProxyCABundlePath names it.
 OAUTH2_PROXY_CA_PATH = "/etc/pki/tls/certs/oauth2-proxy-idp-ca.pem"
@@ -697,3 +707,50 @@ def gateway_endpoint(worker, unit, running):
         worker.pending("http@mgmt-gateway")
     reachable = bool(targets) and len(digests) == len(targets)
     return {"certificateSHA256": (bound or digests[0]) if reachable else "", "reachable": reachable}
+
+
+def credential_services(unit):
+    """The declared services whose login a management gateway unit reads: its frozen monitored services cephadm keeps a login for."""
+    if unit.get("type") != "mgmt-gateway":
+        return []
+    return [service for service in unit.get("monitoring", []) if service in CREDENTIAL_SERVICES]
+
+
+def login_value(value):
+    """A user or password as Bootwright retains it: 1 to 128 visible ASCII characters other than `&`, `<` and `>`, which the controller's
+    canonical JSON escapes."""
+    return isinstance(value, str) and 0 < len(value) <= MAX_LOGIN and all("!" <= c <= "~" and c not in "&<>" for c in value)
+
+
+def native_login(answer, service, coordinate):
+    """One get-credentials answer as its {password, user}; the answer of a cluster whose monitoring security is off holds no login. A
+    login cephadm accepted outside the retained alphabet refuses naming only the service and member, never a value."""
+    require(isinstance(answer, dict), "native-output")
+    require(answer != {}, "material")
+    require(LOGIN_MEMBERS <= set(answer) <= ACCESS_MEMBERS, "native-output")
+    require(all(isinstance(answer[member], str) and answer[member] for member in LOGIN_MEMBERS), "material")
+    for member in ("user", "password"):
+        if not login_value(answer[member]):
+            raise NativeFailure("monitoring-login-unsupported", coordinate, service + " " + member, secrets=(answer["user"], answer["password"]))
+    return {"password": answer["password"], "user": answer["user"]}
+
+
+def unique_members(pairs):
+    result = {}
+    for key, value in pairs:
+        require(key not in result, "material")
+        result[key] = value
+    return result
+
+
+def logins_material(data, services):
+    """The produced output: the canonical JSON of exactly one {password, user} per declared service, nothing else."""
+    try:
+        require(isinstance(data, bytes) and 0 < len(data) <= MAX_LOGINS, "material")
+        value = json.loads(data, object_pairs_hook=unique_members)
+    except (ValueError, UnicodeError, TypeError):
+        raise Refusal("material") from None
+    require(isinstance(value, dict) and sorted(value) == sorted(services) and canonical(value) == data, "material")
+    for login in value.values():
+        require(isinstance(login, dict) and set(login) == LOGIN_MEMBERS and login_value(login["user"]) and login_value(login["password"]), "material")
+    return data

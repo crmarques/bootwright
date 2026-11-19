@@ -37,3 +37,12 @@ func ClientKeyringOf(read secrets.Material, client string) (secrets.Material, bo
 	}
 	return secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: keyring}), true
 }
+
+func MonitoringCredentialsOf(read secrets.Material, service string) (secrets.Material, bool) {
+	value, ok := singleValue(read)
+	if !ok {
+		return secrets.Material{}, false
+	}
+	defer clear(value)
+	return MonitoringCredentials(value, service)
+}

@@ -118,6 +118,15 @@ service families, options with unqualified effects and protected leaves
 without a qualified binding record refuse explicitly. There is no arbitrary
 provider-command escape hatch.
 
+`spec.managementGateway.fqdn` is the DNS name clients use for the declared
+management gateway; it is Bootwright's own field, not a cephadm member, and
+names no native document. It needs a declared `mgmt-gateway` service, so
+`spec.managementGateway` without one refuses `api.invariant` there, and an
+`fqdn` equal to a topology node's hostname refuses at that `fqdn`. The
+[management gateway unit](../ceph.md#resources-readiness-and-access) owns
+what the name changes: the bound certificate it must cover and the URLs
+`cluster info` derives from it. Bootwright publishes no DNS record for it.
+
 Other P2 resource additions remain target contracts, not admitted kinds.
 
 IBM packages use the vendor repository selected by `packageRepository`.
@@ -349,7 +358,10 @@ value is preserved:
 - a `topology.stretch` block's `ruleName: stretch-rule`, its tiebreaker
   `site` from the tiebreaker node and, when omitted, its `dataSites` as the
   sorted distinct sites of the nodes the MON service places, other than the
-  tiebreaker; and
+  tiebreaker;
+- `managementGateway.fqdn` as `mgr.<cluster>.<storage domain>` when a
+  `mgmt-gateway` service is declared, the field is not authored and that
+  storage domain exists; and
 - `serviceBindings` and their `secrets` in sorted order.
 
 Implicit defaults owned by Ceph or a native renderer, such as role-derived

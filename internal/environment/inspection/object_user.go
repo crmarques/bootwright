@@ -80,6 +80,9 @@ func ClearSecrets(result *InfoResult) {
 		if cluster.Ceph.Dashboard != nil {
 			cluster.Ceph.Dashboard.Password.Clear()
 		}
+		for _, access := range cluster.Ceph.Monitoring {
+			access.Password.Clear()
+		}
 		for _, user := range cluster.Ceph.ObjectUsers {
 			user.Credentials.Clear()
 		}

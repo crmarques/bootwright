@@ -128,8 +128,13 @@ UNIT_TYPES = {
     "rbd-mirror": UnitType(mirror_validate, mirror_check, mirror_claim, mirror_settle, mirror_expected, mirror_readiness, MIRROR_TYPES, mirror_frontend,
                            {"rbd-mirror": None}, {}, frozenset(MIRROR_TYPES), None),
 }
-PHASES = frozenset(("unit", "ingress_firewall", "vip_holder", "sso_config", "sso", "nvmeof_unit_observe"))
-READ_ONLY_PHASES = frozenset(("nvmeof_unit_observe",))
+PHASES = frozenset(("unit", "ingress_firewall", "vip_holder", "sso_config", "sso", "nvmeof_unit_observe", "monitoring_credentials",
+                    "monitoring_credentials_held"))
+READ_ONLY_PHASES = frozenset(("nvmeof_unit_observe", "monitoring_credentials_held"))
+# The daemon types whose deployment proves cephadm v20.2.1 already stores a service's login: it stores both logins before it configures a
+# Prometheus daemon (PrometheusService.generate_config) and Prometheus's before it configures a Grafana daemon
+# (GrafanaService.get_dependencies), src/pybind/mgr/cephadm/services/monitoring.py.
+LOGIN_HOLDERS = {"alertmanager": frozenset(("prometheus",)), "prometheus": frozenset(("grafana", "prometheus"))}
 # The ingress firewall check reads only these host tools, never with a write, reload or query form.
 SYSTEMCTL = "/usr/bin/systemctl"
 FIREWALL_CMD = "/usr/bin/firewall-cmd"
@@ -149,6 +154,8 @@ ZONE_NAME = re.compile(r"[A-Za-z0-9_.+-]{1,64}\Z")
 PORT_TOKEN = re.compile(r"([0-9]{1,5})(?:-([0-9]{1,5}))?/tcp\Z")
 RICH_VRRP = re.compile(r'rule (?:family="(ipv4|ipv6)" )?protocol value="(?:vrrp|112)" accept\Z')
 RICH_PORT = re.compile(r'rule (?:family="(ipv4|ipv6)" )?port port="([0-9]{1,5})(?:-([0-9]{1,5}))?" protocol="tcp" accept\Z')
+DNS_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\Z")
+GATEWAY_MONITORED = ("alertmanager", "grafana", "prometheus")
 DOCUMENT_MEMBERS = frozenset(("networks", "placement", "service_id", "service_type", "spec"))
 # The management gateway's oauth2-proxy document alone also carries its one custom_configs entry, the identity provider's CA bundle mount.
 PROXY_MEMBERS = DOCUMENT_MEMBERS | {"custom_configs"}
@@ -306,10 +313,11 @@ def validate(request, hosts):
     """One unit of a known type: 1 to 8 placed documents, each listed in `delegated` with exactly its hosts."""
     unit = request.get("service")
     require(isinstance(unit, dict) and {"documents", "id", "type"} <= set(unit) <=
-            {"bindings", "config", "documents", "id", "ingressPorts", "observeBudget", "scrapeIngress", "type"})
+            {"bindings", "config", "documents", "endpoint", "id", "ingressPorts", "monitoring", "observeBudget", "scrapeIngress", "type"})
     require(isinstance(unit["type"], str) and unit["type"] in UNIT_TYPES)
     require("config" not in unit or unit["type"] == "monitoring")
     require("scrapeIngress" not in unit or unit["type"] == "monitoring")
+    gateway_access(unit)
     # Go freezes the NVMe-oF unit observer's read bound (service_unit.go unitDeadline).
     require(("observeBudget" in unit) == (unit["type"] == "nvmeof"))
     require("observeBudget" not in unit or type(unit["observeBudget"]) is int and 0 < unit["observeBudget"] <= ceph_native_nvmeof.MAX_BUDGET)
@@ -337,6 +345,16 @@ def validate(request, hosts):
         seen.add(name)
     validate_bindings(unit)
     UNIT_TYPES[unit["type"]].validate(unit, request, hosts)
+
+
+def gateway_access(unit):
+    """A management gateway's client DNS name and the monitoring services it fronts, as Go froze them: only on a mgmt-gateway unit, a
+    DNS name and a sorted, nonempty subset of the monitoring services."""
+    endpoint, monitoring = unit.get("endpoint"), unit.get("monitoring")
+    require(endpoint is None and monitoring is None or unit["type"] == "mgmt-gateway")
+    require(endpoint is None or isinstance(endpoint, str) and 0 < len(endpoint) <= 253 and all(DNS_LABEL.fullmatch(part) for part in endpoint.split(".")))
+    require(monitoring is None or isinstance(monitoring, list) and bool(monitoring) and all(service in GATEWAY_MONITORED for service in monitoring) and
+            monitoring == sorted(set(monitoring)))
 
 
 def frontend(request):
@@ -734,6 +752,38 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
         self.manager_declare(enable, module=("dashboard", "ac-user-show"))
         require(ceph_native_observability.sso_enabled(self), "not-ready")
         return {"changed": True, "pending": False}
+
+    def monitoring_credentials(self):
+        """After the unit's readiness, on the bootstrap host and writing no record of its own: the basic-auth login cephadm keeps for each
+        declared Prometheus and Alertmanager behind this management gateway, as the canonical JSON its protected output holds. Only a
+        declared service is asked, because cephadm stores a default login for one it is asked about; the logins travel only in the
+        result's private member, never in a refusal or a record."""
+        return self.read_logins(self.login_services())
+
+    def monitoring_credentials_held(self):
+        """An observation's read of the same logins, only once cephadm must already hold each: a deployed daemon of a type whose
+        configuration stores that login proves it, so the read stores none. Otherwise it reads none and answers no private member."""
+        services = self.login_services()
+        rows = self.manager_retry(self.ceph, "orch", "ps")
+        require(isinstance(rows, list) and all(isinstance(row, dict) for row in rows), "native-output")
+        deployed = {row.get("daemon_type") for row in rows}
+        if not all(LOGIN_HOLDERS[service] & deployed for service in services):
+            return {"changed": False}
+        return self.read_logins(services)
+
+    def login_services(self):
+        services = ceph_native_observability.credential_services(self.request["service"])
+        require(self.request["action"] == "service" and bool(services), "request")
+        require(self.markers.owned(), "ownership")
+        require(self.ceph("fsid") == {"fsid": self.request["fsid"]}, "ownership")
+        return services
+
+    def read_logins(self, services):
+        logins = {}
+        for service in services:
+            answer = self.manager_retry(self.ceph, "orch", service, "get-credentials")
+            logins[service] = ceph_native_observability.native_login(answer, service, self.native_coordinate())
+        return {"changed": False, "private": canonical(logins).decode("ascii")}
 
     def unfinished(self, evidence):
         if self.request["action"] != "service":

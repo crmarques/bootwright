@@ -167,7 +167,7 @@ spec:
         client_id: ceph
         oidc_issuer_url: https://idp.example.test/realms/ceph
         provider_display_name: Qualification IdP
-        redirect_url: https://management.lab.example.test:9443/oauth2/callback
+        redirect_url: https://mgr.ceph-lab.lab.example.test:9443/oauth2/callback
 
       custom_configs:
         - mount_path: /etc/pki/tls/certs/oauth2-proxy-idp-ca.pem

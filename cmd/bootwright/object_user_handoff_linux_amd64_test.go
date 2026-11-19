@@ -33,6 +33,12 @@ func (*objectHandoffFixture) HostKeyProved(context.Context, string, string, api.
 func (*objectHandoffFixture) DashboardPassword(context.Context, string, string) (inspection.Custodied, bool, error) {
 	return inspection.Custodied{Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("dashboard-private")})}, true, nil
 }
+func (*objectHandoffFixture) MonitoringCredentials(context.Context, string, string, string) (inspection.Custodied, bool, error) {
+	return inspection.Custodied{}, false, nil
+}
+func (*objectHandoffFixture) GrafanaPassword(context.Context, string, string) (inspection.Custodied, bool, error) {
+	return inspection.Custodied{}, false, nil
+}
 func (*objectHandoffFixture) ClientKeyring(context.Context, string, string) (inspection.Custodied, bool, error) {
 	return inspection.Custodied{}, false, nil
 }

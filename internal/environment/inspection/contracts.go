@@ -22,6 +22,7 @@ type StorageProof struct {
 	Image           Image
 	Monitors        []Monitor
 	Dashboard       Dashboard
+	Monitoring      []MonitoringAccess
 	Endpoints       []Endpoint
 	Specializations []string
 }
@@ -39,9 +40,15 @@ type ClientCustody interface {
 	ClientKeyring(ctx context.Context, contextName, client string) (Custodied, bool, error)
 }
 
+type MonitoringCustody interface {
+	MonitoringCredentials(ctx context.Context, contextName, cluster, service string) (Custodied, bool, error)
+	GrafanaPassword(ctx context.Context, contextName, cluster string) (Custodied, bool, error)
+}
+
 type Custody interface {
 	DashboardCustody
 	ClientCustody
+	MonitoringCustody
 	ObjectUserCredentials(ctx context.Context, contextName, user string) (Custodied, bool, error)
 }
 

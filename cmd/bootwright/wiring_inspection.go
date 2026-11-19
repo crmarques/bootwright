@@ -40,16 +40,64 @@ type trustRecords interface {
 
 func wireInspection(state inventory.EffectiveState, reconciler lifecycle.Service, binder *custody.Service, selection contexts.SelectionStore, records trustRecords) inspection.Service {
 	return inspection.New(effectiveGraph{state: nodeAccessState{state: state}}, cephInspection{reconciler: reconciler}, installProofs{reconciler: reconciler},
-		hostKeyProofs{keys: machineHostKeys{reconciler: reconciler}, records: records}, currentSelection(selection), inspectionCustody{reader: producedReader{binder: binder}, administrator: reconciler.AdminCredentials()}).WithMembers(clusterMembers()).WithAdministrator(clusterAdministrator).WithClients(clusterClientMetadata{reconciler: reconciler, custody: binder}).WithContainerDetails(containerDetails).WithConsoleCustody(inspectionCustody{reader: producedReader{binder: binder}, administrator: reconciler.AdminCredentials()})
+		hostKeyProofs{keys: machineHostKeys{reconciler: reconciler}, records: records}, currentSelection(selection), inspectionCustody{reader: producedReader{binder: binder}, administrator: reconciler.AdminCredentials(), frozen: reconciler, current: binder}).WithMembers(clusterMembers()).WithAdministrator(clusterAdministrator).WithClients(clusterClientMetadata{reconciler: reconciler, custody: binder}).WithContainerDetails(containerDetails).WithConsoleCustody(inspectionCustody{reader: producedReader{binder: binder}, administrator: reconciler.AdminCredentials(), frozen: reconciler, current: binder})
 }
 
 type producedEntries interface {
 	ReadProduced(ctx context.Context, contextName, block, name string) (containeraccess.Custodied, bool, error)
 }
 
+type storageResourcesReader interface {
+	StorageResources(ctx context.Context, contextName string) (*lifecycle.StorageResourcesResult, error)
+}
+
+type currentSecrets interface {
+	ReadCurrent(ctx context.Context, request custody.ReadCurrentRequest) ([]secretstore.BoundMaterial, error)
+}
+
 type inspectionCustody struct {
 	reader        producedEntries
 	administrator administratorPasswordReader
+	frozen        storageResourcesReader
+	current       currentSecrets
+}
+
+func (d inspectionCustody) MonitoringCredentials(ctx context.Context, contextName, cluster, service string) (inspection.Custodied, bool, error) {
+	read, found, err := d.reader.ReadProduced(ctx, contextName, ceph.GatewayBlock(cluster), ceph.MonitoringOutput)
+	if err != nil || !found {
+		return inspection.Custodied{Material: read.Material, Unproved: read.Unproved}, found, err
+	}
+	defer read.Material.Clear()
+	login, ok := ceph.MonitoringCredentialsOf(read.Material, service)
+	if !ok {
+		return inspection.Custodied{}, true, inspection.ErrMonitoringMaterial
+	}
+	return inspection.Custodied{Material: login, Unproved: read.Unproved}, true, nil
+}
+
+func (d inspectionCustody) GrafanaPassword(ctx context.Context, contextName, cluster string) (inspection.Custodied, bool, error) {
+	if d.frozen == nil || d.current == nil {
+		return inspection.Custodied{}, false, availability.ErrNotImplemented
+	}
+	resources, err := d.frozen.StorageResources(ctx, contextName)
+	if err != nil || resources == nil {
+		return inspection.Custodied{}, false, err
+	}
+	secret, bound := ceph.GrafanaPasswordSecret(cluster, resources.Frozen)
+	if !bound {
+		return inspection.Custodied{}, false, nil
+	}
+	read, err := d.current.ReadCurrent(ctx, custody.ReadCurrentRequest{ContextName: contextName, Names: []string{secret}})
+	if err != nil {
+		return inspection.Custodied{}, false, err
+	}
+	if len(read) != 1 {
+		for _, item := range read {
+			item.Material.Clear()
+		}
+		return inspection.Custodied{}, false, inspection.ErrMonitoringMaterial
+	}
+	return inspection.Custodied{Material: read[0].Material}, true, nil
 }
 
 func (d inspectionCustody) ObjectUserCredentials(ctx context.Context, contextName, user string) (inspection.Custodied, bool, error) {
@@ -139,7 +187,15 @@ func (c cephInspection) ManagedStorage(ctx context.Context, contextName string, 
 	if err != nil {
 		return inspection.StorageProof{}, err
 	}
-	found, reason := ceph.Inspect(catalog, cluster, proofs)
+	resources, err := c.reconciler.StorageResources(ctx, contextName)
+	if err != nil {
+		return inspection.StorageProof{}, err
+	}
+	var frozen []reconciliation.Block
+	if resources != nil {
+		frozen = resources.Frozen
+	}
+	found, reason := ceph.Inspect(catalog, cluster, frozen, proofs)
 	if reason != "" {
 		return inspection.StorageProof{Release: administration.Release, AdminNode: administration.Node, Reason: reason}, nil
 	}
@@ -157,22 +213,17 @@ func (c cephInspection) ManagedStorage(ctx context.Context, contextName string, 
 	for _, url := range d.URLs {
 		proof.Dashboard.URLs = append(proof.Dashboard.URLs, inspection.DashboardURL{Host: url.Host, URL: url.URL, Role: url.Role})
 	}
-	proof.Endpoints, err = c.endpoints(ctx, contextName, cluster.Name(), proofs)
+	for _, access := range found.Monitoring {
+		proof.Monitoring = append(proof.Monitoring, inspection.MonitoringAccess{Service: access.Service, URL: access.URL})
+	}
+	proof.Endpoints, err = c.endpoints(ctx, contextName, cluster.Name(), frozen, proofs)
 	if err != nil {
 		return inspection.StorageProof{}, err
 	}
 	return proof, nil
 }
 
-func (c cephInspection) endpoints(ctx context.Context, contextName, cluster string, proofs []lifecycle.BlockEvidence) ([]inspection.Endpoint, error) {
-	found, err := c.reconciler.StorageResources(ctx, contextName)
-	if err != nil {
-		return nil, err
-	}
-	var frozen []reconciliation.Block
-	if found != nil {
-		frozen = found.Frozen
-	}
+func (c cephInspection) endpoints(ctx context.Context, contextName, cluster string, frozen []reconciliation.Block, proofs []lifecycle.BlockEvidence) ([]inspection.Endpoint, error) {
 	all := slices.Clone(proofs)
 	for _, name := range ceph.EndpointGateways(cluster, frozen) {
 		gateway, err := c.reconciler.Evidence(ctx, contextName, string(api.CephObjectGateway), name)

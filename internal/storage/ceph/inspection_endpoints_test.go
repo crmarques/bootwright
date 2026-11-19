@@ -111,6 +111,19 @@ func TestClusterInfoEndpoints(t *testing.T) {
 		}
 	})
 
+	t.Run("a management FQDN names the gateway URL", func(t *testing.T) {
+		for _, services := range [][]api.Value{vipGateway("192.0.2.60"), {hostGateway("node-1", "node-2")}} {
+			f := &endpointFixture{}
+			unit := gatewayUnitOf(t, withManagementFQDN(gatewayCatalog(t, services, nil), managementFQDN))
+			block := f.service(t, unit)
+			f.prove(t, block, reached(digest))
+			row := endpointRow(InspectEndpoints("example", f.blocks, f.proofs), "mgmt-gateway")
+			if !slices.Equal(row.URLs, []string{"https://" + managementFQDN + ":9443/"}) || row.Status != EndpointReady {
+				t.Fatalf("named gateway %+v", row)
+			}
+		}
+	})
+
 	t.Run("an IPv6 virtual IP is bracketed", func(t *testing.T) {
 		f := &endpointFixture{}
 		block := f.service(t, gatewayUnitOf(t, gatewayCatalog(t, vipGateway("2001:db8::60"), nil)))

@@ -389,9 +389,14 @@ lists the requirements each storage family emits:
   Bootwright does not realize for this service"), and its one admitted
   `custom_configs` entry carries only its `mount_path`. The block also depends
   on `ceph-service-<cluster>-monitoring` when that block exists, and its
-  deadline is apply 2940 s (4260 s with an oauth2-proxy, whose rendered
+  deadline is apply 3600 s (4920 s with an oauth2-proxy, whose rendered
   configuration proof and single sign-on write each add one native call),
-  observe 720 s, destroy 1380 s. Its bindings are Secret references
+  observe 1380 s, destroy 1380 s, each apply and observation holding one native
+  call for its monitoring logins. Its request also carries the cluster's
+  effective [`managementGateway.fqdn`](api/ceph.md#cephcluster) as
+  `service.endpoint`, when there is one, and as `service.monitoring` the
+  sorted declared subset of `alertmanager`, `grafana` and `prometheus`, which
+  the gateway serves under `/<service>/`; no other unit carries either. Its bindings are Secret references
   (`service.bindings`) lent as protected files: the gateway's certificate to
   every operation and its private key to apply only, and the oauth2-proxy's
   client and cookie secrets, TLS pair and identity provider CA bundle to apply
@@ -410,8 +415,13 @@ lists the requirements each storage family emits:
   an `sso` member, `""` or `"oauth2"`; only a management gateway unit with an
   oauth2-proxy may report `"oauth2"`, and its readiness needs it. Before a fresh apply registers, the bound certificate
   must name the gateway's `virtual_ip` (an IP address entry) or, without one,
-  every host of its placement (a DNS name or a matching wildcard), or the
-  apply refuses naming the Secret; no certificate byte enters the refusal.
+  every host of its placement (a DNS name or a matching wildcard), and also
+  the frozen `service.endpoint` when there is one, or the apply refuses naming
+  the Secret; no certificate byte enters the refusal. A missing
+  `service.endpoint`, also when a storage domain derives it, refuses with the
+  remedy to reissue the certificate with it as a DNS name (or a matching
+  wildcard), or to author a `managementGateway.fqdn` it holds. The readiness proof
+  still connects to the virtual IP or the hosts.
   For RBD mirroring, a declared `rbd-mirror` service forms one
   `ceph-service-<cluster>-rbd-mirror` block whose one singleton document
   carries no `service_id` or `spec`; its daemons run the Ceph image, so it
@@ -1741,6 +1751,26 @@ Without an oauth2-proxy, Bootwright writes no dashboard setting and runs no
 dashboard's standby behaviour itself, and the cluster's dashboard phase keeps
 its own publication and readback.
 
+A running management gateway turns on cephadm's monitoring security, which
+puts Prometheus and Alertmanager behind basic authentication. When the unit's
+frozen `monitoring` lists `prometheus` or `alertmanager`, its apply runs, after
+readiness on the bootstrap host, `orch <service> get-credentials` over the
+verified administrative channel for those services only, because that command
+stores the default `admin`/`admin` for a service cephadm holds no login for.
+A recorded, non-removal observation proving the unit ready asks only when
+`orch ps` shows a daemon proving cephadm already stores each login (v20.2.1
+stores both before it configures a Prometheus daemon, Prometheus's before a
+Grafana daemon); otherwise it reads and recaptures none. Residual: a login
+removed outside cephadm after that is stored again as the default. A `user` or
+`password` that is not a nonempty string, or an empty answer (security off),
+refuses `material`; one outside 1 to 128 visible ASCII characters other than
+`&`, `<` and `>` refuses `monitoring-login-unsupported`, naming the service and
+member, never the value, with the remedy `ceph orch <service>
+set-credentials`. The logins reach only the produced output `monitoring`, the
+canonical JSON `{"<service>":{"password","user"}}` of exactly those services,
+never evidence, a refusal, a record or a diagnostic. A unit listing neither
+service, and a removal's observation, declare no output.
+
 With an oauth2-proxy, the unit also reads `container_image_oauth2_proxy`, and
 the proxy's five bound leaves (`client_secret`, `cookie_secret`, `ssl_cert`,
 `ssl_key` and `/custom_configs/0/content`) are lent to its apply phase only
@@ -2357,9 +2387,10 @@ enters [produced-material custody](state-reconciliation.md#produced-material-cus
 before its block is done. Capture failure leaves an unknown outcome and safe
 recapture. Retries keep identity and material without incidental rotation.
 An observation that no attempt or resolution records, such as
-`bootwright diff --observe`, declares no output: the cluster, client and object
-user blocks prove their postcondition without returning the dashboard
-password, the client keyring or the S3 key pair, and the cluster's bootstrap
+`bootwright diff --observe`, declares no output: the cluster, client, object
+user and management gateway blocks prove their postcondition without returning
+the dashboard password, the client keyring, the S3 key pair or the monitoring
+logins, and the cluster's bootstrap
 host checks the dashboard account against its retained password with
 `dashboard_present`, which answers presence alone.
 Confidential material kept beside a native effect follows
@@ -2371,8 +2402,8 @@ install an add-on.
 Produced storage material is not an authored Secret and cannot be revealed
 through Secret commands under the [custody contract](secrets.md#produced-material),
 whose table lists each storage output's one revealing command: the dashboard
-administrator password, one CephClient's Ceph keyring and a
-CephObjectUser's S3 key pair. A client keyring is revealed in the native
+administrator password, the management gateway's monitoring logins, one
+CephClient's Ceph keyring and a CephObjectUser's S3 key pair. A client keyring is revealed in the native
 keyring form, for one selected managed cluster and one of its declared clients
 settled before any custody read, until the destroy that completes the removal
 withdraws it. A bucket block reads its owner's S3 key pair only into its

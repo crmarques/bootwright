@@ -1,5 +1,5 @@
 implementation: storage-ceph-core-v1
-content-digest: 36df5d9340708fbe7420c946057dfc09548e3e870f8431a06157718186c137c3
+content-digest: 1d54919b342f43c79419e37eda6e8ca9f8fee066a06d8e56d61d92fda0e556ba
 request-version: ceph-core-v1
 automation-formats: -custody-v1, ceph-bootstrap-recovery-v1, ceph-bootstrap-state-v1, ceph-client-auth-v1, ceph-cluster-device-identities-v1, ceph-dashboard-port-attempt-v1, ceph-dashboard-port-repair-v1, ceph-dashboard-redeploy-v1, ceph-dashboard-tls-v1, ceph-dashboard-user-v1, ceph-device-identities-v1, ceph-filesystem-attempt-v1, ceph-host-cache-v1, ceph-monitoring-template-v1, ceph-native-route-v1, ceph-native-teardown-v1, ceph-osd-device-clear-v1, ceph-osd-device-intent-v1, ceph-physical-device-binding-v1, ceph-policy-attempt-v1, ceph-pool-attempt-v1, ceph-rbd-image-attempt-v1, ceph-registry-v1, ceph-runtime-profile-v1, ceph-service-inputs-v1, ceph-subvolume-attempt-v1, ceph-subvolume-group-attempt-v1, ceph-tiebreaker-removal-v1, ceph-tunnel-custody-v1, ceph-tunnel-redeploy-v1, ceph-tunnel-relabel-v1, ceph-tunnel-stage-v1, ceph-tunnel-v1
 mark-formats: .bootwright-registry-, Bootwright: this host, bootwright-owner, bootwright:
@@ -10,6 +10,7 @@ effect-pins:
   health-scoped-to-owned-pools-and-filesystems-v1
   gateway-dashboard-cephadm-client-tls-v1
   gateway-native-ca-endpoint-proof-v1
+  gateway-monitoring-logins-v1
 request-identity:
   cluster
   fsid
@@ -292,8 +293,10 @@ request-schema:
   service.bindings[].serviceRef string
   service.config map[string]map[string]string omitempty
   service.documents []opaque
+  service.endpoint string omitempty
   service.id string
   service.ingressPorts []int omitempty
+  service.monitoring []string omitempty
   service.observeBudget int omitempty
   service.scrapeIngress map[string]string omitempty
   service.type string

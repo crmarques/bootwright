@@ -20,7 +20,10 @@ No live execution or operator acceptance is claimed.
   redundancy. The extra RAM is a qualification allowance, not a vendor minimum.
 - OSD autotuning is off with a 4 GiB target (`4294967296`), not a process cap.
 - Management VIP `198.51.100.50`, port 9443; allow the gateway port and VRRP
-  on both ingress hosts.
+  on both ingress hosts. Clients reach the gateway as
+  `mgr.ceph-lab.lab.example.test`, the name normalization derives, so
+  `management-tls` and the oauth2-proxy `redirect_url` name it; publish its DNS
+  record pointing at the VIP.
 - Required operator inputs: a trusted OIDC IdP with client registration and
   role mapping (`oidc-client`, `oidc-cookie`, `oidc-ca`), an SNMPv3 receiver
   (`snmp-auth`, `snmp-privacy`), `management-tls`, `grafana-admin`, and DNS for

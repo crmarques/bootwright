@@ -765,6 +765,8 @@ argument_specs:
               documents:
                 type: list
                 elements: dict
+              endpoint:
+                type: str
               id:
                 type: str
                 required: true
@@ -773,6 +775,9 @@ argument_specs:
               ingressPorts:
                 type: list
                 elements: int
+              monitoring:
+                type: list
+                elements: str
               observeBudget:
                 type: int
               type:
@@ -866,6 +871,12 @@ argument_specs:
           - C(client) receives a client action's generated CephX identity.
           - C(dashboard) receives a cluster action's dashboard administrator password.
           - C(object-user) receives an object-user action's generated S3 key pair.
+          - C(monitoring) receives a management gateway unit's Prometheus and Alertmanager basic-auth logins, read from cephadm.
+          - An apply reads them with C(orch <service> get-credentials), which stores cephadm's default admin/admin login for a service it
+            holds none for. An observation reads them only when a deployed Prometheus daemon (both logins) or Grafana daemon (the
+            Prometheus login) proves cephadm v20.2.1 already stores each, and otherwise writes no C(monitoring) output. Residual, not
+            proved by the read itself, an observation still writes a default when an operator removed the stored login outside
+            cephadm after that daemon was configured, or when another cephadm release stores the login later than v20.2.1.
 
   observe:
     short_description: Observe a frozen Ceph resource without mutation.

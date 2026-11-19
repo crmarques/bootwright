@@ -39,17 +39,24 @@ type DashboardInspection struct {
 	CertificateSHA256 string
 }
 
+type MonitoringInspection struct {
+	Service string
+	URL     string
+}
+
 type Inspection struct {
 	FSID            string
 	Image           ImageInspection
 	Monitors        []MonitorInspection
 	Dashboard       DashboardInspection
+	Monitoring      []MonitoringInspection
 	Specializations []string
 }
 
 const (
 	DashboardReady    = "ready"
 	DashboardUnproved = "unproved"
+	DashboardGateway  = "gateway"
 	DashboardActive   = "active"
 	DashboardStandby  = "standby"
 )
@@ -59,7 +66,7 @@ const (
 	noImageProof   = "no apply of this context's current operation has recorded the cluster's resolved Ceph image"
 )
 
-func Inspect(catalog api.Catalog, cluster api.Object, proofs []lifecycle.BlockEvidence) (Inspection, string) {
+func Inspect(catalog api.Catalog, cluster api.Object, frozen []reconciliation.Block, proofs []lifecycle.BlockEvidence) (Inspection, string) {
 	image, reason := inspectImage(cluster.Name(), proofs)
 	if reason != "" {
 		return Inspection{}, reason
@@ -72,11 +79,12 @@ func Inspect(catalog api.Catalog, cluster api.Object, proofs []lifecycle.BlockEv
 	if reason != "" {
 		return Inspection{}, reason
 	}
-	dashboard, reason := inspectDashboard(cluster, evidence)
+	access, gated := GatewayAccessOf(cluster.Name(), frozen)
+	dashboard, reason := inspectDashboard(cluster, evidence, access, gated)
 	if reason != "" {
 		return Inspection{}, reason
 	}
-	return Inspection{FSID: evidence.FSID, Image: image, Monitors: monitors, Dashboard: dashboard, Specializations: clusterSpecializations(cluster.Name(), evidence, proofs)}, ""
+	return Inspection{FSID: evidence.FSID, Image: image, Monitors: monitors, Dashboard: dashboard, Monitoring: access.Monitoring, Specializations: clusterSpecializations(cluster.Name(), evidence, proofs)}, ""
 }
 
 func clusterSpecializations(cluster string, evidence Evidence, proofs []lifecycle.BlockEvidence) []string {
@@ -97,7 +105,7 @@ func clusterSpecializations(cluster string, evidence Evidence, proofs []lifecycl
 	return slices.Compact(ids)
 }
 
-func inspectDashboard(cluster api.Object, evidence Evidence) (DashboardInspection, string) {
+func inspectDashboard(cluster api.Object, evidence Evidence, access GatewayAccess, gated bool) (DashboardInspection, string) {
 	nodes := cluster.Spec().Get("topology", "nodes").Items()
 	node := func(native string) (string, bool) {
 		index := slices.IndexFunc(nodes, func(node api.Value) bool { return cephcluster.NativeHostname(node) == native })
@@ -108,13 +116,20 @@ func inspectDashboard(cluster api.Object, evidence Evidence) (DashboardInspectio
 	}
 	d := evidence.Dashboard
 	result := DashboardInspection{Status: DashboardReady, User: DashboardUser, URLs: []DashboardURL{}, CertificateSHA256: d.CertificateSHA256}
+	if gated {
+		result.URLs = append(result.URLs, DashboardURL{Host: "mgmt-gateway", URL: access.URL, Role: DashboardGateway})
+	}
 	if d.URL != "" {
 		active, ok := node(evidence.MGRActive)
 		if !ok {
 			return DashboardInspection{}, "the active manager in the cluster's evidence names no declared node"
 		}
-		result.URLs = append(result.URLs, DashboardURL{Host: active, URL: d.URL, Role: DashboardActive})
-		for _, standby := range evidence.MGRStandbys {
+		result.URLs = append(result.URLs, DashboardURL{Host: active, URL: "https://" + evidence.MGRActive + ":" + DashboardPort + "/", Role: DashboardActive})
+		standbys := evidence.MGRStandbys
+		if gated {
+			standbys = nil
+		}
+		for _, standby := range standbys {
 			name, ok := node(standby)
 			if !ok {
 				return DashboardInspection{}, "a standby manager in the cluster's evidence names no declared node"
@@ -392,6 +407,33 @@ func sortedHosts(document endpointDocument) []string {
 	return slices.Sorted(slices.Values(document.Placement.Hosts))
 }
 
+type GatewayAccess struct {
+	URL        string
+	Monitoring []MonitoringInspection
+}
+
+func GatewayAccessOf(cluster string, frozen []reconciliation.Block) (GatewayAccess, bool) {
+	for _, block := range frozen {
+		if block.Kind != string(api.CephCluster) || block.Object != cluster || block.Implementation != Implementation {
+			continue
+		}
+		r, err := DecodeRequest(block.Request)
+		if err != nil || r.Action != "service" || r.Service == nil || r.Service.Type != "mgmt-gateway" {
+			continue
+		}
+		candidate, ok := mgmtEndpoint(r)
+		if !ok || len(candidate.row.URLs) == 0 {
+			return GatewayAccess{}, false
+		}
+		access := GatewayAccess{URL: candidate.row.URLs[0]}
+		for _, service := range r.Service.Monitoring {
+			access.Monitoring = append(access.Monitoring, MonitoringInspection{Service: service, URL: access.URL + service + "/"})
+		}
+		return access, true
+	}
+	return GatewayAccess{}, false
+}
+
 func mgmtEndpoint(r Request) (endpointCandidate, bool) {
 	unit := r.Service
 	documents, ok := endpointDocuments(r)
@@ -400,7 +442,10 @@ func mgmtEndpoint(r Request) (endpointCandidate, bool) {
 		return endpointCandidate{}, false
 	}
 	hosts := sortedHosts(gateway)
-	if gateway.Spec.VirtualIP != "" {
+	switch {
+	case unit.Endpoint != "":
+		hosts = []string{unit.Endpoint}
+	case gateway.Spec.VirtualIP != "":
 		hosts = []string{gateway.Spec.VirtualIP}
 	}
 	issuer := IssuerCephadm
@@ -734,3 +779,21 @@ func (a Administration) Command(contextName, cluster, fsid string) string {
 }
 
 func ObjectUserGateway(user api.Object) string { return user.Spec().Get("objectGatewayRef").Text() }
+
+func GrafanaPasswordSecret(cluster string, frozen []reconciliation.Block) (string, bool) {
+	for _, block := range frozen {
+		if block.Kind != string(api.CephCluster) || block.Object != cluster || block.Implementation != Implementation {
+			continue
+		}
+		r, err := DecodeRequest(block.Request)
+		if err != nil || r.Action != "service" || r.Service == nil || r.Service.Type != "monitoring" {
+			continue
+		}
+		for _, binding := range r.Service.Bindings {
+			if binding.ServiceRef == "grafana" && binding.Path == "/spec/initial_admin_password" {
+				return binding.SecretRef, true
+			}
+		}
+	}
+	return "", false
+}

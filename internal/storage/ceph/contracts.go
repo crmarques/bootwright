@@ -80,5 +80,5 @@ func unsupportedFailure() error {
 
 func ContentDigest() string {
 	return reconciliation.ContentDigestOf(Implementation, Version, EvidenceVersion, PackageVersion, RetirementVersion, TiebreakerEvidenceVersion,
-		"selected-tunnel-image-v1", "health-scoped-to-owned-pools-and-filesystems-v1", "gateway-dashboard-cephadm-client-tls-v1", "gateway-native-ca-endpoint-proof-v1")
+		"selected-tunnel-image-v1", "health-scoped-to-owned-pools-and-filesystems-v1", "gateway-dashboard-cephadm-client-tls-v1", "gateway-native-ca-endpoint-proof-v1", "gateway-monitoring-logins-v1")
 }

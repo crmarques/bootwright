@@ -618,7 +618,7 @@ spec:
         client_id: ceph
         oidc_issuer_url: https://idp.example.test/realms/ceph
         provider_display_name: Qualification IdP
-        redirect_url: https://management.lab.example.test:9443/oauth2/callback
+        redirect_url: https://mgr.ceph-lab.lab.example.test:9443/oauth2/callback
       custom_configs:
         - mount_path: /etc/pki/tls/certs/oauth2-proxy-idp-ca.pem
     - service_type: loki
@@ -661,6 +661,8 @@ spec:
           secretRef: snmp-auth
         - path: /spec/credentials/snmp_v3_priv_password
           secretRef: snmp-privacy
+  managementGateway:
+    fqdn: mgr.ceph-lab.lab.example.test
   topology:
     nodes:
       - name: rhel-01
@@ -805,9 +807,9 @@ spec:
   type: tlsCertificate
   source:
     generated:
-      commonName: management.lab.example.test
+      commonName: mgr.ceph-lab.lab.example.test
       dnsNames:
-        - management.lab.example.test
+        - mgr.ceph-lab.lab.example.test
       ipAddresses:
         - 198.51.100.50
       validityDays: 365

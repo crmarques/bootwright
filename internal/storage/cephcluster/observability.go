@@ -278,6 +278,7 @@ func (a *admission) observabilityGraph(ceph api.Value) {
 		declared[typeName] = true
 		authenticating = authenticating || typeName == "mgmt-gateway" && service.Get("spec", "enable_auth").Bool()
 	}
+	a.managementGateway(ceph, declared["mgmt-gateway"])
 	for i, service := range services {
 		field := indexed("$.spec.services", i)
 		a.requiredBindings(service, field)
@@ -296,6 +297,28 @@ func (a *admission) observabilityGraph(ceph api.Value) {
 			if service.Get("spec", "enable_auth").Bool() && !declared["oauth2-proxy"] {
 				a.issue("api.invariant", field+".spec.enable_auth", "enable_auth needs an oauth2-proxy service as the management gateway's authentication backend", "declare an oauth2-proxy service or set spec.enable_auth: false")
 			}
+		}
+	}
+}
+
+func (a *admission) managementGateway(ceph api.Value, declared bool) {
+	if !ceph.Get("managementGateway").Present() {
+		return
+	}
+	if !declared {
+		a.issue("api.invariant", "$.spec.managementGateway", "spec.managementGateway names the management gateway's DNS name, and this cluster declares no mgmt-gateway service",
+			"declare a mgmt-gateway service in spec.services or remove spec.managementGateway")
+		return
+	}
+	const field = "$.spec.managementGateway.fqdn"
+	fqdn := textOf(ceph, "managementGateway", "fqdn")
+	if fqdn != "" && !api.ValidLexical(api.LexicalDNS, fqdn) {
+		a.issue("api.invariant", field, "the derived management gateway FQDN is not a valid DNS name", "set spec.managementGateway.fqdn to a valid DNS name or shorten the cluster or domain name")
+		return
+	}
+	for _, node := range ceph.Get("topology", "nodes").Items() {
+		if fqdn != "" && strings.EqualFold(NativeHostname(node), fqdn) {
+			a.issue("api.invariant", field, "the management gateway FQDN equals the hostname of storage node "+textOf(node, "name"), "set spec.managementGateway.fqdn to a name no storage node of this cluster uses")
 		}
 	}
 }

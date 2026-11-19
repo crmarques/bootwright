@@ -71,7 +71,7 @@ func TestCephInspectionReportsTheHostSpecializationsTheLifecycleEvidenceCarries(
 		api.FieldValue{Name: "machineRef", Value: api.StringValue("m1")})
 	cluster := api.NewObject(api.CephCluster, "storage", api.Value{}, api.MapValue(
 		api.FieldValue{Name: "topology", Value: api.MapValue(api.FieldValue{Name: "nodes", Value: api.ListValue(node)})}))
-	found, reason := ceph.Inspect(api.NewCatalog([]api.Object{cluster, host}), cluster, proofs)
+	found, reason := ceph.Inspect(api.NewCatalog([]api.Object{cluster, host}), cluster, nil, proofs)
 	if want := []string{"ceph-bootstrap-license-call-continues", "ceph-host-fips-continues"}; reason != "" || !slices.Equal(found.Specializations, want) {
 		t.Fatalf("inspection = %+v (%q), want the specializations %v", found.Specializations, reason, want)
 	}

@@ -15,12 +15,32 @@ import (
 
 const (
 	DashboardOutput   = "dashboard"
+	MonitoringOutput  = "monitoring"
 	DashboardUser     = "admin"
 	dashboardLength   = 32
 	dashboardAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_."
 )
 
 func DashboardBlock(cluster string) string { return ClusterBlockID(cluster) }
+
+func GatewayBlock(cluster string) string {
+	return ServiceUnitBlockID(cluster, ServiceUnit{Type: "mgmt-gateway"})
+}
+
+var credentialServiceTypes = []string{"alertmanager", "prometheus"}
+
+func credentialServices(r Request) []string {
+	if r.Action != "service" || r.Service == nil || r.Service.Type != "mgmt-gateway" {
+		return nil
+	}
+	var services []string
+	for _, service := range r.Service.Monitoring {
+		if slices.Contains(credentialServiceTypes, service) {
+			services = append(services, service)
+		}
+	}
+	return services
+}
 
 type clientCredential struct {
 	Caps   map[string]string `json:"caps"`
@@ -45,6 +65,8 @@ func identifyProduced(produced []lifecycle.Produced, r Request, evidence []byte)
 			principal = "object user " + r.ObjectUser.Name
 		case produced[i].Name == DashboardOutput:
 			principal = "dashboard user " + DashboardUser
+		case produced[i].Name == MonitoringOutput && len(credentialServices(r)) != 0:
+			principal = "monitoring basic auth"
 		}
 		produced[i].Identity = "cluster fsid " + r.FSID + " created " + e.Incarnation + " as " + principal
 	}
@@ -59,6 +81,9 @@ func validateProduced(produced []lifecycle.Produced, r Request, present bool) er
 	}
 	if present && r.Action == "object-user" {
 		return validateObjectUser(produced, r)
+	}
+	if present && len(credentialServices(r)) != 0 {
+		return validateMonitoring(produced, credentialServices(r))
 	}
 	if !present || r.Action != "client" {
 		if len(produced) != 0 {
@@ -226,4 +251,60 @@ func validateDashboard(produced []lifecycle.Produced) error {
 		}
 	}
 	return nil
+}
+
+type monitoringLogin struct {
+	Password string `json:"password"`
+	User     string `json:"user"`
+}
+
+const maxMonitoringLogins = 4096
+
+func decodeMonitoringLogins(value []byte) (map[string]monitoringLogin, bool) {
+	logins, err := reconciliation.DecodeEvidence[map[string]monitoringLogin](value, maxMonitoringLogins, "Ceph monitoring logins")
+	if err != nil || canonicaljson.Prove(value, logins, canonicaljson.Bare) != nil {
+		return nil, false
+	}
+	raw, err := reconciliation.DecodeEvidence[map[string]map[string]json.RawMessage](value, maxMonitoringLogins, "Ceph monitoring login members")
+	if err != nil {
+		return nil, false
+	}
+	for service, login := range logins {
+		if !slices.Contains(credentialServiceTypes, service) || !closedMembers(raw[service], "password", "user") || !visibleKey(login.User) || !visibleKey(login.Password) {
+			return nil, false
+		}
+	}
+	return logins, true
+}
+
+func validateObserved(produced []lifecycle.Produced, r Request, recorded bool) error {
+	if len(produced) == 0 && len(credentialServices(r)) != 0 {
+		return nil
+	}
+	return validateProduced(produced, r, recorded)
+}
+
+func validateMonitoring(produced []lifecycle.Produced, services []string) error {
+	if len(produced) != 1 || produced[0].Name != MonitoringOutput || len(produced[0].Material.Parts()) != 1 {
+		return evidenceFailure()
+	}
+	value, ok := produced[0].Material.Part(secrets.ValuePart)
+	if !ok {
+		return evidenceFailure()
+	}
+	defer clear(value)
+	logins, ok := decodeMonitoringLogins(value)
+	if !ok || !slices.Equal(slices.Sorted(maps.Keys(logins)), services) {
+		return evidenceFailure()
+	}
+	return nil
+}
+
+func MonitoringCredentials(value []byte, service string) (secrets.Material, bool) {
+	logins, ok := decodeMonitoringLogins(value)
+	login, found := logins[service]
+	if !ok || !found {
+		return secrets.Material{}, false
+	}
+	return secrets.NewMaterial(map[secrets.Part][]byte{secrets.UsernamePart: []byte(login.User), secrets.PasswordPart: []byte(login.Password)}), true
 }

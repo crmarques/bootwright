@@ -805,9 +805,10 @@ A managed CephCluster entry adds these fields, in this order, after its
 | `adminNode` | The declared name of the bootstrap node, which holds the administrator keyring. |
 | `cephCommand` | The exact prefix that runs the Ceph CLI as the administrator through `cluster exec`: `bootwright cluster exec --context <context> --name <cluster> --node <adminNode> -- sudo -n ceph --conf /var/lib/bootwright/ceph/<fsid>/ceph.conf --keyring /var/lib/bootwright/ceph/<fsid>/ceph.client.admin.keyring`. The operator appends the Ceph arguments. |
 | `status` | `ready`, or `unavailable` with a `reason` and the remedy `bootwright apply --context <context> --stage clusters` when the evidence above is missing; an unavailable entry omits the fields that evidence would carry. |
-| `dashboard` | `{status, user, urls, certificateSHA256}`: `status` is `ready`, or `unproved` with a `reason` when the apply could not reach the dashboard; `user` is the administrator account; `urls` and `certificateSHA256` are those the apply proved. |
+| `dashboard` | `{status, user, urls, certificateSHA256}`: `status` is `ready`, or `unproved` with a `reason` when the apply could not reach the dashboard; `user` is the administrator account; `certificateSHA256` is the one the apply proved for the active manager's dashboard, so behind a management gateway it belongs to the `active` row, not to the gateway URL, whose leaf is the `mgmt-gateway` row's of `endpoints`. `urls` is `[{host, url, role}]`. When the current operation froze a management gateway for the cluster, the first row is `{host: mgmt-gateway, role: gateway}` at the gateway's URL as `endpoints` derives it, and the active manager follows with no standby rows, because cephadm makes a standby answer `503` behind a gateway; otherwise the active manager comes first and each standby follows with role `standby`. The active manager's row is `https://<its node's hostname>:8443/`, the name of the host the apply observed it on, with role `active`; it appears only when the apply observed it serving. |
+| `monitoring` | `[{service, url}]`, ordered by `service`: one row for each of `alertmanager`, `grafana` and `prometheus` that the frozen management gateway request lists, at the gateway's URL followed by `<service>/`; omitted without a management gateway or such a service and on an unavailable entry. Only `--secrets` adds secret members to a row. |
 | `resources` | `[{kind, name, status, scope}]`: the rows `status` reports under this cluster, in the same order with the same `status`, on a ready and an unavailable entry alike. `scope` is a one-line redacted statement of the object in the spellings below, built from the request the current operation froze for it; it is omitted when no request of this build froze the object. For CephObjectGateway it is the gateway request, not the zone pools that object also freezes. CephConsumer takes it from its declaration, which holds references only. No `scope` carries a key, password, Secret reference or other Secret material. |
-| `endpoints` | `[{service, urls, certificateSHA256, issuer, status, reason}]`: one row for each management gateway, NFS service and object gateway request the current operation froze for this cluster, ordered by `service`; always an array, empty on an unavailable entry. `service` is `mgmt-gateway`, `nfs.<service_id>` or `rgw.<service_id>`. Each URL derives from the frozen request and spells an IPv6 host in brackets. The management gateway is `https://<virtual_ip>:<port>/`, or `https://<host>:<port>/` for each placement host when it declares no virtual IP. An NFS service behind an ingress is `nfs://<ingress virtual IP>:<port>/`, the port being the NFS `port` behind a keepalive-only ingress and otherwise the ingress `frontend_port`, default 2049; without an ingress it is the NFS `virtual_ip`, else each placement host, at the NFS `port`, default 2049. An object gateway is `https` when its terminating document, the ingress when one fronts it and otherwise the rgw service, sets `ssl`, else `http`, at the ingress `frontend_port`, else `rgw_frontend_port`, else 443 or 80, on its endpoint FQDN, else the ingress virtual IP, else each placement host. `status` is `ready` when the apply evidence of that block in the current operation, for the same frozen request, proves the endpoint ready (a management or object gateway also reached by that apply's probe from the cluster's bootstrap host; no connect from the controller is made or implied), else `unproved` with a `reason`; an NFS service without an ingress is always `unproved`, because the apply proves an NFS address only through the virtual IP of an ingress in front of it. `certificateSHA256` is the SHA-256 fingerprint of the leaf certificate that probe observed, present only on a `ready` TLS endpoint. `issuer` is `bound` when the request binds a stored certificate and `cephadm` when cephadm signs it, and is omitted for a plaintext endpoint. No endpoint carries Secret material. |
+| `endpoints` | `[{service, urls, certificateSHA256, issuer, status, reason}]`: one row for each management gateway, NFS service and object gateway request the current operation froze for this cluster, ordered by `service`; always an array, empty on an unavailable entry. `service` is `mgmt-gateway`, `nfs.<service_id>` or `rgw.<service_id>`. Each URL derives from the frozen request and spells an IPv6 host in brackets. The management gateway is `https://<managementGateway.fqdn>:<port>/` when its frozen request carries that name, else `https://<virtual_ip>:<port>/`, else `https://<host>:<port>/` for each placement host. An NFS service behind an ingress is `nfs://<ingress virtual IP>:<port>/`, the port being the NFS `port` behind a keepalive-only ingress and otherwise the ingress `frontend_port`, default 2049; without an ingress it is the NFS `virtual_ip`, else each placement host, at the NFS `port`, default 2049. An object gateway is `https` when its terminating document, the ingress when one fronts it and otherwise the rgw service, sets `ssl`, else `http`, at the ingress `frontend_port`, else `rgw_frontend_port`, else 443 or 80, on its endpoint FQDN, else the ingress virtual IP, else each placement host. `status` is `ready` when the apply evidence of that block in the current operation, for the same frozen request, proves the endpoint ready (a management or object gateway also reached by that apply's probe from the cluster's bootstrap host; no connect from the controller is made or implied), else `unproved` with a `reason`; an NFS service without an ingress is always `unproved`, because the apply proves an NFS address only through the virtual IP of an ingress in front of it. `certificateSHA256` is the SHA-256 fingerprint of the leaf certificate that probe observed, present only on a `ready` TLS endpoint. `issuer` is `bound` when the request binds a stored certificate and `cephadm` when cephadm signs it, and is omitted for a plaintext endpoint. No endpoint carries Secret material. |
 
 | Kind | `scope` |
 | --- | --- |
@@ -833,8 +834,13 @@ isolated from each other
 apply step carries each grant clause above, without its leading `; `, as an
 impact line after `create per-consumer Ceph principals for <consumer>`.
 
-`--secrets --name <cluster>` adds `passwordValue` to `dashboard`, the only
-field that carries a secret. Its contract, refusals and warning are the
+`--secrets --name <cluster>` adds `passwordValue` to `dashboard` and `user`
+and `passwordValue` to each `monitoring` row, or `anonymous: true` to a
+`grafana` row with no bound admin password; these are the only fields that
+carry a secret. Text output lists them under Custody after the dashboard's
+user and password, as `<Service> user` and `<Service> password`, Grafana's as
+`Grafana initial password`, or `Grafana login anonymous access; no admin
+password is bound`. Their contract, refusals and warnings are the
 [storage dashboard access](../cli.md#storage-dashboard-access).
 
 `accessCommands` contains exactly one entry for each canonical command, ordered
@@ -896,13 +902,24 @@ Resources lists each row as `<Kind>/<name>` with its
 status; full detail appends its scope. Full detail includes verbose frozen
 evidence and access templates; compact detail retains statuses, actionable
 reasons, ready access and the dashboard certificate fingerprint, the evidence
-for the browser's self-signed warning.
+for the browser's certificate warning.
 It identifies the default
 SSH node, and gives context- and cluster-qualified invocation templates for
 applicable commands, including `--node` for SSH and `-- <command>...` for a
 required payload. A managed Ceph entry also shows its release, FSID, image
 reference and digest, monitors, administrator command and dashboard URLs, user
-and status. Full detail of a ready managed Ceph entry also shows a
+and status. Behind a management gateway the first dashboard row reads
+`Dashboard <url> (via management gateway)` and the active manager's reads
+`Direct <url> (active MGR <host> at last observation)`. Each certificate
+fingerprint follows the URL that presents it: under the gateway's row,
+`Certificate SHA-256` is the ready `mgmt-gateway` endpoint's leaf, marked
+`(bound certificate)` or `(cephadm-signed; compare before accepting the browser
+warning)` by its issuer and omitted while that endpoint is unproved; under the
+active manager's, `Direct SHA-256` is the dashboard's own self-signed leaf. The
+`Dashboard status` row then closes the dashboard rows. Without a gateway the
+active manager's row leads and `Certificate SHA-256` is the dashboard's
+self-signed leaf after the status. Each monitoring row
+follows as `Alertmanager`, `Grafana` or `Prometheus` with its URL. Full detail of a ready managed Ceph entry also shows a
 `Specializations` line naming those ids, `none` when the evidence names none.
 Access lists each endpoint after the dashboard with its service and
 status, and its reason when unproved; a ready endpoint is marked as the apply

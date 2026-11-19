@@ -85,7 +85,7 @@ func provedPair(t *testing.T) []lifecycle.BlockEvidence {
 
 func TestInspectReadsFSIDImageAndMonitorsFromTheCurrentOperationsEvidence(t *testing.T) {
 	catalog, cluster := inspectedCluster()
-	got, reason := Inspect(catalog, cluster, provedPair(t))
+	got, reason := Inspect(catalog, cluster, nil, provedPair(t))
 	want := Inspection{
 		FSID:  inspectedFSID,
 		Image: ImageInspection{Reference: PinnedRepository + ":" + PinnedTag, Digest: inspectedDigest, Platform: PinnedPlatform},
@@ -106,14 +106,14 @@ func TestInspectReadsFSIDImageAndMonitorsFromTheCurrentOperationsEvidence(t *tes
 
 func TestInspectIgnoresTheSettingsBlockEvidence(t *testing.T) {
 	catalog, cluster := inspectedCluster()
-	want, reason := Inspect(catalog, cluster, provedPair(t))
+	want, reason := Inspect(catalog, cluster, nil, provedPair(t))
 	if reason != "" {
 		t.Fatalf("the proved pair inspects as %q", reason)
 	}
 	settings := inspectedClusterEvidence(t, func(e *Evidence) {
 		e.Action, e.MonAddrs, e.Dashboard = "settings", []MonitorAddress{}, DashboardEvidence{}
 	})
-	got, reason := Inspect(catalog, cluster, append(provedPair(t), inspectedProof(Implementation, reconciliation.Apply, reconciliation.BlockDone, settings)))
+	got, reason := Inspect(catalog, cluster, nil, append(provedPair(t), inspectedProof(Implementation, reconciliation.Apply, reconciliation.BlockDone, settings)))
 	if reason != "" || !reflect.DeepEqual(got, want) {
 		t.Fatalf("a completed settings block makes the inspection %+v (%q), want %+v", got, reason, want)
 	}
@@ -121,7 +121,7 @@ func TestInspectIgnoresTheSettingsBlockEvidence(t *testing.T) {
 
 func TestInspectIgnoresTheUnitBlockEvidence(t *testing.T) {
 	catalog, cluster := inspectedCluster()
-	want, reason := Inspect(catalog, cluster, provedPair(t))
+	want, reason := Inspect(catalog, cluster, nil, provedPair(t))
 	if reason != "" {
 		t.Fatalf("the proved pair inspects as %q", reason)
 	}
@@ -129,7 +129,7 @@ func TestInspectIgnoresTheUnitBlockEvidence(t *testing.T) {
 		e.Action, e.MonAddrs, e.Dashboard = "service", []MonitorAddress{}, DashboardEvidence{}
 		e.Daemons = []UnitDaemon{{Host: "rhel-01.lab.test", Name: "nfs.files.0.0.rhel-01.abcdef", Service: "nfs.files"}}
 	})
-	got, reason := Inspect(catalog, cluster, append(provedPair(t), inspectedProof(Implementation, reconciliation.Apply, reconciliation.BlockDone, unit)))
+	got, reason := Inspect(catalog, cluster, nil, append(provedPair(t), inspectedProof(Implementation, reconciliation.Apply, reconciliation.BlockDone, unit)))
 	if reason != "" || !reflect.DeepEqual(got, want) {
 		t.Fatalf("a completed unit block makes the inspection %+v (%q), want %+v", got, reason, want)
 	}
@@ -216,7 +216,7 @@ func TestInspectReportsAReasonUnlessBothProofsAreCompleteAndReady(t *testing.T) 
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, reason := Inspect(catalog, cluster, tt.proofs())
+			got, reason := Inspect(catalog, cluster, nil, tt.proofs())
 			if !strings.Contains(reason, tt.reason) || !reflect.DeepEqual(got, Inspection{}) {
 				t.Fatalf("inspection = %+v (%q), want a reason containing %q", got, reason, tt.reason)
 			}
@@ -228,7 +228,7 @@ func TestInspectNeedsTheMonitorsMachineAddress(t *testing.T) {
 	_, cluster := inspectedCluster()
 	bare := api.NewObject(api.Machine, "m1", api.Value{}, api.MapValue())
 	catalog := api.NewCatalog([]api.Object{cluster, bare, inspectedMachine("m2", "192.0.2.12"), inspectedMachine("m3", "192.0.2.13")})
-	got, reason := Inspect(catalog, cluster, provedPair(t))
+	got, reason := Inspect(catalog, cluster, nil, provedPair(t))
 	if !strings.Contains(reason, "Machine contact address") || !reflect.DeepEqual(got, Inspection{}) {
 		t.Fatalf("inspection = %+v (%q)", got, reason)
 	}
@@ -249,7 +249,7 @@ func TestInspectReportsAnUnreachableOrUnservedDashboardUnproved(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			proofs := provedPair(t)
 			proofs[1].Evidence = inspectedClusterEvidence(t, tt.edit)
-			got, reason := Inspect(catalog, cluster, proofs)
+			got, reason := Inspect(catalog, cluster, nil, proofs)
 			if reason != "" || got.Dashboard.Status != DashboardUnproved || !strings.Contains(got.Dashboard.Reason, tt.reason) || len(got.Dashboard.URLs) != tt.urls ||
 				got.Dashboard.User != "admin" || got.FSID != inspectedFSID {
 				t.Fatalf("inspection = %+v (%q)", got, reason)
@@ -272,12 +272,12 @@ func TestInspectNamesTheAppliedSpecializations(t *testing.T) {
 	undecodable := hostApplied("ceph-call-home-opt-in")
 	undecodable.Block.RequestDigest = "another"
 	proofs = append(proofs, hostApplied("ceph-mgr-without-license-contract"), hostApplied("ceph-call-home-opt-in", "ceph-mgr-without-license-contract"), hostApplied(), undecodable)
-	got, reason := Inspect(catalog, cluster, proofs)
+	got, reason := Inspect(catalog, cluster, nil, proofs)
 	want := []string{"ceph-bootstrap-license-call-continues", "ceph-call-home-opt-in", "ceph-mgr-without-license-contract"}
 	if reason != "" || got.Dashboard.Status != DashboardReady || !reflect.DeepEqual(got.Specializations, want) {
 		t.Fatalf("specializations = %q (%q), want %q", got.Specializations, reason, want)
 	}
-	plain, reason := Inspect(catalog, cluster, append(provedPair(t), hostApplied(), undecodable))
+	plain, reason := Inspect(catalog, cluster, nil, append(provedPair(t), hostApplied(), undecodable))
 	if reason != "" || plain.Specializations != nil {
 		t.Fatalf("an execution that applied none names %q (%q)", plain.Specializations, reason)
 	}

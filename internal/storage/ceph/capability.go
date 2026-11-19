@@ -542,7 +542,7 @@ func (c Capability) observe(ctx context.Context, e lifecycle.Execution, removal 
 	if shared := c.sharedHosts(ctx, e, r, removal); shared != nil {
 		result, err = c.invoke(ctx, e, "observe", r, shared, nil)
 	} else {
-		result, err = c.run(ctx, e, "observe", r)
+		result, err = c.runFor(ctx, e, "observe", r, removal)
 	}
 	if err != nil {
 		return unknown, err
@@ -555,7 +555,7 @@ func (c Capability) observe(ctx context.Context, e lifecycle.Execution, removal 
 	if effect != reconciliation.EffectCompleted || removal {
 		lifecycle.ClearProduced(result.Produced)
 		result.Produced = nil
-	} else if err := validateProduced(result.Produced, r, lifecycle.Recorded(e)); err != nil {
+	} else if err := validateObserved(result.Produced, r, lifecycle.Recorded(e)); err != nil {
 		lifecycle.ClearProduced(result.Produced)
 		return unknown, err
 	} else if err := identifyProduced(result.Produced, r, result.Evidence); err != nil {

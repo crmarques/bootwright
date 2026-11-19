@@ -132,6 +132,9 @@ func normalizeCluster(object api.Object, catalog api.Catalog) api.Value {
 		}
 		ceph = ceph.WithPath(stretch, "topology", "stretch")
 	}
+	if !ceph.Has("managementGateway", "fqdn") && domain != "" && object.Name() != "" && declaresService(ceph, "mgmt-gateway") {
+		ceph = ceph.WithPath(api.StringValue("mgr."+object.Name()+"."+domain), "managementGateway", "fqdn")
+	}
 	if ceph.Has("serviceBindings") {
 		bindings := ceph.Get("serviceBindings").Items()
 		for i, binding := range bindings {
@@ -148,6 +151,10 @@ func normalizeCluster(object api.Object, catalog api.Catalog) api.Value {
 	}
 
 	return ceph
+}
+
+func declaresService(ceph api.Value, serviceType string) bool {
+	return slices.ContainsFunc(ceph.Get("services").Items(), func(service api.Value) bool { return textOf(service, "service_type") == serviceType })
 }
 
 func storageDomain(catalog api.Catalog) string {

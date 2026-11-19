@@ -82,23 +82,39 @@ requires `--name` to name exactly one cluster after normalization: a list of
 several is `cli.usage` with exit `2`, before any evidence is read.
 
 `cluster info --secrets --name <cluster>` additionally reveals the password as
-`passwordValue` in that entry's `dashboard`, on standard output only. Its checks
-run in this order, each before the next:
+`passwordValue` in that entry's `dashboard`, on standard output only. Behind a
+management gateway it also reveals, as `user` and `passwordValue` of each
+[`monitoring` row](output.md#cluster-discovery), each monitored service's own
+login: Prometheus's and Alertmanager's basic-auth logins from the gateway
+block's produced output `monitoring`
+([management gateway unit](../ceph.md#resources-readiness-and-access)), and
+Grafana's user `admin` with the current version of the Secret the frozen
+monitoring unit binds at `/spec/initial_admin_password`, which is the version
+that unit applied once it applied it
+([secrets](../secrets.md#effect-material-under-a-live-binding)). Grafana applies that
+password only when it first creates its database, so it is labeled the initial
+admin password; a Grafana with no such binding keeps anonymous access, and its
+row says so and reveals nothing. Its checks run in this order, each before the
+next:
 
 | Condition | Diagnostic, exit `1` | Next action |
 | --- | --- | --- |
 | No selected OpenShiftCluster or CephCluster has the name | `access.target`, naming the context and the name | `bootwright cluster info --context <context>` lists the clusters the context selects |
 | The name is an external CephCluster | `cluster.not-applicable`, naming the cluster, its kind and the applicable target, a managed CephCluster | as above |
 | The context's custody holds no dashboard password for the cluster | `access.unavailable`, naming the cluster | `bootwright apply --context <context> --stage clusters` |
+| Behind a management gateway, the custody holds no login for a listed Prometheus or Alertmanager | `access.unavailable`, naming the service and the cluster | `bootwright apply --context <context> --stage clusters` |
 
 The target and its applicability are settled from the compiled graph before
 any custody read, so a target or applicability refusal reads no credential
 bytes. A copy custody marks unproved, kept by a removal that never proved its
 effect, is revealed with exactly one `access.unproved` warning naming the
-cluster, and its `dashboard.status` is `unproved`. A dashboard whose
+cluster, and its `dashboard.status` is `unproved`; an unproved monitoring login
+is revealed with one such warning naming its service and the cluster. A
+refusal reveals nothing: values already read are cleared, never printed in
+part. A dashboard whose
 evidence alone does not prove it reachable, its copy unmarked, is revealed with
-`dashboard.status` `unproved` and its reason and no warning (D183, Q101). The value occurs only in
-the `passwordValue` field, and is never copied to a diagnostic, log, evidence
+`dashboard.status` `unproved` and its reason and no warning (D183, Q101). Each value occurs only in
+a `passwordValue` or monitoring `user` field, and is never copied to a diagnostic, log, evidence
 record, plan or second stream.
 
 `cluster info --object-user <name> --name <cluster>` reveals the S3 keys of

@@ -161,7 +161,7 @@ func (s Service) revealDashboard(ctx context.Context, selected string, entry Sto
 	}
 	dashboard.Password, dashboard.Revealed = custodied.Material, true
 	dashboard.Warn = custodied.Unproved
-	return nil
+	return s.revealMonitoring(ctx, selected, entry)
 }
 
 func (s Service) read(ctx context.Context, contextName string) (string, api.Catalog, error) {
@@ -423,6 +423,7 @@ func (s Service) cephEntry(ctx context.Context, selected string, catalog api.Cat
 	entry.Monitors = proof.Monitors
 	dashboard := proof.Dashboard
 	entry.Dashboard = &dashboard
+	entry.Monitoring = proof.Monitoring
 	if proof.Endpoints != nil {
 		entry.Endpoints = proof.Endpoints
 	}

@@ -214,6 +214,10 @@ func proveGatewayUnit(contextName string, block reconciliation.Block, material m
 			}
 		}
 	}
+	if fqdn := r.Service.Endpoint; fqdn != "" && leaf.VerifyHostname(fqdn) != nil {
+		return secrets.Refusal("part", "the certificate of Secret "+secret+" does not name "+fqdn+", the name clients use for the management gateway of CephCluster "+r.Cluster, contextName, secret,
+			"reissue the certificate with "+fqdn+" as a DNS name (or a matching wildcard) in its subject alternative names and store it with "+set+", or set spec.managementGateway.fqdn of CephCluster "+r.Cluster+" to a DNS name the certificate already holds, then apply again")
+	}
 	return nil
 }
 

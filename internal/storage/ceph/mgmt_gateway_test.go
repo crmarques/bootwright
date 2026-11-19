@@ -282,11 +282,11 @@ func TestOAuth2ProxyPlansWithItsSelectedImage(t *testing.T) {
 		t.Fatal("the SSO request did not round-trip")
 	}
 	plain := mgmtGatewayRequest(t)
-	for request, want := range map[*Request]time.Duration{&r: 4260 * time.Second, &plain: 2940 * time.Second} {
+	for request, want := range map[*Request]time.Duration{&r: 4920 * time.Second, &plain: 3600 * time.Second} {
 		if got, err := cephDeadline(*request, "apply"); err != nil || got != want {
 			t.Fatalf("the gateway apply deadline is %v (%v), want %v", got, err, want)
 		}
-		for operation, want := range map[string]time.Duration{"observe": 720 * time.Second, "destroy": 1380 * time.Second} {
+		for operation, want := range map[string]time.Duration{"observe": 1380 * time.Second, "destroy": 1380 * time.Second} {
 			if got, err := cephDeadline(*request, operation); err != nil || got != want {
 				t.Fatalf("the gateway %s deadline is %v (%v), want %v", operation, got, err, want)
 			}
@@ -305,7 +305,7 @@ func TestSSOProofWindowIsOneNativeCallWhateverTheHostCount(t *testing.T) {
 		r.Hosts[i].Name = "host-" + strconv.Itoa(i+1)
 	}
 	got, err := cephDeadline(r, "apply")
-	if err != nil || got != base || got != time.Duration((3+2)*nativeCall+readinessWait+60)*time.Second {
+	if err != nil || got != base || got != time.Duration((4+2)*nativeCall+readinessWait+60)*time.Second {
 		t.Fatalf("the SSO gateway apply deadline at %d hosts is %v (%v), want the %v of one proof call and one write call", maxClusterHosts, got, err, base)
 	}
 }
@@ -403,7 +403,8 @@ func TestGatewayProofIgnoresTheOAuth2ProxyBindings(t *testing.T) {
 func mgmtGatewayRequest(t *testing.T) Request {
 	t.Helper()
 	r := frozenGoldenRequest()
-	unit := gatewayUnitOf(t, delegatedCatalog(vipGateway("192.0.2.60"), []api.Value{tlsBinding("mgmt-gateway", "mgmt-tls")}))
+	services := append(vipGateway("192.0.2.60"), auxiliaryService("grafana", "", api.Value{}), auxiliaryService("prometheus", "", api.Value{}))
+	unit := gatewayUnitOf(t, withManagementFQDN(delegatedCatalog(services, []api.Value{tlsBinding("mgmt-gateway", "mgmt-tls")}), managementFQDN))
 	r.Action, r.Service = "service", &unit
 	for _, document := range unitDocuments(r) {
 		r.Delegated = append(r.Delegated, DelegatedService{Name: documentName(document), Hosts: document.Placement.Hosts})
@@ -504,7 +505,7 @@ func TestGatewayUnitDeadline(t *testing.T) {
 		if err != nil || !slices.Equal(unitTypesOf(units), []string{"crash", "mgmt-gateway"}) || len(units[1].Hosts) != hosts {
 			t.Fatalf("%d hosts plan units %+v (%v)", hosts, units, err)
 		}
-		for operation, want := range map[string]time.Duration{"apply": 2940 * time.Second, "observe": 720 * time.Second, "destroy": 1380 * time.Second} {
+		for operation, want := range map[string]time.Duration{"apply": 3600 * time.Second, "observe": 1380 * time.Second, "destroy": 1380 * time.Second} {
 			if got, err := cephDeadline(units[1], operation); err != nil || got != want {
 				t.Fatalf("with %d hosts the gateway %s deadline is %v (%v), want %v", hosts, operation, got, err, want)
 			}

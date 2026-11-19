@@ -104,6 +104,7 @@ options:
       - nvmeof-budget
       - ingress-firewall
       - service-credential-foreign
+      - monitoring-login-unsupported
       - ssh-policy-host-excluded
       - ssh-policy-unavailable
       - tunnel-host-key-excluded

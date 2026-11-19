@@ -46,6 +46,9 @@ type fixture struct {
 	objectUsers    map[string]Custodied
 	objectReads    []string
 	objectUnproved bool
+	logins         map[string]Custodied
+	grafana        *Custodied
+	monitoringRead []string
 }
 
 func text(value string) api.Value { return api.StringValue(value) }

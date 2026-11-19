@@ -179,6 +179,8 @@ func clusterGoldens() []cliGolden {
 			missingKubeconfig())
 	}
 	list := func(r *dispatchRecord) { r.result.clusterList = clusterListResult() }
+	gateway := func(r *dispatchRecord) { r.result.clusterInfo = storageOnly(gatewayCeph()) }
+	gatewaySecrets := func(r *dispatchRecord) { r.result.clusterInfo = storageOnly(revealedGatewayCeph(false, false)) }
 	revealed := func(r *dispatchRecord) { r.result.clusterInfo = storageOnly(revealedCeph(false)) }
 	unproved := func(r *dispatchRecord) { r.result.clusterInfo = storageOnly(revealedCeph(true)) }
 	warning := "  warning  access.unproved\n" +
@@ -199,6 +201,10 @@ func clusterGoldens() []cliGolden {
 		{golden: "cli-cluster-info", args: "cluster info", record: ready},
 		{golden: "cli-cluster-info-json", args: "cluster info --output json", record: ready},
 		{golden: "cli-cluster-info-full", args: "cluster info --detail full", record: ready},
+		{golden: "cli-cluster-info-gateway", args: "cluster info --name storage", record: gateway},
+		{golden: "cli-cluster-info-gateway-json", args: "cluster info --name storage --output json", record: gateway},
+		{golden: "cli-cluster-info-gateway-secrets", args: "cluster info --name storage --secrets", record: gatewaySecrets},
+		{golden: "cli-cluster-info-gateway-secrets-json", args: "cluster info --name storage --secrets --output json", record: gatewaySecrets},
 		{golden: "cli-cluster-info-unavailable", args: "cluster info", record: missing},
 		{golden: "cli-cluster-info-unavailable-json", args: "cluster info --output json", record: missing},
 		{golden: "cli-cluster-info-secrets", args: "cluster info --name storage --secrets", record: revealed},

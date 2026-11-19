@@ -282,7 +282,23 @@ INVALID = {
     "ingress frontend port": lambda request: request["service"]["documents"][0]["spec"].update(frontend_port=443),
     "one leaf bound": lambda request: request["service"].update(bindings=bindings()[:1]),
     "unselected nginx": lambda request: request.update(auxiliary=AUXILIARY[:1]),
+    "empty endpoint": lambda request: request["service"].update(endpoint=""),
+    "endpoint not a DNS name": lambda request: request["service"].update(endpoint="mgr_storage.example.test"),
+    "endpoint not a string": lambda request: request["service"].update(endpoint=["mgr.storage.example.test"]),
+    "empty monitoring": lambda request: request["service"].update(monitoring=[]),
+    "unknown monitored service": lambda request: request["service"].update(monitoring=["loki"]),
+    "unsorted monitoring": lambda request: request["service"].update(monitoring=["prometheus", "grafana"]),
+    "repeated monitoring": lambda request: request["service"].update(monitoring=["grafana", "grafana"]),
 }
+
+
+def test_gateway_access_members_only_on_the_gateway_unit():
+    request = gateway_request()
+    request["service"].update(endpoint="mgr.storage.example.test", monitoring=["alertmanager", "grafana", "prometheus"])
+    assert ceph_native.validate(copy.deepcopy(request)) is not None
+    for member, value in (("endpoint", "mgr.storage.example.test"), ("monitoring", ["grafana"])):
+        with pytest.raises(ceph_native.Refusal, match="^request$"):
+            ceph_native.validate(units.changed(units.unit_request(), ("service", member), value))
 
 
 @pytest.mark.parametrize("case", sorted(INVALID))

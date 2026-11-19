@@ -38,6 +38,8 @@ UNRECORDED_READING = "unrecorded"
 HOSTS_READING = "hosts"
 # The produced-material output each action writes on apply and observe: its Go caller reads exactly that one.
 OUTPUTS = {"client": "client", "cluster": "dashboard", "object-user": "object-user"}
+# A service unit's one output: a management gateway's monitoring logins, written only when it fronts a Prometheus or an Alertmanager.
+MONITORING_OUTPUT = "monitoring"
 # The refusals each block's Go caller remedies by name (hostRefusals,
 # adapterRefusals and smbRefusals in internal/storage/ceph); a test holds them equal.
 HOST_REASONS = (
@@ -65,6 +67,7 @@ CLUSTER_REASONS = (
     "object-zone-pools", "object-endpoint-certificate", "object-user-foreign", "object-user-identity", "object-bucket-foreign",
     "object-bucket-identity", "object-bucket-s3", "nfs-export-foreign", "nfs-export-apply", "nfs-export-path-escape", "nfs-export-realm-default",
     "nvmeof-native", "nvmeof-identity", "nvmeof-foreign", "nvmeof-budget",
+    "monitoring-login-unsupported",
     "ingress-firewall", "service-credential-foreign", "ssh-policy-host-excluded", "ssh-policy-unavailable", "tunnel-host-key-excluded",
     "sso-unverified", "stretch-intent", "stretch-interrupted", "stretch-location", "stretch-weight", "stretch-rule", "stretch-foreign", "stretch-pools",
     "stretch-drift", "tiebreaker-foreign", "tiebreaker-unreachable", "device-not-empty", "foreign-osd",
@@ -649,15 +652,36 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
 def admit_outputs(request, operation, outputs):
     """The produced-material outputs an action's apply declares and its observation declares or omits; every other run declares none."""
     outputs = outputs or {}
-    ceph_native.require(set(outputs) <= set(OUTPUTS.values()))
-    if request["action"] in OUTPUTS and operation == "apply":
-        ceph_native.require(set(outputs) == {OUTPUTS[request["action"]]}, "material")
-    elif request["action"] in OUTPUTS and operation == "observe":
+    ceph_native.require(set(outputs) <= set(OUTPUTS.values()) | {MONITORING_OUTPUT})
+    output = expected_output(request)
+    if output is not None and operation == "apply":
+        ceph_native.require(set(outputs) == {output}, "material")
+    elif output is not None and operation == "observe":
         # An observation no operation records declares no output: it proves presence and takes over no material.
-        ceph_native.require(set(outputs) in ({OUTPUTS[request["action"]]}, set()), "material")
+        ceph_native.require(set(outputs) in ({output}, set()), "material")
     elif operation in ("apply", "observe"):
         ceph_native.require(not outputs, "material")
     return outputs
+
+
+def expected_output(request):
+    """The one output an action writes; a service unit writes one only as a management gateway with a login to read."""
+    if request["action"] == "service":
+        return MONITORING_OUTPUT if ceph_native_observability.credential_services(request["service"]) else None
+    return OUTPUTS.get(request["action"])
+
+
+def monitoring_output(request, operation, bootstrap, transport, path):
+    """The gateway's logins, read on the bootstrap host after readiness, reach only the runner's protected output file. An observation
+    reads them only once cephadm already holds each, and otherwise writes no output."""
+    produced = transport.call(bootstrap, "monitoring_credentials" if operation == "apply" else "monitoring_credentials_held")
+    if operation != "apply" and produced == {"changed": False}:
+        return
+    ceph_native.require(isinstance(produced, dict) and set(produced) == {"changed", "private"} and produced["changed"] is False, "evidence")
+    value = produced["private"]
+    ceph_native.require(isinstance(value, str) and value.isascii(), "material")
+    data = ceph_native_observability.logins_material(value.encode("ascii"), ceph_native_observability.credential_services(request["service"]))
+    private_files.write(path, data)
 
 
 def execute_cluster(request, operation, request_digest, transport, bootstrap, outputs, *, now, pause, connect, reading, shared):
@@ -955,11 +979,12 @@ def execute_nvmeof(request, operation, request_digest, transport, bootstrap, *, 
     return observed({"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}, operation, blocking)
 
 
-def execute_unit(request, operation, request_digest, transport, bootstrap, *, now, pause, phases=("unit",)):
+def execute_unit(request, operation, request_digest, transport, bootstrap, *, now, pause, phases=("unit",), outputs=None):
     """A service unit runs its apply phases only on the bootstrap host: its preparation proof, with an ingress the firewall check on each
     ingress host, its apply phases in order, with an oauth2-proxy the rendered-configuration proof on each proxy host and then the one
     single sign-on write, then its own readiness wait. Its apply phase holds every bound leaf; each observation and
-    removal holds the observed ones, and a management gateway's served leaf must be the bound certificate's."""
+    removal holds the observed ones, and a management gateway's served leaf must be the bound certificate's. A ready management gateway
+    that declares its output then writes its monitoring logins there."""
     changed, pending = False, []
     bound_unit = request["action"] == "service" and bool(request["service"].get("bindings"))
     seen = transport.unit_material("observe") if bound_unit else {}
@@ -989,6 +1014,8 @@ def execute_unit(request, operation, request_digest, transport, bootstrap, *, no
     if "mgmtGatewayCertificate" in seen:
         bound = hashlib.sha256(ceph_native_observability.leaf(seen["mgmtGatewayCertificate"])).hexdigest()
         ceph_native.require(observation["endpoint"]["certificateSHA256"] in ("", bound), "evidence")
+    if outputs and observation["ready"]:
+        monitoring_output(request, operation, bootstrap, transport, outputs[MONITORING_OUTPUT])
     return observed({"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}, operation, pending)
 
 
@@ -1078,7 +1105,7 @@ PROCEDURES = {
     "subvolume": execute_resource,
     "settings": execute_resource,
     "service": lambda request, operation, request_digest, transport, bootstrap, outputs, *, now, pause, **_: execute_unit(
-        request, operation, request_digest, transport, bootstrap, now=now, pause=pause),
+        request, operation, request_digest, transport, bootstrap, now=now, pause=pause, outputs=outputs),
     "nvmeof": lambda request, operation, request_digest, transport, bootstrap, outputs, *, now, pause, **_: execute_nvmeof(
         request, operation, request_digest, transport, bootstrap, now=now, pause=pause),
     "nfs-export": lambda request, operation, request_digest, transport, bootstrap, outputs, *, now, pause, **_: execute_unit(

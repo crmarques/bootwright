@@ -157,13 +157,21 @@ func gatewayMaterial(e lifecycle.Execution, r Request, operation string) ([]life
 const UnrecordedReading = "unrecorded"
 
 func (c Capability) run(ctx context.Context, e lifecycle.Execution, operation string, r Request) (lifecycle.RunResult, error) {
+	return c.runFor(ctx, e, operation, r, false)
+}
+
+func (c Capability) runFor(ctx context.Context, e lifecycle.Execution, operation string, r Request, removal bool) (lifecycle.RunResult, error) {
 	if operation == "observe" && r.Action == "cluster" && !lifecycle.Recorded(e) {
 		return c.invoke(ctx, e, operation, r, map[string]string{"reading": UnrecordedReading}, nil)
 	}
-	return c.invoke(ctx, e, operation, r, nil, nil)
+	return c.invokeFor(ctx, e, operation, r, nil, nil, removal)
 }
 
 func (c Capability) invoke(ctx context.Context, e lifecycle.Execution, operation string, r Request, values map[string]string, named map[string]error) (lifecycle.RunResult, error) {
+	return c.invokeFor(ctx, e, operation, r, values, named, false)
+}
+
+func (c Capability) invokeFor(ctx context.Context, e lifecycle.Execution, operation string, r Request, values map[string]string, named map[string]error, removal bool) (lifecycle.RunResult, error) {
 	if c.runner == nil {
 		return lifecycle.RunResult{}, cephUnconfigured.Fail("the Ceph adapter is not configured", "")
 	}
@@ -193,6 +201,9 @@ func (c Capability) invoke(ctx context.Context, e lifecycle.Execution, operation
 	}
 	if produces && r.Action == "cluster" {
 		outputs = append(outputs, lifecycle.OutputFile{Name: DashboardOutput, Variable: DashboardOutput})
+	}
+	if produces && !removal && len(credentialServices(r)) != 0 {
+		outputs = append(outputs, lifecycle.OutputFile{Name: MonitoringOutput, Variable: MonitoringOutput})
 	}
 	refusals := adapterRefusals()
 	if r.Client != nil {
@@ -360,6 +371,7 @@ func adapterRefusals() map[string]error {
 	out["foreign-client"] = foreignClientRefusal("<name>")
 	out["cephx-policy"] = cephUnqualified.Fail("native Ceph keys do not prove the declared aes256k CephX key type", "the selected native artifacts mint another key type: remove spec.security.cephx.keyType to use the build's default, or select artifacts that mint aes256k keys; inspect the native error and retain the operation for recovery or destroy")
 	out["service-credential-foreign"] = cephForeign.Fail("a Ceph service a service-unit block applied stores a credential other than the one its bound Secret holds", "find the service and leaf the native error names with ceph orch ls --export; Bootwright never replaces a credential of a deployed service: store the deployed value again in the Secret that the service's spec.serviceBindings entry binds to that leaf with bootwright secret set, or take back what this context owns with bootwright destroy --context <context>, then apply")
+	out["monitoring-login-unsupported"] = cephUnqualified.Fail("a Prometheus or Alertmanager login that cephadm holds behind the management gateway is not one Bootwright retains: each user and password is 1 to 128 visible ASCII characters other than &, < and >", "the native error names the service and whether its user or password differs, never the value; reset that service's login with ceph orch prometheus set-credentials <user> <password> or ceph orch alertmanager set-credentials <user> <password> to visible ASCII characters other than &, < and >, then apply again")
 	out["foreign-pool"] = cephForeign.Fail("a Ceph pool of the CephPool's name, or of a zone pool a CephObjectGateway derives, exists that this operation did not create", "rename the CephPool or the CephObjectGateway's spec.zone, or remove the foreign pool outside Bootwright; a pool without this operation's creation record is never adopted")
 	out["foreign-profile"] = cephForeign.Fail("an erasure-code profile named after the CephPool exists that this operation did not create", "rename the CephPool, or remove the foreign profile outside Bootwright; Bootwright never overrides a profile with --force")
 	out["foreign-rule"] = cephForeign.Fail("a CRUSH rule of the frozen name exists that this operation did not create, or it is not the rule this operation created", "rename the CephPlacementPolicy's ruleName or the erasure-coded CephPool, or remove the foreign rule outside Bootwright")

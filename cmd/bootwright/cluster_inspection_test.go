@@ -231,7 +231,7 @@ func TestCephInspectionReportsAReasonWithoutProofsAndTheFSIDWithThem(t *testing.
 	catalog, cluster := inspectedStorageCluster()
 	reader := &readerFake{}
 	proof, err := (cephInspection{reconciler: reader}).ManagedStorage(context.Background(), "lab", catalog, cluster)
-	if err != nil || proof.Reason == "" || proof.FSID != "" || !slices.Equal(reader.reads, []string{"CephCluster/storage"}) {
+	if err != nil || proof.Reason == "" || proof.FSID != "" || !slices.Equal(reader.reads, []string{"CephCluster/storage", "resources/lab"}) {
 		t.Fatalf("proof without evidence = %+v (%v) after reads %v", proof, err, reader.reads)
 	}
 	digest := inspectedDigest
