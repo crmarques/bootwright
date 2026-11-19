@@ -2696,6 +2696,28 @@ def test_a_serial_selection_resolves_every_requested_path_through_its_bound_kern
         native.node_of(rows[0]["path"])
 
 
+@pytest.mark.parametrize("action", ["cluster", "pool", "delegating pool"])
+def test_a_physical_hosts_device_reading_binds_its_clusters_host_scope_for_every_block(core_request, monkeypatch, action):
+    rows = serial_selected(core_request)
+    monkeypatch.setattr(ceph_host_runtime, "physical_hardware", lambda host: None)
+    scope = {key: value for key, value in core_request.items() if key != "action"}
+    if action == "pool":
+        core_request.update(action="pool", pool=replicated_pool())
+    elif action == "delegating pool":
+        core_request.update(action="pool", pool=replicated_pool(), delegated=[{"name": "crash", "hosts": [core_request["bootstrap"]]}])
+    ceph_native.validate(core_request)
+    native, unused = worker(core_request, {})
+    read = []
+
+    def host_devices(runtime):
+        read.append(runtime.request)
+        return {"devices": rows[:1]}
+
+    monkeypatch.setattr(ceph_host_runtime.HostRuntime, "host_devices", host_devices)
+    assert native.physical_devices() == {rows[0]["path"]: rows[0]}
+    assert read == [scope]
+
+
 @pytest.mark.parametrize("damage", ["wwn", "path", "unaligned", "small", "bool-size", "shared", "grammar", "virtual"])
 def test_the_worker_holds_a_serial_selection_to_its_frozen_shape(core_request, damage):
     serial_selected(core_request)

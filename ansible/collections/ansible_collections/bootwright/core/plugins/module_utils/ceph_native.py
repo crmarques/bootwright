@@ -703,6 +703,12 @@ def host_scope(request):
     return validate_scope(request)
 
 
+def cluster_scope(request):
+    """The host scope of any validated block request: its cluster's members, without its action, resource or delegated services."""
+    validate(request)
+    return validate_scope({key: value for key, value in request.items() if key in SCOPE_MEMBERS | SCOPE_OPTIONAL})
+
+
 def package_proxy(value, reason="packages"):
     """A resolved CONNECT endpoint, never credentials or an ambient route."""
     import urllib.parse

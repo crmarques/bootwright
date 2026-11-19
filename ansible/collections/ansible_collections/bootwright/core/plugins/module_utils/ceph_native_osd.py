@@ -12,7 +12,8 @@ import re
 from ansible_collections.bootwright.core.plugins.module_utils.canonical_json import canonical
 from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import (
     CEPH_VOLUME_BLOCK, CEPH_VOLUME_GROUP, DEVICE_IDENTITIES, DEVICE_IDENTITIES_VERSION, DEVICE_TREE, LVM_UUID, NativeFailure, OSD_CLEAR_SECONDS,
-    OSD_CLEAR_VERSION, OSD_UUID, Refusal, auxiliary_device_paths, device_path, lvm_devices_lists, never_booted, require, volume_tool_running,
+    OSD_CLEAR_VERSION, OSD_UUID, Refusal, auxiliary_device_paths, cluster_scope, device_path, lvm_devices_lists, never_booted, require,
+    volume_tool_running,
 )
 
 
@@ -346,7 +347,7 @@ class Devices:
         if not self.worker.host.get("physical"):
             return {}
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_host_runtime
-        reader = ceph_host_runtime.HostRuntime(self.worker.request, self.worker.host["name"])
+        reader = ceph_host_runtime.HostRuntime(cluster_scope(self.worker.request), self.worker.host["name"])
         return {value["path"]: value for value in reader.host_devices()["devices"]}
 
     def devices(self):
