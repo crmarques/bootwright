@@ -112,25 +112,6 @@ func TestRetirementNeverRemovesTheOtherBlocksTools(t *testing.T) {
 	}
 }
 
-// A single-block stage an earlier build froze at controller-clients-v5 is not
-// continued: it refuses by its version, and the build that applied it destroys it.
-func TestARetainedSingleBlockStageOfTheEarlierVersionRefuses(t *testing.T) {
-	block := planBlock(t, unwired(), stateOf(environment(), machine(), cluster()), reconciliation.Apply)
-	earlier := stageRequest(t, block)
-	earlier.Version = "controller-clients-v5"
-	data, err := earlier.Canonical()
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = DecodeRequest(data)
-	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "records.version-unsupported" ||
-		reported[0].Message != "the frozen controller prerequisites request has an unsupported version: controller-clients-v5" ||
-		reported[0].Remediation != "destroy it with the build that applied it" {
-		t.Fatalf("a retained v5 stage refused as %+v", reported)
-	}
-}
-
 func err0(_ Request, err error) error { return err }
 
 // With the image mirror's Registry beside the artifact mirror on the

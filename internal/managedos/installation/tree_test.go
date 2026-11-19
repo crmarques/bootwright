@@ -169,13 +169,13 @@ func TestATreeApplyNamesItsRefusalsWithTheirRemedy(t *testing.T) {
 	}
 }
 
-func TestTreeOldRequestAndEvidenceVersionsRefuse(t *testing.T) {
+func TestTreeRequestAndEvidenceOfAnotherVersionRefuse(t *testing.T) {
 	execution, _ := treeFixture(t)
 	if _, err := DecodeTreeRequest([]byte(`{"version":"os-package-tree-v0"}`)); err == nil {
-		t.Fatal("accepted old tree request")
+		t.Fatal("accepted a tree request of another version")
 	}
 	evidence, _ := json.Marshal(TreeEvidence{Version: "os-package-tree-evidence-v0", Request: execution.Block.RequestDigest})
 	if _, err := decodeTreeEvidence(evidence, execution.Block.RequestDigest); err == nil {
-		t.Fatal("accepted old tree evidence")
+		t.Fatal("accepted tree evidence of another version")
 	}
 }

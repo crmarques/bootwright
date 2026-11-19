@@ -29,7 +29,7 @@ author:
 """
 
 EXAMPLES = r"""
-- name: Discard the installer work area a previous build left
+- name: Discard a stale installer work area
   bootwright.core.containercluster_work_area:
     path: /var/lib/example/clusters/sno
     refuse_inserted: true

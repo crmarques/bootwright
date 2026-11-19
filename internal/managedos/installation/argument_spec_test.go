@@ -33,7 +33,7 @@ type specOption struct {
 // specification does not admit: a version it does not list, a required option
 // the request lacks, or a key that a dict declaring options does not declare.
 // The role's own tests prove only that it agrees with itself, and this
-// package's tests prove only what it freezes, so a role left at an earlier
+// package's tests prove only what it freezes, so a role left at another
 // request version, or a budget field renamed on one side only, would fail
 // every apply, observe and destroy on a real host while both sides stay green.
 // Each frozen request golden is therefore checked against every entry point

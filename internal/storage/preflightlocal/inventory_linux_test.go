@@ -35,7 +35,7 @@ func TestInventoryReadsConfiguredAndLiveDomainShapes(t *testing.T) {
 		}
 	}
 }
-func TestDomainDirectoryReadsAFileLargerThanTheOldBound(t *testing.T) {
+func TestDomainDirectoryReadsAFileOfOneHundredKiB(t *testing.T) {
 	directory := t.TempDir()
 	body := `<domain><name>big</name><uuid>u1</uuid><vcpu>2</vcpu><metadata>` + strings.Repeat("x", 100<<10) + `</metadata></domain>`
 	if err := os.WriteFile(filepath.Join(directory, "big.xml"), []byte(body), 0o600); err != nil {

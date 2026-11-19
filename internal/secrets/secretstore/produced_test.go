@@ -8,7 +8,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
-const retiredRemedy = "destroy this context's effects with a Bootwright build that opens this store, or abandon them with bootwright context delete --name <context> --purge --allow-orphans, then create the context again"
+const unknownBackendRemedy = "destroy this context's effects with a Bootwright build that opens this store, or abandon them with bootwright context delete --name <context> --purge --allow-orphans, then create the context again"
 
 // A store whose persisted backend this build's catalog no longer carries is
 // refused by every access with the identity it read and the way out, before
@@ -16,7 +16,7 @@ const retiredRemedy = "destroy this context's effects with a Bootwright build th
 func TestAnUnknownPersistedBackendRefusesWithItsIdentityAndRemedy(t *testing.T) {
 	current := testBackend("current", true)
 	access, w, source := testAccess(current)
-	record, err := EncodeRecord(Selector{SelectorVersion: RecordVersion, Context: "fixture", Backend: "retired-v3", Generation: "generation-one"}, []byte(`{}`))
+	record, err := EncodeRecord(Selector{SelectorVersion: RecordVersion, Context: "fixture", Backend: "unknown-v1", Generation: "generation-one"}, []byte(`{}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,7 +30,7 @@ func TestAnUnknownPersistedBackendRefusesWithItsIdentityAndRemedy(t *testing.T) 
 		"initialize": func() error { return access.InitializeArea(context.Background(), w.selected, "current", w.area) },
 	} {
 		found := diagnostics.Of(attempt())
-		if len(found) != 1 || found[0].Code != "secret.store.implementation" || !strings.Contains(found[0].Message, "retired-v3") || found[0].Remediation != retiredRemedy {
+		if len(found) != 1 || found[0].Code != "secret.store.implementation" || !strings.Contains(found[0].Message, "unknown-v1") || found[0].Remediation != unknownBackendRemedy {
 			t.Fatalf("%s refused as %+v", name, found)
 		}
 	}

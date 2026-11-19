@@ -163,9 +163,7 @@ def composed(tmp_path, mirror=None, credentials=(), proxy=None, bundles=0):
     return Templar(loader=LOADER, variables=variables).template(written["bootwright.core.private_file"]["content"])
 
 
-# The bytes the role wrote for each case while the composition was a Jinja
-# expression in build.yml, so its move into one filter (B1513) is proved to
-# change none of them.
+# The exact bytes the role writes for each case.
 @pytest.mark.parametrize("arguments, digest", [
     ({},
      "b0810c1a331771722ec5c7c78e0f03a2944aa7641d7931795d44f3f83239e7f0"),

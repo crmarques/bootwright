@@ -87,16 +87,6 @@ def test_the_artifact_server_runs_the_managed_service_role(operation):
     }
 
 
-@pytest.mark.parametrize("retired", ["infra_artifact_server_nginx"])
-def test_no_copied_artifact_server_role_remains(retired):
-    assert not (COLLECTION / "roles" / retired).exists()
-
-
-@pytest.mark.parametrize("retired", ["infra_dns_server_dnsmasq", "infra_ntp_server_chrony", "infra_proxy_squid"])
-def test_no_copied_managed_service_role_remains(retired):
-    assert not (COLLECTION / "roles" / retired).exists()
-
-
 def test_the_argument_spec_keys_the_request_by_its_frozen_implementation():
     specs = yaml.safe_load((ROLE / "meta" / "argument_specs.yml").read_text())["argument_specs"]
     assert sorted(specs) == sorted(OPERATIONS + tuple(ARTIFACT_ENTRY + operation for operation in OPERATIONS))
@@ -795,8 +785,8 @@ def test_derived_dns_local_zones_cover_the_input_document_bound():
     assert not holds(task, variables("bootwright_managed_service", request))
 
 
-# A registry runs at the level Go froze, so a request that carries none, as
-# one an earlier build froze, is refused before any effect.
+# A registry runs at the level Go froze, so a request that carries none is
+# refused before any effect.
 @pytest.mark.parametrize("request_value, admitted", [
     ({"kind": "Registry", "labelLevel": "s0:c537,c638"}, True),
     ({"kind": "Registry"}, False),

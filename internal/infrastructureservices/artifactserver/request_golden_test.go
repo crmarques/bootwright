@@ -52,7 +52,7 @@ func requestGoldenOf(t *testing.T, objects ...api.Object) []byte {
 
 // The request an artifact server freezes, the host claims it reserves and the
 // impacts it prints keep their exact bytes for every IPv4 and DNS-name shape,
-// so a plan an earlier build registered reads the same under this one.
+// because the plan digest covers them.
 func TestArtifactServerRequestGoldensKeepTheirBytes(t *testing.T) {
 	sshHost := api.NewObject(api.Machine, "services", api.Value{}, controller().Spec().Without("access").With("access", api.MapValue(field("ssh", api.MapValue(
 		text("addressRef", "ip"), number("port", "2222"), text("user", "root"),

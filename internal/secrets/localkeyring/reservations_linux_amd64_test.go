@@ -146,9 +146,6 @@ func TestReservationsOutliveTheirVersionsAndBindings(t *testing.T) {
 	if snapshot := h.snapshot(); len(snapshot.Versions) != 0 || len(snapshot.Bindings) != 0 {
 		t.Fatalf("the store still holds %d versions and %d bindings", len(snapshot.Versions), len(snapshot.Bindings))
 	}
-	if _, err := os.Stat(filepath.Join(h.secretsRoot(), earlierIdentityDirectory)); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("a per-file reservation directory exists: %v", err)
-	}
 	retired, err := hex.DecodeString(strings.TrimPrefix(first.ID, "ver-"))
 	if err != nil {
 		t.Fatal(err)
@@ -174,9 +171,9 @@ func refusesWithoutEffects(t *testing.T, h *integrationStore, code string) error
 }
 
 // The reservation record is the metadata's own member, so whoever changes it
-// without the keys is refused by authentication, and a reseal that drops, malforms,
-// disorders or overfills it, or omits it as an earlier build did, is refused
-// as corrupt before any session.
+// without the keys is refused by authentication, and a reseal that drops,
+// malforms, disorders, overfills or omits it is refused as corrupt before any
+// session.
 func TestATamperedOrMissingReservationRecordRefuses(t *testing.T) {
 	cases := map[string]func(*testing.T, []string, []byte) []byte{
 		"a live version's reservation dropped": func(t *testing.T, ids []string, plaintext []byte) []byte {
@@ -301,32 +298,6 @@ func TestAForeignReservationRecordRefuses(t *testing.T) {
 	})
 	if failureCode(err) != "secret.store.corrupt" || !reflect.DeepEqual(before, artifactTree(t, foreign.secretsRoot())) {
 		t.Fatalf("a record sealed for another context = %v", err)
-	}
-}
-
-// A keyring an earlier build left keeps one reservation file each and
-// metadata without the member; it is refused, never converted, and the
-// refusal names that layout.
-func TestAnEarlierBuildsPerFileReservationsAreRefused(t *testing.T) {
-	for name, metadata := range map[string]bool{"its metadata": true, "only its directory": false} {
-		t.Run(name, func(t *testing.T) {
-			h := newIntegrationStore(t)
-			version := h.putOne("credential", "synthetic-value")
-			directory := filepath.Join(h.secretsRoot(), earlierIdentityDirectory)
-			if err := os.Mkdir(directory, 0700); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(filepath.Join(directory, version.ID+".json"), []byte(`{"formatVersion":1,"context":"example","id":"`+version.ID+`"}`+"\n"), 0600); err != nil {
-				t.Fatal(err)
-			}
-			if metadata {
-				h.reseal(func(plaintext []byte) []byte { return replaceMember(t, plaintext, "reserved", nil) })
-			}
-			err := refusesWithoutEffects(t, h, "secret.store.corrupt")
-			if reported := diagnostics.Of(err); !strings.Contains(reported[0].Message, "per-file layout of an earlier build") {
-				t.Fatalf("the refusal does not name the earlier layout: %v", err)
-			}
-		})
 	}
 }
 

@@ -23,14 +23,6 @@ from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "managedos_install_anaconda"
 
-# The waits the role once chose for itself.
-RETIRED = (
-    "managedos_install_anaconda_identity_attempts",
-    "managedos_install_anaconda_identity_delay",
-    "managedos_install_anaconda_reachable_attempts",
-    "managedos_install_anaconda_reachable_delay",
-)
-
 # The one count the role passes itself: an observation takes the answer that
 # is already true, trying the fleet account once more a second later.
 OBSERVATION_RETRY = {
@@ -69,13 +61,6 @@ def rendered(value):
     """What one templated value is for a request freezing BUDGETS."""
     scope = {"bootwright_os_install_request": {"budgets": BUDGETS}}
     return int(Templar(loader=LOADER, variables=scope).template(value))
-
-
-def test_the_role_defines_none_of_the_waits_it_once_chose():
-    for path in sorted(ROLE.rglob("*.yml")):
-        text = path.read_text()
-        for name in RETIRED:
-            assert name not in text, "%s still names %s" % (path.relative_to(ROLE), name)
 
 
 def reboot_defaults():

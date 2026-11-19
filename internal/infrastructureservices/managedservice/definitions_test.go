@@ -37,12 +37,12 @@ func refusal(t *testing.T, err error) diagnostics.Diagnostic {
 // declare, refuses by naming its version and the build that can still destroy it.
 func TestAManagedServiceRequestOfAnotherVersionRefusesNamingItsVersion(t *testing.T) {
 	for kind, definition := range definitions() {
-		for _, retired := range []string{kind + "-v1", kind + "-v2", "managed-service-v3", "managed-service-v5"} {
-			t.Run(retired, func(t *testing.T) {
+		for _, other := range []string{kind + "-v2", "managed-service-v2"} {
+			t.Run(other, func(t *testing.T) {
 				request := managedservice.Request{
 					Kind:      string(definition.Kind),
 					Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: "controller"},
-					Version:   retired,
+					Version:   other,
 				}
 				canonical, err := request.Canonical()
 				if err != nil {
@@ -59,8 +59,8 @@ func TestAManagedServiceRequestOfAnotherVersionRefusesNamingItsVersion(t *testin
 				}
 				_, err = managedservice.DecodeRequest(data, definition.Version)
 				reported := refusal(t, err)
-				if !strings.Contains(reported.Message, retired) || !strings.Contains(reported.Remediation, "build that applied it") {
-					t.Fatalf("%s refused a request at %s as %q, remedy %q", definition.Implementation, retired, reported.Message, reported.Remediation)
+				if !strings.Contains(reported.Message, other) || !strings.Contains(reported.Remediation, "build that applied it") {
+					t.Fatalf("%s refused a request at %s as %q, remedy %q", definition.Implementation, other, reported.Message, reported.Remediation)
 				}
 			})
 		}

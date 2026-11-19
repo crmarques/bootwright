@@ -33,7 +33,7 @@ func discoveryGroups(name string, removing bool) []reconciliation.Group {
 	return groups
 }
 
-// Preserve frozen presentation, including an older cleanup with no groups.
+// Preserve frozen presentation.
 func discoveryRemovalGroups(frozen []reconciliation.Group) []reconciliation.Group {
 	var groups []reconciliation.Group
 	for _, group := range frozen {

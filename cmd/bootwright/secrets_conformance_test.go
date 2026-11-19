@@ -68,7 +68,7 @@ func (*memoryImplementation) Selection() secretstore.Selection {
 	return secretstore.Selection{Type: "session-test", Store: secretstore.ComponentRef{ID: "memory-test", InterfaceVersion: 1, StateVersion: 1, ConfigVersion: 1}, KeyCustody: secretstore.ComponentRef{ID: "operator-test", InterfaceVersion: 1, StateVersion: 1, ConfigVersion: 1}}
 }
 
-func (*memoryImplementation) Backend() string { return "session-test-v2" }
+func (*memoryImplementation) Backend() string { return "session-test-v1" }
 
 func (*memoryImplementation) Requirements() []secretstore.SessionRequirement {
 	return []secretstore.SessionRequirement{{Kind: "operator-session"}}

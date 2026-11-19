@@ -104,9 +104,9 @@ func TestRegisteredBeforeReadsAnyAttempt(t *testing.T) {
 	}
 }
 
-func TestAFrozenRequestOfTheEarlierVersionRefuses(t *testing.T) {
-	_, err := DecodeRequest([]byte(`{"version":"os-install-anaconda-v14"}`))
-	if reported := diagnostics.Of(err); len(reported) == 0 || !strings.Contains(reported[0].Message, "os-install-anaconda-v14") {
-		t.Fatalf("the earlier version was read as %v", err)
+func TestAFrozenRequestOfAnotherVersionRefuses(t *testing.T) {
+	_, err := DecodeRequest([]byte(`{"version":"os-install-anaconda-v2"}`))
+	if reported := diagnostics.Of(err); len(reported) == 0 || !strings.Contains(reported[0].Message, "os-install-anaconda-v2") {
+		t.Fatalf("another version was read as %v", err)
 	}
 }

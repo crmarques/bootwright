@@ -636,8 +636,8 @@ class ResourceWorker(ceph_native.Worker):
         owned = self.markers.read(mark)
         require(owned is None or owned == client, "ownership")
         scope = self.client_scope()
-        # Refuse old hash bindings and unbound material names without opening
-        # their contents. Matching private bytes cannot create ownership.
+        # Refuse a foreign hash binding or an unbound material name without
+        # opening its contents. Matching private bytes cannot create ownership.
         self.client_custody(scope)
         entries = self.ceph("auth", "ls")
         require(isinstance(entries, dict) and isinstance(entries.get("auth_dump"), list), "native-output")

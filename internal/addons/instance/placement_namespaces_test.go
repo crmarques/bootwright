@@ -180,17 +180,17 @@ func TestApplyAndObserveRefuseAFrozenRequestWhoseNamespacesWereWidened(t *testin
 	}
 }
 
-func TestARequestOfTheEarlierVersionRefusesAtRetirement(t *testing.T) {
+func TestARequestOfAnotherVersionRefusesAtRetirement(t *testing.T) {
 	data, err := fixtureRequest(t).Canonical()
 	if err != nil {
 		t.Fatal(err)
 	}
-	earlier := strings.Replace(string(data), `"version":"`+requestVersion+`"`, `"version":"addon-instance-request-v2"`, 1)
-	if earlier == string(data) {
+	other := strings.Replace(string(data), `"version":"`+requestVersion+`"`, `"version":"addon-instance-request-v2"`, 1)
+	if other == string(data) {
 		t.Fatal("the frozen request does not carry its version member")
 	}
 	block := fixtureBlock(t, fixtureRequest(t))
-	block.Request = []byte(earlier)
+	block.Request = []byte(other)
 	capability := New(&scriptedRunner{}, fixtureRegistry(t), nil)
 	_, destroyErr := capability.Destroy(context.Background(), lifecycle.Execution{Block: block})
 	_, removalErr := capability.Removal(context.Background(), block)

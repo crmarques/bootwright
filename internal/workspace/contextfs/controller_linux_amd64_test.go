@@ -208,7 +208,7 @@ func TestTheFirstBindingRefusesBeforeSetupCompletes(t *testing.T) {
 // The store keeps its host-wide state under controller/: setup's lock, record
 // and runtimes in controller/install and the attributed controller record in
 // controller/record, which the descriptor names. The controller container
-// admits nothing else: an unknown entry, the earlier setup name, an install
+// admits nothing else: an unknown entry, an install
 // subtree that is no directory and a record no descriptor declares each refuse
 // every read.
 func TestTheStoreAdmitsControllerWithOnlyInstallAndRecord(t *testing.T) {
@@ -229,11 +229,6 @@ func TestTheStoreAdmitsControllerWithOnlyInstallAndRecord(t *testing.T) {
 			t.Errorf("the store holds no %s (%v)", path, err)
 		}
 	}
-	for _, path := range []string{"host", "setup"} {
-		if _, err := os.Lstat(filepath.Join(root, path)); !errors.Is(err, os.ErrNotExist) {
-			t.Errorf("the store holds the earlier layout's %s (%v)", path, err)
-		}
-	}
 	hold, err := store.HoldRuntime(ctx, digest)
 	if err != nil || hold.Path() != filepath.Join(root, "controller/install/runtimes", digest) {
 		t.Fatalf("the runtime is held at %v (%v)", hold, err)
@@ -252,9 +247,6 @@ func TestTheStoreAdmitsControllerWithOnlyInstallAndRecord(t *testing.T) {
 		message string
 	}{
 		"an unknown directory": {func(t *testing.T, root string) { mkdirs(t, 0700, filepath.Join(root, "controller/runs")) }, unsupportedRootStateMessage},
-		"the earlier setup name": {func(t *testing.T, root string) {
-			mkdirs(t, 0700, filepath.Join(root, "controller/setup"))
-		}, unsupportedRootStateMessage},
 		"an install file": {func(t *testing.T, root string) {
 			mkdirs(t, 0700, filepath.Join(root, "controller"))
 			writePrivate(t, filepath.Join(root, "controller/install"), nil)

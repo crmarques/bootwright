@@ -33,7 +33,7 @@ type roleOption struct {
 // A role refuses, before its first task, a request whose version it does not
 // list, that lacks a required option, or that carries a key a dict declaring
 // options does not declare. Moving a budget between the two requests changes
-// both, so a role left at the earlier version, or a budget declared on one
+// both, so a role left at another version, or a budget declared on one
 // side only, would fail every apply, observe and destroy on a real host while
 // the goldens and the role's own tests stay green. Each request golden is
 // therefore checked against every entry point its capability runs: its keys,

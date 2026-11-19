@@ -159,7 +159,6 @@ func strictYAMLRefusals() []strictYAMLRow {
 		{"unsupported apiVersion", "apiVersion: bootwright.io/v1beta1\nkind: Secret\nmetadata:\n  name: probe\nspec:\n" + strictYAMLToken, []string{"api.version $.apiVersion"}},
 		{"missing kind", "apiVersion: bootwright.io/v1alpha1\nmetadata:\n  name: probe\nspec:\n" + strictYAMLToken, []string{"api.kind $.kind"}},
 		{"unregistered kind", "apiVersion: bootwright.io/v1alpha1\nkind: Widget\nmetadata:\n  name: probe\nspec: {}\n", []string{"api.kind $.kind"}},
-		{"retired kind", "apiVersion: bootwright.io/v1alpha1\nkind: InfraComponent\nmetadata:\n  name: probe\nspec: {}\n", []string{"api.kind $.kind"}},
 		{"absent metadata", "apiVersion: bootwright.io/v1alpha1\nkind: Secret\nspec:\n" + strictYAMLToken, []string{"api.required $.metadata"}},
 		{"absent metadata name", "apiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata: {}\nspec:\n" + strictYAMLToken, []string{"api.required $.metadata.name"}},
 		{"absent spec", "apiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata:\n  name: probe\n", []string{"api.required $.spec"}},

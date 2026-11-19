@@ -9,8 +9,7 @@
 # changes: the author's answer to whether the change alters what an effect is
 # (specs/state-reconciliation.md, "Continuation and removal").
 #
-# A commit that names a moved contract, or changes the value of a Go store
-# format version (a non-test `...Version = <integer>` line), makes this build refuse state an
+# A commit that names a moved contract makes this build refuse state an
 # earlier build left, so it marks its subject with "!" and carries a
 # "BREAKING CHANGE: " footer naming what it refuses and the remedy
 # (specs/project.md, "Design priorities and non-goals").
@@ -72,21 +71,7 @@ for commit in $(git rev-list --no-merges "$1..$2"); do
         status=1
     fi
     changed=$(git -c core.quotePath=false diff-tree --no-commit-id --name-only -r --root "$commit")
-    formats=$(git -c core.quotePath=false diff-tree --no-commit-id -p -r --root "$commit" -- 'internal/*.go' ':(exclude)*_test.go' |
-        awk '/^--- a\// { file = substr($0, 7) }
-            /^\+\+\+ b\// { file = substr($0, 7) }
-            match($0, /^[-+][[:space:]]*(const[[:space:]]+)?[A-Za-z]*Version([[:space:]]+[A-Za-z0-9]+)?[[:space:]]*=[[:space:]]*[0-9]+[[:space:]]*(\/\/.*)?$/) {
-                line = $0; sub(/[[:space:]]*\/\/.*$/, "", line); sign = substr(line, 1, 1)
-                name = line; sub(/^[-+][[:space:]]*(const[[:space:]]+)?/, "", name); sub(/[^A-Za-z].*$/, "", name)
-                value = line; sub(/^.*=[[:space:]]*/, "", value); sub(/[[:space:]]*$/, "", value)
-                print sign file ":" name "=" value
-            }')
     breaking=
-    for removed in $(printf '%s\n' "$formats" | sed -n 's/^-//p'); do
-        if printf '%s\n' "$formats" | grep -q "^+${removed%%=*}=" && ! printf '%s\n' "$formats" | grep -Fqx "+$removed"; then
-            breaking="$breaking ${removed%%=*}"
-        fi
-    done
     if touches_contract "$changed"; then
         contract=$(git log -1 --format=%b "$commit" | sed -n 's/^Contract: //p')
         if test "$contract" = unchanged; then
@@ -113,7 +98,7 @@ for commit in $(git rev-list --no-merges "$1..$2"); do
     if test -n "$breaking"; then
         if ! printf '%s\n' "$subject" | grep -Eq '^[a-z]+(\([a-z0-9-]+\))?!: ' ||
             ! git log -1 --format=%b "$commit" | grep -Eq '^BREAKING CHANGE: [^ ]'; then
-            echo "$commit: moves a contract or a store format version, so this build refuses state an earlier build left; mark the subject with '!' and add a 'BREAKING CHANGE: ' footer naming what it refuses and the remedy" >&2
+            echo "$commit: moves a contract, so this build refuses state an earlier build left; mark the subject with '!' and add a 'BREAKING CHANGE: ' footer naming what it refuses and the remedy" >&2
             status=1
         fi
     fi

@@ -9,7 +9,7 @@ import pytest
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_export_native as export, ceph_native
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils.test_ceph_smb_native import scope, Markers
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils.test_ceph_client_custody import client  # pylint: disable=unused-import
-from ansible_collections.bootwright.core.tests.unit.test_ceph_request_goldens import legacy_export_caps
+from ansible_collections.bootwright.core.tests.unit.test_ceph_request_goldens import expected_export_caps
 
 
 def request():
@@ -19,7 +19,7 @@ def request():
              "providedMachines": [], "hostSecretRefs": ceph_native.host_secret_refs(cluster["hosts"]), "scope": cluster,
              "physicalHosts": False, "monitors": {"node-1": "192.0.2.1"},
              "monitoringHosts": ["192.0.2.1", "192.0.2.2"], "monitoringPort": 9283}
-    value["principals"] = legacy_export_caps(value)
+    value["principals"] = expected_export_caps(value)
     return value
 
 
@@ -332,7 +332,7 @@ def test_rgw_lost_reply_recaptures_one_pair_without_key_arguments(monkeypatch):
     native.export["gateway"] = {"name": "objects", "fqdn": "objects.example.test", "addresses": ["192.0.2.1"], "port": 80,
                                 "realm": "objects", "zoneGroup": "objects", "zone": "objects", "indexPool": "objects.rgw.buckets.index",
                                 "tls": False, "certificateRef": ""}
-    native.export["principals"] = legacy_export_caps(native.export)
+    native.export["principals"] = expected_export_caps(native.export)
     uid = native.identifier + "-ops"
     stored = []
     calls = []
@@ -368,7 +368,7 @@ def test_failed_rgw_create_retains_no_rgw_material(monkeypatch):
     native.export["gateway"] = {"name": "objects", "fqdn": "objects.example.test", "addresses": ["192.0.2.1"], "port": 80,
                                 "realm": "objects", "zoneGroup": "objects", "zone": "objects", "indexPool": "objects.rgw.buckets.index",
                                 "tls": False, "certificateRef": ""}
-    native.export["principals"] = legacy_export_caps(native.export)
+    native.export["principals"] = expected_export_caps(native.export)
 
     def rgw(*args):
         if args[:2] == ("user", "list"):
@@ -385,7 +385,7 @@ def test_failed_rgw_create_retains_no_rgw_material(monkeypatch):
 def test_consumer_preserves_the_one_name_bound(length):
     value = request()
     value["name"] = "c" * length
-    value["principals"] = legacy_export_caps(value)
+    value["principals"] = expected_export_caps(value)
     if length == 64:
         with pytest.raises(ceph_native.Refusal):
             export.validate(value)

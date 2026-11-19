@@ -174,13 +174,13 @@ func TestAnotherVersionOrAnEscalatingPlacementRefuses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	earlier := strings.Replace(string(data), `"version":"`+requestVersion+`"`, `"version":"artifact-server-nginx-v0"`, 1)
+	other := strings.Replace(string(data), `"version":"`+requestVersion+`"`, `"version":"artifact-server-nginx-v0"`, 1)
 	local := `"placement":{"connection":"local","machine":"controller"}`
 	escalating := strings.Replace(string(data), local, `"placement":{"connection":"local","machine":"controller","sudoPasswordRef":"controller-sudo"}`, 1)
-	if earlier == string(data) || escalating == string(data) {
+	if other == string(data) || escalating == string(data) {
 		t.Fatalf("the frozen request does not carry this build's version and a local placement:\n%s", data)
 	}
-	if _, err := DecodeRequest([]byte(earlier)); err == nil {
+	if _, err := DecodeRequest([]byte(other)); err == nil {
 		t.Fatal("a request of another version decoded")
 	}
 	if _, err := DecodeRequest([]byte(escalating)); err == nil {

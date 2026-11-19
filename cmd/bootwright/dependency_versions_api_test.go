@@ -12,7 +12,7 @@ import (
 // An Environment declares versions only for the prerequisites its own
 // controller stage installs. The private interpreter, Ansible and the baseline
 // native packages belong to context-independent setup, which reads no
-// Environment, so their former keys are no longer part of the schema.
+// Environment, so an Environment names none of them.
 func TestEnvironmentDependencyVersionsPreserveExplicitIntent(t *testing.T) {
 	t.Parallel()
 	environment := serviceEnvironment + `  dependencyVersions:

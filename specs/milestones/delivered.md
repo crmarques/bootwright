@@ -6543,7 +6543,7 @@ partial-effect, interrupted-removal, replay and old-plan contracts.
    owner, with its own evidence; inverse dependencies retain the tree until
    every consumer is removed. `TestTreeRequestAndEvidenceGoldens`,
    `TestTreeContinuationClassifiesPartialAndInterruptedRemoval`,
-   `TestTreeOldRequestAndEvidenceVersionsRefuse`,
+   `TestTreeRequestAndEvidenceOfAnotherVersionRefuse`,
    `TestATreeApplyNamesItsRefusalsWithTheirRemedy` and the role harness in
    `test_managedos_package_tree.py` prove replay, continuation after partial
    publication, interrupted removal and the named refusals.
@@ -10284,7 +10284,7 @@ program's validation. The tests are
 `TestEditedPlacementNamespacesRefuseAtDecode`,
 `TestValidateNamespacesRefusesWhatDiffersFromTheRegistry`,
 `TestApplyAndObserveRefuseAFrozenRequestWhoseNamespacesWereWidened`,
-`TestARequestOfTheEarlierVersionRefusesAtRetirement`,
+`TestARequestOfAnotherVersionRefusesAtRetirement`,
 `TestGitOpsPlacementIntoKubeSystemRefuses` and the F04 regression
 `TestRenamedGitOpsDescriptorStillRendersItsPlacement`.
 
@@ -14796,7 +14796,7 @@ the same order.
 Contracts: `controller-clients-v4` moved to `controller-clients-v5` with the
 request's `part`, which moved the stage's content digest; a retained v4 stage
 refuses by its version, so the build that applied it destroys it
-(`TestARetainedSingleBlockStageOfTheEarlierVersionRefuses`). No other plan
+(`TestAFrozenStageRequestOfAnyOtherVersionRefuses`). No other plan
 golden moved beyond the example's new block identity.
 
 **Commits:** this commit. Gates: listed in its message. No live run or push
@@ -17944,3 +17944,69 @@ remains open. A hosted KubeVirt Machine refuses new work until
 [B1622](backlog.md#b1622); explicit discovery's check is
 [B1623](backlog.md#b1623) and the automatic preparation's `Stop first` list
 [B1624](backlog.md#b1624).
+
+## X634 — No residue of earlier builds
+
+**Owner:** Architecture, with Secrets and Controller; **items:** B1633,
+B1634 and B1635 (safety); **authority:** [D279](backlog.md#d279).
+
+Every Bootwright-owned version already stood at its
+[development baseline](../project.md#design-priorities-and-non-goals). The
+keyring no longer names an earlier build's reservation layout; an unknown root
+entry refuses as any other corrupt store does. `scripts/check-commits` keeps
+the moved-contract rule alone, the collection drops its SMB re-export aliases,
+and tests and comments state the current shape and the generic refusal of
+another version without narrating earlier builds. `golang.org/x/crypto` moves
+to v0.59.0 and the default and minimum helm to 4.3.2 and `virtctl` to
+1.10.0, which clear the findings their releases fix.
+
+**Exit evidence:** the delivering commits record the package tests, the
+collection units and lint, the unchanged contract goldens, the
+vulnerability gates, `make check` and `make race`. Existing development state
+has no cross-build guarantee; no host state is changed.
+
+### B1633
+
+`govulncheck` named GO-2026-5932, the unmaintained
+`golang.org/x/crypto/openpgp` package, in the required
+`golang.org/x/crypto` v0.58.0. No Bootwright code calls it, but v0.59.0
+carries the fix, so the module moves to it (and `golang.org/x/sys` to the
+release it requires), with the tools module and the license table.
+
+**Exit evidence:** `govulncheck` reports no module, package or symbol
+finding; the tidy, module and license checks pass. No operator gate.
+
+### B1634
+
+The [vulnerability gate](../security.md#the-vulnerability-gate) held five
+`no_fix` exceptions for helm 4.3.1 and 74 exceptions for `virtctl` 1.9.1, and
+their publishers have since released helm 4.3.2 and `virtctl` 1.10.0. Both
+defaults and minimums move to those releases. Helm 4.3.2 clears four of its
+findings; GO-2026-5932 still has no tagged `golang.org/x/crypto` release, so
+its exception moves to the new release. `virtctl` 1.10.0 needs 34 exceptions
+in place of 74, each decided anew against that release's file and `go.mod`.
+The frozen KubeVirt install requests, acquisition lists and plans name the new
+releases.
+
+**Exit evidence:** `make tool-table` matches every default and the `virtctl`
+`go.mod` pin to its publisher, and `make vulngate` passes with 54 findings
+under 45 reviewed exceptions, where it held 120 under 89. No operator gate.
+
+### B1635
+
+The owner asked to reset Bootwright's internal versioning and remove backward
+compatibility. Every Bootwright-owned version already stood at the
+[development baseline](../project.md#design-priorities-and-non-goals). What
+remained: the keyring refused the per-file reservation layout of an earlier
+build by name ([secrets](../secrets.md)), `scripts/check-commits` kept a rule
+for moving a store format version that the policy forbids, the collection kept
+re-export aliases for the SMB request names, and tests, fixtures and comments
+narrated earlier builds, retired names and refactors. The keyring now refuses
+any unknown root entry generically, the commit rule keeps only moved
+contracts, the aliases are gone, the tests prove the current shape and the
+generic refusal of another version, and `TestDevelopmentVersionsRemainFixed`
+also reads `cmd/`.
+
+**Exit evidence:** the delivering commit records the package tests, the
+collection units, the unchanged contract goldens, `make check` and
+`make race`. No host state changes and no operator gate applies.

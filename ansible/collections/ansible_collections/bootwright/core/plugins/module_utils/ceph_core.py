@@ -1301,16 +1301,9 @@ def execute_host(request, operation, request_digest, transport):
     return {"changed": False, "evidence": recorded(observation, transport, request_digest, request)}
 
 
-SMB_VERSION = ceph_smb_native.VERSION
 SMB_EVIDENCE_VERSION = ceph_smb_native.EVIDENCE_VERSION
-SMB_TYPES = ceph_smb_native.TYPES
-SMB_SERVED = ceph_smb_native.SERVED
-SMB_REQUIRED = ceph_smb_native.REQUIRED
-SMB_OPTIONAL = ceph_smb_native.OPTIONAL
 SMB_EVIDENCE = frozenset(("daemons", "exists", "fsid", "owned", "owner", "partial", "ready", "removed", "request", "resource", "version"))
-SMB_USER_PASSWORD = ceph_smb_native.USER_PASSWORD
 SMB_FSID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")
-SMB_IMAGE = ceph_smb_native.IMAGE
 
 
 def smb_request(value):

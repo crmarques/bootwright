@@ -22,7 +22,7 @@ def nvme_request(core_request):
         "listeners": [{"host": "node-1", "address": "192.0.2.1", "port": 4420}, {"host": "node-2", "address": "192.0.2.2", "port": 4420}],
         "namespaces": [{"id": 1, "image": {"name": "image", "pool": "images", "dataPool": "", "sizeBytes": 1024 ** 3, "features": ["layering"]}}],
     }
-    core_request["nvmeof"]["budgets"] = goldens.legacy_nvmeof_budgets(core_request["nvmeof"])
+    core_request["nvmeof"]["budgets"] = goldens.expected_nvmeof_budgets(core_request["nvmeof"])
     return core_request
 
 

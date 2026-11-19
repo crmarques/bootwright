@@ -185,7 +185,6 @@ func TestRegisterRefusesInconsistentOperations(t *testing.T) {
 		"unsorted bindings": func(o Operation) Operation { o.Bindings = []string{"b", "a"}; return o },
 		"missing context":   func(o Operation) Operation { o.Context = ""; return o },
 		"local timestamp":   func(o Operation) Operation { o.Created = "2026-09-11T12:00:00+02:00"; return o },
-		"earlier version":   func(o Operation) Operation { o.Version, o.Closure = 1, nil; return o },
 		"no closure":        func(o Operation) Operation { o.Closure = nil; return o },
 		"short closure": func(o Operation) Operation {
 			o.Closure = &Closure{Digest: strings.Repeat("3", 63), Python: "3.14", Ansible: "2.21.4"}
@@ -352,8 +351,8 @@ func TestOnlyTheCurrentOperationRecordVersionReads(t *testing.T) {
 	target := testOperation(t, plan).ID + "/operation.json"
 	current := testOperation(t, plan)
 	for name, mutate := range map[string]func(Operation) Operation{
-		"an earlier version": func(o Operation) Operation { o.Version = OperationVersion - 1; return o },
-		"no closure":         func(o Operation) Operation { o.Closure = nil; return o },
+		"an unsupported version": func(o Operation) Operation { o.Version = OperationVersion + 1; return o },
+		"no closure":             func(o Operation) Operation { o.Closure = nil; return o },
 		"an uppercase digest": func(o Operation) Operation {
 			o.Closure = &Closure{Digest: strings.Repeat("A", 64), Python: "3.14", Ansible: "2.21.4"}
 			return o

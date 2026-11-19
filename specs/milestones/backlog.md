@@ -9493,3 +9493,19 @@ single ingress at one site, and a spanning ingress beside another, still
 refuse. The rule is the
 [stretch front doors](../ceph.md#stretch-services-and-front-doors); the work
 is [B1631](m2.md#b1631).
+
+### D279
+
+**owner** (2026-11-19): asked to review the code, reset any internal
+versioning Bootwright still uses, remove any backward compatibility with an
+earlier version and keep the code as clean as possible, since no Bootwright
+instance exists, and to fix any vulnerability found. Authorizes X634 (M1,
+B1633, B1634 and B1635) under the
+[development policy](../project.md#design-priorities-and-non-goals) that
+[D267](#d267) set: every Bootwright-owned version already stood at its
+baseline, so the work removes the remaining tailored refusal of an earlier
+keyring layout, the commit rule for a moved store format version, a dead
+collection alias set and the tests and comments that narrate earlier builds,
+and raises the components the vulnerability gates name. The owner asked for
+the change to reach origin after the full gate; no host operation is
+authorized.

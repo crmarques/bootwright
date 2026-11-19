@@ -24,7 +24,7 @@
       - 137
       - -9
   block:
-    - name: Discard the installer work area a previous build left
+    - name: Discard a stale installer work area
       bootwright.core.containercluster_work_area:
         path: '{{ containercluster_media_agent_work }}'
         refuse_inserted: true

@@ -2,9 +2,8 @@
 
 Each scenario is a scripted installer, (rc, stderr, seconds) per run, what the
 restore before each attempt does, and what the read of the registered hosts
-after a stall answers. The messages were pinned on the wait's YAML and Jinja
-(wait.yml, wait_attempt.yml and the role defaults) before the wait moved into
-the inspection (B1513), and the outcome each one is classified as with them.
+after a stall answers. The exact message each scenario produces is pinned,
+with the outcome it is classified as.
 """
 
 from __future__ import annotations

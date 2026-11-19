@@ -22,7 +22,7 @@ func TestDevelopmentVersionsRemainFixed(t *testing.T) {
 	}
 	versioned := regexp.MustCompile(`-v([0-9]+)$`)
 	for _, path := range files {
-		if (!strings.HasPrefix(path, "internal/") && !strings.HasPrefix(path, "api/")) || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+		if (!strings.HasPrefix(path, "internal/") && !strings.HasPrefix(path, "api/") && !strings.HasPrefix(path, "cmd/")) || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			continue
 		}
 		source, err := parser.ParseFile(token.NewFileSet(), filepath.Join(root, path), nil, 0)

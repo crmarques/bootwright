@@ -7,8 +7,6 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
 
-const earlierIdentityDirectory = "identities"
-
 func inspectArtifacts(ctx context.Context, area secretstore.Area, index indexRecord) (int, bool, error) {
 	paths, err := obsoleteArtifacts(ctx, area, index)
 	return len(paths), len(paths) != 0, err
@@ -39,9 +37,6 @@ func rootArtifacts(ctx context.Context, area secretstore.Area) ([]string, int, e
 	obsolete := []string{}
 	metadataSeen := false
 	for _, entry := range root {
-		if entry.Name == earlierIdentityDirectory {
-			return nil, 0, earlierLayoutFailure()
-		}
 		if entry.Directory {
 			if _, exists := directories[entry.Name]; !exists || directories[entry.Name] {
 				return nil, 0, secretstore.Failure("store.corrupt", "secret store contains an unsupported directory")

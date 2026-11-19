@@ -67,7 +67,7 @@ def scoped_client(arm, access="readWrite"):
                  "subvolumePath": NOGROUP_PATH}
     else:
         value = {"name": "consumer", "pool": "volumes", "access": access, "dataPools": list(arm), "filesystem": "", "group": "", "subvolume": ""}
-    value["caps"] = goldens.legacy_caps(value)
+    value["caps"] = goldens.expected_caps(value)
     return value
 
 

@@ -72,9 +72,9 @@ def prepared(request):
     return request
 
 
-# What the collection derived before Go froze these values (B1505). The pins below hold every golden to them, so the move changed
-# no grant, budget or placement-group count; fixtures elsewhere build their frozen values from them.
-def legacy_caps(client):
+# The grants, budgets and placement-group counts a frozen request must carry. The pins below hold every golden to them;
+# fixtures elsewhere build their frozen values from them.
+def expected_caps(client):
     """The caps `ceph fs authorize` renders for a CephFS scope (doc/cephfs/client-auth.rst); RBD's profiles otherwise."""
     if client["filesystem"]:
         grant = "r" if client["access"] == "readOnly" else "rw"
@@ -87,7 +87,7 @@ def legacy_caps(client):
     return {"mon": "profile rbd", "mgr": "profile " + profile + " pool=" + client["pool"], "osd": osd}
 
 
-def legacy_export_caps(request):
+def expected_export_caps(request):
     """The grants of the five Ceph CSI principals an export creates, as the export worker derived them (caps_for)."""
     health = "profile rbd-read-only"
     if "gateway" in request:
@@ -106,7 +106,7 @@ def legacy_export_caps(request):
     }
 
 
-def legacy_pg_num(autoscale):
+def expected_pg_num(autoscale):
     pgs = 32
     if autoscale["minPGs"] and pgs < autoscale["minPGs"]:
         pgs = autoscale["minPGs"]
@@ -115,7 +115,7 @@ def legacy_pg_num(autoscale):
     return pgs
 
 
-def legacy_nvmeof_budgets(frozen):
+def expected_nvmeof_budgets(frozen):
     """60 seconds per CLI command, 30 per held image probe, plus local work; the controller bound adds an observation and a retry window."""
     gateways, namespaces = len(frozen["gateways"]), len(frozen["namespaces"])
     listeners, hosts = len(frozen["listeners"]), len(frozen["hosts"])
@@ -138,26 +138,26 @@ def pools_of(value):
             yield from pools_of(member)
 
 
-def test_the_frozen_grants_budgets_and_pg_counts_equal_what_the_collection_derived():
+def test_the_frozen_grants_budgets_and_pg_counts_match_the_expected_values():
     clients = [name for name, request in REQUESTS.items() if "client" in request]
     nvmeof = [name for name, request in REQUESTS.items() if "nvmeof" in request]
     pools = [pool for request in REQUESTS.values() for pool in pools_of(request)]
     assert len(clients) == 3 and nvmeof == ["nvmeof"] and len(pools) >= 5
     for name in clients:
         client = prepared(REQUESTS[name])["client"]
-        assert client["caps"] == legacy_caps(client), name
+        assert client["caps"] == expected_caps(client), name
     for name in nvmeof:
-        assert REQUESTS[name]["nvmeof"]["budgets"] == legacy_nvmeof_budgets(REQUESTS[name]["nvmeof"])
+        assert REQUESTS[name]["nvmeof"]["budgets"] == expected_nvmeof_budgets(REQUESTS[name]["nvmeof"])
     for pool in pools:
-        assert pool["pgNum"] == legacy_pg_num(pool["autoscale"]), pool["name"]
+        assert pool["pgNum"] == expected_pg_num(pool["autoscale"]), pool["name"]
 
 
-def test_the_frozen_export_principal_grants_equal_what_the_export_worker_derived():
+def test_the_frozen_export_principal_grants_match_the_expected_values():
     exports = versions("ceph-export-request-v1")
     assert exports == ["export", "export-gateway", "export-tls"]
     assert any("gateway" in REQUESTS[name] for name in exports)
     for name in exports:
-        assert REQUESTS[name]["principals"] == legacy_export_caps(REQUESTS[name]), name
+        assert REQUESTS[name]["principals"] == expected_export_caps(REQUESTS[name]), name
 
 
 @pytest.mark.parametrize("name, member", [("client", "caps"), ("client-filesystem", "caps"), ("client-subvolume", "caps"), ("nvmeof", "budgets")])

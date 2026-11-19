@@ -483,12 +483,11 @@ func TestAnotherBuildsRootRefusesWithTheLiveEnvironmentRemedy(t *testing.T) {
 	}
 }
 
-// A store an earlier build wrote, with its host-wide state in host/, its setup
-// in host/setup/ and a registry of the previous format version, is another
+// A store whose registry names an unsupported format version is another
 // build's: every command refuses it with the live-environment remedy and
 // leaves it as it was, and uninstall hands that refusal to its service, which
 // only a discard accepts.
-func TestAStoreWithTheEarlierLayoutIsAnotherBuilds(t *testing.T) {
+func TestAStoreOfAnUnsupportedRegistryVersionIsAnotherBuilds(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	store, sources := fixture(t)
@@ -496,38 +495,33 @@ func TestAStoreWithTheEarlierLayoutIsAnotherBuilds(t *testing.T) {
 	recordPreparedSetup(t, store)
 	bind(t, store, record.Name)
 	root := store.options.Root
-	for _, move := range [][2]string{{controllerContainer, "host"}, {"host/" + installSubtree, "host/setup"}} {
-		if err := os.Rename(filepath.Join(root, move[0]), filepath.Join(root, move[1])); err != nil {
-			t.Fatal(err)
-		}
-	}
 	path := filepath.Join(root, "registry.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	current := []byte("{\"version\":" + strconv.Itoa(contexts.RegistryVersion) + ",")
-	earlier := bytes.Replace(data, current, []byte("{\"version\":"+strconv.Itoa(contexts.RegistryVersion-1)+","), 1)
-	if bytes.Equal(earlier, data) {
+	unsupported := bytes.Replace(data, current, []byte("{\"version\":"+strconv.Itoa(contexts.RegistryVersion+1)+","), 1)
+	if bytes.Equal(unsupported, data) {
 		t.Fatal("the fixture did not change the registry version")
 	}
-	writePrivate(t, path, earlier)
+	writePrivate(t, path, unsupported)
 	before := snapshotRootEntries(t, root)
 	_, err = store.View(ctx)
 	requireOtherBuildRemedy(t, "list", err)
 	requireOtherBuildRemedy(t, "init", store.Transact(ctx, true, nil, func(contexts.Transaction) error {
-		t.Fatal("init reached an earlier build's store")
+		t.Fatal("init reached another build's store")
 		return nil
 	}))
 	_, err = store.ReadSetup(ctx)
 	requireOtherBuildRemedy(t, "install preview", err)
 	requireOtherBuildRemedy(t, "install", store.MutateSetup(ctx, func(prerequisites.SetupTransaction) error {
-		t.Fatal("install reached an earlier build's store")
+		t.Fatal("install reached another build's store")
 		return nil
 	}))
 	requireOtherBuildRemedy(t, "uninstall", store.Uninstall(ctx, func(tx prerequisites.UninstallTransaction) error {
 		if view := tx.View(); !view.RootExists || len(view.Contexts) != 0 || view.Setup.Exists {
-			t.Fatalf("uninstall read an earlier build's store: %+v", view)
+			t.Fatalf("uninstall read another build's store: %+v", view)
 		}
 		return tx.View().Unreadable
 	}))

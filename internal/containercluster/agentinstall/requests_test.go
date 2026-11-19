@@ -146,7 +146,7 @@ func frozen(t *testing.T, request interface{ Canonical() ([]byte, error) }) []by
 // and even its destroy, run only on the build that registered it.
 func TestAMediaRequestOfAnotherVersionRefuses(t *testing.T) {
 	media, _, _ := onlyRequests(t, externalCatalog())
-	media.Version = "cluster-media-agent-v4"
+	media.Version = "cluster-media-agent-v2"
 	data, err := media.Canonical()
 	if err != nil {
 		t.Fatal(err)
@@ -226,9 +226,9 @@ func expectVersionRefusal(t *testing.T, err error, subject, version string) {
 
 func TestAMediaRequestOfAnotherVersionWithAnUndeclaredFieldRefusesByItsVersion(t *testing.T) {
 	media, _, _ := onlyRequests(t, singleNodeCatalog())
-	media.Version = "cluster-media-agent-v4"
+	media.Version = "cluster-media-agent-v2"
 	_, err := DecodeMediaRequest(withAnUndeclaredField(t, media.Canonical))
-	expectVersionRefusal(t, err, "cluster media", "cluster-media-agent-v4")
+	expectVersionRefusal(t, err, "cluster media", "cluster-media-agent-v2")
 }
 
 func TestAnInstallRequestOfAnotherVersionWithAnUndeclaredFieldRefusesByItsVersion(t *testing.T) {
@@ -240,14 +240,14 @@ func TestAnInstallRequestOfAnotherVersionWithAnUndeclaredFieldRefusesByItsVersio
 
 func TestMediaAndInstallRequestsOfOtherVersionsRefuse(t *testing.T) {
 	media, install, _ := onlyRequests(t, singleNodeCatalog())
-	media.Version = "cluster-media-agent-v9"
+	media.Version = "cluster-media-agent-v2"
 	encoded, err := media.Canonical()
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, err = DecodeMediaRequest(encoded)
 	expectVersionRefusal(t, err, "cluster media", media.Version)
-	install.Version = "cluster-install-agent-v24"
+	install.Version = "cluster-install-agent-v2"
 	encoded, err = install.Canonical()
 	if err != nil {
 		t.Fatal(err)

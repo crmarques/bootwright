@@ -48,10 +48,9 @@ class ControllerTests(unittest.TestCase):
             self.assertEqual(visited, [(path, True) for path in expected])
             self.assertEqual(instance.root, expected[-1])
             self.assertEqual(str(controller.ROOT), "/var/lib/bootwright-hosted")
-            for version in ("physical-erase-v2", "physical-erase-v3"):
-                with patch.object(controller, "directory", side_effect=AssertionError("retired request reached filesystem")):
-                    with self.assertRaises(controller.worker.Refusal):
-                        controller.Controller(dict(request, version=version), "a" * 64, material)
+            with patch.object(controller, "directory", side_effect=AssertionError("unsupported request reached filesystem")):
+                with self.assertRaises(controller.worker.Refusal):
+                    controller.Controller(dict(request, version="physical-erase-v2"), "a" * 64, material)
 
     def test_the_worker_compares_the_root_wwn_go_names_and_the_root_serial_number(self):
         hardware = {"interfaces": [{"macAddress": "52:54:00:9A:1B:01"}], "serialNumber": "ZC1A2B3C"}
@@ -379,7 +378,7 @@ class RemovalCustodyTests(unittest.TestCase):
             first, root, _publication = self.prepared(temporary, "op-remove-1/erase-metal-01/1")
             custody = (root / "custody.json").read_bytes()
             key = (root / "host-key").read_bytes()
-            (root / "ks.cfg").write_text("kickstart an earlier build rendered")
+            (root / "ks.cfg").write_text("a stale kickstart")
             again, _root, _publication = self.prepared(temporary, "op-remove-1/erase-metal-01/2")
             self.assertEqual(again["private"], first["private"])
             self.assertEqual((root / "custody.json").read_bytes(), custody)

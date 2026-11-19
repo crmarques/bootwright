@@ -68,25 +68,25 @@ func TestThawVersionReadsTheVersionBeforeTheShape(t *testing.T) {
 		Name    string `json:"name"`
 		Version string `json:"version"`
 	}
-	const exact = `{"name":"lab","version":"probe-v2"}`
-	decoded, err := ThawVersion[probe]([]byte(exact), "probe", "probe-v2")
-	if err != nil || decoded != (probe{Name: "lab", Version: "probe-v2"}) {
+	const exact = `{"name":"lab","version":"probe-v1"}`
+	decoded, err := ThawVersion[probe]([]byte(exact), "probe", "probe-v1")
+	if err != nil || decoded != (probe{Name: "lab", Version: "probe-v1"}) {
 		t.Fatalf("this version read as %+v (%v)", decoded, err)
 	}
 	const remedy = "destroy it with the build that applied it"
 	const unreadable = "the frozen probe request has an unsupported version it does not name readably"
 	for name, tc := range map[string]struct{ data, message, remediation, code string }{
-		"another version with a removed member": {`{"aRemovedField":true,"name":"lab","version":"probe-v1"}`, "the frozen probe request has an unsupported version: probe-v1", remedy, "records.version-unsupported"},
-		"a number":                              {`{"name":"lab","version":2}`, unreadable, remedy, "records.version-unsupported"},
-		"no version":                            {`{"name":"lab"}`, unreadable, remedy, "records.version-unsupported"},
-		"an empty version":                      {`{"name":"lab","version":""}`, unreadable, remedy, "records.version-unsupported"},
-		"an unsafe version":                     {`{"name":"lab","version":"v2\nx"}`, unreadable, remedy, "records.version-unsupported"},
-		"a non-object":                          {`["probe-v2"]`, "the frozen probe request is malformed", remedy, "records.request-unreadable"},
-		"this version and a new member":         {`{"aRemovedField":true,"name":"lab","version":"probe-v2"}`, "the frozen probe request is malformed", remedy, "records.request-unreadable"},
-		"a case-variant version":                {`{"Version":"probe-v1","name":"lab","version":"probe-v2"}`, "the frozen probe request is not canonical", remedy, "records.request-unreadable"},
-		"trailing data":                         {exact + "x", "the frozen probe request contains trailing data", remedy, "records.request-unreadable"},
+		"another version with an undeclared member": {`{"anUndeclaredMember":true,"name":"lab","version":"probe-v2"}`, "the frozen probe request has an unsupported version: probe-v2", remedy, "records.version-unsupported"},
+		"a number":                      {`{"name":"lab","version":2}`, unreadable, remedy, "records.version-unsupported"},
+		"no version":                    {`{"name":"lab"}`, unreadable, remedy, "records.version-unsupported"},
+		"an empty version":              {`{"name":"lab","version":""}`, unreadable, remedy, "records.version-unsupported"},
+		"an unsafe version":             {`{"name":"lab","version":"v2\nx"}`, unreadable, remedy, "records.version-unsupported"},
+		"a non-object":                  {`["probe-v1"]`, "the frozen probe request is malformed", remedy, "records.request-unreadable"},
+		"this version and a new member": {`{"anUndeclaredMember":true,"name":"lab","version":"probe-v1"}`, "the frozen probe request is malformed", remedy, "records.request-unreadable"},
+		"a case-variant version":        {`{"Version":"probe-v2","name":"lab","version":"probe-v1"}`, "the frozen probe request is not canonical", remedy, "records.request-unreadable"},
+		"trailing data":                 {exact + "x", "the frozen probe request contains trailing data", remedy, "records.request-unreadable"},
 	} {
-		decoded, err := ThawVersion[probe]([]byte(tc.data), "probe", "probe-v2")
+		decoded, err := ThawVersion[probe]([]byte(tc.data), "probe", "probe-v1")
 		reported := diagnostics.Of(err)
 		if len(reported) != 1 || reported[0].Code != tc.code || reported[0].Message != tc.message || reported[0].Remediation != tc.remediation || reported[0].Source != nil {
 			t.Errorf("%s: refusal = %+v, want %q", name, reported, tc.message)

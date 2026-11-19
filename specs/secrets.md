@@ -732,12 +732,10 @@ toward the physical limit. Logical material/version/binding limits also apply.
 Secret IDs use 128 random bits with 16 exclusive collision attempts. Limit
 failure never authorizes removal of referenced material or identity evidence.
 
-There is no conversion from an earlier keyring format. A keyring whose
-identity reservations an earlier build kept as one `identities/<id>.json` file
-each, whose metadata lacks `reserved`, refuses with `secret.store.corrupt`
-naming that layout, with the exits below. A `secrets/` subtree
-that is nonempty, holds no `store.json` this build can authenticate, and holds
-anything besides attributable initialization evidence and interrupted
+A keyring holds only the current layout: an unknown root entry, or metadata
+that lacks `reserved`, refuses with `secret.store.corrupt`, with the exits
+below. A `secrets/` subtree that is nonempty, holds no `store.json` this
+build can authenticate, and holds anything besides attributable initialization evidence and interrupted
 temporaries refuses with `secret.store.corrupt` before any session is acquired.
 A lifecycle verb that meets it while reopening a binding reports a
 [lost binding](state-reconciliation.md#continuation-and-removal) instead; any

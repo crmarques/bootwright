@@ -41,18 +41,3 @@ func TestDiscoveryFreezesProgressForItsRealWork(t *testing.T) {
 		t.Fatalf("removal progress = %v", got)
 	}
 }
-
-func TestDiscoveryRemovalPreservesAnOlderFrozenEmptyGroupList(t *testing.T) {
-	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: testContext, Incarnation: "example-incarnation"}, State: compilation.NewState(discoveryCatalog(), discoveryCatalog(), nil), Controller: "controller"}
-	owner := New(nil).WithMedia(labMedia())
-	plan, err := owner.Plan(context.Background(), input)
-	if err != nil || len(plan.Definitions) != 1 {
-		t.Fatal(err)
-	}
-	frozen := plan.Definitions[0]
-	frozen.Groups = nil
-	removal, err := owner.Removal(context.Background(), reconciliation.Block{BlockDefinition: frozen})
-	if err != nil || len(removal.Groups) != 0 {
-		t.Fatalf("an older frozen cleanup gained new presentation groups: %+v %v", removal.Groups, err)
-	}
-}

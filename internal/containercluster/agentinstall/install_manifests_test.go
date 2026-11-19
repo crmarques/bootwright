@@ -185,7 +185,7 @@ func TestEveryTopologyGetsBothPoolsChronyConfiguration(t *testing.T) {
 }
 
 // Without the image mirror, or with no time server selected, no manifest is
-// written and the request is the one earlier builds froze.
+// written.
 func TestNoChronyConfigurationWithoutTheMirrorOrATimeServer(t *testing.T) {
 	cases := map[string]api.Catalog{
 		"no mirror":      singleNodeCatalog(),

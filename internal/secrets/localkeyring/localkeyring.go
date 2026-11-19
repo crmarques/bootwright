@@ -109,9 +109,6 @@ func (i *Implementation) open(ctx context.Context, selected secretstore.Context,
 	defer clear(plaintext)
 	index, err := decodeIndexPlaintext(plaintext)
 	if err != nil {
-		if layoutErr := refuseEarlierLayout(ctx, area); layoutErr != nil {
-			return nil, layoutErr
-		}
 		return nil, err
 	}
 	index.FormatVersion, index.Algorithm, index.Selector = formatVersion, algorithm, selector
@@ -279,23 +276,6 @@ func (s *session) refreshMetadata(ctx context.Context) error {
 	}
 	s.retained, s.cleanup = retained, cleanup
 	return nil
-}
-
-func refuseEarlierLayout(ctx context.Context, area secretstore.Area) error {
-	root, err := area.Entries(ctx, "")
-	if err != nil {
-		return areaFailure(ctx, "store.corrupt", "secret artifacts cannot be enumerated safely", err)
-	}
-	for _, entry := range root {
-		if entry.Name == earlierIdentityDirectory {
-			return earlierLayoutFailure()
-		}
-	}
-	return nil
-}
-
-func earlierLayoutFailure() error {
-	return secretstore.Failure("store.corrupt", "secret store keeps its identity reservations in the per-file layout of an earlier build, which this build does not convert")
 }
 
 func (s *session) Close() error {

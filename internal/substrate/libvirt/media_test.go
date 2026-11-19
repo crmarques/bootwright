@@ -155,11 +155,11 @@ func TestSSDRequestAndPresenceGolden(t *testing.T) {
 		t.Fatal(err)
 	}
 	matchesGolden(t, "machine-content-digest", encode(t, map[string]string{"digest": MachineContentDigest()}), false)
-	legacy := mediaRequest(t, mediaDisk("ordinary", false))
-	data, _ = legacy.Canonical()
+	plain := mediaRequest(t, mediaDisk("ordinary", false))
+	data, _ = plain.Canonical()
 	for _, key := range []string{"bus", "media", "rotationRate"} {
 		if strings.Contains(string(data), `"`+key+`"`) {
-			t.Fatal("omitted media changed legacy request bytes")
+			t.Fatal("an ordinary disk names no bus, media or rotationRate")
 		}
 	}
 }

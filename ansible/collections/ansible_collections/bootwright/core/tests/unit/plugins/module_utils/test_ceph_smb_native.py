@@ -820,10 +820,8 @@ def test_smb_worker_ships_after_its_imports():
     assert tuple(ceph_transport.Transport.native_sources()) == modules
 
 
-def test_core_keeps_the_smb_names_as_aliases():
-    assert ceph_core.SMB_VERSION == ceph_smb_native.VERSION == "ceph-smb-v1"
+def test_core_smb_request_returns_the_validated_request():
     assert ceph_core.SMB_EVIDENCE_VERSION == ceph_smb_native.EVIDENCE_VERSION == "ceph-smb-evidence-v1"
-    assert ceph_core.SMB_TYPES is ceph_smb_native.TYPES
     value = request("ceph.smb.share")
     assert ceph_core.smb_request(copy.deepcopy(value)) == value
 

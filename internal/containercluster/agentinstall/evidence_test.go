@@ -7,8 +7,7 @@ import (
 
 // The installation adapter records whether a wait of its apply put the kept
 // kubeconfig back in place of the installer's own, which no longer parsed.
-// Evidence that names the restore proves completion as any other does, and
-// evidence an earlier build published without the field reads as no restore.
+// Evidence that names the restore proves completion as any other does.
 func TestInstallEvidenceRecordsARestoreOfTheInstallersKubeconfig(t *testing.T) {
 	_, install, _ := onlyRequests(t, singleNodeCatalog())
 	const completed = `{"absent":false,"booted":true,"cluster":"` + anchorIdentity + `","completed":true,"identity":"` +
@@ -17,7 +16,6 @@ func TestInstallEvidenceRecordsARestoreOfTheInstallersKubeconfig(t *testing.T) {
 	for data, restored := range map[string]bool{
 		completed + `,"restored":true}`:  true,
 		completed + `,"restored":false}`: false,
-		completed + `}`:                  false,
 	} {
 		if err := ValidateInstallPresence([]byte(data), install, testDigest); err != nil {
 			t.Fatalf("the completion evidence %s was refused: %v", data, err)

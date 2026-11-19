@@ -7,10 +7,9 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// formerAdapterRule is the exact comparison the collection's adapter once
-// decided for itself: a Subscription's spec, and an RBAC object's subjects
-// and rules. Go now emits the paths and the adapter only applies them.
-func formerAdapterRule(kind, member string) bool {
+// exactRule is the exact comparison: a Subscription's spec, and an RBAC
+// object's subjects and rules.
+func exactRule(kind, member string) bool {
 	return kind == "Subscription" && member == "spec" ||
 		slices.Contains([]string{"Role", "ClusterRole", "RoleBinding", "ClusterRoleBinding"}, kind) && (member == "subjects" || member == "rules")
 }
@@ -30,7 +29,7 @@ func TestEachObjectEntryNamesTheMembersTheAdapterComparedExactly(t *testing.T) {
 		}
 		var want []string
 		for _, member := range members {
-			if formerAdapterRule(kind, member) {
+			if exactRule(kind, member) {
 				want = append(want, member)
 			}
 		}

@@ -148,8 +148,7 @@ func TestEvidenceRequiresCompleteUniqueCoverage(t *testing.T) {
 	if got := EvaluateEvidence(p, e); got != Completed {
 		t.Fatal(got)
 	}
-	// A receipt names the basis of its ownership; one that names none, as an
-	// earlier evidence version wrote, or another word proves nothing.
+	// A receipt with an empty or unknown basis proves nothing.
 	for _, basis := range []Basis{MarkRecovered, UIDMatched, "", "adopted"} {
 		e.Receipts[0].Basis = basis
 		want := Completed

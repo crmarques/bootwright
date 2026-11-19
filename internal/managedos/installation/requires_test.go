@@ -38,8 +38,7 @@ func TestTheRequestFreezesTheProofsItsFieldsRequire(t *testing.T) {
 }
 
 // The worker sessions' timeouts are Go's constants, frozen into the request
-// budgets, and the run bounds are derived from the same constants: the values
-// are the ones the role once chose for itself.
+// budgets, and the run bounds are derived from the same constants.
 func TestTheSessionBudgetsAndTheRunBoundsShareTheirConstants(t *testing.T) {
 	update := &Update{Policy: "withinRelease", Release: "9.8"}
 	hosted, satellite := &Registration{}, &Registration{Satellite: &Satellite{Hostname: "satellite.example.test"}}

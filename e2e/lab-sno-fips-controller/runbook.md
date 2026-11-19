@@ -505,9 +505,8 @@ reclaims run directories it does not own ([B1095](../../specs/milestones/backlog
 ### Diagnose an add-on failure after installation
 
 An add-on failure leaves the completed SNO installation in place. Read the
-failed block's log using the path the CLI prints. If an older build hides the
-reason at **Publish bounded cluster object evidence**, inspect OLM through
-the independent client. Keep the kubeconfig private:
+failed block's log using the path the CLI prints, then inspect OLM through the
+independent client. Keep the kubeconfig private:
 
 ```sh
 umask 077
