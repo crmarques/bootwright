@@ -18056,3 +18056,16 @@ root escalation through the adapter transport.
 goldens, a placement admission test and an adapter fixture proving that a sudo
 refusal prevents the effect playbook from starting. Live SSH and sudo
 verification remains open.
+
+## X638 — Retained-root Ceph SSH diagnostics
+
+**Owner:** Storage; **item:** B1645 (safety); **authority:** the owner's
+request to finish mergeable work from the recovery worktree.
+
+The [retained-root inverse](../ceph.md#devices-and-destructive-ownership)
+classifies unsuccessful SSH exits using a fixed diagnostic vocabulary.
+The controller keeps command output private.
+
+**Exit evidence:** the delivering commit records the regression suite,
+the repository gates and the independent review. The change has no new
+operator acceptance requirement.

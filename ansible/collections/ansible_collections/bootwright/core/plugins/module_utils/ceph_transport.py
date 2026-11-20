@@ -21,8 +21,9 @@ from ansible_collections.bootwright.core.plugins.module_utils import (
     ceph_native_nfs, ceph_native_nvmeof, ceph_native_object, ceph_native_observability, ceph_native_observe, ceph_native_osd, ceph_native_registry,
     ceph_native_resources, ceph_native_stretch, ceph_native_units, ceph_native_validate, ceph_native_worker, ceph_package_sources,
     ceph_package_worker, ceph_packages, ceph_pull_broker, ceph_registry_discovery, ceph_replication_native, ceph_smb_native, ceph_ssh_policy,
-    ceph_tunnel, ceph_tunnel_custody, ceph_tunnel_staging, held_directory, native_apply, native_diagnostics, native_resolution, native_signatures,
-    native_specializations, physical_erase_worker, physical_machine_identity, private_files, registry_auth, remote_command, tls_trust,
+    ceph_tunnel, ceph_tunnel_custody, ceph_tunnel_staging, held_directory, managedos_guest_ssh, native_apply, native_diagnostics,
+    native_resolution, native_signatures, native_specializations, physical_erase_worker, physical_machine_identity,
+    private_files, registry_auth, remote_command, tls_trust,
     transport_faults,
 )
 
@@ -41,6 +42,26 @@ BOOTSTRAP_CALL = BOOTSTRAP_BUDGET + 60
 
 
 NATIVE_FAILURES = ("native-unknown", "native-refusal", "native-timeout")
+
+CLEANUP_SSH_HINTS = (
+    (managedos_guest_ssh.HOST_KEY_MARKERS, "host-key verification failed"),
+    ((b"no matching key exchange method", b"no matching cipher", b"no matching MAC"), "SSH algorithm negotiation failed"),
+    ((b"Permission denied (", b"Too many authentication failures"), "SSH authentication was refused"),
+    ((b"Connection closed by", b"Connection reset by", b"Broken pipe"), "SSH connection closed or reset"),
+    ((b"Connection timed out", b"Operation timed out"), "SSH connection timed out"),
+    ((b"Connection refused", b"No route to host", b"Network is unreachable"), "SSH endpoint could not be reached"),
+    ((b"/usr/bin/python3: No such file or directory", b"/usr/bin/python3: command not found",
+      b"/usr/bin/sudo: No such file or directory", b"/usr/bin/sudo: command not found"), "remote launcher command was not found"),
+    ((b"sudo:",), "sudo reported a failure"),
+)
+
+
+def cleanup_ssh_exit(code, output):
+    """Return a fixed diagnostic category and the exit status."""
+    stderr = getattr(output, "stderr", b"")
+    hint = next((hint for markers, hint in CLEANUP_SSH_HINTS if any(marker in stderr for marker in markers)),
+                "no recognized SSH diagnostic")
+    return ("exit %d: %s" % (code, hint)).encode("ascii")
 
 
 def bootstrap_launcher(supervisor_source, host_source):
@@ -135,12 +156,14 @@ class Transport:
             argv = ssh_argv(host, key, known, source, worker_budget, worker_ceiling=worker_ceiling, frozen_ceiling=frozen_ceiling,
                             ssh_config=config, host_key_algorithms=algorithms)
             sources = dict(payload.get("sources", {})) if isinstance(payload, dict) else {}
-            private = payload.get("payload", {}).get("private", {}) if isinstance(payload, dict) else {}
-            private = native_diagnostics.private_values(private)
+            worker_payload = payload.get("payload", {}) if isinstance(payload, dict) else {}
+            private = native_diagnostics.private_values(worker_payload.get("private", {}))
             private.extend(ceph_native.read_regular(path, private=True) for path in self.material.values())
             payload = ceph_native.canonical(payload)
             ceph_native.require(len(payload) <= ceph_native.MAX_INPUT, "material")
             code, output = self.run(argv, data=payload, timeout=timeout)
+        if code != 0 and worker_payload.get("phase") in ceph_native.PHYSICAL_PHASES:
+            raise ceph_native.NativeFailure("transport", "Ceph cleanup SSH", cleanup_ssh_exit(code, output))
         ceph_native.require(code == 0, "transport")
         try:
             result = json.loads(output)

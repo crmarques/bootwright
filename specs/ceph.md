@@ -1246,6 +1246,10 @@ native cleanup receipt. Its disk policy still applies. Foreign state or an inter
 cleanup refuses or remains partial. Generic online removal remains closed by
 the client-quiescence requirement.
 
+If the retained-root cleanup SSH command exits unsuccessfully, its transport
+failure can report the exit status and a fixed category derived from SSH
+stderr. Both raw command streams remain private.
+
 Protected Bootwright recovery/custody and retry journals and its restrictive
 SSH policy remain on the retained OS; native absence is not whole-filesystem
 cleanup or sanitization. Reinstallation overwrites the independently selected

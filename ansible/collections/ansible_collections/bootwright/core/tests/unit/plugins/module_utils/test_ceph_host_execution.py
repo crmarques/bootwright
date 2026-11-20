@@ -583,7 +583,8 @@ def test_a_provided_host_never_bootstraps(tiebreaker_request):
         ceph_core.host_request(tiebreaker_request)
 
 
-def test_retained_physical_host_dispatches_cleanup_and_readonly_removal(host_request):
+@pytest.fixture
+def retained_host_request(host_request):
     request = copy.deepcopy(host_request)
     target = next(host for host in request["cluster"]["hosts"] if host["name"] == request["host"])
     target.update(
@@ -594,6 +595,11 @@ def test_retained_physical_host_dispatches_cleanup_and_readonly_removal(host_req
         if service["service_type"] == "osd":
             service["placement"]["hosts"] = [name for name in service["placement"]["hosts"] if name != request["host"]]
             service["placement"].pop("count", None)
+    return request
+
+
+def test_retained_physical_host_dispatches_cleanup_and_readonly_removal(retained_host_request):
+    request = retained_host_request
 
     class CleanupTransport:
         def __init__(self):
@@ -616,6 +622,37 @@ def test_retained_physical_host_dispatches_cleanup_and_readonly_removal(host_req
     transport.removed = False
     partial = ceph_core.execute_host(request, "observe-remove", DIGEST, transport)
     assert partial["evidence"]["removed"] is False and "nativeRemoved" not in partial["evidence"]
+
+
+@pytest.mark.parametrize(("phase", "code", "stderr", "expected"), [
+    ("physical_host_observe", 255, b"Host key verification failed.", "host-key verification failed"),
+    ("physical_host_remove", 255, b"no matching key exchange method found", "SSH algorithm negotiation failed"),
+    ("physical_host_observe", 255, b"Permission denied (publickey).", "SSH authentication was refused"),
+    ("physical_host_remove", 255, b"Connection closed by 192.0.2.2", "SSH connection closed or reset"),
+    ("physical_host_remove", 255, b"Connection timed out", "SSH connection timed out"),
+    ("physical_host_observe", 255, b"Connection refused", "SSH endpoint could not be reached"),
+    ("physical_host_observe", 1, b"sudo: a password is required", "sudo reported a failure"),
+    ("physical_host_remove", 127, b"sudo: unable to execute /usr/bin/python3: No such file or directory", "remote launcher command was not found"),
+    ("physical_host_remove", 127, b"sudo: /usr/bin/python3: command not found", "remote launcher command was not found"),
+    ("physical_host_remove", 127, b"bash: /usr/bin/sudo: No such file or directory", "remote launcher command was not found"),
+    ("physical_host_remove", -9, b"unrecognized failure", "no recognized SSH diagnostic"),
+    ("host_observe", 255, b"Permission denied (publickey).", None),
+])
+def test_retained_root_ssh_failure_keeps_both_streams_private(retained_host_request, tmp_path, phase, code, stderr, expected):
+    key, known = tmp_path / "key", tmp_path / "known"
+    key.write_text("PRIVATE-KEY-SENTINEL")
+    known.write_text("192.0.2.2 ssh-ed25519 PUBLIC")
+    for path in (key, known):
+        path.chmod(0o600)
+    cluster = retained_host_request["cluster"]
+    host = next(item for item in cluster["hosts"] if item["name"] == retained_host_request["host"])
+    material = {"sshKey": str(key), "knownHosts": str(known)}
+    output = ceph_native.NativeOutput(b"STDOUT-SENTINEL", stderr + b" STDERR-SENTINEL")
+    transport = ceph_transport.Transport(cluster, material, scope=True, run=lambda *args, **kwargs: (code, output))
+    with pytest.raises(ceph_native.Refusal, match="^transport$") as raised:
+        transport.call(host, phase)
+    detail = getattr(raised.value, "native_error", None)
+    assert detail == ({"coordinate": "Ceph cleanup SSH", "cause": "exit %d: %s" % (code, expected)} if expected else None)
 
 
 def test_host_module_strips_readonly_removal_selector_before_transport(host_request, monkeypatch):
