@@ -759,6 +759,27 @@ The remote account's permissions apply to the session. A provided host that
 runs managed infrastructure has additional
 [placement requirements](../specs/infrastructure-services.md#placement-arms-and-credentials).
 
+Use `--ssh-user ops --ssh-ask-password` in an interactive `machine rsh` or
+single-target `machine exec` when the account uses a password. OpenSSH asks for
+the password after verifying the host. `machine info` shows the default session
+and lifecycle placement identities and the sources of their credentials and
+host keys.
+
+On a provided placement host that disables root SSH, give lifecycle work its
+own existing account and SSH key. Add this record alongside the Machine's
+session access. Authorize the key on the host and configure noninteractive
+sudo for the operations it will run.
+
+```yaml
+spec:
+  access:
+    lifecycle:
+      user: automation
+      privateKeyRef: automation-key
+      knownHostsRef: node-host-key
+      privilege: sudo
+```
+
 When an insert refuses because a BMC still presents other media, such as an
 image an operator attached by hand or one an interrupted run left, `machine
 eject-media` releases whatever each listed Machine presents and reads the

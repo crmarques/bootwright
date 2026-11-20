@@ -665,6 +665,9 @@ func hostKeyCredentialCollisions(o api.Object, c api.Catalog, key string) []api.
 		if machine.Identity() != o.Identity() && !api.MachineInstalled(machine) && machine.Spec().Get("access", "ssh", "auth", "privateKeyRef").Text() == key {
 			collide(machine, "spec.access.ssh.auth.privateKeyRef")
 		}
+		if machine.Spec().Get("access", "lifecycle", "privateKeyRef").Text() == key {
+			collide(machine, "spec.access.lifecycle.privateKeyRef")
+		}
 	}
 	for _, cluster := range c.Clusters() {
 		if field, ok := api.ClusterNodeLoginField(cluster, key); ok {

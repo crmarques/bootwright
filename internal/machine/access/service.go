@@ -90,6 +90,15 @@ func (s Service) open(ctx context.Context, contextName, name string, options mac
 	if err != nil {
 		return nil, err
 	}
+	if options.AskPassword {
+		terminal, err := s.interactive()
+		if err != nil {
+			return nil, err
+		}
+		if !terminal {
+			return nil, failure("access.unavailable", "SSH password prompting requires a terminal", "use --ssh-id-file for unattended access")
+		}
+	}
 	identity, privateKeyRef, err := s.identity(ctx, effective.Effective, resolved, options)
 	if err != nil {
 		return nil, err
@@ -118,7 +127,9 @@ func (s Service) open(ctx context.Context, contextName, name string, options mac
 			return err
 		}
 		session.HostKey = host
-		s.advise(resolved, selected)
+		if identity.Kind == machine.IdentityPassword && !options.AskPassword {
+			s.advise(resolved, selected)
+		}
 		code, err := s.options.Launcher.Run(inner, session, s.options.Streams.In, s.options.Streams.Out, s.options.Streams.Err)
 		if err != nil {
 			return err

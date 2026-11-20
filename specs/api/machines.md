@@ -32,7 +32,7 @@ omission meaning. Null and unknown values refuse.
 `managed` authorizes installation and enablement of firewalld on an OS-ready
 provided host and the [host firewall capability](../managed-os.md#host-firewall-requirements)'s
 owned, persistent admission for that Machine's declared listeners. It
-requires a controller-local placement or pinned root SSH access. On an
+requires a controller-local placement or pinned lifecycle SSH access. On an
 installed Machine it requires an explicitly enabled install profile. It is
 refused on a downstream-installer Machine. No zone name or port list is
 authored here: listener ports and addresses come from their owning capabilities.
@@ -554,11 +554,11 @@ installer-provisioned machine, omission means no Bootwright login.
 | --- | --- | --- | --- | --- |
 | `addressRef` | string | normalized | `ssh`, else on a Bootwright-installed Machine its `network.installAddressRef` when that address is declared, else `fqdn` | Machine-local `network.addresses[].name`; no arbitrary only-address fallback. |
 | `port` | integer | no | `22` | `1..65535` effective. |
-| `user` | string | no | none for operator identity: the client then logs in as the account it runs as, today the controller's root account in the elevated child; otherwise `root` | POSIX user name; required explicitly with password auth; `root` on a [lifecycle placement host](#addresses-and-access). |
-| `auth.operatorIdentity` | empty object | union | — | Offer the default identity files of the account the session client runs as, today the controller's root account, with no agent; another account needs `--ssh-user` with `--ssh-id-file`. Running the client under the invoking account is tracked as [B332](../milestones/backlog.md#b332). |
+| `user` | string | no | invoking account for operator identity, otherwise `root` | POSIX user name. Required explicitly with password auth. |
+| `auth.operatorIdentity` | empty object | union | — | Run SSH under the invoking account with its default identity files and no agent. A session override follows the [session credential rules](../cli.md#machine-ssh-sessions). |
 | `auth.privateKeyRef` | string | union | — | `sshKeyPair` `Secret`. Access credential. |
 | `auth.passwordRef` | string | union | — | `usernamePassword` `Secret`; requires authored `user`. Access credential. |
-| `sudoPasswordRef` | string | no | — | `usernamePassword` `Secret`; refused on a [lifecycle placement host](#addresses-and-access), and no consumer escalates with it. Access credential. |
+| `sudoPasswordRef` | string | no | — | `usernamePassword` `Secret`. Reserved. The fallback lifecycle login refuses it. Access credential. |
 | `knownHostsRef` | string | no | [context-managed trust](../contexts.md#storage-locking-and-publication) | `opaque` `Secret` containing one exact OpenSSH `known_hosts` entry. Trust anchor. |
 
 Exactly one SSH `auth` arm is present. `access.rootLogin` is `keep` by default
@@ -566,20 +566,23 @@ or `revoke`. `revoke` requires authored SSH access and a non-root replacement
 identity supplied by the managed storage-cluster relationship; it is invalid
 on a Bootwright-installed machine or a machine without that successor login.
 
-A lifecycle placement host connects as root and never escalates
-([D7](../milestones/backlog.md#d7)), save a Bootwright-installed service
-host's `bootwright`, through its installation's `NOPASSWD: ALL` sudo rule
-([D251](../milestones/backlog.md#d251) (31)). A Machine with
-`access.ssh` is a lifecycle placement host when a managed
-service names it as `spec.machineRef`, or an `InfraProvider`
-as `spec.libvirt.machineRef`. There an effective
-`access.ssh.user` other than `root` refuses with `api.invariant` at
-`$.spec.access.ssh.user`, and an authored `access.ssh.sudoPasswordRef` refuses
-at `$.spec.access.ssh.sudoPasswordRef`. An operator-identity host that authors no user has no effective user
-here; its placement refuses before planning under the
-[SSH arm](../infrastructure-services.md#placement-arms-and-credentials).
-Machines that are only cluster nodes, storage nodes or session targets keep
-any account.
+A remote provided Machine that hosts managed infrastructure, a provider, or
+its own managed firewall may declare `access.lifecycle`. The entire record is
+atomic and requires all four fields. It shares the effective `ssh.addressRef`
+and `ssh.port`. Sessions continue to use the account and credential in
+`access.ssh`.
+
+| Field | Type | Rule |
+| --- | --- | --- |
+| `user` | string | Existing POSIX account. |
+| `privateKeyRef` | string | `sshKeyPair` Secret for the lifecycle account. Access credential. |
+| `knownHostsRef` | string | `opaque` Secret pinning the lifecycle SSH endpoint. Trust anchor. |
+| `privilege` | enum | `direct` requires user `root`. `sudo` requires a non-root user with noninteractive sudo to root for the operation. |
+
+Without `access.lifecycle`, a provided lifecycle placement uses
+`access.ssh` with a root login, private key and host pin. That login refuses
+`sudoPasswordRef`. Bootwright-installed service hosts use their installation's
+derived login. See [placement credentials](../infrastructure-services.md#placement-arms-and-credentials).
 
 The `knownHostsRef` Secret, a trust anchor, is ASCII split at spaces
 and tabs only. Blank and `#` lines are ignored; exactly one data line remains,

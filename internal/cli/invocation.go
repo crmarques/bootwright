@@ -28,6 +28,7 @@ type InvocationClass struct {
 	// download reading its signed URL there.
 	SecretStdin string
 	URLStdin    bool
+	SSHPassword bool
 }
 
 func ClassifyInvocation(args []string) InvocationClass {
@@ -68,6 +69,7 @@ func ClassifyInvocation(args []string) InvocationClass {
 		classification.SecretStdin = rules.secretStdin(flags)
 	}
 	classification.URLStdin = rules.urlStdin != nil && rules.urlStdin(flags)
+	classification.SSHPassword = boolValue(flags, "ssh-ask-password")
 	return classification
 }
 

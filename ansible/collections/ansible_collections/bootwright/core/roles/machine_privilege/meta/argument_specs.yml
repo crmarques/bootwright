@@ -1,0 +1,14 @@
+---
+argument_specs:
+  observe:
+    short_description: Prove that the pinned placement login can execute a module as root.
+    options:
+      bootwright_machine_privilege_request:
+        type: dict
+        required: true
+        options:
+          version:
+            type: str
+            required: true
+            choices:
+              - machine-privilege-v1

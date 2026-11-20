@@ -44,6 +44,9 @@ func memberNames(requested []string) []string {
 
 func (s Service) several(ctx context.Context, contextName string, names []string, options machine.SSHOptions,
 	words []string) (*machine.SessionResult, error) {
+	if options.AskPassword {
+		return nil, failure("access.unavailable", "SSH password prompting requires one Machine", "select one Machine or use --ssh-id-file")
+	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -140,7 +143,7 @@ func (s Service) members(ctx context.Context, catalog api.Catalog, contextName s
 		if err != nil {
 			return nil, err
 		}
-		if identity.Kind == machine.IdentityPassword {
+		if identity.Kind == machine.IdentityPassword && identity.IdentityFile == "" {
 			remediation := "run bootwright machine exec --context " + contextName + " --name " + resolved.name + " -- <command> on it alone"
 			if operation == "cp" {
 				remediation = "copy this Machine alone from an interactive terminal with bootwright machine cp --context " + contextName + " --name " + resolved.name + " <source> <destination>"

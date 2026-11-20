@@ -21,10 +21,10 @@ func (r *readRecorder) String() string {
 	return r.Value.String()
 }
 
-var scopedFlags = []string{"context", "ssh-id-file", "ssh-user", "ssh-ask-sudo-password", "ssh-user-for-provisioned"}
+var scopedFlags = []string{"context", "ssh-id-file", "ssh-user", "ssh-ask-sudo-password", "ssh-user-for-provisioned", "ssh-ask-password"}
 
 func scopedFlagArguments(name string) []string {
-	if name == "ssh-ask-sudo-password" || name == "ssh-user-for-provisioned" {
+	if name == "ssh-ask-sudo-password" || name == "ssh-user-for-provisioned" || name == "ssh-ask-password" {
 		return []string{"--" + name}
 	}
 	return []string{"--" + name, "value"}

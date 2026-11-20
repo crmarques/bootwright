@@ -9,9 +9,9 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	containerpreflight "github.com/crmarques/bootwright/internal/containercluster/preflight"
 	containerpreflightlocal "github.com/crmarques/bootwright/internal/containercluster/preflightlocal"
+	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 	"github.com/crmarques/bootwright/internal/machine/inventory"
-	"github.com/crmarques/bootwright/internal/machine/sshlocal"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/nativeexec"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -55,12 +55,23 @@ type remoteCommands struct {
 }
 
 func (r remoteCommands) Run(ctx context.Context, contextName, machine string, argv []string, bound int) ([]byte, int, error) {
-	if r.reconciler == nil {
+	if r.reconciler == nil || r.state == nil {
 		return nil, 0, errors.New("verified remote command is unavailable")
 	}
+	effective, err := r.state.RenderEffective(ctx, compilation.EffectiveRequest{ContextName: contextName})
+	if err != nil || effective == nil {
+		return nil, 0, errors.New("verified remote command is unavailable")
+	}
+	effective, sudo := lifecycleAccess(effective, machine)
+	if sudo {
+		// Preserve the probe's exit 1 without treating a sudo denial as an
+		// absent file. The shell receives the probe argv as positional data.
+		argv = append([]string{"/usr/bin/sudo", "-H", "-n", "-k", "-u", "root", "--", "/bin/sh", "-c",
+			`"$@"; status=$?; if [ "$status" -eq 1 ]; then exit 41; fi; exit "$status"`, "bootwright-capacity"}, argv...)
+	}
 	capture := nativeexec.Refusing(cmp.Or(max(bound, 0), preflightlocal.MaxOutput))
-	client := sshlocal.New(r.deps.Home, r.deps.Owner, sessionFiles(r.deps.Files))
-	sessions := machineaccess.New(r.state, currentSelection(r.deps.Selection), machineaccess.Options{
+	client := sessionClient(r.deps.Home, r.deps.Owner, r.deps.Files, r.deps.CopyAccount)
+	sessions := machineaccess.New(lifecycleAccessState{effective: effective}, currentSelection(r.deps.Selection), machineaccess.Options{
 		Lender: *r.reconciler, Ownership: machineOwnership{reconciler: *r.reconciler}, Evidence: machineHostKeys{reconciler: *r.reconciler}, Trust: r.deps.Trust, Launcher: client,
 		Streams: machineaccess.Streams{Out: capture, Err: io.Discard},
 	})
@@ -71,6 +82,12 @@ func (r remoteCommands) Run(ctx context.Context, contextName, machine string, ar
 	}
 	if result.ExitCode != 0 {
 		capture.Clear()
+		if sudo && result.ExitCode == 1 {
+			return nil, 0, errors.New("lifecycle account did not prove noninteractive sudo for the capacity probe")
+		}
+		if sudo && result.ExitCode == 41 {
+			return nil, 1, nil
+		}
 		return nil, result.ExitCode, nil
 	}
 	return capture.Bytes(), 0, nil
@@ -79,7 +96,7 @@ func (r remoteCommands) Run(ctx context.Context, contextName, machine string, ar
 func preflightCommands(state inventory.EffectiveState, reconciler lifecycle.Service, deps serviceDependencies) preflight.Commands {
 	base := machineaccess.Options{Lender: reconciler, Ownership: machineOwnership{reconciler: reconciler}, Evidence: machineHostKeys{reconciler: reconciler}, Trust: deps.Trust}
 	return preflightReads(state, currentSelection(deps.Selection), base, func() preflightClient {
-		return sshlocal.New(deps.Home, deps.Owner, sessionFiles(deps.Files))
+		return sessionClient(deps.Home, deps.Owner, deps.Files, deps.CopyAccount)
 	})
 }
 

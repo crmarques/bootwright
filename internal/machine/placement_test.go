@@ -32,6 +32,38 @@ func providedHost(name string, ssh api.Value) api.Object {
 	return object(api.Machine, name, m("os", m("provided", m()), "access", m("ssh", ssh)))
 }
 
+func TestDedicatedLifecycleLoginPreservesSessionAccess(t *testing.T) {
+	host := providedHost("services", m("user", "ops", "auth", m("passwordRef", "session-password")))
+	host = host.WithSpec(host.Spec().WithPath(list(m("name", "ssh", "address", "192.0.2.10")), "network", "addresses").
+		WithPath(m("user", "automation", "privilege", "sudo", "privateKeyRef", "automation-key", "knownHostsRef", "host-pin"), "access", "lifecycle"))
+	normalized, _ := Normalize(host, placementCatalog(host))
+	if issues := privilegeInvariants(Validate(normalized, placementCatalog(normalized))); len(issues) != 0 {
+		t.Fatalf("privilege issues: %v", issues)
+	}
+	session, ok := SSH(normalized)
+	if !ok || session.User != "ops" || session.PasswordRef != "session-password" {
+		t.Fatalf("session = %+v", session)
+	}
+	place, err := PlacementFor(normalized, "controller")
+	if err != nil || !place.PinnedSSH() || !place.Sudo() || place.User != "automation" ||
+		place.Address != session.Address || !slices.Equal(place.SecretReferences(), []string{"automation-key", "host-pin"}) {
+		t.Fatalf("placement = %+v, err = %v", place, err)
+	}
+	refused := normalized.WithSpec(normalized.Spec().WithPath(api.StringValue("direct"), "access", "lifecycle", "privilege"))
+	if _, err := PlacementFor(refused, "controller"); err == nil {
+		t.Fatal("a non-root lifecycle user with direct privileges was admitted")
+	}
+	if issues := validatePlacementHost(refused, placementCatalog(refused)); len(issues) != 1 || issues[0].Field != "$.spec.access.lifecycle" {
+		t.Fatalf("validation accepted an invalid lifecycle privilege: %v", issues)
+	}
+	if issues := validatePlacementHost(normalized, api.NewCatalog([]api.Object{normalized})); len(issues) != 1 {
+		t.Fatalf("validation accepted an unused lifecycle login: %v", issues)
+	}
+	if got, ok := LifecyclePlacement(normalized, placementCatalog(normalized)); !ok || got != place {
+		t.Fatalf("inspect placement = %+v; want %+v", got, place)
+	}
+}
+
 func privilegeInvariants(issues []api.Issue) []string {
 	var fields []string
 	for _, issue := range issues {

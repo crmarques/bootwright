@@ -35,7 +35,8 @@ Both endpoints require Linux with Python 3.9 or newer and procfs; no remote sudo
 `--ssh-user` and `--ssh-id-file` follow the session credential rules. Password
 authentication is available only for one Machine at an interactive terminal in
 text mode; several or structured transfers never prompt for credentials.
-The existing password-arm offered-key limitation remains [B544](../milestones/backlog.md#b544).
+An explicitly offered key is the sole authentication method for a
+password-configured target in a batch.
 
 Before payload writes, every Machine's identity and host key is proved, then
 sources and destinations are preflighted. Preflight workers exit; execution

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 
+	"github.com/crmarques/bootwright/internal/machine/sshlocal"
 	"github.com/crmarques/bootwright/internal/nativeartifacts/comparisonlocal"
 	"github.com/crmarques/bootwright/internal/nativeartifacts/renderlocal"
 	"github.com/crmarques/bootwright/internal/workspace/invokerfs"
@@ -15,6 +16,9 @@ func main() {
 }
 
 func processMain() int {
+	if handled, code := sshlocal.ServeOperator(os.Args[1:]); handled {
+		return code
+	}
 	if handled, code := selectionfs.ServeHelper(context.Background(), os.Args[1:], os.Stdin, os.Stdout); handled {
 		return code
 	}

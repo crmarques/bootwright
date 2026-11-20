@@ -11,10 +11,10 @@ them; any other command refuses them as flags it does not accept. The
 context-free commands, which refuse `--context`, are `controller install`,
 `controller check`, `controller rebind`, `controller uninstall`, `context` (every subcommand), `media` (every subcommand), `add-ons` (every subcommand), `help`, `completion`, `version`, `schema` and `sbom`; only `apply`, `destroy`,
 `machine rsh`, `machine exec`, `machine cp`, `cluster rsh`, `cluster exec` and `preflight` accept
-`--ssh-*`; `machine rsh`,
-`machine exec`, `machine cp`, `cluster rsh` and `cluster exec` accept only `--ssh-id-file`
-and `--ssh-user`, refuse the other two, and omit them from help and
-completion. A command resolves a taken global value only when its use case
+`--ssh-*`. `machine rsh`, `machine exec`, `cluster rsh` and `cluster exec`
+accept `--ssh-id-file`, `--ssh-user` and `--ssh-ask-password`. `machine cp`
+accepts `--ssh-id-file` and `--ssh-user`. Help and completion list each
+command's supported flags. A command resolves a taken global value only when its use case
 consumes it. An unused value grants no authority, performs no discovery or
 prompt, and changes no result; its syntax and context-independent safety
 checks still apply. `TestInheritedFlagScopeIsTheFlagsEachCommandReads` derives
@@ -32,6 +32,7 @@ completion to them.
 | `--context <name>` | context name; current context | Select the named context for a context-backed command. The [flag relationships](#flag-relationships-and-safeguards) below restrict it. |
 | `--ssh-id-file <path>` | path; none | Offer this private key first for an SSH operation; a declared credential remains the fallback. A leading `~` resolves from the invoking account database, not an untrusted `HOME`; the opened file must satisfy the private-file rules in [security](../security.md). |
 | `--ssh-user <name>` | POSIX user name; none | Use one explicitly borrowed account for eligible OS-ready machines. On [`machine rsh` and `machine exec`](../cli.md#machine-ssh-sessions) it reaches any account under the session's credential rules. It does not alter desired state or the managed identity Bootwright installs. |
+| `--ssh-ask-password[=<bool>]` | Boolean; `false` | Prompt for the remote SSH login password through OpenSSH. Requires `--ssh-user`, one target and a terminal. Conflicts with `--ssh-id-file`. |
 | `--ssh-ask-sudo-password[=<bool>]` | Boolean; `false` | Prompt once for the borrowed account's sudo password, hold it only in bounded memory for this invocation, and never place it in arguments, environment, state, output, or logs. It conflicts with JSON or YAML output and non-interactive execution, and is not consumed by `machine rsh` or `machine exec`. |
 | `--ssh-user-for-provisioned[=<bool>]` | Boolean; `false` | Extend `--ssh-user` to Bootwright-provisioned machines. It requires `--ssh-user`; the same frozen account must pass the managed-OS ownership probe. It is not consumed by `machine rsh` or `machine exec`, which reach a provisioned Machine's accounts through `--ssh-user` alone. |
 
@@ -154,7 +155,7 @@ Not yet met: `preflight --stage add-ons` runs no add-on prerequisite check and a
 | Invocation | Local flags and defaults | Successful result | Effects |
 | --- | --- | --- | --- |
 | `bootwright machine list` | `--clusters <list>` default all; `--power-status` false; `--short` false | Machines with their declared contact and addresses and the evidence-backed lifecycle position each reached, their management-controller-reported power with `--power-status`, or sorted names with `--short` | read local state; with `--power-status`, read each machine's power through its management controller |
-| `bootwright machine info` | `--name <list>` default all; an unknown name refuses | selected machine placement, contact, addresses, and recorded lifecycle evidence | read local inventory only; no host or power contact |
+| `bootwright machine info` | `--name <list>` default all; unknown names refuse | [machine details and access identities](output.md#machine-results) | read local inventory |
 | `bootwright machine rsh` | required `--name <machine>` | an interactive SSH session on the exact Machine as its resolved identity; the client's exit status is the result | read state, open the session's credential for its duration, read or record host trust, run one pinned SSH client |
 | `bootwright machine exec` | required `--name <list>` and `<command>...` | the exact argument vector runs on the Machine, or on every listed Machine concurrently, at most the lifecycle bound at a time, with [each line prefixed by its Machine](../cli.md#machine-ssh-sessions); the remote command's exit status is the result, the highest of them for several | same |
 | `bootwright machine cp` | required `--name <list>` and two operands `local:<path> remote:<path>` or the reverse; `--overwrite` false | per-Machine copy outcomes and confirmed file/byte counts; structured output supported | run one pinned SSH client and a fixed file worker; explicit local or remote payload writes under the receiving account; no lifecycle state |

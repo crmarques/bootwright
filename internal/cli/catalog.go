@@ -154,6 +154,7 @@ func globalFlags() []flagSpec {
 		stringFlag("ssh-id-file", "Offer an explicit private key for eligible SSH access"),
 		stringFlag("ssh-user", "Borrow an explicit POSIX account for eligible SSH access"),
 		boolFlag("ssh-ask-sudo-password", "Request the borrowed account's sudo password"),
+		boolFlag("ssh-ask-password", "Prompt for the named SSH user's login password"),
 		boolFlag("ssh-user-for-provisioned", "Extend the borrowed account to provisioned machines"),
 		{name: "help", short: "h", help: "Show help for this command", kind: "bool", defaultValue: "false"},
 	}
@@ -299,9 +300,10 @@ const payloadHelp = " Bootwright flags go before the command." +
 func sessionCommand(spec commandSpec) commandSpec {
 	spec.session = true
 	spec.long = spec.short + ". By default, log in with the Machine's SSH identity." +
-		" For a different account, supply --ssh-user <user> and --ssh-id-file <private-key>." +
-		" That account must already accept the corresponding public key. An unproved host key requires" +
+		" Select a different account with --ssh-user and its --ssh-id-file or --ssh-ask-password." +
+		" Password prompts require a terminal and one target. An unproved host key requires" +
 		" interactive confirmation before SSH offers a credential. The exit status is the client's."
+	spec.sshFlags = sessionSSHFlags
 	spec.short += " as the Machine's resolved identity; confirm or refuse an unproved host key and return the client's exit status"
 	if spec.payload {
 		spec.long += payloadHelp

@@ -14,7 +14,18 @@
         ],
         "os": "provided",
         "clusters": [],
-        "lifecycle": "not-applied"
+        "lifecycle": "not-applied",
+        "session": {
+          "user": "ops",
+          "credential": "invoking account's default keys",
+          "hostKey": "context trust"
+        },
+        "lifecyclePlacement": {
+          "user": "automation",
+          "credential": "private key Secret automation-key",
+          "hostKey": "Secret host-pin",
+          "privilege": "passwordless sudo"
+        }
       },
       {
         "name": "rhel-01",
@@ -25,7 +36,12 @@
         "os": "installed",
         "provider": "lab-libvirt",
         "clusters": [],
-        "lifecycle": "applied"
+        "lifecycle": "applied",
+        "session": {
+          "user": "bootwright",
+          "credential": "private key Secret fleet",
+          "hostKey": "installation evidence"
+        }
       },
       {
         "name": "sno-01",

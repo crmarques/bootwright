@@ -1348,9 +1348,8 @@ durable state, and the operator is never asked to export it.
 `--ssh-user` reaches any account on any Machine, including one Bootwright
 installed. Naming the account the Machine already declares resolves to that
 account's own credential. Naming any other account offers it none, because a
-credential opens exactly the account it was authored for; such an invocation
-must supply `--ssh-id-file`, and without one it fails `access.unavailable`
-rather than putting one account's key on the wire under another's name.
+credential opens exactly the account it was authored for. Supply
+`--ssh-id-file` for that account, or select `--ssh-ask-password`.
 `--ssh-id-file` is offered ahead of the declared credential, which remains the
 fallback; a leading `~` resolves from the invoking account database, the file
 is opened with the invoking account's credentials and must satisfy the
@@ -1359,9 +1358,12 @@ as a private copy. Neither flag alters desired state or the managed identity
 Bootwright installs, and neither `--ssh-user-for-provisioned` nor
 `--ssh-ask-sudo-password` is consumed.
 
-Not yet met: a Machine whose `auth` is a `passwordRef` arm never tries an
-offered `--ssh-id-file` key ahead of its password; tracked as
-[B544](milestones/backlog.md#b544).
+`--ssh-ask-password` requires an explicit `--ssh-user` and one target at an
+interactive terminal. It conflicts with `--ssh-id-file`. After host-key
+verification, OpenSSH handles the prompt for the named account. This choice
+uses no password Secret and produces no Secret-reveal advisory. When
+Bootwright elevates through sudo, it requires proof that sudo will not record
+the input.
 
 The host key is proved before any credential is offered, from exactly one
 source in this order: the Machine's `access.ssh.knownHostsRef` `Secret`; for a
@@ -1429,12 +1431,10 @@ Every member is resolved in the context's effective graph, with its identity,
 before anything is lent, proved or opened. Unknown or excluded members fail
 `access.target` in one diagnostic naming each of them, and any other refusal is
 reported for the first refusing Machine in canonical order. A Machine whose
-resolved identity is the `password` arm fails `access.unavailable`: the client
-prompts for a password on the terminal, which concurrent sessions cannot share;
-the diagnostic names the `machine exec` of that Machine alone as the way, and
-an offered `--ssh-id-file` does not lift the refusal, because a password
-identity tells the client never to try a key; a borrowed `--ssh-user` account
-resolves to the operator identity and is not refused. One credential lend
+resolved identity is the `password` arm uses only an explicitly offered
+`--ssh-id-file` key in a batch. If there is no offered key, or the operator
+explicitly requested a prompt, the invocation fails `access.unavailable`
+before opening any session. One credential lend
 covers every session. Host keys are proved, and admitted against this host's
 SSH crypto policy, one Machine at a time in canonical order before any session
 opens, so an interactive first-use confirmation asks about one Machine

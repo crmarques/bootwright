@@ -64,7 +64,9 @@ func fleetKeyIssues(fleetKey api.Value, catalog api.Catalog) []api.Issue {
 				names = append(names, machine.Name())
 			}
 		}
-		if fleetKey.Present() && !installs && machine.Spec().Get("access", "ssh", "auth", "privateKeyRef").Equal(fleetKey) && len(issues) < api.MaxIssues {
+		access := machine.Spec().Get("access")
+		if fleetKey.Present() && !installs && len(issues) < api.MaxIssues &&
+			(access.Get("ssh", "auth", "privateKeyRef").Equal(fleetKey) || access.Get("lifecycle", "privateKeyRef").Equal(fleetKey)) {
 			issues = append(issues, api.Issue{Code: "api.invariant", Field: field,
 				Message: subject + " uses the fleet install key as its access key; the fleet key must differ from authored Machine access keys",
 				Remediation: "give " + subject + " its own sshKeyPair Secret or an operator identity, or choose another fleet key; if Bootwright dials it with the fleet key, " +

@@ -1,7 +1,7 @@
   bootwright / machine rsh
-      Open an SSH session. By default, log in with the Machine's SSH identity. For a different
-      account, supply --ssh-user <user> and --ssh-id-file <private-key>. That account must
-      already accept the corresponding public key. An unproved host key requires interactive
+      Open an SSH session. By default, log in with the Machine's SSH identity. Select a
+      different account with --ssh-user and its --ssh-id-file or --ssh-ask-password. Password
+      prompts require a terminal and one target. An unproved host key requires interactive
       confirmation before SSH offers a credential. The exit status is the client's.
 
   Usage

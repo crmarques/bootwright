@@ -2177,7 +2177,7 @@ interface. Ambiguous or unproved access refuses with `ssh-admission`. Destroy re
 Preflight, plan and observation never prepare a daemon or change a rule.
 
 The frozen `installation.FirewallRequest` carries either direct local or
-pinned root SSH placement, or the installation's fleet session reached
+pinned lifecycle SSH placement, or the installation's fleet session reached
 through its original placement and pinned host-key proof. It freezes the
 context, Machine, publisher identities, selectors, protocols and ports.
 Removal waits for consumers, deletes only owned service memberships and

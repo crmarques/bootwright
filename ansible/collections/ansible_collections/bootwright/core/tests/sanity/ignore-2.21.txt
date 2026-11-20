@@ -34,6 +34,7 @@ plugins/modules/lifecycle_scratch.py validate-modules:missing-gplv3-license
 plugins/modules/machine_hardware_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/machine_hardware_read.py validate-modules:missing-gplv3-license
 plugins/modules/machine_power_protocol.py validate-modules:missing-gplv3-license
+plugins/modules/machine_privilege_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/managedos_firewall.py validate-modules:missing-gplv3-license
 plugins/modules/managedos_firewall_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/managedos_guest_command.py validate-modules:missing-gplv3-license

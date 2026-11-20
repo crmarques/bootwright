@@ -42,6 +42,10 @@ var fixedOptions = []string{
 // arguments builds the exact client argument vector for one session, pinning
 // the algorithms the host policy admits; it is pure so a test reads what runs.
 func arguments(session machine.Session, held paths, pinned string) []string {
+	return clientArguments(session, held, pinned, descriptorPath)
+}
+
+func clientArguments(session machine.Session, held paths, pinned string, descriptorPath func(int) string) []string {
 	args := []string{"-F", descriptorPath(held.config)}
 	if held.identityFile != 0 {
 		args = append(args, "-i", descriptorPath(held.identityFile))
@@ -74,27 +78,27 @@ func arguments(session machine.Session, held paths, pinned string) []string {
 	return args
 }
 
-// authentication restricts the client to the one method this identity uses.
-// A key arm that also fell back to a password would offer the operator's
-// terminal to a prompt the identity never authorized.
+// authentication offers only methods authorized for the selected login.
 func authentication(session machine.Session) []string {
 	switch session.Kind {
 	case machine.IdentityPassword:
+		if session.IdentityFile != "" && !session.Batch {
+			return []string{
+				"-o", "IdentitiesOnly=yes",
+				"-o", "IdentityAgent=none",
+				"-o", "PreferredAuthentications=publickey,password,keyboard-interactive",
+			}
+		}
+		if session.IdentityFile != "" {
+			return keyAuthentication()
+		}
 		return []string{
 			"-o", "IdentityAgent=none",
 			"-o", "PubkeyAuthentication=no",
 			"-o", "PreferredAuthentications=password,keyboard-interactive",
 		}
 	case machine.IdentityKey:
-		// IdentitiesOnly confines the client to the keys named above, so the
-		// running account's own default identities are never offered with them.
-		return []string{
-			"-o", "IdentitiesOnly=yes",
-			"-o", "IdentityAgent=none",
-			"-o", "PreferredAuthentications=publickey",
-			"-o", "PasswordAuthentication=no",
-			"-o", "KbdInteractiveAuthentication=no",
-		}
+		return keyAuthentication()
 	default:
 		return []string{
 			"-o", "IdentityAgent=none",
@@ -102,6 +106,16 @@ func authentication(session machine.Session) []string {
 			"-o", "PasswordAuthentication=no",
 			"-o", "KbdInteractiveAuthentication=no",
 		}
+	}
+}
+
+func keyAuthentication() []string {
+	return []string{
+		"-o", "IdentitiesOnly=yes",
+		"-o", "IdentityAgent=none",
+		"-o", "PreferredAuthentications=publickey",
+		"-o", "PasswordAuthentication=no",
+		"-o", "KbdInteractiveAuthentication=no",
 	}
 }
 

@@ -60,6 +60,9 @@ var (
 	runnerHostKeyUnbound = diagnostics.Stop{Code: "runner.host-key-unbound", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
 		Meaning: "an SSH placement names no host key its own access binds, so no adapter ran", Remedy: "bind the host's key through its access.ssh.knownHostsRef, then plan the operation again"}
+	runnerPrivilegeUnproved = diagnostics.Stop{Code: "runner.privilege-unproved", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseEnvironment, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "a provided lifecycle host did not prove passwordless sudo before the adapter ran", Remedy: "check the SSH connection and the bound account's sudo privileges, then repeat"}
 	runnerBoundaryUnavailable = diagnostics.Stop{Code: "runner.boundary-unavailable", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseBuild, Recovery: diagnostics.RecoveryFixThenRepeat,
 		Meaning: "the authorized adapter execution boundary is not installed", Remedy: setupRemediation}
@@ -105,6 +108,7 @@ var stops = []diagnostics.Stop{runnerResultChannel, runnerAuthorizationChannel, 
 	runnerExitedBeforeLoad, runnerTaskFailed, runnerHostUnreachable, runnerExited, runnerResultIncomplete, runnerProtocolInvalid,
 	runnerAuthorizationUncertain, runnerDeadline, runnerNoResult, runnerRequestInvalid, runnerHostKeyUnbound, runnerBoundaryUnavailable,
 	runnerUnsupportedPlatform, runnerStorage, runnerScratchUnusable, runnerStaleRun, runnerAdapterRunning, runnerMaterialUnprepared,
-	runnerInvocationEnded, runnerOutputInvalid, runnerPreparationUnrecorded, runnerBindingUnavailable, runnerHostKeyInvalid, runnerAutomationMismatch}
+	runnerInvocationEnded, runnerOutputInvalid, runnerPreparationUnrecorded, runnerBindingUnavailable, runnerHostKeyInvalid, runnerAutomationMismatch,
+	runnerPrivilegeUnproved}
 
 func Stops() []diagnostics.Stop { return slices.Clone(stops) }

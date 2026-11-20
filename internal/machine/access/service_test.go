@@ -427,6 +427,34 @@ func TestAPasswordMachineNamesTheRevealRatherThanAnsweringIt(t *testing.T) {
 	}
 }
 
+func TestPasswordAdviceFollowsTheResolvedAccount(t *testing.T) {
+	for _, options := range []machine.SSHOptions{
+		{User: "ops", IdentityFile: "/keys/ops"},
+		{User: "ops", AskPassword: true},
+		{User: "admin", AskPassword: true},
+	} {
+		h := newHarness(t, nil)
+		if _, err := exec(t, h, "secured", options, "id"); err != nil {
+			t.Fatal(err)
+		}
+		session := h.client.sessions[0]
+		if session.User != options.User || (session.Kind == machine.IdentityPassword) != options.AskPassword || len(h.lender.requested) != 0 {
+			t.Fatalf("resolved identity = %+v, lent %v", session.Identity, h.lender.requested)
+		}
+		if strings.Contains(h.errStream.String(), "admin-password") {
+			t.Fatalf("revealed an unrelated credential reference: %q", h.errStream.String())
+		}
+	}
+}
+
+func TestExplicitPasswordRequiresATerminalBeforeLendingOrObserving(t *testing.T) {
+	h := newHarness(t, func(options *Options) { options.Terminal = func() (bool, error) { return false, nil } })
+	_, err := exec(t, h, "secured", machine.SSHOptions{User: "ops", AskPassword: true}, "id")
+	if code(t, err) != "access.unavailable" || h.lender.lends != 0 || len(h.client.sessions) != 0 || len(h.prompt.asked) != 0 {
+		t.Fatalf("expected a terminal refusal before any credential or connection: %v", err)
+	}
+}
+
 // A credential this context holds opens exactly the account it was authored
 // for. Another account receives none, rather than being handed a key that
 // belongs to someone else.

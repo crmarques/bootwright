@@ -123,7 +123,8 @@ func (a *admission) clusterAccess(ceph api.Value) {
 			}
 		}
 		for _, machine := range a.catalog.OfKind(api.Machine) {
-			if textOf(machine.Spec(), "access", "ssh", "auth", "privateKeyRef") == key {
+			if textOf(machine.Spec(), "access", "ssh", "auth", "privateKeyRef") == key ||
+				textOf(machine.Spec(), "access", "lifecycle", "privateKeyRef") == key {
 				a.invalid("$.spec.cephadm.clusterSSH.keyRef", "cluster SSH key must differ from Machine access keys", "set spec.cephadm.clusterSSH.keyRef to a dedicated Secret distinct from every Machine access key")
 				break
 			}

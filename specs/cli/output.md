@@ -525,9 +525,11 @@ or base64 content recovers exactly the requested bytes.
 
 ## Machine results
 
-`machine info` uses the same inventory row shape as `machine list`, after its
-optional exact-name selection (an unknown name refuses, as in the CLI spec), and always requests no power read. No info
-field claims a live observation that the list service did not make.
+`machine info` extends the inventory row with optional `session` and
+`lifecyclePlacement` records. Each reports its applicable `user`,
+`credential`, `hostKey`, and `privilege` as local configuration facts.
+Credential and host-key fields identify their sources. The command reads no
+Secret material and makes no power or SSH observation.
 
 Each `machines` entry of `machine list` orders its fields as follows:
 

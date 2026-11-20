@@ -729,6 +729,11 @@ is not one allowlisted directive, or `GSSAPIKeyExchange no`, with a value of
 letters, digits and `@.,_+^*?!/ -` refuses `access.unavailable` rather than
 being skipped; the Go session reducer and the Python placement and Ceph tunnel
 reducers all give the verdicts of one shared table of policy lines.
+For `operatorIdentity` without an offered key, the launcher gives only the
+generated policy and proved host pin to a helper running under the verified
+invoking account. The helper holds the anonymous files under that UID and
+starts the same qualified SSH client, which reads the invoking account's
+default identities.
 The pinned host key's algorithms are intersected with that policy as the
 pinned client itself evaluates it (`ssh -G` over the reduced configuration,
 contacting no endpoint), and the session pins only the intersection, so

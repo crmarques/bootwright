@@ -16,6 +16,7 @@ const (
 var (
 	allSSHFlags     = []string{"ssh-id-file", "ssh-user", "ssh-ask-sudo-password", "ssh-user-for-provisioned"}
 	accountSSHFlags = []string{"ssh-id-file", "ssh-user"}
+	sessionSSHFlags = []string{"ssh-id-file", "ssh-user", "ssh-ask-password"}
 )
 
 func inheritedFlagScope(path string) (contextFree bool, sshFlags []string) {

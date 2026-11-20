@@ -66,10 +66,14 @@ func inventory(placement machineref.Placement, interpreter string, paths map[str
 		host["ansible_user"] = placement.User
 		host["ansible_ssh_private_key_file"] = paths["id"]
 		host["ansible_python_interpreter"] = "/usr/bin/python3"
-		if placement.Installed() {
+		if placement.Installed() || placement.Sudo() {
 			host["ansible_become"] = true
 			host["ansible_become_method"] = "sudo"
 			host["ansible_become_user"] = "root"
+		}
+		if placement.Sudo() {
+			host["ansible_become_exe"] = "/usr/bin/sudo"
+			host["ansible_become_flags"] = "-H -n -k"
 		}
 		host["ansible_ssh_common_args"] = strings.Join([]string{
 			"-F", paths["ssh_config"],
@@ -150,10 +154,14 @@ func checkHostKey(request lifecycle.RunRequest) (string, error) {
 	if placement.Local() {
 		return "", nil
 	}
+	hostKeyField := "access.ssh.knownHostsRef"
+	if placement.Privilege != "" {
+		hostKeyField = "access.lifecycle.knownHostsRef"
+	}
 	pinned := slices.IndexFunc(request.Materials, func(file lifecycle.MaterialFile) bool { return file.Name == "known_hosts" })
 	if placement.KnownHostsRef == "" || pinned < 0 || request.Materials[pinned].Secret != placement.KnownHostsRef || request.Materials[pinned].Part != secrets.ValuePart {
-		return "", runnerHostKeyUnbound.Fail("an SSH placement connects only against the host key its own access.ssh.knownHostsRef binds",
-			"author access.ssh.knownHostsRef on Machine/"+placement.Machine)
+		return "", runnerHostKeyUnbound.Fail("an SSH placement connects only against the host key its own "+hostKeyField+" binds",
+			"author "+hostKeyField+" on Machine/"+placement.Machine)
 	}
 	bound, ok := request.Material[placement.KnownHostsRef]
 	if !ok {
@@ -174,7 +182,7 @@ func checkHostKey(request lifecycle.RunRequest) (string, error) {
 		return "", runnerHostKeyInvalid.Fail(
 			"the SSH host key Secret "+placement.KnownHostsRef+" of Machine/"+placement.Machine+" is not one known-hosts entry for "+token+
 				" ("+reason+"), so nothing connects to that host",
-			"author access.ssh.knownHostsRef on Machine/"+placement.Machine+" as one known-hosts entry for "+token)
+			"author "+hostKeyField+" on Machine/"+placement.Machine+" as one known-hosts entry for "+token)
 	}
 	return key.Line(placement.Address, placement.Port), nil
 }

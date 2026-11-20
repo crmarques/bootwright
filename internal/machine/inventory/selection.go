@@ -72,6 +72,44 @@ func row(object api.Object, members []string, evidence machine.OwnershipState) M
 	return current
 }
 
+func accessFor(catalog api.Catalog, object api.Object, account string) (*Access, *Access) {
+	var session, automation *Access
+	switch ssh, ok := machine.SSH(object); {
+	case ok:
+		session = &Access{User: ssh.User, Credential: "invoking account's default keys", HostKey: "context trust"}
+		if session.User == "" {
+			session.User = account
+		}
+		switch {
+		case ssh.PrivateKeyRef != "":
+			session.Credential = "private key Secret " + ssh.PrivateKeyRef
+		case ssh.PasswordRef != "":
+			session.Credential = "password prompt (Secret " + ssh.PasswordRef + ")"
+		}
+		switch {
+		case ssh.KnownHostsRef != "":
+			session.HostKey = "Secret " + ssh.KnownHostsRef
+		case machine.Installed(object):
+			session.HostKey = "installation evidence"
+		}
+	case machine.ReachedLocally(object):
+		session = &Access{Credential: "local execution"}
+	}
+	if place, ok := machine.LifecyclePlacement(object, catalog); ok {
+		automation = &Access{User: place.User, Credential: "private key Secret " + place.PrivateKeyRef,
+			HostKey: "Secret " + place.KnownHostsRef, Privilege: "direct root"}
+		switch {
+		case place.Local():
+			automation = &Access{Credential: "local execution"}
+		case place.Installed():
+			automation.HostKey, automation.Privilege = "installation evidence", "passwordless sudo"
+		case place.Sudo():
+			automation.Privilege = "passwordless sudo"
+		}
+	}
+	return session, automation
+}
+
 // lifecycle translates the frozen verb and the least settled state its blocks
 // reached into the position an operator reads. A verb that has not completed
 // names itself in progress, because a Machine halfway through a removal still

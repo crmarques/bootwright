@@ -30,13 +30,8 @@ func validateFirewall(machine api.Object, catalog api.Catalog) []api.Issue {
 		return nil
 	}
 	if api.MachineProvided(machine) {
-		controller := ""
-		for _, environment := range catalog.OfKind(api.Environment) {
-			controller = environment.Spec().Get("controller", "machineRef").Text()
-		}
-		ssh := machine.Spec().Get("access", "ssh")
-		if machine.Name() != controller && (!ssh.Has("auth", "privateKeyRef") || !ssh.Has("knownHostsRef")) {
-			return []api.Issue{invariant("$.spec.firewall.management", "managed firewall preparation on a remote host requires pinned root SSH access", "author access.ssh.auth.privateKeyRef and access.ssh.knownHostsRef on this Machine")}
+		if _, err := PlacementFor(machine, controllerForPlacement(catalog)); err != nil {
+			return []api.Issue{invariant("$.spec.firewall.management", "managed firewall preparation on a remote host requires pinned lifecycle SSH access", "author spec.access.lifecycle or a pinned root login in spec.access.ssh")}
 		}
 	}
 	if !api.MachineProvided(machine) {

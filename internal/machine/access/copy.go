@@ -26,6 +26,7 @@ type CopyRequest struct {
 type CopyAccount struct {
 	UID, GID int
 	Groups   []uint32
+	Name     string
 }
 
 type CopyProgress struct {
@@ -45,6 +46,10 @@ type CopyResult struct {
 }
 
 func (s Service) Copy(ctx context.Context, request CopyRequest) (*CopyResult, error) {
+	if request.SSH.AskPassword {
+		return nil, failure("cli.usage", "machine cp does not accept an explicit SSH password prompt",
+			"use a declared password login interactively or use --ssh-id-file")
+	}
 	if request.NonInteractive {
 		s.options.Terminal = func() (bool, error) { return false, nil }
 	}
@@ -97,7 +102,7 @@ func (s Service) Copy(ctx context.Context, request CopyRequest) (*CopyResult, er
 		seen := map[string]bool{}
 		for i := range sessions {
 			sessions[i].Batch = len(names) > 1 || request.NonInteractive || !interactive
-			if sessions[i].Batch && sessions[i].Kind == machine.IdentityPassword {
+			if sessions[i].Batch && sessions[i].Kind == machine.IdentityPassword && sessions[i].IdentityFile == "" {
 				return failure("access.unavailable", "Machine "+sessions[i].Machine+" needs interactive password authentication", "copy this Machine alone from an interactive terminal")
 			}
 			key := sessions[i].HostKey.Fingerprint() + "/" + sessions[i].User
@@ -106,7 +111,7 @@ func (s Service) Copy(ctx context.Context, request CopyRequest) (*CopyResult, er
 			}
 			seen[key] = true
 		}
-		if len(sessions) == 1 && sessions[0].Kind == machine.IdentityPassword {
+		if len(sessions) == 1 && sessions[0].Kind == machine.IdentityPassword && !sessions[0].Batch {
 			s.advise(members[0].target, selected)
 		}
 		return s.copySessions(inner, request, sessions, result)

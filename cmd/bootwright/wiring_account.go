@@ -126,5 +126,5 @@ func (a invokingAccount) copyAccount(ctx context.Context) (machineaccess.CopyAcc
 	if err != nil {
 		return machineaccess.CopyAccount{}, errors.New("invoking account cannot be verified")
 	}
-	return machineaccess.CopyAccount{UID: account.UID, GID: account.GID, Groups: append([]uint32(nil), account.Groups...)}, nil
+	return machineaccess.CopyAccount{UID: account.UID, GID: account.GID, Groups: append([]uint32(nil), account.Groups...), Name: account.Name}, nil
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/availability"
 	"github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/nativeexec"
 	"github.com/crmarques/bootwright/internal/trust"
 )
 
@@ -26,7 +27,12 @@ type Launcher struct {
 	Home    func() (string, error)
 	Owner   func() (int, error)
 	Files   Files
+	Account func(context.Context) (nativeexec.Account, error)
 	Scratch string
+}
+
+func ServeOperator(args []string) (bool, int) {
+	return len(args) > 0 && args[0] == operatorMode, 255
 }
 
 func New(home func() (string, error), owner func() (int, error), files Files) Launcher {

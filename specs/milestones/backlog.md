@@ -22,9 +22,6 @@ Alias cell.
 | [B1622](#b1622) | new, 2026-11-18 (X627 review) | product | Substrate and Reconciliation | Prove a hosted KubeVirt Machine off or absent without creating access on its host cluster | Fails closed: a context with a hosted KubeVirt Machine refuses every new apply and destroy |
 | [B1623](#b1623) | new, 2026-11-18 (X627 review) | safety | Reconciliation and Machine | Decide whether explicit `machine discover` and `machine inventory` take the power entry check | The owner's request named apply and destroy only |
 | [B1624](#b1624) | new, 2026-11-18 (X627 review) | product | Reconciliation, with CLI | `Stop first` names the whole fleet an automatic preparation's entry check reads | The refusal already names every blocking Machine |
-| [B1641](#b1641) | new, 2026-11-20 (remote access review) | defect | Machine | Show the password advisory only for the account using that password | The session already authenticates with the selected key |
-| [B1642](#b1642) | new, 2026-11-20 (remote access review) | product | Machine and CLI | Let an operator explicitly choose a terminal password prompt for an alternate SSH account | Changes the session credential contract |
-| [B1643](#b1643) | new, 2026-11-20 (remote access review) | product | Machine and Reconciliation | Select a distinct lifecycle login and privilege policy on a provided placement host | Changes the placement privilege boundary |
 | [B82](#b82) | C5; moved from M4 on 2026-10-10 (D128); parked on 2026-10-11 (D129) | product | Managed OS | One more image, profile or entitlement variant | No concrete additional OS variant beyond the qualified M2 matrix |
 | [B96](#b96) | Y3 | enabling | Architecture | Collection metadata and naming polish | Pruned from M1 on 2026-09-28 |
 | [B97](#b97) | A8 (kind tables) | enabling | Desired state and Workspace | Kind field-table parity and a path checker | Pruned from M1 on 2026-09-28 |
@@ -72,7 +69,6 @@ Alias cell.
 | [B327](#b327) | new, 2026-10-05 | product | Managed OS | DHCP installation | D80: M1 refuses DHCP-only installations |
 | [B329](#b329) | new, 2026-10-05 | enabling | Architecture | A declaration-spacing check across the tree | An optional check no M1 lane needs; D56 leaves it out of M1 |
 | [B331](#b331) | new, 2026-10-05 | product | Controller setup | A FIPS-qualified controller runtime | D108: M1 documents the runtime's own cryptography on a FIPS host |
-| [B332](#b332) | new, 2026-10-05 | product | Machine and Controller | `auth.operatorIdentity` runs under the invoking account | D112: M1 documents what the arm does today; this needs B282's helper |
 | [B334](#b334) | new, 2026-10-05; its TLS half split to B446 on 2026-10-07 (D120) | safety | Substrate | The emulated BMC refuses a non-loopback bind address and runs confined | D115: M1 binds the examples' emulated BMCs to loopback; D120 moved the TLS to B446, now in M2 |
 | [B341](#b341) | new, 2026-10-05 (X39) | enabling | State reconciliation | The template-delimiter refusal names the authored field and scopes native content | Found in X39 after D56; parked under D48; the scope needs an owner decision |
 | [B345](#b345) | new, 2026-10-05 (X39) | enabling | Controller, with CLI | A sudoers denial in a human invocation names its remedy | Found in X39 after D56; parked under D48 |
@@ -134,7 +130,6 @@ Alias cell.
 | [B533](#b533) | new, 2026-10-13 (the X76 review) | defect | Storage | The Ceph observation and manager waits hold their contract at every transient edge | Found by the X76 review; no milestone depends on it: each case is transient, leaves no effect unproved and is recovered by a later apply |
 | [B537](#b537) | new, 2026-10-13 (the owner's M2b Ceph run) | safety | Storage | A bootstrap that failed before making any mon store is taken back and retried instead of forcing a destroy | Found in the M2b run; no milestone depends on it: destroy recovers it, and removing cluster files needs its own safety decision |
 | [B540](#b540) | new, 2026-10-13 (the X81 review) | safety | Storage | The pool block proves the pool it resumes or creates is newer than its attempt | Found by the X81 review; no milestone depends on it: both cases need an outside actor to recreate the pool during day-0 |
-| [B544](#b544) | new, 2026-10-14 (X85) | defect | Machine | A key offered with `--ssh-id-file` is tried ahead of a Machine's declared password | Found in X85; no milestone depends on it: the password still opens the session, and a borrowed `--ssh-user` account takes the key |
 | [B545](#b545) | new, 2026-10-14 (the X85 review) | defect | Machine, with Workspace | A power batch keeps the retained output of every run its result names | Found by the X85 review; no milestone depends on it: it needs a batch of more than 16 Machines, and every run's outcome is still reported |
 | [B558](#b558) | new, 2026-10-14 (D152) | product | Controller setup | `setup --dry-run` renders the setup receipt without sudo from a readable index outside the store | Owner decision under D152's clause 9: the store stays root 0700, and the dry run lists requirement names without the receipt |
 | [B560](#b560) | new, 2026-10-14 (D152) | enabling | Controller setup | The dnf4 and dnf5 preview fixtures are real captures from RHEL 9 and Fedora 44 | D152's clause 6: the in-tree fixtures follow dnf's documented output, and the captures need the owner's hosts in X90's acceptance |
@@ -647,10 +642,6 @@ Top-level declarations run together against the formatting rule in about 103 pla
 ### B331
 
 On a FIPS-mode controller host, Bootwright's Go binary and its private CPython use their own cryptography, outside the host's validated modules, which [B292](delivered.md#x42--media-contexts-setup-service-and-machine-admission) documents and preflight reports. Qualifying FIPS would use Go's FIPS 140-3 module and a private CPython linked to the system OpenSSL FIPS provider (found by the 2026-10-05 audit). **Exit evidence:** a qualified FIPS build and runtime, with setup and a lifecycle run on a FIPS-mode host.
-
-### B332
-
-`auth.operatorIdentity` promises the invoking operator's own SSH identity, but the session client runs as root with root's default identities, which [B283](delivered.md#x40--machine-commands-status-secrets-and-validate-refusals) documents. Running the arm's client under the invoking account, with its default identities and `-l` defaulting to that account, would build on [B282](delivered.md#x39--untrusted-input-trust-and-privilege-boundaries)'s helper (found by the 2026-10-05 audit). **Exit evidence:** argv and session tests under the invoking account.
 
 ### B334
 
@@ -1226,23 +1217,6 @@ IDs) would rule out every pool that existed before the create; a
 fingerprint decision recorded, and, if adopted, tests that a resume or a
 create whose pool's ID does not exceed the recorded `pool_max` refuses
 `pool-identity`.
-
-### B544
-
-[Machine SSH sessions](../cli.md#machine-ssh-sessions) offer `--ssh-id-file`
-ahead of the declared credential, which remains the fallback. For a Machine
-whose `access.ssh.auth` is a `passwordRef` arm, the session resolves the
-password identity, and `sshlocal.authentication` then passes
-`PubkeyAuthentication=no` with `PreferredAuthentications=password,keyboard-interactive`,
-so the client names the offered key with `-i` but never tries it. X85 found
-this while deciding the several-machine `machine exec` refusal of a password
-identity, which therefore stays a refusal even when a key is offered. The
-outcome is an authentication arm for a password identity with an offered key
-that tries the key first and the password after it, with batch sessions
-restricted to the key. **Exit evidence:** an argument-vector test that a
-password identity with an offered key enables public-key authentication
-ahead of the password methods, and a several-machine `machine exec` test that
-such a Machine opens its session with the offered key instead of refusing.
 
 ### B545
 
@@ -4016,41 +3990,6 @@ reads every managed Machine of the fleet. List the fleet the check reads.
 
 **Exit evidence:** a plan golden for an automatic preparation naming every
 fleet Machine under `Stop first`.
-
-### B1641
-
-**Owner:** Machine. **Kind:** defect. **Requires:** none.
-**Definition:** Specified.
-
-A single-target [SSH session](../cli.md#machine-ssh-sessions) using an
-alternate account and key on a Machine with a declared password prints a
-command to reveal the original account's password. Select the advisory from
-the resolved identity. **Exit evidence:** an alternate key session emits no
-reveal instruction and the declared password session names its own Secret.
-
-### B1642
-
-**Owner:** Machine and CLI. **Kind:** product. **Requires:** owner selection.
-**Definition:** Candidate.
-
-Offer an explicit terminal password prompt for a different account on a
-single-target [Machine SSH session](../cli.md#machine-ssh-sessions). OpenSSH
-owns the prompt after host-key verification. **Exit evidence:** a terminal
-session reaches the named account without lending the declared credential,
-and batch and noninteractive invocations refuse before connecting.
-
-### B1643
-
-**Owner:** Machine and Reconciliation. **Kind:** product.
-**Requires:** owner selection. **Definition:** Candidate.
-
-Allow a provided [placement host](../infrastructure-services.md#placement-arms-and-credentials)
-to bind an existing automation account independently of operator sessions and
-declare how lifecycle work obtains the privileges it needs. Promotion defines
-the supported sudo policies and how each is proved. **Exit evidence:** a
-pinned host with direct root login disabled completes apply, continuation and
-destroy under the bound account and privilege policy. An insufficient rule
-refuses before mutation and the host's existing account policy is preserved.
 
 ## Retired
 

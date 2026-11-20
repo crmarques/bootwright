@@ -2110,7 +2110,7 @@ rotation, which still call the Secret a context
 the `media list` row ([B300](#x44--help-completion-contracts-and-ratchets)); the `secret set` help
 ([B95](#x44--help-completion-contracts-and-ratchets)); codes the registry scan cannot see
 ([B162](backlog.md#b162)); `auth.operatorIdentity` under the invoking account
-([B332](backlog.md#b332)); `status` over input a new rule refuses
+([B332](#x637--operator-and-lifecycle-ssh)); `status` over input a new rule refuses
 ([B226](backlog.md#b226)); `--ssh-id-file` through the helper as root,
 now part of [B352](backlog.md#b352); and the defaulted fleet-key duplicate on
 an installed Machine ([B294](#x42--media-contexts-setup-service-and-machine-admission)). Under D48 (D116) the other
@@ -5433,7 +5433,7 @@ the highest status ([sessions](../cli.md#machine-ssh-sessions)).
 wait for a slot. A several-Machine exec has no standard input and cannot use
 password authentication, so a Machine that signs in with a password is reached
 alone, even with a key offered, because a password identity never tries an
-offered key ([B544](backlog.md#b544)). The output lines of several sessions are
+offered key ([B544](#x637--operator-and-lifecycle-ssh)). The output lines of several sessions are
 interleaved by line, never within one, and carry no ordering between Machines.
 A batch of more than 16 Machines can retire the retained output of its own
 earliest runs before its result names them ([B545](backlog.md#b545)).
@@ -5484,7 +5484,7 @@ cluster, so a name two clusters share selects a node in each. A listed cluster
 that declares none of the `--node` members refuses the invocation instead of
 running nothing there. The Machine behind every resolved node is subject to the
 several-Machine exec rules of X85, so a Machine that signs in with a password is
-reached alone ([B544](backlog.md#b544)).
+reached alone ([B544](#x637--operator-and-lifecycle-ssh)).
 
 ### X87 — Controller setup v2 foundations
 
@@ -18037,3 +18037,22 @@ added restore each package to its floor; the floors themselves do not move
 down.
 
 **Exit evidence:** `make cover` passes.
+
+## X637 — Operator and lifecycle SSH
+
+**Owner:** Machine, CLI, Controller and Reconciliation. **Items:** B332, B544,
+B1641, B1642, B1643 and B1644. **Kind:** safety. **Authority:** the owner's
+request to implement the remote access review recommendations.
+
+**Outcome:** [session selection](../cli.md#machine-ssh-sessions) handles
+explicit key and password selection and ties the password advisory to the
+resolved account. [Operator identity](../security.md#direct-ssh-sessions)
+uses the invoking account. [Machine info](../cli/output.md#machine-results)
+shows configured session and lifecycle access. [Provided placements](../infrastructure-services.md#placement-arms-and-credentials)
+can use a separately bound, pinned lifecycle login and prove passwordless
+root escalation through the adapter transport.
+
+**Exit evidence:** credential-resolution and SSH argument tests, inventory
+goldens, a placement admission test and an adapter fixture proving that a sudo
+refusal prevents the effect playbook from starting. Live SSH and sudo
+verification remains open.

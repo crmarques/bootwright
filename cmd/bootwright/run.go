@@ -69,6 +69,11 @@ func (b privilegeBoundary) run(ctx context.Context, args []string, stdout, stder
 			return refuseAtBoundary(classification, stdout, stderr, *refusal, 1)
 		}
 	}
+	if classification.SSHPassword && b.euid() == 0 && !privilege.SupervisedChild() {
+		if command, set := b.lookupEnv("SUDO_COMMAND"); set && command != "" {
+			return refuseAtBoundary(classification, stdout, stderr, privilege.UnsupervisedSSHPassword(), 255)
+		}
+	}
 	if classification.RequiresRoot && b.euid() == 0 && privilege.SupervisedChild() {
 		if refusal := privilege.ConfirmElevatedChild(os.Environ()); refusal != nil {
 			return refuseAtBoundary(classification, stdout, stderr, *refusal, 1)
@@ -114,6 +119,9 @@ func elevationInvocation(classification cli.InvocationClass, args []string, rout
 	}
 	if classification.URLStdin {
 		invocation.SecretStdin = privilege.MediaURLInput
+	}
+	if classification.SSHPassword {
+		invocation.SecretStdin = privilege.SSHPasswordInput
 	}
 	if file, ok := terminalFile(stdout); ok {
 		invocation.OutputTerminal = file

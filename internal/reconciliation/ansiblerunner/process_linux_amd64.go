@@ -72,6 +72,14 @@ func checkRequest(request lifecycle.RunRequest) (string, error) {
 	if err := checkMaterials(request); err != nil {
 		return "", err
 	}
+	if place := request.Placement; place.Privilege != "" {
+		key := slices.ContainsFunc(request.Materials, func(file lifecycle.MaterialFile) bool {
+			return file.Name == "id" && file.Secret == place.PrivateKeyRef && file.Part == secrets.PrivateKeyPart
+		})
+		if !place.PinnedSSH() || !key {
+			return "", runnerRequestInvalid.Fail("the lifecycle placement's login, privilege, and key binding disagree", "plan the operation again")
+		}
+	}
 	pinned, err := checkHostKey(request)
 	if err != nil {
 		return "", err
@@ -137,27 +145,13 @@ func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (result l
 	if err := writeSSHConfig(job, request, paths); err != nil {
 		return lifecycle.RunResult{}, err
 	}
-	values, err := variables(request, paths)
-	if err != nil {
+	if err := writeRunInputs(job, scratch, request, paths); err != nil {
 		return lifecycle.RunResult{}, err
 	}
-	values["bootwright_run_scratch"] = scratch
-	outputs, err := prepareOutputs(job, request)
-	if err != nil {
-		return lifecycle.RunResult{}, err
-	}
-	if outputs != nil {
-		values[request.Variable+"_output"] = outputs
-	}
-	phaseHosts, err := phaseInventory(request, paths)
-	if err != nil {
-		return lifecycle.RunResult{}, err
-	}
-	if err := writeJSON(job, inventoryName, phaseHosts); err != nil {
-		return lifecycle.RunResult{}, err
-	}
-	if err := writeVariables(job, values); err != nil {
-		return lifecycle.RunResult{}, err
+	if request.Placement.Sudo() {
+		if err := r.proveSudo(ctx, job, scratch, lock, automation, request); err != nil {
+			return lifecycle.RunResult{}, err
+		}
 	}
 	launched = true
 	result, err = r.execute(ctx, job, scratch, lock, automation, playbook, request)
@@ -172,6 +166,49 @@ func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (result l
 	}
 	result.Produced = produced
 	return result, nil
+}
+
+func writeRunInputs(job, scratch string, request lifecycle.RunRequest, paths map[string]string) error {
+	values, err := variables(request, paths)
+	if err != nil {
+		return err
+	}
+	values["bootwright_run_scratch"] = scratch
+	outputs, err := prepareOutputs(job, request)
+	if err != nil {
+		return err
+	}
+	if outputs != nil {
+		values[request.Variable+"_output"] = outputs
+	}
+	if request.Placement.Sudo() {
+		values["bootwright_machine_privilege_request"] = map[string]any{"version": "machine-privilege-v1"}
+	}
+	hosts, err := phaseInventory(request, paths)
+	if err != nil {
+		return err
+	}
+	if err := writeJSON(job, inventoryName, hosts); err != nil {
+		return err
+	}
+	return writeVariables(job, values)
+}
+
+func (r Runner) proveSudo(ctx context.Context, job, scratch string, lock *os.File, automation stagedAutomation, request lifecycle.RunRequest) error {
+	proof := lifecycle.RunRequest{Deadline: 30 * time.Second, Launch: request.Launch, ReadOnly: true, Parallelism: 1}
+	result, err := r.execute(ctx, job, scratch, lock, automation, "machine/privilege_observe.yml", proof)
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	var evidence struct {
+		UID *int `json:"uid"`
+	}
+	if err == nil && result.Outcome == reconciliation.OutcomeUnchanged &&
+		json.Unmarshal(result.Evidence, &evidence) == nil && evidence.UID != nil && *evidence.UID == 0 {
+		return nil
+	}
+	return runnerPrivilegeUnproved.Fail("Machine/"+request.Placement.Machine+" did not prove noninteractive root sudo as "+request.Placement.User,
+		"check the SSH pin, key and account, and allow noninteractive sudo to root for the lifecycle role, then repeat the operation")
 }
 
 // The entries the runner writes into a job beside its lock, its record and its

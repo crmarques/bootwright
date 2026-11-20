@@ -136,7 +136,7 @@ func (s Services) invokeClusterRsh(ctx context.Context, values *requestValues, _
 		ContextName: values.text("context"),
 		Name:        values.text("name"),
 		Node:        values.text("node"),
-		SSH:         values.sshAccount(),
+		SSH:         values.sshSession(),
 	}, s.EnvironmentAccess.ClusterRsh)
 	return commandResult{session: result}, err
 }
@@ -149,7 +149,7 @@ func (s Services) invokeClusterExec(ctx context.Context, values *requestValues, 
 		ContextName: values.text("context"),
 		Names:       values.names("name"),
 		Nodes:       values.names("node"),
-		SSH:         values.sshAccount(),
+		SSH:         values.sshSession(),
 		Command:     slices.Clone(args),
 	}, s.EnvironmentAccess.ClusterExec)
 	return commandResult{session: result}, err

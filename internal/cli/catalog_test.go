@@ -81,7 +81,7 @@ func TestPublicCatalog(t *testing.T) {
 	}
 	var globals []string
 	root.PersistentFlags().VisitAll(func(flag *pflag.Flag) { globals = append(globals, flag.Name) })
-	if strings.Join(globals, " ") != "ascii color context detail help output progress ssh-ask-sudo-password ssh-id-file ssh-user ssh-user-for-provisioned width" {
+	if strings.Join(globals, " ") != "ascii color context detail help output progress ssh-ask-password ssh-ask-sudo-password ssh-id-file ssh-user ssh-user-for-provisioned width" {
 		t.Errorf("global flags: %v", globals)
 	}
 	for short, name := range map[string]string{"h": "help", "o": "output"} {

@@ -116,14 +116,44 @@ func displayMachineList(result *inventory.ListResult) machineListPresentation {
 
 // Machine info has its own documented DTO while preserving the inventory facts
 // used by the list presentation.
-type machineInfoPresentation machineListPresentation
+type machineInfoPresentation struct {
+	Context   string                       `json:"context"`
+	Machines  []machineInfoRowPresentation `json:"machines"`
+	PowerRead bool                         `json:"powerRead"`
+}
+
+type machineInfoRowPresentation struct {
+	machineRowPresentation
+	Session   *machineAccessPresentation `json:"session,omitempty"`
+	Placement *machineAccessPresentation `json:"lifecyclePlacement,omitempty"`
+}
+
+type machineAccessPresentation struct {
+	User       string `json:"user,omitempty"`
+	Credential string `json:"credential"`
+	HostKey    string `json:"hostKey,omitempty"`
+	Privilege  string `json:"privilege,omitempty"`
+}
+
+func displayMachineAccess(access *inventory.Access) *machineAccessPresentation {
+	if access == nil {
+		return nil
+	}
+	return &machineAccessPresentation{User: escapeDisplayLine(access.User), Credential: escapeDisplayLine(access.Credential),
+		HostKey: escapeDisplayLine(access.HostKey), Privilege: escapeDisplayLine(access.Privilege)}
+}
 
 func (machineInfoPresentation) documentedResult() {}
 
 func writeMachineInfo(out io.Writer, command string, result *inventory.ListResult, jsonMode bool) error {
 	if jsonMode {
+		list := displayMachineList(result)
+		info := machineInfoPresentation{Context: list.Context, PowerRead: list.PowerRead, Machines: make([]machineInfoRowPresentation, len(list.Machines))}
+		for i, row := range result.Machines {
+			info.Machines[i] = machineInfoRowPresentation{machineRowPresentation: list.Machines[i], Session: displayMachineAccess(row.Session), Placement: displayMachineAccess(row.Placement)}
+		}
 		return writeEnvelope(out, commandEnvelope{SchemaVersion: "v1alpha1", Command: escapeDisplayLine(command), OK: true, ExitCode: 0,
-			Result: machineInfoPresentation(displayMachineList(result)), Diagnostics: []diagnostic{}, Logs: []string{}})
+			Result: info, Diagnostics: []diagnostic{}, Logs: []string{}})
 	}
 	var text display
 	if len(result.Machines) == 0 {
@@ -148,6 +178,22 @@ func writeMachineInfo(out io.Writer, command string, result *inventory.ListResul
 			access = append(access, field{Label: "Addresses", Value: displayValue(strings.Join(row.IPs, ", "))})
 		}
 		text.mutedFields(access...)
+		for _, entry := range []struct {
+			title string
+			info  *inventory.Access
+		}{{"Session", row.Session}, {"Lifecycle placement", row.Placement}} {
+			if entry.info == nil {
+				continue
+			}
+			text.subsection(entry.title)
+			fields := []field{{Label: "Credential", Value: entry.info.Credential}}
+			for _, value := range []field{{Label: "User", Value: entry.info.User}, {Label: "Host key", Value: entry.info.HostKey}, {Label: "Privilege", Value: entry.info.Privilege}} {
+				if value.Value != "" {
+					fields = append(fields, value)
+				}
+			}
+			text.mutedFields(fields...)
+		}
 		text.subsection("Evidence")
 		text.mutedFields(field{Label: "Lifecycle", Value: row.Lifecycle}, field{Label: "Power", Value: "not read"})
 	}

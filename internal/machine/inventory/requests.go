@@ -7,7 +7,8 @@ type ListRequest struct {
 	// Power asks each selected Machine's own management controller what its
 	// power is. It is the one thing this command contacts a host for, so it is
 	// opt-in: without it the command reads local state alone.
-	Power bool
+	Power         bool
+	InspectAccess bool
 }
 
 type ListResult struct {
@@ -35,4 +36,10 @@ type MachineRow struct {
 	Clusters  []string
 	Lifecycle string
 	Power     string
+	Session   *Access
+	Placement *Access
+}
+
+type Access struct {
+	User, Credential, HostKey, Privilege string
 }

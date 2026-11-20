@@ -1,0 +1,29 @@
+---
+- name: Validate the placement privilege observation request
+  ansible.builtin.assert:
+    that:
+      - bootwright_machine_privilege_request.version == 'machine-privilege-v1'
+    quiet: true
+  no_log: true
+
+- name: Enter the read-only privilege proof
+  bootwright.core.machine_privilege_protocol:
+    phase: loaded
+
+- name: Read the effective UID through lifecycle sudo
+  ansible.builtin.setup:
+    gather_subset:
+      - '!all'
+      - '!min'
+      - user
+    filter:
+      - ansible_effective_user_id
+  register: machine_privilege_uid
+  no_log: true
+
+- name: Report the proved lifecycle privilege
+  bootwright.core.machine_privilege_protocol:
+    phase: completed
+    outcome: unchanged
+    uid: '{{ machine_privilege_uid.ansible_facts.ansible_effective_user_id }}'
+  no_log: true

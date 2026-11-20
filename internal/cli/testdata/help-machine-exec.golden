@@ -1,13 +1,13 @@
   bootwright / machine exec
-      Run a command over SSH. By default, log in with the Machine's SSH identity. For a
-      different account, supply --ssh-user <user> and --ssh-id-file <private-key>. That account
-      must already accept the corresponding public key. An unproved host key requires
-      interactive confirmation before SSH offers a credential. The exit status is the client's.
-      --name takes a comma-separated list: the command runs on every listed machine
-      concurrently, at most eight at a time, each output line is prefixed by its machine, and
-      the exit status is the highest any client returned. Bootwright flags go before the
-      command. Use -- before a flag-shaped first payload value to preserve it as data. After
-      the first payload value, all remaining tokens belong to the payload.
+      Run a command over SSH. By default, log in with the Machine's SSH identity. Select a
+      different account with --ssh-user and its --ssh-id-file or --ssh-ask-password. Password
+      prompts require a terminal and one target. An unproved host key requires interactive
+      confirmation before SSH offers a credential. The exit status is the client's. --name
+      takes a comma-separated list: the command runs on every listed machine concurrently, at
+      most eight at a time, each output line is prefixed by its machine, and the exit status is
+      the highest any client returned. Bootwright flags go before the command. Use -- before a
+      flag-shaped first payload value to preserve it as data. After the first payload value,
+      all remaining tokens belong to the payload.
 
   Usage
     bootwright machine exec <command>... [flags]

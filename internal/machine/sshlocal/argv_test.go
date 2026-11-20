@@ -100,6 +100,23 @@ func TestThePasswordArmLetsTheClientAskAndOffersNoKey(t *testing.T) {
 	}
 }
 
+func TestAnOfferedKeyPrecedesPasswordAndIsTheOnlyBatchMethod(t *testing.T) {
+	with := session(machine.IdentityPassword)
+	with.IdentityFile = "/keys/ops"
+	held := paths{config: 3, identityFile: 4, knownHosts: 5}
+	for _, batch := range []bool{false, true} {
+		with.Batch = batch
+		got := strings.Join(arguments(with, held, with.HostKey.Algorithms()), " ")
+		want := "PreferredAuthentications=publickey,password,keyboard-interactive"
+		if batch {
+			want = "PreferredAuthentications=publickey -o PasswordAuthentication=no -o KbdInteractiveAuthentication=no -o BatchMode=yes"
+		}
+		if !strings.Contains(got, want) || strings.Contains(got, "PubkeyAuthentication=no") {
+			t.Fatalf("batch = %t, arguments = %s", batch, got)
+		}
+	}
+}
+
 // A batch session runs beside others that share the terminal, so its client
 // may never prompt; a single session keeps the client's own behavior.
 func TestOnlyABatchSessionForbidsTheClientToPrompt(t *testing.T) {

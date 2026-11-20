@@ -117,6 +117,14 @@ func validateSharedFlags(command *cobra.Command, spec commandSpec) string {
 	if boolValue(flags, "ssh-user-for-provisioned") && stringValue(flags, "ssh-user") == "" {
 		return "--ssh-user-for-provisioned requires --ssh-user"
 	}
+	if boolValue(flags, "ssh-ask-password") {
+		if stringValue(flags, "ssh-user") == "" {
+			return "--ssh-ask-password requires --ssh-user"
+		}
+		if flags.Changed("ssh-id-file") {
+			return "--ssh-ask-password conflicts with --ssh-id-file"
+		}
+	}
 	if spec.session && selectedStructured(command) {
 		return "live SSH sessions require --output text"
 	}

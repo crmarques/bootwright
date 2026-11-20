@@ -110,7 +110,7 @@ func (s Services) invokeMachineInfo(ctx context.Context, values *requestValues, 
 	if s.MachineInventory == nil {
 		return commandResult{}, errMissingService
 	}
-	result, err := invokeResult(ctx, values, inventory.ListRequest{ContextName: values.text("context"), Names: selectedInfoNames(values)}, s.MachineInventory.List)
+	result, err := invokeResult(ctx, values, inventory.ListRequest{ContextName: values.text("context"), Names: selectedInfoNames(values), InspectAccess: true}, s.MachineInventory.List)
 	return commandResult{machines: result}, err
 }
 
@@ -121,7 +121,7 @@ func (s Services) invokeMachineRsh(ctx context.Context, values *requestValues, _
 	result, err := invokeResult(ctx, values, machineaccess.RshRequest{
 		ContextName: values.text("context"),
 		Name:        values.text("name"),
-		SSH:         values.sshAccount(),
+		SSH:         values.sshSession(),
 	}, s.MachineAccess.Rsh)
 	return commandResult{session: result}, err
 }
@@ -133,7 +133,7 @@ func (s Services) invokeMachineExec(ctx context.Context, values *requestValues, 
 	result, err := invokeResult(ctx, values, machineaccess.ExecRequest{
 		ContextName: values.text("context"),
 		Names:       values.names("name"),
-		SSH:         values.sshAccount(),
+		SSH:         values.sshSession(),
 		Command:     slices.Clone(args),
 	}, s.MachineAccess.Exec)
 	return commandResult{session: result}, err

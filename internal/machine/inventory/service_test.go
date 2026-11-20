@@ -6,16 +6,57 @@ import (
 	"slices"
 	"testing"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
 )
 
-type effectiveState struct{ context string }
+type effectiveState struct {
+	context string
+	objects []api.Object
+}
 
 func (s *effectiveState) RenderEffective(_ context.Context, request compilation.EffectiveRequest) (*compilation.EffectiveResult, error) {
 	s.context = request.ContextName
+	if s.objects != nil {
+		return &compilation.EffectiveResult{Effective: api.NewCatalog(s.objects)}, nil
+	}
 	return &compilation.EffectiveResult{Effective: catalog()}, nil
+}
+
+func TestMachineInfoReportsOnlyConfiguredAccessSources(t *testing.T) {
+	controller := object(api.Machine, "controller", m("access", m("local", m()), "os", m("provided", m())))
+	environment := object(api.Environment, "env", m("controller", m("machineRef", "controller")))
+	fixture := catalog()
+	guest, _ := fixture.Find(api.Machine, "guest")
+	guest = guest.WithSpec(guest.Spec().WithPath(api.StringValue("ssh"), "network", "installAddressRef").
+		WithPath(api.StringValue("managed"), "firewall", "management"))
+	host, _ := fixture.Find(api.Machine, "host")
+	host = host.WithSpec(host.Spec().WithPath(m("user", "ops", "addressRef", "ssh",
+		"auth", m("passwordRef", "ops-password"), "knownHostsRef", "session-pin"), "access", "ssh").
+		WithPath(m("user", "automation", "privilege", "sudo", "privateKeyRef", "lifecycle-key", "knownHostsRef", "lifecycle-pin"), "access", "lifecycle").
+		WithPath(api.StringValue("managed"), "firewall", "management"))
+	node, _ := fixture.Find(api.Machine, "node")
+	node = node.WithSpec(node.Spec().WithPath(m("addressRef", "ssh", "auth", m("operatorIdentity", m())), "access", "ssh"))
+	proxy := object(api.Proxy, "proxy", m("management", "managed", "machineRef", "controller"))
+	objects := []api.Object{controller, environment, guest, host, node, proxy}
+	reader := &controllers{}
+	inspect := New(&effectiveState{objects: objects}, ownership{}, reader, nil).
+		WithAccount(func(context.Context) string { return "alice" })
+	info, err := inspect.List(context.Background(), ListRequest{ContextName: "lab", InspectAccess: true})
+	if err != nil || len(info.Machines) != 4 || reader.calls != 0 {
+		t.Fatalf("info = %+v, err = %v, power reads = %d", info, err, reader.calls)
+	}
+	rows := info.Machines
+	if rows[0].Session.Credential != "local execution" || rows[0].Placement.Credential != "local execution" ||
+		rows[1].Placement.User != "bootwright" || rows[1].Placement.HostKey != "installation evidence" ||
+		rows[2].Session.User != "ops" || rows[2].Session.HostKey != "Secret session-pin" ||
+		rows[2].Session.Credential != "password prompt (Secret ops-password)" ||
+		rows[2].Placement.User != "automation" || rows[2].Placement.Privilege != "passwordless sudo" ||
+		rows[2].Placement.HostKey != "Secret lifecycle-pin" || rows[3].Session.User != "alice" || rows[3].Placement != nil {
+		t.Fatalf("access summaries = %+v", rows)
+	}
 }
 
 type ownership struct{ reads *int }

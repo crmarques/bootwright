@@ -30,7 +30,8 @@ PROTOCOLS = {
     "cluster_objects_protocol", "containercluster_install_protocol", "containercluster_media_protocol",
     "controller_protocol", "infra_service_protocol", "infrastructureservices_mirror_files_protocol", "infrastructureservices_mirror_images_protocol",
     "infrastructureservices_mirror_release_protocol",
-    "machine_hardware_protocol", "machine_power_protocol", "managedos_firewall_protocol", "managedos_install_protocol",
+    "machine_hardware_protocol", "machine_power_protocol", "machine_privilege_protocol",
+    "managedos_firewall_protocol", "managedos_install_protocol",
     "managedos_tree_protocol", "managedos_disk_discovery_protocol",
     "substrate_host_protocol", "substrate_libvirt_machine_protocol", "substrate_physical_protocol", "physical_erase_protocol",
     "substrate_kubevirt_protocol",
@@ -68,6 +69,17 @@ def running(name, arguments, monkeypatch):
 
 def test_every_plugin_has_a_stub_run():
     assert set(plugin_names()) == PROTOCOLS | set(EFFECTS)
+
+
+@pytest.mark.parametrize("uid", [0, 1000, False, "0"])
+def test_privilege_completion_requires_an_observed_root_uid(uid, monkeypatch):
+    _module, result, records = running(
+        "machine_privilege_protocol", {"phase": "completed", "outcome": "unchanged", "uid": uid}, monkeypatch)
+    if isinstance(uid, int) and not isinstance(uid, bool) and uid == 0:
+        assert not result.get("failed")
+        assert records == [({"phase": "completed", "outcome": "unchanged", "evidence": {"uid": 0}}, False)]
+    else:
+        assert result.get("failed") and not records
 
 
 @pytest.mark.parametrize("name", sorted(PROTOCOLS))

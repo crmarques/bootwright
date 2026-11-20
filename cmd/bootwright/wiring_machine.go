@@ -17,6 +17,7 @@ import (
 	"github.com/crmarques/bootwright/internal/machine/power"
 	"github.com/crmarques/bootwright/internal/machine/sshlocal"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
+	"github.com/crmarques/bootwright/internal/nativeexec"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/ansiblerunner"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -61,7 +62,7 @@ type machineDependencies struct {
 func wireMachine(deps machineDependencies) cli.Services {
 	selection := currentSelection(deps.Selection)
 	evidence := machineOwnership{reconciler: deps.Lifecycle}
-	client := sshlocal.New(deps.Home, deps.Owner, sessionFiles(deps.Files))
+	client := sessionClient(deps.Home, deps.Owner, deps.Files, deps.CopyAccount)
 	runner := ansiblerunner.New(operationPlaybook(), deps.Stager).AdmitReadOnly(readOnlyOperations()...)
 	powered := power.New(deps.State, power.NewEvidenceRealization(deps.Lifecycle, realizesMachine), machineIdentities{reconciler: deps.Lifecycle},
 		deps.Lifecycle, runner, runner.BeginInvocation, deps.Confirmer, deps.Reporter, selection).
@@ -74,13 +75,33 @@ func wireMachine(deps machineDependencies) cli.Services {
 		Streams: deps.Streams, Terminal: deps.Terminal,
 	})
 	return cli.Services{
-		MachineInventory:  inventory.New(accessState, evidence, powered, selection),
+		MachineInventory: inventory.New(accessState, evidence, powered, selection).WithAccount(func(ctx context.Context) string {
+			if deps.CopyAccount == nil {
+				return ""
+			}
+			account, err := deps.CopyAccount(ctx)
+			if err != nil {
+				return ""
+			}
+			return account.Name
+		}),
 		MachineAccess:     sessions,
 		MachineCopy:       sessions,
 		EnvironmentAccess: clusterSessions(deps.State, sessions, selection),
 		MachinePower:      powered,
 		MachineTrust:      enrollment.New(accessState, deps.Trust, selection, trustOptions(deps, client)),
 	}
+}
+
+func sessionClient(home func() (string, error), owner func() (int, error), files operatorFiles, resolve func(context.Context) (machineaccess.CopyAccount, error)) sshlocal.Launcher {
+	client := sshlocal.New(home, owner, sessionFiles(files))
+	if resolve != nil {
+		client.Account = func(ctx context.Context) (nativeexec.Account, error) {
+			account, err := resolve(ctx)
+			return nativeexec.Account{UID: uint32(account.UID), GID: uint32(account.GID), Groups: account.Groups}, err
+		}
+	}
+	return client
 }
 
 func clusterSessions(state inventory.EffectiveState, sessions machineaccess.Service, selection func(context.Context) (string, error)) environmentaccess.Service {

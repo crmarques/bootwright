@@ -42,6 +42,7 @@ request-schema:
   placement.machine string
   placement.port int omitempty
   placement.privateKeyRef string omitempty
+  placement.privilege string omitempty
   placement.user string omitempty
   pullSecretRef string
   release struct mirrorfill.ReleaseImage

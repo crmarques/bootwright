@@ -1,18 +1,18 @@
   bootwright / cluster exec
       Run a command over SSH on cluster nodes' Machines. By default, log in with the Machine's
-      SSH identity. For a different account, supply --ssh-user <user> and --ssh-id-file
-      <private-key>. That account must already accept the corresponding public key. An unproved
-      host key requires interactive confirmation before SSH offers a credential. The exit
-      status is the client's. Bootwright flags go before the command. Use -- before a
-      flag-shaped first payload value to preserve it as data. After the first payload value,
-      all remaining tokens belong to the payload. --name takes a comma-separated list, and each
-      cluster runs the command on the Machine behind its administrator node. --node takes a
-      comma-separated list and selects those nodes, by name then by FQDN, in every listed
-      cluster that declares them. The command runs on every resolved Machine concurrently, at
-      most eight at a time, each output line is prefixed by its Machine, and the exit status is
-      the highest any client returned. For an OpenShiftCluster, the default is its first node
-      in name order, and --node also accepts <role>-<ordinal> with a zero-based ordinal in that
-      order (for example, controlPlane-0 or worker-0). External CephClusters are inapplicable.
+      SSH identity. Select a different account with --ssh-user and its --ssh-id-file or
+      --ssh-ask-password. Password prompts require a terminal and one target. An unproved host
+      key requires interactive confirmation before SSH offers a credential. The exit status is
+      the client's. Bootwright flags go before the command. Use -- before a flag-shaped first
+      payload value to preserve it as data. After the first payload value, all remaining tokens
+      belong to the payload. --name takes a comma-separated list, and each cluster runs the
+      command on the Machine behind its administrator node. --node takes a comma-separated list
+      and selects those nodes, by name then by FQDN, in every listed cluster that declares
+      them. The command runs on every resolved Machine concurrently, at most eight at a time,
+      each output line is prefixed by its Machine, and the exit status is the highest any
+      client returned. For an OpenShiftCluster, the default is its first node in name order,
+      and --node also accepts <role>-<ordinal> with a zero-based ordinal in that order (for
+      example, controlPlane-0 or worker-0). External CephClusters are inapplicable.
 
   Usage
     bootwright cluster exec <command>... [flags]

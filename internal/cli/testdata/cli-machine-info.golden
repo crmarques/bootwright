@@ -4,6 +4,15 @@
       Clusters  -
     Access
       Contact  controller.lab.example.test
+    Session
+      Credential  invoking account's default keys
+      User        ops
+      Host key    context trust
+    Lifecycle placement
+      Credential  private key Secret automation-key
+      User        automation
+      Host key    Secret host-pin
+      Privilege   passwordless sudo
     Evidence
       Lifecycle  not-applied
       Power      not read
@@ -14,6 +23,10 @@
       Clusters  -
     Access
       Contact  rhel-01.lab.example.test
+    Session
+      Credential  private key Secret fleet
+      User        bootwright
+      Host key    installation evidence
     Evidence
       Lifecycle  applied
       Power      not read

@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/availability"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -15,10 +16,16 @@ type Service struct {
 	ownership Ownership
 	power     PowerReader
 	selection CurrentSelection
+	account   func(context.Context) string
 }
 
 func New(state EffectiveState, ownership Ownership, power PowerReader, selection CurrentSelection) Service {
 	return Service{state: state, ownership: ownership, power: power, selection: selection}
+}
+
+func (s Service) WithAccount(account func(context.Context) string) Service {
+	s.account = account
+	return s
 }
 
 // List reports every selected Machine with the lifecycle position its context's
@@ -57,6 +64,18 @@ func (s Service) List(ctx context.Context, request ListRequest) (*ListResult, er
 			return nil, err
 		}
 		rows = slices.DeleteFunc(rows, func(row MachineRow) bool { return !slices.Contains(request.Names, row.Name) })
+	}
+	if request.InspectAccess {
+		account := "invoking account"
+		if s.account != nil {
+			if name := s.account(ctx); name != "" {
+				account = name
+			}
+		}
+		for i := range rows {
+			object, _ := effective.Effective.Find(api.Machine, rows[i].Name)
+			rows[i].Session, rows[i].Placement = accessFor(effective.Effective, object, account)
+		}
 	}
 	if !request.Power {
 		return &ListResult{Context: name, Machines: rows}, nil

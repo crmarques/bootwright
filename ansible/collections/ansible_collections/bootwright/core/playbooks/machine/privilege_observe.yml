@@ -1,0 +1,13 @@
+---
+- name: Prove the provided lifecycle account can become root
+  hosts: bootwright_target
+  gather_facts: false
+  any_errors_fatal: true
+  serial: 1
+  strategy: ansible.builtin.linear
+
+  tasks:
+    - name: Observe the privilege requested by lifecycle placement
+      ansible.builtin.import_role:
+        name: bootwright.core.machine_privilege
+        tasks_from: observe

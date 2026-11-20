@@ -151,9 +151,9 @@ func TestARefusalForAnyMemberOpensNoSession(t *testing.T) {
 			code: "access.unavailable", want: "Machine/controller"},
 		{name: "password", names: []string{"secured", "peer"},
 			code: "access.unavailable", want: "--name secured -- <command> on it alone"},
-		{name: "password with an offered key", names: []string{"secured", "peer"},
-			options: machine.SSHOptions{IdentityFile: "/keys/mine"},
-			code:    "access.unavailable", want: "Machine/secured authenticates with a password"},
+		{name: "explicit password prompt with several targets", names: []string{"secured", "peer"},
+			options: machine.SSHOptions{User: "admin", AskPassword: true},
+			code:    "access.unavailable", want: "requires one Machine"},
 		{name: "unproved host key", names: []string{"host", "declared"},
 			adjust: func(h *harness) { h.service.options.Terminal = func() (bool, error) { return false, nil } },
 			code:   "trust.identity", want: "--name host"},
@@ -189,6 +189,18 @@ func TestARefusalForAnyMemberOpensNoSession(t *testing.T) {
 				t.Fatal("a resolution refusal opened material")
 			}
 		})
+	}
+}
+
+func TestBatchOffersTheExplicitKeyToAPasswordDeclaredAccount(t *testing.T) {
+	h := newHarness(t, nil)
+	_, err := execNames(t, h, []string{"secured", "peer"}, machine.SSHOptions{IdentityFile: "/keys/ops"}, "id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	session := h.client.sessions[sessionsByMachine(h.client)["secured"]]
+	if !session.Batch || session.IdentityFile != "/keys/ops" || session.User != "admin" {
+		t.Fatalf("session = %+v", session)
 	}
 }
 

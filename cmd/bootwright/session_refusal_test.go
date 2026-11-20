@@ -110,6 +110,29 @@ func TestTheBoundaryGivesASessionItsOwnStatus(t *testing.T) {
 	}
 }
 
+func TestExplicitSSHPasswordUsesTheSudoInputGuard(t *testing.T) {
+	args := []string{"machine", "rsh", "--name", "node", "--ssh-user", "ops", "--ssh-ask-password"}
+	var elevated []privilege.Invocation
+	var stdout, stderr bytes.Buffer
+	boundary := boundaryUnderTest(nil, privilege.Outcome{}, &elevated)
+	if status := boundary.run(context.Background(), args, &stdout, &stderr); status != 0 ||
+		len(elevated) != 1 || elevated[0].SecretStdin != privilege.SSHPasswordInput {
+		t.Fatalf("password input did not reach the sudo guard: status %d, %v, %s", status, elevated, &stderr)
+	}
+	boundary.euid = func() int { return 0 }
+	boundary.lookupEnv = func(name string) (string, bool) {
+		if name == "SUDO_COMMAND" {
+			return "/usr/bin/bootwright machine rsh", true
+		}
+		return "", false
+	}
+	stderr.Reset()
+	if status := boundary.run(context.Background(), args, &stdout, &stderr); status != 255 ||
+		len(elevated) != 1 || !strings.Contains(stderr.String(), "input logging policy was not verified") {
+		t.Fatalf("manual sudo did not refuse the password prompt: status %d, %s", status, &stderr)
+	}
+}
+
 // A root invocation sudo started refuses a foreign variable before it resolves
 // an account or runs anything, whether or not its command needs root.
 func TestASudoStartedRootInvocationRefusesAForeignVariableFirst(t *testing.T) {

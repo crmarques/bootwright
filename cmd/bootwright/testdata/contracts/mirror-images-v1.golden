@@ -40,6 +40,7 @@ request-schema:
   placement.machine string
   placement.port int omitempty
   placement.privateKeyRef string omitempty
+  placement.privilege string omitempty
   placement.user string omitempty
   version string
 evidence-schema:

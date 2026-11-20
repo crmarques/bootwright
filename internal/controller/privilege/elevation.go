@@ -182,9 +182,16 @@ func concludeSession(run elevationRun, stderr *startFilter) Outcome {
 }
 
 const MediaURLInput = "the media URL"
+const SSHPasswordInput = "the SSH login password"
+
+func UnsupervisedSSHPassword() diagnostics.Diagnostic {
+	return diagnostics.Diagnostic{Severity: "error", Code: "access.unavailable",
+		Message:     "this sudo session's input logging policy was not verified for an SSH password prompt",
+		Remediation: "run bootwright as the invoking user so Bootwright can check sudo policy, or use --ssh-id-file"}
+}
 
 func inputSubject(input string) string {
-	if input == MediaURLInput {
+	if input == MediaURLInput || input == SSHPasswordInput {
 		return input
 	}
 	return "Secret " + input
@@ -193,6 +200,9 @@ func inputSubject(input string) string {
 func fileRemedy(input string) string {
 	if input == MediaURLInput {
 		return "repeat the command with --from-url-file <path> in place of --from-url-file -"
+	}
+	if input == SSHPasswordInput {
+		return "repeat the command with --ssh-id-file <path> in place of --ssh-ask-password"
 	}
 	return fileFlagRemedy
 }

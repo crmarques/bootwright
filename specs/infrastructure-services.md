@@ -38,19 +38,11 @@ or creates a log.
 
 ### Refusal table
 
-Each row is a managed service refusal, held to its capability's `Unsupported`
-by `TestArtifactServerRefusalTableMatchesUnsupported` for the ArtifactServer,
-every row but the endpoint-address bound, and by
-`TestManagedServiceRefusalTableMatchesUnsupported` for the Proxy, DNSServer,
-NTPServer and Registry, every row but the artifact socket bound. Reason and
-remedy are the message and remediation of `plan.object-unsupported` on the
-refused service `<server>`; `<machine>` is its placement Machine, `<proxy>` the
-Proxy it selects, and `<profile>`, `<kind>`, `<consumer>` and `<provider>` the
-install profile, service kind, publishing object and provider. The
-installed-host rows but the firewall's hold the ArtifactServer alone, the
-own-installation row the DNSServer and NTPServer, and the image copy tool row
-the Registry. The SSH rows never refuse a service on the controller, which is
-reached locally.
+These rows describe managed service refusals checked by
+`TestArtifactServerRefusalTableMatchesUnsupported` and
+`TestManagedServiceRefusalTableMatchesUnsupported`. The reason and remedy are
+emitted by `plan.object-unsupported` on `<server>`. The SSH rows apply to
+remote placements.
 
 | Refusal | Path | Reason | Remedy |
 | --- | --- | --- | --- |
@@ -58,9 +50,9 @@ reached locally.
 | Proxy authentication | `spec.connection.auth.proxyAuthRef` on the external `Proxy` the placement `Machine` selects | `this executable acquires a managed service's image through no authenticated proxy, and <proxy>, which <machine> selects for <server>, sets spec.connection.auth.proxyAuthRef` | `select direct: {} or an external Proxy that needs no authentication in spec.proxy on <machine>` |
 | Private trust | `spec.connection.trustBundleRef` on the external `Proxy` the placement `Machine` selects | `this executable acquires a managed service's image with the host's system trust store alone, and <proxy>, which <machine> selects for <server>, sets spec.connection.trustBundleRef` | `select direct: {} or an external Proxy without spec.connection.trustBundleRef in spec.proxy on <machine>` |
 | HTTP proxy alone | `spec.connection.httpsProxy` absent on the external `Proxy` the placement `Machine` selects | `HTTPS acquisition for <server> requires spec.connection.httpsProxy on <proxy>` | `set spec.connection.httpsProxy on <proxy>, or select direct access on <machine>` |
-| Operator SSH identity | `spec.access.ssh.auth.operatorIdentity` on a placement `Machine` other than the controller, the default of a provided Machine without authored access included | `this executable reaches a placement host other than the controller only with a bound SSH private key, and <machine>, where <server> runs, uses spec.access.ssh.auth.operatorIdentity` | `author spec.access.ssh.auth.privateKeyRef and spec.access.ssh.knownHostsRef on <machine>, or place <server> on the controller Machine` |
-| Password SSH authentication | `spec.access.ssh.auth.passwordRef` on a placement `Machine` other than the controller | `this executable reaches a placement host other than the controller only with a bound SSH private key, and <machine>, where <server> runs, uses spec.access.ssh.auth.passwordRef` | `author spec.access.ssh.auth.privateKeyRef and spec.access.ssh.knownHostsRef on <machine>, or place <server> on the controller Machine` |
-| No bound host key | `spec.access.ssh` without `knownHostsRef` on a placement `Machine` other than the controller | `this executable connects to a placement host other than the controller only against a bound SSH host key, and <machine>, where <server> runs, declares no spec.access.ssh.knownHostsRef` | `author spec.access.ssh.knownHostsRef on <machine>, or place <server> on the controller Machine` |
+| Operator SSH identity | Operator identity on a provided host without a dedicated lifecycle login | `this executable reaches a placement host other than the controller only with a bound SSH private key, and <machine>, where <server> runs, uses spec.access.ssh.auth.operatorIdentity` | `author spec.access.ssh.auth.privateKeyRef and spec.access.ssh.knownHostsRef on <machine>, or place <server> on the controller Machine` |
+| Password SSH authentication | Password authentication on a provided host without a dedicated lifecycle login | `this executable reaches a placement host other than the controller only with a bound SSH private key, and <machine>, where <server> runs, uses spec.access.ssh.auth.passwordRef` | `author spec.access.ssh.auth.privateKeyRef and spec.access.ssh.knownHostsRef on <machine>, or place <server> on the controller Machine` |
+| No bound host key | A remote lifecycle login without knownHostsRef | `this executable connects to a placement host other than the controller only against a bound SSH host key, and <machine>, where <server> runs, declares no spec.access.ssh.knownHostsRef` | `author spec.access.ssh.knownHostsRef on <machine>, or place <server> on the controller Machine` |
 | Host firewall on an installed Machine | the placement `Machine` is installed by Bootwright through a `MachineInstallProfile` whose `spec.customizations.security.firewall.enabled` is absent | `a managed service on an installed host requires an explicit firewall choice, and <machine>, where <server> runs, is installed by <profile>, which leaves its firewall choice implicit` | `set spec.customizations.security.firewall.enabled: true or false on <profile>, or place <server> on an OS-ready Machine` |
 | Service of its host's own installation | a managed `DNSServer` or `NTPServer` on an installed `Machine` that the `dns` selections of that Machine's network configuration, or its installation's `ntp` selections, name | `the installation of <machine> uses <server>, which runs on <machine> and so answers only once that installation completes` | `select a <kind> placed on another Machine for the installation of <machine>, or place <server> on another Machine` |
 | Artifact server on an installed Machine | a managed `ArtifactServer` on an installed `Machine` that `spec.mirror.artifacts.serverRef` does not select | `an ArtifactServer on a Machine Bootwright installs serves only the Environment's managed artifact mirror, and <server> on <machine> is not the server spec.mirror.artifacts.serverRef selects` | `place <server> on the controller Machine or on an OS-ready Machine reached over SSH` |
@@ -76,7 +68,7 @@ reached locally.
 | Arm | Selected when | Execution | Coordination |
 | --- | --- | --- | --- |
 | Controller | The placement Machine is the [Environment controller](api/environment.md#controller-machine) | Local, through the private controller runtime under [Controller's execution boundary](controller.md#the-controller-runtime) | The Workspace root lock, the context lease, the verified host binding and the host reservations below |
-| SSH | The placement Machine authors `access.ssh` | Remote, over SSH from the controller | The context lease and the SSH-qualified [host reservations](#host-reservations) below |
+| SSH | A remote provided placement Machine | Remote, over SSH from the controller | The context lease and the SSH-qualified [host reservations](#host-reservations) below |
 | Installed | The placement Machine is one Bootwright installs | Remote, over SSH from the controller, after its installation | The context lease and host reservations qualified by its address and port |
 
 The controller arm requires this context's verified
@@ -85,16 +77,14 @@ controller runtime of the running build's lock, which a completed setup
 publishes. A missing, contradictory or stale binding refuses before effects
 and names `controller install`.
 
-The SSH arm connects as root and never escalates. It consumes authored
-`access.ssh.auth.privateKeyRef` and required `access.ssh.knownHostsRef`, and
-binds user `root` and only those two Secret versions with the plan. A
-placement host with another account or an escalation Secret refuses at
-admission under [addresses and access](api/machines.md#addresses-and-access),
-and the placement derivation refuses the same host before planning.
-`passwordRef` and `auth.operatorIdentity`, and a placement host with no
-`knownHostsRef`, refuse before registration as the
-[refusal table](#refusal-table) states; the global borrowed-SSH flags are
-unsupported and refuse before planning. The bound `knownHostsRef` material is parsed before
+The SSH arm binds the [lifecycle login](api/machines.md#addresses-and-access)
+and the private key and host-pin Secret versions in the plan. For a declared
+`sudo` login, the runner first executes a bounded, read-only Ansible playbook
+with the same inventory and noninteractive become policy as the effect. It
+requires the effective UID to be zero before it starts the operation's
+playbook. A refusal names the host and account. The account and sudo rule
+remain under the operator's management. Borrowed-SSH flags refuse before
+lifecycle planning. The bound `knownHostsRef` material is parsed before
 connection under [the Machine host-key rules](api/machines.md#addresses-and-access);
 a changed, missing, corrupt or unparseable entry refuses before the connection,
 and an observed key mismatch refuses before any remote command. The adapter

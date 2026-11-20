@@ -54,6 +54,9 @@ func resolveTarget(catalog api.Catalog, name, contextName string) (target, error
 // than being handed the key that belongs to another account.
 func resolveIdentity(ctx context.Context, selected target, options machine.SSHOptions,
 	launcher Launcher) (machine.Identity, string, error) {
+	if options.AskPassword {
+		return identityFor(selected, options, "")
+	}
 	offered, err := launcher.IdentityFile(ctx, options.IdentityFile)
 	if err != nil {
 		return machine.Identity{}, "", err
@@ -91,6 +94,14 @@ func fleetIdentity(selected target, fleet FleetIdentity) (machine.Identity, stri
 }
 
 func identityFor(selected target, options machine.SSHOptions, offered string) (machine.Identity, string, error) {
+	if options.AskPassword {
+		if !api.ValidLexical(api.LexicalPOSIXUser, options.User) || options.IdentityFile != "" {
+			return machine.Identity{}, "", failure("cli.usage",
+				"an SSH password prompt requires an explicit user and no key file",
+				"use --ssh-user <user> --ssh-ask-password")
+		}
+		return machine.Identity{User: options.User, Kind: machine.IdentityPassword}, "", nil
+	}
 	identity := machine.Identity{User: selected.ssh.User, IdentityFile: offered}
 	borrowed := options.User != "" && options.User != selected.ssh.User
 	if borrowed {
@@ -101,7 +112,7 @@ func identityFor(selected target, options machine.SSHOptions, offered string) (m
 		if offered == "" {
 			return identity, "", failure("access.unavailable",
 				"this context holds no credential for the account "+options.User+" on "+selected.object.Identity(),
-				"offer one with --ssh-id-file, or drop --ssh-user to use the Machine's own identity")
+				"offer a key with --ssh-id-file or use the account's configured session identity")
 		}
 		return identity, "", nil
 	}

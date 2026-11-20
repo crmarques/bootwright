@@ -391,6 +391,7 @@ func dispatchFlags() *pflag.FlagSet {
 		flags.Bool(name, true, "")
 	}
 	flags.Bool("password-stdin", false, "")
+	flags.Bool("ssh-ask-password", false, "")
 	flags.Bool("raw", false, "")
 	flags.Bool("follow", false, "")
 	flags.Bool("value-stdin", false, "")

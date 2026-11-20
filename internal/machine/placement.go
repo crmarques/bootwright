@@ -21,8 +21,7 @@ const (
 const InstallFamily = "os-install"
 
 // Placement fixes where one block's effect runs. The local arm needs no
-// address or credential; the SSH arm names exactly one target and connects as
-// root without escalation.
+// address or credential; an SSH placement fixes the login and elevation.
 type Placement struct {
 	Address       string     `json:"address,omitempty"`
 	Connection    Connection `json:"connection"`
@@ -30,6 +29,7 @@ type Placement struct {
 	Machine       string     `json:"machine"`
 	Port          int        `json:"port,omitempty"`
 	PrivateKeyRef string     `json:"privateKeyRef,omitempty"`
+	Privilege     string     `json:"privilege,omitempty"`
 	User          string     `json:"user,omitempty"`
 }
 
@@ -40,6 +40,33 @@ func (p Placement) Local() bool { return p.Connection == ConnectionLocal }
 // passwordless sudo rule that installation wrote, against the host key its
 // installation proved, so the placement binds no host-key Secret.
 func (p Placement) Installed() bool { return p.Connection == ConnectionInstalled }
+
+func (p Placement) Sudo() bool { return p.Privilege == "sudo" }
+
+func (p Placement) PinnedSSH() bool {
+	return p.Connection == ConnectionSSH && sshPrivilege(p.User, p.Privilege) && api.ValidLexical(api.LexicalHost, p.Address) &&
+		p.Port >= 1 && p.Port <= 65535 && api.ValidLexical(api.LexicalName, p.PrivateKeyRef) && api.ValidLexical(api.LexicalName, p.KnownHostsRef)
+}
+
+func sshPrivilege(user, privilege string) bool {
+	if user == "root" {
+		return privilege == "" || privilege == "direct"
+	}
+	return privilege == "sudo" && api.ValidLexical(api.LexicalPOSIXUser, user)
+}
+
+func LifecyclePlacement(o api.Object, c api.Catalog) (Placement, bool) {
+	if !placementHost(o, c) {
+		return Placement{}, false
+	}
+	controller := controllerForPlacement(c)
+	if providerHost(o, c) {
+		placement, err := PlacementFor(o, controller)
+		return placement, err == nil
+	}
+	placement, err := ServicePlacementFor(o, controller)
+	return placement, err == nil
+}
 
 // SecretReferences names every declaration a placement needs bound before the
 // operation registers. An escalation Secret is never one of them.
@@ -58,8 +85,7 @@ func (p Placement) SecretClasses() secrets.Classes {
 }
 
 // PlacementFor selects the arm one block runs through. The controller is
-// local; every other host must author the SSH access the operation binds, and
-// that access connects as root and never escalates.
+// local. A provided host may dedicate an identity to lifecycle work.
 func PlacementFor(machine api.Object, controllerMachine string) (Placement, error) {
 	if machine.Name() == controllerMachine {
 		return Placement{Connection: ConnectionLocal, Machine: machine.Name()}, nil
@@ -67,6 +93,9 @@ func PlacementFor(machine api.Object, controllerMachine string) (Placement, erro
 	ssh := machine.Spec().Get("access", "ssh")
 	if !ssh.Present() {
 		return Placement{}, machinePlacementNoAccess.Fail("a placement host must be the controller or declare SSH access", "place the work on the controller Machine, or author access.ssh on "+machine.Identity())
+	}
+	if login := machine.Spec().Get("access", "lifecycle"); login.Present() {
+		return dedicatedPlacement(machine, ssh, login)
 	}
 	if ssh.Has("auth", "operatorIdentity") {
 		return Placement{}, machinePlacementAuthUnsupported.Fail("operator SSH identity is unsupported for lifecycle placement", "author access.ssh.auth.privateKeyRef on "+machine.Identity())
@@ -99,6 +128,28 @@ func PlacementFor(machine api.Object, controllerMachine string) (Placement, erro
 		Address: address, Connection: ConnectionSSH, KnownHostsRef: ssh.Get("knownHostsRef").Text(),
 		Machine: machine.Name(), Port: port, PrivateKeyRef: ssh.Get("auth", "privateKeyRef").Text(), User: user,
 	}, nil
+}
+
+func dedicatedPlacement(machine api.Object, ssh, login api.Value) (Placement, error) {
+	user, privilege := login.Get("user").Text(), login.Get("privilege").Text()
+	if privilege == "" || !sshPrivilege(user, privilege) {
+		return Placement{}, machinePlacementEscalates.Fail("the lifecycle login must use root with direct privileges or a non-root account with passwordless sudo",
+			"set spec.access.lifecycle.user and spec.access.lifecycle.privilege on "+machine.Identity())
+	}
+	address, err := infrastructureservices.ResolveAddress(machine, ssh.Get("addressRef").Text())
+	if err != nil {
+		return Placement{}, err
+	}
+	port := 22
+	if value, ok := ssh.Get("port").Int64(); ok && value > 0 {
+		port = int(value)
+	}
+	key, host := login.Get("privateKeyRef").Text(), login.Get("knownHostsRef").Text()
+	if key == "" || host == "" {
+		return Placement{}, machinePlacementKeyMissing.Fail("the lifecycle login requires a private key and a host pin", "set spec.access.lifecycle.privateKeyRef and spec.access.lifecycle.knownHostsRef on "+machine.Identity())
+	}
+	return Placement{Address: address, Connection: ConnectionSSH, KnownHostsRef: host,
+		Machine: machine.Name(), Port: port, PrivateKeyRef: key, User: user, Privilege: privilege}, nil
 }
 
 func ServicePlacementFor(machine api.Object, controllerMachine string) (Placement, error) {
@@ -142,6 +193,16 @@ var privilegeRemediations = map[string]string{
 // such as a cluster node, a storage node or a session target, keeps any account.
 func validatePlacementHost(o api.Object, c api.Catalog) []api.Issue {
 	ssh := o.Spec().Get("access", "ssh")
+	if login := o.Spec().Get("access", "lifecycle"); login.Present() {
+		if !api.MachineProvided(o) || !ssh.Present() || !placementHost(o, c) || o.Name() == controllerForPlacement(c) {
+			return []api.Issue{invariant("$.spec.access.lifecycle", "a dedicated lifecycle login requires a remote provided placement host",
+				"select a provided placement host reached over SSH or remove spec.access.lifecycle")}
+		}
+		if _, err := dedicatedPlacement(o, ssh, login); err != nil {
+			return []api.Issue{invariant("$.spec.access.lifecycle", err.Error(), "declare a key and host pin, and choose root with direct or a non-root user with sudo")}
+		}
+		return nil
+	}
 	if !ssh.Present() || !placementHost(o, c) || installed(o) && !providerHost(o, c) {
 		return nil
 	}
@@ -150,6 +211,13 @@ func validatePlacementHost(o api.Object, c api.Catalog) []api.Issue {
 		issues = append(issues, invariant("$.spec.access.ssh."+field, privilegeRefusals[field], privilegeRemediations[field]))
 	}
 	return issues
+}
+
+func controllerForPlacement(c api.Catalog) string {
+	if environments := c.OfKind(api.Environment); len(environments) == 1 {
+		return environments[0].Spec().Get("controller", "machineRef").Text()
+	}
+	return ""
 }
 
 // placementHost reports whether a managed infrastructure service or a libvirt

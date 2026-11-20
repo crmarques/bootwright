@@ -302,8 +302,8 @@ func validFirewallRequest(request FirewallRequest) error {
 				return invalid("has unexpected local access fields")
 			}
 		case machineref.ConnectionSSH:
-			if placement.User != "root" || !api.ValidLexical(api.LexicalHost, placement.Address) || placement.Port < 1 || placement.Port > 65535 || !api.ValidLexical(api.LexicalName, placement.PrivateKeyRef) || !api.ValidLexical(api.LexicalName, placement.KnownHostsRef) {
-				return invalid("has no pinned root SSH placement")
+			if !placement.PinnedSSH() {
+				return invalid("has no pinned lifecycle SSH placement")
 			}
 		default:
 			return invalid("has an unsupported direct placement")

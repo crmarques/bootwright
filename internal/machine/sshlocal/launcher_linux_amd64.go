@@ -68,6 +68,7 @@ type Launcher struct {
 	Home       func() (string, error)
 	Owner      func() (int, error)
 	Files      Files
+	Account    func(context.Context) (nativeexec.Account, error)
 	PolicyPath string
 	Scratch    string
 	Environ    func() []string
@@ -101,7 +102,14 @@ func (l Launcher) Run(ctx context.Context, session machine.Session, in io.Reader
 	if err != nil {
 		return 0, err
 	}
-	return exitStatus(nativeexec.Run(ctx, interactive(client, arguments(session, held, pinned), l.environment(), in, out, errOut)))
+	command := interactive(client, arguments(session, held, pinned), l.environment(), in, out, errOut)
+	if session.Kind == machine.IdentityOperator && session.IdentityFile == "" && os.Geteuid() == 0 {
+		command, err = l.invokingCommand(ctx, command, session, pinned, files)
+		if err != nil {
+			return 0, err
+		}
+	}
+	return exitStatus(nativeexec.Run(ctx, command))
 }
 
 func interactive(client string, args, env []string, in io.Reader, out, errOut io.Writer) nativeexec.Command {

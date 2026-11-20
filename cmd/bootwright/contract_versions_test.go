@@ -185,6 +185,7 @@ func automationFormats() map[string]automationFormat {
 		"ceph-bootstrap-recovery-v1":        core,
 		"ceph-bootstrap-state-v1":           core,
 		"ceph-registry-v1":                  core,
+		"machine-privilege-v1":              transient("the read-only placement privilege probe exists only before a runner starts its effect"),
 		"ceph-native-route-v1":              core,
 		"ceph-native-teardown-v1":           core,
 		"ceph-tiebreaker-removal-v1":        core,

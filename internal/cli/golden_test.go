@@ -494,6 +494,13 @@ func cliGoldens() []cliGolden {
 		}
 		return result
 	}
+	machineInfo := func(r *dispatchRecord) {
+		result := machines(false)
+		result.Machines[0].Session = &inventory.Access{User: "ops", Credential: "invoking account's default keys", HostKey: "context trust"}
+		result.Machines[0].Placement = &inventory.Access{User: "automation", Credential: "private key Secret automation-key", HostKey: "Secret host-pin", Privilege: "passwordless sudo"}
+		result.Machines[1].Session = &inventory.Access{User: "bootwright", Credential: "private key Secret fleet", HostKey: "installation evidence"}
+		r.result.machines = result
+	}
 	retainedBy := func(name string) (string, []string, string) {
 		id := runID
 		if name != "rhel-01" {
@@ -1159,8 +1166,8 @@ func cliGoldens() []cliGolden {
 		// JSON invocation silences: TestAJSONInvocationWritesNoProgress in
 		// cmd/bootwright proves that wiring, and these goldens hold what the
 		// Runner writes.
-		{golden: "cli-machine-info", args: "machine info", record: func(r *dispatchRecord) { r.result.machines = machines(false) }},
-		{golden: "cli-machine-info-json", args: "machine info --output json", record: func(r *dispatchRecord) { r.result.machines = machines(false) }},
+		{golden: "cli-machine-info", args: "machine info", record: machineInfo},
+		{golden: "cli-machine-info-json", args: "machine info --output json", record: machineInfo},
 		{golden: "cli-machine-list", args: "machine list --power-status", record: func(r *dispatchRecord) { r.result.machines = machines(true) }},
 		{golden: "cli-machine-list-json", args: "machine list --power-status --output json", record: func(r *dispatchRecord) { r.result.machines = machines(true) }},
 		{golden: "cli-machine-list-short", args: "machine list --short", record: func(r *dispatchRecord) { r.result.machines = machines(false) }},

@@ -27,7 +27,11 @@ func TestHostFirewallPolicyPreservesExternalOwnershipAndRequiresPinnedRemoteAcce
 	if issues := validateFirewall(remote, catalog); len(issues) != 1 {
 		t.Fatal("unbound remote access accepted", issues)
 	}
-	remote = remote.WithSpec(remote.Spec().WithPath(api.StringValue("host-key"), "access", "ssh", "knownHostsRef").WithPath(api.StringValue("host-id"), "access", "ssh", "auth", "privateKeyRef"))
+	remote = remote.WithSpec(remote.Spec().
+		WithPath(m("privateKeyRef", "host-id"), "access", "ssh", "auth").
+		WithPath(api.StringValue("host-key"), "access", "ssh", "knownHostsRef").
+		WithPath(api.StringValue("ssh"), "access", "ssh", "addressRef").
+		WithPath(list(m("name", "ssh", "address", "192.0.2.10")), "network", "addresses"))
 	if issues := validateFirewall(remote, api.NewCatalog([]api.Object{remote})); len(issues) != 0 {
 		t.Fatal(issues)
 	}

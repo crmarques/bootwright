@@ -88,6 +88,7 @@ request-schema:
   install.placement.machine string
   install.placement.port int omitempty
   install.placement.privateKeyRef string omitempty
+  install.placement.privilege string omitempty
   install.placement.user string omitempty
   install.private *struct installation.Publication omitempty
   install.private.certificateRef string omitempty

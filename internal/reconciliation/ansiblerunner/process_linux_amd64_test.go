@@ -42,6 +42,13 @@ func TestLifecycleAdapterChild(t *testing.T) {
 	}
 	result, authorization := os.NewFile(3, "result"), os.NewFile(4, "authorization")
 	switch mode {
+	case "privilege-ok":
+		_, _ = result.Write([]byte("{\"phase\":\"loaded\"}\n"))
+		_, _ = bufio.NewReader(authorization).ReadString('\n')
+		_, _ = result.Write([]byte("{\"evidence\":{\"uid\":0},\"outcome\":\"unchanged\",\"phase\":\"completed\"}\n"))
+		os.Exit(0)
+	case "privilege-denied":
+		os.Exit(1)
 	case "waiter":
 		// Only a closed authorization channel ends this descendant.
 		_, _ = io.Copy(io.Discard, authorization)
@@ -84,6 +91,44 @@ func TestLifecycleAdapterChild(t *testing.T) {
 	// Booting nodes: nothing but the runner ends this adapter early.
 	time.Sleep(30 * time.Second)
 	os.Exit(0)
+}
+
+func TestLifecyclePrivilegeProofGatesTheEffectPlaybook(t *testing.T) {
+	for _, proved := range []bool{false, true} {
+		t.Run(strconv.FormatBool(proved), func(t *testing.T) {
+			var playbooks []string
+			runner := Runner{
+				stager: newDirStager(t), jobParent: t.TempDir(), scratchParent: privateTempDir(t),
+				playbooks: map[string]string{"artifact-server-nginx-v1/apply": "apply.yml"},
+				command: func(_ string, args ...string) *exec.Cmd {
+					playbook := args[len(args)-1]
+					playbooks = append(playbooks, filepath.Base(playbook))
+					mode := "lifecycle-child-privilege-denied"
+					if proved && len(playbooks) == 1 {
+						mode = "lifecycle-child-privilege-ok"
+					}
+					return exec.Command(os.Args[0], "-test.run=^TestLifecycleAdapterChild$", "--", mode)
+				},
+			}
+			request := sshRequest()
+			request.Placement.User = "automation"
+			request.Placement.Privilege = "sudo"
+			request.Launch = testLaunch
+			result, err := runner.Run(context.Background(), request)
+			want := []string{"privilege_observe.yml"}
+			if proved {
+				want = append(want, "apply.yml")
+			} else {
+				reported := diagnostics.Of(err)
+				if !result.NotStarted || len(reported) != 1 || reported[0].Code != "runner.privilege-unproved" {
+					t.Fatalf("missing refusal before effect: %+v %v", result, err)
+				}
+			}
+			if !slices.Equal(playbooks, want) {
+				t.Fatalf("playbooks = %v, want %v (%v)", playbooks, want, err)
+			}
+		})
+	}
 }
 
 // superviseLikeTheCollection stands in for the collection's supervisor. It
