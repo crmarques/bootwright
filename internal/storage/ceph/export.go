@@ -24,7 +24,7 @@ const ConsumerOutput = "external-details"
 
 func ConsumerBlockID(name string) string { return reconciliation.BlockIdentity("ceph-consumer-", name) }
 func ConsumerContentDigest() string {
-	sum := sha256.Sum256([]byte(ConsumerImplementation + "\x00" + ConsumerVersion + "\x00" + ConsumerEvidenceVersion))
+	sum := sha256.Sum256([]byte(ConsumerImplementation + "\x00" + ConsumerVersion + "\x00" + ConsumerEvidenceVersion + "\x00typed-pool-journal"))
 	return hex.EncodeToString(sum[:])
 }
 

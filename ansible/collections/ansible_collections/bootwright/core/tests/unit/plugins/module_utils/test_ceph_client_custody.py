@@ -25,7 +25,7 @@ from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import 
 class Markers:
     def __init__(self, request):
         self.path = os.path.join(ceph_native.ROOT, request["fsid"])
-        self.records = {"pool-volumes.json": {"name": "volumes"}, "pool-id-volumes.json": {"id": 4}}
+        self.records = {"pool-owner~volumes.json": {"name": "volumes"}, "pool-id~volumes.json": {"id": 4}}
         self.writes = []
         self.before = lambda name, value: None
         self.after = lambda name, value: None
@@ -117,8 +117,8 @@ def client(tmp_path, monkeypatch, request):
     markers = Markers(request)
     native_pools = [{"pool_name": "volumes", "pool_id": 4, "application_metadata": {"rbd": {}}}]
     for number, name in enumerate(data_pools, start=5):
-        markers.records["pool-" + name + ".json"] = {"name": name}
-        markers.records["pool-id-" + name + ".json"] = {"id": number}
+        markers.records["pool-owner~" + name + ".json"] = {"name": name}
+        markers.records["pool-id~" + name + ".json"] = {"id": number}
         native_pools.append({"pool_name": name, "pool_id": number, "application_metadata": {"rbd": {}}})
     group = "" if arm == "subvolume-nogroup" else "csi"
     path = NOGROUP_PATH if arm == "subvolume-nogroup" else SUBVOLUME_PATH
@@ -249,9 +249,9 @@ def test_client_caps_include_data_pools_in_sorted_order(client):
 @pytest.mark.parametrize("change", ["missing-marker", "different-id", "absent-natively"])
 def test_client_data_pools_are_proved_owned_before_key_generation(client, change):
     if change == "missing-marker":
-        del client.markers.records["pool-id-ec-data.json"]
+        del client.markers.records["pool-id~ec-data.json"]
     elif change == "different-id":
-        client.markers.records["pool-id-archive.json"] = {"id": 9}
+        client.markers.records["pool-id~archive.json"] = {"id": 9}
     else:
         client.state.data_pools = client.state.data_pools[:1]
     with pytest.raises(ceph_native.Refusal, match="pool-identity"):
@@ -447,7 +447,7 @@ def test_scope_numeric_types_are_closed_even_when_python_values_compare_equal(cl
 @pytest.mark.parametrize("pool_id,alias", [(0, False), (1, True), (0, 0.0), (1, 1.0)])
 def test_every_custody_and_effect_scope_refuses_boolean_and_float_pool_id_aliases(client, record, pool_id, alias):
     client.state.pool_id = pool_id
-    client.markers.records["pool-id-volumes.json"] = {"id": pool_id}
+    client.markers.records["pool-id~volumes.json"] = {"id": pool_id}
     client.native.client()
     client.markers.records[record]["scope"]["poolID"] = alias
     with pytest.raises(ceph_native.Refusal, match="client-identity"):
@@ -492,7 +492,7 @@ def test_native_cluster_and_pool_identity_are_proved_before_key_generation(clien
     elif changed == "fsid":
         client.state.fsid = "foreign"
     else:
-        del client.markers.records["pool-volumes.json"]
+        del client.markers.records["pool-owner~volumes.json"]
     with pytest.raises(ceph_native.Refusal):
         client.native.client()
     assert client.state.generated == client.state.added == 0

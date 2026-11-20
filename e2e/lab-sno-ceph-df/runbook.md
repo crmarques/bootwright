@@ -502,14 +502,12 @@ and repeat it.
 
 ## 7. Destroy
 
-Destroy the verified installation. With the guests running, destroy pauses
-before removal and names the stop; the repeated destroy continues the same
-operation. The consumer retires with its cluster, so this destroy removes the
-Data Foundation instance, the consumer's principals and both clusters:
+Stop the managed guests before starting destroy. The consumer retires with
+its cluster, so this destroy removes the Data Foundation instance, the
+consumer's principals and both clusters.
 
 ```sh
 ./bin/bootwright plan --context "$CONTEXT"
-./bin/bootwright destroy --context "$CONTEXT" --authorize data-loss
 ./bin/bootwright machine stop --context "$CONTEXT" --name sno-01,rhel-01,rhel-02,rhel-03 --yes
 ./bin/bootwright destroy --context "$CONTEXT" --authorize data-loss
 ./bin/bootwright status --context "$CONTEXT"
@@ -517,8 +515,8 @@ virsh --connect qemu:///system list --all
 virsh --connect qemu:///system net-list --all
 ```
 
-Require the refusal or pause to name the guests, and no domain, disk, network,
-installer work area or managed service of the context to remain. Unset the
+Require no domain, disk, network, installer work area or managed service of
+the context to remain. Unset the
 kubeconfig, which no longer reaches a cluster:
 
 ```sh

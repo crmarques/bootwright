@@ -125,13 +125,19 @@ func (s Service) retiredWithHosts(plan reconciliation.Plan) (map[string]bool, ma
 		}
 		before[block.ID] = reach
 	}
-	removesHost := func(block reconciliation.Block, after, machine string) bool {
-		if block.Kind != string(api.Machine) || block.Object != machine || !before[block.ID][after] {
+	removesHost := func(block, after reconciliation.Block, machine string) bool {
+		if !before[block.ID][after.ID] {
 			return false
 		}
 		capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
+		if !ok {
+			return false
+		}
+		if terminal, retires := capability.(HostRetirement); retires && terminal.RetiresHost(block, after, machine) {
+			return true
+		}
 		removal, removes := capability.(HostRemoval)
-		return ok && removes && removal.RemovesHost(block)
+		return removes && block.Kind == string(api.Machine) && block.Object == machine && removal.RemovesHost(block)
 	}
 	retired := map[string]bool{}
 	for _, block := range plan.Blocks {
@@ -145,7 +151,7 @@ func (s Service) retiredWithHosts(plan reconciliation.Plan) (map[string]bool, ma
 			continue
 		}
 		retired[block.ID] = !slices.ContainsFunc(machines, func(machine string) bool {
-			return !slices.ContainsFunc(plan.Blocks, func(candidate reconciliation.Block) bool { return removesHost(candidate, block.ID, machine) })
+			return !slices.ContainsFunc(plan.Blocks, func(candidate reconciliation.Block) bool { return removesHost(candidate, block, machine) })
 		})
 	}
 	consumerHosts, direct := s.consumers(plan, retired, before)
@@ -300,6 +306,12 @@ func (s Service) removalWarnings(plan reconciliation.Plan) []diagnostics.Diagnos
 	}
 	slices.SortFunc(found, compareSurvivors)
 	var warnings []diagnostics.Diagnostic
+	for _, block := range plan.Blocks {
+		capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
+		if source, warns := capability.(RemovalWarningSource); ok && warns {
+			warnings = append(warnings, source.RemovalWarnings(block)...)
+		}
+	}
 	for _, survivor := range slices.Compact(found) {
 		warnings = append(warnings, warned(planConsumerOutlivesDestroy,
 			"a destroy of this context refuses before registration while "+consumption([]SurvivingConsumer{survivor})+" and outlives that destroy",

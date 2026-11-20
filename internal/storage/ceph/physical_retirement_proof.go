@@ -15,12 +15,13 @@ import (
 )
 
 type PhysicalRetirementReceipt struct {
-	Block                  string `json:"block,omitempty"`
-	Cleanup                string `json:"cleanup,omitempty"`
-	Digest                 string `json:"digest,omitempty"`
-	Machine                string `json:"machine"`
-	Request                string `json:"request,omitempty"`
-	RetainedWithoutInstall bool   `json:"retainedWithoutInstall,omitempty"`
+	Block                    string `json:"block,omitempty"`
+	Cleanup                  string `json:"cleanup,omitempty"`
+	Digest                   string `json:"digest,omitempty"`
+	Machine                  string `json:"machine"`
+	Request                  string `json:"request,omitempty"`
+	RetainedWithoutInstall   bool   `json:"retainedWithoutInstall,omitempty"`
+	HostPreparationUnstarted bool   `json:"hostPreparationUnstarted,omitempty"`
 }
 
 type PhysicalRetirementEvidence struct {
@@ -120,14 +121,22 @@ func (c PhysicalRetirementCapability) completed(ctx context.Context, e lifecycle
 		if err := (PhysicalRetirementRequest{Hosts: r.Hosts[index : index+1]}).authorized(); err != nil {
 			return nil, err
 		}
-		cleanup := ""
+		cleanup, hostUnstarted := "", false
 		if host.RetainRoot {
-			cleanup, err = physicalHostCleanupProof(e, r.Cluster, host)
+			if unstarted {
+				hostUnstarted, err = originalHostUnstarted(e, r.Cluster, host)
+				if err != nil {
+					return nil, err
+				}
+			}
+			if !hostUnstarted {
+				cleanup, err = physicalHostCleanupProof(e, r.Cluster, host)
+			}
 			if err != nil {
 				return nil, err
 			}
 			if len(r.Hosts[index].EraseTargets) == 0 {
-				receipts = append(receipts, PhysicalRetirementReceipt{Machine: host.Machine, Cleanup: cleanup})
+				receipts = append(receipts, PhysicalRetirementReceipt{Machine: host.Machine, Cleanup: cleanup, HostPreparationUnstarted: hostUnstarted})
 				continue
 			}
 		}
@@ -140,6 +149,7 @@ func (c PhysicalRetirementCapability) completed(ctx context.Context, e lifecycle
 			return nil, err
 		}
 		receipt.Cleanup = cleanup
+		receipt.HostPreparationUnstarted = hostUnstarted
 		receipts = append(receipts, receipt)
 	}
 	return policyEvidence(e, r, receipts, true)
@@ -389,6 +399,30 @@ func physicalHostRelease(e lifecycle.Execution, frozen HostRequest) (json.RawMes
 		return nil, err
 	}
 	return json.Marshal(retirementFor(request))
+}
+
+func originalHostUnstarted(e lifecycle.Execution, cluster string, host Host) (bool, error) {
+	found, unstarted := false, false
+	for _, proof := range e.OriginalRemovalDependents {
+		if proof.Block.ID != HostBlockID(cluster, host.Machine) {
+			continue
+		}
+		request, err := DecodeHostRequest(proof.Block.Request)
+		if err != nil {
+			return false, err
+		}
+		target, _ := request.target()
+		if found || proof.Kind != string(api.CephCluster) || proof.Object != cluster || proof.Implementation != HostImplementation ||
+			proof.Verb != reconciliation.Apply || proof.Block.Kind != proof.Kind || proof.Block.Object != proof.Object ||
+			proof.Block.Implementation != proof.Implementation || !hex64(proof.Block.RequestDigest) ||
+			request.Cluster.Cluster != cluster || target.Machine != host.Machine || target.Name != host.Name ||
+			!target.Physical || !target.RetainRoot || !slices.Equal(target.Devices, host.Devices) {
+			return false, physicalPolicyFailure()
+		}
+		found = true
+		unstarted = proof.State == reconciliation.BlockPending && len(proof.Evidence) == 0
+	}
+	return found && unstarted, nil
 }
 
 func physicalHostCleanupProof(e lifecycle.Execution, cluster string, host Host) (string, error) {

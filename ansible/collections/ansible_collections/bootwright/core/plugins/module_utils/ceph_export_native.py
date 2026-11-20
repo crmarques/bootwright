@@ -125,8 +125,8 @@ class ExportWorker(ceph_native_resources.ResourceWorker):
         require(self.markers.owned() and self.ceph("fsid") == {"fsid": self.request["fsid"]}, "export-identity")
         self.verify_tool()
         pool = self.export["pool"]
-        require(self.markers.read("pool-" + pool + ".json") is not None, "export-prerequisite-pool-identity")
-        pool_id = self.markers.read("pool-id-" + pool + ".json")
+        require(self.markers.read(ceph_native_resources.pool_record("owner", pool)) is not None, "export-prerequisite-pool-identity")
+        pool_id = self.markers.read(ceph_native_resources.pool_record("id", pool))
         require(isinstance(pool_id, dict) and set(pool_id) == {"id"}, "export-prerequisite-pool-identity")
         pools = self.ceph("osd", "pool", "ls", "detail")
         selected = [entry for entry in pools if entry.get("pool_name") == pool]

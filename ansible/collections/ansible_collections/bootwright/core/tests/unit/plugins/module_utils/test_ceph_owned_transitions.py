@@ -251,8 +251,8 @@ def test_rbd_init_lost_reply_retries_only_the_same_owned_pool(core_request):
     native.command = command
     with pytest.raises(ceph_native.Refusal, match="native-command"):
         native.pool()
-    assert "pool-rbd-attempt-volumes.json" in marks.records
-    assert "pool-rbd-complete-volumes.json" not in marks.records
+    assert "pool-rbd-attempt~volumes.json" in marks.records
+    assert "pool-rbd-complete~volumes.json" not in marks.records
     native.pool()
     inits = [effect for effect in effects if effect[0] == "/usr/bin/rbd"]
     assert len(inits) == 2 and inits[0] == inits[1]

@@ -137,7 +137,7 @@ class Monitor:
 class Transport:
     def __init__(self, value, side, monitor):
         self.value, self.side, self.monitor = value, side, monitor
-        records = {"pool-volumes.json": value[side]["pool"], "pool-id-volumes.json": {"id": 1}}
+        records = {"pool-owner~volumes.json": value[side]["pool"], "pool-id~volumes.json": {"id": 1}}
         if side == "primary":
             for image in value["images"]:
                 records["rbd-" + image["name"] + ".json"] = image

@@ -294,6 +294,18 @@ type HostRemoval interface {
 	RemovesHost(reconciliation.Block) bool
 }
 
+// HostRetirement proves a plan contains a terminal release for an installed
+// host whose substrate and disks remain. The terminal block still must verify
+// its own receipts before releasing any claims.
+type HostRetirement interface {
+	RetiresHost(terminal, dependent reconciliation.Block, machine string) bool
+}
+
+// RemovalWarningSource reports reasons a fresh apply plan cannot later retire.
+type RemovalWarningSource interface {
+	RemovalWarnings(reconciliation.Block) []diagnostics.Diagnostic
+}
+
 type MachineDeletion interface {
 	DeletesMachine(reconciliation.Block) bool
 }

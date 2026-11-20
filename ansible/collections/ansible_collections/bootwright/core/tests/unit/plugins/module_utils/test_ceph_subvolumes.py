@@ -122,7 +122,7 @@ def worker(world, subvolume=None):
     request.update(action="subvolume", subvolume=subvolume or sub_value())
     marks = fs_fixtures.Markers(world)
     for name, identifier in fs_fixtures.POOL_IDS.items():
-        marks.records.update({"pool-" + name + ".json": {"name": name}, "pool-id-" + name + ".json": {"id": identifier}})
+        marks.records.update({"pool-owner~" + name + ".json": {"name": name}, "pool-id~" + name + ".json": {"id": identifier}})
     marks.records.update({"filesystem-files.json": fs_fixtures.fs_value(groups=[fs_fixtures.group_value()]), "filesystem-id.files.json": {"id": 7},
                           "group.files.csi.json": fs_fixtures.group_value()})
     native = tunnel_native.custody_held(ceph_native_resources.ResourceWorker(request, "node-1", run=world.run, markers=marks))
@@ -320,7 +320,7 @@ def test_subvolume_parent_proved_before_any_subvolume_command(case, reason):
     elif case == "group-marker":
         del marks.records["group.files.csi.json"]
     elif case == "unowned-pool":
-        del marks.records["pool-id-cephfs-data.json"]
+        del marks.records["pool-id~cephfs-data.json"]
     elif case == "group-gone":
         del world.groups["csi"]
     with pytest.raises(ceph_native.Refusal, match="^" + reason + "$"):

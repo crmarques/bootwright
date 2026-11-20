@@ -20,7 +20,7 @@ func stretchedChildRefusal(kind api.Kind) (message, remedy string, refused bool)
 		"remove this " + string(kind) + " or declare it on a cluster without spec.topology.stretch; B936 delivers NFS and SMB stretch profiles", true
 }
 
-func (a *admission) stretchServices(ceph api.Value, sites []string) {
+func (a *admission) stretchServices(ceph api.Value, sites []string, tiebreaker string) {
 	siteOf, nodes := map[string]string{}, map[string]api.Value{}
 	for _, node := range ceph.Get("topology", "nodes").Items() {
 		siteOf[textOf(node, "name")], nodes[textOf(node, "name")] = textOf(node, "site"), node
@@ -46,6 +46,8 @@ func (a *admission) stretchServices(ceph api.Value, sites []string) {
 		}
 		placedAt[i], placedHosts[i] = perSite, names
 		switch {
+		case kind == "mon":
+			a.stretchMonitors(service, field, len(names), perSite, sites, slices.Contains(names, tiebreaker))
 		case slices.Contains(stretchHAServices, kind):
 			a.stretchHAService(service, field, kind, perSite, sites)
 		case kind == "ingress":
@@ -88,6 +90,21 @@ func (a *admission) stretchServices(ceph api.Value, sites []string) {
 			a.stretchIngressPair(services, ingresses, placedAt, sites)
 		default:
 			a.invalid(indexed("$.spec.services", ingresses[0])+".spec.backend_service", "rgw service "+name+" of a stretch cluster has "+strconv.Itoa(len(ingresses))+" ingresses, neither one over every data site nor one per data site", "front "+name+" with one ingress over every data site on a stretched public network, with exactly one ingress per data site ("+strings.Join(sites, ", ")+"), or with none behind an operator-owned load balancer or DNS")
+		}
+	}
+}
+
+func (a *admission) stretchMonitors(service api.Value, field string, total int, perSite map[string]int, sites []string, arbiter bool) {
+	if count := service.Get("placement", "count"); count.Present() && numeric(count).Cmp(big.NewInt(int64(total))) != 0 {
+		a.invalid(field+".placement.count", "stretch MON placement must deploy on every selected host to guarantee the tiebreaker and site quorum", "omit placement.count or set it to the number of selected hosts")
+	}
+	if len(sites) != 2 || !arbiter || perSite[sites[0]] == 0 || perSite[sites[1]] == 0 {
+		return
+	}
+	for _, site := range sites {
+		if total-perSite[site] <= total/2 {
+			a.invalid(field+".placement", "the stretch MON service loses its majority when data site "+site+" is unavailable", "select an equal number of MON hosts at both data sites and the one tiebreaker")
+			return
 		}
 	}
 }

@@ -131,10 +131,10 @@ def main():
     )
     params = module.params
     try:
-        request = ceph_core.host_request(params["request"])
         material = dict(params["material"])
         removal = material.pop("removal", "false")
         ceph_native.require(removal in ("true", "false") and (removal == "false" or params["operation"] == "observe"), "request")
+        request = ceph_core.host_request(params["request"], removal=params["operation"] == "destroy" or removal == "true")
         transport = ceph_transport.Transport(request["cluster"], material, scope=True)
         if params["operation"] == "apply":
             result = ceph_core.host_step(request, params["step"], params["digest"], transport, plan_digest=params["plan_digest"],

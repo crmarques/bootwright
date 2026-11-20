@@ -906,15 +906,15 @@ then settle without work and show no difference:
 
 ## 6. Destroy and clean up
 
-Ceph retires with its three stopped hosts, and removal while a host survives is
-not supported. With the guests running, destroy first unregisters each guest
-from its subscription service, then pauses before any other removal and names
-the stop ([online cleanup](../../specs/state-reconciliation.md)); the repeated
-destroy continues the same operation:
+Ceph retires with its three stopped hosts. Stop the guests before starting
+destroy. A fresh destroy against a running target returns
+`lifecycle.start-power` before it registers a removal. Once registered,
+destroy may briefly start a guest to unregister it from RHSM and then prove
+it off again. If removal is interrupted, repeat destroy to continue its
+original plan.
 
 ```sh
 ./bin/bootwright plan --context "$CONTEXT"
-./bin/bootwright destroy --context "$CONTEXT" --authorize data-loss
 ./bin/bootwright machine stop --context "$CONTEXT" --name rhel-01,rhel-02,rhel-03 --yes
 ./bin/bootwright destroy --context "$CONTEXT" --authorize data-loss
 ./bin/bootwright status --context "$CONTEXT"

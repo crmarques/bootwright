@@ -164,8 +164,8 @@ def worker(world, image):
     request = cluster()
     request.update(action="rbd", rbd=image)
     marks = Markers(world)
-    marks.records.update({"pool-volumes.json": {"name": "volumes"}, "pool-id-volumes.json": {"id": 8},
-                          "pool-ec-data.json": {"name": "ec-data"}, "pool-id-ec-data.json": {"id": 9}})
+    marks.records.update({"pool-owner~volumes.json": {"name": "volumes"}, "pool-id~volumes.json": {"id": 8},
+                          "pool-owner~ec-data.json": {"name": "ec-data"}, "pool-id~ec-data.json": {"id": 9}})
     return tunnel_native.custody_held(ceph_native_resources.ResourceWorker(request, "node-1", run=world.run, markers=marks)), marks
 
 
@@ -341,9 +341,9 @@ def test_rbd_requires_owned_pools(case):
     native, marks = worker(world, image_value(dataPool="ec-data"))
     name = "ec-data" if case.startswith("data") else "volumes"
     if case.endswith("missing"):
-        del marks.records["pool-" + name + ".json"]
+        del marks.records["pool-owner~" + name + ".json"]
     else:
-        marks.records["pool-id-" + name + ".json"] = {"id": 7}
+        marks.records["pool-id~" + name + ".json"] = {"id": 7}
     with pytest.raises(ceph_native.Refusal, match="^pool-identity$"):
         native.rbd()
     assert world.argvs == [] and world.mutations == []

@@ -1,12 +1,12 @@
 implementation: storage-ceph-physical-retirement-v1
-content-digest: c278273c035e12b44eca61c1c7ec12c2bd31f3f7fba10e9e54c009cd6c4a6190
+content-digest: ae17123d1a8ca9d6479c714b8bc88b4393f7392033ef0ed24a1cc0655a54d93c
 request-version: storage-ceph-physical-retirement-v1
 automation-formats: none
 mark-formats: none
 proof-ids: none
 fixed-places: none
 effect-pins:
-  original-host-and-completed-erase-proof-v1
+  original-host-preparation-and-terminal-retirement-receipts
 request-identity:
   cluster
   hosts[].name
@@ -47,6 +47,7 @@ evidence-schema:
   receipts[].machine string
   receipts[].request string omitempty
   receipts[].retainedWithoutInstall bool omitempty
+  receipts[].hostPreparationUnstarted bool omitempty
   request string
   retired bool
   version string

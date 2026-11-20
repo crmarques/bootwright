@@ -117,7 +117,7 @@ class ReplicationWorker(ceph_native_resources.ResourceWorker):
         require(self.markers.owned(), "ownership")
         require(self.ceph("fsid") == {"fsid": self.request["fsid"]}, "ownership")
         pool = self.endpoint["pool"]
-        require(self.markers.read("pool-" + pool["name"] + ".json") == pool, "pool-identity")
+        require(self.markers.read(ceph_native_resources.pool_record("owner", pool["name"])) == pool, "pool-identity")
         self.owned_pool(pool["name"])
         record = self.markers.read(self.mark("attempt"))
         require(record is None or record == self.intent(), "replication-identity")

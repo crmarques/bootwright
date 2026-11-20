@@ -21,7 +21,7 @@ const ReplicationImplementation = "storage-ceph-replication-v1"
 const ReplicationEvidenceVersion = "ceph-replication-evidence-v1"
 
 func ReplicationContentDigest() string {
-	sum := sha256.Sum256([]byte(ReplicationImplementation + "\x00" + ReplicationVersion + "\x00" + ReplicationEvidenceVersion + "\x00" + PhysicalRetirementImplementation))
+	sum := sha256.Sum256([]byte(ReplicationImplementation + "\x00" + ReplicationVersion + "\x00" + ReplicationEvidenceVersion + "\x00" + PhysicalRetirementImplementation + "\x00typed-pool-journal"))
 	return hex.EncodeToString(sum[:])
 }
 func ReplicationBlockID(name string) string {

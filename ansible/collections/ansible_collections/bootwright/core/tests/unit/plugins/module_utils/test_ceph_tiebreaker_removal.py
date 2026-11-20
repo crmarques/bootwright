@@ -64,6 +64,7 @@ class Host:
         self.tool = value["cephadm"]["path"]
         self.commands, self.declared, self.lose = [], [], False
         self.styles = {}
+        self.runtime_present = False
 
     def path(self, *parts):
         return os.path.join(self.root, *parts)
@@ -84,6 +85,10 @@ class Host:
         return ceph_native.Worker.registry_intent(self)
 
     def command(self, argv, timeout=60, json_result=True):
+        if argv[:2] == ["/usr/bin/systemctl", "list-units"]:
+            return ("ceph-" + FSID + "@mon.node-5.service loaded active running\n").encode() if self.runtime_present else b""
+        if argv[:2] == ["/usr/bin/podman", "ps"]:
+            return []
         assert not json_result and timeout == stretch.RM_CLUSTER_TIMEOUT
         self.commands.append(list(argv))
         assert argv == [self.tool, "rm-cluster", "--fsid", FSID, "--force"]
@@ -484,3 +489,55 @@ def test_retained_root_recovers_a_lost_native_cleanup_reply(tiebreaker):
         cleanup.remove()
     assert cleanup.observe()["removed"] is True
     assert cleanup.remove()["changed"] is False and len(host.commands) == 1
+
+
+def test_a_cleanup_receipt_requires_absence_beyond_the_daemon_directory(tiebreaker):
+    host = tiebreaker
+    host.runtime_present = True
+    with pytest.raises(ceph_native.Refusal, match="^not-removed$"):
+        removal(host).remove()
+    assert stretch.REMOVAL_COMPLETE not in host.markers.records
+    host.runtime_present = False
+    keyring = host.path("etc/ceph/ceph.client.admin.keyring")
+    write(keyring, b"synthetic residue", 0o600)
+    assert removal(host).observe()["removed"] is False
+    os.unlink(keyring)
+    assert removal(host).remove()["removed"] is True
+
+
+@pytest.mark.parametrize("relative", [
+    "run/ceph/" + FSID + "/ceph-mon.synthetic.asok",
+    "tmp/cephadm-" + FSID + "/config",
+    "etc/sysctl.d/90-ceph-" + FSID + "-osd.conf",
+    "usr/lib/sysctl.d/90-ceph-" + FSID + "-osd.conf",
+])
+def test_native_layout_residue_blocks_a_removal_receipt(tiebreaker, relative):
+    host = tiebreaker
+    residue = host.path(relative)
+    write(residue, b"synthetic residue")
+    with pytest.raises(ceph_native.Refusal, match="^not-removed$"):
+        removal(host).remove()
+    assert stretch.REMOVAL_COMPLETE not in host.markers.records
+    assert removal(host).observe()["removed"] is False
+    assert len(host.commands) == 1
+
+
+@pytest.mark.parametrize("operation", ["remove", "observe"])
+def test_runtime_only_residue_is_not_unclaimed_absence(tiebreaker, operation):
+    unclaimed(tiebreaker)
+    tiebreaker.runtime_present = True
+    with pytest.raises(ceph_native.Refusal, match="^tiebreaker-foreign$"):
+        getattr(removal(tiebreaker), operation)()
+    assert not tiebreaker.commands
+
+
+@pytest.mark.parametrize("contents", [
+    "[global]\nfsid = " + OTHER_FSID + "\n[mon]\nfsid = " + FSID,
+    "[global]\nfsid = " + FSID + "\nfsid = " + OTHER_FSID,
+])
+def test_ambiguous_default_config_refuses_before_cleanup(tiebreaker, contents):
+    write(tiebreaker.path("etc/ceph/ceph.conf"), contents.encode())
+    with pytest.raises(ceph_native.Refusal, match="^tiebreaker-foreign$"):
+        removal(tiebreaker).remove()
+    assert not tiebreaker.commands
+    assert stretch.REMOVAL_ATTEMPT not in tiebreaker.markers.records

@@ -45,7 +45,7 @@ def test_the_pool_observation_returns_the_values_it_compares(core_request):
     core_request.update(action="pool", pool=fixtures.replicated_pool())
     marks = fixtures.Markers()
     native = fixtures.observed_pool(core_request, marks)
-    marks.records["pool-id-volumes.json"] = {"id": 8}
+    marks.records["pool-id~volumes.json"] = {"id": 8}
     evidence = native.empty_evidence()
     evidence["exists"] = True
     assert native.observe_resource(evidence, True) is True
@@ -58,7 +58,7 @@ def test_a_changed_size_reads_back_and_keeps_the_pool_unready(core_request):
     core_request.update(action="pool", pool=fixtures.replicated_pool())
     marks = fixtures.Markers()
     native = fixtures.observed_pool(core_request, marks)
-    marks.records["pool-id-volumes.json"] = {"id": 8}
+    marks.records["pool-id~volumes.json"] = {"id": 8}
     original = native.pools
     native.pools = lambda: [dict(entry, size=4, quota_max_bytes=1 << 40) for entry in original()]
     evidence = native.empty_evidence()

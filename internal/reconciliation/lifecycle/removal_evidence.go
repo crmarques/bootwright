@@ -165,10 +165,7 @@ func attemptPreparations(ctx context.Context, store recordReader, operation, blo
 }
 
 func originalRemovalDependents(ctx context.Context, store recordReader, operation operationstore.Operation, block string) ([]BlockEvidence, error) {
-	if operation.Verb != reconciliation.Destroy {
-		return nil, nil
-	}
-	held, err := sourceLineage(ctx, store, operation.Source)
+	held, err := appliedLineage(ctx, store, operation)
 	if err != nil {
 		return nil, err
 	}
@@ -222,13 +219,15 @@ func (s Service) populateRemovalExecution(ctx context.Context, store OperationSt
 	if err != nil {
 		return err
 	}
-	dependents, err := originalRemovalDependents(ctx, store, operation, execution.Block.ID)
+	execution.RemovalProved, execution.RemovalPreparations = proved, preparations
+	if operation.Verb != reconciliation.Destroy {
+		return nil
+	}
+	execution.OriginalRemovalDependents, err = originalRemovalDependents(ctx, store, operation, execution.Block.ID)
 	if err != nil {
 		return err
 	}
-	execution.RemovalProved, execution.RemovalPreparations = proved, preparations
-	execution.OriginalRemovalDependents = dependents
-	if operation.Verb == reconciliation.Destroy && execution.Resolution == 0 && execution.Attempt > 0 {
+	if execution.Resolution == 0 && execution.Attempt > 0 {
 		execution.PrepareRemoval = func(inner context.Context, preparation json.RawMessage) error {
 			return store.RecordPreparation(inner, operation.ID, execution.Block.ID, execution.Attempt, slices.Clone(preparation))
 		}

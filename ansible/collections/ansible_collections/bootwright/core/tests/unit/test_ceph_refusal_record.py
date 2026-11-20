@@ -58,7 +58,7 @@ def failed(module, execute, error, monkeypatch):
         raise error
 
     monkeypatch.setattr(module, "AnsibleModule", FakeModule)
-    monkeypatch.setattr(ceph_core, "host_request", lambda value: {"cluster": value})
+    monkeypatch.setattr(ceph_core, "host_request", lambda value, **kwargs: {"cluster": value})
     monkeypatch.setattr(ceph_transport, "Transport", lambda *arguments, **keywords: None)
     monkeypatch.setattr(ceph_core, execute, raising)
     with pytest.raises(Finished):

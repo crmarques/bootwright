@@ -432,14 +432,13 @@ client clean-canary
 ## 8. Destroy and clean up
 
 Detach `app-01` so no RBD watcher or CephFS session holds the stores, then
-destroy as the plan directs. With the guests running, destroy pauses before
-removal and names the guests to stop; the repeated destroy continues the same
-operation:
+stop the managed guests, then destroy as the plan directs. A fresh destroy
+against a running target refuses before registration. Repeating an interrupted
+registered destroy continues that removal.
 
 ```sh
 ./bin/bootwright machine exec --context "$CONTEXT" --name app-01 -- sudo -n bash e2e-sample/app-teardown.sh
 ./bin/bootwright plan --context "$CONTEXT"
-./bin/bootwright destroy --context "$CONTEXT" --authorize data-loss
 ./bin/bootwright machine stop --context "$CONTEXT" --name ceph-01,ceph-02,ceph-03,app-01,client-01 --yes
 ./bin/bootwright destroy --context "$CONTEXT" --authorize data-loss
 ./bin/bootwright status --context "$CONTEXT"

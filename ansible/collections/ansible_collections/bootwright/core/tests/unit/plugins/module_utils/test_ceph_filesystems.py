@@ -200,7 +200,7 @@ def worker(world, filesystem=None, mds_count=None, service_id="files"):
     request.update(action="filesystem", filesystem=filesystem or fs_value())
     marks = Markers(world)
     for name, identifier in POOL_IDS.items():
-        marks.records.update({"pool-" + name + ".json": {"name": name}, "pool-id-" + name + ".json": {"id": identifier}})
+        marks.records.update({"pool-owner~" + name + ".json": {"name": name}, "pool-id~" + name + ".json": {"id": identifier}})
     return tunnel_native.custody_held(ceph_native_resources.ResourceWorker(request, "node-1", run=world.run, markers=marks)), marks
 
 

@@ -600,6 +600,9 @@ def test_retained_physical_host_dispatches_cleanup_and_readonly_removal(host_req
             self.calls = []
             self.removed = True
 
+        def wait_for_guest(self, host):
+            assert host["name"] == request["host"]
+
         def call(self, host, phase):
             self.calls.append((host["name"], phase))
             return {"changed": phase == "physical_host_remove", "removed": self.removed, "attempted": True}

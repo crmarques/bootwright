@@ -1232,12 +1232,17 @@ no refusal stays the generic adapter failure, failing the attempt.
 
 ## Devices and destructive ownership
 
-When the original policy retains the root, the Ceph host block first proves
-and removes only its original FSID's native daemon layout, own cluster-key
-entry and registry anchor, using the verified package cephadm without disk zap.
-A terminal retirement requires that native-absence receipt for every retained
-root, including hosts with no OSDs, plus verified erase receipts for every
-selected data, DB and WAL disk. Foreign state or an interrupted unproved
+When the original policy retains the root, the registered Ceph host inverse
+starts the original Machine. It uses the original cluster block's delegated
+service placement to prove its daemon layout and removes its FSID, cluster-key
+entry and bound registry credential without disk zap. It records native
+absence before proving the Machine off. A retry with the durable receipt
+finishes the shutdown without another guest cleanup. The terminal retirement
+checks that receipt for each retained root, including an installed host with
+no selected Ceph disks or erase targets, and checks verified erase receipts
+for every selected data, DB and WAL disk. An installed host whose Ceph host
+preparation and core cluster blocks are both positively unstarted needs no
+native cleanup receipt. Its disk policy still applies. Foreign state or an interrupted unproved
 cleanup refuses or remains partial. Generic online removal remains closed by
 the client-quiescence requirement.
 
@@ -2553,7 +2558,11 @@ and needs neither the bootstrap host nor MON quorum.
   `/var/log/ceph/<fsid>` nor the FSID's logrotate file exists,
   `/etc/ceph/ceph.conf` does not name the FSID, and neither the recorded
   `authorized_keys` line nor the credential remains, read without following
-  links; only then is the completion recorded beside the attempt and the
+  links. The FSID's systemd units, Podman objects, socket and temporary
+  directories and sysctl fragments are absent. When
+  removal attributed the default configuration to this FSID, the default
+  public key and admin keyring are independently absent. Only then is the
+  completion recorded beside the attempt and the
   cluster's retirement evidence names the tiebreaker as cleaned.
 - **Recovery.** A lost reply leaves the effect unknown: the next attempt
   observes first, completes without a command when absence is proved, and

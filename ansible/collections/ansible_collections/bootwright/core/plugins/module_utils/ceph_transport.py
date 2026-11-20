@@ -9,8 +9,10 @@ import functools
 import inspect
 import json
 import os
+import socket
 import tempfile
 import threading
+import time
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
     bounded_process, canonical_json, ceph_admin_credentials_native, ceph_crypto_policy, ceph_evidence, ceph_export_dns, ceph_export_native,
@@ -80,7 +82,7 @@ class Transport:
     """No material value appears in arguments, environment, errors or logs."""
 
     def __init__(self, request, material, run=ceph_native.bounded_command, *, scope=False, smb_secrets=0, policy=None):
-        self.request = ceph_native.validate_scope(request) if scope else ceph_native.validate(request)
+        self.request = ceph_native.validate_scope(request, delegated=True) if scope else ceph_native.validate(request)
         ceph_native.require(type(smb_secrets) is int and 0 <= smb_secrets <= 10000, "material")
         self.material = material
         self.run = run
@@ -168,6 +170,18 @@ class Transport:
     @staticmethod
     def native_sources():
         return dict(shipped_native_sources())
+
+    def wait_for_guest(self, host):
+        """Wait for the already-bound endpoint after a managed power-on."""
+        self.prepare_round()
+        deadline = time.monotonic() + 120
+        while time.monotonic() < deadline:
+            try:
+                with socket.create_connection((host["address"], host["port"]), timeout=2):
+                    return
+            except OSError:
+                time.sleep(2)
+        raise ceph_native.Refusal("transport")
 
     def call(self, host, phase, private=None, *, timeout=660, devices=None, service=None, names=None, orphans=None):
         nvme_long = (self.request.get("action") == "nvmeof" and phase in ("nvmeof", "nvmeof_observe")

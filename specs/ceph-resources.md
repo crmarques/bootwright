@@ -342,6 +342,13 @@ A pool requires `spec.role` at plan; the role derives the application
 then the policy, then 3/2. A policy and an erasure-coded pool are exclusive:
 an erasure-coded pool places itself through `spec.erasure.crushDeviceClass`.
 
+Pool intent, attempt, native ID and setting records use disjoint keys for
+each record type and native name. The worker records the native ID only
+after the monitor reports creation and the pool reads back with the frozen
+creation shape. An already-existing reply, or a same-name pool after a lost
+reply without a completed ID record, leaves the pool unproved and untouched.
+The attempt record alone grants no authority to change its settings.
+
 ### Erasure coding
 
 An erasure-coded pool owns one erasure-code profile and one CRUSH rule, both

@@ -8,8 +8,8 @@
     "fingerprint": "2c68291574f858f89fe46c945bec00cb0964704c7a87039037a4c6f21648a9fd"
   },
   "ceph-export-v1": {
-    "contentDigest": "65d626bbba8a32a2a1fe2b5168467dbf4c48aff8ded24688ac55a52b7ea5fc66",
-    "fingerprint": "f093cc4dcdcf5c4c885134d645a7d0ce4e76072445a0bb2d93434f4999baf077"
+    "contentDigest": "e3d36c73f971f2eec43751fc4e334f823faed1aac4654eeab9a90b84c6359c1a",
+    "fingerprint": "b9146a2498e2534d957b37f4252c8b7e6dc57d57d3e921fb824baccb558d0ff9"
   },
   "cluster-install-agent-v1": {
     "contentDigest": "78bb10d8aecbb6c788fcc283270ab82273abf798d5e6f12d71c6e13e5a0e20f5",
@@ -92,28 +92,28 @@
     "fingerprint": "acd2acb85c9a6964fad0549efc9af2af36bb08a5f73244f0176414aebad4ff36"
   },
   "storage-ceph-core-v1": {
-    "contentDigest": "aa6652e62d4d7309d5659f62cdc5bb9352910380cd99bc1fb27b881d4088d324",
-    "fingerprint": "f9edcecacde860c2234935654d6468c5c719c47fb32cf4021ccde778a858bb16"
+    "contentDigest": "783d1f4330e99eab5d4e748046a442b56d7648fb53ec23085d9ebedab3106ed5",
+    "fingerprint": "95e3146c044471c4bc8a6a8a11b2be61a50f646a2d64f329d009f7c7a8b89b5e"
   },
   "storage-ceph-host-v1": {
-    "contentDigest": "2f788749c33c8f705bdd415ce61f447dc8243d57cf090062c22807170481df7d",
-    "fingerprint": "27a73e5e158de6c03725d91ac32bebbfcc596e82a12bedf5284a9766f742af59"
+    "contentDigest": "69938e53f4f41a3b75a1a92e0adb03e573291644aade560892d894ef0e7bb57d",
+    "fingerprint": "e565010ea3e2fb15985bbd43ac1e8ec2d612ab22cd499ae9fd2b4c554bd1429d"
   },
   "storage-ceph-image-v1": {
     "contentDigest": "f0822b3d0eb59977829abbed7248c391a51d33a21602d3cbba5e3035d50b62d8",
     "fingerprint": "affaf3a5fa4eb4efa5ca15672d90a0915dccccca0a4d85fc41a2ad1e3688c111"
   },
   "storage-ceph-physical-retirement-v1": {
-    "contentDigest": "c278273c035e12b44eca61c1c7ec12c2bd31f3f7fba10e9e54c009cd6c4a6190",
-    "fingerprint": "ddc6a83ce238e0025802ed26bde7fdf21b939b0745e715dadadb014c3ab7d108"
+    "contentDigest": "ae17123d1a8ca9d6479c714b8bc88b4393f7392033ef0ed24a1cc0655a54d93c",
+    "fingerprint": "359e7753f62e054510c64399aeab1b7012aa97078604afd31d3cfbf06a89c49d"
   },
   "storage-ceph-replication-v1": {
-    "contentDigest": "bed82437951d8d81d0c419da99c864d488e0fe128c38cce355d2a0618a51f956",
-    "fingerprint": "bb9e8e6dcc0b44477b278c831106ad93f72331f7f3a542c98472e4a727875408"
+    "contentDigest": "fb3e6c45363e2c3ec7cef4c6902dbd34fb8290867c59def6d988204165833296",
+    "fingerprint": "93b14ddac6021a9e364d3354fbd32181d5015836051215b66918ae304f649d41"
   },
   "storage-ceph-smb-v1": {
     "contentDigest": "8881e871ae65d1dae0f830b683954cbcd665a792c4d7dd5ee808710605c9bcda",
-    "fingerprint": "a68fad3b560f6a79d76d7316f6425a6c8fc17f0fca5ce7f57c902f003c92ab7c"
+    "fingerprint": "1c1ddd00ca3169b8add7aa4cc5729d56a4d29af4d42c5ecb241180a7516e0c2a"
   },
   "substrate-host-kubevirt-v1": {
     "contentDigest": "712073aec40ccf2e0e5022b4cda1155858296525dab94bfb77736ff9b8e1c6b9",

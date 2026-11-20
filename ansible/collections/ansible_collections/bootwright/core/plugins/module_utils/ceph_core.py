@@ -1157,12 +1157,12 @@ def dashboard_phase(request, operation, request_digest, bootstrap, transport, ob
     return ceph_evidence.evidence(dict(observation, dashboard=dashboard), request_digest, request), changed
 
 
-def host_request(value):
+def host_request(value, *, removal=False):
     """A frozen host block request: its cluster's host scope and one of its hosts."""
     ceph_native.require(isinstance(value, dict) and set(value) == {"cluster", "host", "imagesSeconds", "pulls", "version"}
                         and value["version"] == "ceph-host-v1")
     ceph_native.require(type(value["imagesSeconds"]) is int and 0 < value["imagesSeconds"] <= max(ceph_transport.WORKER_CEILINGS))
-    cluster = ceph_native.validate_scope(value["cluster"])
+    cluster = ceph_native.validate_scope(value["cluster"], delegated=removal)
     ceph_native.require("packages" in cluster)
     ceph_native.require(sum(host["name"] == value["host"] for host in cluster["hosts"]) == 1)
     ceph_native.require(sum(source["host"] == value["host"] for source in cluster["packages"]["sources"]) == 1)
@@ -1269,13 +1269,15 @@ def host_step(request, step, request_digest, transport, *, plan_digest="", appli
 
 def execute_host(request, operation, request_digest, transport):
     """An observation or a release; an apply is its role's ordered host steps, composed here in the same order."""
-    host_request(request)
+    host_request(request, removal=operation in ("destroy", "observe-remove"))
     cluster = request["cluster"]
     ceph_native.require(operation in ("apply", "observe", "destroy", "observe-remove"))
     ceph_native.require(ceph_native.digest(request_digest))
     host = next(item for item in cluster["hosts"] if item["name"] == request["host"])
     if host.get("physical") and host.get("retainRoot") and operation in ("destroy", "observe-remove"):
         phase = "physical_host_remove" if operation == "destroy" else "physical_host_observe"
+        if operation == "destroy":
+            transport.wait_for_guest(host)
         result = transport.call(host, phase)
         ceph_native.require(isinstance(result, dict) and type(result.get("removed")) is bool, "evidence")
         ceph_native.require(operation != "destroy" or result["removed"], "not-removed")

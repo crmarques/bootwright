@@ -64,6 +64,9 @@ var (
 	cephBudgetExceeded = diagnostics.Stop{Code: "ceph.budget-exceeded", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseBound, Recovery: diagnostics.RecoveryChangeInput,
 		Meaning: "a Ceph operation needs a run deadline past the bound every adapter run is held to, so no adapter ran", Remedy: "declare fewer hosts, namespaces or initiator hosts"}
+	cephRetirementUnavailable = diagnostics.Stop{Code: "ceph.retirement-unavailable", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
+		Meaning: "the planned Ceph cluster would refuse automatic retirement", Remedy: "review the original erase policy and cluster consumers before apply"}
 	cephRetirementRefused = diagnostics.Stop{Code: "ceph.retirement-refused", Level: diagnostics.LevelRemoval, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
 		Meaning: "a physical Ceph host holds no disk-erasure authority that covers every selected disk, so its retirement took nothing back", Remedy: "retain this context and erase every selected Ceph disk"}
@@ -132,7 +135,7 @@ var (
 var stops = []diagnostics.Stop{
 	cephRequestInvalid, cephUnconfigured, cephRecordsMissing, cephEvidenceMismatch, cephProofMismatch, cephOtherBuild, cephHostKeyInvalid, cephDisksShared, cephFipsUnproved,
 	cephUnsupportedRelease, cephLicenseUnaccepted, cephImageInvalid, cephUnsupportedProfile, cephUnsupportedTopology, cephUnsupportedService, cephUnsupportedDisk, cephUnsupportedPool,
-	cephPackageSourceUnsupported, cephBudgetExceeded, cephRetirementRefused, cephHostsSurvive, cephSecretInvalid, cephStretchIntent, cephSSHPolicyExcluded, cephSSHPolicyUnreadable,
+	cephPackageSourceUnsupported, cephBudgetExceeded, cephRetirementUnavailable, cephRetirementRefused, cephHostsSurvive, cephSecretInvalid, cephStretchIntent, cephSSHPolicyExcluded, cephSSHPolicyUnreadable,
 	cephDeviceRefused, cephUnqualified, cephForeign, cephDrifted, cephPrerequisite, cephNotReady, cephOSDUnproved, cephPackageUnproved, cephBoundaryUnproved, cephEnrollmentBudget,
 	cephConsumerIncomplete, cephUnproved, cephResultInvalid, cephEvidenceUnproved, cephTiebreakerUnproved,
 }

@@ -150,6 +150,7 @@ class World:
             if self.create_code:
                 return self.create_code, b""
             self.create(command)
+            return 0, ("pool '" + command[3] + "' created").encode()
         elif command[:3] == ("osd", "pool", "set") or command[:3] == ("osd", "pool", "set-quota"):
             self.configure(command)
         elif command[:4] == ("osd", "pool", "application", "enable"):
@@ -252,8 +253,8 @@ def test_pool_create_erasure_sets_profile_then_pool_without_rule():
     assert native.pool() == {"changed": True}
     create = ("osd", "pool", "create", "volumes", "32", "32", "erasure", "volumes", "--autoscale_mode", "on")
     log = world.log
-    assert log.index(("write", "pool-attempt-volumes.json")) < log.index(PROFILE_SET) < log.index(create) < log.index(("write", "pool-id-volumes.json"))
-    assert marks.records["pool-attempt-volumes.json"] == pool_attempt(native)
+    assert log.index(("write", "pool-attempt~volumes.json")) < log.index(PROFILE_SET) < log.index(create) < log.index(("write", "pool-id~volumes.json"))
+    assert marks.records["pool-attempt~volumes.json"] == pool_attempt(native)
     assert ("osd", "pool", "set", "volumes", "allow_ec_overwrites", "true") in log
     assert ("osd", "pool", "application", "enable", "volumes", "rbd") in log
     assert not any(entry[0] == "/usr/bin/rbd" for entry in log)
@@ -270,7 +271,7 @@ def test_pool_refuses_foreign_profile_and_rule(foreign):
         world.rules["volumes"] = rule(7, "volumes", 3)
     with pytest.raises(ceph_native.Refusal, match="^foreign-" + foreign + "$"):
         native.pool()
-    assert "pool-attempt-volumes.json" not in marks.records and world.effects() == [("write", "pool-volumes.json")]
+    assert "pool-attempt~volumes.json" not in marks.records and world.effects() == [("write", "pool-owner~volumes.json")]
 
 
 @pytest.mark.parametrize("case", ["recorded", "unrecorded", "firstn"])
@@ -280,13 +281,13 @@ def test_pool_retry_after_lost_reply_adopts_only_with_attempt(case):
     world.profiles["volumes"] = normalized(item.split("=", 1) for item in PROFILE_SET[4:])
     world.rules["volumes"] = rule(7, "volumes", 3, chooseleaf="chooseleaf_firstn" if case == "firstn" else None)
     if case != "unrecorded":
-        marks.records["pool-volumes.json"] = native.request["pool"]
-        marks.records["pool-attempt-volumes.json"] = pool_attempt(native)
+        marks.records["pool-owner~volumes.json"] = native.request["pool"]
+        marks.records["pool-attempt~volumes.json"] = pool_attempt(native)
     if case == "recorded":
         assert native.pool() == {"changed": True}
         assert PROFILE_SET not in world.log
         assert sum(entry[:3] == ("osd", "pool", "create") for entry in world.log) == 1
-        assert marks.records["pool-id-volumes.json"] == {"id": 8} and world.entry("volumes")["crush_rule"] == 7
+        assert marks.records["pool-id~volumes.json"] == {"id": 8} and world.entry("volumes")["crush_rule"] == 7
         return
     with pytest.raises(ceph_native.Refusal, match="^foreign-(profile|rule)$" if case == "unrecorded" else "^foreign-rule$"):
         native.pool()
@@ -305,8 +306,8 @@ def test_pool_erasure_profile_accepts_plugin_added_keys(plugin, extra, accepted)
     world.profiles["volumes"] = dict(normalized(passed), **extra)
     if plugin == "jerasure":
         assert {"w": "8", "jerasure-per-chunk-alignment": "false"}.items() <= normalized(passed).items()
-    marks.records["pool-volumes.json"] = native.request["pool"]
-    marks.records["pool-attempt-volumes.json"] = pool_attempt(native)
+    marks.records["pool-owner~volumes.json"] = native.request["pool"]
+    marks.records["pool-attempt~volumes.json"] = pool_attempt(native)
     if accepted:
         assert native.pool() == {"changed": True}
         assert ready(native)[0] is True
@@ -323,7 +324,7 @@ def test_pool_create_erange_maps_to_pg_budget(code, reason):
     native, marks = resource(world, "pool", pool_value())
     with pytest.raises(ceph_native.Refusal, match="^" + reason + "$"):
         native.pool()
-    assert "pool-id-volumes.json" not in marks.records and marks.records["pool-attempt-volumes.json"] == pool_attempt(native)
+    assert "pool-id~volumes.json" not in marks.records and marks.records["pool-attempt~volumes.json"] == pool_attempt(native)
 
 
 @pytest.mark.parametrize("kind,role,overwrites", [
@@ -361,9 +362,9 @@ def test_pool_quota_and_compression_setters_idempotent():
     assert first == [("osd", "pool", "set", "volumes", "size", "2"), ("osd", "pool", "set-quota", "volumes", "max_bytes", "1073741824"),
                      ("osd", "pool", "set", "volumes", "compression_mode", "passive"), ("osd", "pool", "set", "volumes", "compression_algorithm", "zstd")]
     for field in ("size", "min_size", "quota_max_bytes", "quota_max_objects", "compression_mode", "compression_algorithm"):
-        prefix = "pool-setting-volumes-" + field
-        assert marks.writes.index(prefix + "-attempt.json") < marks.writes.index(prefix + "-complete.json")
-    assert "pool-setting-volumes-application-attempt.json" not in marks.records
+        prefix = "pool-setting-" + field
+        assert marks.writes.index(prefix + "-attempt~volumes.json") < marks.writes.index(prefix + "-complete~volumes.json")
+    assert "pool-setting-application-attempt~volumes.json" not in marks.records
     observed, effects = copy.deepcopy(world.pools), native_effects(world)
     del world.log[:]
     assert native.pool() == {"changed": False}
@@ -400,8 +401,8 @@ def test_pool_quota_setter_lost_success_is_read_back_without_a_second_write():
     native.ceph = ceph
     with pytest.raises(ceph_native.Refusal, match="native-command"):
         native.pool()
-    assert "pool-setting-volumes-quota_max_bytes-attempt.json" in marks.records
-    assert "pool-setting-volumes-quota_max_bytes-complete.json" not in marks.records
+    assert "pool-setting-quota_max_bytes-attempt~volumes.json" in marks.records
+    assert "pool-setting-quota_max_bytes-complete~volumes.json" not in marks.records
     assert native.pool() == {"changed": True}
     quotas = [entry for entry in world.log if entry[:3] == ("osd", "pool", "set-quota")]
     assert quotas == [("osd", "pool", "set-quota", "volumes", "max_bytes", "1073741824")]
@@ -467,7 +468,7 @@ def test_completed_ec_overwrites_and_application_drift_refuse_pool_drift_without
 
 def test_completed_rbd_init_application_drift_refuses_pool_drift_without_writing():
     world, native, marks = settled(pool_value())
-    assert "pool-rbd-complete-volumes.json" in marks.records
+    assert "pool-rbd-complete~volumes.json" in marks.records
     inits = [entry for entry in world.log if entry[0] == "/usr/bin/rbd"]
     world.entry("volumes")["application_metadata"] = {}
     refuses_drift_without_writing(world, native, marks)
@@ -479,7 +480,7 @@ def test_completed_rbd_init_application_drift_refuses_pool_drift_without_writing
 ])
 def test_an_attempt_or_completion_for_another_pool_id_still_refuses_pool_identity(field, record, drift):
     world, native, marks = settled(pool_value(quota=QUOTA))
-    name = "pool-setting-volumes-" + field + "-" + record + ".json"
+    name = "pool-setting-" + field + "-" + record + "~volumes.json"
     marks.records[name] = dict(marks.records[name], id=9)
     world.entry("volumes")[field] = drift
     refuses_drift_without_writing(world, native, marks, "pool-identity")
@@ -505,12 +506,12 @@ def test_an_incomplete_setter_still_continues_to_the_frozen_value(argv, field):
     native.ceph = ceph
     with pytest.raises(ceph_native.Refusal, match="^native-command$"):
         native.pool()
-    prefix = "pool-setting-volumes-" + field
-    assert prefix + "-attempt.json" in marks.records and prefix + "-complete.json" not in marks.records
+    prefix = "pool-setting-" + field
+    assert prefix + "-attempt~volumes.json" in marks.records and prefix + "-complete~volumes.json" not in marks.records
     assert argv not in world.log
     assert native.pool() == {"changed": True}
     assert [entry for entry in world.log if entry == argv] == [argv]
-    assert marks.records[prefix + "-complete.json"] == marks.records[prefix + "-attempt.json"]
+    assert marks.records[prefix + "-complete~volumes.json"] == marks.records[prefix + "-attempt~volumes.json"]
 
 
 @pytest.mark.parametrize("option,value,expected", [
@@ -672,11 +673,11 @@ def test_pool_erasure_lost_reply_refuses_another_profile():
     world = World()
     native, marks = resource(world, "pool", pool_value("erasure"))
     native.pool()
-    del marks.records["pool-id-volumes.json"]
+    del marks.records["pool-id~volumes.json"]
     world.entry("volumes")["erasure_code_profile"] = "other"
     with pytest.raises(ceph_native.Refusal, match="^pool-identity$"):
         native.pool()
-    assert "pool-id-volumes.json" not in marks.records
+    assert "pool-id~volumes.json" not in marks.records
 
 
 def foreign_create(world):
@@ -737,7 +738,7 @@ def test_crush_capacity_refuses_when_class_hosts_below_width():
     native, marks = resource(world, "pool", pool_value("erasure", device_class="ssd"))
     with pytest.raises(ceph_native.Refusal, match="^crush-capacity$"):
         native.pool()
-    assert "pool-attempt-volumes.json" not in marks.records and world.effects() == [("write", "pool-volumes.json")]
+    assert "pool-attempt~volumes.json" not in marks.records and world.effects() == [("write", "pool-owner~volumes.json")]
     world = World([["ssd"]] * 6)
     native, marks = resource(world, "pool", pool_value("erasure", device_class="ssd"))
     assert native.pool() == {"changed": True}
@@ -872,7 +873,7 @@ def test_erasure_host_minimum_is_k_plus_m():
     native, marks = resource(world, "pool", erasure_pool(2, 2, device_class="ssd"))
     with pytest.raises(ceph_native.Refusal, match="^crush-capacity$"):
         native.pool()
-    assert "pool-attempt-volumes.json" not in marks.records and world.effects() == [("write", "pool-volumes.json")]
+    assert "pool-attempt~volumes.json" not in marks.records and world.effects() == [("write", "pool-owner~volumes.json")]
 
 
 @pytest.mark.parametrize("k, m, plugin", [(2, 1, "isa"), (3, 2, "jerasure"), (2, 2, "jerasure"), (8, 6, "isa")])
@@ -915,3 +916,33 @@ def test_a_stretch_pool_may_hold_as_many_replicas_as_osd_hosts():
         ceph_native_resources.validate_pool(copy.deepcopy(pool), 4)
     with pytest.raises(ceph_native.Refusal, match="^request$"):
         ceph_native_resources.validate_pool(dict(pool, size=5), 4, stretch=True)
+
+
+@pytest.mark.parametrize("order", [("data", "id-data"), ("id-data", "data")])
+def test_pool_journal_keys_with_overlapping_native_names(order):
+    world = World()
+    marks = Markers(world)
+    for name in order:
+        worker, unused = resource(world, "pool", pool_value(name=name))
+        worker.markers = marks
+        assert worker.pool() == {"changed": True}
+    assert all(marks.read("pool-id~" + name + ".json") == {"id": 8} for name in order)
+
+
+@pytest.mark.parametrize("reply", [b"", b"pool 'volumes' already exists"])
+def test_pool_create_without_positive_reply_never_adopts_or_modifies(reply):
+    class ConcurrentMonitor(World):
+        def effect(self, command):
+            if command[:3] == ("osd", "pool", "create"):
+                self.create(command)
+                self.pools[-1]["crush_rule"] = 3
+                return 0, ceph_native.NativeOutput(b"", reply)
+            return super().effect(command)
+
+    world = ConcurrentMonitor()
+    worker, marks = resource(world, "pool", pool_value(size=2))
+    with pytest.raises(ceph_native.Refusal, match="^pool-identity$"):
+        worker.pool()
+    with pytest.raises(ceph_native.Refusal, match="^pool-identity$"):
+        worker.pool()
+    assert world.pools[0]["size"] == 3 and marks.read("pool-id~volumes.json") is None

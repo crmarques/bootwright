@@ -162,18 +162,15 @@ minimal run is recorded in
 [X94](milestones/delivered.md#x94--post-destroy-cluster-inspection); remaining
 core/promotion gates stay on M2.
 
-Host preparation supplies registry access through the invocation-local
-credential broker defined by [storage](ceph.md). Podman receives an empty
-authfile and ephemeral mutual-TLS identity. Native bootstrap and provider
-registry-login arguments never receive entitlement credentials. Core
-authorization retains its separately owned protected guest registry record;
-publication binds a reserved inode to a
-durable frozen-scope intent before the native file becomes visible. Recovery
-and removal require that binding and the exact descriptor identity; matching
-bytes or an empty native inventory do not supply ownership. Ownership records
-contain neither secret values nor secret-derived digests. A foreign authfile
-or stored native registry credentials refuse. Actual guest/runtime use and
-owned cleanup remain qualification requirements.
+Host preparation uses the invocation-local [registry broker](ceph.md) with
+an empty authfile and ephemeral mutual TLS. Bootstrap and native registry
+login never receive entitlement credentials. Core authorization reserves an
+anonymous inode and durably binds it to the frozen scope before linking the
+protected guest authfile. A crash before linking leaves no named credential.
+After linking, recovery and removal prove the descriptor against that record.
+Records contain no credential or secret-derived digest. A foreign authfile or
+stored native registry credentials refuse. Guest use and cleanup require
+qualification.
 
 For example, this partial cluster declares core services using labels attached
 to its already-declared hosts. It omits provider coordinates and topology, so

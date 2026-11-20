@@ -234,6 +234,12 @@ def validate_policy(policy, osd_hosts):
     require(type(policy["size"]) is int and 2 <= policy["size"] <= osd_hosts)
 
 
+def pool_record(kind, name):
+    """The separator occurs in no admitted pool name or record kind."""
+    require(named(name) and "~" not in kind and "/" not in kind, "pool-identity")
+    return "pool-" + kind + "~" + name + ".json"
+
+
 def validate_pool(pool, osd_hosts, stretch=False):
     """A replicated pool needs more OSD hosts than replicas, except on a stretch cluster, whose rule places two per site."""
     require(isinstance(pool, dict) and pool.get("type") in ("replicated", "erasure"))
@@ -334,46 +340,40 @@ class ResourceWorker(ceph_native.Worker):
         require(self.markers.owned(), "ownership")
         pool = self.request["pool"]
         name = pool["name"]
-        mark = "pool-" + name + ".json"
+        mark = pool_record("owner", name)
         owned = self.markers.read(mark)
         require(owned is None or owned == pool, "ownership")
         entries = [p for p in self.pools() if p.get("pool_name") == name]
         require(owned is not None or not entries, "foreign-pool")
         self.markers.write(mark, pool)
-        recorded = canonical(self.markers.read("pool-attempt-" + name + ".json")) == canonical(self.pool_attempt())
-        identity = self.markers.read("pool-id-" + name + ".json")
+        recorded = canonical(self.markers.read(pool_record("attempt", name))) == canonical(self.pool_attempt())
+        identity = self.markers.read(pool_record("id", name))
         created = False
-        if entries and identity is None:
-            # A lost creation response resumes only from this operation's own
-            # attempt record and one same-name pool with the frozen parameters.
-            require(recorded, "pool-identity")
-            require(len(entries) == 1 and self.created_pool(entries[0], pool), "pool-identity")
-            self.markers.write("pool-id-" + name + ".json", {"id": self.pool_id(entries[0])})
-            identity = self.markers.read("pool-id-" + name + ".json")
         if entries:
-            require(identity is not None and identity == {"id": self.pool_id(entries[0])}, "pool-identity")
+            require(len(entries) == 1, "pool-identity")
+            require(identity == {"id": self.pool_id(entries[0])}, "pool-identity")
         else:
             require(identity is None, "pool-identity")
             if pool["type"] == "erasure":
                 self.erasure_profile(pool, recorded)
             elif not recorded:
-                self.markers.write("pool-attempt-" + name + ".json", self.pool_attempt())
+                self.markers.write(pool_record("attempt", name), self.pool_attempt())
             self.create_pool(pool)
             created = True
             entries = [p for p in self.pools() if p.get("pool_name") == name]
-            require(len(entries) == 1, "pool-identity")
-            self.markers.write("pool-id-" + name + ".json", {"id": self.pool_id(entries[0])})
+            require(len(entries) == 1 and self.created_pool(entries[0], pool), "pool-identity")
+            self.markers.write(pool_record("id", name), {"id": self.pool_id(entries[0])})
         changed = created
         if pool["type"] == "replicated":
             for field, wanted in (("size", pool["size"]), ("min_size", pool["minSize"])):
-                changed = self.markers.read("pool-setting-" + name + "-" + field + "-complete.json") is None or changed
+                changed = self.markers.read(pool_record("setting-" + field + "-complete", name)) is None or changed
                 self.pool_setting(pool, field, wanted)
         for field, wanted, observed, argv in self.pool_options(pool):
             changed = self.pool_option(pool, field, wanted, observed, argv) or changed
         if pool["type"] == "replicated" and pool["application"] == "rbd":
             init = {"owner": self.request["owner"], "fsid": self.request["fsid"], "pool": pool,
-                    "id": self.markers.read("pool-id-" + name + ".json")["id"]}
-            attempt_name, complete_name = "pool-rbd-attempt-" + name + ".json", "pool-rbd-complete-" + name + ".json"
+                    "id": self.markers.read(pool_record("id", name))["id"]}
+            attempt_name, complete_name = pool_record("rbd-attempt", name), pool_record("rbd-complete", name)
             attempted, completed = self.markers.read(attempt_name), self.markers.read(complete_name)
             require(attempted is None or attempted == init, "pool-identity")
             require(completed is None or completed == init and attempted == init, "pool-identity")
@@ -391,19 +391,20 @@ class ResourceWorker(ceph_native.Worker):
     def pool_setting(self, pool, field, wanted):
         current = self.owned_pool(pool["name"])
         require(type(current.get(field)) is int and current[field] > 0, "native-output")
-        prefix = "pool-setting-" + pool["name"] + "-" + field
+        attempt_name = pool_record("setting-" + field + "-attempt", pool["name"])
+        complete_name = pool_record("setting-" + field + "-complete", pool["name"])
         intent = {"owner": self.request["owner"], "fsid": self.request["fsid"], "id": self.pool_id(current), "field": field, "value": wanted}
-        attempt, complete = self.markers.read(prefix + "-attempt.json"), self.markers.read(prefix + "-complete.json")
+        attempt, complete = self.markers.read(attempt_name), self.markers.read(complete_name)
         require(attempt is None or attempt == intent, "pool-identity")
         require(complete is None or complete == intent and attempt == intent, "pool-identity")
         require(complete is None or current[field] == wanted, "pool-drift")
         if attempt is None:
-            self.markers.write(prefix + "-attempt.json", intent)
+            self.markers.write(attempt_name, intent)
         if current[field] != wanted:
             self.ceph("osd", "pool", "set", pool["name"], field, str(wanted), json_result=False)
             require(self.owned_pool(pool["name"]).get(field) == wanted, "not-ready")
         if complete is None:
-            self.markers.write(prefix + "-complete.json", intent)
+            self.markers.write(complete_name, intent)
 
     def pool_attempt(self):
         return {"version": POOL_ATTEMPT, "owner": self.request["owner"], "fsid": self.request["fsid"], "pool": self.request["pool"]}
@@ -417,7 +418,7 @@ class ResourceWorker(ceph_native.Worker):
         if not recorded:
             require(name not in profiles, "foreign-profile")
             require(name not in rules, "foreign-rule")
-            self.markers.write("pool-attempt-" + name + ".json", self.pool_attempt())
+            self.markers.write(pool_record("attempt", name), self.pool_attempt())
         elif name in rules:
             require(self.erasure_rule_matches(self.rule_dump(name), pool), "foreign-rule")
         if name not in profiles:
@@ -461,9 +462,13 @@ class ResourceWorker(ceph_native.Worker):
             args.append("--bulk")
         if autoscale["targetRatio"]:
             args += ["--target_size_ratio", autoscale["targetRatio"]]
-        code = self.ceph_status(*args)
+        with self.bootstrap_hold():
+            code, response = self.run([*self.admin_argv("/usr/bin/ceph"), *args], timeout=60)
         require(code != 34, "pg-budget")
         require(code == 0, "native-command")
+        expected = ("pool '" + name + "' created").encode("ascii")
+        stdout, stderr = bytes(response).strip(), getattr(response, "stderr", b"").strip()
+        require((stdout == expected and not stderr) or (stderr == expected and not stdout), "pool-identity")
 
     @staticmethod
     def pool_options(pool):
@@ -509,20 +514,21 @@ class ResourceWorker(ceph_native.Worker):
         the completion is absent and the observed value differs, the completion after the readback. A completed setting is never
         sent again; a completed setting whose live value differs refuses pool-drift before any write. Returns whether the completion was absent."""
         current = self.owned_pool(pool["name"])
-        prefix = "pool-setting-" + pool["name"] + "-" + field
+        attempt_name = pool_record("setting-" + field + "-attempt", pool["name"])
+        complete_name = pool_record("setting-" + field + "-complete", pool["name"])
         intent = {"owner": self.request["owner"], "fsid": self.request["fsid"], "id": self.pool_id(current), "field": field, "value": wanted}
-        attempt, complete = self.markers.read(prefix + "-attempt.json"), self.markers.read(prefix + "-complete.json")
+        attempt, complete = self.markers.read(attempt_name), self.markers.read(complete_name)
         require(attempt is None or attempt == intent, "pool-identity")
         require(complete is None or complete == intent and attempt == intent, "pool-identity")
         if complete is not None:
             require(observed(current), "pool-drift")
             return False
         if attempt is None:
-            self.markers.write(prefix + "-attempt.json", intent)
+            self.markers.write(attempt_name, intent)
         if not observed(current):
             self.ceph("osd", "pool", *argv, json_result=False)
             require(observed(self.owned_pool(pool["name"])), "not-ready")
-        self.markers.write(prefix + "-complete.json", intent)
+        self.markers.write(complete_name, intent)
         return True
 
     def created_pool(self, entry, pool):
@@ -530,8 +536,15 @@ class ResourceWorker(ceph_native.Worker):
         may already have moved when it is on, as it is by default."""
         rule = self.rule_dump(pool["crushRule"])
         self.pool_id(entry)
-        autoscaled = entry.get("pg_autoscale_mode") == "on" and type(entry.get("pg_num")) is int and entry["pg_num"] >= 1
-        return (entry.get("type") == (3 if pool["type"] == "erasure" else 1) and entry.get("crush_rule") == rule["rule_id"]
+        autoscale = pool["autoscale"]
+        flags = entry.get("flags_names")
+        autoscaled = autoscale["mode"] == "on" and type(entry.get("pg_num")) is int and entry["pg_num"] >= 1
+        options = entry.get("options", {})
+        creation_options = all(self.option_matches(options, option, autoscale[member])
+                               for option, block, member in OWNED_OPTIONS if block == "autoscale")
+        return (entry.get("pg_autoscale_mode") == autoscale["mode"] and isinstance(flags, str)
+                and ("bulk" in flags.split(",")) == autoscale["bulk"] and creation_options
+                and entry.get("type") == (3 if pool["type"] == "erasure" else 1) and entry.get("crush_rule") == rule["rule_id"]
                 and (entry.get("pg_num") == pool["pgNum"] or autoscaled)
                 and (pool["type"] != "erasure" or entry.get("erasure_code_profile") == pool["name"]))
 
@@ -677,9 +690,9 @@ class ResourceWorker(ceph_native.Worker):
         client = self.request["client"]
         if client["filesystem"]:
             return self.cephfs_client_scope(client)
-        pool = self.markers.read("pool-" + client["pool"] + ".json")
+        pool = self.markers.read(pool_record("owner", client["pool"]))
         require(isinstance(pool, dict) and pool.get("name") == client["pool"], "pool-unowned")
-        identifier = self.markers.read("pool-id-" + client["pool"] + ".json")
+        identifier = self.markers.read(pool_record("id", client["pool"]))
         require(isinstance(identifier, dict) and set(identifier) == {"id"} and type(identifier["id"]) is int and identifier["id"] >= 0, "pool-identity")
         pools = self.ceph("osd", "pool", "ls", "detail")
         require(isinstance(pools, list) and len(pools) <= 65536, "native-output")
@@ -889,23 +902,21 @@ class ResourceWorker(ceph_native.Worker):
     def observe_pool(self, evidence, ready):
         pool = self.request["pool"]
         entries = [p for p in self.pools() if p.get("pool_name") == pool["name"]]
-        owned = self.markers.read("pool-" + pool["name"] + ".json") == pool
+        owned = self.markers.read(pool_record("owner", pool["name"])) == pool
         require(owned or not entries, "foreign-pool")
         native_id = self.pool_id(entries[0]) if entries else -1
-        identity = self.markers.read("pool-id-" + pool["name"] + ".json")
-        # A creation whose reply was lost has this operation's attempt record and no recorded ID yet: unfinished work the
-        # apply resumes, never a refusal; any other unrecorded or different ID still refuses.
-        unrecorded = (bool(entries) and identity is None
-                      and canonical(self.markers.read("pool-attempt-" + pool["name"] + ".json")) == canonical(self.pool_attempt()))
-        require(not entries or unrecorded or identity == {"id": native_id}, "pool-identity")
+        identity = self.markers.read(pool_record("id", pool["name"]))
+        # A pending attempt cannot prove that a same-name pool is ours. It
+        # remains unproved without the ID bound after a positive create reply.
+        require(not entries or len(entries) == 1 and identity == {"id": native_id}, "pool-identity")
         evidence["owned"] = owned
         # Native absence does not remove retained owned cleanup work.
         evidence["exists"] = owned or bool(entries)
-        evidence["resource"] = {"id": "" if unrecorded or not entries else str(native_id), "path": ""}
+        evidence["resource"] = {"id": "" if not entries else str(native_id), "path": ""}
         if entries:
             # The values readiness compares, read back for a comparison of the desired and the real pool.
             evidence["pool"] = ceph_native.pool_reading(entries[0])
-        return ready and not unrecorded and bool(entries) and self.pool_ready(entries[0], pool)
+        return ready and bool(entries) and self.pool_ready(entries[0], pool)
 
     def pool_ready(self, entry, pool):
         """Every frozen attribute as observed; a mismatch is not ready, never a refusal."""
@@ -1005,9 +1016,9 @@ class ResourceWorker(ceph_native.Worker):
 
     def owned_pool(self, name, entries=None):
         """An image or filesystem is only ever created in a pool this operation created and still holds under its recorded ID."""
-        pool = self.markers.read("pool-" + name + ".json")
+        pool = self.markers.read(pool_record("owner", name))
         require(isinstance(pool, dict) and pool.get("name") == name, "pool-identity")
-        identifier = self.markers.read("pool-id-" + name + ".json")
+        identifier = self.markers.read(pool_record("id", name))
         require(isinstance(identifier, dict) and set(identifier) == {"id"} and type(identifier["id"]) is int and identifier["id"] >= 0, "pool-identity")
         selected = [entry for entry in (self.pools() if entries is None else entries) if isinstance(entry, dict) and entry.get("pool_name") == name]
         require(len(selected) == 1 and self.pool_id(selected[0]) == identifier["id"], "pool-identity")
@@ -1302,7 +1313,7 @@ class ResourceWorker(ceph_native.Worker):
     def filesystem_ready(self, dump, entry):
         """The recorded pools in frozen order, the frozen MDS settings, every rank active with its follower, enough standbys, then the groups."""
         filesystem, mdsmap = self.request["filesystem"], entry["mdsmap"]
-        recorded = [self.markers.read("pool-id-" + name + ".json") for name in [filesystem["metadataPool"]] + filesystem["dataPools"]]
+        recorded = [self.markers.read(pool_record("id", name)) for name in [filesystem["metadataPool"]] + filesystem["dataPools"]]
         if not all(isinstance(item, dict) and set(item) == {"id"} for item in recorded):
             return False
         ids = [item["id"] for item in recorded]

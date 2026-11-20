@@ -242,7 +242,7 @@ def test_the_host_secret_refs_are_exactly_the_scope_s_host_keys():
 
 def prerequisite_worker(monkeypatch):
     value = request()
-    records = {"pool-block.json": {"name": "block"}, "pool-id-block.json": {"id": 4},
+    records = {"pool-owner~block.json": {"name": "block"}, "pool-id~block.json": {"id": 4},
                "filesystem-files.json": {"name": "files"}, "filesystem-id.files.json": {"id": 5}}
     native = export.ExportWorker(value, "node-1", markers=Markers(records))
     responses = {

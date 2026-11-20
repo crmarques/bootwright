@@ -565,7 +565,7 @@ func TestRequestSchemaChangeLeavesHostDigest(t *testing.T) {
 		}
 	}
 	want := []string{"ansiblePackageVersion", "auxiliary", "bootstrap", "callHome", "cephadm", "cluster", "clusterKeyRef", "clusterNetworks", "clusterSSHTransport", "clusterSSHUser",
-		"config", "controller", "fsid", "hosts", "image", "monIP", "nfsGaneshaPackageVersion", "owner", "packageRepository", "packageRepositoryKey", "packages", "publicNetworks", "registry",
+		"config", "controller", "delegated", "fsid", "hosts", "image", "monIP", "nfsGaneshaPackageVersion", "owner", "packageRepository", "packageRepositoryKey", "packages", "publicNetworks", "registry",
 		"registryProxy", "registryRef", "registryTrustBundleRef", "release", "security", "services", "singleHostDefaults", "stretch", "version"}
 	slices.Sort(want)
 	if got := jsonNames(reflect.TypeFor[ClusterScope]()); !slices.Equal(got, want) {
@@ -587,7 +587,9 @@ func TestRequestSchemaChangeLeavesHostDigest(t *testing.T) {
 	r.Action, r.Pool, r.Client = "pool", &Pool{Name: "volumes"}, &Client{Name: "consumer", Pool: "volumes", Access: "readOnly"}
 	scope := scopeOf(r)
 	for field, value := range reflect.ValueOf(scope).Fields() {
-		if value.IsZero() {
+		// Delegated placement is added to the private removal invocation
+		// from the frozen cluster block, not projected by scopeOf.
+		if value.IsZero() && field.Name != "Delegated" {
 			t.Fatalf("the fixture leaves ClusterScope.%s unset", field.Name)
 		}
 	}

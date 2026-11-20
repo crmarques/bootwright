@@ -7,9 +7,12 @@ contact a registry, invoke Podman, or qualify a provider artifact.
 from __future__ import annotations
 
 import base64
+import contextlib
 import copy
 import json
 import os
+import pathlib
+import stat
 from types import SimpleNamespace
 
 import pytest
@@ -58,27 +61,35 @@ class Markers:
         self.writes.append(name)
         self.after(name, value)
 
+    write_anonymous = write
+
 
 @pytest.fixture
 def registry(cluster_request, tmp_path, monkeypatch):
     root = tmp_path / "root"
     root.mkdir(mode=0o755)
     (root / "etc").mkdir(mode=0o755)
-    original_open, original_fstat = os.open, os.fstat
+    original_open, original_fstat, original_stat = os.open, os.fstat, os.stat
 
     def open_file(path, flags, mode=0o777, *, dir_fd=None):
         if path == "/" and dir_fd is None:
             path = str(root)
         return original_open(path, flags, mode, dir_fd=dir_fd)
 
-    def fstat(fd):
-        actual = original_fstat(fd)
+    def simulated_owner(actual):
         fields = {name: getattr(actual, name) for name in dir(actual) if name.startswith("st_")}
         fields.update(st_uid=0, st_gid=0)
         return SimpleNamespace(**fields)
 
+    def stat_file(path, *args, **kwargs):
+        actual = original_stat(path, *args, **kwargs)
+        if path == ceph_native.REGISTRY_NAME and kwargs.get("dir_fd") is not None:
+            return simulated_owner(actual)
+        return actual
+
     monkeypatch.setattr(ceph_native.os, "open", open_file)
-    monkeypatch.setattr(ceph_native.os, "fstat", fstat)
+    monkeypatch.setattr(ceph_native.os, "fstat", lambda fd: simulated_owner(original_fstat(fd)))
+    monkeypatch.setattr(ceph_native.os, "stat", stat_file)
     monkeypatch.setattr(ceph_native.os, "fchown", lambda fd, uid, gid: ceph_native.require(uid == gid == 0))
     markers = Markers()
 
@@ -105,7 +116,9 @@ def test_authfile_publication_has_only_nonsecret_custody_records(registry):
     assert not native.prepare_registry(material)
     assert (directory / ceph_native.REGISTRY_NAME).read_bytes() == material
     assert (directory / ceph_native.REGISTRY_NAME).stat().st_mode & 0o777 == 0o600
-    assert native.markers.writes == ["registry-intent.json", "registry-pending.json", "registry-file.json"]
+    first, inode, pending, ready, reproof = native.markers.writes
+    assert (first, pending, ready) == ("registry-intent.json", "registry-pending.json", "registry-file.json")
+    assert inode.startswith("registry-inode-") and reproof == ready
     assert not list(directory.glob(".bootwright-registry-*"))
     records = json.dumps(native.markers.records)
     assert "synthetic-user" not in records and "synthetic-password" not in records and "auths" not in records
@@ -211,7 +224,7 @@ def test_foreign_fifo_refuses_without_a_blocking_open_or_content_read(registry, 
     monkeypatch.setattr(ceph_native.os, "open", open_file)
     with pytest.raises(ceph_native.Refusal, match="^registry-ownership$"):
         native.prepare_registry(material)
-    assert opened == ([filename] if bound else [])
+    assert opened == ([filename] if bound and name == "authfile" else [])
     assert native.markers.writes == []
 
 
@@ -275,7 +288,7 @@ def test_pending_inode_recovers_each_global_publication_interruption(registry, m
 
     def interrupt_link(source, target, **kwargs):
         nonlocal linked
-        assert native.markers.read("registry-pending.json") is not None
+        assert any(name.startswith("registry-inode-") for name in native.markers.records)
         if state == "anchor":
             raise OSError("synthetic interruption")
         result = link(source, target, **kwargs)
@@ -297,11 +310,10 @@ def test_pending_inode_recovers_each_global_publication_interruption(registry, m
     native.markers.before = interrupt_record
     with pytest.raises(OSError):
         native.prepare_registry(material)
-    pending = native.markers.read("registry-pending.json")
-    assert pending is not None and native.markers.read("registry-file.json") is None
+    assert native.markers.read("registry-file.json") is None
     files = list(directory.iterdir())
-    assert len(files) == (2 if state == "linked" else 1)
-    assert all(path.stat().st_ino == pending["metadata"]["inode"] for path in files)
+    assert len(files) == (0 if state == "anchor" else 1)
+    assert all(path.name == ceph_native.REGISTRY_NAME for path in files)
     monkeypatch.setattr(ceph_native.os, "link", link)
     monkeypatch.setattr(ceph_native.os, "fsync", fsync)
     native.markers.before = lambda name, value: None
@@ -310,12 +322,12 @@ def test_pending_inode_recovers_each_global_publication_interruption(registry, m
     assert not list(directory.glob(".bootwright-registry-*"))
 
 
-def test_failed_pending_journal_cleans_only_its_unbound_anchor(registry):
+def test_failed_inode_journal_leaves_no_named_credential(registry):
     native, directory, material = registry
 
     def refuse(name, value):
         del value
-        if name == "registry-pending.json":
+        if name.startswith("registry-inode-"):
             raise OSError("synthetic interruption")
 
     native.markers.before = refuse
@@ -339,7 +351,7 @@ def test_durable_pending_journal_is_preserved_when_acknowledgment_is_lost(regist
     with pytest.raises(OSError):
         native.prepare_registry(material)
     assert native.markers.read("registry-pending.json") is not None
-    assert (directory / native.registry_intent()["anchor"]).exists()
+    assert (directory / ceph_native.REGISTRY_NAME).exists()
     native.markers.after = lambda name, value: None
     assert native.prepare_registry(material)
 
@@ -556,3 +568,37 @@ def test_a_published_registry_is_reproved_before_any_device_read(registry):
     reach_devices(native)
     with pytest.raises(ceph_native.Refusal, match="^registry-ownership$"):
         native.devices()
+
+
+def test_recovery_syncs_a_single_link_registry_marker_after_lost_acknowledgment(tmp_path, monkeypatch):
+    markers = ceph_native.Markers({"fsid": "synthetic"}, root=str(tmp_path))
+    directory = pathlib.Path(markers.path)
+    directory.mkdir(mode=0o700)
+
+    @contextlib.contextmanager
+    def held(path, unused):
+        fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            yield fd
+        finally:
+            os.close(fd)
+
+    synced, sync = [], os.fsync
+
+    def fail_after_marker_link(fd):
+        if stat.S_ISDIR(os.fstat(fd).st_mode):
+            synced.append(fd)
+            if len(synced) == 1:
+                raise OSError("synthetic interruption after publication")
+        sync(fd)
+
+    monkeypatch.setattr(ceph_native, "held", held)
+    monkeypatch.setattr(ceph_native, "read_regular", lambda path, **unused: pathlib.Path(path).read_bytes())
+    monkeypatch.setattr(ceph_native.os, "fsync", fail_after_marker_link)
+    name, record = "registry-file.json", {"synthetic": "binding"}
+    with pytest.raises(OSError):
+        markers.write_anonymous(name, record)
+    assert (directory / name).stat().st_nlink == 1
+    assert list(directory.iterdir()) == [directory / name]
+    markers.write_anonymous(name, record)
+    assert len(synced) == 2

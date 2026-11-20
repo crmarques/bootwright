@@ -517,12 +517,11 @@ run; any is a failed row:
 
 ## 6. Destroy and clean up
 
-Retain the evidence and data you need first. The first destroy unregisters the
-running guests from RHSM, then pauses and names the stop of the whole group. Stop all three and
-finish removal:
+Retain the evidence and data you need first. Stop all three guests before
+starting destroy. The registered removal can start each guest for RHSM
+unregistration and proves it off again before removing it.
 
 ```sh
-./bin/bootwright destroy --context "$CONTEXT" --authorize data-loss
 ./bin/bootwright machine stop --context "$CONTEXT" --name rhel-01,rhel-02,rhel-03 --yes
 ./bin/bootwright destroy --context "$CONTEXT" --authorize data-loss
 ./bin/bootwright status --context "$CONTEXT"

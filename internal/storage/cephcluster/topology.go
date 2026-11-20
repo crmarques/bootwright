@@ -153,9 +153,19 @@ func (a *admission) clusterAccess(ceph api.Value) {
 func (a *admission) topology(ceph api.Value) {
 	nodes := ceph.Get("topology", "nodes").Items()
 	fqdns, names, machines := []string{}, []string{}, []string{}
+	shortNames := map[string]string{}
 	for i, node := range nodes {
 		field := indexed("$.spec.topology.nodes", i)
-		fqdns = append(fqdns, NativeHostname(node))
+		hostname := NativeHostname(node)
+		short := NativeShortName(node)
+		if len(hostname) > 128 {
+			a.invalid(field+".fqdn", "the registered storage hostname exceeds Ceph's 128-byte limit", "use a shorter registered hostname")
+		}
+		if other, exists := shortNames[short]; exists && other != hostname {
+			a.invalid(field+".fqdn", "the registered storage hostname shares its first DNS label with "+other, "use a distinct first DNS label for every storage host")
+		}
+		shortNames[short] = hostname
+		fqdns = append(fqdns, hostname)
 		names = append(names, textOf(node, "name"))
 		machines = append(machines, textOf(node, "machineRef"))
 		if host, ok := a.catalog.Find(api.Machine, textOf(node, "machineRef")); ok {
@@ -264,6 +274,9 @@ func (a *admission) stretch(ceph api.Value) {
 	if !stretch.Present() {
 		return
 	}
+	if rule := textOf(stretch, "ruleName"); stretch.Has("ruleName") && (!crushRuleName.MatchString(rule) || rule == "replicated_rule") {
+		a.invalid("$.spec.topology.stretch.ruleName", "stretch requires a valid CRUSH rule name distinct from the bootstrap-owned replicated_rule", "use 1–128 letters, digits, dots, underscores or hyphens, beginning with a letter or digit, or omit ruleName to use stretch-rule")
+	}
 	sites := stretch.Get("dataSites").Strings()
 	for i, site := range sites {
 		a.storageSite(site, indexed("$.spec.topology.stretch.dataSites", i))
@@ -302,7 +315,7 @@ func (a *admission) stretch(ceph api.Value) {
 			a.invalid(indexed("$.spec.services", i)+".placement", "the "+kind+" service places on the stretch tiebreaker "+tiebreaker+", which runs a MON alone", "narrow this service's placement to data-site nodes")
 		}
 	}
-	a.stretchServices(ceph, sites)
+	a.stretchServices(ceph, sites, tiebreaker)
 	for i, node := range ceph.Get("topology", "nodes").Items() {
 		if site := textOf(node, "site"); textOf(node, "name") != tiebreaker && !slices.Contains(sites, site) {
 			a.invalid(indexed("$.spec.topology.nodes", i)+".site", "a stretch node occupies one of the two data sites, or is the tiebreaker", "place this node's Machine at one of spec.topology.stretch.dataSites")

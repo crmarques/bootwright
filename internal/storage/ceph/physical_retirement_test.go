@@ -302,6 +302,16 @@ func TestPhysicalRetirementPolicyRefusesMissingDataDBOrWALIntent(t *testing.T) {
 	if err := request.authorized(); err == nil {
 		t.Fatal("uncovered auxiliary disk admitted as retirement")
 	}
+	raw, err := request.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	block := retirementBlock(t, PhysicalRetirementBlockID(request.Cluster), string(api.CephCluster), request.Cluster, PhysicalRetirementImplementation, raw)
+	warnings := NewPhysicalRetirement().RemovalWarnings(block)
+	if len(warnings) != 1 || warnings[0].Code != cephRetirementUnavailable.Code ||
+		!strings.Contains(warnings[0].Message, request.Hosts[0].Devices[1].Path) {
+		t.Fatalf("warning should identify the uncovered disk: %+v", warnings)
+	}
 }
 
 func TestPhysicalRetirementOmissionRetainsAndCannotAuthorizeLaterErasure(t *testing.T) {
@@ -357,6 +367,11 @@ func TestMonitorOnlyPhysicalHostStillNeedsItsOriginalRootErasePolicy(t *testing.
 	}
 	if err := request.authorized(); err == nil {
 		t.Fatal("an empty data-disk list bypassed root erasure authorization")
+	}
+	warnings := capability.RemovalWarnings(execution.Block)
+	if len(warnings) != 1 || warnings[0].Code != cephRetirementUnavailable.Code ||
+		!strings.Contains(warnings[0].Message, "no original erase target") {
+		t.Fatalf("missing root erasure warning: %+v", warnings)
 	}
 }
 
@@ -674,5 +689,79 @@ func TestRetainedMonitorWithoutOSDsNeedsNativeReceiptInsteadOfRootErase(t *testi
 	}
 	if !terminal.Retired || !hex64(terminal.Receipts[0].Cleanup) || terminal.Receipts[0].Digest != "" {
 		t.Fatal("monitor retirement lacks native-only receipt", terminal.Receipts[0])
+	}
+}
+
+func TestRetirementOfInstalledHostWithUnstartedCephPreparation(t *testing.T) {
+	capability, e, cluster, _ := physicalRetirementFixture(t)
+	policy, err := DecodePhysicalRetirementRequest(e.Block.Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range policy.Hosts {
+		policy.Hosts[i].RetainRoot = true
+	}
+	raw, _ := policy.Canonical()
+	e.Block = retirementBlock(t, PhysicalRetirementBlockID(cluster.Cluster), string(api.CephCluster), cluster.Cluster, PhysicalRetirementImplementation, raw)
+	coreRaw, _ := cluster.Canonical()
+	core := retirementBlock(t, ClusterBlockID(cluster.Cluster), string(api.CephCluster), cluster.Cluster, Implementation, coreRaw)
+	unstarted := retirementRecord(core, reconciliation.Apply, nil)
+	unstarted.State = reconciliation.BlockPending
+	e.OriginalRemovalDependents = []lifecycle.BlockEvidence{unstarted}
+	for _, pair := range e.RemovalProved {
+		if pair.Applied.Implementation != HostImplementation {
+			continue
+		}
+		original, err := DecodeHostRequest(pair.Applied.Block.Request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := range original.Cluster.Hosts {
+			original.Cluster.Hosts[i].RetainRoot = true
+		}
+		raw, _ := original.canonical()
+		pending := retirementRecord(retirementBlock(t, pair.Applied.Block.ID, pair.Applied.Kind, pair.Applied.Object, HostImplementation, raw), reconciliation.Apply, nil)
+		pending.State = reconciliation.BlockPending
+		e.OriginalRemovalDependents = append(e.OriginalRemovalDependents, pending)
+	}
+	e.RemovalProved = slices.DeleteFunc(e.RemovalProved, func(pair lifecycle.RemovalEvidence) bool {
+		return pair.Applied.Implementation == HostImplementation
+	})
+	result, err := capability.Destroy(context.Background(), e)
+	var evidence PhysicalRetirementEvidence
+	if err != nil || json.Unmarshal(result.Evidence, &evidence) != nil || !evidence.Retired || len(evidence.Receipts) != len(policy.Hosts) {
+		t.Fatalf("terminal retirement failed with positively unstarted Ceph hosts: %+v %v", evidence, err)
+	}
+	for _, receipt := range evidence.Receipts {
+		if !receipt.HostPreparationUnstarted || receipt.Digest == "" {
+			t.Fatal("receipt did not prove both unstarted preparation and disk erasure", receipt)
+		}
+	}
+	e.OriginalRemovalDependents = e.OriginalRemovalDependents[:len(e.OriginalRemovalDependents)-1]
+	if _, err := capability.Destroy(context.Background(), e); err == nil {
+		t.Fatal("missing host history was accepted as positive absence")
+	}
+}
+
+func TestNoEraseRetirementAppliesOnlyToItsOwnStorage(t *testing.T) {
+	const cluster = "storage"
+	const machine = "monitor"
+	request := PhysicalRetirementRequest{Version: PhysicalRetirementImplementation, Cluster: cluster,
+		Hosts: []PhysicalRetirementHost{{Name: "monitor", Machine: machine, RetainRoot: true, Devices: []Device{}, EraseTargets: []PhysicalEraseTarget{}}}}
+	raw, _ := request.Canonical()
+	terminal := retirementBlock(t, PhysicalRetirementBlockID(cluster), string(api.CephCluster), cluster, PhysicalRetirementImplementation, raw)
+	core := Request{Action: "cluster", Cluster: cluster, Version: Version}
+	raw, _ = core.Canonical()
+	dependent := retirementBlock(t, ClusterBlockID(cluster), string(api.CephCluster), cluster, Implementation, raw)
+	capability := NewPhysicalRetirement()
+	if !capability.RetiresHost(terminal, dependent, machine) {
+		t.Fatal("a retained MON with no erase targets needs a terminal cleanup proof")
+	}
+	firewall := retirementBlock(t, "firewall-monitor", string(api.Machine), machine, "fixture-firewall", []byte(`{}`))
+	if capability.RetiresHost(terminal, firewall, machine) {
+		t.Fatal("a Ceph storage proof cannot cover installed firewall removal")
+	}
+	if capability.RetiresHost(terminal, dependent, "another-machine") {
+		t.Fatal("the terminal proof cannot cover another Machine")
 	}
 }

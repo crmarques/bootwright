@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -206,12 +207,27 @@ func (c ConsumerCapability) Removal(ctx context.Context, block reconciliation.Bl
 	r, err := DecodeConsumerRequest(block.Request)
 	return lifecycle.Removal{Description: "retire Ceph consumer " + r.Name + " with its owned hosts", Impacts: []string{"retire Ceph consumer " + r.Name + " with its owned hosts"}, Consumes: []string{reconciliation.AuthorizationDataLoss}}, err
 }
+
+const physicalConsumerRemedy = "retain this context while the consumer uses the cluster; automatic retirement of a physical CephConsumer requires B491"
+
+func (ConsumerCapability) RemovalWarnings(block reconciliation.Block) []diagnostics.Diagnostic {
+	r, err := DecodeConsumerRequest(block.Request)
+	if err != nil || !r.PhysicalHosts {
+		return nil
+	}
+	return []diagnostics.Diagnostic{retirementWarning("CephConsumer/"+r.Name+" prevents automated destroy of physical CephCluster/"+r.Cluster,
+		"omit the consumer before apply if you need automated retirement, or plan for physical consumer removal under B491")}
+}
+
 func (c ConsumerCapability) retirement(ctx context.Context, e lifecycle.Execution) (json.RawMessage, error) {
 	r, err := c.identity(ctx, e)
 	if err != nil {
 		return nil, err
 	}
-	if !e.RetiredWithHosts || r.PhysicalHosts {
+	if r.PhysicalHosts {
+		return nil, cephHostsSurvive.Fail("CephConsumer/"+r.Name+" is bound to a cluster with physical hosts", physicalConsumerRemedy)
+	}
+	if !e.RetiredWithHosts {
 		return nil, cephHostsSurvive.Fail(survivingReason, survivingRemedy)
 	}
 	pending, err := pendingPhysicalClusters(e, []string{r.Cluster}, r.Machines)
@@ -242,7 +258,10 @@ func (c ConsumerCapability) Quiescent(ctx context.Context, p lifecycle.Probe) (l
 	if err != nil {
 		return lifecycle.Quiescence{State: lifecycle.Unproved}, err
 	}
-	if !p.RetiredWithHosts || r.PhysicalHosts {
+	if r.PhysicalHosts {
+		return lifecycle.Quiescence{State: lifecycle.Unproved, Reason: "CephConsumer/" + r.Name + " is bound to a cluster with physical hosts", Remedy: physicalConsumerRemedy}, nil
+	}
+	if !p.RetiredWithHosts {
 		return lifecycle.Quiescence{State: lifecycle.Unproved, Reason: survivingReason, Remedy: survivingRemedy}, nil
 	}
 	if _, err := c.identity(ctx, p.Execution()); err != nil {

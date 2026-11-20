@@ -403,7 +403,9 @@ never change the frozen plan or register an operation. A `plan` of an apply
 also reports one `plan.consumer-outlives-destroy` warning for each consumer and
 effect a destroy of the context would refuse over
 ([quiescence before removal](../state-reconciliation.md#quiescence-before-removal)),
-in `diagnostics` and on standard error before the plan.
+in `diagnostics` and on standard error before the plan. The
+`ceph.retirement-unavailable` warning identifies a physical Ceph consumer
+or a selected physical disk that the frozen policy cannot retire.
 
 JSON retains the complete report when checks fail. Uninstalled guests remain
 pending without remote probes; dry-run performs no live capacity or guest

@@ -8,6 +8,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/machine"
@@ -36,6 +37,7 @@ type ClusterScope struct {
 	ClusterSSHUser           string                       `json:"clusterSSHUser"`
 	Config                   map[string]map[string]string `json:"config,omitempty"`
 	Controller               string                       `json:"controller"`
+	Delegated                []DelegatedService           `json:"delegated,omitempty"`
 	FSID                     string                       `json:"fsid,omitempty"`
 	Hosts                    []Host                       `json:"hosts"`
 	Image                    string                       `json:"image"`
@@ -131,7 +133,7 @@ func (r HostRequest) source() (int, bool) {
 }
 
 func HostContentDigest() string {
-	d := sha256.Sum256([]byte(HostImplementation + "\x00" + HostVersion + "\x00" + HostEvidenceVersion + "\x00" + "selected-packages-repository-proxy-runtime-placement-pulls-profile-route-devices-v1\x00pull-registration-and-joined-cancellation-v1\x00exclusive-podman-proxy-default"))
+	d := sha256.Sum256([]byte(HostImplementation + "\x00" + HostVersion + "\x00" + HostEvidenceVersion + "\x00" + "selected-packages-repository-proxy-runtime-placement-pulls-profile-route-devices-v1\x00pull-registration-and-joined-cancellation-v1\x00exclusive-podman-proxy-default\x00registered-retained-root-removal"))
 	return hex.EncodeToString(d[:])
 }
 
@@ -576,8 +578,12 @@ func (c HostCapability) run(ctx context.Context, e lifecycle.Execution, operatio
 	if len(removal) != 0 && removal[0] {
 		values["removal"] = "true"
 	}
+	deadline := hostDeadline(operation)
+	if operation == "destroy" && host.RetainRoot {
+		deadline += 125 * time.Second // Allow the guest to boot and its SSH listener to come up.
+	}
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{Implementation: HostImplementation, Operation: operation, Variable: "bootwright_ceph_host", Canonical: canonical,
-		Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: r.Cluster.Controller}, Materials: files, Values: values, Refusals: refusals, NativeErrors: true, Deadline: hostDeadline(operation)}))
+		Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: r.Cluster.Controller}, Materials: files, Values: values, Refusals: refusals, NativeErrors: true, Deadline: deadline}))
 }
 
 func (c HostCapability) Apply(ctx context.Context, e lifecycle.Execution) (lifecycle.Result, error) {
@@ -635,16 +641,16 @@ func (c HostCapability) Destroy(ctx context.Context, e lifecycle.Execution) (lif
 	if decodeErr != nil {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, decodeErr
 	}
-	if physicalHosts(frozen.Cluster.Hosts) {
+	host, _ := frozen.target()
+	if host.Physical {
 		evidence, err := physicalHostRelease(e, frozen)
 		if err != nil {
 			return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
 		}
-		host, _ := frozen.target()
 		if !host.RetainRoot {
 			return lifecycle.Result{Outcome: reconciliation.OutcomeUnchanged, Evidence: evidence}, nil
 		}
-		return c.cleanupPhysicalHost(ctx, e, false)
+		return c.removeFromRetainedHost(ctx, e, host.Machine)
 	}
 	r, err := c.prepare(ctx, e)
 	if err != nil {
@@ -675,27 +681,16 @@ func (c HostCapability) ObserveRemoval(ctx context.Context, e lifecycle.Executio
 	if decodeErr != nil {
 		return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, decodeErr
 	}
-	if physicalHosts(frozen.Cluster.Hosts) {
+	host, _ := frozen.target()
+	if host.Physical {
 		evidence, err := physicalHostRelease(e, frozen)
 		if err != nil {
 			return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, err
 		}
-		host, _ := frozen.target()
 		if !host.RetainRoot {
 			return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Outcome: reconciliation.OutcomeUnchanged, Evidence: evidence}, nil
 		}
-		result, err := c.cleanupPhysicalHost(ctx, e, true)
-		if err != nil {
-			return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, err
-		}
-		proof, err := decodeHostEvidence(result.Evidence, e.Block.RequestDigest)
-		if err != nil {
-			return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, err
-		}
-		if !proof.NativeRemoved {
-			return lifecycle.Observation{Effect: reconciliation.EffectPartial, Evidence: result.Evidence}, nil
-		}
-		return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Outcome: result.Outcome, Evidence: result.Evidence}, nil
+		return c.observeRetainedHostRemoval(ctx, e, host.Machine)
 	}
 	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
 	r, err := c.prepare(ctx, e)
@@ -769,30 +764,6 @@ func preparedHostProof(proofs []lifecycle.BlockEvidence, cluster, machineName st
 		return HostRequest{}, HostEvidence{}, cephRecordsMissing.Fail("Ceph lacks its original apply's host preparation proof", "restore the original apply evidence; each host is prepared before the cluster block runs")
 	}
 	return request, *found, nil
-}
-
-func (c HostCapability) cleanupPhysicalHost(ctx context.Context, e lifecycle.Execution, observe bool) (lifecycle.Result, error) {
-	r, err := c.prepare(ctx, e)
-	if err != nil {
-		return lifecycle.Result{}, err
-	}
-	operation := "destroy"
-	if observe {
-		operation = "observe"
-	}
-	result, err := c.run(ctx, e, operation, r, observe)
-	if err != nil {
-		return lifecycle.Result{}, err
-	}
-	evidence, err := decodeHostEvidence(result.Evidence, e.Block.RequestDigest)
-	if err != nil || !evidence.identifies(r) || evidence.NativeRemoved && !retained(evidence, r) || !observe && (!evidence.NativeRemoved || !retained(evidence, r)) {
-		return lifecycle.Result{}, cephUnproved.Fail("the retained-root Ceph host cleanup did not prove native absence", "continue the original removal")
-	}
-	outcome, usable := result.Outcome, result.Outcome.Settled()
-	if !usable {
-		return lifecycle.Result{}, physicalPolicyFailure()
-	}
-	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil
 }
 
 func (HostCapability) HostMachines(block reconciliation.Block) ([]string, error) {

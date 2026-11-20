@@ -97,6 +97,9 @@ func (s Service) machineStopped(run invocation, execution Execution) func(contex
 				continue
 			}
 			_, state, err := s.recordedMachinePower(ctx, run, execution, dependency.Block)
+			if err == nil && !state.Settled() && state.State != Live {
+				err = destroyInUse.Fail("cannot prove the identity and power of Machine/"+name+" ("+state.Reason+")", "restore native power access and repeat the destroy")
+			}
 			return state.Settled(), err
 		}
 		return false, engineRecordsDamaged.Fail("the original apply lacks the managed Machine/"+name+" for the power check", "restore its apply records")

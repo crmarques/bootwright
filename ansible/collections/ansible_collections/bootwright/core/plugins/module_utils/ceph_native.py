@@ -685,12 +685,14 @@ def delegated_daemon(daemon, request):
     require(daemon["hostname"] in delegated[service], "foreign-service")
 
 
-def validate_scope(scope):
+def validate_scope(scope, *, delegated=False):
     """Admit one cluster's host scope: the core envelope without its resource action, pool or client."""
     require(isinstance(scope, dict))
-    require(SCOPE_MEMBERS <= set(scope) and not set(scope) - SCOPE_MEMBERS - SCOPE_OPTIONAL)
+    require(SCOPE_MEMBERS <= set(scope) and not set(scope) - SCOPE_MEMBERS - SCOPE_OPTIONAL - ({"delegated"} if delegated else set()))
     from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_validate
     ceph_native_validate.scope_checks(scope)
+    if delegated:
+        validate_delegated(scope, scope["hosts"])
     return scope
 
 
@@ -1144,6 +1146,23 @@ class Markers:
             os.fsync(fd)
         finally:
             os.close(fd)
+
+    def write_anonymous(self, name, value):
+        """Publish a registry proof with exactly one link at every crash boundary."""
+        with held(self.path, "ownership") as directory:
+            existing = self.read(name)
+            require(existing is None or existing == value, "ownership")
+            if existing is None:
+                fd = os.open(".", os.O_TMPFILE | os.O_RDWR | os.O_CLOEXEC, 0o600, dir_fd=directory)
+                with os.fdopen(fd, "wb") as stream:
+                    stream.write(canonical(value))
+                    stream.flush()
+                    os.fsync(fd)
+                    try:
+                        os.link("/proc/self/fd/" + str(fd), name, dst_dir_fd=directory, follow_symlinks=True)
+                    except FileExistsError:
+                        require(self.read(name) == value, "ownership")
+            os.fsync(directory)
 
 
 class Custody:
@@ -2874,10 +2893,14 @@ class Worker:
         raise Refusal("client-quiescence-unqualified")
 
 
+def validate_removal_scope(scope):
+    return validate_scope(scope, delegated=True)
+
+
 class PhysicalHostRemovalWorker(Worker):
     """The frozen physical host scope; native removal stays FSID-bound."""
 
-    admit = staticmethod(validate_scope)
+    admit = staticmethod(validate_removal_scope)
 
     def physical_host_observe(self):
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_stretch

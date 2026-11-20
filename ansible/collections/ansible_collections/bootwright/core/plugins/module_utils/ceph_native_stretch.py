@@ -20,6 +20,7 @@ from __future__ import annotations
 # pylint: disable=unidiomatic-typecheck
 
 import base64
+import configparser
 import contextlib
 import copy
 import hashlib
@@ -683,25 +684,27 @@ class TiebreakerRemoval:
                 with contextlib.suppress(FileNotFoundError):
                     os.unlink(stage, dir_fd=directory)
 
-    def credentials(self):
+    def credentials(self, directory):
         """The registry credential names this host's records bind, each with the metadata it must carry; any other refuses."""
         intent = self.worker.registry_intent()
-        ready, pending = self.markers.read("registry-file.json"), self.markers.read("registry-pending.json")
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_registry
+        ready = self.markers.read("registry-file.json")
+        pending = ceph_native_registry.pending_registry(self.markers, directory, intent)
         for record in (ready, pending):
             require(record is None or isinstance(record, dict) and set(record) == {"intent", "metadata"} and record["intent"] == intent,
                     "tiebreaker-foreign")
         if ready is not None:
             return intent, ((REGISTRY_NAME, ready["metadata"], False, (1,)), (intent["anchor"], None, False, ()))
         if pending is not None:
-            return intent, ((REGISTRY_NAME, pending["metadata"], True, (1, 2)), (intent["anchor"], pending["metadata"], True, (1, 2)))
+            return intent, ((REGISTRY_NAME, pending["metadata"], True, (1,)), (intent["anchor"], None, False, ()))
         return intent, ((REGISTRY_NAME, None, False, ()), (intent["anchor"], None, False, ()))
 
     def credential_present(self, remove=False):
         """Whether a recorded credential name remains; with remove, unlink each one proved by its recorded descriptor metadata."""
-        unused, names = self.credentials()
         remaining = False
         try:
             with registry_directory() as directory:
+                unused, names = self.credentials(directory)
                 for name, metadata, pending, links in names:
                     if not registry_exists(directory, name):
                         continue
@@ -747,12 +750,49 @@ class TiebreakerRemoval:
             with os.fdopen(fd, "rb") as handle:
                 info = os.fstat(handle.fileno())
                 require(stat.S_ISREG(info.st_mode) and info.st_size <= MAX_CONF, "tiebreaker-foreign")
-                return self.fsid.encode("ascii") in handle.read(MAX_CONF + 1)
+                content = handle.read(MAX_CONF + 1)
+                fsid = self.fsid.encode("ascii")
+                if fsid not in content:
+                    return False
+                config = configparser.ConfigParser(interpolation=None, default_section=None, strict=True)
+                try:
+                    config.read_string(content.decode("utf-8"))
+                except (configparser.Error, UnicodeError):
+                    raise Refusal("tiebreaker-foreign") from None
+                require(config.has_section("global") and config.get("global", "fsid", fallback=None) == self.fsid,
+                        "tiebreaker-foreign")
+                require(all(section == "global" or not config.has_option(section, "fsid") for section in config.sections()), "tiebreaker-foreign")
+                return True
+
+    def native_runtime(self):
+        prefix = "ceph-" + self.fsid
+        listing = self.worker.command(["/usr/bin/systemctl", "list-units", "--all", "--no-legend", "--plain", "--no-pager",
+                                       prefix + "@*.service", prefix + ".target"], timeout=15, json_result=False)
+        units = [line.split()[0] for line in listing.splitlines() if line.strip()]
+        require(all(unit.startswith(prefix.encode("ascii")) for unit in units), "native-output")
+        containers = self.worker.command(["/usr/bin/podman", "ps", "--all", "--format", "json", "--filter", "name=^" + prefix + "-"], timeout=15)
+        require(isinstance(containers, list), "native-output")
+        return bool(units or containers)
+
+    def config_residue(self):
+        binding = self.markers.read("native-removal-config.json")
+        if binding is None:
+            return False
+        require(binding == self.record, "tiebreaker-foreign")
+        return any(present(CONF_ROOT + "/" + name) for name in ("ceph.pub", "ceph.client.admin.keyring"))
+
+    def native_layout_residue(self):
+        if present("/run/ceph/" + self.fsid) or present("/tmp/cephadm-" + self.fsid):
+            return True
+        prefix = "90-ceph-" + self.fsid + "-"
+        return any(name.startswith(prefix) and name.endswith(".conf")
+                   for directory in ("/etc/sysctl.d", "/usr/lib/sysctl.d") for name in listing(directory))
 
     def scoped(self):
         """This FSID's own native layout, read without following a link; cephadm keeps every daemon of the FSID under its data directory."""
         return {"data": present(DATA_ROOT + "/" + self.fsid), "log": present(LOG_ROOT + "/" + self.fsid),
-                "logrotate": present(LOGROTATE_ROOT + "/ceph-" + self.fsid), "units": self.units(), "conf": self.conf_names()}
+                "logrotate": present(LOGROTATE_ROOT + "/ceph-" + self.fsid), "units": self.units(), "conf": self.conf_names(),
+                "layoutResidue": self.native_layout_residue()}
 
     def traced(self):
         """Whether a trace this cluster's authorize phase leaves outside the FSID's layout remains with no marker to name it: a key
@@ -789,13 +829,13 @@ class TiebreakerRemoval:
 
     def footprint(self, authorization):
         return dict(self.scoped(), daemons=self.daemons(), key=self.key_present(authorization), credential=self.credential_present(),
-                    route=self.route_present())
+                    route=self.route_present(), confResidue=self.config_residue(), runtime=self.native_runtime())
 
     def prove(self):
         """Read only: this cluster's owner marker, its records, and a footprint that is only its own; None for a host the cluster's
         claim never reached, which holds nothing of the FSID (any part of it there is another's)."""
         if not self.claimed():
-            require(not any(self.scoped().values()) and not self.traced(), "tiebreaker-foreign")
+            require(not any(self.scoped().values()) and not self.traced() and not self.native_runtime(), "tiebreaker-foreign")
             return None
         attempt, complete = self.journal()
         authorization = self.authorization()
@@ -832,6 +872,9 @@ class TiebreakerRemoval:
         require(complete is None, "tiebreaker-foreign")
         del attempt
         argv = self.rm_cluster() if any(footprint[name] for name in NATIVE) else None
+        require(argv is not None or not any(footprint[name] for name in ("runtime", "confResidue", "layoutResidue")), "not-removed")
+        if footprint["conf"]:
+            self.markers.write("native-removal-config.json", self.record)
         self.markers.write(REMOVAL_ATTEMPT, self.record)
         if footprint["key"]:
             self.remove_key(authorization)

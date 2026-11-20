@@ -29,14 +29,14 @@ func cephMarkerSources() map[string][]string {
 		"ceph_native_bootstrap.py":         {core, export, smb, replication},
 		"ceph_native_dashboard.py":         {core, export, smb, replication},
 		"ceph_native_osd.py":               {core, export, smb, replication},
-		"ceph_native_registry.py":          {core, export, smb, replication},
+		"ceph_native_registry.py":          {core, host, export, smb, replication},
 		"ceph_native_resources.py":         {core, export, smb, replication},
 		"ceph_native_nfs.py":               {core, smb},
 		"ceph_native_nvmeof.py":            {core},
 		"ceph_native_object.py":            {core},
 		"ceph_native_observability.py":     {core},
 		"ceph_monitoring_template.py":      {core},
-		"ceph_native_stretch.py":           {core},
+		"ceph_native_stretch.py":           {core, host},
 		"ceph_native_units.py":             {core},
 		"ceph_tunnel_custody.py":           {core},
 		"ceph_host_runtime.py":             {host, core},
@@ -52,7 +52,7 @@ func cephMarkerSources() map[string][]string {
 // each is a proof identifier of the implementations its sources name.
 func cephMarkerNames() []string {
 	return []string{
-		"-attempt", "-attempt-%d.json", "-attempt.json", "-complete.json", "-facts.json", "-id", "-id.json",
+		"-attempt", "-attempt-%d.json", "-attempt.json", "-complete", "-complete.json", "-facts.json", "-id", "-id.json",
 		"-inputs.json", "-pulled.json", "-ready.json", "-reserved.json", "-rgw.json", ".json", "artifact.json",
 		"attempt-call_home_initialize.json", "auth.json", "auxiliary-", "bootstrap-attempt.json",
 		"bootstrap-enrollment.json", "bootstrap-original-ready.json", "bootstrap-original-reserved.json",
@@ -65,14 +65,13 @@ func cephMarkerNames() []string {
 		"initial-mgr-original-ready.json", "manifest.json", "monitoring-haproxy-attempt.json", "monitoring-haproxy-complete.json",
 		"monitoring-log-config-attempt.json",
 		"monitoring-log-config-complete.json", "monitoring-template-attempt.json", "monitoring-template-complete.json",
-		"native-route.json", "native-teardown.json", "nfs-export-attempt.", "nfs-export-id.",
+		"native-removal-config.json", "native-route.json", "native-teardown.json", "nfs-export-attempt.", "nfs-export-id.",
 		"nfs-pool-id.json", "nfs-pool.json", "nvmeof-attempt.", "nvmeof-complete.", "object-bucket-", "object-user-",
 		"osd-device-", "osd-device-intent.json", "owner.json", "physical-device-binding.json", "podman-auth.json",
-		"policy-", "policy-attempt-", "policy-id-", "policy.json", "pool-", "pool-attempt-", "pool-id-",
-		"pool-rbd-attempt-", "pool-rbd-complete-", "pool-setting-", "pull-attempt-%d.json", "pulled.json", "rbd-",
-		"rbd-attempt.", "rbd-id.", "registry-file.json", "registry-intent.json", "registry-pending.json",
+		"policy-", "policy-attempt-", "policy-id-", "policy.json", "pool-", "pull-attempt-%d.json", "pulled.json", "rbd-",
+		"rbd-attempt.", "rbd-id.", "registry-file.json", "registry-inode-", "registry-intent.json", "registry-pending.json",
 		"registry-removal.json", "registry-removed.json", "replication-", "rgw-root.json", "route.json",
-		"runtime-profile.json", "scope.json", "service-", "service-inputs.json", "smb-applied.", "smb-attempt.",
+		"runtime-profile.json", "scope.json", "service-", "service-inputs.json", "setting-", "smb-applied.", "smb-attempt.",
 		"ssh-authorization.json", "sshd-policy.json", "stretch-", "subvolume-", "subvolume-attempt.", "subvolume-path.",
 		"synthetic.json", "tiebreaker-removal-attempt.json", "tiebreaker-removal-complete.json", "transport-directory.json", "transport-file-ready-", "transport-file-relabeled-",
 		"transport-file-reserved-", "transport-ready.json", "transport-relabel.json", "transport.json",
@@ -86,7 +85,7 @@ func cephMarkerNames() []string {
 const cephMarkerProof = "marker:"
 
 var (
-	cephMarkerCall = regexp.MustCompile(`markers\.(?:read|write)\(`)
+	cephMarkerCall = regexp.MustCompile(`markers\.(?:read|write(?:_anonymous)?)\(`)
 	// cephMarkerJSON is a quoted record name; cephMarkerOperand is a quoted
 	// operand of a concatenation that builds one.
 	cephMarkerJSON    = regexp.MustCompile(`"([^"\\\n]*\.json)"`)

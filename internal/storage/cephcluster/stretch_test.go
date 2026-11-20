@@ -315,3 +315,42 @@ func TestStretchRefusesNVMeoFNFSAndSMB(t *testing.T) {
 		t.Fatal("a gateway of a stretch cluster took the NFS and SMB refusal")
 	}
 }
+
+func TestStretchMONAdmissionProvesQuorum(t *testing.T) {
+	for _, test := range []struct {
+		name, field string
+		placement   api.Value
+	}{
+		{"one MON from five", "$.spec.services[0].placement.count", m("hosts", fqdns("a1", "a2", "b1", "b2", "tie"), "count", 1)},
+		{"arbitrary subset of four", "$.spec.services[0].placement.count", m("hosts", fqdns("a1", "a2", "b1", "b2", "tie"), "count", 4)},
+		{"unbalanced", "$.spec.services[0].placement", m("hosts", fqdns("a1", "a2", "b1", "tie"))},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			cluster, catalog := stretchCatalog(t, func(spec api.Value) api.Value {
+				services := spec.Get("services")
+				return spec.With("services", withItem(services, 0, services.Items()[0].With("placement", test.placement)))
+			})
+			requireIssue(t, Validate(cluster, catalog), test.field)
+		})
+	}
+}
+
+func TestStretchRuleNameAdmission(t *testing.T) {
+	for _, rule := range []string{"replicated_rule", "invalid/rule", strings.Repeat("a", 129)} {
+		cluster, catalog := stretchCatalog(t, func(spec api.Value) api.Value {
+			return spec.WithPath(api.StringValue(rule), "topology", "stretch", "ruleName")
+		})
+		requireIssue(t, Validate(cluster, catalog), "$.spec.topology.stretch.ruleName")
+	}
+}
+
+func TestNativeHostnamesMatchWorkerAdmission(t *testing.T) {
+	a := strings.Repeat("a", 60)
+	for _, name := range []string{"a1.other.example.test", a + "." + a + ".other.example.test"} {
+		cluster, catalog := stretchCatalog(t, nil)
+		nodes := cluster.Spec().Get("topology", "nodes")
+		cluster = cluster.WithSpec(cluster.Spec().WithPath(withItem(nodes, 2,
+			nodes.Items()[2].With("fqdn", api.StringValue(name))), "topology", "nodes"))
+		requireIssue(t, Validate(cluster, replace(catalog, cluster)), "$.spec.topology.nodes[2].fqdn")
+	}
+}

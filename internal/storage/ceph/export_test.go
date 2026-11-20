@@ -436,3 +436,23 @@ func TestExportTLSRequestGolden(t *testing.T) {
 		t.Fatal("physical export retirement accepted")
 	}
 }
+
+func TestConsumerRemovalWarningNamesThePhysicalCluster(t *testing.T) {
+	block := reconciliation.Block{BlockDefinition: managedExportPlan(t, false)}
+	request, err := DecodeConsumerRequest(block.Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	capability := ConsumerCapability{}
+	if warnings := capability.RemovalWarnings(block); len(warnings) != 0 {
+		t.Fatalf("a virtual consumer should retire with its hosts: %+v", warnings)
+	}
+	request.PhysicalHosts = true
+	block.Request = mustCanonical(t, request)
+	warnings := capability.RemovalWarnings(block)
+	if len(warnings) != 1 || warnings[0].Code != cephRetirementUnavailable.Code ||
+		!strings.Contains(warnings[0].Message, "CephConsumer/"+request.Name) ||
+		!strings.Contains(warnings[0].Message, "CephCluster/"+request.Cluster) {
+		t.Fatalf("warning should identify the consumer and physical cluster: %+v", warnings)
+	}
+}

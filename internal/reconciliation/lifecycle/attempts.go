@@ -214,21 +214,10 @@ func (s Service) ranUnder(block reconciliation.Block) operationstore.Build {
 	}
 }
 
-// resolveUnknown observes the exact frozen request read-only under a freshly
-// allocated resolution identity and log, before any observation begins. Until
-// both exist it has observed nothing, so it returns no state and the block
-// keeps the one it had: a resolution that cannot start moves nothing. It
-// observes for the verb the operation froze: a destroy's block through
-// ObserveRemoval, so a target its removal has not yet taken back is no
-// removal, and an apply's block through Observe. Where removal says a fresh
-// removal resolves an apply's block, an Observe that proves it completed
-// resolves it done and captures what it produced, as the apply's own
-// finalization does (D123); otherwise that removal reads the apply's block by
-// its own check, through the block of removalPlan that takes it back, which
-// keeps the apply's identity, implementation, content digest and request
-// (D119), and the resolution is still recorded against the apply's block, as
-// removalEffect maps it. A block it leaves unknown names command, the exact
-// command that observes it again.
+// resolveUnknown opens a resolution record and log before observing the frozen
+// request. A fresh destroy can resolve unknown apply through either its original
+// forward proof (D123) or its matching inverse (D119). Both record against the
+// original block. An unresolved block reports the command for another observation.
 func (s Service) resolveUnknown(ctx context.Context, run invocation, block reconciliation.Block, position, total int, reading removalReading, command string, retry bool) (reconciliation.BlockState, error) {
 	tx, store, boundary, operation, plan := run.tx, run.store, run.boundary, run.operation, run.plan
 	removal := reading.plan != nil
@@ -269,6 +258,9 @@ func (s Service) resolveUnknown(ctx context.Context, run invocation, block recon
 			if as == reconciliation.Destroy {
 				observe = capability.ObserveRemoval
 				execution.RetiredWithHosts = reading.retired[target.ID]
+				if err := s.removalResolutionExecution(inner, run, &execution, target.ID); err != nil {
+					return Result{Outcome: reconciliation.OutcomeUnknown}, err
+				}
 			}
 			value, err := observe(inner, execution)
 			observation = value
@@ -325,6 +317,19 @@ func (s Service) resolveUnknown(ctx context.Context, run invocation, block recon
 	explanation := s.explainIn(ctx, store, operation, verb, observed, observation.Evidence)
 	_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "unresolved", Block: block.ID, Detail: explanation.Reason})
 	return state, unresolvedFailure(block.ID, explanation, command)
+}
+
+func (s Service) removalResolutionExecution(ctx context.Context, run invocation, execution *Execution, target string) error {
+	execution.MachineStopped = s.machineStopped(run, *execution)
+	if run.operation.Verb != reconciliation.Apply {
+		return nil
+	}
+	dependents, err := originalRemovalDependents(ctx, run.store, run.operation, target)
+	if err != nil {
+		return err
+	}
+	execution.OriginalRemovalDependents = dependents
+	return nil
 }
 
 // resolvedProgress keeps the row of a block its resolution left failed running into the retry that follows.

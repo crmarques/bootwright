@@ -408,6 +408,12 @@ checks:
   IP's network and `virtual_interface_networks`) overlap use different
   keepalived virtual router IDs; an omitted `first_virtual_router_id` is 50,
   and each ingress takes one ID because `virtual_ips_list` is refused;
+- registered storage hostnames are at most 128 bytes, and their first DNS
+  labels are unique because they identify native MON and MGR daemons;
+- the stretch MON service places one daemon on every selected host, including
+  the tiebreaker. The selected hosts retain a majority after either data site
+  is lost. The stretch rule uses the CRUSH name grammar and reserves
+  `replicated_rule` for bootstrap;
 - each declared rgw service is bound by exactly one CephObjectGateway of
   its cluster; realm, zone group and zone are unique per cluster across
   gateways; zone pool roles and the derived-pool host rule hold; and endpoint

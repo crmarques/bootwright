@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine/diskselection"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -72,7 +73,7 @@ func PhysicalRetirementBlockID(cluster string) string {
 }
 
 func PhysicalRetirementContentDigest() string {
-	digest := sha256.Sum256([]byte(PhysicalRetirementImplementation + ":original-host-and-completed-erase-proof-v1"))
+	digest := sha256.Sum256([]byte(PhysicalRetirementImplementation + ":original-host-preparation-and-terminal-retirement-receipts"))
 	return hex.EncodeToString(digest[:])
 }
 
@@ -175,13 +176,7 @@ func (r PhysicalRetirementRequest) authorized() error {
 			return physicalRemovalRefusal()
 		}
 		for _, device := range host.Devices {
-			covered := slices.ContainsFunc(host.EraseTargets, func(target PhysicalEraseTarget) bool {
-				if device.WWN != "" {
-					return target.WWN == device.WWN
-				}
-				return target.Serial == device.Serial && target.SizeBytes == device.SizeBytes
-			})
-			if !covered {
+			if !host.covers(device) {
 				return cephRetirementRefused.Fail("physical Ceph retirement requires explicit erasure of every selected data, DB and WAL disk", "include every selected Ceph disk, by its WWN or its serial number and size, in a hardware.dataDisks entry of each Machine, as originally applied, with a non-retain onRemoval")
 			}
 		}
@@ -236,4 +231,67 @@ func (PhysicalRetirementCapability) Quiescent(ctx context.Context, _ lifecycle.P
 		return lifecycle.Quiescence{State: lifecycle.Unproved}, err
 	}
 	return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: "physical retirement verification owns only a durable policy"}, nil
+}
+
+func (PhysicalRetirementCapability) RetiresHost(block, dependent reconciliation.Block, machine string) bool {
+	request, err := DecodePhysicalRetirementRequest(block.Request)
+	if err != nil || block.ID != PhysicalRetirementBlockID(request.Cluster) || block.Object != request.Cluster ||
+		!usesPhysicalRetirement(dependent, request.Cluster) {
+		return false
+	}
+	return slices.ContainsFunc(request.Hosts, func(host PhysicalRetirementHost) bool {
+		return host.Machine == machine && host.RetainRoot && len(host.Devices) == 0 && len(host.EraseTargets) == 0
+	})
+}
+
+func (h PhysicalRetirementHost) covers(device Device) bool {
+	return slices.ContainsFunc(h.EraseTargets, func(target PhysicalEraseTarget) bool {
+		if device.WWN != "" {
+			return target.WWN == device.WWN
+		}
+		return target.Serial == device.Serial && target.SizeBytes == device.SizeBytes
+	})
+}
+
+func retirementWarning(message, remedy string) diagnostics.Diagnostic {
+	return diagnostics.Diagnostic{Severity: "warning", Code: cephRetirementUnavailable.Code, Message: message, Remediation: remedy}
+}
+
+func (PhysicalRetirementCapability) RemovalWarnings(block reconciliation.Block) []diagnostics.Diagnostic {
+	request, err := DecodePhysicalRetirementRequest(block.Request)
+	if err != nil {
+		return nil
+	}
+	var warnings []diagnostics.Diagnostic
+	for _, host := range request.Hosts {
+		name := "CephCluster/" + request.Cluster + " on Machine/" + host.Machine
+		if len(host.Devices) == 0 && len(host.EraseTargets) == 0 && !host.RetainRoot {
+			warnings = append(warnings, retirementWarning(name+" has no original erase target", "declare the root's removal policy before apply"))
+		}
+		for _, device := range host.Devices {
+			if !host.covers(device) {
+				warnings = append(warnings, retirementWarning(name+" cannot retire because "+device.Path+" has no erase policy",
+					"declare this disk's exact identity and a non-retain onRemoval on the Machine before apply"))
+			}
+		}
+	}
+	return warnings
+}
+
+func usesPhysicalRetirement(block reconciliation.Block, cluster string) bool {
+	switch block.Implementation {
+	case Implementation:
+		r, err := DecodeRequest(block.Request)
+		return err == nil && r.Cluster == cluster
+	case HostImplementation:
+		r, err := DecodeHostRequest(block.Request)
+		return err == nil && r.Cluster.Cluster == cluster
+	case SMBImplementation:
+		r, err := DecodeSMBRequest(block.Request)
+		return err == nil && r.Cluster == cluster
+	case ReplicationImplementation:
+		r, err := DecodeReplicationRequest(block.Request)
+		return err == nil && (r.Primary.Cluster == cluster || r.Secondary.Cluster == cluster)
+	}
+	return false
 }

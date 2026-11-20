@@ -708,8 +708,8 @@ def test_fsid_json_object_is_checked_before_other_cluster_reads(core_request):
 def test_pool_numeric_identity_must_survive_recreation(core_request):
     core_request.update(action="pool", pool=replicated_pool())
     marks = Markers()
-    marks.records["pool-volumes.json"] = core_request["pool"]
-    marks.records["pool-id-volumes.json"] = {"id": 4}
+    marks.records["pool-owner~volumes.json"] = core_request["pool"]
+    marks.records["pool-id~volumes.json"] = {"id": 4}
     native, calls = worker(core_request, {("osd", "pool", "ls", "detail"): [{"pool_name": "volumes", "pool_id": 8}]}, marks)
     with pytest.raises(ceph_native.Refusal, match="pool-identity"):
         native.pool()
@@ -739,7 +739,8 @@ def pool_world(core_request, pools, effects):
         if command[:3] == ("osd", "pool", "create"):
             pools.append({"pool_name": command[3], "pool_id": 8, "type": 1, "crush_rule": 0, "pg_num": int(command[4]),
                           "size": 3, "min_size": 2, "quota_max_bytes": 0, "quota_max_objects": 0, "options": {}, "flags_names": "hashpspool",
-                          "application_metadata": {}})
+                          "application_metadata": {}, "pg_autoscale_mode": command[command.index("--autoscale_mode") + 1]})
+            return 0, ("pool '" + command[3] + "' created").encode()
         if command[:3] == ("osd", "pool", "set"):
             pools[0][command[4]] = int(command[5])
         if command[0] == "/usr/bin/rbd":
@@ -774,20 +775,19 @@ def test_pool_creation_journals_its_attempt_before_the_create(core_request):
     assert native.pool() == {"changed": True}
     creates = [index for index, effect in enumerate(effects) if effect[:3] == ("osd", "pool", "create")]
     assert len(creates) == 1
-    assert effects.index(("write", "pool-attempt-volumes.json")) < creates[0] < effects.index(("write", "pool-id-volumes.json"))
-    assert marks.records["pool-attempt-volumes.json"] == pool_attempt(core_request)
+    assert effects.index(("write", "pool-attempt~volumes.json")) < creates[0] < effects.index(("write", "pool-id~volumes.json"))
+    assert marks.records["pool-attempt~volumes.json"] == pool_attempt(core_request)
 
 
-def test_a_lost_pool_creation_response_resumes_without_a_second_create(core_request):
+def test_a_lost_pool_creation_response_preserves_ambiguous_native_pool(core_request):
     marks, effects = Markers(), []
     pools = [{"pool_name": "volumes", "pool_id": 8, "type": 1, "crush_rule": 0, "pg_num": 32}]
     native = pool_worker(core_request, marks, pools, effects)
-    marks.records["pool-volumes.json"] = core_request["pool"]
-    marks.records["pool-attempt-volumes.json"] = pool_attempt(core_request)
-    assert native.pool() == {"changed": True}
-    assert not any(effect[:3] == ("osd", "pool", "create") for effect in effects)
-    assert marks.records["pool-id-volumes.json"] == {"id": 8}
-    assert ("osd", "pool", "set", "volumes", "size", "2") in effects
+    marks.records["pool-owner~volumes.json"] = core_request["pool"]
+    marks.records["pool-attempt~volumes.json"] = pool_attempt(core_request)
+    with pytest.raises(ceph_native.Refusal, match="^pool-identity$"):
+        native.pool()
+    assert not effects and "pool-id~volumes.json" not in marks.records
 
 
 @pytest.mark.parametrize("case", ["no-attempt", "foreign-attempt", "rule", "pg", "erasure", "two"])
@@ -795,12 +795,12 @@ def test_a_same_name_pool_without_this_operations_creation_refuses(core_request,
     marks, effects = Markers(), []
     pools = [{"pool_name": "volumes", "pool_id": 8, "type": 1, "crush_rule": 0, "pg_num": 32}]
     native = pool_worker(core_request, marks, pools, effects)
-    marks.records["pool-volumes.json"] = core_request["pool"]
-    marks.records["pool-attempt-volumes.json"] = pool_attempt(core_request)
+    marks.records["pool-owner~volumes.json"] = core_request["pool"]
+    marks.records["pool-attempt~volumes.json"] = pool_attempt(core_request)
     if case == "no-attempt":
-        del marks.records["pool-attempt-volumes.json"]
+        del marks.records["pool-attempt~volumes.json"]
     elif case == "foreign-attempt":
-        marks.records["pool-attempt-volumes.json"] = dict(pool_attempt(core_request), owner="apply-other")
+        marks.records["pool-attempt~volumes.json"] = dict(pool_attempt(core_request), owner="apply-other")
     elif case == "rule":
         pools[0]["crush_rule"] = 3
     elif case == "pg":
@@ -811,7 +811,7 @@ def test_a_same_name_pool_without_this_operations_creation_refuses(core_request,
         pools.append(dict(pools[0], pool_id=9))
     with pytest.raises(ceph_native.Refusal, match="^pool-identity$"):
         native.pool()
-    assert effects == [] and "pool-id-volumes.json" not in marks.records
+    assert effects == [] and "pool-id~volumes.json" not in marks.records
 
 
 def test_a_foreign_same_name_pool_never_owned_refuses_before_any_record(core_request):
@@ -824,35 +824,28 @@ def test_a_foreign_same_name_pool_never_owned_refuses_before_any_record(core_req
 
 
 @pytest.mark.parametrize("mode", ["on", "warn", "off", None])
-def test_a_lost_creation_resumes_after_the_autoscaler_moved_pg_num_only_when_it_is_on(core_request, mode):
+def test_pool_creation_shape_accounts_for_autoscaler(core_request, mode):
     marks, effects = Markers(), []
-    pools = [{"pool_name": "volumes", "pool_id": 8, "type": 1, "crush_rule": 0, "pg_num": 1}]
+    pool = {"pool_name": "volumes", "pool_id": 8, "type": 1, "crush_rule": 0, "pg_num": 1}
     if mode is not None:
-        pools[0]["pg_autoscale_mode"] = mode
-    native = pool_worker(core_request, marks, pools, effects)
-    marks.records["pool-volumes.json"] = core_request["pool"]
-    marks.records["pool-attempt-volumes.json"] = pool_attempt(core_request)
-    if mode == "on":
-        assert native.pool() == {"changed": True}
-        assert marks.records["pool-id-volumes.json"] == {"id": 8}
-        assert not any(effect[:3] == ("osd", "pool", "create") for effect in effects)
-        return
-    with pytest.raises(ceph_native.Refusal, match="^pool-identity$"):
-        native.pool()
-    assert effects == [] and "pool-id-volumes.json" not in marks.records
+        pool["pg_autoscale_mode"] = mode
+    native = pool_worker(core_request, marks, [pool], effects)
+    assert native.created_pool(pool, core_request["pool"]) == (mode == "on")
+    core_request["pool"]["autoscale"]["mode"] = "off"
+    assert not native.created_pool(pool, core_request["pool"])
 
 
 def test_a_pool_listing_without_pool_id_refuses_as_native_output(core_request):
     marks, effects = Markers(), []
     pools = [{"pool_name": "volumes", "pool": 8, "type": 1, "crush_rule": 0, "pg_num": 32}]
     native = pool_worker(core_request, marks, pools, effects)
-    marks.records["pool-volumes.json"] = core_request["pool"]
-    marks.records["pool-attempt-volumes.json"] = pool_attempt(core_request)
+    marks.records["pool-owner~volumes.json"] = core_request["pool"]
+    marks.records["pool-attempt~volumes.json"] = pool_attempt(core_request)
     with pytest.raises(ceph_native.Refusal, match="^native-output$"):
         native.pool()
     with pytest.raises(ceph_native.Refusal, match="^native-output$"):
         native.observe_resource(native.empty_evidence(), True)
-    assert effects == [] and "pool-id-volumes.json" not in marks.records
+    assert effects == [] and "pool-id~volumes.json" not in marks.records
 
 
 def observed_pool(core_request, marks):
@@ -860,18 +853,18 @@ def observed_pool(core_request, marks):
               "flags_names": "hashpspool,selfmanaged_snaps", "quota_max_bytes": 0, "quota_max_objects": 0, "erasure_code_profile": "", "stripe_width": 0,
               "options": {}, "application_metadata": {"rbd": {}}}]
     native = pool_worker(core_request, marks, pools, [])
-    marks.records["pool-volumes.json"] = core_request["pool"]
-    marks.records["pool-attempt-volumes.json"] = pool_attempt(core_request)
+    marks.records["pool-owner~volumes.json"] = core_request["pool"]
+    marks.records["pool-attempt~volumes.json"] = pool_attempt(core_request)
     return native
 
 
-def test_a_pool_this_operation_created_without_a_recorded_id_observes_as_unfinished(core_request):
+def test_a_pool_without_a_recorded_id_is_unproved(core_request):
     marks = Markers()
     native = observed_pool(core_request, marks)
     evidence = native.empty_evidence()
-    assert native.observe_resource(evidence, True) is False
-    assert evidence["owned"] and evidence["exists"] and evidence["resource"] == {"id": "", "path": ""}
-    marks.records["pool-id-volumes.json"] = {"id": 8}
+    with pytest.raises(ceph_native.Refusal, match="^pool-identity$"):
+        native.observe_resource(evidence, True)
+    marks.records["pool-id~volumes.json"] = {"id": 8}
     evidence = native.empty_evidence()
     assert native.observe_resource(evidence, True) is True
     assert evidence["resource"] == {"id": "8", "path": ""}
@@ -882,11 +875,11 @@ def test_an_unproved_pool_id_still_refuses_observation(core_request, case):
     marks = Markers()
     native = observed_pool(core_request, marks)
     if case == "no-attempt":
-        del marks.records["pool-attempt-volumes.json"]
+        del marks.records["pool-attempt~volumes.json"]
     elif case == "foreign-attempt":
-        marks.records["pool-attempt-volumes.json"] = dict(pool_attempt(core_request), owner="apply-other")
+        marks.records["pool-attempt~volumes.json"] = dict(pool_attempt(core_request), owner="apply-other")
     else:
-        marks.records["pool-id-volumes.json"] = {"id": 4}
+        marks.records["pool-id~volumes.json"] = {"id": 4}
     with pytest.raises(ceph_native.Refusal, match="^pool-identity$"):
         native.observe_resource(native.empty_evidence(), True)
 
@@ -895,7 +888,7 @@ def test_client_caps_and_a_hash_only_binding_refuse_unproved_identity(core_reque
     core_request.update(action="client", client={"name": "reader", "pool": "volumes", "access": "readOnly", "dataPools": [],
                                                  "filesystem": "", "group": "", "subvolume": "", "caps": READ_ONLY_CAPS})
     marks = Markers()
-    marks.records["pool-volumes.json"] = {"name": "volumes"}
+    marks.records["pool-owner~volumes.json"] = {"name": "volumes"}
     marks.records["client-reader.json"] = core_request["client"]
     marks.records["client-id-reader.json"] = {"keyHash": hashlib.sha256(b"original").hexdigest()}
     native, calls = worker(core_request, {("auth", "ls"): {"auth_dump": [{"entity": "client.reader", "key": "replacement"}]}}, marks)
@@ -1405,9 +1398,9 @@ def test_absent_native_resource_retains_owned_cleanup_work(core_request, action,
     answers[("osd", "pool", "ls", "detail") if action == "pool" else ("auth", "ls")] = [] if action == "pool" else {"auth_dump": []}
     marks = Markers()
     if owned:
-        marks.records[action + "-" + resource["name"] + ".json"] = copy.deepcopy(resource)
+        marks.records[("pool-owner~" if action == "pool" else action + "-") + resource["name"] + ".json"] = copy.deepcopy(resource)
         if action == "pool":
-            marks.records["pool-id-volumes.json"] = {"id": 4}
+            marks.records["pool-id~volumes.json"] = {"id": 4}
     retained = copy.deepcopy(marks.records)
     native, calls = worker(core_request, answers, marks)
 

@@ -724,18 +724,18 @@ Destroy `CTX_CEPH` first. Its cluster block removes the tiebreaker's Ceph
 footprint over the fleet connection, and refuses `tiebreaker-unreachable`
 without `arbiter-01`, while a tiebreaker already reinstalled or deleted has
 no exit ([B938](../../specs/milestones/m2.md#b938)); `CTX_CEPH` also
-attaches to `CTX_ARB`'s network.
+attaches to `CTX_ARB`'s network. Stop the managed data hosts before the
+first destroy and keep the provided tiebreaker reachable. A fresh destroy
+with a running managed host returns `lifecycle.start-power` before registration.
 
 ```sh
-./bin/bootwright destroy --context "$CTX_CEPH" --authorize data-loss
 ./bin/bootwright machine stop --context "$CTX_CEPH" --name ceph-01,ceph-02,ceph-03,ceph-04 --yes
 ./bin/bootwright destroy --context "$CTX_CEPH" --authorize data-loss
 ./bin/bootwright status --context "$CTX_CEPH"
 ```
 
-The first destroy runs the online Ceph cleanup, `arbiter-01`'s footprint
-included, then pauses, naming the stop of the data hosts. Before destroying
-`CTX_ARB`, read each
+Repeat an interrupted destroy until the registered removal completes. Before
+destroying `CTX_ARB`, read each
 [absence](../../specs/ceph.md#a-provided-tiebreakers-removal) the removal
 proves, and the parts of its footprint the knowledge page leaves unverified:
 
