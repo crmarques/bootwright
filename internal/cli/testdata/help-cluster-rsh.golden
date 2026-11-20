@@ -1,9 +1,9 @@
   bootwright / cluster rsh
-      Open an SSH session on a cluster node's Machine as the Machine's resolved identity;
-      confirm or refuse an unproved host key and return the client's exit status. The session
-      runs as the identity the Machine's desired state authorizes, over a host key proved
-      before any credential is offered; an unproved key is confirmed interactively or refused.
-      The exit status is the client's. The session opens on the Machine behind one node of an
+      Open an SSH session on a cluster node's Machine. By default, log in with the Machine's
+      SSH identity. For a different account, supply --ssh-user <user> and --ssh-id-file
+      <private-key>. That account must already accept the corresponding public key. An unproved
+      host key requires interactive confirmation before SSH offers a credential. The exit
+      status is the client's. The session opens on the Machine behind one node of an
       OpenShiftCluster or managed CephCluster: --node selects the node by name, then by FQDN,
       and defaults to the administrator node that cluster info names. For an OpenShiftCluster,
       the default is its first node in name order, and --node also accepts <role>-<ordinal>

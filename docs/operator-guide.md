@@ -743,6 +743,22 @@ bootwright machine stop --context lab-rhel --name rhel-01,rhel-02,rhel-03 --yes
 bootwright machine exec --context lab-rhel --name rhel-01,rhel-02,rhel-03 cat /etc/os-release
 ```
 
+To use an existing account for one session, supply its login and private key.
+The target account must already accept the corresponding public key. Place
+both flags before the remote command.
+
+```sh
+bootwright machine exec --name node --ssh-user ops --ssh-id-file ~/.ssh/ops -- id -un
+bootwright machine rsh --name node --ssh-user ops --ssh-id-file ~/.ssh/ops
+```
+
+For recurring access to a provided Machine, set `spec.access.ssh.user` and
+its `auth.privateKeyRef`, or use `auth.passwordRef` for a single login where
+the client prompts for the password. These fields describe an existing login.
+The remote account's permissions apply to the session. A provided host that
+runs managed infrastructure has additional
+[placement requirements](../specs/infrastructure-services.md#placement-arms-and-credentials).
+
 When an insert refuses because a BMC still presents other media, such as an
 image an operator attached by hand or one an interrupted run left, `machine
 eject-media` releases whatever each listed Machine presents and reads the

@@ -294,16 +294,15 @@ const payloadHelp = " Bootwright flags go before the command." +
 	" Use -- before a flag-shaped first payload value to preserve it as data." +
 	" After the first payload value, all remaining tokens belong to the payload."
 
-// sessionCommand describes one command that opens an SSH session. Its help
-// states what the operator is actually getting: a live session as an identity
-// they did not choose, over a host key they may be asked to confirm, whose
-// exit status is the client's rather than a Bootwright result.
+// sessionCommand describes the login, trust and exit status shared by Machine
+// and cluster SSH sessions.
 func sessionCommand(spec commandSpec) commandSpec {
 	spec.session = true
+	spec.long = spec.short + ". By default, log in with the Machine's SSH identity." +
+		" For a different account, supply --ssh-user <user> and --ssh-id-file <private-key>." +
+		" That account must already accept the corresponding public key. An unproved host key requires" +
+		" interactive confirmation before SSH offers a credential. The exit status is the client's."
 	spec.short += " as the Machine's resolved identity; confirm or refuse an unproved host key and return the client's exit status"
-	spec.long = spec.short + ". The session runs as the identity the Machine's desired state authorizes," +
-		" over a host key proved before any credential is offered; an unproved key is confirmed" +
-		" interactively or refused. The exit status is the client's."
 	if spec.payload {
 		spec.long += payloadHelp
 	}

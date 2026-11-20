@@ -22,6 +22,9 @@ Alias cell.
 | [B1622](#b1622) | new, 2026-11-18 (X627 review) | product | Substrate and Reconciliation | Prove a hosted KubeVirt Machine off or absent without creating access on its host cluster | Fails closed: a context with a hosted KubeVirt Machine refuses every new apply and destroy |
 | [B1623](#b1623) | new, 2026-11-18 (X627 review) | safety | Reconciliation and Machine | Decide whether explicit `machine discover` and `machine inventory` take the power entry check | The owner's request named apply and destroy only |
 | [B1624](#b1624) | new, 2026-11-18 (X627 review) | product | Reconciliation, with CLI | `Stop first` names the whole fleet an automatic preparation's entry check reads | The refusal already names every blocking Machine |
+| [B1641](#b1641) | new, 2026-11-20 (remote access review) | defect | Machine | Show the password advisory only for the account using that password | The session already authenticates with the selected key |
+| [B1642](#b1642) | new, 2026-11-20 (remote access review) | product | Machine and CLI | Let an operator explicitly choose a terminal password prompt for an alternate SSH account | Changes the session credential contract |
+| [B1643](#b1643) | new, 2026-11-20 (remote access review) | product | Machine and Reconciliation | Select a distinct lifecycle login and privilege policy on a provided placement host | Changes the placement privilege boundary |
 | [B82](#b82) | C5; moved from M4 on 2026-10-10 (D128); parked on 2026-10-11 (D129) | product | Managed OS | One more image, profile or entitlement variant | No concrete additional OS variant beyond the qualified M2 matrix |
 | [B96](#b96) | Y3 | enabling | Architecture | Collection metadata and naming polish | Pruned from M1 on 2026-09-28 |
 | [B97](#b97) | A8 (kind tables) | enabling | Desired state and Workspace | Kind field-table parity and a path checker | Pruned from M1 on 2026-09-28 |
@@ -4013,6 +4016,41 @@ reads every managed Machine of the fleet. List the fleet the check reads.
 
 **Exit evidence:** a plan golden for an automatic preparation naming every
 fleet Machine under `Stop first`.
+
+### B1641
+
+**Owner:** Machine. **Kind:** defect. **Requires:** none.
+**Definition:** Specified.
+
+A single-target [SSH session](../cli.md#machine-ssh-sessions) using an
+alternate account and key on a Machine with a declared password prints a
+command to reveal the original account's password. Select the advisory from
+the resolved identity. **Exit evidence:** an alternate key session emits no
+reveal instruction and the declared password session names its own Secret.
+
+### B1642
+
+**Owner:** Machine and CLI. **Kind:** product. **Requires:** owner selection.
+**Definition:** Candidate.
+
+Offer an explicit terminal password prompt for a different account on a
+single-target [Machine SSH session](../cli.md#machine-ssh-sessions). OpenSSH
+owns the prompt after host-key verification. **Exit evidence:** a terminal
+session reaches the named account without lending the declared credential,
+and batch and noninteractive invocations refuse before connecting.
+
+### B1643
+
+**Owner:** Machine and Reconciliation. **Kind:** product.
+**Requires:** owner selection. **Definition:** Candidate.
+
+Allow a provided [placement host](../infrastructure-services.md#placement-arms-and-credentials)
+to bind an existing automation account independently of operator sessions and
+declare how lifecycle work obtains the privileges it needs. Promotion defines
+the supported sudo policies and how each is proved. **Exit evidence:** a
+pinned host with direct root login disabled completes apply, continuation and
+destroy under the bound account and privilege policy. An insufficient rule
+refuses before mutation and the host's existing account policy is preserved.
 
 ## Retired
 
