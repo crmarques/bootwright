@@ -154,7 +154,7 @@ def test_the_identity_is_read_and_compared_before_any_power_request():
     # The read tolerates its own failure only so that the controller's message
     # reaches the output uncensored: the step after it refuses there, so a read
     # that failed is never compared as an empty identity.
-    native = LOADER.load_from_file(str(ROLE.parent / "substrate_baremetal_machine/tasks/state_read.yml"))
+    native = LOADER.load_from_file(str(ROLE.parent / "substrate_machine/tasks/redfish_state_read.yml"))
     inspect = one([task for task in native if INSPECT in task], "inspect via state_read")
     assert inspect["failed_when"] is False and inspect["no_log"] is True
     assert "ignore_errors" not in loaded[read]

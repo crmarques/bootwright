@@ -276,8 +276,16 @@ def scope(consumer, arm):
 
 def operations(arm, entry):
     """Each controller effect one entry point performs: operation, target and task."""
-    tasks = role_tasks.flatten(loaded(ROLES / SUBSTRATES[arm] / "tasks" / (entry + ".yml")))
-    return [(task[BOOT]["operation"], task[BOOT].get("target"), task) for task in tasks if BOOT in task]
+    tasks = list(role_tasks.flatten(loaded(ROLES / SUBSTRATES[arm] / "tasks" / (entry + ".yml"))))
+    steps = []
+    for task in tasks:
+        include = task.get("ansible.builtin.include_role", {})
+        if include.get("name") == "bootwright.core.substrate_machine":
+            shared = ROLES / "substrate_machine" / "tasks" / (include["tasks_from"] + ".yml")
+            steps.extend(role_tasks.flatten(loaded(shared)))
+        else:
+            steps.append(task)
+    return [(task[BOOT]["operation"], task[BOOT].get("target"), task) for task in steps if BOOT in task]
 
 
 def applies(task, variables):
@@ -414,7 +422,7 @@ def test_only_the_state_reads_look_for_media():
             assert path.relative_to(ROLES).parts[0] not in INSTALLATIONS
             media = task[READ].get("media")
             if not isinstance(media, bool):
-                assert path.name == "state_read.yml"
+                assert path.name == "redfish_state_read.yml"
                 rendering = Templar(loader=LOADER, variables={"bootwright_machine_port": {"media": False}})
                 assert rendering.template(media) is False
 
@@ -432,6 +440,7 @@ def test_the_boot_entry_points_boot_the_media_their_own_way(powers_off):
         ("power-off", None), ("boot", "Cd"), ("power-on", None)]
     variables = {LIBVIRT + "_boot_installer_powers_off": powers_off}
     assert [applies(task, variables) for _operation, _target, task in steps] == [True, powers_off, True]
+    assert steps[1][2][BOOT]["allow_continuous"] is True
 
     steps = operations("baremetal", "boot_media")
     assert [(operation, target) for operation, target, _task in steps] == [("boot", "Cd"), ("power-on", None)]
@@ -443,7 +452,7 @@ def test_the_boot_entry_points_boot_the_media_their_own_way(powers_off):
 def test_the_disk_boot_selects_the_disk_and_powers_on_only_when_asked(arm, power_on):
     steps = operations(arm, "boot_disk")
     assert [(operation, target) for operation, target, _task in steps] == [("boot", "Hdd"), ("power-on", None)]
-    variables = {SUBSTRATES[arm] + "_disk_power_on": power_on}
+    variables = {"bootwright_machine_port": {"power_on": power_on}}
     assert [applies(task, variables) for _operation, _target, task in steps] == [True, power_on]
 
 
@@ -477,8 +486,7 @@ def test_a_cluster_removal_dispatches_nothing():
 # state; each poll reads it as not yet the answer it waits for, so it spends
 # one attempt rather than ending the poll.
 @pytest.mark.parametrize("path, register, awaited, pending", [
-    ("substrate_libvirt_machine/tasks/state_read.yml", "substrate_libvirt_machine_port_result", "Off", "On"),
-    ("substrate_baremetal_machine/tasks/state_read.yml", "substrate_baremetal_machine_port_result", "Off", "On"),
+    ("substrate_machine/tasks/redfish_state_read.yml", "substrate_machine_redfish_port_result", "Off", "On"),
     ("substrate_libvirt_machine/tasks/apply.yml", "substrate_libvirt_machine_controller", "On", ""),
 ])
 def test_a_poll_spends_an_attempt_on_a_read_that_failed(path, register, awaited, pending):

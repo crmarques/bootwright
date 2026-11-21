@@ -1,0 +1,62 @@
+---
+- name: Select the installed disk as the boot device
+  bootwright.core.redfish_boot:
+    endpoint: '{{ bootwright_machine_port.endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", bootwright_machine_port.user, rstrip=false) }}'
+    password: '{{ lookup("ansible.builtin.file", bootwright_machine_port.password, rstrip=false) }}'
+    verify: '{{ bootwright_machine_port.verify }}'
+    verification: "{{ bootwright_machine_port.verification | default(omit, true) }}"
+    ca_data: >-
+      {{ lookup('ansible.builtin.file', bootwright_machine_port.ca, rstrip=false)
+         if bootwright_machine_port.ca | length > 0 else '' }}
+    expected_macs: '{{ bootwright_machine_port.prove_macs | default(omit) }}'
+    pinned_uuid_base64: '{{ bootwright_machine_port.pinned_uuid_base64 | default("") }}'
+    pinned_serial_base64: '{{ bootwright_machine_port.pinned_serial_base64 | default("") }}'
+    allow_continuous: true
+    operation: boot
+    target: Hdd
+  register: substrate_machine_redfish_disk_selected
+  failed_when: false
+  no_log: true
+
+# ansible-core keeps nothing of a failure under no_log but that it failed, so
+# each of the controller's own refusals is reported by a step of its own,
+# where no credential is.
+- name: Stop at a disk selection the management controller did not complete
+  ansible.builtin.assert:
+    that:
+      - substrate_machine_redfish_disk_selected.msg is not defined
+    fail_msg: >-
+      selecting the installed disk through the management controller at
+      {{ bootwright_machine_port.endpoint }} failed:
+      {{ (substrate_machine_redfish_disk_selected.msg | default('') | string | bootwright.core.printable)[:512] }}
+    quiet: true
+
+- name: Power the installed system on and poll it to running
+  bootwright.core.redfish_boot:
+    endpoint: '{{ bootwright_machine_port.endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", bootwright_machine_port.user, rstrip=false) }}'
+    password: '{{ lookup("ansible.builtin.file", bootwright_machine_port.password, rstrip=false) }}'
+    verify: '{{ bootwright_machine_port.verify }}'
+    verification: "{{ bootwright_machine_port.verification | default(omit, true) }}"
+    ca_data: >-
+      {{ lookup('ansible.builtin.file', bootwright_machine_port.ca, rstrip=false)
+         if bootwright_machine_port.ca | length > 0 else '' }}
+    expected_macs: '{{ bootwright_machine_port.prove_macs | default(omit) }}'
+    pinned_uuid_base64: '{{ bootwright_machine_port.pinned_uuid_base64 | default("") }}'
+    pinned_serial_base64: '{{ bootwright_machine_port.pinned_serial_base64 | default("") }}'
+    operation: power-on
+  register: substrate_machine_redfish_disk_started
+  failed_when: false
+  no_log: true
+  when: bootwright_machine_port.power_on | bool
+
+- name: Stop at a power-on the management controller did not complete
+  ansible.builtin.assert:
+    that:
+      - substrate_machine_redfish_disk_started.msg is not defined
+    fail_msg: >-
+      powering the installed system on through the management controller at
+      {{ bootwright_machine_port.endpoint }} failed:
+      {{ (substrate_machine_redfish_disk_started.msg | default('') | string | bootwright.core.printable)[:512] }}
+    quiet: true

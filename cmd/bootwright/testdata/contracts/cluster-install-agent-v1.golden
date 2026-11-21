@@ -1,5 +1,5 @@
 implementation: cluster-install-agent-v1
-content-digest: 78bb10d8aecbb6c788fcc283270ab82273abf798d5e6f12d71c6e13e5a0e20f5
+content-digest: 1b2d37b085b4269bf833072a5894f9358149fe8453e0d899f1d405ed1700dad8
 request-version: cluster-install-agent-v1
 automation-formats: none
 mark-formats: bootwright.io/lend
@@ -17,6 +17,7 @@ effect-pins:
   booted-never-no-effect
   insert-recorded-before-media
   verified-media-default
+  physical-root-and-release-proof
 request-identity:
   identity.context
   identity.cluster
@@ -75,8 +76,9 @@ request-schema:
   nodes[].hardware.interfaces[].macAddress string
   nodes[].hardware.interfaces[].name string
   nodes[].hardware.rootDisk *struct agentinstall.RootDisk omitempty
-  nodes[].hardware.rootDisk.serialNumber string
-  nodes[].hardware.rootDisk.sizeBytes int64
+  nodes[].hardware.rootDisk.serialNumber string omitempty
+  nodes[].hardware.rootDisk.sizeBytes int64 omitempty
+  nodes[].hardware.rootDisk.wwn string omitempty
   nodes[].hardware.rootSelector string
   nodes[].hardware.rootVolumeRef *struct substrate.VolumeRef omitempty
   nodes[].hardware.rootVolumeRef.firmware bool omitempty

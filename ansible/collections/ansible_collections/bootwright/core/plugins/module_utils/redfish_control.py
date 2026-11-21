@@ -37,7 +37,7 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
 
-from ansible_collections.bootwright.core.plugins.module_utils import redfish_discovery, redfish_remote_ca, transport_faults, tls_trust
+from ansible_collections.bootwright.core.plugins.module_utils import machine_identity, redfish_discovery, redfish_remote_ca, transport_faults, tls_trust
 from ansible_collections.bootwright.core.plugins.module_utils import redfish_media_verification
 
 MAX_BODY = 1 << 20
@@ -357,6 +357,20 @@ class Client:
         return {field: str(system.get(field) or "") for field in
                 ("UUID", "SerialNumber", "Manufacturer", "Model")}
 
+    def require_identity(self, expected, uuid_pin, serial_pin):
+        """A read-only target guard usable at any power state."""
+        if expected is None:
+            return
+        if uuid_pin or serial_pin:
+            identity = self.identity()
+            matched = machine_identity.pinned(
+                {"uuid": identity["UUID"], "serial": identity["SerialNumber"]}, uuid_pin, serial_pin,
+            )
+        else:
+            matched = machine_identity.verdict(hardware_observation(self), expected=expected)["declared"]
+        if not matched:
+            raise ControllerError("the management controller did not prove the declared machine and its recorded identity")
+
     def power_state(self):
         """The power state of the kept system read, or the empty string."""
         return _power(self.system())
@@ -381,6 +395,8 @@ class Client:
             return [], ["the interface collection could not be read"]
         if len(listed) > MAX_HARDWARE_INTERFACES:
             return [], ["the interface inventory exceeds 64 members; no complete hardware proof was made"]
+        if redfish_discovery.complete_members(collection, MAX_HARDWARE_INTERFACES) is None:
+            return [], ["the interface collection is incomplete"]
         observed, failures = redfish_discovery.reported_macs([self._interface(link) for link in listed])
         if not observed and not failures:
             failures.append("the interface collection is empty")
@@ -471,9 +487,10 @@ class Client:
             return []
         if status != 200 or not isinstance(collection, dict):
             raise _failure("reading", url, status, collection)
-        if not isinstance(collection.get("Members"), list):
-            raise _failure("reading", url, status, collection, "the collection lists no members")
-        return self._references(collection["Members"], url)
+        members = redfish_discovery.complete_members(collection, MAX_MEDIA_CANDIDATES)
+        if members is None:
+            raise _failure("reading", url, status, collection, "the virtual-media collection is incomplete or exceeds its bound")
+        return self._references(members, url)
 
     def _references(self, links, where):
         """The distinct URLs a list of links names; a malformed link is unreadable."""
@@ -507,8 +524,8 @@ class Client:
                 raise _failure(doing, member, status, body)
         return self._member
 
-    def inserted(self):
-        """The image the device reports, or "" when it presents none or none is offered.
+    def media_state(self):
+        """Whether the optical device is occupied and the image name it reports.
 
         The body kept from discovery answers until the client writes; after
         that the device is read again, and a device that then answers 404 was
@@ -520,9 +537,20 @@ class Client:
             status, body = self._probe(member)
             if status != 404 and self._member is None:
                 raise _failure("reading", member, status, body)
-        if member and self._member is not None:
-            self.last_image = redfish_discovery.inserted_image(self._member)
-        return self.last_image
+        if not member or self._member is None:
+            return False, ""
+        present = redfish_discovery.media_present(self._member)
+        if present is None:
+            raise ControllerError("reading: the optical device did not report whether media is inserted")
+        self.last_image = redfish_discovery.inserted_image(self._member)
+        return present, self.last_image
+
+    def inserted(self):
+        """Return the image name, refusing when the media is occupied but unnamed."""
+        present, image = self.media_state()
+        if present and not image:
+            raise ControllerError("reading: virtual media is inserted but the controller reports no image identity")
+        return image
 
     def insert(self, image, trust=TRUST_ESTABLISHED, certificate="", private=False, enable_verification=False):
         """Attach an image and confirm the device presents it; True when it changed.
@@ -552,7 +580,7 @@ class Client:
             raise ControllerError("enabling media verification conflicts with disableVerification", cause="media-verification-config")
         delegated = enable_verification or trust == TRUST_DISABLED
         configured = self._configure_media_verification(member, image, trust != TRUST_DISABLED) if delegated else False
-        if redfish_discovery.image_matches(self.inserted(), image):
+        if redfish_discovery.image_matches(self.media_state()[1], image):
             if trust != TRUST_DISABLED:
                 self._verified_fetch(member)
             elif delegated:
@@ -561,7 +589,7 @@ class Client:
         if trust == TRUST_ESTABLISHED or trust == TRUST_IMPORT and not enable_verification:
             self._verified_fetch(member)
         manager_verified = trust == TRUST_IMPORT and self._verified_managers()
-        if redfish_discovery.media_present(self._device(member, "attaching")):
+        if self.media_state()[0]:
             reason = self._release(member)[1]
             if reason:
                 raise ControllerError("attaching: the device presents other media and was not released: " + reason)
@@ -583,8 +611,8 @@ class Client:
         raise ControllerError(reason, FETCH_CAUSES if fetch_failed else "", cause="media-fetch" if fetch_failed else "request")
 
     def _configure_media_verification(self, member, image, wanted):
-        current = self.inserted()
-        if current and not redfish_discovery.image_matches(current, image):
+        occupied, current = self.media_state()
+        if occupied and not redfish_discovery.image_matches(current, image):
             raise ControllerError("media verification setup refuses attached foreign media", cause="media-verification-config")
         try:
             rows = redfish_media_verification.preflight(self, member, wanted)
@@ -883,7 +911,10 @@ class Client:
                 return False, ""
             if self._member is None:
                 return False, str(_failure("ejecting", member, status, body))
-        if not redfish_discovery.media_present(self._member):
+        present = redfish_discovery.media_present(self._member)
+        if present is None:
+            return False, "the optical device did not report whether media is inserted"
+        if not present:
             self.last_image = ""
             return False, ""
         target, payload = self._eject_request(self._member, member)
@@ -913,14 +944,14 @@ class Client:
         status, body = 0, None
         for probe in range(MEDIA_PROBES):
             status, body = self._probe(member)
-            if status == 404 or (status == 200 and isinstance(body, dict) and not redfish_discovery.media_present(body)):
+            if status == 404 or (status == 200 and redfish_discovery.media_present(body) is False):
                 self.last_image = ""
                 return ""
             if probe + 1 < MEDIA_PROBES:
                 self.sleep(MEDIA_PROBE_DELAY)
         return str(_failure("ejecting", member, status, body, "the device still presents media"))
 
-    def boot_once(self, target="Cd", budget=None, stop=None):
+    def boot_once(self, target="Cd", budget=None, stop=None, *, allow_continuous=False):
         """Select the next boot device and read the selection back.
 
         The precondition some firmware requires is the system's entity tag,
@@ -944,7 +975,7 @@ class Client:
             return self.fetch(method="PATCH", payload=payload, headers={"If-Match": seen} if seen else {},
                               timeout=timeout, doing=doing)
 
-        status = self._await(BOOT_POLLS, BOOT_POLL_DELAY, lambda seen: redfish_discovery.boot_selected(seen, target),
+        status = self._await(BOOT_POLLS, BOOT_POLL_DELAY, lambda seen: redfish_discovery.boot_selected(seen, target, allow_continuous),
                              budget, stop, self.resender(send, True) if status == 0 else None)
         if status is not None:
             raise _failure(doing, self.endpoint, status, None, "the system does not report %s for the next boot" % target)
@@ -1033,6 +1064,18 @@ class Client:
         if stop is not None and stop():
             return 0
         return wanted if deadline is None else min(wanted, deadline - self.clock())
+
+
+def hardware_observation(client):
+    """Read the system and its hardware identity without changing it."""
+    identity = client.identity()
+    power = client.power_state()
+    addresses, failures = client.hardware_addresses()
+    return {
+        "addresses": addresses, "failures": failures, "power": power,
+        "manufacturer": identity["Manufacturer"], "model": identity["Model"],
+        "serial": identity["SerialNumber"], "uuid": identity["UUID"],
+    }
 
 
 def _power(system):

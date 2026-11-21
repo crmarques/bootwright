@@ -108,9 +108,10 @@ func observeAllowlist() map[observeTaskKey]observeAllowance {
 	})
 	add("physical_erase", "refused.yml", "ansible.builtin.fail", "stops at a refused observation without touching the host", read)
 	for _, role := range []string{"substrate_libvirt_machine", "substrate_baremetal_machine"} {
-		for _, module := range []string{"ansible.builtin.set_fact", observeCollection + "redfish_system_read", observeCollection + "redfish_system_inspect"} {
-			add(role, "state_read.yml", module, "reads controller state and retains answers in memory", read)
-		}
+		add(role, "state_read.yml", "ansible.builtin.set_fact", "retains the shared controller read in memory", read)
+	}
+	for _, module := range []string{"ansible.builtin.set_fact", observeCollection + "redfish_system_read", observeCollection + "redfish_system_inspect"} {
+		add("substrate_machine", "redfish_state_read.yml", module, "reads controller state and retains answers in memory", read)
 	}
 	kubevirtRead := func(operation string) func(map[string]any, map[string]any) bool {
 		return func(params, _ map[string]any) bool { return params["operation"] == operation }
@@ -586,7 +587,7 @@ func TestObserveDispatchRefusesMutationAndUnresolvedBindings(t *testing.T) {
 	for _, test := range []struct{ path, before, after string }{
 		{"containercluster_install_agent/tasks/node_state.yml", "containercluster_install_agent_port_operation: state_read", "containercluster_install_agent_port_operation: media_insert"},
 		{"substrate_machine/defaults/main.yml", "bootwright.core.substrate_libvirt_machine", "{{ untrusted_role }}"},
-		{"substrate_baremetal_machine/tasks/state_read.yml", "bootwright.core.redfish_system_read:", "bootwright.core.redfish_power:"},
+		{"substrate_machine/tasks/redfish_state_read.yml", "bootwright.core.redfish_system_read:", "bootwright.core.redfish_power:"},
 	} {
 		assets := maps.Clone(ansible.Assets())
 		path := observeRoleRoot + test.path

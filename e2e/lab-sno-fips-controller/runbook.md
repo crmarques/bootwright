@@ -840,7 +840,7 @@ if bootwright destroy --context "$CTX_FIPS" --authorize "$AUTH" --yes \
     exit 1
 fi
 cat "$RUN_DIR/destroy-while-running.json"
-jq -e '.diagnostics | any(.code == "lifecycle.live" and (.message | contains("sno-01")) and (.message | contains("its domain is running")))' \
+jq -e '.diagnostics | any(.code == "lifecycle.start-power" and (.message | contains("sno-01")) and (.message | contains("the hypervisor reports the domain in use")))' \
     "$RUN_DIR/destroy-while-running.json" >/dev/null
 bootwright machine stop --context "$CTX_FIPS" --name sno-01 --yes
 bootwright plan --context "$CTX_FIPS" --output json > "$RUN_DIR/destroy-plan-stopped.json"

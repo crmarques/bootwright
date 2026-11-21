@@ -127,13 +127,11 @@ likes (openstack/sushy at ecddf50 reads it without regard to case, in
 sushy/resources/base.py lines 643-648; not re-checked here), so the client
 lower-cases every header name and prefers the header over the body's tag.
 
-An accepted boot PATCH is not a selection either. The client reads the system
-back until `BootSourceOverrideTarget` is the target and
-`BootSourceOverrideEnabled` is `Once`, or `Continuous` on a controller that
-does not list `Once` in `BootSourceOverrideEnabled@Redfish.AllowableValues`:
-the emulator reports every override as `Continuous` and advertises nothing, but
-one that offers `Once` and reports `Continuous` did not apply what was asked.
-The bound, 12 reads 5 s apart, is borrowed from the reference's power-state
+An accepted boot PATCH still needs a read-back. Physical optical and firmware-setup boot require
+the requested `BootSourceOverrideTarget` and `BootSourceOverrideEnabled` of
+`Once`. The libvirt adapter explicitly allows the emulator's `Continuous`
+reply when installing an OS that powers itself off. Selecting the installed
+disk also accepts persistence. The emulator does not advertise `Once`. The bound, 12 reads 5 s apart, is borrowed from the reference's power-state
 poll. On the captured BMC the `Once`/`Cd` PATCH answered 200 with the system
 body already reporting `Once`/`Cd`, and the next read reported it, so the
 read-back was satisfied on its first read (the capture of 15:55Z, the boot

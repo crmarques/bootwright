@@ -277,7 +277,7 @@ func (c InstallCapability) Observe(ctx context.Context, execution lifecycle.Exec
 
 // observesRemoval scopes an observation to what a removal takes back: the
 // adapter reads the media each node's controller presents, and not the
-// cluster, which a removal leaves running.
+// cluster, whose physical disks the removal retains.
 const observesRemoval = "removal"
 
 // ObserveRemoval reads, for what a removal proves, an observation of the
@@ -554,26 +554,26 @@ func preBootRefusals(contextName, continuation string, request InstallRequest) m
 func nodeRefusal(reason string, index int) string { return reason + "-node-" + strconv.Itoa(index) }
 
 // pinValues carries, under each node's position, the identity its Machine
-// block proved: a physical node's on apply, a pinned port's on every operation.
+// block proved, using the original apply proof during removal.
 func (c InstallCapability) pinValues(execution lifecycle.Execution, operation string, request InstallRequest) (map[string]string, error) {
 	values := map[string]string{}
 	for index, node := range request.Nodes {
 		pinnedPort := node.PortPinned
-		if !pinnedPort && (!node.Physical || operation != "apply") {
+		if !pinnedPort && !node.Physical {
 			continue
 		}
 		if c.identities == nil {
 			return nil, openshiftAdapterUnconfigured.Fail("the reader of Machine/"+node.Machine+"'s pinned identity is not configured", "")
 		}
 		proved := execution.Proved
-		if pinnedPort && len(execution.ApplyProved) != 0 {
+		if (pinnedPort || operation != "apply") && len(execution.ApplyProved) != 0 {
 			proved = execution.ApplyProved
 		}
 		pin, pinned, err := c.identities.PinnedIdentity(node.Machine, proved)
 		if err != nil {
 			return nil, err
 		}
-		if node.Hardware != nil && node.Hardware.RootVolumeRef != nil && (!pinned || !node.Hardware.RootVolumeRef.Matches(pin.RootVolume)) {
+		if operation == "apply" && node.Hardware != nil && node.Hardware.RootVolumeRef != nil && (!pinned || !node.Hardware.RootVolumeRef.Matches(pin.RootVolume)) {
 			return nil, openshiftMachineProofMissing.Fail("the existing root volume has no matching durable Machine proof", "apply the Machine stage before building and installing")
 		}
 		if pinned {

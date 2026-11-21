@@ -585,10 +585,14 @@ func frozenHardware(target substrate.Target) *Hardware {
 		return nil
 	}
 	hardware := Hardware{RootVolumeRef: target.RootDeviceHints.VolumeRef, Interfaces: make([]Interface, 0, len(target.Interfaces)), RootSelector: "wwn"}
-	if hints := target.RootDeviceHints; hints.SerialNumber != "" && hints.SizeBytes != "" {
+	hints := target.RootDeviceHints
+	if hints.WWN != "" {
+		hardware.RootDisk = &RootDisk{WWN: hints.WWN}
+	}
+	if hints.SerialNumber != "" && hints.SizeBytes != "" {
 		// Selection already checked the exact capacity and its integer bounds.
 		size, _ := strconv.ParseInt(hints.SizeBytes, 10, 64)
-		hardware.RootDisk = &RootDisk{SerialNumber: hints.SerialNumber, SizeBytes: size}
+		hardware.RootDisk = &RootDisk{SerialNumber: hints.SerialNumber, SizeBytes: size, WWN: hints.WWN}
 		hardware.RootSelector = "serialAndSize"
 	}
 	if hardware.RootVolumeRef != nil {

@@ -44,7 +44,7 @@ ENTRY_FILES = {"target_proof": "pre_boot", "firmware": "pre_boot"}
 # The roles that reach a controller a bundle can anchor, and how many Redfish
 # module tasks each holds. Finding another number means the walk or a role
 # changed, and either must be looked at.
-BUNDLED = {"substrate_baremetal_machine": 12, "substrate_libvirt_machine": 12, "substrate_machine": 2}
+BUNDLED = {"substrate_baremetal_machine": 6, "substrate_libvirt_machine": 6, "substrate_machine": 8}
 # The roles that make Redfish calls without a bundle, and why.
 UNBUNDLED = {
     "containercluster_media_agent": "it makes no Redfish call",
@@ -96,7 +96,7 @@ def test_every_redfish_call_passes_the_controller_bundle(role):
     missing = ["%s: %s" % (name, task.get("name")) for name, _module, arguments, task in found if "ca_data" not in arguments]
     assert not missing, "tasks reaching a controller without its bundle:\n" + "\n".join(missing)
     assert len(found) == BUNDLED[role]
-    if role == "substrate_baremetal_machine":
+    if role in ("substrate_baremetal_machine", "substrate_machine"):
         assert all("verification" in arguments for _name, _module, arguments, _task in found)
 
 
@@ -256,15 +256,24 @@ def test_the_managed_os_installation_sets_and_settles_the_frozen_trust(lookups, 
 def test_cluster_media_calls_carry_each_nodes_frozen_trust(physical, enable):
     tasks = loaded(ROLES / "containercluster_install_agent/tasks/port.yml")
     invocation = next(task for task in tasks if "ansible.builtin.include_role" in task)
-    variables = {**invocation["vars"], "bootwright_cluster_install_request": {"deliveryKind": "fetch"},
-                 "containercluster_install_agent_node": {"physical": physical, "machinePort": {
-                     "endpoint": "https://bmc.example.test/redfish/v1/Systems/1", "verify": True, "userVariable": "controllerUserNode2",
-                     "passwordVariable": "controllerPasswordNode2", "caVariable": "controllerCANode2"}, "controller": {
-                     "endpoint": "https://bmc.example.test/redfish/v1/Systems/1", "tlsVerify": True,
-                     "virtualMedia": {"trust": "importCertificate", "enableVerification": enable, "restoreVerification": False, "removeCertificate": True}}},
-                 "bootwright_run_scratch": "/run/private", "containercluster_install_agent_index": 2,
-                 "bootwright_cluster_install_material": {"artifactCertificate": "/run/certificate", "controllerUserNode2": "/run/user",
-                                                         "controllerPasswordNode2": "/run/password", "controllerCANode2": "/run/ca"}}
+    node = {
+        "physical": physical,
+        "hardware": {"interfaces": [{"macAddress": "02:00:00:00:00:01"}]},
+        "machinePort": {
+            "endpoint": "https://bmc.example.test/redfish/v1/Systems/1", "verify": True, "userVariable": "controllerUserNode2",
+            "passwordVariable": "controllerPasswordNode2", "caVariable": "controllerCANode2",
+        },
+        "controller": {
+            "endpoint": "https://bmc.example.test/redfish/v1/Systems/1", "tlsVerify": True,
+            "virtualMedia": {"trust": "importCertificate", "enableVerification": enable, "restoreVerification": False, "removeCertificate": True},
+        },
+    }
+    variables = {
+        **invocation["vars"], "bootwright_cluster_install_request": {"deliveryKind": "fetch"}, "containercluster_install_agent_node": node,
+        "bootwright_run_scratch": "/run/private", "containercluster_install_agent_index": 2,
+        "bootwright_cluster_install_material": {"artifactCertificate": "/run/certificate", "controllerUserNode2": "/run/user",
+                                                "controllerPasswordNode2": "/run/password", "controllerCANode2": "/run/ca"},
+    }
     for operation in ("state_read", "media_insert", "media_eject"):
         rendering = Templar(loader=LOADER, variables={**variables, "containercluster_install_agent_port_operation": operation})
         port = rendering.template(invocation["vars"]["bootwright_machine_port"])

@@ -51,7 +51,7 @@ func mixedRun(t *testing.T, operation string, capability InstallCapability) (map
 	}
 	for index := range request.Nodes {
 		if request.Nodes[index].Physical {
-			request.Nodes[index].Hardware = &Hardware{RootSelector: "wwn"}
+			request.Nodes[index].Hardware = &Hardware{RootSelector: "wwn", RootDisk: &RootDisk{WWN: "0x5000000000000001"}}
 		}
 		bounds, ok := substrate.MachineBoundsFor(request.Nodes[index].Substrate)
 		if !ok {
@@ -63,6 +63,10 @@ func mixedRun(t *testing.T, operation string, capability InstallCapability) (map
 	execution.Proved = []lifecycle.BlockEvidence{
 		{Kind: "Machine", Object: "metal-01", Verb: reconciliation.Apply, State: reconciliation.BlockDone, Evidence: json.RawMessage(`{}`)},
 		{Kind: "Machine", Object: "metal-03", Verb: reconciliation.Apply, State: reconciliation.BlockDone, Evidence: json.RawMessage(`{}`)},
+	}
+	if operation != "apply" {
+		execution.ApplyProved = execution.Proved
+		execution.Proved = []lifecycle.BlockEvidence{{Kind: "Machine", Object: "foreign", Verb: reconciliation.Apply}}
 	}
 	runner := &fakeRunner{}
 	capability.runner = runner
@@ -82,7 +86,7 @@ func mixedRun(t *testing.T, operation string, capability InstallCapability) (map
 // Each physical node carries the identity its own Machine block proved,
 // base64-encoded under its own position in the frozen node order, so the node
 // booted third is never compared with the identity of the node booted first.
-// A node its substrate created reads no pin, and only an apply carries any.
+// A node on libvirt reads no pin.
 func TestEachPhysicalNodeCarriesItsOwnPin(t *testing.T) {
 	identities := &pinsByName{pins: map[string]machine.HardwareIdentity{
 		"metal-01": {UUID: "4c4c4544-0042-3510-8052-b4c04f4d4e31", Serial: "CZJ2440ABC"},
@@ -110,8 +114,13 @@ func TestEachPhysicalNodeCarriesItsOwnPin(t *testing.T) {
 	}
 	for _, operation := range []string{"destroy", "observe"} {
 		removal := &pinsByName{pins: identities.pins}
-		if pins, _, err := mixedRun(t, operation, NewInstall(nil).WithIdentities(removal)); err != nil || len(pins) != 0 || len(removal.asked) != 0 {
+		if pins, _, err := mixedRun(t, operation, NewInstall(nil).WithIdentities(removal)); err != nil || !reflect.DeepEqual(pins, want) || !reflect.DeepEqual(removal.asked, identities.asked) {
 			t.Fatalf("%s carried %v after asking for %v (%v)", operation, pins, removal.asked, err)
+		}
+		for _, handed := range removal.handed {
+			if len(handed) != 2 || handed[0].Object != "metal-01" || handed[1].Object != "metal-03" {
+				t.Fatalf("%s read a pin from %+v instead of the original apply proof", operation, handed)
+			}
 		}
 	}
 }

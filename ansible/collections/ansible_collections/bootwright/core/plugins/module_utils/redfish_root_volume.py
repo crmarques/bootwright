@@ -7,38 +7,15 @@ from __future__ import annotations
 
 import re
 
-from ansible_collections.bootwright.core.plugins.module_utils import redfish_root_disk
+from ansible_collections.bootwright.core.plugins.module_utils import redfish_root_disk, redfish_storage
 
 
 ID = re.compile(r"[A-Za-z0-9_-]{1,128}")
-NAA = re.compile(r"[0-9a-f]{16}(?:[0-9a-f]{16})?")
 REFUSAL = (
     "the existing root volume could not be proved with one unique OS-correlatable NAA identifier and exact capacity; "
     "declare a directly mappable spec.hardware.rootDisk.volumeRef, or select the OS-visible disk by serialNumber and sizeBytes"
 )
 Refused = redfish_root_disk.Refused
-
-
-def _naa(body):
-    identifiers = body.get("Identifiers", [])
-    if not isinstance(identifiers, list) or len(identifiers) > 32:
-        raise Refused(REFUSAL)
-    names = []
-    for item in identifiers:
-        if not isinstance(item, dict):
-            raise Refused(REFUSAL)
-        if item.get("DurableNameFormat") != "NAA":
-            continue
-        name = item.get("DurableName")
-        if not isinstance(name, str):
-            raise Refused(REFUSAL)
-        name = name.lower()
-        if NAA.fullmatch(name) is None or not int(name, 16):
-            raise Refused(REFUSAL)
-        names.append("0x" + name)
-    if len(names) > 1:
-        raise Refused(REFUSAL)
-    return names[0] if names else ""
 
 
 def _read(client, reference, kind):
@@ -50,35 +27,36 @@ def _read(client, reference, kind):
 
 
 def _inventory(client):
+    try:
+        return _read_inventory(client)
+    except redfish_storage.Unqualified:
+        raise Refused(REFUSAL) from None
+
+
+def _read_inventory(client):
     seen, drives, volumes = set(), [], []
-    for reference in redfish_root_disk._members(client, redfish_root_disk._link(client.system().get("Storage"))):
+    doing = "reading the root volume inventory"
+    for reference in redfish_storage.collection(client, redfish_storage.link(client.system().get("Storage")), redfish_storage.MAX_STORAGE, doing):
         storage = _read(client, reference, "Storage")
         storage_id = storage.get("Id")
         if not isinstance(storage_id, str) or ID.fullmatch(storage_id) is None or storage_id in seen:
             raise Refused(REFUSAL)
         seen.add(storage_id)
-        links = storage.get("Drives")
-        if not isinstance(links, list) or len(links) > redfish_root_disk.MAX_DRIVES or "Drives@odata.nextLink" in storage:
-            raise Refused(REFUSAL)
-        count = storage.get("Drives@odata.count", len(links))
-        if type(count) is not int or count != len(links):
-            raise Refused(REFUSAL)
-        for link in links:
-            drive = _read(client, client._own(redfish_root_disk._link(link), "reading the root volume inventory"), "Drive")
-            drives.append(_naa(drive))
-            if len(drives) > redfish_root_disk.MAX_DRIVES:
+        for link in redfish_storage.references(client, storage, redfish_storage.MAX_DRIVES, doing, "Drives"):
+            drives.append(redfish_storage.naa(_read(client, link, "Drive")))
+            if len(drives) > redfish_storage.MAX_DRIVES:
                 raise Refused(REFUSAL)
         if "Volumes" not in storage:
             continue
         volume_ids = set()
-        for link in redfish_root_disk._members(client, redfish_root_disk._link(storage["Volumes"]), allow_empty=True):
+        for link in redfish_storage.collection(client, redfish_storage.link(storage["Volumes"]), redfish_storage.MAX_STORAGE, doing):
             volume = _read(client, link, "Volume")
             volume_id = volume.get("Id")
             if not isinstance(volume_id, str) or ID.fullmatch(volume_id) is None or volume_id in volume_ids:
                 raise Refused(REFUSAL)
             volume_ids.add(volume_id)
-            volumes.append((storage_id, volume_id, _naa(volume), volume.get("CapacityBytes"), link))
-            if len(volumes) > redfish_root_disk.MAX_DRIVES:
+            volumes.append((storage_id, volume_id, redfish_storage.naa(volume), volume.get("CapacityBytes"), link))
+            if len(volumes) > redfish_storage.MAX_DRIVES:
                 raise Refused(REFUSAL)
     return volumes, drives
 
@@ -97,7 +75,7 @@ def discover(client, reference):
         raise Refused(REFUSAL)
     storage, volume, wwn, size, _link = matches[0]
     if (not wwn or sum(item[2] == wwn for item in volumes) != 1 or wwn in drives
-            or type(size) is not int or not 4096 <= size <= redfish_root_disk.MAX_SIZE or size % 4096):
+            or type(size) is not int or not 4096 <= size <= redfish_storage.MAX_SIZE or size % 4096):
         raise Refused(REFUSAL)
     return {"storageId": storage, "volumeId": volume, "wwn": wwn, "sizeBytes": size}
 
@@ -112,7 +90,12 @@ def _boot_reference(client, volumes):
             or any(not isinstance(item, str) or not 1 <= len(item) <= 128 for item in order) or len(set(order)) != len(order)):
         raise Refused(REFUSAL)
     options = {}
-    for link in redfish_root_disk._members(client, redfish_root_disk._link(boot.get("BootOptions"))):
+    doing = "reading the default boot volume"
+    try:
+        links = redfish_storage.collection(client, redfish_storage.link(boot.get("BootOptions")), redfish_storage.MAX_STORAGE, doing)
+    except redfish_storage.Unqualified:
+        raise Refused(REFUSAL) from None
+    for link in links:
         option = _read(client, link, "BootOption")
         name = option.get("BootOptionReference")
         if not isinstance(name, str) or not 1 <= len(name) <= 128 or name in options:
@@ -135,7 +118,10 @@ def _boot_reference(client, volumes):
         related = option.get("RelatedItem")
         if not isinstance(related, list) or len(related) != 1:
             raise Refused(REFUSAL)
-        target = client._own(redfish_root_disk._link(related[0]), "reading the default boot volume")
+        try:
+            target = client._own(redfish_storage.link(related[0]), doing)
+        except redfish_storage.Unqualified:
+            raise Refused(REFUSAL) from None
         matches = [item for item in volumes if item[4] == target]
         if len(matches) != 1:
             raise Refused(REFUSAL)

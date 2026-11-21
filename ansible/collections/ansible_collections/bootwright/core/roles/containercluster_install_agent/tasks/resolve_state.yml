@@ -10,7 +10,7 @@
       completed: '{{ containercluster_install_agent_state.completed }}'
       missing: '{{ containercluster_install_agent_state.missing }}'
       media: >-
-        {{ containercluster_install_agent_presenting | map(attribute='item.machine') | list }}
+        {{ containercluster_install_agent_presenting }}
       ownMedia: >-
         {{ containercluster_install_agent_media_identity.results | default([])
            | selectattr('own', 'defined') | selectattr('own', 'equalto', true)
@@ -21,6 +21,17 @@
            | map(attribute='item.machine') | list }}
   vars:
     containercluster_install_agent_presenting: >-
+      {{ ((containercluster_install_agent_controllers.results | default([])
+           | selectattr('media', 'defined') | selectattr('media', 'ne', '') | map(attribute='item.machine') | list)
+          + (containercluster_install_agent_controllers.results | default([])
+             | selectattr('media_present', 'defined') | selectattr('media_present', 'equalto', true)
+             | map(attribute='item.machine') | list)) | unique | sort }}
+  changed_when: false
+
+- name: Keep whether any occupied device did not name its image
+  ansible.builtin.set_fact:
+    containercluster_install_agent_unnamed_media: >-
       {{ containercluster_install_agent_controllers.results | default([])
-         | selectattr('media', 'defined') | selectattr('media', 'ne', '') | list }}
+         | selectattr('media_present', 'defined') | selectattr('media_present', 'equalto', true)
+         | selectattr('media', 'equalto', '') | list | length > 0 }}
   changed_when: false

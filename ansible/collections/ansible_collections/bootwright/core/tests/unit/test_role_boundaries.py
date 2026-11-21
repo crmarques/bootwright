@@ -128,9 +128,8 @@ UNITS = {
 # The polls, by file and register. Finding fewer means the walk stopped seeing
 # them, which would pass the poll rule vacuously.
 POLLS = {
-    ("substrate_baremetal_machine/tasks/state_read.yml", "substrate_baremetal_machine_port_result"),
+    ("substrate_machine/tasks/redfish_state_read.yml", "substrate_machine_redfish_port_result"),
     ("managedos_install_anaconda/tasks/guest.yml", "managedos_install_anaconda_guest"),
-    ("substrate_libvirt_machine/tasks/state_read.yml", "substrate_libvirt_machine_port_result"),
     ("managedos_install_anaconda/tasks/reachable.yml", "managedos_install_anaconda_reachable"),
     ("infrastructureservices_artifact_listener/tasks/proof.yml", "infrastructureservices_artifact_listener_fetch"),
     ("machine_ssh_identity/tasks/main.yml", "machine_ssh_identity_marker_read"),
@@ -157,13 +156,12 @@ CONTROLLER_FILES = {
     "managedos_install_anaconda/tasks/observe.yml",
     "managedos_install_anaconda/tasks/reboot.yml",
     "substrate_baremetal_machine/tasks/apply.yml",
-    "substrate_baremetal_machine/tasks/boot_disk.yml",
+    "substrate_machine/tasks/redfish_boot_disk.yml",
     "substrate_baremetal_machine/tasks/boot_media.yml",
     "substrate_baremetal_machine/tasks/firmware.yml",
     "substrate_baremetal_machine/tasks/observe.yml",
     "substrate_baremetal_machine/tasks/target_proof.yml",
     "substrate_libvirt_machine/tasks/apply.yml",
-    "substrate_libvirt_machine/tasks/boot_disk.yml",
     "substrate_libvirt_machine/tasks/boot_media.yml",
     "substrate_libvirt_machine/tasks/observe.yml",
     "substrate_libvirt_machine/tasks/pre_boot.yml",
@@ -817,6 +815,7 @@ def test_no_management_controller_refusal_is_censored():
 # the endpoint, and a wait's budget.
 ENDPOINT = "https://bmc.example.test/redfish/v1/Systems/1"
 SCOPE = dict({
+    "bootwright_machine_port": {"endpoint": ENDPOINT},
     "bootwright_machine_power_request": {"identity": {"object": "metal"}},
     "bootwright_os_install_request": {"identity": {"object": "rhel-01"},
                                       "budgets": {"installer": {"attempts": 180, "delaySeconds": 20},

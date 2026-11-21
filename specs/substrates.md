@@ -1377,9 +1377,10 @@ it after an attempt whose outcome was not proved, are its pin while that apply
 is the context's current operation: the pre-boot proof above compares the
 BMC's answer with them before any media is inserted, and the machine power
 commands below before any power request, and each refuses a machine that
-answers as a different system. A destroy ends the pin once
-it is the context's current operation and releases the claim when it completes;
-the next apply pins what its own proof finds, the MAC set still required.
+answers as a different system. Destroy keeps the original apply's identity
+available for its target checks, including the [OpenShift inverse](openshift-clusters.md#installation),
+and releases the claim when it completes. The next apply pins what its own
+proof finds and proves the complete MAC set again.
 Observation is read-only: the exact identity with its complete MAC set is
 positive completion, an endpoint that answers as another system or does not
 answer at all stays unknown, and there is no absence to prove, because this
@@ -1988,7 +1989,10 @@ cannot reach a resource the BMC reports, or that receives a body which
 is not a Redfish resource, fails rather than answering empty, and the target
 proof reports what it could not read as unobserved, which proves nothing; a
 BMC that offers no virtual media reports none, and inserting into it
-refuses.
+refuses. A media observation distinguishes occupancy from the image name.
+An occupied device without an image name cannot prove absence or ownership,
+and an unreadable insertion state refuses. A partial NIC or virtual-media
+collection cannot prove identity or absence.
 
 The per-arm port budgets live in `internal/substrate/machine_bounds.go`.
 Physical virtual-media discovery admits at most four distinct managers and
@@ -2031,8 +2035,8 @@ than a fixed sequence every consumer repeats, because how a boot is selected is
 the substrate's own answer. Its consumer says whether the installer ends by
 powering the machine off, rather than by rebooting into what it wrote. A
 physical BMC consumes a one-time override and forgets it, so the
-bare-metal arm sets one from the media and powers the machine on, and the
-machine returns to its disk by itself; it never powers an operator-owned
+bare-metal arm sets one from the media, requires positive `Once` read-back
+before powering the machine on, and the machine returns to its disk by itself; it never powers an operator-owned
 machine off. An emulated BMC has no one-time override: selecting a
 device rewrites the domain's persistent boot order, which then survives every
 reboot. The libvirt arm therefore powers its own machine off first, which

@@ -127,10 +127,11 @@ type Hardware struct {
 }
 
 // RootDisk is the exact whole drive the controller must report uniquely before
-// inserting media. The native agent receives only the exact serial hint.
+// inserting media. The native agent receives the declared WWN and serial hints.
 type RootDisk struct {
-	SerialNumber string `json:"serialNumber"`
-	SizeBytes    int64  `json:"sizeBytes"`
+	SerialNumber string `json:"serialNumber,omitempty"`
+	SizeBytes    int64  `json:"sizeBytes,omitempty"`
+	WWN          string `json:"wwn,omitempty"`
 }
 
 // Interface is one NIC a physical node must report for it to be the machine
@@ -355,14 +356,14 @@ func validRootProof(hardware *Hardware) bool {
 	if hardware == nil {
 		return false
 	}
+	disk := hardware.RootDisk
 	switch hardware.RootSelector {
 	case "wwn":
-		return hardware.RootDisk == nil && hardware.RootVolumeRef == nil
+		return hardware.RootVolumeRef == nil && disk != nil && diskselection.ValidWWN(disk.WWN) && disk.SerialNumber == "" && disk.SizeBytes == 0
 	case "volume":
 		return hardware.RootDisk == nil && hardware.RootVolumeRef != nil && hardware.RootVolumeRef.Valid()
 	case "serialAndSize":
-		disk := hardware.RootDisk
-		return hardware.RootVolumeRef == nil && disk != nil && diskselection.ValidSerial(disk.SerialNumber) && diskselection.ValidSize(disk.SizeBytes)
+		return hardware.RootVolumeRef == nil && disk != nil && (disk.WWN == "" || diskselection.ValidWWN(disk.WWN)) && diskselection.ValidSerial(disk.SerialNumber) && diskselection.ValidSize(disk.SizeBytes)
 	default:
 		return false
 	}

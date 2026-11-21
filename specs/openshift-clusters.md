@@ -47,15 +47,19 @@ A `hardware.rootDisk.hints.deviceName` refuses there, and each declared selector
 must be valid. A virtual node declares no root disk: its root is `/dev/vda`,
 derived.
 
-The installation freezes a serial-selected root's serial and capacity into its
-hardware proof. Immediately before media insertion, and again after a firmware
-change, the physical substrate reads this ComputerSystem's complete Storage
-inventory over the declared verified BMC connection. It requires exactly one
-whole Drive reporting the serial, and that Drive's exact `CapacityBytes` must
-match. It counts serial matches before comparing size, so a duplicate with a
-different size is also ambiguous. Missing, unreadable, paginated, oversized or
-ambiguous inventory refuses before media insertion. The native agent receives
-the exact serial hint; it has no exact-size field. The existing
+The installation freezes each authored WWN or serial-and-exact-size
+selector into its hardware proof. Immediately before media insertion, and
+again after a firmware change, it reads the ComputerSystem's complete Storage
+inventory over verified BMC TLS. A direct drive proof excludes absent bays,
+requires readable presence, and refuses a logical layout. The selected drive
+reports Enabled and no hot-spare assignment. Missing, unreadable, paginated,
+oversized or ambiguous inventory refuses before insertion. A serial must be
+unique even if another drive with that serial reports a different size, and the
+selected Drive's exact `CapacityBytes` must match. A WWN must match one
+durable NAA identifier on a SAS or SATA Drive. The authored WWN must be the
+installer-visible identity confirmed for that hardware. If the Machine declares
+both selectors, they must agree on the same drive. The agent receives the WWN
+or serial hint as declared. It provides no exact-size predicate. The
 [controller-to-installer race](state-reconciliation.md#physical-disk-safety)
 and real-hardware qualification remain.
 
@@ -66,9 +70,8 @@ whose current proof differs from that receipt refuses before boot. The native
 agent has no exact-capacity predicate; the BMC comparison and the existing
 controller-to-installer race still require real-controller qualification.
 
-A virtual node whose provider host is not the Machine the selected artifact
-server is placed on boots under a verified fetch of the private
-[boot image](#boot-media) instead of its emulated BMC's unverified one. The placement, install-profile and physical-node refusals
+An emulated BMC's verified image fetch follows the
+[boot-media trust rule](#boot-media-trust). The placement, install-profile and physical-node refusals
 and the root-device refusals name the bound Machine in the remediation the
 refusal carries, because it is what the operator changes. A node whose
 [realized target](substrates.md#realized-target-fields) does not derive, other
@@ -314,7 +317,7 @@ and requires no synchronized time of it.
 ### Root-device hint projection
 
 Each admitted root-device hint reaches a host record's `rootDeviceHints` as
-follows; a physical node that declares none gets no `rootDeviceHints`.
+follows; a logical-volume root adds its hint once the media block has the Machine proof.
 
 | Machine hint | `rootDeviceHints` key |
 | --- | --- |
@@ -758,8 +761,9 @@ journaled it: an insert that fails has its link retired in the same attempt
 once its BMC, read without being changed, answers presenting something
 else, and every insert link no BMC presents is swept when an apply has
 read its nodes and before it boots any, when a release has ejected every node,
-and in this block's inverse after its ejects, which keeps only the media of a
-node whose eject failed. A link is presented when its token is a component of
+and in this block's inverse after every eject is proved. A sweep preserves
+the publication while any relevant occupied device names no image. A failed
+eject keeps its link until removal can prove release. A link is presented when its token is a component of
 the path of an image some BMC reports, whatever host and port that image
 names, because a physical BMC may echo the image without its
 non-default port; a token is too random for a foreign image to name it. The
@@ -1049,16 +1053,13 @@ inserted into a running machine. A foreign answer is not
 converged: there is no reinstall path, and installing again requires this
 cluster's nodes to be destroyed and applied again.
 
-**Inverse.** Destroy ejects the media each node still presents and proves none
-is left. The work area and the published image leave with the media block's own
-inverse, which the plan orders after this one. The custodied administrator
-access leaves when the removal completes, not with this inverse. The installed
-cluster leaves with its nodes' disks, so this block removes nothing from a
-node and consumes no authorization of its own on removal. A cluster whose nodes
-are physical keeps running after its context is destroyed, exactly as a
-physically installed operating system does. Its secondary networks stay with
-it, because the cluster network block is retired with the cluster it
-configured.
+**Inverse.** Destroy proves each node's media ejected before the media block
+removes its work area and publication. Administrator access leaves when
+removal completes. Physical disks and secondary networks stay. A fresh
+destroy requires managed nodes off. This inverse leaves power as it found it
+and consumes no authorization of its own. Before a physical media read,
+eject or disk selection, it checks the original system pin. Without a pin, it
+requires the complete declared MAC set and a reported UUID or serial.
 
 **Unknown resolution.** Observation is read-only against the frozen request. A
 cluster answering with this operation's identity at the declared release,
@@ -1239,7 +1240,7 @@ naming a difference, a settled apply reaches no cluster and
 `bootwright diff --observe` reports drift as a partial realization
 ([observation](add-ons.md#observation-and-continuation), D153), and the block's removal
 retires it with its cluster without contacting it: the cluster leaves with its
-disks, or keeps running on physical nodes. A condition reporting `Degraded`, a
+virtual disks, or remains installed on the retained physical disks. A condition reporting `Degraded`, a
 policy matching no node and a foreign attachment definition each fail the block
 naming the object.
 

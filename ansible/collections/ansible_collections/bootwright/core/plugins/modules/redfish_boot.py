@@ -162,6 +162,22 @@ options:
         the deciding setting false and weakens boot-media provenance.
     type: bool
     default: false
+  expected_macs:
+    description: Declared hardware addresses to prove before using this physical system.
+    type: list
+    elements: str
+  pinned_uuid_base64:
+    description: Recorded system UUID encoded as base64, when present.
+    type: str
+    default: ""
+  pinned_serial_base64:
+    description: Recorded system serial encoded as base64, when present.
+    type: str
+    default: ""
+  allow_continuous:
+    description: Accept a persistent selection where the caller can boot correctly without a one-shot override.
+    type: bool
+    default: false
 author:
   - Bootwright contributors (@crmarques)
 """
@@ -207,6 +223,10 @@ TRUSTS = (redfish_control.TRUST_ESTABLISHED, redfish_control.TRUST_IMPORT, redfi
 def main():
     module = AnsibleModule(
         argument_spec={
+            "expected_macs": {"type": "list", "elements": "str"},
+            "pinned_uuid_base64": {"type": "str", "default": ""},
+            "pinned_serial_base64": {"type": "str", "default": ""},
+            "allow_continuous": {"type": "bool", "default": False},
             "endpoint": {"type": "str", "required": True},
             "user": {"type": "str", "required": True},
             "password": {"type": "str", "required": True, "no_log": True},
@@ -232,11 +252,13 @@ def main():
     try:
         client = redfish_control.Client(params["endpoint"], params["user"], params["password"],
                                         verify=bool(params["verify"]), ca_data=params["ca_data"] or "", verification=params.get("verification") or "")
+        if params.get("expected_macs") is not None:
+            client.require_identity(params["expected_macs"], params.get("pinned_uuid_base64", ""), params.get("pinned_serial_base64", ""))
         changed, power, media = drive(
             client, operation, attempts, params["image"] or "", params["target"], trust=params["trust"],
             certificate=params["certificate"] or "", restore_verification=bool(params["restore_verification"]),
             remove_certificate=bool(params["remove_certificate"]), private_delivery=bool(params["private_delivery"]),
-            enable_verification=bool(params["enable_verification"]))
+            enable_verification=bool(params["enable_verification"]), allow_continuous=bool(params.get("allow_continuous")))
     except redfish_control.ControllerError as failure:
         module.fail_json(msg="the management controller did not complete %s: %s" % (operation, failure))
     else:
@@ -247,7 +269,7 @@ def main():
 
 
 def drive(client, operation, attempts, image="", target="Cd", trust=redfish_control.TRUST_ESTABLISHED,
-          certificate="", restore_verification=False, remove_certificate=False, private_delivery=False, enable_verification=False):
+          certificate="", restore_verification=False, remove_certificate=False, private_delivery=False, enable_verification=False, allow_continuous=False):
     """Perform exactly the one operation asked for, prove it, and report it.
 
     Returns whether it changed anything, the power state the invocation's last
@@ -270,7 +292,7 @@ def drive(client, operation, attempts, image="", target="Cd", trust=redfish_cont
     if operation == "eject" and remove_certificate and not certificate:
         raise redfish_control.ControllerError("an eject removing a certificate needs that certificate")
     if operation == "boot":
-        client.boot_once(target)
+        client.boot_once(target, allow_continuous=allow_continuous)
         return True, client.last_power, ""
     if operation in RESETS:
         # A graceful request asks the operating system to stop; forcing the

@@ -39,7 +39,7 @@ def machine_port_state(result, expected_url="", media=True):
     state = "unknown"
     if not result.get("msg") and media and isinstance(presented, str):
         if not presented:
-            state = "none"
+            state = "foreign" if result.get("media_present") is True else "none"
         elif expected_url:
             try:
                 actual, expected = urlsplit(presented), urlsplit(expected_url)

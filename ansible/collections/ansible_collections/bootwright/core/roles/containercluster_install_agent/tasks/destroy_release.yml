@@ -34,23 +34,18 @@
       when: containercluster_install_agent_ejected.results | default([]) | selectattr('msg', 'defined') | list | length > 0
 
   always:
-    # A link a failed or replaced insert left is presented by no controller,
-    # so only the media of a node whose eject was not proved is kept.
-    - name: Retire every insert link no node whose eject failed presents
+    # Every failed eject can still hold its link. A successful node retires
+    # its own named link. Sweep the remaining links only after every eject.
+    - name: Retire stale insert links after every eject is proved
       bootwright.core.containercluster_media_token:
         request: '{{ bootwright_cluster_install_request }}'
         source: '{{ containercluster_install_agent_before.observation.url }}'
-        presented: >-
-          {{ containercluster_install_agent_controllers.results | default([])
-             | rejectattr('item.machine', 'in', containercluster_install_agent_released_machines)
-             | map(attribute='media', default='') | list }}
+        presented: []
         operation: sweep
-      vars:
-        containercluster_install_agent_released_machines: >-
-          {{ containercluster_install_agent_ejected.results | default([])
-             | rejectattr('msg', 'defined')
-             | map(attribute='containercluster_install_agent_node.machine') | list }}
-      when: containercluster_install_agent_before.observation.url | default('') | length > 0
+      when:
+        - containercluster_install_agent_before.observation.url | default('') | length > 0
+        - containercluster_install_agent_ejected.results | default([]) | length == bootwright_cluster_install_request.nodes | length
+        - containercluster_install_agent_ejected.results | selectattr('msg', 'defined') | list | length == 0
       register: containercluster_install_agent_swept
       failed_when: false
       no_log: true

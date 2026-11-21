@@ -158,12 +158,14 @@ def connect(monkeypatch, firmware, verify=True, ca_data=""):
 
 def run(monkeypatch, firmware, operation, attempts=3, image="", target="Cd", **trust):
     """One module invocation: a fresh client, as main() builds one."""
+    trust.setdefault("allow_continuous", firmware.system.endswith(UUID))
     return redfish_boot.drive(connect(monkeypatch, firmware), operation, attempts, image, target, **trust)
 
 
 def read(monkeypatch, firmware, media=True):
     """One read-module invocation: a fresh client, as its main() builds one."""
-    return redfish_system_read.read(connect(monkeypatch, firmware), media)
+    power, _present, image = redfish_system_read.read(connect(monkeypatch, firmware), media)
+    return power, image
 
 
 def emulator():
@@ -629,6 +631,59 @@ def test_a_media_read_reports_what_the_device_presents(monkeypatch, shape):
                                         "/redfish/v1/Managers/" + UUID, firmware.system + "/VirtualMedia/Cd"]
 
 
+def test_an_unnamed_image_remains_occupied(monkeypatch):
+    firmware = emulator()
+    member = firmware.system + "/VirtualMedia/Cd"
+    original = firmware.resources[member]
+    firmware.resources[member] = lambda f: dict(original(f), Inserted=True, Image=None)
+    client = connect(monkeypatch, firmware)
+    assert redfish_system_read.read(client, True) == ("Off", True, "")
+    with pytest.raises(ControllerError, match="no image identity"):
+        client.inserted()
+
+
+@pytest.mark.parametrize("reported", [None, "", "indeterminate"])
+def test_unknown_insertion_never_proves_absence_or_allows_a_write(monkeypatch, reported):
+    firmware = emulator()
+    member = firmware.system + "/VirtualMedia/Cd"
+    original = firmware.resources[member]
+    firmware.resources[member] = lambda f: dict(original(f), Inserted=reported)
+    with pytest.raises(ControllerError, match="did not report whether media is inserted"):
+        redfish_system_read.read(connect(monkeypatch, firmware), True)
+    with pytest.raises(ControllerError, match="did not report whether media is inserted"):
+        run(monkeypatch, firmware, "eject")
+    assert not writes(firmware)
+
+
+def test_partial_interface_collection_cannot_prove_identity(monkeypatch):
+    firmware = emulator()
+    path = firmware.system + "/EthernetInterfaces"
+    firmware.resources[path] = {"Members": [], "Members@odata.count": 1}
+    observed = redfish_system_inspect.observe(connect(monkeypatch, firmware))
+    assert observed["failures"] == ["the interface collection is incomplete"]
+
+
+def test_partial_virtual_media_collection_does_not_prove_absence(monkeypatch):
+    firmware = emulator()
+    path = firmware.system + "/VirtualMedia"
+    firmware.resources[path] = {"Members": [], "Members@odata.nextLink": path + "?page=2"}
+    with pytest.raises(ControllerError, match="collection is incomplete"):
+        redfish_system_read.read(connect(monkeypatch, firmware), True)
+
+
+@pytest.mark.parametrize("operation", ["eject", "boot"])
+def test_changed_physical_pin_refuses_late_mutations(monkeypatch, operation):
+    firmware = manager_scoped()
+    module = Module({"endpoint": firmware.endpoint, "user": "operator", "password": PASSWORD,
+                     "operation": operation, "expected_macs": [], "pinned_uuid_base64": "b3RoZXI="})
+    monkeypatch.setattr(redfish_boot, "AnsibleModule", module.build)
+    monkeypatch.setattr(redfish_control, "_opener", firmware.opener)
+    redfish_boot.main()
+    assert module.ended[0] == "fail"
+    assert "recorded identity" in module.ended[1]["msg"]
+    assert not writes(firmware)
+
+
 class Built(Exception):
     """What a module's main() asked AnsibleModule for, raised before anything runs."""
 
@@ -694,7 +749,7 @@ def test_the_read_module_reports_what_it_read_and_fails_closed(monkeypatch):
         redfish_system_read.main()
         assert module.ended[0] == ended
         if ended == "exit":
-            assert module.ended[1] == {"changed": False, "power": "Off", "media": IMAGE}
+            assert module.ended[1] == {"changed": False, "power": "Off", "media": IMAGE, "media_present": True}
         else:
             assert module.ended[1]["msg"].startswith("the management controller could not be read: ")
             assert firmware.system in module.ended[1]["msg"] and PASSWORD not in module.ended[1]["msg"]
@@ -1334,7 +1389,9 @@ def test_a_boot_selection_is_read_back(monkeypatch):
     assert gets(kept).count(kept.system) == 1 + redfish_control.BOOT_POLLS
     assert kept.pauses == [redfish_control.BOOT_POLL_DELAY] * (redfish_control.BOOT_POLLS - 1)
 
-    assert run(monkeypatch, emulator(), "boot") == (True, "Off", "")
+    assert run(monkeypatch, emulator(), "boot", allow_continuous=True) == (True, "Off", "")
+    with pytest.raises(ControllerError, match="does not report Cd"):
+        run(monkeypatch, emulator(), "boot", allow_continuous=False)
     assert run(monkeypatch, manager_scoped(), "boot") == (True, "Off", "")
 
     refused = advertise_boot(emulator(), ["Once", "Continuous", "Disabled"])
@@ -1519,7 +1576,7 @@ def test_a_read_back_outlasts_an_unreadable_answer(monkeypatch, operation):
         firmware.write = attach_then_unreadable
     else:
         firmware.script("GET", firmware.system + DEVICE, unavailable)
-    assert redfish_boot.drive(client, operation, 3, IMAGE)[0]
+    assert redfish_boot.drive(client, operation, 3, IMAGE, allow_continuous=True)[0]
     assert len(writes(firmware)) == 1 and len(firmware.pauses) == 1
 
 
@@ -2041,7 +2098,7 @@ def test_the_trust_options_default_to_no_action(monkeypatch):
 # bundle that cannot be used fails the module through its own failure rather
 # than as a traceback.
 @pytest.mark.parametrize("module, extra", [
-    (redfish_boot, {"operation": "boot", "image": None, "target": "Cd", "attempts": 3, "trust": "established",
+    (redfish_boot, {"operation": "boot", "image": None, "target": "Cd", "attempts": 3, "trust": "established", "allow_continuous": True,
                     "certificate": "", "restore_verification": False, "remove_certificate": False,
                     "private_delivery": False}),
     (redfish_system_read, {"media": False}),

@@ -739,11 +739,15 @@ func TestARootDeviceSizeTheFrozenInputCannotCarryRefuses(t *testing.T) {
 	}
 }
 
-// Only the agent configuration carries the hints: the install request boots
-// the same nodes whatever disk each one selects.
-func TestTheInstallRequestCarriesNoRootDeviceHint(t *testing.T) {
+// Supplemental hints belong to the installer, while the stable selector also
+// reaches the physical pre-boot proof.
+func TestTheInstallRequestCarriesTheWWNProofAndNoSupplementalHints(t *testing.T) {
 	_, hinted, _ := onlyRequests(t, physicalHintsCatalog())
 	_, compact, _ := onlyRequests(t, physicalCatalog())
+	if got := hinted.Nodes[1].Hardware.RootDisk; got == nil || got.WWN != "0x5000c500a1b2c3d5" {
+		t.Fatalf("hinted node's pre-boot proof = %+v", got)
+	}
+	compact.Nodes[1].Hardware.RootDisk = hinted.Nodes[1].Hardware.RootDisk
 	hintedBytes, err := hinted.Canonical()
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
@@ -753,7 +757,7 @@ func TestTheInstallRequestCarriesNoRootDeviceHint(t *testing.T) {
 		t.Fatal(diagnostics.Of(err))
 	}
 	if !bytes.Equal(hintedBytes, compactBytes) {
-		t.Fatalf("the install request changed with the hints:\n%s\n%s", hintedBytes, compactBytes)
+		t.Fatalf("the install request changed outside the WWN proof:\n%s\n%s", hintedBytes, compactBytes)
 	}
 }
 

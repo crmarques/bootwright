@@ -68,6 +68,18 @@ options:
     description: Whether to discover the virtual-media device and report the image it presents.
     type: bool
     default: false
+  expected_macs:
+    description: Declared hardware addresses to prove before using this physical system.
+    type: list
+    elements: str
+  pinned_uuid_base64:
+    description: Recorded system UUID encoded as base64, when present.
+    type: str
+    default: ""
+  pinned_serial_base64:
+    description: Recorded system serial encoded as base64, when present.
+    type: str
+    default: ""
 author:
   - Bootwright contributors (@crmarques)
 """
@@ -99,10 +111,14 @@ power:
 media:
   description:
     - For a media read, the image the virtual-media device presents, or the
-      empty string when it presents none or the controller offers none.
+      empty string when the controller names no image.
     - Always empty for a power read, which never looks for media.
   returned: success
   type: str
+media_present:
+  description: Whether an optical device holds media, including an unnamed image.
+  returned: success
+  type: bool
 """
 
 from ansible.module_utils.basic import AnsibleModule
@@ -112,6 +128,9 @@ from ansible_collections.bootwright.core.plugins.module_utils import redfish_con
 def main():
     module = AnsibleModule(
         argument_spec={
+            "expected_macs": {"type": "list", "elements": "str"},
+            "pinned_uuid_base64": {"type": "str", "default": ""},
+            "pinned_serial_base64": {"type": "str", "default": ""},
             "endpoint": {"type": "str", "required": True},
             "user": {"type": "str", "required": True},
             "password": {"type": "str", "required": True, "no_log": True},
@@ -126,17 +145,21 @@ def main():
     try:
         client = redfish_control.Client(params["endpoint"], params["user"], params["password"],
                                         verify=bool(params["verify"]), ca_data=params["ca_data"] or "", verification=params.get("verification") or "")
-        power, media = read(client, bool(params["media"]))
+        if params.get("expected_macs") is not None:
+            client.require_identity(params["expected_macs"], params.get("pinned_uuid_base64", ""), params.get("pinned_serial_base64", ""))
+        power, present, media = read(client, bool(params["media"]))
     except redfish_control.ControllerError as failure:
         module.fail_json(msg="the management controller could not be read: %s" % failure)
     else:
-        module.exit_json(changed=False, power=power, media=media)
+        module.exit_json(changed=False, power=power, media=media, media_present=present)
 
 
 def read(client, media):
     """The power state the system reports and, for a media read, the image
     the device presents; a power read reports no image."""
-    return client.power_state(), client.inserted() if media else ""
+    power = client.power_state()
+    present, image = client.media_state() if media else (False, "")
+    return power, present, image
 
 
 if __name__ == "__main__":

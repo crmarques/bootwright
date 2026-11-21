@@ -91,7 +91,7 @@ def test_each_install_port_request_matches_the_selected_arm_entrypoint():
         for operation in ('state_read', 'media_insert', 'media_eject', 'power'):
             scope = dict(port['vars'], containercluster_install_agent_port_operation=operation,
                          containercluster_install_agent_node={
-                             'physical': arm == 'baremetal', 'machinePort': {
+                             'physical': arm == 'baremetal', 'hardware': {'interfaces': [{'macAddress': '02:00:00:00:00:01'}]}, 'machinePort': {
                                  'endpoint': 'https://bmc.example.test', 'verify': True, 'userVariable': 'controllerUserNode0',
                                  'passwordVariable': 'controllerPasswordNode0', 'caVariable': 'controllerCANode0',
                                  'pinnedUUIDVariable': 'pinnedUUIDBase64Node0', 'pinnedSerialVariable': 'pinnedSerialBase64Node0'},
@@ -107,7 +107,12 @@ def test_each_install_port_request_matches_the_selected_arm_entrypoint():
             if operation == 'media_insert':
                 assert request['private'] is True
                 assert request['enable_verification'] is (arm == 'baremetal')
-            result = ArgumentSpecValidator(specs[operation]['options']).validate({'bootwright_machine_port': request})
+            if arm == 'baremetal' and operation in ('state_read', 'media_eject'):
+                assert request['prove_macs'] == ['02:00:00:00:00:01']
+            else:
+                assert 'prove_macs' not in request
+            result = ArgumentSpecValidator(specs[operation]['options']).validate(
+                {'bootwright_machine_port': request}, validate_role_argument_spec=True)
             assert not result.error_messages, (arm, operation, result.error_messages)
 
 
@@ -129,3 +134,25 @@ def test_node_collection_uses_the_ordered_inventory_aliases():
         result = Templar(loader=loader, variables=scope).template(collect['ansible.builtin.set_fact'])
         assert result['containercluster_install_agent_controllers']['results'][0]['power'] == 'Off'
         assert result['containercluster_install_agent_media_identity']['results'][0]['own'] is False
+
+
+def test_an_occupied_device_without_an_image_blocks_token_sweep():
+    from ansible.template import Templar
+
+    loader = LOADER
+    resolve = loader.load_from_file(str(TASKS / 'resolve_state.yml'), trusted_as_template=True)
+    prepare = loader.load_from_file(str(TASKS / 'prepare_boot.yml'), trusted_as_template=True)
+    scope = {
+        'containercluster_install_agent_state': {'cluster': '', 'release': '', 'completed': False, 'missing': []},
+        'containercluster_install_agent_controllers': {'results': [
+            {'item': {'machine': 'empty'}, 'media_present': False, 'media': '', 'power': 'Off'},
+            {'item': {'machine': 'occupied'}, 'media_present': True, 'media': '', 'power': 'On'},
+        ]},
+        'containercluster_install_agent_before': {'observation': {'url': 'https://artifacts.example.test/image'}},
+    }
+    verdict = Templar(loader=loader, variables={**scope, **resolve[0]['vars']})
+    assert verdict.template(resolve[0]['ansible.builtin.set_fact'])['containercluster_install_agent_state']['media'] == ['occupied']
+    scope.update(verdict.template(resolve[1]['ansible.builtin.set_fact']))
+    sweep = next(task for task in prepare if task.get('bootwright.core.containercluster_media_token', {}).get('operation') == 'sweep')
+    guarded = Templar(loader=loader, variables=scope)
+    assert [guarded.evaluate_conditional(when) for when in sweep['when']] == [True, False]

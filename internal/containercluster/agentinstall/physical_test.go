@@ -97,7 +97,7 @@ func TestPhysicalAgentWWNReachesTheInstallerAsItsWWNHint(t *testing.T) {
 			if got := hostHints(t, media)["master-0"]; !reflect.DeepEqual(got, want) {
 				t.Fatalf("root hints = %#v", got)
 			}
-			if hardware := install.Nodes[0].Hardware; hardware.RootSelector != "wwn" || hardware.RootDisk != nil || hardware.RootVolumeRef != nil {
+			if hardware := install.Nodes[0].Hardware; hardware.RootSelector != "wwn" || hardware.RootDisk == nil || hardware.RootDisk.WWN != wwn || hardware.RootVolumeRef != nil {
 				t.Fatalf("root proof = %+v", hardware)
 			}
 		})

@@ -77,8 +77,9 @@ def test_apply_sweeps_right_after_reading_its_nodes_and_before_any_boot():
     assert read + 1 < position(apply, lambda t: t.get('ansible.builtin.import_tasks') == 'boot.yml')
     scope = {'containercluster_install_agent_controllers': controllers(BASE + TOKEN + '/agent.iso', '')}
     assert evaluate(first, scope) == [BASE + TOKEN + '/agent.iso', '']
-    for url, runs in [('', False), (BASE + 'abcdef/agent.iso', True)]:
-        assert guard_holds(first, {'containercluster_install_agent_before': {'observation': {'url': url}}}) is runs
+    for url, unnamed, runs in [('', False, False), (BASE, False, True), (BASE, True, False)]:
+        assert guard_holds(first, {'containercluster_install_agent_before': {'observation': {'url': url}},
+                                   'containercluster_install_agent_unnamed_media': unnamed}) is runs
 
 
 def test_apply_sweeps_once_every_node_released_its_media():
@@ -94,7 +95,7 @@ def test_apply_sweeps_once_every_node_released_its_media():
     assert len(sweeps(apply)) == 2
 
 
-def test_destroy_sweeps_after_its_ejects_keeping_only_unejected_media():
+def test_destroy_sweeps_only_after_every_eject_is_proved():
     destroy = tasks('destroy_release.yml')
     block = next(t for t in destroy if 'always' in t)
     always = block['always']
@@ -103,12 +104,15 @@ def test_destroy_sweeps_after_its_ejects_keeping_only_unejected_media():
     assert reports_its_refusal(always, len(always) - 2) is always[-1]
     assert position(tasks('node_eject.yml'), lambda t: t.get(MODULE, {}).get('operation') == 'remove') > 0
     ejects = [{'containercluster_install_agent_node': {'machine': 'sno-00'}},
-              {'containercluster_install_agent_node': {'machine': 'sno-01'}, 'msg': 'HTTP 503'}]
-    scope = {'containercluster_install_agent_controllers': controllers(BASE + TOKEN + '/agent.iso', BASE + OTHER + '/agent.iso'),
-             'containercluster_install_agent_ejected': {'results': ejects}}
-    assert evaluate(sweep, scope) == [BASE + OTHER + '/agent.iso']
-    unejected = {'containercluster_install_agent_controllers': scope['containercluster_install_agent_controllers']}
-    assert evaluate(sweep, unejected) == [BASE + TOKEN + '/agent.iso', BASE + OTHER + '/agent.iso']
+              {'containercluster_install_agent_node': {'machine': 'sno-01'}}]
+    scope = {
+        'containercluster_install_agent_before': {'observation': {'url': BASE}},
+        'bootwright_cluster_install_request': {'nodes': [{'machine': 'sno-00'}, {'machine': 'sno-01'}]},
+    }
+    for evidence, runs in [(ejects, True), (ejects[:1], False), ([ejects[0], dict(ejects[1], msg='HTTP 503')], False)]:
+        scope['containercluster_install_agent_ejected'] = {'results': evidence}
+        assert guard_holds(sweep, scope) is runs
+    assert evaluate(sweep, scope) == []
 
 
 def failed_insert_tasks():
@@ -129,6 +133,7 @@ def test_a_failed_insert_reads_its_controller_and_retires_its_link_when_not_pres
     failed = {'msg': 'HTTP 500'}
     for insertion, after, retires in [
         (failed, {'media': '', 'power': 'Off'}, True),
+        (failed, {'media': '', 'power': 'On', 'media_present': True}, False),
         (failed, {'media': BASE + OTHER + '/agent.iso', 'power': 'Off'}, True),
         (failed, {'media': 'HTTPS://192.0.2.1:443/private/clusters/sno/' + TOKEN + '/agent.iso', 'power': 'Off'}, False),
         (failed, {'msg': 'HTTP 403', 'failed_when_result': False}, False),

@@ -24,7 +24,10 @@ class Inventory:
         self.resources = {
             ROOT: {"Members": [{"@odata.id": STORAGE}], "Members@odata.count": 1},
             STORAGE: {"Drives": [{"@odata.id": DRIVE}]},
-            DRIVE: {"@odata.type": "#Drive.v1_19_0.Drive", "SerialNumber": EXPECTED["serialNumber"], "CapacityBytes": 8192},
+            DRIVE: {
+                "@odata.type": "#Drive.v1_19_0.Drive", "SerialNumber": EXPECTED["serialNumber"], "CapacityBytes": 8192,
+                "Protocol": "SAS", "Status": {"State": "Enabled"},
+            },
         }
         self.reads = []
 
@@ -47,6 +50,54 @@ def test_one_whole_drive_with_exact_serial_and_size_is_proved_without_writes():
     before = copy.deepcopy(client.resources)
     redfish_root_disk.prove(client, EXPECTED)
     assert len(client.reads) == 3 and client.resources == before
+
+
+def test_an_absent_drive_with_a_matching_serial_and_size_does_not_prove_the_root():
+    client = Inventory()
+    client.resources[DRIVE]["Status"] = {"State": "Absent"}
+    with pytest.raises(redfish_root_disk.Refused):
+        redfish_root_disk.prove(client, EXPECTED)
+
+
+def test_an_absent_bay_without_a_serial_is_not_a_drive():
+    client = Inventory()
+    client.resources[STORAGE]["Drives"].append({"@odata.id": DRIVE + "-empty"})
+    client.resources[DRIVE + "-empty"] = {"@odata.type": "#Drive.v1_19_0.Drive", "Status": {"State": "Absent"}}
+    redfish_root_disk.prove(client, EXPECTED)
+
+
+@pytest.mark.parametrize("facts", [
+    {"Status": {}},
+    {"Links": {"Volumes": [{"@odata.id": STORAGE + "/Volumes/1"}]}},
+])
+def test_an_unknown_or_volume_backing_drive_cannot_prove_a_direct_root(facts):
+    client = Inventory()
+    client.resources[DRIVE].update(facts)
+    with pytest.raises(redfish_root_disk.Refused):
+        redfish_root_disk.prove(client, EXPECTED)
+
+
+def test_wwn_and_serial_must_identify_the_same_unique_present_drive():
+    client = Inventory()
+    naa = {"DurableNameFormat": "NAA", "DurableName": "5000000000000001"}
+    client.resources[DRIVE]["Identifiers"] = [naa]
+    wwn = {"wwn": "0x5000000000000001"}
+    redfish_root_disk.prove(client, wwn)
+    redfish_root_disk.prove(client, dict(EXPECTED, **wwn))
+
+    client.resources[DRIVE]["Protocol"] = "NVMe"
+    with pytest.raises(redfish_root_disk.Refused):
+        redfish_root_disk.prove(client, wwn)
+    client.resources[DRIVE]["Protocol"] = "SAS"
+
+    client.resources[STORAGE]["Drives"].append({"@odata.id": DRIVE + "-other"})
+    client.resources[DRIVE + "-other"] = dict(client.resources[DRIVE], SerialNumber="OTHER")
+    with pytest.raises(redfish_root_disk.Refused):
+        redfish_root_disk.prove(client, wwn)
+
+    client.resources[DRIVE]["Identifiers"] = [dict(naa, DurableName="5000000000000002")]
+    with pytest.raises(redfish_root_disk.Refused):
+        redfish_root_disk.prove(client, dict(EXPECTED, **wwn))
 
 
 @pytest.mark.parametrize("second_size", [8192, 16384])

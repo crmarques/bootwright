@@ -14,7 +14,9 @@
       {{ containercluster_install_agent_controllers.results | default([])
          | map(attribute='media', default='') | list }}
     operation: sweep
-  when: containercluster_install_agent_before.observation.url | default('') | length > 0
+  when:
+    - containercluster_install_agent_before.observation.url | default('') | length > 0
+    - not (containercluster_install_agent_unnamed_media | bool)
   register: containercluster_install_agent_swept
   failed_when: false
   no_log: true

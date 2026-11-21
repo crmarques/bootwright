@@ -235,6 +235,9 @@ argument_specs:
           verification:
             type: str
             required: false
+          prove_macs:
+            type: list
+            elements: str
           verify:
             type: bool
             required: true
@@ -311,6 +314,9 @@ argument_specs:
           verification:
             type: str
             required: false
+          prove_macs:
+            type: list
+            elements: str
           verify:
             type: bool
             required: true
@@ -416,6 +422,9 @@ argument_specs:
           verification:
             type: str
             required: false
+          prove_macs:
+            type: list
+            elements: str
           verify:
             type: bool
             required: true

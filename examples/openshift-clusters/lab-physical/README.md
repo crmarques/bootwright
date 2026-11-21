@@ -20,7 +20,10 @@ is claimed. The accepted [lab-sno](../lab-sno/) and
   `wwn`. Every BMC name, MAC and disk identity is synthetic; replace them
   with verified identities and all physical NICs. Physical agent installs
   require a supported WWN or an exact serial number and size, with no device path.
-  Serial selection also requires a complete BMC Storage inventory before boot.
+  Direct-root selection requires a complete BMC Storage inventory before boot.
+  Verify a SAS or SATA disk’s authored WWN against both the BMC’s durable NAA
+  identifier and the installer-visible identity. Use a proved serial and exact
+  size or a declared logical root where that correlation is unavailable.
 - Each server must meet the actual release's CPU, memory and disk
   requirements. The controller needs at least 4 vCPU, 16 GiB memory and 100 GiB
   free storage for tools and artifacts.
@@ -42,8 +45,8 @@ is claimed. The accepted [lab-sno](../lab-sno/) and
 - Complete the owning M1 physical prerequisites before the real-hardware row;
   no emulated rehearsal stands in for it
   ([D224](../../../specs/milestones/backlog.md#d224)). Removal ejects media and deletes
-  Bootwright-owned delivery state but retains the operating system and data on
-  the disks.
+  Bootwright-owned delivery state and retains the operating system and data on
+  the disks. Power off the managed nodes before a fresh destroy.
 
 For a connection that intentionally skips certificate checks, set
 `hardware.bmc.tls.verification: none` on that Machine and author no

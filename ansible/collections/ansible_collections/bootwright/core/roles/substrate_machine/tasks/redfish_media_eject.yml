@@ -14,6 +14,9 @@
     ca_data: >-
       {{ lookup('ansible.builtin.file', bootwright_machine_port.ca, rstrip=false)
          if bootwright_machine_port.ca | default('') | length > 0 else '' }}
+    expected_macs: '{{ bootwright_machine_port.prove_macs | default(omit) }}'
+    pinned_uuid_base64: '{{ bootwright_machine_port.pinned_uuid_base64 | default("") }}'
+    pinned_serial_base64: '{{ bootwright_machine_port.pinned_serial_base64 | default("") }}'
     operation: eject
     restore_verification: '{{ bootwright_machine_port.restore_verification | default(false) }}'
     remove_certificate: '{{ bootwright_machine_port.remove_certificate | default(false) }}'

@@ -184,16 +184,40 @@ def optical(member):
     return bool(MEDIA_NAMES.search(str(member.get("@odata.id") or "").rstrip("/")))
 
 
+# Exact counts exclude booleans in controller data.
+def complete_members(body, limit, key="Members"):
+    """A complete, bounded Redfish list, or None if the reply proves only part of it."""
+    if not isinstance(body, dict) or key + "@odata.nextLink" in body or "@odata.nextLink" in body:
+        return None
+    members = body.get(key)
+    if not isinstance(members, list) or len(members) > limit:
+        return None
+    count = body.get(key + "@odata.count", len(members))
+    if type(count) is not int or count != len(members):  # pylint: disable=unidiomatic-typecheck
+        return None
+    return members
+
+
 def inserted_image(member):
     """The image a member reports presenting, or the empty string."""
     if not media_present(member):
         return ""
-    return str(member.get("Image") or "")
+    image = member.get("Image")
+    return image if isinstance(image, str) else ""
 
 
 def media_present(member):
-    """Whether a member reports media inserted, whether or not it names the image."""
-    return isinstance(member, dict) and _truthy(member.get("Inserted"))
+    """Whether a member reports insertion, or None for an unknown state."""
+    value = member.get("Inserted") if isinstance(member, dict) else None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        value = value.strip().lower()
+        if value in ("1", "true", "yes", "on"):
+            return True
+        if value in ("0", "false", "no", "off"):
+            return False
+    return None
 
 
 def image_matches(observed, expected):
@@ -330,13 +354,11 @@ def security_services(manager):
     return sorted(set(link for link in links if link))
 
 
-def boot_selected(system, target):
+def boot_selected(system, target, allow_continuous=False):
     """Whether a system reports the one-time boot device that was selected.
 
-    `Once` proves it. `Continuous` proves it only on a controller that does not
-    offer `Once` at all, because such firmware reports every override as
-    continuous; one that advertises `Once` and reports `Continuous` did not
-    apply what was asked.
+    The caller can explicitly accept a persistent selection for a controller
+    that reports every override as Continuous and does not advertise Once.
     """
     boot = system.get("Boot") if isinstance(system, dict) else None
     if not isinstance(boot, dict) or boot.get("BootSourceOverrideTarget") != target:
@@ -345,7 +367,7 @@ def boot_selected(system, target):
     if enabled == "Once":
         return True
     offered = boot.get("BootSourceOverrideEnabled@Redfish.AllowableValues")
-    return enabled == "Continuous" and not (isinstance(offered, list) and "Once" in offered)
+    return allow_continuous and enabled == "Continuous" and not (isinstance(offered, list) and "Once" in offered)
 
 
 def canonical_mac(value):
@@ -387,11 +409,3 @@ def reported_macs(members):
             continue
         observed.update(found)
     return sorted(observed), failures
-
-
-def _truthy(value):
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        return value.strip().lower() in ("1", "true", "yes", "on")
-    return bool(value)

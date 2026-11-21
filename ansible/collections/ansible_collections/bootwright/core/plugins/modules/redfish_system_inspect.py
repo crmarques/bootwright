@@ -67,7 +67,7 @@ options:
     default: {}
   root_disk:
     description:
-      - Optional dictionary containing serialNumber and sizeBytes for the one whole root drive to prove before agent boot.
+      - Optional dictionary with a WWN, an exact serial and size, or both for the one whole root drive to prove before agent boot.
       - The serial must match exactly one drive and that drive's capacity must equal sizeBytes.
       - Empty requests no disk proof.
     type: dict
@@ -125,6 +125,8 @@ def main():
                 raise redfish_root_volume.Refused(redfish_root_volume.REFUSAL)
             observation["rootVolume"] = redfish_root_volume.discover(client, module.params["volume_ref"])
         if module.params.get("root_disk"):
+            if not module.params["verify"] or module.params.get("verification") == "none" or not module.params["endpoint"].startswith("https://"):
+                raise redfish_root_disk.Refused("the root disk proof requires verified HTTPS BMC access")
             redfish_root_disk.prove(client, module.params["root_disk"])
         tpm = usable_tpm(client.system()) if module.params.get("require_tpm", False) else False
     except redfish_root_disk.Refused as failure:
@@ -152,17 +154,7 @@ def observe(client):
     error; an answered system missing identity remains a hardware mismatch.
     Virtual media is not queried because this proof does not need it.
     """
-    identity, power = client.identity(), client.power_state()
-    addresses, failures = client.hardware_addresses()
-    return {
-        "addresses": addresses,
-        "failures": failures,
-        "manufacturer": identity["Manufacturer"],
-        "model": identity["Model"],
-        "power": power,
-        "serial": identity["SerialNumber"],
-        "uuid": identity["UUID"],
-    }
+    return redfish_control.hardware_observation(client)
 
 
 if __name__ == "__main__":

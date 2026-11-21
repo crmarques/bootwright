@@ -71,6 +71,9 @@
             "name": "enp1s0"
           }
         ],
+        "rootDisk": {
+          "wwn": "0x5000c500a1b2c3d4"
+        },
         "rootSelector": "wwn"
       },
       "machine": "metal-01",
@@ -108,6 +111,9 @@
             "name": "enp1s0"
           }
         ],
+        "rootDisk": {
+          "wwn": "0x5000c500a1b2c3d4"
+        },
         "rootSelector": "wwn"
       },
       "machine": "metal-02",
@@ -145,6 +151,9 @@
             "name": "enp1s0"
           }
         ],
+        "rootDisk": {
+          "wwn": "0x5000c500a1b2c3d4"
+        },
         "rootSelector": "wwn"
       },
       "machine": "metal-03",

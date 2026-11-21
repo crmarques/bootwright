@@ -52,6 +52,7 @@
     ca_data: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_boot_ca, rstrip=false) }}'
     operation: boot
     target: Cd
+    allow_continuous: true
   register: substrate_libvirt_machine_boot_selected
   failed_when: false
   no_log: true
