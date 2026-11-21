@@ -65,11 +65,11 @@ func (r *dispatchRecord) called(ctx context.Context, path string, request any) e
 type contextsSpy struct{ record *dispatchRecord }
 
 func (s contextsSpy) Init(ctx context.Context, request contexts.InitRequest) (*contexts.AdmissionResult, error) {
-	return s.record.result.admission, s.record.called(ctx, "init", request)
+	return s.record.result.admission, s.record.called(ctx, "context init", request)
 }
 
 func (s contextsSpy) Update(ctx context.Context, request contexts.UpdateRequest) (*contexts.AdmissionResult, error) {
-	return s.record.result.admission, s.record.called(ctx, "update", request)
+	return s.record.result.admission, s.record.called(ctx, "context update", request)
 }
 
 func (s contextsSpy) Use(ctx context.Context, request contexts.UseRequest) (*contexts.UseResult, error) {

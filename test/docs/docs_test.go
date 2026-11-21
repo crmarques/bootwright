@@ -913,7 +913,7 @@ var askRuleMarkers = []struct{ phrase, flag string }{
 // that needs no ask rule. A row whose Effects cell gains a marker, or loses the
 // phrase, fails until it is classified again.
 var askRuleNoAsk = map[string]string{
-	"init": "local", "update": "local", "context use": "local",
+	"context init": "local", "context update": "local", "context use": "local",
 	"context list": "read local state", "context current": "read local state",
 	"policy permissions":   "read the selected context",
 	"catalog add-ons list": "read executable registry", "catalog add-ons info": "read executable registry",

@@ -18,9 +18,9 @@ import (
 
 func TestOperationBoundaryIsLazyForInformationalMalformedAndUnavailablePaths(t *testing.T) {
 	for _, invocation := range []string{
-		"--help", "init --help", "help render effective", "completion bash", "version",
+		"--help", "context init --help", "help render effective", "completion bash", "version",
 		"__bootwright_complete context", "__bootwright_complete_no_desc render",
-		"init --name example -f one -f two", "context delete --name example --purge=false",
+		"context init --name example -f one -f two", "context delete --name example --purge=false",
 		"validate --output json --unknown", "render effective -f input", "render --output json",
 		"catalog add-ons list",
 		"catalog add-ons info --name metallb",

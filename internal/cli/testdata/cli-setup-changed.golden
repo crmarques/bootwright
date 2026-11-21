@@ -3,4 +3,4 @@
     Readiness  all required prerequisites verified
     Logs       /var/log/bootwright/controller/install-000003.output
     Follow     bootwright logs --install=install-000003
-    Next       bootwright init --name <name> --input-dir <dir>
+    Next       bootwright context init --name <name> --input-dir <dir>

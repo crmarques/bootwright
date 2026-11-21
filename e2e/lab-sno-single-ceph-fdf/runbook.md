@@ -141,7 +141,7 @@ The optional block/file-only render sets `ceph.object=false` consistently in
 ## Bootstrap and hand over to the FIPS controller
 
 ```bash
-bootwright init --name "$CTX_BOOT" --input-dir "$INPUT_DIR/bootstrap"
+bootwright context init --name "$CTX_BOOT" --input-dir "$INPUT_DIR/bootstrap"
 bootwright secret generate --context "$CTX_BOOT"
 bootwright secret check --context "$CTX_BOOT"
 bootwright apply --dry-run --context "$CTX_BOOT"
@@ -185,7 +185,7 @@ On the controller, initialize this context and bind its credentials:
 
 ```bash
 CTX_FIPS=lab-sno-single-ceph-fdf
-bootwright init --name "$CTX_FIPS" --input-dir "$HOME/fips"
+bootwright context init --name "$CTX_FIPS" --input-dir "$HOME/fips"
 bootwright secret set --context "$CTX_FIPS" --name openshift-pull-secret \
     --value-file "$HOME/openshift-pull-secret" --yes
 bootwright secret set --context "$CTX_FIPS" --name ibm-registry \

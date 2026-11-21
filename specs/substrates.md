@@ -111,7 +111,7 @@ whose `certificateRef` names a generated `tlsCertificate` whose
 `ipAddresses` do not include that `bindAddress`, compared as Go's hostname
 verification compares an IP, also refuses at admission, with the remedy to add
 the address to the Secret's `spec.source.generated.ipAddresses`, import the
-change with `bootwright update`, then run `bootwright secret generate`.
+change with `bootwright context update`, then run `bootwright secret generate`.
 A stored certificate's names are proved only when a fresh apply binds it.
 
 ### Refusal table
@@ -2303,7 +2303,7 @@ the machine reports the declared hardware in full or, to correct the
 declaration instead, by taking the context back with
 `bootwright destroy --context <context>`, correcting
 `spec.hardware.bmc.address` or `spec.hardware.nics`, importing that
-input with `bootwright update --name <context> --input-dir <directory>`
+input with `bootwright context update --name <context> --input-dir <directory>`
 and running `bootwright apply --context <context>`; `identity-mismatch`, a
 physical machine answering as another system than its pin, remedied by the same
 destroy, correcting that address if it names another BMC, the same

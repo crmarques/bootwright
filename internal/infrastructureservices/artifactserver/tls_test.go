@@ -274,7 +274,7 @@ func TestServingCertificateRefusalsNameTheSecretAndTheirRemedy(t *testing.T) {
 	reported := diagnostics.Of(err)
 	if len(reported) != 1 || !strings.Contains(reported[0].Message, "192.0.2.9") ||
 		reported[0].Remediation != "store a certificate that names 192.0.2.9 with bootwright secret set --name artifact-server-tls --certificate-file <path> --private-key-file <path> --context lab, "+
-			"or, for a generated Secret, add 192.0.2.9 to spec.source.generated.ipAddresses, import the change with bootwright update --name lab --input-dir <dir> "+
+			"or, for a generated Secret, add 192.0.2.9 to spec.source.generated.ipAddresses, import the change with bootwright context update --name lab --input-dir <dir> "+
 			"and run bootwright secret generate --name artifact-server-tls --context lab; then destroy this apply with bootwright destroy --context lab and apply again" {
 		t.Fatalf("an uncovered IP address = %#v", reported)
 	}

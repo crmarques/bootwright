@@ -20,8 +20,6 @@
   COMMAND     PURPOSE
   install     Install context-independent controller prerequisites
   uninstall   Remove the Bootwright host installation
-  init        Initialize a configured context and select it
-  update      Replace a context’s definition
   validate    Validate a complete desired-state input universe
   context     Create, select, update and delete contexts
   catalog     Browse installer media, built-in add-ons and the desired-state schema

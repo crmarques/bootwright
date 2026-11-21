@@ -619,7 +619,7 @@ digest, the host public key, the address, whether that connection was accepted,
 the network result, `fips`, whether the installed system proved FIPS mode,
 `rootEncryption`, whether it proved its root disk encrypted, `rootWWN`, and
 `registration`, the consumer and the ownership state the worker read, and
-`update`, what the update did; a later consumer that
+`context update`, what the update did; a later consumer that
 connects to the Machine binds that key, never a first-use answer from the
 network. An observation proves completion the same way, because it is what
 resolves an interrupted apply: an observation that proves the marker and the
@@ -1883,7 +1883,7 @@ after the update's reboot`, remedied by `remove 4, 8 and 9 from
 spec.customizations.security.diskEncryption.unlock.tpm2.pcrIds on <profile>,
 or set spec.updates.policy to none on <profile>`.
 
-**Frozen request.** The installation request freezes `update`, `{policy,
+**Frozen request.** The installation request freezes `context update`, `{policy,
 release}`, omitted for `none`; its version stays fixed under the
 [development policy](project.md#design-priorities-and-non-goals). A change
 of either changes the request and so the marker, so it is another

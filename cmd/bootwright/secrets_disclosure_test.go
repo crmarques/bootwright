@@ -20,7 +20,7 @@ func TestSecretNormalOutputsAndStateNeverContainMaterialOrDigests(t *testing.T) 
 		secretDocument("password", "usernamePassword", ""),
 		secretDocument("docker", "dockerConfigJson", ""),
 	}, "\n---\n"))
-	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	contextRun(t, services, 0, "secret", "encryption", "init")
 	canaries := []string{"synthetic-output-opaque-canary", "synthetic-output-password-canary", "synthetic-invalid-docker-canary", "synthetic-produced-kubeconfig-canary"}
 	for _, value := range append([]string{}, canaries...) {

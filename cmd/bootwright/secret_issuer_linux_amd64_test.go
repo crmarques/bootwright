@@ -26,7 +26,7 @@ func TestGeneratedIssuerThroughProductionCustodyAndFrozenBinding(t *testing.T) {
 		secretDocument("a-leaf", "tlsCertificate", "  source: {generated: {issuerRef: z-root, commonName: bmc.example.test, dnsNames: [bmc.example.test], validityDays: 30}}\n"),
 		secretDocument("z-root", "caBundle", "  source: {generated: {commonName: synthetic-root, validityDays: 30}}\n"),
 	}, "\n---\n"))
-	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	contextRun(t, services, 0, "secret", "encryption", "init")
 	out, _ := contextRun(t, services, 0, "secret", "generate", "--name", "a-leaf")
 	if strings.Contains(out, "PRIVATE KEY") || strings.Contains(out, "CERTIFICATE") {

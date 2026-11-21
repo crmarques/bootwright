@@ -144,7 +144,7 @@ umask 077
 RUN_DIR=$(mktemp -d)
 printf 'Run records: %s\n' "$RUN_DIR"
 ./bin/bootwright validate --input-dir "$INPUT_DIR"
-./bin/bootwright init --name "$CONTEXT" --input-dir "$INPUT_DIR"
+./bin/bootwright context init --name "$CONTEXT" --input-dir "$INPUT_DIR"
 ./bin/bootwright secret set --context "$CONTEXT" --name openshift-pull-secret --value-file "${PULL_SECRET_FILE:?Set PULL_SECRET_FILE to the private pull-secret JSON file}" --yes
 if [ "$MIRROR_ENABLED" = "true" ]; then
     ./bin/bootwright secret set --context "$CONTEXT" --name mirror-ca --certificate-file "${MIRROR_CA_FILE:?Set MIRROR_CA_FILE to the mirror CA PEM file}" --yes

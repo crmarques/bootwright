@@ -18,7 +18,7 @@ func TestForeignInstallationRefusalNamesTheMachineAndSafeRecovery(t *testing.T) 
 			t.Fatalf("message = %s", found[0].Message)
 		}
 	}
-	if !strings.Contains(found[0].Remediation, "does not replace another installation in place") || !strings.Contains(found[0].Remediation, "bootwright update --name example") {
+	if !strings.Contains(found[0].Remediation, "does not replace another installation in place") || !strings.Contains(found[0].Remediation, "bootwright context update --name example") {
 		t.Fatalf("remedy = %s", found[0].Remediation)
 	}
 }

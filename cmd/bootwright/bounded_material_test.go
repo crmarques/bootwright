@@ -61,7 +61,7 @@ func TestBoundedConsumersOfTwoContextsReadTogetherAndLeaveTheKeyringAsTheyFoundI
 	services, repository, input, _ := contextFixture(t)
 	addSecretInput(t, input, "secret.yaml", secretDocument("opaque", "opaque", ""))
 	for _, name := range []string{"alpha", "beta"} {
-		contextRun(t, services, 0, "init", "--name", name, "--input-dir", input)
+		contextRun(t, services, 0, "context", "init", "--name", name, "--input-dir", input)
 		contextRun(t, services, 0, "secret", "encryption", "init", "--context", name)
 		contextRun(t, services, 0, "secret", "set", "--context", name, "--name", "opaque",
 			"--value-file", addSecretInput(t, t.TempDir(), "value", "synthetic-"+name+"-canary"))

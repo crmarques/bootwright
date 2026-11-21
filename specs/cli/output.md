@@ -219,8 +219,8 @@ without ambient terminal or clock dependencies.
 
 ### Context identity
 
-Context identity is presented by the commands that own it. `init`,
-`update`, `context use`, `context current`, `context list`, and
+Context identity is presented by the commands that own it. `context init`,
+`context update`, `context use`, `context current`, `context list`, and
 `context delete` present the selected context's name, and its mode where
 [their results](../contexts.md#command-results-and-confirmation) show one.
 `status` reports on one context, so it opens with that context as its headline,
@@ -305,11 +305,11 @@ and their output goldens:
 | `cluster update-admin-creds` | `context`, `cluster`, `logins` |
 | `context current`, `context use`, `policy install` | `context` |
 | `context delete` | `name`, `outcome`, `currentCleared`, `orphansAbandoned`, `releasedReservations` |
+| `context init`, `context update` | `context`, `counts`, `filesCopied`, `inputChanged`, optional `checked` |
 | `context list` | `contexts` |
 | `diff` | `context`, `operation`, `input`, optional `adds`, `plan`, `observed`, `blocks`, `objects`, `files`, `summary`, optional `outdatedClients` |
 | `explain` | `stops` |
 | `help` | `command`, `usage`, `description`, `commands`, `flags` |
-| `init`, `update` | `context`, `counts`, `filesCopied`, `inputChanged`, optional `checked` |
 | `install` | optional `context`, optional `machine`, optional `route`, `dryRun`, `outcome`, `platform`, `checks`, `actions`, `requirements`, `files`, optional `preview`, optional `progress`, optional `receipt`, optional `next` |
 | `logs` | optional `context`, optional `operation`, optional `verb`, optional `state`, optional `events`, optional `source`, optional `path`, optional `bytes`, optional `truncated`, optional `output` |
 | `machine cp` | `context`, `source`, `machines` |

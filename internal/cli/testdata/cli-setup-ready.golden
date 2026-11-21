@@ -11,4 +11,4 @@
     Nothing to do.
 
     Outcome  unchanged
-    Next     bootwright init --name <name> --input-dir <dir>
+    Next     bootwright context init --name <name> --input-dir <dir>

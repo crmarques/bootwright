@@ -53,11 +53,11 @@ func eachPreBootRefusal(t *testing.T, continuation string) {
 				"or its inventory could not be read in full, so no media was inserted into it and it was not booted",
 				"once the machine reports the hardware Machine/metal-01 declares in full, run "+next+"; to correct that declaration instead, "+
 					"take this context back with bootwright destroy --context lab-b, correct spec.hardware.bmc.address or spec.hardware.nics on Machine/metal-01 "+
-					"and import that input with bootwright update --name lab-b --input-dir <directory>, then run bootwright apply --context lab-b"),
+					"and import that input with bootwright context update --name lab-b --input-dir <directory>, then run bootwright apply --context lab-b"),
 			RefusalIdentityMismatch: refusal(prebootIdentityMismatch, "the management controller at "+preBootEndpoint+" answers as another system than the one this operation proved "+
 				"for Machine/metal-01, so no media was inserted into it and it was not booted",
 				"take this context back with bootwright destroy --context lab-b, correct spec.hardware.bmc.address on Machine/metal-01 "+
-					"if it names another BMC and import that input with bootwright update --name lab-b --input-dir <directory>, "+
+					"if it names another BMC and import that input with bootwright context update --name lab-b --input-dir <directory>, "+
 					"then run bootwright apply --context lab-b, so the machine is proved again"),
 			RefusalMachineRunning: running,
 			RefusalTPMAbsent:      refusal(prebootTPMAbsent, "Machine/metal-01 does not positively report an enabled TPM 2.0, so no encrypted installer was booted", "enable a supported TPM 2.0 on Machine/metal-01, then run "+next),
@@ -65,14 +65,14 @@ func eachPreBootRefusal(t *testing.T, continuation string) {
 				"under spec.hardware.firmware.mode prove, so no media was inserted into it and it was not booted",
 				"set the declared values on Machine/metal-01 through its BMC, then run "+next+"; to have Bootwright set them instead, "+
 					"take this context back with bootwright destroy --context lab-b, set spec.hardware.firmware.mode to enforce on Machine/metal-01 "+
-					"and import that input with bootwright update --name lab-b --input-dir <directory>, then run bootwright apply --context lab-b"),
+					"and import that input with bootwright context update --name lab-b --input-dir <directory>, then run bootwright apply --context lab-b"),
 			RefusalFirmwareNotApplied: refusal(prebootFirmwareNotApplied, "the management controller at "+preBootEndpoint+" refused or did not apply the firmware settings Machine/metal-01 declares, "+
 				"so no media was inserted into it and no installer was booted",
 				"when the reasons say the machine was not proved off, first stop it with bootwright machine stop --context lab-b --name metal-01 --force; "+
 					"read the BMC's message in the attempt's retained output and correct the cause through the BMC, then run "+next+
 					"; any one-time setup boot and settings this step staged stay on the machine and apply at its next boot; to correct the declaration instead, "+
 					"take this context back with bootwright destroy --context lab-b, correct spec.hardware.firmware on Machine/metal-01 "+
-					"and import that input with bootwright update --name lab-b --input-dir <directory>, then run bootwright apply --context lab-b"),
+					"and import that input with bootwright context update --name lab-b --input-dir <directory>, then run bootwright apply --context lab-b"),
 		},
 		ArmVSphere: nil,
 		"":         nil,

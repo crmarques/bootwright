@@ -30,7 +30,7 @@ const toolSourcesRemedy = "no command of this build frees a retained tool source
 const controllerVersionRemedy = "with a build that reads it, destroy each environment (bootwright destroy --context <name>) and delete each context " +
 	"(bootwright context delete --name <name> --purge); then run bootwright uninstall --discard-unreadable and bootwright install " +
 	"with this build, which never reads the controller record. That fresh install also drops this host's contexts with their Secrets and its stored media: " +
-	"recreate them from your input directories with bootwright init and bootwright catalog media add."
+	"recreate them from your input directories with bootwright context init and bootwright catalog media add."
 
 // ControllerRecordVersion is the private shared-host evidence format. It
 // holds host identity, bindings, tool sources and areas, and reservations,

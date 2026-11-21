@@ -60,7 +60,7 @@ func TestAnOfferedKeyResolvesOnlyThroughTheBoundOpener(t *testing.T) {
 		t.Fatalf("the offered key exists on this host, so the test proves nothing: %v", err)
 	}
 	services := sessionFileServices(t, files)
-	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", filepath.Dir(environment))
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", filepath.Dir(environment))
 	files.take()
 	_, err := services.MachineAccess.Exec(context.Background(), machineaccess.ExecRequest{
 		ContextName: "alpha", Names: []string{"node"}, SSH: machine.SSHOptions{IdentityFile: key}, Command: []string{"true"},

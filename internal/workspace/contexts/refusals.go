@@ -10,17 +10,17 @@ import (
 // name was given or read from the selection.
 func AbsentContext(name string) error {
 	return diagnostics.NewFailureWithRemediation("context.state", "context "+name+" does not exist", "",
-		"create it with bootwright init --name "+name+", or select an existing one with bootwright context use --name <context>; bootwright context list names them")
+		"create it with bootwright context init --name "+name+", or select an existing one with bootwright context use --name <context>; bootwright context list names them")
 }
 
 func NoSelection() error {
 	return diagnostics.NewFailureWithRemediation("context.state", "no current context is selected", "",
-		"select one with bootwright context use --name <context>, or create one with bootwright init --name <context>")
+		"select one with bootwright context use --name <context>, or create one with bootwright context init --name <context>")
 }
 
 func MissingInput(name string) error {
 	return diagnostics.NewFailureWithRemediation("context.input", "context "+name+" has no desired state", "",
-		"import it with bootwright update --name "+name+" --input-dir <dir>")
+		"import it with bootwright context update --name "+name+" --input-dir <dir>")
 }
 
 // NotReady refuses a context an init or a deletion left unfinished, naming
@@ -28,7 +28,7 @@ func MissingInput(name string) error {
 func NotReady(record Record) error {
 	if record.Mode == Initializing {
 		return diagnostics.NewFailureWithRemediation("context.state", "context "+record.Name+" is still initializing: an earlier init did not finish", "",
-			"finish it with bootwright init --name "+record.Name+" and its original Context file, from any input directory, or discard it with bootwright context delete --name "+record.Name+" --purge")
+			"finish it with bootwright context init --name "+record.Name+" and its original Context file, from any input directory, or discard it with bootwright context delete --name "+record.Name+" --purge")
 	}
 	return diagnostics.NewFailureWithRemediation("context.state", "context "+record.Name+" is being deleted", "",
 		"finish the deletion with bootwright context delete --name "+record.Name+" --purge")
@@ -42,7 +42,7 @@ func AlreadyExists(record Record) error {
 			"finish the deletion with bootwright context delete --name "+record.Name+" --purge, then repeat the init")
 	}
 	return diagnostics.NewFailureWithRemediation("context.state", "context "+record.Name+" already exists", "",
-		"replace its input with bootwright update --name "+record.Name+" --input-dir <dir>, or delete it with bootwright context delete --name "+record.Name+" --purge")
+		"replace its input with bootwright context update --name "+record.Name+" --input-dir <dir>, or delete it with bootwright context delete --name "+record.Name+" --purge")
 }
 
 // IncompleteOperation refuses an update while an operation is incomplete. Its
@@ -95,7 +95,7 @@ var ErrNoContexts = errors.New("no context exists on this host yet")
 
 func NoContexts() error {
 	return diagnostics.NewFailureWithRemediation("context.state", "no context exists on this host yet", "",
-		"create one with bootwright init --name <name>")
+		"create one with bootwright context init --name <name>")
 }
 
 // ErrUnreadableEvidence marks the guard's refusal of mutation evidence it

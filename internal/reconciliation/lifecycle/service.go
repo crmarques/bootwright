@@ -117,7 +117,7 @@ func resolveContext(ctx context.Context, selection CurrentSelection, name string
 	}
 	if selected == "" {
 		return "", failure("context.state", "no current context is selected",
-			"select one with bootwright context use --name <context>, or create one with bootwright init --name <context>")
+			"select one with bootwright context use --name <context>, or create one with bootwright context init --name <context>")
 	}
 	return selected, nil
 }

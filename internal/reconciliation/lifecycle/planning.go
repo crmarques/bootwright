@@ -533,7 +533,7 @@ func refuseTemplateValues(contextName, retry string, definitions []reconciliatio
 		// A plan reads the context's imported input, so the repaired values are
 		// imported before the context is planned again.
 		remedy := "remove " + strings.Join(removed, " and ") + " from the desired-state values " + object + " is planned from, " +
-			"import them with bootwright update --name " + contextName + " --input-dir <dir>, then run " + retry
+			"import them with bootwright context update --name " + contextName + " --input-dir <dir>, then run " + retry
 		reported := raised(planTemplateValue, message, remedy)
 		reported.Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: definition.Kind, Name: definition.Object}
 		refused = append(refused, reported)

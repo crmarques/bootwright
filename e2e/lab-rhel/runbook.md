@@ -74,7 +74,7 @@ e2e/render.sh lab-rhel --out-dir "$INPUT_DIR" \
   --set "registration.updateWithinRelease=$UPDATE_WITHIN_RELEASE"
 CONTROLLER_ADDRESS=$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')   # the host address
 ./bin/bootwright validate --input-dir "$INPUT_DIR"
-./bin/bootwright init --name "$CONTEXT" --input-dir "$INPUT_DIR"
+./bin/bootwright context init --name "$CONTEXT" --input-dir "$INPUT_DIR"
 ./bin/bootwright secret generate --context "$CONTEXT"
 if [ "$REGISTER" = true ]; then
   ./bin/bootwright secret set --context "$CONTEXT" --name rhsm-org --value-file "${RHSM_ORG_FILE:?Set RHSM_ORG_FILE to the RHSM organization ID file}" --yes
@@ -357,7 +357,7 @@ if [ "$REGISTER" = true ]; then
     --set "registration.enabled=$REGISTER" \
     --set "registration.updateWithinRelease=$UPDATE_WITHIN_RELEASE"
   ./bin/bootwright validate --input-dir "$INPUT_DIR"
-  ./bin/bootwright init --name "$CONTEXT" --input-dir "$INPUT_DIR"
+  ./bin/bootwright context init --name "$CONTEXT" --input-dir "$INPUT_DIR"
   ./bin/bootwright secret generate --context "$CONTEXT"
   ./bin/bootwright secret set --context "$CONTEXT" --name rhsm-org --value-file "$RHSM_ORG_FILE" --yes
   ./bin/bootwright secret set --context "$CONTEXT" --name rhsm-key --value-file "$RHSM_KEY_FILE" --yes

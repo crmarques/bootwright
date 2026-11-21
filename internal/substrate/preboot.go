@@ -56,7 +56,7 @@ func PreBootRefusals(arm Arm, contextName, continuation, machine, endpoint strin
 	// and the context's input cannot change under it: a corrected declaration
 	// takes effect only after a destroy takes the context back.
 	destroy := "take this context back with bootwright destroy --context " + contextName
-	update := " and import that input with bootwright update --name " + contextName + " --input-dir <directory>"
+	update := " and import that input with bootwright context update --name " + contextName + " --input-dir <directory>"
 	switch arm {
 	case ArmLibvirt:
 		return map[string]error{RefusalMachineRunning: running}

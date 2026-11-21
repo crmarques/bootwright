@@ -146,7 +146,7 @@ func TestAPlainDeleteClearsTheRefusedRecordStatesBesidePristineEvidence(t *testi
 	} {
 		t.Run(name, func(t *testing.T) {
 			services, repository, input, root := contextFixture(t)
-			contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
+			contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 			arrange(t, repository, root)
 			mutation, err := os.ReadFile(filepath.Join(root, "contexts", "alpha", "state", "mutation.json"))
 			if err != nil || !strings.Contains(string(mutation), `"operation":"none","ownership":"none"`) {
@@ -196,7 +196,7 @@ func TestTheDeletionARefusalNamesOverUnrecognizedEvidenceRuns(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			services, repository, input, root := contextFixture(t)
-			contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
+			contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 			if err := os.WriteFile(filepath.Join(root, "contexts", "alpha", "state", "mutation.json"), []byte(test.evidence), 0600); err != nil {
 				t.Fatal(err)
 			}
@@ -232,7 +232,7 @@ func TestTheDeletionARefusalNamesOverUnrecognizedEvidenceRuns(t *testing.T) {
 func TestAnUpdateOverACompletedApplyWarnsAndTheNextApplyRefuses(t *testing.T) {
 	t.Parallel()
 	services, repository, input, root := contextFixture(t)
-	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	ctx := context.Background()
 	if err := repository.MutateLifecycle(ctx, "alpha", func(tx lifecycle.Transaction) error {
 		registerDoneUnder(ctx, t, operationstore.New(tx.Operations(), tx.Logs(), exitStamp), tx.Identity().Revision, inputDigestOf(tx.Inputs()),
@@ -248,7 +248,7 @@ func TestAnUpdateOverACompletedApplyWarnsAndTheNextApplyRefuses(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(input, "environment.yaml"), []byte(strings.ReplaceAll(syntheticEnvironment, "example.test", "changed.test")), 0600); err != nil {
 		t.Fatal(err)
 	}
-	out, stderr := contextRun(t, services, 0, "update", "--name", "alpha", "--input-dir", input, "--yes")
+	out, stderr := contextRun(t, services, 0, "context", "update", "--name", "alpha", "--input-dir", input, "--yes")
 	if !strings.HasPrefix(out, "  ✓ Context updated\n") || !strings.HasPrefix(stderr, "  warning  input.changed-since-apply\n    context alpha holds a completed apply") {
 		t.Fatalf("the update over a completed apply: %s %q", out, stderr)
 	}

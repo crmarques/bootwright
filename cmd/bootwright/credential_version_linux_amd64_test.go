@@ -57,7 +57,7 @@ func credentialVersionContext(t *testing.T, declaration string, seed func(cli.Se
 		Presenter: testLifecyclePresenter{}, Confirmer: deps.Confirmer, Capabilities: removableCapabilities{},
 	}
 	services := assembleServices(deps)
-	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	contextRun(t, services, 0, "secret", "encryption", "init")
 	seed(services)
 	return services, repository

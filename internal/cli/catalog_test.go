@@ -32,7 +32,7 @@ func TestOnlyTheTrustStoreCommandNamesAFlagForTrust(t *testing.T) {
 
 func TestPublicCatalog(t *testing.T) {
 	expected := map[string]string{
-		"init": "check file input-dir name", "update": "check file input-dir name yes", "context use": "name", "context list": "", "context current": "short", "context delete": "allow-orphans name purge yes",
+		"context init": "check file input-dir name", "context update": "check file input-dir name yes", "context use": "name", "context list": "", "context current": "short", "context delete": "allow-orphans name purge yes",
 		"catalog add-ons list": "", "catalog add-ons info": "name",
 		"secret set": "certificate-file name password-file password-stdin private-key-file public-key-file username value-file value-stdin yes", "secret generate": "name renew yes", "secret check": "", "secret list": "", "secret info": "name", "secret show": "name part", "secret delete": "name yes",
 		"secret encryption init": "", "secret encryption status": "", "secret encryption rotate": "yes",

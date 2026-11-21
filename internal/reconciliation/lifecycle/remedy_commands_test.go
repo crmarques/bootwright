@@ -27,7 +27,7 @@ func TestABoundedRefusalNamesAReservedKeyAndItsRetry(t *testing.T) {
 	}
 	planned := diagnostics.Of(RefuseTemplateDelimiters("lab", definitions))
 	want := `remove every key named "__ansible_type", "__ansible_unsafe" or "__ansible_vault" from the desired-state values Machine/metal is planned from, ` +
-		"import them with bootwright update --name lab --input-dir <dir>, then run bootwright apply --dry-run --context lab"
+		"import them with bootwright context update --name lab --input-dir <dir>, then run bootwright apply --dry-run --context lab"
 	if len(planned) != 1 || planned[0].Message != reported[0].Message || planned[0].Remediation != want {
 		t.Fatalf("the plan's refusal reported %+v, want remediation %q", planned, want)
 	}

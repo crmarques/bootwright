@@ -576,7 +576,7 @@ func cliGoldens() []cliGolden {
 	authorizeMissing := lifecycle.Stops()[slices.IndexFunc(lifecycle.Stops(), func(stop diagnostics.Stop) bool { return stop.Code == "authorize.missing" })]
 	unauthorized := authorizeMissing.Fail("this plan has data-loss consequences that are not authorized: step 3 (install the operating system of metal-01)",
 		"repeat it with the authorization: bootwright apply --context lab --stage machines --authorize data-loss")
-	noInput := diagnostics.NewFailureWithRemediation("context.input", "context lab has no desired state", "", "import input with bootwright update --name lab --input-dir <dir>")
+	noInput := diagnostics.NewFailureWithRemediation("context.input", "context lab has no desired state", "", "import input with bootwright context update --name lab --input-dir <dir>")
 	stateRootRefused := func(r *dispatchRecord) {
 		r.result.controller = setupDryRun(platform)
 		r.result.controller.Route = "direct (no HTTPS_PROXY)"
@@ -915,7 +915,7 @@ func cliGoldens() []cliGolden {
 
 		// Contexts.
 		{
-			golden: "cli-context-init", args: "init --name lab -f context.yaml --input-dir inputs",
+			golden: "cli-context-init", args: "context init --name lab -f context.yaml --input-dir inputs",
 			record: func(r *dispatchRecord) {
 				r.result.admission = &contexts.AdmissionResult{Context: lab, Counts: compilation.Counts{FilesSeen: 14, ObjectsDecoded: 14}, FilesCopied: 14, InputChanged: true, Diagnostics: []diagnostic{deferred}}
 			},
@@ -925,7 +925,7 @@ func cliGoldens() []cliGolden {
 				"    CustomPlaybook is a reserved declaration and cannot execute.\n" +
 				"    Field: $.spec\n",
 		},
-		{golden: "cli-context-update", args: "update --name lab --input-dir inputs --yes", record: func(r *dispatchRecord) {
+		{golden: "cli-context-update", args: "context update --name lab --input-dir inputs --yes", record: func(r *dispatchRecord) {
 			r.result.admission = &contexts.AdmissionResult{Context: lab, Counts: compilation.Counts{FilesSeen: 14, ObjectsDecoded: 14}}
 		}},
 		{golden: "cli-context-use", args: "context use --name lab", record: func(r *dispatchRecord) { r.result.use = &contexts.UseResult{Context: lab} }},
@@ -998,7 +998,7 @@ func cliGoldens() []cliGolden {
 			args: "secret list --context lab", code: 1, record: func(r *dispatchRecord) { r.err = noInput },
 			stderr: "  error  context.input\n" +
 				"    context lab has no desired state\n" +
-				"    Next: import input with bootwright update --name lab --input-dir <dir>\n",
+				"    Next: import input with bootwright context update --name lab --input-dir <dir>\n",
 		},
 		{golden: "cli-secret-list-refused-json", args: "secret list --context lab --output json", code: 1, record: func(r *dispatchRecord) { r.err = noInput }},
 		// An explicit sensitive result is the requested bytes with no added

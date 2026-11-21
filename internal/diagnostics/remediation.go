@@ -40,7 +40,7 @@ var defaultRemediations = map[string]string{
 	"runtime.internal":    "repeat the command; a repeated failure is a Bootwright defect to report",
 
 	"context.configuration": "correct the context setup the message names and repeat the command",
-	"context.input":         "import a desired-state revision with bootwright update --name <context> --input-dir <dir>",
+	"context.input":         "import a desired-state revision with bootwright context update --name <context> --input-dir <dir>",
 	"context.state":         "run bootwright context list to see the contexts",
 	"context.unsafe-delete": "resolve the evidence the message names and repeat the deletion",
 	"context.orphaned":      "review the abandoned objects the message names",

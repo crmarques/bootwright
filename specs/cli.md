@@ -215,12 +215,12 @@ plan, or continuation.
 `validate --input-dir` accepts a YAML file or directory and may be repeated.
 The set is compiled as one ordered desired-state input universe under
 [the API contract](api.md). Supplying `--input-dir` makes validation
-context-free. Omission uses the selected context input. For `init`
-and `update`, `-f/--file` accepts one standalone Context configuration
+context-free. Omission uses the selected context input. For `context init`
+and `context update`, `-f/--file` accepts one standalone Context configuration
 file and `--input-dir` accepts one desired-state directory for immutable
 import. Both are optional at init. Update requires at least one. Omission
-never discovers the working directory. `init --check` requires an unused name,
-including when the store does not exist. `update --check` requires a ready
+never discovers the working directory. `context init --check` requires an unused name,
+including when the store does not exist. `context update --check` requires a ready
 name and applies the same read-only admission decision and lifecycle guards
 as update. Both forms inspect the supplied files without selecting a
 context, copying input, creating keys or publishing a revision. They validate
@@ -453,7 +453,7 @@ semantic validation and uses the selected human or structured representation.
 A context is one self-contained lifecycle unit, and its name, a lowercase DNS
 label, is its identity. [Contexts](contexts.md) defines storage, selection,
 initialization, input replacement, [permanent deletion](contexts.md#permanent-deletion)
-and successful context command results; `init --name <name>` requires
+and successful context command results; `context init --name <name>` requires
 no desired state.
 
 Media, secret, add-on, and context writes use verified roots, safe

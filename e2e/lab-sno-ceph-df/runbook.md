@@ -168,7 +168,7 @@ RUN_DIR=$(mktemp -d)
 printf 'Run records: %s\n' "$RUN_DIR"
 CONTROLLER_ADDRESS="$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')"
 ./bin/bootwright validate --input-dir "$INPUT_DIR"
-./bin/bootwright init --name "$CONTEXT" --input-dir "$INPUT_DIR"
+./bin/bootwright context init --name "$CONTEXT" --input-dir "$INPUT_DIR"
 ./bin/bootwright secret generate --context "$CONTEXT"
 ./bin/bootwright secret set --context "$CONTEXT" --name openshift-pull-secret --value-file "${PULL_SECRET_FILE:?Set PULL_SECRET_FILE to the private pull-secret JSON file}" --yes
 install -m 0600 /dev/null "$RUN_DIR/ibm-password"

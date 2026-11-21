@@ -148,7 +148,7 @@ CONTEXT="lab-network-variants"
 INPUT_DIR="$HOME/bootwright-e2e/lab-network-variants"
 CONTROLLER_ADDRESS=$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')
 ./bin/bootwright validate --input-dir "$INPUT_DIR"
-./bin/bootwright init --name "$CONTEXT" --input-dir "$INPUT_DIR"
+./bin/bootwright context init --name "$CONTEXT" --input-dir "$INPUT_DIR"
 ./bin/bootwright secret generate --context "$CONTEXT"
 if [ "$REGISTER" = true ]; then
     ./bin/bootwright secret set --context "$CONTEXT" --name rhsm-org --value-file "${RHSM_ORG_FILE:?Set RHSM_ORG_FILE}" --yes
@@ -165,7 +165,7 @@ second directory, which validates, and import it:
 
 ```sh
 e2e/render.sh lab-network-variants "${FEATURE_ARGS[@]}" --set bond.mode=802.3ad --out-dir ~/bootwright-e2e/lab-network-variants-mode
-./bin/bootwright update --name "$CONTEXT" --input-dir ~/bootwright-e2e/lab-network-variants-mode --yes
+./bin/bootwright context update --name "$CONTEXT" --input-dir ~/bootwright-e2e/lab-network-variants-mode --yes
 ./bin/bootwright apply --dry-run --context "$CONTEXT"
 ```
 
@@ -174,7 +174,7 @@ bonding, and bond bond0 of Machine/nv-bond declares mode 802.3ad". This is the
 expected negative test. Restore the valid declaration before proceeding:
 
 ```sh
-./bin/bootwright update --name "$CONTEXT" --input-dir "$INPUT_DIR" --yes
+./bin/bootwright context update --name "$CONTEXT" --input-dir "$INPUT_DIR" --yes
 ```
 
 ## 5. Prepare the controller and services
@@ -544,7 +544,7 @@ under the context name `nv-cutoff`. Keep all four feature choices unchanged:
 e2e/render.sh lab-network-variants "${FEATURE_ARGS[@]}" --set name=nv-cutoff --set single=true --set cutoff=true --out-dir ~/bootwright-e2e/lab-network-variants-cutoff
 CUTOFF_CONTEXT="nv-cutoff"
 ./bin/bootwright validate --input-dir ~/bootwright-e2e/lab-network-variants-cutoff
-./bin/bootwright init --name "$CUTOFF_CONTEXT" --input-dir ~/bootwright-e2e/lab-network-variants-cutoff
+./bin/bootwright context init --name "$CUTOFF_CONTEXT" --input-dir ~/bootwright-e2e/lab-network-variants-cutoff
 ./bin/bootwright secret generate --context "$CUTOFF_CONTEXT"
 if [ "$REGISTER" = true ]; then
     ./bin/bootwright secret set --context "$CUTOFF_CONTEXT" --name rhsm-org --value-file "${RHSM_ORG_FILE:?Set RHSM_ORG_FILE}" --yes
@@ -588,7 +588,7 @@ Render the corrected declaration with the same feature arguments:
 ./bin/bootwright machine stop --context "$CUTOFF_CONTEXT" --name nv-bond --yes
 ./bin/bootwright destroy --context "$CUTOFF_CONTEXT" --authorize data-loss
 e2e/render.sh lab-network-variants "${FEATURE_ARGS[@]}" --set name=nv-cutoff --set single=true --out-dir ~/bootwright-e2e/lab-network-variants-cutoff
-./bin/bootwright update --name "$CUTOFF_CONTEXT" --input-dir ~/bootwright-e2e/lab-network-variants-cutoff --yes
+./bin/bootwright context update --name "$CUTOFF_CONTEXT" --input-dir ~/bootwright-e2e/lab-network-variants-cutoff --yes
 ./bin/bootwright apply --context "$CUTOFF_CONTEXT" --yes
 ```
 

@@ -18,7 +18,7 @@ func initializationStagePrefix(name string) string { return ".init-" + name + "-
 
 func initializationDamage(name string, cause error) error {
 	return contexts.StateErrorWithRemediation("initializing context entry contexts/"+name+" cannot be attributed: "+causeText(cause),
-		"preserve the unattributed entry and restore a matching complete store backup, or have the administrator isolate that entry without deleting its contents; then finish with bootwright init --name "+name+" and its original Context file, or discard the reserved name with bootwright context delete --name "+name+" --purge")
+		"preserve the unattributed entry and restore a matching complete store backup, or have the administrator isolate that entry without deleting its contents; then finish with bootwright context init --name "+name+" and its original Context file, or discard the reserved name with bootwright context delete --name "+name+" --purge")
 }
 
 func (t *transaction) collectInitializationStages(ctx context.Context, name string) error {

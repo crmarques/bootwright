@@ -128,7 +128,7 @@ the last filesystem step before it drops the registry entry, and a repeated
 deletion finds it gone. A directory holding a mount, an entry of another owner
 or anything else this store never creates refuses `context.state` naming that
 entry, and links are removed as links
-(`TestDeletionRemovesTheContextLogDirectory`). `init` removes a
+(`TestDeletionRemovesTheContextLogDirectory`). `context init` removes a
 directory an earlier context of the same name left there, under the exclusive
 root lock, before the context is ready
 (`TestInitRemovesALeftoverLogDirectory`). A structured result names a log

@@ -1292,7 +1292,7 @@ at every run of its block, its removal included. Each such block is one
 `api.value` diagnostic whose object is the block's, naming the first field
 holding a delimiter or such a key, how many more of its fields hold one, and
 the remedy: remove the delimiters and keys from the values the object is
-planned from, import them with `bootwright update`, then run
+planned from, import them with `bootwright context update`, then run
 `bootwright apply --dry-run --context` with the context. A removal or a continuation
 planned from a frozen plan is never refused this way. A bounded run, which a
 `machine start`, `stop` or `restart` and the power reading of

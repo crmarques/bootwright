@@ -250,7 +250,7 @@ fi
 printf 'Restore host variables with: source %s/host-env.sh\n' "$RUN_DIR"
 bootwright validate --input-dir "$INPUT_DIR/bootstrap"
 bootwright validate --input-dir "$INPUT_DIR/fips"
-bootwright init --name "$CTX_BOOT" --input-dir "$INPUT_DIR/bootstrap"
+bootwright context init --name "$CTX_BOOT" --input-dir "$INPUT_DIR/bootstrap"
 bootwright secret generate --context "$CTX_BOOT"
 bootwright secret check --context "$CTX_BOOT"
 bootwright apply --dry-run --context "$CTX_BOOT"
@@ -331,7 +331,7 @@ bootwright version
 bootwright install --yes
 bootwright install --dry-run                     # the FIPS mode check reports 1
 bootwright validate --input-dir ~/fips
-bootwright init --name "$CTX_FIPS" --input-dir ~/fips
+bootwright context init --name "$CTX_FIPS" --input-dir ~/fips
 bootwright secret set --context "$CTX_FIPS" --name openshift-pull-secret --value-file ~/openshift-pull-secret --yes
 bootwright secret generate --context "$CTX_FIPS"
 ```

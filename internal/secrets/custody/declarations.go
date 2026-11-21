@@ -26,7 +26,7 @@ func (s Service) resolve(ctx context.Context, name string) (secretstore.Context,
 	}
 	if snapshot.Context.Revision == "" {
 		return secretstore.Context{}, nil, diagnostics.NewFailureWithRemediation("context.input", "context "+snapshot.Context.Name+" has no desired state", "",
-			"import it with bootwright update --name "+snapshot.Context.Name+" --input-dir <dir>")
+			"import it with bootwright context update --name "+snapshot.Context.Name+" --input-dir <dir>")
 	}
 	state, _, err := s.compiler.Compile(ctx, snapshot.Inputs)
 	if err != nil {

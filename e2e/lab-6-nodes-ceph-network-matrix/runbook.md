@@ -152,7 +152,7 @@ clock elapsed seconds. Retain the private evidence directory for diagnostics.
     if [ -n "$VALUES_FILE" ]; then RENDER_ARGS+=(--values "$VALUES_FILE"); fi
     e2e/render.sh "$CONTEXT" "${RENDER_ARGS[@]}" --out-dir "$INPUT_DIR"
     ./bin/bootwright validate --input-dir "$INPUT_DIR"
-    ./bin/bootwright init --name "$CONTEXT" --input-dir "$INPUT_DIR"
+    ./bin/bootwright context init --name "$CONTEXT" --input-dir "$INPUT_DIR"
     ./bin/bootwright secret generate --context "$CONTEXT"
     cut -d: -f2- "$IBM_REGISTRY_FILE" > "$RUN_DIR/ibm-password"
     ./bin/bootwright secret set --context "$CONTEXT" --name ibm-registry \
@@ -304,7 +304,7 @@ e2e/render.sh "$CONTEXT" "${RENDER_ARGS[@]}"
 CONTROLLER_ADDRESS=$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p'); printf 'Controller address: %s\n' "$CONTROLLER_ADDRESS"
 grep -h -A1 'name: ip$' "$INPUT_DIR/infra/machines/controller.yaml"   # must show CONTROLLER_ADDRESS
 ./bin/bootwright validate --input-dir "$INPUT_DIR"
-./bin/bootwright init --name "$CONTEXT" --input-dir "$INPUT_DIR"
+./bin/bootwright context init --name "$CONTEXT" --input-dir "$INPUT_DIR"
 ./bin/bootwright secret generate --context "$CONTEXT"
 install -m 0600 /dev/null "$RUN_DIR/ibm-password"
 cut -d: -f2- "${IBM_REGISTRY_FILE:?Set IBM_REGISTRY_FILE to the IBM entitlement key file}" > "$RUN_DIR/ibm-password"
@@ -321,9 +321,9 @@ validates, import it and plan:
 
 ```sh
 e2e/render.sh "$CONTEXT" "${RENDER_ARGS[@]}" --set bond.mode=802.3ad --out-dir "$RUN_DIR/input-mode"
-./bin/bootwright update --name "$CONTEXT" --input-dir "$RUN_DIR/input-mode" --yes
+./bin/bootwright context update --name "$CONTEXT" --input-dir "$RUN_DIR/input-mode" --yes
 ./bin/bootwright apply --dry-run --context "$CONTEXT"
-./bin/bootwright update --name "$CONTEXT" --input-dir "$INPUT_DIR" --yes
+./bin/bootwright context update --name "$CONTEXT" --input-dir "$INPUT_DIR" --yes
 ```
 
 Require the plan to say that a libvirt bridge qualifies only active-backup

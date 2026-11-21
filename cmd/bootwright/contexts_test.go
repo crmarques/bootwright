@@ -109,15 +109,15 @@ func stateFingerprint(t *testing.T, root string) map[string]string {
 func TestContextChecksDoNotPublish(t *testing.T) {
 	t.Parallel()
 	services, _, input, root := contextFixture(t)
-	checkInit := []string{"init", "--name", "alpha", "--input-dir", input, "--check"}
-	checkUpdate := []string{"update", "--name", "alpha", "--input-dir", input, "--check"}
+	checkInit := []string{"context", "init", "--name", "alpha", "--input-dir", input, "--check"}
+	checkUpdate := []string{"context", "update", "--name", "alpha", "--input-dir", input, "--check"}
 	contextRun(t, services, 0, checkInit...)
 	contextRun(t, services, 1, checkUpdate...)
 	if _, err := os.Stat(root); !os.IsNotExist(err) {
 		t.Fatalf("checking admission created the store: %v", err)
 	}
-	contextRun(t, services, 0, "init", "--name", "alpha")
-	contextRun(t, services, 0, "init", "--name", "other")
+	contextRun(t, services, 0, "context", "init", "--name", "alpha")
+	contextRun(t, services, 0, "context", "init", "--name", "other")
 	before := stateFingerprint(t, root)
 	contextRun(t, services, 1, checkInit...)
 	out, _ := contextRun(t, services, 0, append(checkUpdate, "--output", "json")...)
@@ -138,7 +138,7 @@ func TestCompleteContextJourney(t *testing.T) {
 		t.Fatalf("read-only list created state: %v", err)
 	}
 	contextRun(t, services, 1, "context", "current", "--short")
-	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	registry, err := repository.View(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -151,8 +151,8 @@ func TestCompleteContextJourney(t *testing.T) {
 	if short != "alpha\n" {
 		t.Fatal(short)
 	}
-	contextRun(t, services, 1, "init", "--name", "alpha", "--input-dir", input)
-	contextRun(t, services, 0, "init", "--name", "other", "--input-dir", input)
+	contextRun(t, services, 1, "context", "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "context", "init", "--name", "other", "--input-dir", input)
 	registry, err = repository.View(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -160,7 +160,7 @@ func TestCompleteContextJourney(t *testing.T) {
 	if len(registry.Contexts) != 2 || registry.Contexts[0].Name == registry.Contexts[1].Name || registry.Contexts[0].EnvironmentDirectory != registry.Contexts[1].EnvironmentDirectory {
 		t.Fatal("second context from one input directory", registry)
 	}
-	identical, _ := contextRun(t, services, 0, "update", "--name", "alpha", "--input-dir", input)
+	identical, _ := contextRun(t, services, 0, "context", "update", "--name", "alpha", "--input-dir", input)
 	registry, err = repository.View(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -171,8 +171,8 @@ func TestCompleteContextJourney(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(input, "environment.yaml"), []byte(strings.ReplaceAll(syntheticEnvironment, "example.test", "changed.test")), 0600); err != nil {
 		t.Fatal(err)
 	}
-	contextRun(t, services, 1, "update", "--name", "alpha", "--input-dir", input)
-	contextRun(t, services, 0, "update", "--name", "alpha", "--input-dir", input, "--yes")
+	contextRun(t, services, 1, "context", "update", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "context", "update", "--name", "alpha", "--input-dir", input, "--yes")
 	registry, err = repository.View(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -188,7 +188,7 @@ func TestCompleteContextJourney(t *testing.T) {
 		t.Fatal(err)
 	}
 	addSecretInput(t, other, "controller.yaml", serviceHost)
-	contextRun(t, services, 0, "update", "--name", "alpha", "--input-dir", other, "--yes")
+	contextRun(t, services, 0, "context", "update", "--name", "alpha", "--input-dir", other, "--yes")
 	registry, err = repository.View(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -196,7 +196,7 @@ func TestCompleteContextJourney(t *testing.T) {
 	if registry.Contexts[0].Name != first.Name || registry.Contexts[0].EnvironmentDirectory != filepath.Clean(other) {
 		t.Fatal("update from another directory changed identity or kept the old provenance", registry)
 	}
-	contextRun(t, services, 0, "init", "--name", "beta", "--input-dir", other)
+	contextRun(t, services, 0, "context", "init", "--name", "beta", "--input-dir", other)
 	contextRun(t, services, 0, "context", "use", "--name", "alpha")
 	list, _ := contextRun(t, services, 0, "context", "list")
 	if strings.Index(list, "alpha") > strings.Index(list, "beta") {
@@ -205,7 +205,7 @@ func TestCompleteContextJourney(t *testing.T) {
 	contextRun(t, services, 0, "context", "delete", "--name", "alpha", "--purge", "--yes")
 	contextRun(t, services, 1, "context", "current", "--short")
 	contextRun(t, services, 1, "validate", "--context", "alpha")
-	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	registry, err = repository.View(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -232,7 +232,7 @@ func TestMissingContextRegistryExplainsSafeRecovery(t *testing.T) {
 	for _, args := range [][]string{
 		{"context", "list"},
 		{"context", "delete", "--name", "test", "--purge"},
-		{"init", "--name", "test"},
+		{"context", "init", "--name", "test"},
 	} {
 		out, stderr := contextRun(t, services, 1, args...)
 		if out != "" || humanContent(stderr) != humanContent(want) {
@@ -250,8 +250,8 @@ func TestMissingContextRegistryExplainsSafeRecovery(t *testing.T) {
 func TestAHandRemovedContextIsNamedAndAbandonedByItsPurge(t *testing.T) {
 	t.Parallel()
 	services, _, input, root := contextFixture(t)
-	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
-	contextRun(t, services, 0, "init", "--name", "beta", "--input-dir", input)
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "context", "init", "--name", "beta", "--input-dir", input)
 	if err := os.RemoveAll(filepath.Join(root, "contexts", "beta")); err != nil {
 		t.Fatal(err)
 	}
@@ -275,7 +275,7 @@ func TestAHandRemovedContextIsNamedAndAbandonedByItsPurge(t *testing.T) {
 func TestContextInitWithoutInputCreatesSelectableEncryptedContext(t *testing.T) {
 	t.Parallel()
 	services, repository, input, root := contextFixture(t)
-	out, stderr := contextRun(t, services, 0, "init", "--name", "test")
+	out, stderr := contextRun(t, services, 0, "context", "init", "--name", "test")
 	if stderr != "" || !strings.Contains(out, "Input    not imported") || strings.Contains(out, "Files copied") {
 		t.Fatal("unexpected empty context result", out, stderr)
 	}
@@ -328,11 +328,11 @@ func TestContextInitWithoutInputCreatesSelectableEncryptedContext(t *testing.T) 
 	}
 	configuration := filepath.Join(contextRoot, "context.yaml")
 	before := stateFingerprint(t, root)
-	contextRun(t, services, 0, "update", "--name", "test", "--file", configuration)
+	contextRun(t, services, 0, "context", "update", "--name", "test", "--file", configuration)
 	if !sameFingerprints(before, stateFingerprint(t, root)) {
 		t.Fatal("equivalent context configuration changed durable state")
 	}
-	contextRun(t, services, 0, "update", "--name", "test", "--input-dir", input, "--yes")
+	contextRun(t, services, 0, "context", "update", "--name", "test", "--input-dir", input, "--yes")
 	contextRun(t, services, 0, "validate")
 	updated, err := repository.View(context.Background())
 	if err != nil || updated.Contexts[0].Name != record.Name || updated.Contexts[0].Revision == "" {
@@ -346,7 +346,7 @@ func TestContextInitWithoutInputCreatesSelectableEncryptedContext(t *testing.T) 
 func TestUserSelectionRefusesAnAbsentContextAndFollowsNameReuse(t *testing.T) {
 	t.Parallel()
 	services, _, input, root := contextFixture(t)
-	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	pointer := testContextWiring(t, root).Selection
 	retained, err := pointer.Read(context.Background())
 	if err != nil || retained.Name != "alpha" {
@@ -370,7 +370,7 @@ func TestUserSelectionRefusesAnAbsentContextAndFollowsNameReuse(t *testing.T) {
 	if !sameFingerprints(before, stateFingerprint(t, root)) {
 		t.Fatal("selection inspection changed context state")
 	}
-	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	if err := pointer.Write(context.Background(), retained); err != nil {
 		t.Fatal(err)
 	}
@@ -393,7 +393,7 @@ func TestContextReplayAndReadOnlyEffects(t *testing.T) {
 		t.Fatal(err)
 	}
 	explicit, _ := contextRun(t, services, 0, "validate", "--input-dir", input, "--output", "json")
-	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	frozen, _ := contextRun(t, services, 0, "validate", "--output", "json")
 	if explicit != frozen {
 		t.Fatalf("frozen admission changed results:\n%s\n%s", explicit, frozen)
@@ -449,7 +449,7 @@ func TestInvalidAdmissionAndUnavailableRoutesDoNotWrite(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(input, "environment.yaml"), []byte("invalid: ["), 0600); err != nil {
 		t.Fatal(err)
 	}
-	contextRun(t, services, 1, "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 1, "context", "init", "--name", "alpha", "--input-dir", input)
 	if _, err := os.Stat(root); !os.IsNotExist(err) {
 		t.Fatalf("failed admission created state: %v", err)
 	}
@@ -477,7 +477,7 @@ func TestInvalidAdmissionAndUnavailableRoutesDoNotWrite(t *testing.T) {
 	nested := filepath.Join(input, "state")
 	nestedRepository := testRepository(nested)
 	nestedServices := testServices(t, nestedRepository, nested)
-	_, stderr = contextRun(t, nestedServices, 1, "init", "--name", "alpha", "--input-dir", input)
+	_, stderr = contextRun(t, nestedServices, 1, "context", "init", "--name", "alpha", "--input-dir", input)
 	if !strings.Contains(stderr, "context.state") {
 		t.Fatal("nested store did not fail before parsing input", stderr)
 	}
@@ -486,7 +486,7 @@ func TestInvalidAdmissionAndUnavailableRoutesDoNotWrite(t *testing.T) {
 func TestProtectedContextCannotBeDeleted(t *testing.T) {
 	t.Parallel()
 	services, repository, input, root := contextFixture(t)
-	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	registry, err := repository.View(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -495,7 +495,7 @@ func TestProtectedContextCannotBeDeleted(t *testing.T) {
 	if err := os.WriteFile(mutation, []byte(`{"version":1,"operation":"failed","ownership":"retained"}`), 0600); err != nil {
 		t.Fatal(err)
 	}
-	contextRun(t, services, 1, "update", "--name", "alpha", "--input-dir", input, "--yes")
+	contextRun(t, services, 1, "context", "update", "--name", "alpha", "--input-dir", input, "--yes")
 	contextRun(t, services, 1, "context", "delete", "--name", "alpha", "--purge", "--yes")
 	contextRun(t, services, 2, "context", "delete", "--name", "alpha", "--purge", "--yes", "--abandon-resources")
 	registry, err = repository.View(context.Background())
@@ -507,8 +507,8 @@ func TestProtectedContextCannotBeDeleted(t *testing.T) {
 	}
 	contextRun(t, services, 0, "validate")
 	contextRun(t, services, 0, "context", "use", "--name", "alpha")
-	contextRun(t, services, 1, "init", "--name", "alpha", "--input-dir", input)
-	contextRun(t, services, 1, "update", "--name", "alpha", "--input-dir", input, "--yes")
+	contextRun(t, services, 1, "context", "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 1, "context", "update", "--name", "alpha", "--input-dir", input, "--yes")
 	retained, err := os.ReadFile(mutation)
 	if err != nil || !bytes.Contains(retained, []byte("retained")) {
 		t.Fatal("refused deletion lost lifecycle evidence", err)
@@ -535,7 +535,7 @@ func TestMissingEvidenceIsRefusedAndAbandonedAsCorruptEvidenceIs(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			services, repository, input, root := contextFixture(t)
-			contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
+			contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 			if err := test.damage(filepath.Join(root, "contexts", "alpha", "state", "mutation.json")); err != nil {
 				t.Fatal(err)
 			}
@@ -546,7 +546,7 @@ func TestMissingEvidenceIsRefusedAndAbandonedAsCorruptEvidenceIs(t *testing.T) {
 			if _, stderr := contextRun(t, services, 1, "apply", "--context", "alpha", "--yes"); !strings.Contains(stderr, "engine.unindexed-records") || !strings.Contains(humanContent(stderr), humanContent(test.entry)) {
 				t.Fatalf("the apply refused with %q, want it to name %q", stderr, test.entry)
 			}
-			if _, stderr := contextRun(t, services, 1, "update", "--name", "alpha", "--input-dir", input, "--yes"); humanContent(stderr) != humanContent("  error  context.state"+refusal) {
+			if _, stderr := contextRun(t, services, 1, "context", "update", "--name", "alpha", "--input-dir", input, "--yes"); humanContent(stderr) != humanContent("  error  context.state"+refusal) {
 				t.Fatalf("the update refused with %q", stderr)
 			}
 			if _, stderr := contextRun(t, services, 1, "context", "delete", "--name", "alpha", "--purge", "--yes"); humanContent(stderr) != humanContent("  error  context.unsafe-delete"+refusal) {
@@ -589,7 +589,7 @@ func TestCompleteExampleContextRoundTrip(t *testing.T) {
 		}
 	}
 	direct, _ := contextRun(t, services, 0, "validate", "--input-dir", input, "--output", "json")
-	contextRun(t, services, 0, "init", "--name", "complete", "--input-dir", input)
+	contextRun(t, services, 0, "context", "init", "--name", "complete", "--input-dir", input)
 	if err := os.RemoveAll(input); err != nil {
 		t.Fatal(err)
 	}
@@ -612,7 +612,7 @@ func TestContextRunOutlastsAHostSlowerThanAnyDeadline(t *testing.T) {
 	deps := testContextWiring(t, root)
 	deps.Selection = loadedHostSelection{deps.Selection}
 	deps.Repository, deps.Workspace = repository, repository
-	contextRun(t, assembleServices(deps), 0, "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, assembleServices(deps), 0, "context", "init", "--name", "alpha", "--input-dir", input)
 }
 
 // loadedHostSelection stands for a host loaded past any wall-clock deadline:
@@ -635,13 +635,13 @@ func (s loadedHostSelection) Write(ctx context.Context, selection contexts.Selec
 func TestAnIdenticalReimportOverACompletedApplyPublishesNothing(t *testing.T) {
 	t.Parallel()
 	services, repository, input, root := contextFixture(t)
-	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	mutation := filepath.Join(root, "contexts", "alpha", "state", "mutation.json")
 	if err := os.WriteFile(mutation, []byte(`{"version":1,"operation":"applied","ownership":"retained"}`+"\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	before := stateFingerprint(t, root)
-	out, stderr := contextRun(t, services, 0, "update", "--name", "alpha", "--input-dir", input)
+	out, stderr := contextRun(t, services, 0, "context", "update", "--name", "alpha", "--input-dir", input)
 	if !strings.HasPrefix(out, "  ✓ Context unchanged\n") || stderr != "" || !sameFingerprints(before, stateFingerprint(t, root)) {
 		t.Fatalf("the identical re-import changed the store or asked: %s %s", out, stderr)
 	}
@@ -653,11 +653,11 @@ func TestAnIdenticalReimportOverACompletedApplyPublishesNothing(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(input, "environment.yaml"), []byte(strings.ReplaceAll(syntheticEnvironment, "example.test", "changed.test")), 0600); err != nil {
 		t.Fatal(err)
 	}
-	_, stderr = contextRun(t, services, 1, "update", "--name", "alpha", "--input-dir", input)
+	_, stderr = contextRun(t, services, 1, "context", "update", "--name", "alpha", "--input-dir", input)
 	if !strings.Contains(stderr, "confirmation requires an interactive terminal or --yes") || !sameFingerprints(before, stateFingerprint(t, root)) {
 		t.Fatalf("changed input over a completed apply published without confirmation: %s", stderr)
 	}
-	out, stderr = contextRun(t, services, 0, "update", "--name", "alpha", "--input-dir", input, "--yes")
+	out, stderr = contextRun(t, services, 0, "context", "update", "--name", "alpha", "--input-dir", input, "--yes")
 	want := "  warning  input.changed-since-apply\n    context alpha holds a completed apply, and apply refuses changed desired state until what that apply owns is taken back; importing the original files again does not undo this update, because they become a new revision apply refuses the same way\n    Next: take it back with bootwright destroy --context alpha, then run bootwright apply --context alpha\n"
 	if !strings.HasPrefix(out, "  ✓ Context updated\n") || humanContent(stderr) != humanContent(want) {
 		t.Fatalf("changed input over a completed apply: %s %q", out, stderr)
@@ -675,9 +675,9 @@ func TestAnIdenticalReimportReportsItsWarningsOnce(t *testing.T) {
 	services, _, input, root := contextFixture(t)
 	addSecretInput(t, input, "environment.yaml", syntheticEnvironment)
 	addSecretInput(t, input, "reserved.yaml", "apiVersion: bootwright.io/v1alpha1\nkind: CustomPlaybook\nmetadata: {name: reserved}\nspec:\n  enabled: false\n  gates: base\n  playbook: playbooks/site.yaml\n  target: {machines: [service-host]}\n")
-	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	before := stateFingerprint(t, root)
-	out, stderr := contextRun(t, services, 0, "update", "--name", "alpha", "--input-dir", input)
+	out, stderr := contextRun(t, services, 0, "context", "update", "--name", "alpha", "--input-dir", input)
 	warning := "  warning  CustomPlaybook/reserved\n    api.deferred\n    " + filepath.Join(input, "reserved.yaml")
 	if !strings.HasPrefix(out, "  ✓ Context unchanged\n") || strings.Count(stderr, "  warning  ") != 1 || !strings.HasPrefix(humanContent(stderr), humanContent(warning)) || !sameFingerprints(before, stateFingerprint(t, root)) {
 		t.Fatalf("the identical re-import lost or repeated its warning, or changed the store: %s %q", out, stderr)

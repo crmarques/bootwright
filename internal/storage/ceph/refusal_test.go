@@ -99,7 +99,7 @@ func TestAForeignClientRefusalNamesTheClientAndFrozenInputRecovery(t *testing.T)
 		d[0].Message != "Ceph client client.consumer exists that this operation did not create" ||
 		!strings.Contains(d[0].Remediation, "outside Bootwright") ||
 		!strings.Contains(d[0].Remediation, "bootwright destroy --context <context>") ||
-		!strings.Contains(d[0].Remediation, "bootwright update") ||
+		!strings.Contains(d[0].Remediation, "bootwright context update") ||
 		!strings.Contains(d[0].Remediation, "never adopts") {
 		t.Fatalf("a foreign-client refusal reached the operator as %+v", d)
 	}
@@ -126,7 +126,7 @@ func TestACallHomeUnqualifiedRefusalReachesTheOperatorAsUnsupportedWithItsRemedy
 	d := diagnostics.Of(err)
 	if len(d) != 1 || d[0].Code != cephUnqualified.Code || d[0].Message != "IBM Call Home intent has no qualified path on the selected Ceph build" ||
 		d[0].Remediation != "the apply froze this input, so take back what it owns with bootwright destroy --context <context>, "+
-			"correct spec.distribution.ibm.callHome for the selected build with bootwright update, then apply; see .agents/knowledge/version-specializations.md" {
+			"correct spec.distribution.ibm.callHome for the selected build with bootwright context update, then apply; see .agents/knowledge/version-specializations.md" {
 		t.Fatalf("a call-home-unqualified refusal reached the operator as %+v", d)
 	}
 }
@@ -139,7 +139,7 @@ func TestANativeOptionUndeclaredRefusalNamesTheDestroyItsInputChangeNeeds(t *tes
 	d := diagnostics.Of(err)
 	if len(d) != 1 || d[0].Code != cephUnqualified.Code ||
 		!strings.HasPrefix(d[0].Remediation, "the apply froze this input, so take back what it owns with bootwright destroy --context <context>, ") ||
-		!strings.Contains(d[0].Remediation, "with bootwright update, then apply") {
+		!strings.Contains(d[0].Remediation, "with bootwright context update, then apply") {
 		t.Fatalf("a native-option-undeclared refusal reached the operator as %+v", d)
 	}
 }
@@ -449,7 +449,7 @@ func TestResourceRefusalsNameTheirNextStep(t *testing.T) {
 func TestAnUnverifiedSSORefusalNamesTheSkipAndItsRemedies(t *testing.T) {
 	d := diagnostics.Of(adapterRefusals()["sso-unverified"])
 	const message = "an oauth2-proxy daemon of a Ceph management gateway runs with a configuration that skips the identity provider's certificate verification, so Bootwright did not enable the dashboard's single sign-on"
-	const remedy = "the native error names the host, the daemon and where the skip was found; take back what this context owns with bootwright destroy --context <context>, then with bootwright update either select a Ceph image whose cephadm renders oauth2-proxy without that skip, or remove the oauth2-proxy service, its spec.serviceBindings entries and spec.enable_auth on the mgmt-gateway, then apply; Bootwright never changes an applied management gateway unit, so removing the service without that destroy refuses"
+	const remedy = "the native error names the host, the daemon and where the skip was found; take back what this context owns with bootwright destroy --context <context>, then with bootwright context update either select a Ceph image whose cephadm renders oauth2-proxy without that skip, or remove the oauth2-proxy service, its spec.serviceBindings entries and spec.enable_auth on the mgmt-gateway, then apply; Bootwright never changes an applied management gateway unit, so removing the service without that destroy refuses"
 	if len(d) != 1 || d[0].Code != cephPrerequisite.Code || d[0].Message != message || d[0].Remediation != remedy {
 		t.Fatalf("an sso-unverified refusal reached the operator as %+v", d)
 	}

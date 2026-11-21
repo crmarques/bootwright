@@ -185,12 +185,12 @@ func contextInput(configured bool) string {
 func contextNext(summary contexts.Summary) string {
 	switch summary.Mode {
 	case contexts.Initializing:
-		return "bootwright init --name " + summary.Name
+		return "bootwright context init --name " + summary.Name
 	case contexts.Deleting:
 		return "bootwright context delete --name " + summary.Name + " --purge"
 	}
 	if !summary.Configured {
-		return "bootwright update --name " + summary.Name + " --input-dir <directory>"
+		return "bootwright context update --name " + summary.Name + " --input-dir <directory>"
 	}
 	return "bootwright status --context " + summary.Name
 }

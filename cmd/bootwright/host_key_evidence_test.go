@@ -23,7 +23,7 @@ import (
 func TestClusterInfoAfterDestroyReadsRemovalEvidenceAsUnavailable(t *testing.T) {
 	t.Parallel()
 	services, repository, input, root := contextFixture(t)
-	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	state, _ := compileAcceptance(t, exampleDirectory(t, "libvirt-3-nodes-ceph"))
 	services.EnvironmentInspection = wireInspection(labSessionState{effective: state.Effective()}, services.Lifecycle.(lifecycle.Service), services.Secrets.(*custody.Service), nil, nil)
 	plan, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{{

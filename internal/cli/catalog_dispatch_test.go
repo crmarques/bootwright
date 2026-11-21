@@ -33,7 +33,7 @@ func TestEveryCatalogCommandHasApplicationDispatch(t *testing.T) {
 func TestCommandModesComeFromTheCatalog(t *testing.T) {
 	want := map[string]bool{
 		"policy install": true, "policy permissions": true,
-		"init": true, "update": true, "context use": true,
+		"context init": true, "context update": true, "context use": true,
 		"context list": true, "context current": true, "context delete": true,
 		"secret set": true, "secret generate": true, "secret check": true,
 		"secret list": true, "secret info": true, "secret show": true, "secret delete": true,

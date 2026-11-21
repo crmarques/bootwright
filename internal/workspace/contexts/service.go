@@ -338,7 +338,7 @@ func (s Service) Update(ctx context.Context, request UpdateRequest) (*AdmissionR
 		return nil, err
 	}
 	if request.ConfigurationFile == "" && request.InputDirectory == "" {
-		return nil, ConfigurationError("update requires --file or --input-dir")
+		return nil, ConfigurationError("context update requires --file or --input-dir")
 	}
 	var selected Selection
 	if !request.Check {

@@ -62,7 +62,7 @@ There is no global current selection. Explicit `--context` bypasses the user
 file; an implicit selection must still name a ready registry entry. A selection
 naming an absent context fails naming that context, with
 `bootwright context use --name <context>` and
-`bootwright init --name <name>` guidance. List remains
+`bootwright context init --name <name>` guidance. List remains
 usable without a current marker. Init selects only after store publication;
 use changes only selection; update preserves it; delete clears only the
 invoking user's matching name. Never enumerate other users' homes.
@@ -378,10 +378,10 @@ retained beside it.
 
 | Root lock | Lease | Commands |
 | --- | --- | --- |
-| shared | none | Every read: `context list` and `current`, `plan`, `status`, `logs` at each poll of an operation and as it opens a run's output, `apply --dry-run`, `install --dry-run`, `secret check`, `list` and `show`, `secret encryption status`, `catalog media list`, including the opening of each image `--checksums` then reads, the admission a `catalog media add` or `catalog media delete` without `--yes` reviews before its confirmation, the store check a `secret set` from standard input makes before it reads, the plan a `update` or `context delete` without `--yes` presents before its confirmation, SSH-trust and input reads, and the reads that precede `apply` and `destroy`. |
-| exclusive | none | Every other command that may publish, such as `context use`, a `update` that imports no input, `catalog media delete`, the admission and publication of `catalog media add`, the SSH trust that `machine trust` or a confirmed first use records, and the registry transaction in which `install` creates a missing setup subtree. |
-| none | none | The [acquisition](#media-acquisition) of `catalog media add` between those two holds: its copy or download, or its re-read of a stage it adopts, its digest verification, and the record it retains beside a stage whose publication met another's lock; the full read of each image by `catalog media list --checksums`, through the descriptor its shared hold opened; the confirmation prompt of `catalog media add`, `catalog media delete`, `update` and `context delete`; the [read of standard input](secrets.md#acquisition-and-commands) by `secret set --value-stdin` or `--password-stdin`, including its terminal prompt; and every other part of `install`, which holds only [`controller/install/lock`](contexts/controller-record.md#the-setup-subtree). |
-| exclusive | held | `init`; a `update` that imports input; `context delete` of a ready context; `secret set` (from standard input, only to write what it read), `generate` and `delete`, `secret encryption init` and `rotate`, and the Secret binding `apply` and `destroy` take before they execute; and the short shared-state publications of `apply` and `destroy`. |
+| shared | none | Every read: `context list` and `current`, `plan`, `status`, `logs` at each poll of an operation and as it opens a run's output, `apply --dry-run`, `install --dry-run`, `secret check`, `list` and `show`, `secret encryption status`, `catalog media list`, including the opening of each image `--checksums` then reads, the admission a `catalog media add` or `catalog media delete` without `--yes` reviews before its confirmation, the store check a `secret set` from standard input makes before it reads, the plan a `context update` or `context delete` without `--yes` presents before its confirmation, SSH-trust and input reads, and the reads that precede `apply` and `destroy`. |
+| exclusive | none | Every other command that may publish, such as `context use`, a `context update` that imports no input, `catalog media delete`, the admission and publication of `catalog media add`, the SSH trust that `machine trust` or a confirmed first use records, and the registry transaction in which `install` creates a missing setup subtree. |
+| none | none | The [acquisition](#media-acquisition) of `catalog media add` between those two holds: its copy or download, or its re-read of a stage it adopts, its digest verification, and the record it retains beside a stage whose publication met another's lock; the full read of each image by `catalog media list --checksums`, through the descriptor its shared hold opened; the confirmation prompt of `catalog media add`, `catalog media delete`, `context update` and `context delete`; the [read of standard input](secrets.md#acquisition-and-commands) by `secret set --value-stdin` or `--password-stdin`, including its terminal prompt; and every other part of `install`, which holds only [`controller/install/lock`](contexts/controller-record.md#the-setup-subtree). |
+| exclusive | held | `context init`; a `context update` that imports input; `context delete` of a ready context; `secret set` (from standard input, only to write what it read), `generate` and `delete`, `secret encryption init` and `rotate`, and the Secret binding `apply` and `destroy` take before they execute; and the short shared-state publications of `apply` and `destroy`. |
 | none during effects | exclusive | The execution of `apply` and `destroy`, between short root transactions. |
 | shared during admission, none during effects | shared | [Bounded runs](cli/output.md#bounded-run-output), including Machine power; their lease excludes lifecycle mutation of the same context. |
 
@@ -391,7 +391,7 @@ lifecycle effects and bounded runs release the root lock after admission
 while retaining their context lease;
 `catalog media add` releases the root lock while it acquires,
 `catalog media list --checksums` releases its shared hold before it reads any image
-in full, neither `catalog media add`, `catalog media delete`, `update` nor
+in full, neither `catalog media add`, `catalog media delete`, `context update` nor
 `context delete` holds one while it prompts, and a `secret set` from
 standard input holds none while it reads, then takes the exclusive root lock
 and the lease to write and re-proves its
@@ -487,7 +487,7 @@ reservation bytes. Foreign shapes refuse untouched; reads never collect.
 Attribute an unrecorded final directory only by its valid matching reservation.
 Preserve an older unattributable final directory and name restoration or
 administrator isolation before retry or purge. Every initializing-name refusal
-names both exits: `bootwright init --name <name>` with its original
+names both exits: `bootwright context init --name <name>` with its original
 Context file, or `bootwright context delete --name <name> --purge` to discard it.
 
 Input update writes new immutable blobs/manifests exclusively, flushes files
@@ -711,7 +711,7 @@ holds nothing names the same destroy, which
 repeated apply fits in what the destroy freed or refuses again. A fresh apply
 refused beside pristine evidence and no such claim names
 `bootwright context delete --name <name> --purge` and then
-`bootwright init --name <name>` from the context's original
+`bootwright context init --name <name>` from the context's original
 configuration and input. Since an apply's own attempts keep its removal's
 entries, a removal refuses at its registration only over an area something
 else filled, or that the resolutions above took
@@ -1016,7 +1016,7 @@ continue, reinstall or remove it, as
 says to remove the abandoned objects by hand before initializing the same name
 again, and never to reuse a context name across controllers that share a
 provider host; every exit that names an acknowledged deletion followed by
-`bootwright init` of the same name carries the same warning. An
+`bootwright context init` of the same name carries the same warning. An
 acknowledged deletion also leaves in place each
 [installer work area](openshift-clusters.md#boot-media) its clusters'
 installations keep on their artifact server's placement Machine, which holds
@@ -1068,7 +1068,7 @@ input readiness, and the invoking user's current marker. List sorts by name;
 `yes` or `no`, `Input` as `imported` or `not imported`, and retain the context
 `Mode`. Their `Next` names `status --context <name>` for a ready
 context with imported input, input update with `--name <name>` otherwise,
-`init` to resume initialization, or `context delete` to resume
+`context init` to resume initialization, or `context delete` to resume
 deletion. Input admission reports counts
 and copied files; default creation does not invent compilation counts.
 Human warnings appear once on stderr; structured warnings appear in envelope
@@ -1117,8 +1117,8 @@ Every context-backed command that needs desired state (validate, render,
 declaration-dependent secret commands, plan, status, apply, destroy, the
 machine commands and `apply --dry-run`) rejects a missing input
 revision with `context.input`, naming the context, and the remedy
-`bootwright update --name <name> --input-dir <dir>`. An absent store or
+`bootwright context update --name <name> --input-dir <dir>`. An absent store or
 an absent named context refuses with `context.state`, naming that context, with
-`bootwright init --name <name>` and
+`bootwright context init --name <name>` and
 `bootwright context use --name <context>` guidance. Encryption init/status/rotate do not require input.
 Effective output and compilation diagnostics retain their existing contracts.

@@ -63,7 +63,7 @@ func TestAGeneratedServingCertificateCoversEveryHTTPSEndpoint(t *testing.T) {
 	found := refusalsAt(issues, "$.spec.endpoints[0]")
 	if len(issues) != 1 || len(found) != 1 || found[0].Code != "api.invariant" ||
 		found[0].Message != "endpoint ip-https serves HTTPS at 192.0.2.10, which the generated certificate of Secret/serving does not name" ||
-		found[0].Remediation != "add 192.0.2.10 to spec.source.generated.ipAddresses of Secret/serving, import the change with bootwright update --name <context> --input-dir <dir>, "+
+		found[0].Remediation != "add 192.0.2.10 to spec.source.generated.ipAddresses of Secret/serving, import the change with bootwright context update --name <context> --input-dir <dir>, "+
 			"then run bootwright secret generate --name serving --context <context>" {
 		t.Fatalf("an uncovered HTTPS address = %#v, want one refusal at the endpoint naming the Secret and the address", issues)
 	}
@@ -82,7 +82,7 @@ func TestAGeneratedServingCertificateCoversEveryHTTPSEndpoint(t *testing.T) {
 func TestTheSpecStatesTheCoverageRemedyWithEachCommandsContextFlag(t *testing.T) {
 	uncovered := servingSecret(generatedSource([]string{"host.example.test"}, []string{"192.0.2.99"}))
 	found := refusalsAt(admit(coveredServer(), consumerHost(true, consumerAddresses()...), uncovered), "$.spec.endpoints[0]")
-	if len(found) != 1 || !mentionsAll(found[0].Remediation, "bootwright update --name <context> ", "bootwright secret generate --name serving --context <context>") {
+	if len(found) != 1 || !mentionsAll(found[0].Remediation, "bootwright context update --name <context> ", "bootwright secret generate --name serving --context <context>") {
 		t.Fatalf("the coverage refusal = %#v, want a remedy naming update --name and secret generate --context", found)
 	}
 	data, err := os.ReadFile(filepath.Join("..", "..", "specs", "infrastructure-services.md"))
@@ -91,7 +91,7 @@ func TestTheSpecStatesTheCoverageRemedyWithEachCommandsContextFlag(t *testing.T)
 	}
 	_, sentence, ok := strings.Cut(strings.Join(strings.Fields(string(data)), " "), "naming the Secret and the missing address, with the remedy to ")
 	sentence, _, _ = strings.Cut(sentence, " since generation reads")
-	if !ok || !strings.Contains(sentence, "import the change with `update --name <context>` and then run `secret generate` with `--context`") ||
+	if !ok || !strings.Contains(sentence, "import the change with `context update --name <context>` and then run `secret generate` with `--context`") ||
 		strings.Contains(sentence, "each with `--context`") {
 		t.Fatalf("specs/infrastructure-services.md states the coverage remedy as %q, want update with --name and secret generate with --context", sentence)
 	}

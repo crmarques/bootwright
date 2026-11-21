@@ -12,8 +12,8 @@ func TestASoleEmptyOccurrenceOfARepeatableFlagIsAUsageError(t *testing.T) {
 	}{
 		{[]string{"validate", "--input-dir="}, "input-dir"},
 		{[]string{"validate", "--input-dir", ""}, "input-dir"},
-		{[]string{"init", "--name", "demo", "--file="}, "file"},
-		{[]string{"update", "--name", "demo", "--file=", "--input-dir", "in"}, "file"},
+		{[]string{"context", "init", "--name", "demo", "--file="}, "file"},
+		{[]string{"context", "update", "--name", "demo", "--file=", "--input-dir", "in"}, "file"},
 		{[]string{"apply", "--authorize="}, "authorize"},
 		{[]string{"destroy", "--authorize", ""}, "authorize"},
 	} {

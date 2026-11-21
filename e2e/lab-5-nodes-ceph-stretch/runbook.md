@@ -108,8 +108,8 @@ CONTROLLER_ADDRESS=$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/
 umask 077; RUN_DIR=$(mktemp -d)
 ./bin/bootwright validate --input-dir "$INPUT_DIR/arbiter"
 ./bin/bootwright validate --input-dir "$INPUT_DIR/ceph"
-./bin/bootwright init --name "$CTX_ARB" --input-dir "$INPUT_DIR/arbiter"
-./bin/bootwright init --name "$CTX_CEPH" --input-dir "$INPUT_DIR/ceph"
+./bin/bootwright context init --name "$CTX_ARB" --input-dir "$INPUT_DIR/arbiter"
+./bin/bootwright context init --name "$CTX_CEPH" --input-dir "$INPUT_DIR/ceph"
 ./bin/bootwright secret generate --context "$CTX_ARB"
 ./bin/bootwright secret generate --context "$CTX_CEPH"
 install -m 0600 /dev/null "$RUN_DIR/ibm-password"

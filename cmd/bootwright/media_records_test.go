@@ -142,7 +142,7 @@ func TestProductionLifecycleWiringReadsTheMediaStore(t *testing.T) {
 func TestLifecycleSnapshotsAndEffectsAllowReadOnlyMediaRecords(t *testing.T) {
 	t.Parallel()
 	services, repository, input, _ := contextFixture(t)
-	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	reader := storeMediaRecords{store: repository}
 	err := repository.ReadLifecycle(context.Background(), "alpha", func(lifecycle.View) error {
 		records, err := reader.MediaRecords(context.Background())

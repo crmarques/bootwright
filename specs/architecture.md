@@ -195,7 +195,7 @@ Each is deliberate and bounded; another like it is a defect.
   daemon, OSD and resource convergence, mid-procedure where Go cannot answer.
   It publishes the health, placement-group and license facts raw, and
   `storage/ceph` judges them again before it accepts a ready claim.
-- **The schema registry.** `api/v1alpha1`'s `init` functions fill its
+- **The schema registry.** `api/v1alpha1`'s `context init` functions fill its
   package-global kind-to-schema map through `register`, which panics on a
   duplicate; nothing writes it afterwards, and `Schema` returns a fresh `Shape`.
 
@@ -564,7 +564,7 @@ credential-dropped subprocess when the caller is root. The composition root
 also binds `workspace/invokerfs` to the same lazily verified account for
 operator-named paths: the input directory and every file and directory beneath
 it, a Context file, a secret file and a media source. `validate --input-dir`,
-`init` and `update` therefore read one input directory under
+`context init` and `context update` therefore read one input directory under
 the same credentials. A process already running as
 that account, direct root included, opens in-process. A root process serving
 another account starts one bounded helper per acquisition: the running binary,

@@ -89,7 +89,7 @@ func TestGeneratedIntegrations(t *testing.T) {
 						want  []string
 					}{
 						{"commands", []string{"c"}, []string{"catalog", "cluster", "completion", "context"}},
-						{"check flag", []string{"init", "--ch"}, []string{"--check"}},
+						{"check flag", []string{"context", "init", "--ch"}, []string{"--check"}},
 						{"lifecycle preview flag", []string{"apply", "--dry"}, []string{"--dry-run"}},
 						{"catalog commands", []string{"catalog", ""}, []string{"add-ons", "media", "schema"}},
 						{"nested commands", []string{"cluster", "k"}, []string{"keyring", "kubeconfig", "kubectl"}},
@@ -102,10 +102,10 @@ func TestGeneratedIntegrations(t *testing.T) {
 						{"presentation width flag", []string{"status", "--w"}, []string{"--width"}},
 						{"no withdrawn watch flag", []string{"status", "--wat"}, nil},
 						{"no withdrawn verbose flag", []string{"apply", "--v"}, nil},
-						{"input directory flag", []string{"init", "--input"}, []string{"--input-dir"}},
-						{"single directory candidate", []string{"init", "--input-dir", "fixture-alp"}, []string{"fixture-alpha/"}},
-						{"directory paths", []string{"init", "--input-dir", "fixture"}, []string{"fixture-alpha/", "fixture-beta/"}},
-						{"directory paths exclude files", []string{"init", "--input-dir", "fixture-alpha/"}, []string{"fixture-alpha/nested/"}},
+						{"input directory flag", []string{"context", "init", "--input"}, []string{"--input-dir"}},
+						{"single directory candidate", []string{"context", "init", "--input-dir", "fixture-alp"}, []string{"fixture-alpha/"}},
+						{"directory paths", []string{"context", "init", "--input-dir", "fixture"}, []string{"fixture-alpha/", "fixture-beta/"}},
+						{"directory paths exclude files", []string{"context", "init", "--input-dir", "fixture-alpha/"}, []string{"fixture-alpha/nested/"}},
 						{"validate flag", []string{"validate", "--in"}, []string{"--input-dir"}},
 						{"no old validate flag", []string{"validate", "--fi"}, nil},
 						{"file paths include directories", []string{"validate", "--input-dir", "fixture-alpha/"}, []string{"fixture-alpha/input.yaml", "fixture-alpha/nested/"}},

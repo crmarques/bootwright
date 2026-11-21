@@ -19,7 +19,7 @@ func TestSecretSetFlagMistakesExitTwoNamingTheType(t *testing.T) {
 		secretDocument("password", "usernamePassword", ""), secretDocument("ca", "caBundle", ""), secretDocument("tls", "tlsCertificate", ""),
 		secretDocument("ssh", "sshKeyPair", ""),
 	}, "\n---\n"))
-	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	file := addSecretInput(t, t.TempDir(), "value", "synthetic-flag-value")
 	const values = "--value-file <path> or --value-stdin"
 	for _, test := range []struct {

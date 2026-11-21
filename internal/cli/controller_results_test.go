@@ -364,7 +364,7 @@ func TestRunnerFinishesProgressBeforeTheReadyResult(t *testing.T) {
 	var out bytes.Buffer
 	config := Config{Out: &out, Services: dispatchSpies(record), FinishProgress: func() { out.WriteString("<finished>") }}
 	code := New(config).Run(context.Background(), []string{"install"})
-	want := "<finished>\n  Planned changes\n    none\n\n    Outcome  unchanged\n    Next     bootwright init --name <name> --input-dir <dir>\n"
+	want := "<finished>\n  Planned changes\n    none\n\n    Outcome  unchanged\n    Next     bootwright context init --name <name> --input-dir <dir>\n"
 	if code != 0 || out.String() != want {
 		t.Fatalf("code=%d result=%q, want %q", code, out.String(), want)
 	}

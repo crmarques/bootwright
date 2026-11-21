@@ -13,14 +13,14 @@ func TestAReadyControllerCheckNamesContextInit(t *testing.T) {
 	report := controllerReport("unchanged", false)
 	report.DryRun = true
 	report.Actions = nil
-	report.Next = "bootwright init --name <name> --input-dir <dir>"
+	report.Next = "bootwright context init --name <name> --input-dir <dir>"
 	record := &dispatchRecord{result: commandResult{controller: report}}
 	var out, errOut bytes.Buffer
 	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"install", "--dry-run"})
 	if code != 0 || errOut.Len() != 0 {
 		t.Fatalf("exit %d, stderr %q", code, errOut.String())
 	}
-	if want := "    Outcome  unchanged (dry run)\n    Next     bootwright init --name <name> --input-dir <dir>\n"; !strings.HasSuffix(out.String(), want) {
+	if want := "    Outcome  unchanged (dry run)\n    Next     bootwright context init --name <name> --input-dir <dir>\n"; !strings.HasSuffix(out.String(), want) {
 		t.Errorf("controller check ended %q, want the outcome followed by %q", out.String(), want)
 	}
 }

@@ -159,7 +159,7 @@ func TestTheRootChildOpensNoOperatorPathItself(t *testing.T) {
 		args []string
 		want []string
 	}{
-		{[]string{"init", "--name", "alpha", "--input-dir", input, "-f", configuration}, []string{input, environment, host, declaration, configuration}},
+		{[]string{"context", "init", "--name", "alpha", "--input-dir", input, "-f", configuration}, []string{input, environment, host, declaration, configuration}},
 		{[]string{"secret", "set", "--name", "opaque", "--value-file", value}, []string{value}},
 		{[]string{"validate", "--input-dir", input}, []string{input, environment, host, declaration}},
 	} {
@@ -189,7 +189,7 @@ func TestValidateAndContextInitAgreeOnOneDirectory(t *testing.T) {
 	input := filepath.Dir(environment)
 	services := operatorFileServices(t, files)
 	contextRun(t, services, 0, "validate", "--input-dir", input)
-	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	files.deny(host)
 	want := diagnostics.Diagnostic{
 		Severity: "error", Code: "input.read", Source: &diagnostics.SourceLocation{Path: host},
@@ -197,7 +197,7 @@ func TestValidateAndContextInitAgreeOnOneDirectory(t *testing.T) {
 		Remediation: "give the invoking account read access to it, or copy it to a directory that account can read",
 	}
 	validate := []string{"validate", "--input-dir", input}
-	initialize := []string{"init", "--name", "beta", "--input-dir", input}
+	initialize := []string{"context", "init", "--name", "beta", "--input-dir", input}
 	text := "  error  input.read\n    " + host + "\n    " + want.Message + "\n    Next: " + want.Remediation
 	for _, args := range [][]string{validate, initialize} {
 		out, errOut := contextRun(t, services, 1, args...)

@@ -104,7 +104,7 @@ func TestSupervisorRefreshUsesSameExecutorAndOriginalArgumentVector(t *testing.T
 		}
 	})
 	supervisor := NewSupervisor(SudoOptions{Executable: "/opt/bootwright", Sudo: "/usr/bin/sudo", Executor: executor, Delay: delay, NonInteractive: true, Input: strings.NewReader("stdin-payload\n"), Output: &out, Error: &stderr})
-	args := []string{"init", "--name", "test"}
+	args := []string{"context", "init", "--name", "test"}
 	code, err := supervisor.Run(context.Background(), args)
 	if err != nil || code != 17 {
 		t.Fatalf("result %d %v", code, err)
@@ -117,7 +117,7 @@ func TestSupervisorRefreshUsesSameExecutorAndOriginalArgumentVector(t *testing.T
 	if len(calls) != 3 {
 		t.Fatalf("calls %v", calls)
 	}
-	want := []string{"-u", "#0", "-n", "--", "/opt/bootwright", "init", "--name", "test"}
+	want := []string{"-u", "#0", "-n", "--", "/opt/bootwright", "context", "init", "--name", "test"}
 	if !reflect.DeepEqual(calls[1].Arguments, want) {
 		t.Fatalf("args %v", calls[1].Arguments)
 	}

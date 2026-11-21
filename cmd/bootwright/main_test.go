@@ -91,8 +91,8 @@ func TestCompositionWiresEveryApplicationCommand(t *testing.T) {
 	services := isolatedServices(t)
 	commandsWithSyntheticInputs := [][]string{
 		{"validate", "--input-dir", filepath.Join(t.TempDir(), "missing.yaml")},
-		{"init", "--name", "example", "--input-dir", "inputs"},
-		{"update", "--name", "example", "--input-dir", "inputs"},
+		{"context", "init", "--name", "example", "--input-dir", "inputs"},
+		{"context", "update", "--name", "example", "--input-dir", "inputs"},
 		{"context", "use", "--name", "example"},
 		{"context", "list"},
 		{"context", "current"},
@@ -145,7 +145,7 @@ func TestCompositionWiresEveryApplicationCommand(t *testing.T) {
 			var stdout, stderr bytes.Buffer
 			code := runServices(context.Background(), args, &stdout, &stderr, services)
 			prefix := "  error  cli.not-implemented\n    bootwright "
-			if strings.HasPrefix(strings.Join(args, " "), "validate") && len(args) > 2 || args[0] == "init" || args[0] == "update" || args[0] == "render" && args[1] == "effective" && len(args) > 2 && args[2] == "--input-dir" {
+			if strings.HasPrefix(strings.Join(args, " "), "validate") && len(args) > 2 || args[0] == "context" && (args[1] == "init" || args[1] == "update") || args[0] == "render" && args[1] == "effective" && len(args) > 2 && args[2] == "--input-dir" {
 				prefix = "  error  input.not-found\n"
 			} else if args[0] == "context" || args[0] == "secret" || strings.HasPrefix(strings.Join(args, " "), "validate") || strings.HasPrefix(strings.Join(args, " "), "apply --dry-run") && (len(args) == 2 || args[3] == "clusters") ||
 				args[0] == "plan" || args[0] == "status" || args[0] == "apply" || args[0] == "destroy" ||

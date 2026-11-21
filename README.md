@@ -18,7 +18,7 @@ make build
 ```
 
 Use `validate` while authoring or in CI. Importing an input directory with
-`init` validates it before publishing it. Interactive `apply` shows
+`context init` validates it before publishing it. Interactive `apply` shows
 its plan before confirmation. Use `apply --dry-run` or `destroy --dry-run` for a standalone
 preview, and start with `status` when returning to a context.
 

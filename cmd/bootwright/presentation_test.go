@@ -116,7 +116,7 @@ func TestDelegatedSudoEntryRefusesOtherOperations(t *testing.T) {
 		{"policy", "install", "--context", "lab", "--file", "sessions.yaml"},
 		{"secret", "show", "--name", "key"},
 		{"machine", "cp", "--name", "node", "remote:source", "local:dest"},
-		{"update", "--name", "lab", "--input-dir", "."},
+		{"context", "update", "--name", "lab", "--input-dir", "."},
 		{"machine", "exec", "--help"},
 	} {
 		var out, errOut bytes.Buffer

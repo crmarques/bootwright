@@ -23,7 +23,7 @@ func TestSecretConfirmationsHoldNoLeaseAndWriteNothingOnRefusal(t *testing.T) {
 	t.Parallel()
 	services, repository, input, root := contextFixture(t)
 	addSecretInput(t, input, "secret.yaml", secretDocument("payload", "opaque", ""))
-	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	contextRun(t, services, 0, "secret", "encryption", "init")
 	snapshot, err := repository.SecretContext(context.Background(), "alpha")
 	if err != nil {
@@ -67,7 +67,7 @@ func TestASecretChangedDuringItsPromptIsRefusedWithNothingWritten(t *testing.T) 
 	t.Parallel()
 	services, repository, input, root := contextFixture(t)
 	addSecretInput(t, input, "secret.yaml", secretDocument("payload", "opaque", ""))
-	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	contextRun(t, services, 0, "secret", "encryption", "init")
 	values := t.TempDir()
 	first := addSecretInput(t, values, "first", "synthetic-first-value")
@@ -115,13 +115,13 @@ func TestSecretExpectedSnapshotRefusesContextUpdateBeforeEffects(t *testing.T) {
 	t.Parallel()
 	services, repository, input, root := contextFixture(t)
 	addSecretInput(t, input, "secret.yaml", secretDocument("payload", "opaque", ""))
-	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	snapshot, err := repository.SecretContext(context.Background(), "alpha")
 	if err != nil {
 		t.Fatal(err)
 	}
 	addSecretInput(t, input, "secret.yaml", secretDocument("payload", "token", ""))
-	contextRun(t, services, 0, "update", "--name", "alpha", "--input-dir", input, "--yes")
+	contextRun(t, services, 0, "context", "update", "--name", "alpha", "--input-dir", input, "--yes")
 	before := stateFingerprint(t, root)
 	callback := func(secretstore.Area) error { t.Fatal("stale snapshot reached secret effects"); return nil }
 	if err := repository.ReadSecrets(context.Background(), snapshot.Context, callback); err == nil {

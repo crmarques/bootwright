@@ -558,7 +558,7 @@ which of these roots it holds on this host.
 
 | Root | Contents | Created by | Host roles |
 | --- | --- | --- | --- |
-| `/var/lib/bootwright` | The store: contexts, registry, secrets, media; `controller/install` (runtimes, wheel cache, receipt) and `controller/record` | `install` and `init` | Control only |
+| `/var/lib/bootwright` | The store: contexts, registry, secrets, media; `controller/install` (runtimes, wheel cache, receipt) and `controller/record` | `install` and `context init` | Control only |
 | `/var/lib/bootwright-staging` | The embedded automation unpacked for each run | The first command that runs Ansible | Control only |
 | `/var/log/bootwright` | `controller/install-NNNNNN.output`; per context under `contexts/<context>/`, `operations/<op>/`, `runs/run-NNNNNN.output` and `current` | The first command that writes a log | Control only |
 | `/var/lib/bootwright-hosted/<context>/services/<kind>/<service>` | A hosted service's content root, configuration and certificate | `apply` of an artifact server or managed service | Hosting services |

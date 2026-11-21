@@ -108,7 +108,7 @@ func TestLifecycleReadRefusesAContextWithoutInput(t *testing.T) {
 	}
 	readErr := store.ReadLifecycle(ctx, "empty", func(lifecycle.View) error { return nil })
 	reported := diagnostics.Of(readErr)
-	if readErr == nil || len(reported) != 1 || reported[0].Code != "context.input" || reported[0].Message != "context empty has no desired state" || !strings.Contains(reported[0].Remediation, "bootwright update --name empty") {
+	if readErr == nil || len(reported) != 1 || reported[0].Code != "context.input" || reported[0].Message != "context empty has no desired state" || !strings.Contains(reported[0].Remediation, "bootwright context update --name empty") {
 		t.Fatalf("a context without input produced a lifecycle view: %+v", reported)
 	}
 }

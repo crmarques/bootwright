@@ -28,7 +28,7 @@ func runRecorded(args []string) (int, string, string, *dispatchRecord) {
 
 func TestRunnerDispatchesEveryApplicationCommand(t *testing.T) {
 	cases := []string{
-		"init --name demo -f input", "update --name demo -f input", "context use --name demo", "context list", "context current", "context delete --name demo --purge",
+		"context init --name demo -f input", "context update --name demo -f input", "context use --name demo", "context list", "context current", "context delete --name demo --purge",
 		"catalog add-ons list", "catalog add-ons info --name demo",
 		"secret set --name demo --value-file secret.bin", "secret generate", "secret check", "secret list", "secret show --name demo --part value", "secret delete --name demo", "secret encryption init", "secret encryption status", "secret encryption rotate",
 		"catalog media add --name demo.iso --from-file image.iso", "catalog media list", "catalog media delete --name demo.iso", "validate", "install --dry-run", "apply --dry-run", "apply --dry-run --stage clusters", "destroy --dry-run", "status", "render effective --output-dir artifacts --sensitive", "render effective", "render installer", "render storage", "apply", "destroy",
@@ -60,10 +60,11 @@ func TestHelpPrecedenceAndClosedSyntax(t *testing.T) {
 		args string
 		code int
 	}{
-		{"", 0}, {"help", 0}, {"completion", 0}, {"context", 0}, {"secret encryption", 0}, {"context --help", 0}, {"--help init", 0}, {"help init", 0},
-		{"init --name= --help", 0}, {"init -f a -f b --help", 0}, {"secret show --part invalid --help", 0}, {"status --output invalid --help", 0}, {"machine list --short --output json --help", 0}, {"machine list --help --output invalid", 0},
+		{"", 0}, {"help", 0}, {"completion", 0}, {"context", 0}, {"secret encryption", 0}, {"context --help", 0}, {"--help context init", 0}, {"help context init", 0},
+		{"context init --name= --help", 0}, {"context init -f a -f b --help", 0}, {"secret show --part invalid --help", 0}, {"status --output invalid --help", 0}, {"machine list --short --output json --help", 0}, {"machine list --help --output invalid", 0},
 		{"render --output json", 0}, {"render --sensitive --output json", 2}, {"render --output invalid", 2}, {"render effective --input-dir= --help", 0},
 		{"version --help=false", 0}, {"version --help=invalid", 2}, {"render effective --input-dir input", 2},
+		{"init --name lab --check", 2}, {"update --name lab --input-dir input --check", 2},
 		{"example --help", 2}, {"help example", 2}, {"container-cluster --help", 2}, {"help container-cluster", 2}, {"clu list", 2}, {"VERSION", 2}, {"--version", 2}, {"version --format json", 2}, {"__complete", 2}, {"__completeNoDesc", 2}, {"help __bootwright_complete", 2},
 		{"version --", 2}, {"version --help --bad", 2}, {"machine list --short invalid --help", 0}, {"machine list --short=invalid --help", 2}, {"version -vh", 2},
 	}
@@ -89,7 +90,7 @@ func TestResolutionFailuresExplainOnlyTrustedReasons(t *testing.T) {
 	}{
 		{"separator", []string{"version", "--", privateArgument}, "separator is not accepted"},
 		{"unknown-flag", []string{"version", "--unknown=" + privateArgument}, `unknown flag: "--unknown"`},
-		{"missing-value", []string{"init", "--name"}, "flag value is missing"},
+		{"missing-value", []string{"context", "init", "--name"}, "flag value is missing"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

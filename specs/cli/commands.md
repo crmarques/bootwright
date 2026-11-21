@@ -8,7 +8,7 @@ The tables define the complete public command tree, operands, flags and defaults
 Every command accepts and parses the presentation flags below. `--context`
 and the `--ssh-*` flags are accepted only by the commands whose use case reads
 them; any other command refuses them as flags it does not accept. The
-context-free commands, which refuse `--context`, are `install`, `uninstall`, `rebind-host`, `init`, `update`, `catalog` and `context` (all subcommands), `help`, `completion`, `version` and `sbom`; only `apply`, `destroy`,
+context-free commands, which refuse `--context`, are `install`, `uninstall`, `rebind-host`, `catalog` and `context` (all subcommands), `help`, `completion`, `version` and `sbom`; only `apply`, `destroy`,
 `machine rsh`, `machine exec`, `machine cp`, `cluster rsh`, `cluster exec` accept
 `--ssh-*`. `machine rsh`, `machine exec`, `cluster rsh` and `cluster exec`
 accept `--ssh-id-file`, `--ssh-user` and `--ssh-ask-password`. `machine cp`
@@ -93,8 +93,8 @@ by a related noun, and `--short` is the one flag that prints names only.
 
 | Invocation | Local flags and defaults | Successful result | Effects |
 | --- | --- | --- | --- |
-| `bootwright init` | `--check` false; required `--name <name>`; optional `-f, --file <context.yaml>` and `--input-dir <dir>` | initialized context and user selection; optional imported-input summary | local context and keyring creation; with `--check`, bounded admission reads |
-| `bootwright update` | `--check` false; required `--name <name>`; at least one of `-f, --file <context.yaml>` or `--input-dir <dir>`; `--yes` false | unchanged configuration or imported-input summary | local atomic input replacement; with `--check`, bounded admission reads |
+| `bootwright context init` | `--check` false; required `--name <name>`; optional `-f, --file <context.yaml>` and `--input-dir <dir>` | initialized context and user selection; optional imported-input summary | local context and keyring creation; with `--check`, bounded admission reads |
+| `bootwright context update` | `--check` false; required `--name <name>`; at least one of `-f, --file <context.yaml>` or `--input-dir <dir>`; `--yes` false | unchanged configuration or imported-input summary | local atomic input replacement; with `--check`, bounded admission reads |
 | `bootwright context use` | required `--name <name>` | selected-current-context summary | local current-context update |
 | `bootwright policy install` | required `-f, --file <file>` | updated context | atomically replace the context authorization policy |
 | `bootwright policy permissions` | none | the caller's granted commands and targets | read the selected context and resolve subjects through NSS |

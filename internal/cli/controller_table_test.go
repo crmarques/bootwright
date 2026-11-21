@@ -35,7 +35,7 @@ func TestAReadySetupStreamedItsChecksAndEndsWithTheTable(t *testing.T) {
 	report := tableReport("unchanged")
 	report.ProgressPresented = true
 	want := "\n    Host      Fedora Linux 44 (amd64), glibc 2.43 — tested\n    Runtime   Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5 — ready\n" +
-		"    Packages  podman 5:5.8.1-1.fc44 (updates)\n    Nothing to do.\n\n    Outcome  unchanged\n    Next     bootwright init --name <name> --input-dir <dir>\n"
+		"    Packages  podman 5:5.8.1-1.fc44 (updates)\n    Nothing to do.\n\n    Outcome  unchanged\n    Next     bootwright context init --name <name> --input-dir <dir>\n"
 	if got := runControllerResult(t, report, nil, "install"); got != want {
 		t.Fatalf("result = %q, want %q", got, want)
 	}

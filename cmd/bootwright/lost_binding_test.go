@@ -188,7 +188,7 @@ func TestALostFrozenBindingLeavesOnlyTheOrphanAcknowledgedDelete(t *testing.T) {
 				Presenter: testLifecyclePresenter{}, Confirmer: deps.Confirmer, Capabilities: removableCapabilities{},
 			}
 			services := assembleServices(deps)
-			contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
+			contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 			contextRun(t, services, 0, "secret", "encryption", "init")
 			contextRun(t, services, 0, "secret", "set", "--name", "opaque", "--value-file", addSecretInput(t, t.TempDir(), "value", "synthetic-opaque-canary"))
 			bound, err := custodyOf(t, services).Bind(context.Background(), custody.BindRequest{ContextName: "alpha", Names: []string{"opaque"}})

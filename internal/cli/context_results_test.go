@@ -27,8 +27,8 @@ func syntheticContextResults() commandResult {
 
 func contextInvocations() [][]string {
 	return [][]string{
-		{"init", "--name", "example", "-f", "input"},
-		{"update", "--name", "example", "-f", "input"},
+		{"context", "init", "--name", "example", "-f", "input"},
+		{"context", "update", "--name", "example", "-f", "input"},
 		{"context", "use", "--name", "example"},
 		{"context", "list"},
 		{"context", "current"},
@@ -57,7 +57,7 @@ func TestContextSuccessJourneysHaveCompleteTextResults(t *testing.T) {
 				t.Fatalf("missing context name: %q", out.String())
 			}
 			switch args[1] {
-			case "init", "update":
+			case "context init", "context update":
 				for _, count := range []string{"Files copied     5", "Files seen       3", "Objects decoded  4"} {
 					if !strings.Contains(out.String(), count) {
 						t.Fatalf("missing count %q: %q", count, out.String())
@@ -172,8 +172,8 @@ func (contextErrorWriter) Write([]byte) (int, error) { return 0, context.Cancele
 
 func TestContextInformationalAndMalformedInvocationsRemainInert(t *testing.T) {
 	for _, args := range [][]string{
-		{"init", "--help"}, {"update", "-f", "input", "--unknown"},
-		{"init", "--name", "example", "-f", "one", "-f", "two"},
+		{"context", "init", "--help"}, {"context", "update", "-f", "input", "--unknown"},
+		{"context", "init", "--name", "example", "-f", "one", "-f", "two"},
 		{"context", "delete", "--name", "example", "--purge=false"},
 		{"context", "current", "--name", "example"},
 		{"render", "effective", "--help"}, {"render", "effective", "-f", "input"},
@@ -214,7 +214,7 @@ func TestContextInitWithoutInputUsesDefaults(t *testing.T) {
 	record := &dispatchRecord{result: syntheticContextResults()}
 	record.result.admission = &contexts.AdmissionResult{Context: contexts.Summary{Name: "test", Mode: contexts.Ready, Current: true}}
 	var out, errOut bytes.Buffer
-	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"init", "--name", "test"})
+	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"context", "init", "--name", "test"})
 	request, ok := record.request.(contexts.InitRequest)
 	if code != 0 || !ok || request != (contexts.InitRequest{Name: "test"}) || errOut.Len() != 0 || !strings.Contains(out.String(), "Input    not imported") || strings.Contains(out.String(), "Files copied") {
 		t.Fatalf("default init contract: code=%d request=%#v stdout=%q stderr=%q", code, record.request, out.String(), errOut.String())
@@ -226,9 +226,9 @@ func TestContextConfigurationAndInputFlagsAreIndependent(t *testing.T) {
 		args []string
 		want any
 	}{
-		{[]string{"init", "--name", "test", "-f", "context.yaml", "--input-dir", "input"}, contexts.InitRequest{Name: "test", ConfigurationFile: "context.yaml", InputDirectory: "input"}},
-		{[]string{"update", "--name", "test", "-f", "context.yaml"}, contexts.UpdateRequest{Name: "test", ConfigurationFile: "context.yaml"}},
-		{[]string{"update", "--name", "test", "--input-dir", "input", "--yes"}, contexts.UpdateRequest{Name: "test", InputDirectory: "input", SkipConfirmation: true}},
+		{[]string{"context", "init", "--name", "test", "-f", "context.yaml", "--input-dir", "input"}, contexts.InitRequest{Name: "test", ConfigurationFile: "context.yaml", InputDirectory: "input"}},
+		{[]string{"context", "update", "--name", "test", "-f", "context.yaml"}, contexts.UpdateRequest{Name: "test", ConfigurationFile: "context.yaml"}},
+		{[]string{"context", "update", "--name", "test", "--input-dir", "input", "--yes"}, contexts.UpdateRequest{Name: "test", InputDirectory: "input", SkipConfirmation: true}},
 	} {
 		record := &dispatchRecord{result: syntheticContextResults()}
 		code := New(Config{Services: dispatchSpies(record)}).Run(context.Background(), tc.args)
@@ -237,8 +237,8 @@ func TestContextConfigurationAndInputFlagsAreIndependent(t *testing.T) {
 		}
 	}
 	for _, args := range [][]string{
-		{"init", "--name", "test", "--yes"},
-		{"init", "--name", "test", "--input-dir="},
+		{"context", "init", "--name", "test", "--yes"},
+		{"context", "init", "--name", "test", "--input-dir="},
 		{"context", "delete", "--name", "test", "--purge", "--abandon-resources"},
 		{"secret", "encryption", "init", "--type", "local-keyring"},
 	} {
@@ -287,7 +287,7 @@ func TestContextCheckReportsProposedInputWithoutClaimingPublication(t *testing.T
 			Context: contexts.Summary{Name: "lab", Mode: tc.mode}, Checked: true, InputChanged: tc.changed,
 		}}}
 		code := New(Config{Out: &out, ErrOut: &stderr, Services: dispatchSpies(record)}).Run(t.Context(),
-			[]string{tc.command, "--name", "lab", "--input-dir", "fixture", "--check"})
+			[]string{"context", tc.command, "--name", "lab", "--input-dir", "fixture", "--check"})
 		if code != 0 || stderr.Len() != 0 || !strings.Contains(out.String(), tc.want) ||
 			strings.Contains(out.String(), "Files copied") {
 			t.Fatalf("%s check: code=%d stdout=%s stderr=%s", tc.command, code, &out, &stderr)

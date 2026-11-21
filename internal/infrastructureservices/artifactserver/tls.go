@@ -158,7 +158,7 @@ func (r servingRemedies) cover(address string) string {
 		field = "spec.source.generated.ipAddresses"
 	}
 	return "store a certificate that names " + address + " with " + r.set() + ", or, for a generated Secret, add " + address + " to " + field +
-		", import the change with bootwright update --name " + r.contextName() + " --input-dir <dir> and run bootwright secret generate --name " + r.secret + r.contextFlag() + "; " + r.exit()
+		", import the change with bootwright context update --name " + r.contextName() + " --input-dir <dir> and run bootwright secret generate --name " + r.secret + r.contextFlag() + "; " + r.exit()
 }
 
 func (r servingRemedies) contextName() string {

@@ -30,7 +30,7 @@ meanwhile. It does not migrate implementations, and reports the keys it retired 
 and parts it re-encrypted.
 Encryption initialization/status/rotation require context identity and
 configuration, but no desired-state revision. Declaration-dependent commands
-require an imported revision and provide `update --input-dir` guidance
+require an imported revision and provide `context update --input-dir` guidance
 when it is absent.
 
 Store access consumes a resolver interface, so the catalog itself is replaceable.

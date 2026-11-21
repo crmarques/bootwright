@@ -56,7 +56,7 @@ var rootHelpGroups = []struct {
 }{
 	{"Run the lifecycle", []string{"apply", "destroy"}},
 	{"Inspect and troubleshoot", []string{"status", "logs", "diff", "explain"}},
-	{"Prepare Bootwright and its inputs", []string{"install", "uninstall", "init", "update", "validate", "context", "catalog", "secret", "render"}},
+	{"Prepare Bootwright and its inputs", []string{"install", "uninstall", "validate", "context", "catalog", "secret", "render"}},
 	{"Recovery", []string{"rebind-host"}},
 	{"Work with machines and clusters", []string{"machine", "cluster", "policy"}},
 	{"CLI tools", []string{"version", "sbom", "completion", "help"}},

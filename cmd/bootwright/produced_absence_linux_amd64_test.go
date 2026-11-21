@@ -63,7 +63,7 @@ func productionSourcesContext(t *testing.T, name, example string, sources desire
 		}
 		addSecretInput(t, filepath.Join(input, filepath.Dir(relative)), filepath.Base(relative), string(file.Bytes()))
 	}
-	contextRun(t, services, 0, "init", "--name", name, "--input-dir", input)
+	contextRun(t, services, 0, "context", "init", "--name", name, "--input-dir", input)
 	return services, repository
 }
 

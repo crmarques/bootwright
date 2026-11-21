@@ -315,7 +315,7 @@ func controllerNextCommand(command string, report *prerequisites.Report) string 
 		return report.Next
 	}
 	if report.Outcome == "changed" || report.Outcome == "unchanged" {
-		return "bootwright init --name <name> --input-dir <dir>"
+		return "bootwright context init --name <name> --input-dir <dir>"
 	}
 	return ""
 }

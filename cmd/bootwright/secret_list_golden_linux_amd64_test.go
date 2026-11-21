@@ -17,7 +17,7 @@ func TestSecretListGoldenNamesTheKeyringOrdinals(t *testing.T) {
 	t.Parallel()
 	services, _, input, _ := contextFixture(t)
 	addSecretInput(t, input, "secret.yaml", secretDocument("credential", "opaque", "")+"\n---\n"+secretDocument("other", "opaque", ""))
-	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	value := addSecretInput(t, t.TempDir(), "value", "synthetic-first-canary")
 	contextRun(t, services, 0, "secret", "set", "--name", "credential", "--value-file", value)
 	contextRun(t, services, 0, "secret", "set", "--name", "other", "--value-file", value)

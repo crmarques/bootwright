@@ -158,7 +158,7 @@ func (s Service) setup(ctx context.Context, request SetupRequest) (*Report, erro
 		}
 		if current.ready() {
 			current.report.Outcome = "unchanged"
-			current.report.Next = "bootwright init --name <name> --input-dir <dir>"
+			current.report.Next = "bootwright context init --name <name> --input-dir <dir>"
 		} else {
 			current.plan()
 			current.report.Next = setupInvocation

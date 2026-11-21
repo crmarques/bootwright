@@ -15,13 +15,13 @@ import (
 )
 
 const (
-	absentGhost = "  error  context.state\n    context ghost does not exist\n    Next: create it with bootwright init --name ghost, " +
+	absentGhost = "  error  context.state\n    context ghost does not exist\n    Next: create it with bootwright context init --name ghost, " +
 		"or select an existing one with bootwright context use --name <context>; bootwright context list names them\n"
-	absentEmpty = "  error  context.state\n    context empty does not exist\n    Next: create it with bootwright init --name empty, " +
+	absentEmpty = "  error  context.state\n    context empty does not exist\n    Next: create it with bootwright context init --name empty, " +
 		"or select an existing one with bootwright context use --name <context>; bootwright context list names them\n"
-	missingEmptyInput = "  error  context.input\n    context empty has no desired state\n    Next: import it with bootwright update --name empty --input-dir <dir>\n"
+	missingEmptyInput = "  error  context.input\n    context empty has no desired state\n    Next: import it with bootwright context update --name empty --input-dir <dir>\n"
 	noSelection       = "  error  context.state\n    no current context is selected\n    Next: select one with bootwright context use --name <context>, " +
-		"or create one with bootwright init --name <context>\n"
+		"or create one with bootwright context init --name <context>\n"
 )
 
 // refusal runs one invocation that must refuse before any effect and returns
@@ -49,7 +49,7 @@ func TestEveryCommandNamesAnAbsentContextAndItsNextCommand(t *testing.T) {
 	explicit := func(input string) [][]string {
 		return [][]string{
 			{"context", "use", "--name", "ghost"},
-			{"update", "--name", "ghost", "--input-dir", input, "--yes"},
+			{"context", "update", "--name", "ghost", "--input-dir", input, "--yes"},
 			{"context", "delete", "--name", "ghost", "--purge", "--yes"},
 			{"validate", "--context", "ghost"},
 			{"render", "effective", "--context", "ghost"},
@@ -75,10 +75,10 @@ func TestEveryCommandNamesAnAbsentContextAndItsNextCommand(t *testing.T) {
 	}{
 		{name: "no store", prepare: func(*testing.T, cli.Services, string, string) {}},
 		{name: "a store", prepare: func(t *testing.T, services cli.Services, input, _ string) {
-			contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
+			contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 		}},
 		{name: "a stale selection", implicit: true, prepare: func(t *testing.T, services cli.Services, input, root string) {
-			contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
+			contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 			if err := testContextWiring(t, root).Selection.Write(context.Background(), contexts.Selection{Version: contexts.SelectionVersion, Name: "ghost"}); err != nil {
 				t.Fatal(err)
 			}
@@ -105,7 +105,7 @@ func TestEveryCommandNamesAnAbsentContextAndItsNextCommand(t *testing.T) {
 func TestOneCodeNamesAMissingInput(t *testing.T) {
 	t.Parallel()
 	services, _, _, _ := contextFixture(t)
-	contextRun(t, services, 0, "init", "--name", "empty")
+	contextRun(t, services, 0, "context", "init", "--name", "empty")
 	for _, args := range [][]string{
 		{"validate", "--context", "empty"},
 		{"render", "effective", "--context", "empty"},
@@ -134,7 +134,7 @@ func TestNoSelectionReadsTheSameEverywhere(t *testing.T) {
 	}{
 		{name: "no store", prepare: func(*testing.T, cli.Services, string) {}},
 		{name: "a store without a selection", prepare: func(t *testing.T, services cli.Services, input string) {
-			contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
+			contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 			contextRun(t, services, 0, "context", "delete", "--name", "alpha", "--purge", "--yes")
 		}},
 	} {
@@ -192,7 +192,7 @@ func TestAnUnsafeSelectionFileIsNamedWithItsRepair(t *testing.T) {
 	} {
 		t.Run(unsafe.name, func(t *testing.T) {
 			services, _, input, root := contextFixture(t)
-			contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
+			contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 			if err := unsafe.damage(filepath.Dir(root)); err != nil {
 				t.Fatal(err)
 			}
@@ -201,7 +201,7 @@ func TestAnUnsafeSelectionFileIsNamedWithItsRepair(t *testing.T) {
 				requireContextRefusal(t, services, want, args...)
 			}
 			requireContextRefusal(t, services, "  error  context.state\n    context beta was created, but the current selection could not be updated: "+
-				unsafe.message+"\n    Next: select it with bootwright context use --name beta\n", "init", "--name", "beta")
+				unsafe.message+"\n    Next: select it with bootwright context use --name beta\n", "context", "init", "--name", "beta")
 			requireContextRefusal(t, services, want, "context", "use", "--name", "beta")
 		})
 	}
@@ -216,6 +216,6 @@ func TestAnUnavailableSecretStoreTypeIsRefusedUnderItsContextFile(t *testing.T) 
 	if err := os.WriteFile(file, []byte("apiVersion: bootwright.io/v1alpha1\nkind: Context\nmetadata:\n  name: demo\nspec:\n  secretStore:\n    type: vault\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	requireContextRefusal(t, services, "  error  secret.store.implementation\n    "+file+"\n    requested secret store type is unavailable\n    Next: configure the Secret store implementation the message names\n", "init", "--name", "demo", "-f", file)
+	requireContextRefusal(t, services, "  error  secret.store.implementation\n    "+file+"\n    requested secret store type is unavailable\n    Next: configure the Secret store implementation the message names\n", "context", "init", "--name", "demo", "-f", file)
 	requireContextRefusal(t, services, strings.ReplaceAll(absentGhost, "ghost", "demo"), "context", "use", "--name", "demo")
 }

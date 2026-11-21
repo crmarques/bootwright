@@ -29,9 +29,9 @@ func requireRefusal(t *testing.T, err error, code, message, remediation string) 
 func TestContextRefusalsNameTheContextAndTheNextCommand(t *testing.T) {
 	const (
 		absent       = "context ghost does not exist"
-		absentRemedy = "create it with bootwright init --name ghost, or select an existing one with bootwright context use --name <context>; bootwright context list names them"
+		absentRemedy = "create it with bootwright context init --name ghost, or select an existing one with bootwright context use --name <context>; bootwright context list names them"
 		initializing = "context example is still initializing: an earlier init did not finish"
-		resume       = "finish it with bootwright init --name example and its original Context file, from any input directory, or discard it with bootwright context delete --name example --purge"
+		resume       = "finish it with bootwright context init --name example and its original Context file, from any input directory, or discard it with bootwright context delete --name example --purge"
 		deleting     = "context example is being deleted"
 		finish       = "finish the deletion with bootwright context delete --name example --purge"
 	)
@@ -39,17 +39,17 @@ func TestContextRefusalsNameTheContextAndTheNextCommand(t *testing.T) {
 	t.Run("constructors", func(t *testing.T) {
 		requireRefusal(t, contexts.AbsentContext("ghost"), "context.state", absent, absentRemedy)
 		requireRefusal(t, contexts.NoSelection(), "context.state", "no current context is selected",
-			"select one with bootwright context use --name <context>, or create one with bootwright init --name <context>")
+			"select one with bootwright context use --name <context>, or create one with bootwright context init --name <context>")
 		requireRefusal(t, contexts.MissingInput("example"), "context.input", "context example has no desired state",
-			"import it with bootwright update --name example --input-dir <dir>")
+			"import it with bootwright context update --name example --input-dir <dir>")
 		requireRefusal(t, contexts.NotReady(example(contexts.Initializing)), "context.state", initializing, resume)
 		requireRefusal(t, contexts.NotReady(example(contexts.Deleting)), "context.state", deleting, finish)
 		requireRefusal(t, contexts.AlreadyExists(example(contexts.Ready)), "context.state", "context example already exists",
-			"replace its input with bootwright update --name example --input-dir <dir>, or delete it with bootwright context delete --name example --purge")
+			"replace its input with bootwright context update --name example --input-dir <dir>, or delete it with bootwright context delete --name example --purge")
 		requireRefusal(t, contexts.AlreadyExists(example(contexts.Deleting)), "context.state", deleting, finish+", then repeat the init")
 		requireRefusal(t, contexts.IncompleteOperation("example"), "context.state", "context example has an incomplete operation, which continues from the input it froze",
 			"continue it with the command bootwright status --context example names, or take back what it owns with bootwright destroy --context example, then repeat the update")
-		requireRefusal(t, contexts.NoContexts(), "context.state", "no context exists on this host yet", "create one with bootwright init --name <name>")
+		requireRefusal(t, contexts.NoContexts(), "context.state", "no context exists on this host yet", "create one with bootwright context init --name <name>")
 	})
 	t.Run("init over an existing name", func(t *testing.T) {
 		for _, mode := range []contexts.Mode{contexts.Ready, contexts.Deleting} {

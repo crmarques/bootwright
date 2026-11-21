@@ -127,8 +127,8 @@ func heldReservations(t *testing.T, repository *contextfs.Store) []infrastructur
 func TestDeletingAContextHoldingAnUnknownBlockReleasesItsReservations(t *testing.T) {
 	t.Parallel()
 	services, repository, input, _ := contextFixture(t)
-	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
-	contextRun(t, services, 0, "init", "--name", "bravo", "--input-dir", input)
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "context", "init", "--name", "bravo", "--input-dir", input)
 	publishCompletedSetup(t, repository, "alpha", "bravo")
 	reserveFor(t, repository, "alpha", "socket:192.0.2.1:8080", "unit:bootwright-artifact-alpha")
 	reserveFor(t, repository, "bravo", "socket:192.0.2.1:8081")
