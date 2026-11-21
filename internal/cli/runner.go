@@ -222,27 +222,19 @@ func (r *Runner) run(ctx context.Context, args []string) int {
 		command = resolved.helpTarget
 	}
 	if resolved.helpTarget != nil || boolValue(command.Flags(), "help") {
-		if err := r.writeSelectedHelp(command); err != nil {
-			return 1
-		}
-		return 0
+		return r.showHelp(command)
 	}
-	if message := validateInvocation(command, path); message != "" {
-		return r.failure(command, path, "cli.usage", message, 2, selectedJSON(command))
+	incomplete, problem := validateInvocation(command, path)
+	if problem != "" {
+		return r.failure(command, path, "cli.usage", problem, 2, selectedJSON(command))
+	}
+	if incomplete {
+		return r.showHelp(command)
 	}
 	if refuse := specFor(path).refuse; refuse != nil {
 		if message := refuse(r, command); message != "" {
 			return r.failure(command, path, "cli.usage", message, 2, selectedJSON(command))
 		}
-	}
-	if path == "" || path == "completion" || path == "check" || path == "plan" {
-		if err := r.writeSelectedHelp(command); err != nil {
-			return 1
-		}
-		return 0
-	}
-	if command.Annotations["bootwright.command"] == "" {
-		return r.failure(command, path, "cli.usage", "a complete command path is required", 2, selectedStructured(command))
 	}
 	if present := specFor(path).present; present != nil {
 		return present(r, root, command, path)
@@ -251,6 +243,13 @@ func (r *Runner) run(ctx context.Context, args []string) int {
 		return r.unavailableSelection(path, selection, selectedStructured(command))
 	}
 	return r.execute(ctx, command, path)
+}
+
+func (r *Runner) showHelp(command *cobra.Command) int {
+	if err := r.writeSelectedHelp(command); err != nil {
+		return 1
+	}
+	return 0
 }
 
 func (r *Runner) execute(ctx context.Context, command *cobra.Command, path string) int {

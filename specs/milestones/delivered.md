@@ -18133,3 +18133,12 @@ beside built-in add-ons and the schema. [Lifecycle previews](../cli.md#lifecycle
 name the operation. The same completed context can preview a settled apply
 and a removal. The lifecycle regression proves both previews leave the
 operation records unchanged. The delivering commit records the gates.
+
+## X644 — Help for incomplete CLI invocations
+
+**Owner:** CLI. **Item:** B1652 (product). **Authority:** explicit owner request.
+
+The [CLI command tree](../cli.md#command-tree) defines help for incomplete
+invocations. Runner regressions compare implicit and explicit help in text,
+JSON and YAML and verify that malformed input still fails. The delivering
+commit records the verification results.

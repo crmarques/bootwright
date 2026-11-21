@@ -16,86 +16,100 @@ import (
 
 var untilObject = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
-func validateInvocation(command *cobra.Command, path string) string {
+func validateInvocation(command *cobra.Command, path string) (incomplete bool, problem string) {
 	flags := command.Flags()
 	spec := specFor(path)
-	if spec.operandCheck != nil {
-		if err := spec.operandCheck(flags.Args()); err != nil {
-			return err.Error()
-		}
-	} else if hasPayload(command) {
-		if len(flags.Args()) == 0 || flags.Args()[0] == "" {
-			return "a non-empty command argument vector is required"
-		}
-	} else if len(flags.Args()) != 0 {
-		if spec.operandRemedy != nil {
-			if remedy := spec.operandRemedy(flags); remedy != "" {
-				return remedy
-			}
-		}
-		return "this command accepts no positional operands"
+	missingOperands, problem := validateOperands(command, spec)
+	if problem != "" {
+		return false, problem
 	}
-	if message := validateFlagValues(flags, spec); message != "" {
-		return payloadFlagRemedy(command, message)
+	missingFlags, problem := validateFlagValues(command, spec)
+	if problem != "" {
+		return false, problem
 	}
 	if message := validateSharedFlags(command, spec); message != "" {
-		return message
+		return false, message
 	}
 	if spec.validate != nil {
-		return spec.validate(command)
-	}
-	return ""
-}
-
-func payloadFlagRemedy(command *cobra.Command, message string) string {
-	name, ok := strings.CutSuffix(strings.TrimPrefix(message, "--"), " is required")
-	if !ok || !hasPayload(command) {
-		return message
-	}
-	for _, operand := range command.Flags().Args() {
-		if operand == "--"+name || strings.HasPrefix(operand, "--"+name+"=") {
-			return message + "; Bootwright flags go before the remote command"
+		if message := spec.validate(command); message != "" {
+			return false, message
 		}
 	}
-	return message
+	incomplete = !command.Runnable() || missingOperands || missingFlags || spec.missingInput != nil && spec.missingInput(flags)
+	if !incomplete && spec.session && selectedStructured(command) {
+		return false, "live SSH sessions require --output text"
+	}
+	return incomplete, ""
 }
 
-func validateFlagValues(flags *pflag.FlagSet, spec commandSpec) string {
+func validateOperands(command *cobra.Command, spec commandSpec) (incomplete bool, problem string) {
+	flags := command.Flags()
+	args := flags.Args()
+	switch {
+	case spec.operandCheck != nil:
+		return spec.operandCheck(args)
+	case hasPayload(command):
+		if len(args) == 0 {
+			return true, ""
+		}
+		if args[0] == "" {
+			return false, "a non-empty command argument vector is required"
+		}
+	case len(args) != 0:
+		if spec.operandRemedy != nil {
+			if remedy := spec.operandRemedy(flags); remedy != "" {
+				return false, remedy
+			}
+		}
+		return false, "this command accepts no positional operands"
+	}
+	return false, ""
+}
+
+func misplacedPayloadFlag(command *cobra.Command, name string) bool {
+	if !hasPayload(command) {
+		return false
+	}
+	return slices.ContainsFunc(command.Flags().Args(), func(operand string) bool {
+		return operand == "--"+name || strings.HasPrefix(operand, "--"+name+"=")
+	})
+}
+
+func validateFlagValues(command *cobra.Command, spec commandSpec) (incomplete bool, problem string) {
+	flags := command.Flags()
 	for _, flag := range append(globalFlags(), spec.flags...) {
 		parsed := flags.Lookup(flag.name)
 		if parsed == nil {
 			continue
 		}
+		if flag.required && !parsed.Changed {
+			if misplacedPayloadFlag(command, flag.name) {
+				return false, "--" + flag.name + " is required; Bootwright flags go before the remote command"
+			}
+			incomplete = true
+			continue
+		}
 		if value, ok := parsed.Value.(*scalarValue); ok && value.hasEmptyOccurrence && !flag.emptyOK {
-			return "--" + flag.name + " must not contain an empty occurrence"
+			return false, "--" + flag.name + " must not contain an empty occurrence"
 		}
 		if flag.kind == "stringArray" {
-			values := arrayValue(flags, flag.name)
-			for _, value := range values {
-				if value == "" {
-					return "--" + flag.name + " must not contain an empty occurrence"
-				}
-			}
-			if flag.required && len(values) == 0 {
-				return "--" + flag.name + " is required"
+			if slices.Contains(arrayValue(flags, flag.name), "") {
+				return false, "--" + flag.name + " must not contain an empty occurrence"
 			}
 			continue
 		}
 		value := stringValue(flags, flag.name)
-		if flag.required && value == "" {
-			return "--" + flag.name + " is required"
-		}
 		if flag.enumList {
-			if message := validateEnumList(flag, normalizeNames(value), flags.Changed(flag.name)); message != "" {
-				return message
+			if message := validateEnumList(flag, normalizeNames(value), parsed.Changed); message != "" {
+				return false, message
 			}
 			continue
 		}
 		if len(flag.enum) > 0 && !contains(flag.enum, value) {
-			return "--" + flag.name + " must be one of: " + strings.Join(flag.enum, ", ")
+			return false, "--" + flag.name + " must be one of: " + strings.Join(flag.enum, ", ")
 		}
 	}
-	return ""
+	return incomplete, ""
 }
 
 func validateSharedFlags(command *cobra.Command, spec commandSpec) string {
@@ -124,9 +138,6 @@ func validateSharedFlags(command *cobra.Command, spec commandSpec) string {
 		if flags.Changed("ssh-id-file") {
 			return "--ssh-ask-password conflicts with --ssh-id-file"
 		}
-	}
-	if spec.session && selectedStructured(command) {
-		return "live SSH sessions require --output text"
 	}
 	if boolValue(flags, "ssh-ask-sudo-password") && selectedJSON(command) {
 		return "--ssh-ask-sudo-password conflicts with " + structuredLabel(command) + " output"
@@ -249,7 +260,7 @@ func validateSecretInput(flags *pflag.FlagSet) string {
 
 func validateMediaSource(flags *pflag.FlagSet) string {
 	file, sourceURL, urlFile := stringValue(flags, "from-file"), stringValue(flags, "from-url"), stringValue(flags, "from-url-file")
-	if given := len(slices.DeleteFunc([]string{file, sourceURL, urlFile}, func(v string) bool { return v == "" })); given != 1 {
+	if given := len(slices.DeleteFunc([]string{file, sourceURL, urlFile}, func(v string) bool { return v == "" })); given > 1 {
 		return "media add requires exactly one of --from-file, --from-url and --from-url-file"
 	}
 	digest := stringValue(flags, "sha256")
@@ -263,6 +274,9 @@ func validateMediaSource(flags *pflag.FlagSet) string {
 	}
 	if file != "" {
 		return validateMediaFile(file)
+	}
+	if sourceURL == "" && urlFile == "" {
+		return ""
 	}
 	if digest == "" {
 		return "a download requires --sha256"

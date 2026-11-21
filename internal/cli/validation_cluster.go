@@ -8,7 +8,7 @@ import (
 )
 
 func validateClusterAdminName(command *cobra.Command) string {
-	if !api.ValidLexical(api.LexicalName, stringValue(command.Flags(), "name")) {
+	if command.Flags().Changed("name") && !api.ValidLexical(api.LexicalName, stringValue(command.Flags(), "name")) {
 		return "--name must name exactly one cluster"
 	}
 	return ""
@@ -53,7 +53,7 @@ func validateClusterNames(command *cobra.Command, info bool) string {
 			return sensitive + " requires an explicit --name"
 		}
 		return ""
-	case len(names) == 0:
+	case len(names) == 0 && flags.Changed("name"):
 		return "--name must name at least one cluster"
 	case sensitive != "" && len(names) > 1:
 		return sensitive + " reveals one cluster's values; name one cluster"

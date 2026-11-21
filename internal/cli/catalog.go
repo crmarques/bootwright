@@ -32,7 +32,8 @@ type commandSpec struct {
 	helpCommand      bool
 	invoke           commandInvoker
 	validate         commandValidator
-	operandCheck     func([]string) error
+	missingInput     func(*pflag.FlagSet) bool
+	operandCheck     func([]string) (incomplete bool, problem string)
 	operandRemedy    func(*pflag.FlagSet) string
 	refuse           func(*Runner, *cobra.Command) string
 	classify         classifyRules

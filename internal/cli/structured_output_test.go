@@ -74,10 +74,10 @@ func TestStructuredPresentationAndUsageAreSingleDocuments(t *testing.T) {
 		{[]string{"version", "-oyaml"}, 0},
 		{[]string{"help", "context", "init", "-o=json"}, 0},
 		{[]string{"completion", "bash", "--output", "yaml"}, 0},
-		{[]string{"render", "-o", "yaml"}, 2},
+		{[]string{"render", "-o", "yaml"}, 0},
 		{[]string{"--output", "yaml", "unknown"}, 2},
 		{[]string{"version", "--bad", "-o", "yaml"}, 2},
-		{[]string{"context", "init", "-o", "yaml"}, 2},
+		{[]string{"context", "init", "-o", "yaml"}, 0},
 		{[]string{"version", "--width", "23", "-o", "json"}, 2},
 	} {
 		code, out, errOut, record := runRecorded(invocation.args)
@@ -109,9 +109,9 @@ func TestStructuredSessionsRefuseBeforeOpening(t *testing.T) {
 			}
 		}
 	}
-	// Payload text must not select Bootwright's format, even on a usage failure.
-	_, out, errOut, _ := runRecorded([]string{"machine", "exec", "uptime", "--output", "yaml"})
-	if out != "" || !strings.Contains(errOut, "--name is required") {
+	// Payload text must not select Bootwright's format for incomplete help.
+	code, out, errOut, _ := runRecorded([]string{"machine", "exec", "uptime", "--output", "yaml"})
+	if code != 0 || !strings.HasPrefix(out, "  bootwright / machine exec\n") || errOut != "" {
 		t.Fatalf("payload selected output: %q %q", out, errOut)
 	}
 }
@@ -474,9 +474,6 @@ func TestSchemaWritesTheAdvisoryExport(t *testing.T) {
 	if code != 0 || result["format"] != "json-schema" || schema["$schema"] != api.JSONSchemaDialect {
 		t.Fatalf("schema -o json: code %d stdout %.300s", code, out)
 	}
-	if code, _, _, _ := runRecorded([]string{"catalog", "schema"}); code != 2 {
-		t.Fatalf("schema without --format exited %d, want the usage refusal", code)
-	}
 }
 
 // sbom writes the CycloneDX document itself in text mode and places it in
@@ -504,8 +501,5 @@ func TestBillOfMaterialsWritesTheCycloneDXDocument(t *testing.T) {
 	}
 	if code, _ := run(Config{}, "sbom", "--format", "cyclonedx-json"); code != 1 {
 		t.Fatalf("an executable with no bill of materials exited %d", code)
-	}
-	if code, _ := run(Config{BillOfMaterials: compose}, "sbom"); code != 2 {
-		t.Fatalf("sbom without --format exited %d, want the usage refusal", code)
 	}
 }

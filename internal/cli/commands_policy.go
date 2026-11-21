@@ -7,11 +7,12 @@ import (
 
 	"github.com/crmarques/bootwright/internal/machine/sessionpolicy"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 func policyCommands() []commandSpec {
 	return []commandSpec{
-		available(commandSpec{path: "policy install", flags: []flagSpec{requiredPolicyFile()}, validate: validatePolicyInstall,
+		available(commandSpec{path: "policy install", flags: []flagSpec{requiredPolicyFile()}, validate: validatePolicyInstall, missingInput: missingPolicyContext,
 			results: []jsonResult{policyInstallation{}}, render: renderPolicyInstall(),
 			example: "--context lab --file sessions.yaml", invoke: Services.invokePolicyInstall, short: "Install a context's session access policy", long: "Validate and atomically replace the delegated SSH session policy. Requires an explicit --context and exactly one --file."}),
 		available(commandSpec{path: "policy permissions", results: []jsonResult{policyPermissions{}},
@@ -25,11 +26,12 @@ func requiredPolicyFile() flagSpec {
 	return flag
 }
 
+func missingPolicyContext(flags *pflag.FlagSet) bool {
+	return stringValue(flags, "context") == ""
+}
+
 func validatePolicyInstall(command *cobra.Command) string {
-	if !command.Flags().Changed("context") || stringValue(command.Flags(), "context") == "" {
-		return "policy install requires an explicit --context"
-	}
-	if len(arrayValue(command.Flags(), "file")) != 1 {
+	if len(arrayValue(command.Flags(), "file")) > 1 {
 		return "policy install requires exactly one --file"
 	}
 	return ""

@@ -11,7 +11,7 @@
   Command flags
       --allow-orphans  Delete although the context still owns realized objects
       --name           Select the exact object name (required)
-      --purge          Acknowledge permanent context data deletion
+      --purge          Acknowledge permanent context data deletion (required)
       --yes            Confirm the command's ordinary confirmation
 
   Common flags

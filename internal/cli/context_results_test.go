@@ -239,13 +239,12 @@ func TestContextConfigurationAndInputFlagsAreIndependent(t *testing.T) {
 	for _, args := range [][]string{
 		{"context", "init", "--name", "test", "--yes"},
 		{"context", "init", "--name", "test", "--input-dir="},
-		{"context", "update", "--name", "test"},
 		{"context", "delete", "--name", "test", "--purge", "--abandon-resources"},
 		{"secret", "encryption", "init", "--type", "local-keyring"},
 	} {
 		record := &dispatchRecord{}
 		if code := New(Config{Services: dispatchSpies(record)}).Run(context.Background(), args); code != 2 || record.calls != 0 {
-			t.Fatal("removed or incomplete invocation reached application", args, code, record.calls)
+			t.Fatal("invalid invocation was admitted", args, code, record.calls)
 		}
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/crmarques/bootwright/internal/managedos/media"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 type commandValidator func(*cobra.Command) string
@@ -24,7 +25,7 @@ func firstRefusal(validators ...commandValidator) commandValidator {
 }
 
 func validateContextName(command *cobra.Command) string {
-	if command.Flags().Lookup("name") != nil && !dnsLabel(stringValue(command.Flags(), "name")) {
+	if command.Flags().Changed("name") && !dnsLabel(stringValue(command.Flags(), "name")) {
 		return "--name must be a lowercase DNS label"
 	}
 	return ""
@@ -37,16 +38,12 @@ func validateContextFile(command *cobra.Command) string {
 	return ""
 }
 
-func validateContextUpdate(command *cobra.Command) string {
-	flags := command.Flags()
-	if len(arrayValue(flags, "file")) == 0 && stringValue(flags, "input-dir") == "" {
-		return "context update requires --file or --input-dir"
-	}
-	return ""
+func missingContextUpdateInput(flags *pflag.FlagSet) bool {
+	return !hasFiles(flags) && !hasInputDir(flags)
 }
 
 func validateContextDelete(command *cobra.Command) string {
-	if !boolValue(command.Flags(), "purge") {
+	if command.Flags().Changed("purge") && !boolValue(command.Flags(), "purge") {
 		return "context delete requires --purge=true"
 	}
 	return ""
@@ -140,10 +137,14 @@ func validateSecretSet(command *cobra.Command) string {
 }
 
 func validateMediaName(command *cobra.Command) string {
-	if !media.ValidName(stringValue(command.Flags(), "name")) {
+	if command.Flags().Changed("name") && !media.ValidName(stringValue(command.Flags(), "name")) {
 		return "--name must be a portable installer-image basename ending in .iso"
 	}
 	return ""
+}
+
+func missingMediaSource(flags *pflag.FlagSet) bool {
+	return !flags.Changed("from-file") && !flags.Changed("from-url") && !flags.Changed("from-url-file")
 }
 
 func validateMediaAdd(command *cobra.Command) string {
@@ -192,7 +193,7 @@ func validateMachineTrustCommand(command *cobra.Command) string {
 func validateMachineNames(command *cobra.Command) string {
 	flags := command.Flags()
 	names := normalizeNames(stringValue(flags, "name"))
-	if len(names) == 0 {
+	if flags.Changed("name") && len(names) == 0 {
 		return "--name must name at least one machine"
 	}
 	normalizeScalar(flags, "name", strings.Join(names, ","))

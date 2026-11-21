@@ -28,9 +28,10 @@ before output or ambient access.
 
 The [catalog](cli/commands.md#command-and-flag-catalog) is the sole list of
 command paths. With no arguments, the root prints root help and succeeds.
-Bare `help` prints root help. Bare `completion`, `check` and `plan` print their
-group help and succeed. Every incomplete domain parent, `render` included, prints help and
-fails with a usage error.
+Bare `help` prints root help. A command group without a subcommand prints its
+own help and succeeds. A command missing a required flag, a required choice
+of input, or a positional operand also prints its own help and succeeds
+after validating supplied input.
 
 The former root groups `example` and `container-cluster` are absent, with no
 aliases or hidden compatibility handlers. Their paths, including explicit help
@@ -54,9 +55,10 @@ Every invocation admitted by that boundary follows this precedence:
 1. enforce the raw-argument bounds below;
 2. resolve exact command and flag tokens and their syntactic values;
 3. honor an explicit help request;
-4. validate semantic operands, presence, cardinality, enums, formats, defaults,
-   and flag relationships, including context-independent inherited flags;
-5. decide whether the resolved use case, or the part of its selection that
+4. validate supplied operands and flags, including cardinality, enums, formats
+   and flag relationships, and identify missing required inputs;
+5. show help for an incomplete command;
+6. decide whether the resolved use case, or the part of its selection that
    [preflight --stage](cli/commands.md#flag-relationships-and-safeguards)
    names, is available.
 
@@ -64,9 +66,12 @@ Explicit help therefore outranks required-value, enum, cardinality, and
 relationship validation only after the raw bounds and command/flag syntax are
 valid. It continues to follow the no-effect contract under
 [Global flags](cli/commands.md#global-flags). Root help, explicit help requests,
-bare `completion`, completion scripts, and the private completion
-protocol retain their defined behavior; malformed or incomplete usage remains
-`cli.usage` with exit status `2`.
+completion scripts and the private completion protocol retain their defined
+behavior. Implicit help follows the same stream and no-effect contract.
+Unknown tokens, flags supplied without a value, invalid values, invalid
+operands, and invalid flag combinations remain `cli.usage` with exit status
+`2`. The live SSH output restriction applies once the command has all required
+inputs.
 
 A syntactically complete application invocation whose use case is unavailable
 calls its injected, typed application stub. The stub accepts the validated

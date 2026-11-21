@@ -47,8 +47,9 @@ capabilities. JSON and YAML never contain streamed progress, color or cursor con
 Sudo may prompt directly on the controlling terminal when standard input is a
 terminal, as [local privilege](../cli.md#local-privilege-and-user-identity)
 defines; its authentication never enters the structured output streams.
-Live SSH sessions are a stream exception: selecting either structured format
-refuses with `cli.usage` before service dispatch, privilege or session effects.
+Live SSH sessions require text output. A complete session invocation with a
+structured output selector refuses with `cli.usage` before service dispatch,
+privilege or session effects.
 Structured secret input from a terminal also refuses with `cli.usage` before
 privilege or any hidden read; provide it through a pipe or a file.
 Default raw exports remain byte-exact. Explicit structured credential and
@@ -481,9 +482,10 @@ field between array, object, scalar, and `null`.
 
 JSON uses no insignificant whitespace, does not HTML-escape strings, and ends
 with one LF. A JSON-mode failure never emits a partial success document followed
-by an error document. Help, including the successful bare-`render` special
-case, uses the selected human or structured representation and performs no
-application dispatch.
+by an error document. Help uses the selected human or structured representation
+on standard output, leaves standard error empty and exits `0`. This includes
+help shown for an [incomplete invocation](../cli.md#command-tree). No
+application service is called.
 
 A diagnostic object orders its fields as follows:
 

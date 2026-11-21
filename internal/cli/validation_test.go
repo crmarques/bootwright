@@ -18,12 +18,12 @@ func TestFlagRelationshipsAndFormats(t *testing.T) {
 		{"check input -fone,two -fthree", true}, {"apply --authorize=data-loss", true}, {"destroy --authorize=all", false}, {"apply --authorize=data-loss,data-loss", false}, {"apply --authorize=data-loss --authorize=data-loss", false}, {"apply --authorize=data-loss,", false},
 		{"add-ons add", false}, {"add-ons delete", false},
 		{"secret set --name demo", true}, {"secret set --name demo --value-file source", true}, {"secret set --name demo --value-file source --yes=false", true}, {"secret set --name demo --value-file source --password-stdin=false", true}, {"secret set --name demo --value-stdin", true}, {"secret set --name demo --value-file source --value-stdin", false}, {"secret set --name demo --password-file password --username account", true}, {"secret set --name demo --password-stdin --username account", true}, {"secret set --name demo --password-file password --password-stdin --username account", false}, {"secret set --name demo --value-stdin --password-stdin", false}, {"secret set --name demo --password-file password", true}, {"secret set --name demo --username account", true}, {"secret set --name demo --certificate-file cert", true}, {"secret set --name demo --certificate-file cert --private-key-file key", true}, {"secret set --name demo --private-key-file key", true}, {"secret set --name demo --private-key-file key --public-key-file key.pub", true}, {"secret set --name demo --public-key-file key.pub", true}, {"secret set --name demo --value-file source --certificate-file cert", true}, {"secret set --name demo --certificate-file cert --private-key-file key --public-key-file key.pub", true},
-		{"secret show --name demo", false}, {"secret show --name demo --part value", true}, {"secret show --name demo --part username", true}, {"secret show --name demo --part password", true}, {"secret show --name demo --part certificate", true}, {"secret show --name demo --part private-key", true}, {"secret show --name demo --part public-key", true}, {"secret show --name demo --part primary", false},
+		{"secret show --name demo --part value", true}, {"secret show --name demo --part username", true}, {"secret show --name demo --part password", true}, {"secret show --name demo --part certificate", true}, {"secret show --name demo --part private-key", true}, {"secret show --name demo --part public-key", true}, {"secret show --name demo --part primary", false},
 		{"secret encryption init", true}, {"secret encryption init --type local-keyring", false}, {"secret encryption init --type future-store", false}, {"secret encryption init --type LOCAL", false}, {"secret encryption init --type local/keyring", false}, {"secret encryption init --type -local", false},
 		{"catalog media add --name image.iso --from-file image.iso --sha256=", true}, {"catalog media add --name image.iso --from-url https://example.invalid/image.iso", false}, {"catalog media add --name image.iso --from-file image.iso --from-url https://example.invalid/image.iso", false}, {"catalog media add --name image.iso --from-file image.iso --sha256 invalid", false},
 		{"render effective --input-dir input", false}, {"render effective --input-dir input --output-dir output", true}, {"render effective --input-dir input --output-dir output --sensitive", false}, {"render effective --input-dir input --output-dir output --context demo", false}, {"render effective --input-dir input --output-dir output --context=", true}, {"render effective --output-dir output", false}, {"render effective --output-dir output --sensitive", true},
 		{"render effective --sensitive", false}, {"render effective --origins", true}, {"render effective --origins --output-dir output --sensitive", false}, {"render effective --origins --input-dir input --output-dir output", false},
-		{"machine start --name demo", true}, {"machine start --name demo --output json", true}, {"machine start", false}, {"machine start --name demo --force", false},
+		{"machine start --name demo", true}, {"machine start --name demo --output json", true}, {"machine start --name demo --force", false},
 		{"machine stop --name demo", true}, {"machine stop --name demo --force --yes", true}, {"machine stop --name demo --output json", false}, {"machine stop --name demo --output json --yes", true},
 		{"machine restart --name demo --output json", false}, {"machine restart --name demo --output json --yes", true},
 		{"machine trust --output json", false}, {"machine trust --output json --dry-run", true}, {"machine trust --output json --yes", true}, {"machine trust --name one,two --replace two", true}, {"machine trust --name one --replace two", false},
@@ -65,8 +65,8 @@ func parsedCommand(t *testing.T, args []string) *cobra.Command {
 		t.Fatal(err)
 	}
 	path := strings.TrimPrefix(invocation.command.CommandPath(), "bootwright ")
-	if message := validateInvocation(invocation.command, path); message != "" {
-		t.Fatal(message)
+	if incomplete, problem := validateInvocation(invocation.command, path); incomplete || problem != "" {
+		t.Fatalf("incomplete=%t problem=%q", incomplete, problem)
 	}
 	return invocation.command
 }

@@ -49,7 +49,10 @@ func ClassifyInvocation(args []string) InvocationClass {
 		return InvocationClass{}
 	}
 	classification := InvocationClass{Command: path, JSON: selectedStructured(command), Format: stringValue(command.Flags(), "output"), Presentation: normalizePresentation(commandPresentation(command, PresentationOptions{}))}
-	if resolved.helpTarget != nil || boolValue(command.Flags(), "help") || validateInvocation(command, path) != "" || !privilegedOperation(path) {
+	if resolved.helpTarget != nil || boolValue(command.Flags(), "help") || !privilegedOperation(path) {
+		return classification
+	}
+	if incomplete, problem := validateInvocation(command, path); incomplete || problem != "" {
 		return classification
 	}
 	rules, flags := specFor(path).classify, command.Flags()

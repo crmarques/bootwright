@@ -59,7 +59,7 @@
     "internal/infrastructureservices/ntpserver": 0.0,
     "internal/infrastructureservices/proxy": 84.5,
     "internal/infrastructureservices/registry": 89.5,
-    "internal/machine": 83.6,
+    "internal/machine": 83.7,
     "internal/machine/access": 90.8,
     "internal/machine/diskselection": 74.2,
     "internal/machine/hardware": 94.5,

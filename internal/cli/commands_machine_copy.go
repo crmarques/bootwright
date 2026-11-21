@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 
 	"github.com/crmarques/bootwright/internal/machine"
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
@@ -22,9 +23,12 @@ func machineCopyCommand() commandSpec {
 	})
 }
 
-func copyOperands(args []string) error {
+func copyOperands(args []string) (incomplete bool, problem string) {
 	_, _, err := machine.ParseCopyPaths(args)
-	return err
+	if errors.Is(err, machine.ErrMissingCopyOperand) {
+		return true, ""
+	}
+	return false, refusalText(err)
 }
 
 type MachineCopyService interface {

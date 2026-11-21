@@ -22,6 +22,7 @@ Alias cell.
 | [B1622](#b1622) | new, 2026-11-18 (X627 review) | product | Substrate and Reconciliation | Prove a hosted KubeVirt Machine off or absent without creating access on its host cluster | Fails closed: a context with a hosted KubeVirt Machine refuses every new apply and destroy |
 | [B1623](#b1623) | new, 2026-11-18 (X627 review) | safety | Reconciliation and Machine | Decide whether explicit `machine discover` and `machine inventory` take the power entry check | The owner's request named apply and destroy only |
 | [B1624](#b1624) | new, 2026-11-18 (X627 review) | product | Reconciliation, with CLI | `Stop first` names the whole fleet an automatic preparation's entry check reads | The refusal already names every blocking Machine |
+| [B1655](#b1655) | new, 2026-11-21 (CLI verification) | defect | Developer tooling and Access | Restore coverage floors after delegated session policy | A separate coverage repair is outside the CLI presentation and flag changes |
 | [B82](#b82) | C5; moved from M4 on 2026-10-10 (D128); parked on 2026-10-11 (D129) | product | Managed OS | One more image, profile or entitlement variant | No concrete additional OS variant beyond the qualified M2 matrix |
 | [B96](#b96) | Y3 | enabling | Architecture | Collection metadata and naming polish | Pruned from M1 on 2026-09-28 |
 | [B97](#b97) | A8 (kind tables) | enabling | Desired state and Workspace | Kind field-table parity and a path checker | Pruned from M1 on 2026-09-28 |
@@ -3990,6 +3991,17 @@ reads every managed Machine of the fleet. List the fleet the check reads.
 
 **Exit evidence:** a plan golden for an automatic preparation naming every
 fleet Machine under `Stop first`.
+
+### B1655
+
+Coverage measurement on the delegated session policy baseline puts
+`cmd/bootwright`, `internal/controller/privilege`, `internal/machine/access`
+and `internal/machine/sshlocal` below their existing floors.
+`internal/machine/sessionpolicy` has measured coverage and needs a floor.
+Add tests of the affected contracts and refresh the floors.
+
+**Requires:** none. **Definition:** Specified. **Exit evidence:** `make cover`
+passes with the existing floors met and the new package recorded.
 
 ## Retired
 

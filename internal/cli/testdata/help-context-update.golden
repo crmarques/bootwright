@@ -1,5 +1,6 @@
   bootwright / context update
-      Update Context configuration or Environment input
+      Update Context configuration with --file, replace Environment input with --input-dir, or
+      supply both.
 
   Usage
     bootwright context update [flags]

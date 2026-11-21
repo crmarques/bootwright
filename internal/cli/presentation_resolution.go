@@ -84,7 +84,10 @@ func CarryPresentation(args []string, base PresentationOptions) []string {
 	}
 	command := resolved.command
 	path := strings.TrimSpace(strings.TrimPrefix(command.CommandPath(), "bootwright"))
-	if validateInvocation(command, path) != "" || commandPresentation(command, normalizePresentation(base)).Color != "auto" {
+	if incomplete, problem := validateInvocation(command, path); incomplete || problem != "" {
+		return carried
+	}
+	if commandPresentation(command, normalizePresentation(base)).Color != "auto" {
 		return carried
 	}
 	// Args is the original payload suffix; ArgsLenAtDash distinguishes a separator from a flag value.

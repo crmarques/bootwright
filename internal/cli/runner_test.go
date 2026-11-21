@@ -60,9 +60,9 @@ func TestHelpPrecedenceAndClosedSyntax(t *testing.T) {
 		args string
 		code int
 	}{
-		{"", 0}, {"help", 0}, {"completion", 0}, {"context", 2}, {"secret encryption", 2}, {"context --help", 0}, {"--help context init", 0}, {"help context init", 0},
+		{"", 0}, {"help", 0}, {"completion", 0}, {"context", 0}, {"secret encryption", 0}, {"context --help", 0}, {"--help context init", 0}, {"help context init", 0},
 		{"context init --name= --help", 0}, {"context init -f a -f b --help", 0}, {"secret show --part invalid --help", 0}, {"status --output invalid --help", 0}, {"machine list --short --output json --help", 0}, {"machine list --help --output invalid", 0},
-		{"render --output json", 2}, {"render --sensitive --output json", 2}, {"render --output invalid", 2}, {"render effective --input-dir= --help", 0},
+		{"render --output json", 0}, {"render --sensitive --output json", 2}, {"render --output invalid", 2}, {"render effective --input-dir= --help", 0},
 		{"version --help=false", 0}, {"version --help=invalid", 2}, {"render effective --input-dir input", 2},
 		{"example --help", 2}, {"help example", 2}, {"container-cluster --help", 2}, {"help container-cluster", 2}, {"clu list", 2}, {"VERSION", 2}, {"--version", 2}, {"version --format json", 2}, {"__complete", 2}, {"__completeNoDesc", 2}, {"help __bootwright_complete", 2},
 		{"version --", 2}, {"version --help --bad", 2}, {"machine list --short invalid --help", 0}, {"machine list --short=invalid --help", 2}, {"version -vh", 2},
@@ -271,7 +271,7 @@ func TestPayloadParsing(t *testing.T) {
 		{"cluster kubectl", []string{"--", "--help"}, []string{"--help"}, 1},
 		{"cluster oc", []string{"--help"}, nil, 0},
 		{"machine exec", []string{"--", ""}, nil, 2},
-		{"cluster exec", nil, nil, 2},
+		{"cluster exec", nil, nil, 0},
 		{"cluster exec", []string{"--node=", "pwd"}, nil, 2},
 		{"machine exec", []string{"--unknown"}, nil, 2},
 	}
@@ -349,7 +349,6 @@ func TestAFlagWrittenAfterThePayloadIsRefusedWithWhereFlagsGo(t *testing.T) {
 		{[]string{"machine", "exec", "ls", "--name=n"}, "--name is required; Bootwright flags go before the remote command"},
 		{[]string{"cluster", "exec", "ls", "--name", "n"}, "--name is required; Bootwright flags go before the remote command"},
 		{[]string{"cluster", "oc", "get", "--name", "n"}, "--name is required; Bootwright flags go before the remote command"},
-		{[]string{"machine", "exec", privateArgument}, "--name is required"},
 	} {
 		t.Run(strings.Join(test.args, " "), func(t *testing.T) {
 			code, out, errOut, record := runRecorded(test.args)

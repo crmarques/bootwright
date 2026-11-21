@@ -122,3 +122,65 @@ func TestHelpExposesInheritedPresentationChoices(t *testing.T) {
 		}
 	}
 }
+
+func TestIncompleteInvocationShowsHelp(t *testing.T) {
+	for _, test := range []struct {
+		path string
+		args string
+	}{
+		{path: "context"},
+		{path: "secret encryption"},
+		{path: "render"},
+		{path: "catalog media"},
+		{path: "catalog schema"},
+		{path: "sbom"},
+		{path: "context init"},
+		{path: "context update", args: "--name demo"},
+		{path: "context delete", args: "--name demo"},
+		{path: "secret show", args: "--name demo"},
+		{path: "policy install", args: "--file sessions.yaml"},
+		{path: "catalog media add", args: "--name image.iso"},
+		{path: "machine exec", args: "--name demo --"},
+		{path: "machine exec", args: "private-payload"},
+		{path: "machine cp"},
+		{path: "machine cp", args: "--name demo local:source"},
+	} {
+		for _, format := range []string{"text", "json", "yaml"} {
+			t.Run(strings.TrimSpace(test.path+" "+test.args)+"/"+format, func(t *testing.T) {
+				command := append([]string{"-o", format}, strings.Fields(test.path)...)
+				helpCode, help, helpErr, _ := runRecorded(append(slices.Clone(command), "--help"))
+				if helpCode != 0 || helpErr != "" || help == "" {
+					t.Fatalf("explicit help: code=%d stdout=%q stderr=%q", helpCode, help, helpErr)
+				}
+				args := append(command, strings.Fields(test.args)...)
+				code, out, errOut, record := runRecorded(args)
+				if code != 0 || out != help || errOut != "" || record.calls != 0 {
+					t.Fatalf("code=%d stdout=%q stderr=%q calls=%d", code, out, errOut, record.calls)
+				}
+				if class := ClassifyInvocation(args); class.RequiresRoot || class.AmbientRoute || class.URLStdin || class.SecretStdin != "" || class.SSHPassword {
+					t.Fatalf("help acquired capabilities: %+v", class)
+				}
+			})
+		}
+	}
+}
+
+func TestInvalidInputTakesPrecedenceOverIncompleteHelp(t *testing.T) {
+	for _, command := range []string{
+		"context missing", "context init --unknown", "context init --name",
+		"context init --name=", "context init --name Invalid -f one -f two",
+		"secret show --part invalid", "secret show --width 1",
+		"policy install --file first --file second",
+		"context delete --purge=false",
+		"catalog media add --from-file one --from-file= --from-file two",
+		"machine exec --name=, --", "machine cp invalid", "machine exec ls --name=demo",
+	} {
+		t.Run(command, func(t *testing.T) {
+			args := append([]string{"-o", "json"}, strings.Fields(command)...)
+			code, out, errOut, record := runRecorded(args)
+			if code != 2 || errOut != "" || record.calls != 0 || !strings.Contains(out, `"code":"cli.usage"`) {
+				t.Fatalf("code=%d stdout=%q stderr=%q calls=%d", code, out, errOut, record.calls)
+			}
+		})
+	}
+}

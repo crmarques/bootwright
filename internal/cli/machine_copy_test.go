@@ -13,7 +13,7 @@ import (
 )
 
 func TestCopyOperandErrorsHaveNoDispatch(t *testing.T) {
-	for _, tail := range [][]string{nil, {"local:a"}, {"local:a", "local:b"}, {"remote:a", "remote:b"}, {"local:", "remote:b"}, {"a", "remote:b"}, {"local:a", "remote:b", "extra"}} {
+	for _, tail := range [][]string{{"local:"}, {"local:a", "local:b"}, {"remote:a", "remote:b"}, {"local:", "remote:b"}, {"a", "remote:b"}, {"local:a", "remote:b", "extra"}} {
 		args := append([]string{"machine", "cp", "--name", "guest", "--output", "json"}, tail...)
 		status, out, errOut, record := runRecorded(args)
 		var envelope commandEnvelope

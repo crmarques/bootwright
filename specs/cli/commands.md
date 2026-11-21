@@ -399,8 +399,9 @@ a changed or unknown identity, a failed probe, or another named risk. If a
 prompt remains necessary, the command fails instead when standard input is
 non-interactive, JSON or YAML output is selected, or a safe answer cannot be read.
 
-`context delete` requires `--purge` to resolve to `true`; omission or
-`--purge=false` fails without changing state. `--yes` independently controls
+`context delete` requires `--purge` to resolve to `true`. Omitting the flag
+shows command help. An explicit `--purge=false` fails without changing state.
+`--yes` independently controls
 its ordinary confirmation, and `--allow-orphans` replaces neither. What each
 flag acknowledges, and when deletion refuses, follow
 [permanent deletion](../contexts.md#permanent-deletion). A deletion that
