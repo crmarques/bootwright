@@ -500,3 +500,14 @@ func (f *startFilter) forward(data []byte) (int, error) {
 	}
 	return n, err
 }
+
+func AdmitDelegatedEntry(allowed bool, effectiveUID int) *diagnostics.Diagnostic {
+	if !allowed || effectiveUID != 0 {
+		return &diagnostics.Diagnostic{Severity: "error", Code: "access.denied", Message: "the delegated entry admits only privileged session commands and policy permissions"}
+	}
+	path, err := ReexecutionPath()
+	if err != nil || strings.HasPrefix(path, "/proc/") {
+		return &diagnostics.Diagnostic{Severity: "error", Code: "runtime.privilege", Message: "delegated access requires an installed root-owned Bootwright executable"}
+	}
+	return nil
+}

@@ -400,11 +400,18 @@ Bootwright re-executes itself as root through sudo
 ([local privilege](../specs/cli.md#local-privilege-and-user-identity)). An
 executable root owns, below directories root owns, such as one installed with
 `sudo install -m 0755 bootwright /usr/local/bin/bootwright`, is re-executed by
-that absolute path, so a rule naming it admits exactly that binary:
+that absolute path. The following rule grants administrative access to that binary:
 
 ```
 %bootwright-operators ALL=(root) /usr/local/bin/bootwright
 ```
+
+For users who need only SSH sessions, use the narrower sudo rule in
+[Session access policy](../specs/api/session-access-policy.md#delegated-execution).
+Install the policy for the context, then run
+`bootwright policy permissions --context lab` as the intended caller to see
+the current Machine grants. Administrators can use explicit sudo for their
+ordinary session access.
 
 The elevated child confirms it is that file, so install it to a path without
 spaces. Every root invocation sudo starts, including one you run with sudo by

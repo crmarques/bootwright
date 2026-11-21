@@ -31,6 +31,8 @@ type Options struct {
 	Terminal      func() (bool, error)
 	Clock         func() time.Time
 	FleetIdentity func(api.Catalog, api.Object) (FleetIdentity, bool)
+	Prepared      func(context.Context)
+	Authorize     func(context.Context, string, api.Catalog, []machine.SessionTarget, []string) error
 }
 
 type FleetIdentity struct{ User, KeyRef string }
@@ -39,6 +41,17 @@ type Service struct {
 	state     EffectiveState
 	selection CurrentSelection
 	options   Options
+}
+
+func (s Service) WithCatalog(catalog api.Catalog) Service {
+	s.state = sessionCatalog{catalog}
+	return s
+}
+
+type sessionCatalog struct{ catalog api.Catalog }
+
+func (s sessionCatalog) RenderEffective(ctx context.Context, _ compilation.EffectiveRequest) (*compilation.EffectiveResult, error) {
+	return &compilation.EffectiveResult{Effective: s.catalog}, ctx.Err()
 }
 
 func New(state EffectiveState, selection CurrentSelection, options Options) Service {
@@ -90,6 +103,9 @@ func (s Service) open(ctx context.Context, contextName, name string, options mac
 	if err != nil {
 		return nil, err
 	}
+	if err := s.admitOptions(options); err != nil {
+		return nil, err
+	}
 	if options.AskPassword {
 		terminal, err := s.interactive()
 		if err != nil {
@@ -107,7 +123,16 @@ func (s Service) open(ctx context.Context, contextName, name string, options mac
 	if err != nil {
 		return nil, err
 	}
+	if err := s.authorize(ctx, selected, effective.Effective, []member{{target: resolved, identity: identity, privateKeyRef: privateKeyRef}}, requested); err != nil {
+		return nil, err
+	}
+	delegated := s.options.Authorize != nil
+	input := s.options.Streams.In
+	if delegated && len(requested) > 0 {
+		input = nil
+	}
 	session := machine.Session{
+		Delegated: delegated, Batch: delegated && len(requested) > 0,
 		Machine: resolved.name, Address: resolved.address, Port: resolved.port,
 		Identity: identity, Command: requested,
 	}
@@ -130,7 +155,8 @@ func (s Service) open(ctx context.Context, contextName, name string, options mac
 		if identity.Kind == machine.IdentityPassword && !options.AskPassword {
 			s.advise(resolved, selected)
 		}
-		code, err := s.options.Launcher.Run(inner, session, s.options.Streams.In, s.options.Streams.Out, s.options.Streams.Err)
+		s.prepared(inner)
+		code, err := s.options.Launcher.Run(inner, session, input, s.options.Streams.Out, s.options.Streams.Err)
 		if err != nil {
 			return err
 		}
@@ -173,4 +199,31 @@ func (s Service) now() string {
 		clock = time.Now
 	}
 	return clock().UTC().Format(time.RFC3339)
+}
+
+func (s Service) admitOptions(options machine.SSHOptions) error {
+	if s.options.Authorize != nil && options.Borrowed() {
+		return failure("access.denied", "delegated SSH sessions require the configured remote identity", "remove the SSH identity override")
+	}
+	return nil
+}
+
+func (s Service) authorize(ctx context.Context, contextName string, catalog api.Catalog, members []member, argv []string) error {
+	if s.options.Authorize == nil {
+		return nil
+	}
+	targets := make([]machine.SessionTarget, 0, len(members))
+	for _, entry := range members {
+		if entry.identity.Kind != machine.IdentityKey || entry.privateKeyRef == "" {
+			return failure("access.denied", "delegated SSH access to Machine "+entry.target.name+" requires a key", "ask the context administrator to configure SSH key authentication")
+		}
+		targets = append(targets, machine.SessionTarget{Machine: entry.target.name, RemoteUser: entry.identity.User})
+	}
+	return s.options.Authorize(ctx, contextName, catalog, targets, argv)
+}
+
+func (s Service) prepared(ctx context.Context) {
+	if s.options.Prepared != nil {
+		s.options.Prepared(ctx)
+	}
 }

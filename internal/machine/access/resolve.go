@@ -69,6 +69,9 @@ func (s Service) identity(ctx context.Context, catalog api.Catalog, selected tar
 	if fleet, ok := s.fleet(catalog, selected); ok {
 		return fleetIdentity(selected, fleet)
 	}
+	if s.options.Authorize != nil {
+		return identityFor(selected, options, "")
+	}
 	return resolveIdentity(ctx, selected, options, s.options.Launcher)
 }
 

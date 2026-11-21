@@ -96,6 +96,8 @@ by a related noun, and `--short` is the one flag that prints names only.
 | `bootwright context init` | required `--name <name>`; optional `-f, --file <context.yaml>` and `--input-dir <dir>` | initialized context and user selection; optional imported-input summary | local context and keyring creation |
 | `bootwright context update` | required `--name <name>`; at least one of `-f, --file <context.yaml>` or `--input-dir <dir>`; `--yes` false | unchanged configuration or imported-input summary | local atomic input replacement; never lifecycle reconciliation |
 | `bootwright context use` | required `--name <name>` | selected-current-context summary | local current-context update |
+| `bootwright policy install` | required `-f, --file <file>` | updated context | atomically replace the context authorization policy |
+| `bootwright policy permissions` | none | the caller's granted commands and targets | read the selected context and resolve subjects through NSS |
 | `bootwright context list` | none | contexts in canonical name order | read local state |
 | `bootwright context current` | `--short` false | current context details, or only its name with `--short` | read local state |
 | `bootwright context delete` | required `--name <name>` and `--purge`; `--allow-orphans` and `--yes` false | permanent local deletion summary, saying whether it abandoned objects, which its confirmation names by the inventory [permanent deletion](../contexts.md#permanent-deletion) defines or says cannot be listed, and the host reservation keys it released | guarded removal under [permanent deletion](../contexts.md#permanent-deletion); never resource mutation |
@@ -219,6 +221,11 @@ those of `cluster rsh` and `cluster exec` in the
 Applicability does not establish implementation availability, access readiness,
 identity, or ownership. Missing access material on an applicable target is an
 access failure, not a change in applicability.
+
+## Session policy installation
+
+Pass an explicit context to `policy install`. See the
+[session policy](../api/session-access-policy.md) for the schema and delegation rules.
 
 ## Help content
 

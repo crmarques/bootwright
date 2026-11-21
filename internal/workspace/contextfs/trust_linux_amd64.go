@@ -4,8 +4,10 @@ package contextfs
 
 import (
 	"context"
+	"sync"
 	"syscall"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -31,7 +33,7 @@ func (s *Store) ReplaceHostKeys(ctx context.Context, name string, data, expected
 // nothing yet reads as absent rather than as a failure.
 func (t trustStore) readHostKeys(ctx context.Context, name string) ([]byte, error) {
 	var data []byte
-	err := t.withTrustArea(ctx, name, false, func(area *operationArea) error {
+	err := t.withTrustArea(ctx, name, false, nil, func(area *operationArea) error {
 		content, found, err := area.Read(ctx, hostKeysFile, maxOperationRecord)
 		if err != nil || !found {
 			return err
@@ -52,7 +54,7 @@ func (t trustStore) replaceHostKeys(ctx context.Context, name string, data, expe
 	if len(data) == 0 {
 		return state("SSH trust publication requires the records to publish")
 	}
-	return t.withTrustArea(ctx, name, true, func(area *operationArea) error {
+	return t.withTrustArea(ctx, name, true, nil, func(area *operationArea) error {
 		if err := area.EnsureDirectory(ctx, ""); err != nil {
 			return err
 		}
@@ -64,7 +66,7 @@ func (t trustStore) replaceHostKeys(ctx context.Context, name string, data, expe
 // requires. A mutation takes the exclusive root lock for the same reason a
 // lifecycle publication does: the records it replaces must not move underneath
 // the comparison that authorizes the replacement.
-func (t trustStore) withTrustArea(ctx context.Context, name string, mutation bool, callback func(*operationArea) error) error {
+func (t trustStore) withTrustArea(ctx context.Context, name string, mutation bool, expected *contexts.Record, callback func(*operationArea) error) error {
 	if !contextName(name) {
 		return state("SSH trust access requires an explicit context name")
 	}
@@ -76,6 +78,9 @@ func (t trustStore) withTrustArea(ctx context.Context, name string, mutation boo
 		record, err := lifecycleRecord(registry, name)
 		if err != nil {
 			return err
+		}
+		if expected != nil && record != *expected {
+			return state("the context changed during policy validation; repeat policy install")
 		}
 		container, dir, err := openContext(root, record)
 		if err != nil {
@@ -91,4 +96,42 @@ func (t trustStore) withTrustArea(ctx context.Context, name string, mutation boo
 		}
 		return safeError(callback(area))
 	})
+}
+
+const sessionPolicyFile = "session-policy.yaml"
+
+func (s *Store) ReadSessionPolicy(ctx context.Context, name string) ([]byte, error) {
+	var data []byte
+	err := (trustStore{s}).withTrustArea(ctx, name, false, nil, func(area *operationArea) error {
+		var err error
+		data, _, err = area.Read(ctx, sessionPolicyFile, maxOperationRecord)
+		return err
+	})
+	return data, err
+}
+
+func (s *Store) ReplaceSessionPolicy(ctx context.Context, expected contexts.Record, data []byte) error {
+	return (trustStore{s}).withTrustArea(ctx, expected.Name, true, &expected, func(area *operationArea) error {
+		if err := area.EnsureDirectory(ctx, ""); err != nil {
+			return err
+		}
+		expected, _, err := area.Read(ctx, sessionPolicyFile, maxOperationRecord)
+		if err != nil {
+			return err
+		}
+		return area.Replace(ctx, sessionPolicyFile, data, expected)
+	})
+}
+
+// HoldSessionAdmission pins the context mapping until SSH material is ready.
+func (s *Store) HoldSessionAdmission(ctx context.Context) (func(), error) {
+	root, err := s.openRoot(ctx, false, nil)
+	if err != nil {
+		return nil, safeError(err)
+	}
+	if err := awaitRoot(ctx, s, root, syscall.LOCK_SH); err != nil {
+		root.File.Close()
+		return nil, safeError(err)
+	}
+	return sync.OnceFunc(func() { kernel.UnlockAndClose(root.File) }), nil
 }

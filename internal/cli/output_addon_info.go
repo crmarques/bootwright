@@ -88,6 +88,7 @@ func groupShort(part string) string {
 	return map[string]string{
 		"add-ons":    "Inspect add-on packages supported by this build",
 		"cluster":    "Inspect and reach a context's clusters",
+		"policy":     "Manage delegated session access",
 		"completion": "Generate shell completion scripts",
 		"context":    "Create, select, update and delete contexts",
 		"controller": "Install, rebind or remove this host's controller",

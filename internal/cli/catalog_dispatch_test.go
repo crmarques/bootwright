@@ -32,6 +32,7 @@ func TestEveryCatalogCommandHasApplicationDispatch(t *testing.T) {
 // decisions readable from one declaration per command.
 func TestCommandModesComeFromTheCatalog(t *testing.T) {
 	want := map[string]bool{
+		"policy install": true, "policy permissions": true,
 		"context init": true, "context update": true, "context use": true,
 		"context list": true, "context current": true, "context delete": true,
 		"secret set": true, "secret generate": true, "secret check": true,

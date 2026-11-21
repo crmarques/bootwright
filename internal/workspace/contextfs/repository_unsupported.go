@@ -116,3 +116,15 @@ func (*Store) OpenSetup(ctx context.Context, _ string) (logview.Stream, bool, er
 func (*Store) Paths(ctx context.Context, _ string) ([]lifecycle.ContextPath, []diagnostics.Diagnostic, error) {
 	return nil, nil, unsupported(ctx)
 }
+
+func (*Store) ReadSessionPolicy(ctx context.Context, _ string) ([]byte, error) {
+	return nil, unsupported(ctx)
+}
+
+func (*Store) ReplaceSessionPolicy(ctx context.Context, _ contexts.Record, _ []byte) error {
+	return unsupported(ctx)
+}
+
+func (*Store) HoldSessionAdmission(ctx context.Context) (func(), error) {
+	return nil, unsupported(ctx)
+}

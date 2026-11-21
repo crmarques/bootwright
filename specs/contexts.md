@@ -281,7 +281,9 @@ confirmed setup:
       reservation.json
       mutation.json
       operations/
-      trust/hosts.json
+      trust/
+        hosts.json
+        session-policy.yaml
     secrets/
       store.json
       keys/
@@ -302,7 +304,8 @@ confirmed setup:
 | `state/reservation.json` | Durable name-ownership evidence for interrupted creation and guarded deletion. |
 | `state/mutation.json` | Lifecycle ownership and operation evidence; missing or unknown evidence prevents destructive cleanup. |
 | `state/operations/` | [Reconciliation-owned operation records](state-reconciliation.md#operation-records). Workspace supplies the held area and its publication primitives; it never interprets their content. The operations' logs and every run's output lie under the [log root](#log-root), never in the store. |
-| `state/trust/hosts.json` | The context-managed SSH host-key trust an [SSH session](cli.md#machine-ssh-sessions) proves a Machine against when it declares no `knownHostsRef` and Bootwright did not install it: one public-key record per Machine, and one key per address. Written only by `machine trust` and by an explicitly confirmed first use, published atomically against its exact prior content, and removed with the context. A write that takes over the endpoint of a Machine the context no longer declares, or that no longer uses the context's SSH trust, removes that Machine's record in the same write. It holds no confidential material. |
+| `state/trust/hosts.json` | Context-managed [SSH host trust](cli.md#host-key-trust), one public key per Machine and endpoint. `machine trust` or confirmed first use can replace an obsolete endpoint owner atomically against the exact prior content. |
+| `state/trust/session-policy.yaml` | Active [session policy](api/session-access-policy.md), removed with the context. |
 | `secrets/` | Context-bound encrypted custody with its own independently versioned [storage contract](secrets.md#local-keyring). |
 
 Every directory is owned by `root:root` with mode `0700`; every file is owned

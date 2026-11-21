@@ -1314,6 +1314,11 @@ empty.
 The [cluster access contract](cli/cluster-access.md#client-handoffs) owns
 `oc` and `kubectl` descriptors, prerequisites and arguments.
 
+### Delegated session access
+
+The [session access policy](api/session-access-policy.md) governs admission for
+the delegated sudo entry to Machine and cluster sessions.
+
 ### Machine SSH sessions
 
 `machine rsh` and `machine exec` open one SSH session on the exact Machine as

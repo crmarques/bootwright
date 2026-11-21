@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/cli"
@@ -91,7 +92,10 @@ func TestElevationCarriesNoColorWithoutChangingPayload(t *testing.T) {
 	for _, color := range []string{"auto", "always", "never"} {
 		args := []string{"machine", "exec", "--name", "example", "--color", color, "--", "printf", "--color", "always"}
 		invocation := elevationInvocation(cli.ClassifyInvocation(args), args, controller.Route{}, &bytes.Buffer{}, &bytes.Buffer{})
-		options := cli.ResolvePresentation(invocation.Arguments, cli.PresentationOptions{})
+		if invocation.Arguments[0] != delegatedSessionEntry {
+			t.Fatalf("missing delegated sudo entry: %q", invocation.Arguments)
+		}
+		options := cli.ResolvePresentation(invocation.Arguments[1:], cli.PresentationOptions{})
 		want := color
 		if want == "auto" {
 			want = "never"
@@ -102,6 +106,23 @@ func TestElevationCarriesNoColorWithoutChangingPayload(t *testing.T) {
 		payload := invocation.Arguments[len(invocation.Arguments)-3:]
 		if payload[0] != "printf" || payload[1] != "--color" || payload[2] != "always" {
 			t.Fatalf("remote payload changed: %q", invocation.Arguments)
+		}
+	}
+}
+
+func TestDelegatedSudoEntryRefusesOtherOperations(t *testing.T) {
+	boundary := privilegeBoundary{euid: func() int { return 0 }}
+	for _, args := range [][]string{
+		{"policy", "install", "--context", "lab", "--file", "sessions.yaml"},
+		{"secret", "show", "--name", "key"},
+		{"machine", "cp", "--name", "node", "remote:source", "local:dest"},
+		{"context", "update", "--name", "lab", "--input-dir", "."},
+		{"machine", "exec", "--help"},
+	} {
+		var out, errOut bytes.Buffer
+		code := boundary.run(t.Context(), append([]string{delegatedSessionEntry}, args...), &out, &errOut)
+		if code == 0 || out.Len() != 0 || !strings.Contains(errOut.String(), "access.denied") {
+			t.Fatalf("%v: status %d, stdout %q, stderr %q", args, code, &out, &errOut)
 		}
 	}
 }

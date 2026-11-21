@@ -113,3 +113,46 @@ func singleLine(answer []byte) (string, bool) {
 	line, terminated := strings.CutSuffix(string(answer), "\n")
 	return line, terminated && !strings.Contains(line, "\n")
 }
+
+func (Resolver) LookupSubject(ctx context.Context, group bool, name string) (uint32, error) {
+	directory, err := accountDirectoryAt(systemGetent, qualifiedSystemExecutable, systemAccountFiles)
+	if err != nil {
+		return 0, err
+	}
+	if group {
+		return directory.groupID(ctx, name)
+	}
+	named, err := directory.byName(ctx, name)
+	if err != nil {
+		return 0, err
+	}
+	reverse, err := directory.byUID(ctx, named.uid)
+	if err != nil || reverse != named {
+		return 0, errMalformed
+	}
+	return uint32(named.uid), nil
+}
+
+func (s nameService) groupID(ctx context.Context, name string) (uint32, error) {
+	canonical, gid, err := s.group(ctx, name)
+	if err != nil {
+		return 0, err
+	}
+	reverse, reverseID, err := s.group(ctx, strconv.Itoa(gid))
+	if err != nil || reverseID != gid || reverse != canonical {
+		return 0, errMalformed
+	}
+	return uint32(gid), nil
+}
+
+func (s nameService) group(ctx context.Context, key string) (string, int, error) {
+	answer, err := s.lookup(ctx, "group", key)
+	if err != nil {
+		return "", 0, err
+	}
+	line, single := singleLine(answer)
+	if !single {
+		return "", 0, errMalformed
+	}
+	return groupFields(line)
+}

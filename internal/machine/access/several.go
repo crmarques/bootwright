@@ -44,6 +44,9 @@ func memberNames(requested []string) []string {
 
 func (s Service) several(ctx context.Context, contextName string, names []string, options machine.SSHOptions,
 	words []string) (*machine.SessionResult, error) {
+	if err := s.admitOptions(options); err != nil {
+		return nil, err
+	}
 	if options.AskPassword {
 		return nil, failure("access.unavailable", "SSH password prompting requires one Machine", "select one Machine or use --ssh-id-file")
 	}
@@ -69,6 +72,9 @@ func (s Service) several(ctx context.Context, contextName string, names []string
 	if err != nil {
 		return nil, err
 	}
+	if err := s.authorize(ctx, selected, effective.Effective, members, requested); err != nil {
+		return nil, err
+	}
 	var outcomes []outcome
 	request := lifecycle.MaterialRequest{ContextName: selected, Secrets: memberReferences(members)}
 	err = s.options.Lender.WithMaterial(ctx, request, func(inner context.Context, material map[string]secrets.Material) error {
@@ -84,6 +90,7 @@ func (s Service) several(ctx context.Context, contextName string, names []string
 		if err := inner.Err(); err != nil {
 			return err
 		}
+		s.prepared(inner)
 		outcomes = s.launch(inner, sessions)
 		return nil
 	})
@@ -133,7 +140,7 @@ func (s Service) members(ctx context.Context, catalog api.Catalog, contextName s
 			members = append(members, member{target: resolved, identity: identity, privateKeyRef: privateKeyRef, privateKeyPart: privateKeyPart(catalog, privateKeyRef)})
 			continue
 		}
-		if !proved {
+		if !proved && (s.options.Authorize == nil || options.IdentityFile != "") {
 			if offered, err = s.options.Launcher.IdentityFile(ctx, options.IdentityFile); err != nil {
 				return nil, err
 			}
@@ -164,7 +171,7 @@ func (s Service) prove(ctx context.Context, contextName string, members []member
 	for _, selected := range members {
 		session := machine.Session{
 			Machine: selected.target.name, Address: selected.target.address, Port: selected.target.port,
-			Identity: selected.identity, Command: words, Batch: true,
+			Identity: selected.identity, Command: words, Batch: true, Delegated: s.options.Authorize != nil,
 		}
 		if selected.privateKeyRef != "" {
 			key, err := privateKey(selected.privateKeyRef, material, selected.privateKeyPart)

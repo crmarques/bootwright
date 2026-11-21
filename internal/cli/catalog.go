@@ -56,7 +56,7 @@ var rootHelpGroups = []struct {
 	{"Run the lifecycle", []string{"plan", "apply", "destroy"}},
 	{"Inspect and troubleshoot", []string{"status", "logs", "diff", "explain", "check"}},
 	{"Prepare Bootwright and its inputs", []string{"controller", "catalog", "context", "secret", "render"}},
-	{"Work with machines and clusters", []string{"machine", "cluster"}},
+	{"Work with machines and clusters", []string{"machine", "cluster", "policy"}},
 	{"CLI tools", []string{"version", "sbom", "completion", "help"}},
 }
 
@@ -186,6 +186,7 @@ func buildCommandCatalog() []commandSpec {
 	catalog = append(catalog, storageRenderCommand())
 	catalog = append(catalog, lifecycleMutationCommands()...)
 	catalog = append(catalog, machineCommands()...)
+	catalog = append(catalog, policyCommands()...)
 	catalog = append(catalog, machineTrustCommand())
 	catalog = append(catalog, controllerSetupCommand())
 	catalog = append(catalog, controllerCheckCommand())

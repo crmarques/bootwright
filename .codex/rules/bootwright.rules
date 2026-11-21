@@ -234,3 +234,9 @@ prefix_rule(
     decision = "prompt",
     justification = "bootwright cluster update-admin-creds mutates a cluster credential; the owner asks for it (AGENTS.md)",
 )
+
+prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "policy", "install"],
+    decision = "prompt",
+    justification = "bootwright policy install replaces delegated access grants; the owner asks for it (AGENTS.md)",
+)

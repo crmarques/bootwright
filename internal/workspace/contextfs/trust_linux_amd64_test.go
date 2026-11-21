@@ -140,3 +140,44 @@ func TestAContextThatTrustsAHostKeyStaysUsableAndDeletable(t *testing.T) {
 		t.Fatalf("deleting a context that trusted a host key failed: %#v", diagnostics.Of(err))
 	}
 }
+
+func TestSessionPolicyPublicationIsBoundToTheValidatedContext(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	store, record := lifecycleFixture(t)
+	previous := []byte("previous policy")
+	if err := store.ReplaceSessionPolicy(ctx, record, previous); err != nil {
+		t.Fatal(err)
+	}
+	for _, changed := range []contexts.Record{
+		{Name: record.Name, Revision: record.Revision, DirectoryInode: record.DirectoryInode + 1},
+		{Name: record.Name, Revision: "different-revision", DirectoryDevice: record.DirectoryDevice, DirectoryInode: record.DirectoryInode},
+	} {
+		// Keep all non-identity fields equal to the installed context.
+		changed.Mode, changed.SecretStoreType = record.Mode, record.SecretStoreType
+		changed.EnvironmentDirectory = record.EnvironmentDirectory
+		if err := store.ReplaceSessionPolicy(ctx, changed, []byte("stale policy")); err == nil {
+			t.Fatal("published a policy against a changed context")
+		}
+	}
+	current, err := store.ReadSessionPolicy(ctx, record.Name)
+	if err != nil || string(current) != string(previous) {
+		t.Fatalf("policy = %q, error %v", current, err)
+	}
+	if err := store.Transact(ctx, false, nil, func(tx contexts.Transaction) error {
+		if _, err := tx.MutationState(ctx, record.Name); err != nil {
+			return err
+		}
+		return tx.Delete(ctx, record)
+	}); err != nil {
+		t.Fatalf("delete: %#v", diagnostics.Of(err))
+	}
+	root, err := store.rootPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	policyPath := filepath.Join(root, "contexts", record.Name, "state", trustSubtree, sessionPolicyFile)
+	if _, err := os.Lstat(policyPath); !os.IsNotExist(err) {
+		t.Fatalf("context deletion left the policy: %v", err)
+	}
+}

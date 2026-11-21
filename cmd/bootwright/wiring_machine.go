@@ -7,6 +7,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/containercluster/agentinstall"
+	"github.com/crmarques/bootwright/internal/containercluster/openshift"
 	"github.com/crmarques/bootwright/internal/controller/hostlinux"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
@@ -52,6 +53,8 @@ type machineDependencies struct {
 	Files       operatorFiles
 	Stager      prerequisites.AutomationStager
 	Custody     hostCustody
+	Admit       func(context.Context) (func(), error)
+	Authorize   func(context.Context, string, api.Catalog, []machine.SessionTarget, []string) error
 }
 
 // wireMachine binds Machine inspection, explicit access and power. Inspection
@@ -72,8 +75,14 @@ func wireMachine(deps machineDependencies) cli.Services {
 		Copier: sshlocal.Copier{SSH: client, Account: deps.CopyAccount},
 		Lender: deps.Lifecycle, Ownership: evidence, Evidence: machineHostKeys{reconciler: deps.Lifecycle},
 		Trust: deps.Trust, Observer: client, Confirmer: deps.Session, Launcher: client,
-		Streams: deps.Streams, Terminal: deps.Terminal,
+		Streams: deps.Streams, Terminal: deps.Terminal, Authorize: deps.Authorize, Prepared: sessionPrepared,
 	})
+	var direct cli.MachineAccessService = sessions
+	var cluster cli.EnvironmentAccessService = clusterSessions(deps.State, sessions, selection)
+	if deps.Admit != nil {
+		bound := delegatedSessions{hold: deps.Admit, selection: selection, direct: direct, cluster: cluster}
+		direct, cluster = bound, bound
+	}
 	return cli.Services{
 		MachineInventory: inventory.New(accessState, evidence, powered, selection).WithAccount(func(ctx context.Context) string {
 			if deps.CopyAccount == nil {
@@ -85,9 +94,9 @@ func wireMachine(deps machineDependencies) cli.Services {
 			}
 			return account.Name
 		}),
-		MachineAccess:     sessions,
+		MachineAccess:     direct,
 		MachineCopy:       sessions,
-		EnvironmentAccess: clusterSessions(deps.State, sessions, selection),
+		EnvironmentAccess: cluster,
 		MachinePower:      powered,
 		MachineTrust:      enrollment.New(accessState, deps.Trust, selection, trustOptions(deps, client)),
 	}
@@ -120,12 +129,12 @@ func (g effectiveGraph) Effective(ctx context.Context, contextName string) (api.
 
 type machineSessions struct{ access machineaccess.Service }
 
-func (m machineSessions) Rsh(ctx context.Context, contextName, name string, ssh machine.SSHOptions) (*machine.SessionResult, error) {
-	return m.access.Rsh(ctx, machineaccess.RshRequest{ContextName: contextName, Name: name, SSH: ssh})
+func (m machineSessions) Rsh(ctx context.Context, contextName, name string, catalog api.Catalog, ssh machine.SSHOptions) (*machine.SessionResult, error) {
+	return m.access.WithCatalog(openshift.AccessCatalog(catalog)).Rsh(ctx, machineaccess.RshRequest{ContextName: contextName, Name: name, SSH: ssh})
 }
 
-func (m machineSessions) Exec(ctx context.Context, contextName string, names []string, ssh machine.SSHOptions, command []string) (*machine.SessionResult, error) {
-	return m.access.Exec(ctx, machineaccess.ExecRequest{ContextName: contextName, Names: names, SSH: ssh, Command: command})
+func (m machineSessions) Exec(ctx context.Context, contextName string, names []string, catalog api.Catalog, ssh machine.SSHOptions, command []string) (*machine.SessionResult, error) {
+	return m.access.WithCatalog(openshift.AccessCatalog(catalog)).Exec(ctx, machineaccess.ExecRequest{ContextName: contextName, Names: names, SSH: ssh, Command: command})
 }
 
 // sessionFiles opens an offered key through the invoking account's opener, and

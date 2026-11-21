@@ -17,6 +17,7 @@ import (
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 	"github.com/crmarques/bootwright/internal/machine/inventory"
 	"github.com/crmarques/bootwright/internal/machine/power"
+	"github.com/crmarques/bootwright/internal/machine/sessionpolicy"
 	"github.com/crmarques/bootwright/internal/managedos/diskdiscovery"
 	"github.com/crmarques/bootwright/internal/managedos/media"
 	artifactrendering "github.com/crmarques/bootwright/internal/nativeartifacts/rendering"
@@ -341,6 +342,7 @@ func (s logsSpy) Follow(ctx context.Context, selection logview.Selection, sink l
 func dispatchSpies(record *dispatchRecord) Services {
 	return Services{
 		Contexts:              contextsSpy{record},
+		Policy:                policySpy{record},
 		AddOnCatalog:          addOnCatalogSpy{record},
 		Secrets:               secretsSpy{record},
 		Encryption:            encryptionSpy{record},
@@ -412,4 +414,17 @@ func (s machineDiscoverySpy) PlanDiscovery(ctx context.Context, r diskdiscovery.
 
 func (s environmentSpy) UpdateAdminCredentials(ctx context.Context, request lifecycle.UpdateAdminCredentialsRequest) (*lifecycle.UpdateAdminCredentialsResult, error) {
 	return s.record.result.adminCredentials, s.record.called(ctx, "cluster update-admin-creds", request)
+}
+
+type policySpy struct{ record *dispatchRecord }
+
+func (p policySpy) Install(ctx context.Context, name, file string) (string, error) {
+	return name, p.record.called(ctx, "policy install", file)
+}
+
+func (p policySpy) Permissions(ctx context.Context, name string) (string, []sessionpolicy.Grant, error) {
+	return name, []sessionpolicy.Grant{
+		{Name: "diagnostics", ClusterRefs: []string{"apps"}, MachineRefs: []string{"gateway"}, Machines: []string{"gateway", "worker"}, RemoteUser: "core", Commands: [][]string{{"/usr/bin/uptime"}}},
+		{Name: "support", Machines: []string{"worker"}, RemoteUser: "core", Shell: true},
+	}, p.record.called(ctx, "policy permissions", name)
 }

@@ -32,9 +32,10 @@ type Identity struct {
 // opens it, the host key it pins, and the argument vector to run there. An
 // empty Command is an interactive session; a Batch client may never prompt.
 type Session struct {
-	Machine string
-	Address string
-	Port    int
+	Delegated bool
+	Machine   string
+	Address   string
+	Port      int
 	Identity
 	HostKey trust.HostKey
 	Command []string
@@ -51,4 +52,8 @@ type SessionResult struct {
 	Address  string
 	ExitCode int
 	Sessions []SessionResult
+}
+
+type SessionTarget struct {
+	Machine, RemoteUser string
 }

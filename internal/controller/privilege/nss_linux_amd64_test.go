@@ -208,3 +208,35 @@ func danglingLink(t *testing.T) string {
 	}
 	return path
 }
+
+func TestDirectorySubjectNamesAndSudoAliasesResolveToIDs(t *testing.T) {
+	const canonicalUser = "member@example.test"
+	const shortGroup = "PLATFORM_OPERATORS"
+	const qualifiedGroup = "PLATFORM_OPERATORS@example.test"
+	const passwd = canonicalUser + ":*:1152:1022:Member:/home/member:/bin/bash"
+	const group = qualifiedGroup + ":*:2042:"
+	source := nameService{executable: fakeGetent(t, map[string]string{
+		"passwd 1152": printed(passwd), "passwd " + canonicalUser: printed(passwd), "passwd member": printed(passwd),
+		"initgroups " + canonicalUser: initgroups(canonicalUser, "2042"),
+		"group " + shortGroup:         printed(group), "group " + qualifiedGroup: printed(group), "group 2042": printed(group),
+		"passwd other": printed("other:*:1160:1022:Other:/home/other:/bin/bash"),
+	}), bound: 5 * time.Second}
+	for _, name := range []string{"member", canonicalUser} {
+		account, err := accountFrom(t.Context(), source, accountRequest{
+			uid: 0, euid: 0, sudoUID: "1152", sudoGID: "1022", sudoUser: name, trustedParent: true,
+		})
+		if err != nil || account.UID != 1152 || !reflect.DeepEqual(account.Groups, []uint32{1022, 2042}) {
+			t.Fatalf("%q: account %+v, error %v", name, account, err)
+		}
+	}
+	for _, name := range []string{shortGroup, qualifiedGroup} {
+		if gid, err := source.groupID(t.Context(), name); gid != 2042 || err != nil {
+			t.Fatalf("%q: gid %d, error %v", name, gid, err)
+		}
+	}
+	if _, err := accountFrom(t.Context(), source, accountRequest{
+		uid: 0, euid: 0, sudoUID: "1152", sudoGID: "1022", sudoUser: "other", trustedParent: true,
+	}); err == nil {
+		t.Fatal("accepted an alias for another UID")
+	}
+}

@@ -57,6 +57,12 @@ func clientArguments(session machine.Session, held paths, pinned string, descrip
 	if session.Batch {
 		args = append(args, "-o", "BatchMode=yes")
 	}
+	if session.Delegated {
+		args = append(args, "-o", "EscapeChar=none", "-o", "ClearAllForwardings=yes")
+		if len(session.Command) > 0 {
+			args = append(args, "-n", "-T")
+		}
+	}
 	if session.Port != 0 && session.Port != 22 {
 		args = append(args, "-p", strconv.Itoa(session.Port))
 	}

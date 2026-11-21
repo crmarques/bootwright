@@ -73,6 +73,8 @@ var defaultRemediations = map[string]string{
 	"logs.not-found": "run bootwright status --context <context> to see the operation records that remain",
 
 	"trust.identity":     "review the SSH identity the message names and enroll it with bootwright machine trust --context <context>",
+	"access.denied":      "review bootwright policy permissions or contact the context administrator",
+	"access.policy":      "correct the policy and run bootwright policy install again",
 	"access.unavailable": "provide the access metadata or credential the message names and repeat the command",
 	"access.copy":        "inspect the named destination, correct the paths and receiving-account permissions, then retry; completed files remain",
 	"access.target":      "name exactly one authorized target and repeat the command",

@@ -35,3 +35,5 @@ func ConfirmSudoEnvironment() *diagnostics.Diagnostic { return nil }
 func ForegroundOfOwnTerminal() bool { return false }
 
 func Escalated(context.Context) <-chan struct{} { return nil }
+
+func (Resolver) LookupSubject(context.Context, bool, string) (uint32, error) { return 0, errAccount }

@@ -121,7 +121,7 @@ func packageRoles() map[string]packageRole {
 		"containercluster/installation", "containercluster/preflight",
 		"controller/clients", "controller/prerequisites", "controller/firewall", "desiredstate/compilation",
 		"environment/access", "environment/clusterpreflight", "environment/inspection", "environment/preflight",
-		"machine/access", "machine/hardware", "machine/inventory", "machine/power", "managedos/media", "managedos/installation", "managedos/hostfirewall", "managedos/physicalerase", "managedos/diskdiscovery",
+		"machine/access", "machine/sessionpolicy", "machine/hardware", "machine/inventory", "machine/power", "managedos/media", "managedos/installation", "managedos/hostfirewall", "managedos/physicalerase", "managedos/diskdiscovery",
 		"nativeartifacts/rendering", "reconciliation/lifecycle",
 		"secrets/custody", "secrets/encryption", "storage/preflight", "storage/rendering", "storage/ceph",
 		"substrate/baremetal", "substrate/kubevirt", "substrate/libvirt", "trust/enrollment", "workspace/contexts",
@@ -677,6 +677,8 @@ func effectGrants() map[string][]string {
 		"internal/machine/sshlocal": {"io", "os", "syscall"},
 		// Machine access names those streams to hand them on; it opens nothing.
 		"internal/machine/access": {"io"},
+		// A session policy decoder compares its second decode with io.EOF.
+		"internal/machine/sessionpolicy": {"io"},
 		// The invoking account's opener opens only through the descriptors it
 		// issues, names no other os member, and starts at most one helper,
 		// this running binary under that account, whose descriptors it passes

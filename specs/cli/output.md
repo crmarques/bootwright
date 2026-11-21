@@ -304,7 +304,7 @@ and their output goldens:
 | `cluster kubectl`, `cluster oc` | `context`, `cluster`, `client`, `arguments`, `kubeconfigCommand`, `instructions` |
 | `cluster list` | `context`, `clusters` |
 | `cluster update-admin-creds` | `context`, `cluster`, `logins` |
-| `context current`, `context use` | `context` |
+| `context current`, `context use`, `policy install` | `context` |
 | `context delete` | `name`, `outcome`, `currentCleared`, `orphansAbandoned`, `releasedReservations` |
 | `context init`, `context update` | `context`, `counts`, `filesCopied`, `inputChanged` |
 | `context list` | `contexts` |
@@ -321,6 +321,7 @@ and their output goldens:
 | `machine info`, `machine list` | `context`, `machines`, `powerRead` |
 | `machine trust` | `context`, `dryRun`, `pending`, `recorded`, `hosts` |
 | `plan apply`, `plan destroy` | optional `checks`, `context`, `verb`, `steps`, `stages`, optional `until`, `waves`, `widest`, `bound`, `startable`, `deferred`, `continuation`, optional `settled`, `finalizes`, optional `addsTo`, optional `takesBack`, optional `anotherBuild`, `stops`, `stopsAfterOnline`, optional `authorizations`, `receipt` |
+| `policy permissions` | `context`, `grants` |
 | `render acquisitions` | `acquisitions` |
 | `render effective` | optional `counts`, optional `effectiveState`, optional `origins`, optional `inputDir`, optional `outputDir`, optional `effectiveStatePath`, optional `objects` |
 | `sbom` | `format`, `bom` |
@@ -1242,6 +1243,8 @@ it to a variable.
 | `substrate.unclaimed-server` | A warning a `machine-hardware-<machine>` block reports when the host of an OS-ready Machine it reads over SSH reports no permanent hardware address, so the server is not claimed ([OS-ready server claim](../substrates.md#physical-machine-realization)). Never a refusal. |
 | `substrate.lend-not-revoked` | A warning a block's attempt reports when the return of a KubeVirt host access it was lent could not delete the per-lend Secret its token is bound to; it names the host cluster, the Secret and the lifetime that still bounds the token, and a later lend sweeps the Secret once that lifetime has passed ([lent KubeVirt access revocation](../substrates.md#lent-kubevirt-access-revocation)). Never a refusal, and it changes no block's state. |
 | `trust.identity` | SSH identity is missing, changed, contradictory, or not authorized. |
+| `access.denied` | Delegated session admission could not prove a matching grant or the required access boundary. |
+| `access.policy` | A session access policy failed installation validation. |
 | `access.unavailable` | An applicable access request lacks required local access metadata or an available credential artifact. |
 | `access.unproved` | A revealed credential was kept from an effect never proved complete, so the access it grants was not proved; a warning. |
 | `access.target` | Explicit access cannot resolve one exact authorized target. |

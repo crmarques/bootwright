@@ -35,11 +35,11 @@ func (s Service) WithAdministrator(administrator func(api.Object) string) Servic
 }
 
 func (s Service) ClusterRsh(ctx context.Context, request ClusterRshRequest) (*machine.SessionResult, error) {
-	selected, machines, err := s.resolve(ctx, "cluster rsh", request.ContextName, single(request.Name), single(request.Node))
+	selected, machines, catalog, err := s.resolve(ctx, "cluster rsh", request.ContextName, single(request.Name), single(request.Node))
 	if err != nil {
 		return nil, err
 	}
-	return s.sessions.Rsh(ctx, selected, machines[0], request.SSH)
+	return s.sessions.Rsh(ctx, selected, machines[0], catalog, request.SSH)
 }
 
 func single(value string) []string {
@@ -50,37 +50,37 @@ func single(value string) []string {
 }
 
 func (s Service) ClusterExec(ctx context.Context, request ClusterExecRequest) (*machine.SessionResult, error) {
-	selected, machines, err := s.resolve(ctx, "cluster exec", request.ContextName, canonicalNames(request.Names), canonicalNames(request.Nodes))
+	selected, machines, catalog, err := s.resolve(ctx, "cluster exec", request.ContextName, canonicalNames(request.Names), canonicalNames(request.Nodes))
 	if err != nil {
 		return nil, err
 	}
-	return s.sessions.Exec(ctx, selected, machines, request.SSH, request.Command)
+	return s.sessions.Exec(ctx, selected, machines, catalog, request.SSH, request.Command)
 }
 
-func (s Service) resolve(ctx context.Context, command, contextName string, names, selectors []string) (string, []string, error) {
+func (s Service) resolve(ctx context.Context, command, contextName string, names, selectors []string) (string, []string, api.Catalog, error) {
 	if err := ctx.Err(); err != nil {
-		return "", nil, err
+		return "", nil, api.Catalog{}, err
 	}
 	if s.graph == nil || s.sessions == nil {
-		return "", nil, availability.ErrNotImplemented
+		return "", nil, api.Catalog{}, availability.ErrNotImplemented
 	}
 	selected, err := machine.SelectedContext(ctx, s.selection, contextName)
 	if err != nil {
-		return "", nil, err
+		return "", nil, api.Catalog{}, err
 	}
 	catalog, err := s.graph.Effective(ctx, selected)
 	if err != nil {
-		return "", nil, err
+		return "", nil, api.Catalog{}, err
 	}
 	clusters, err := sessionTargets(catalog, command, selected, names)
 	if err != nil {
-		return "", nil, err
+		return "", nil, api.Catalog{}, err
 	}
 	machines, err := selectMachines(clusters, selected, selectors, s.members, s.administrator)
 	if err != nil {
-		return "", nil, err
+		return "", nil, api.Catalog{}, err
 	}
-	return selected, machines, nil
+	return selected, machines, catalog, nil
 }
 
 func sessionTargets(catalog api.Catalog, command, contextName string, names []string) ([]api.Object, error) {

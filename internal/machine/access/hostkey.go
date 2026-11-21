@@ -43,6 +43,9 @@ func (s Service) provedHostKey(ctx context.Context, contextName string, selected
 	if record, found := records.Find(selected.name); found {
 		return recordedHostKey(record, selected, contextName)
 	}
+	if s.options.Authorize != nil {
+		return trust.HostKey{}, failure("trust.identity", "Machine "+selected.name+" has no trusted SSH host key", "ask the context administrator to enroll its host key")
+	}
 	return s.firstUse(ctx, contextName, selected, records, data, machines)
 }
 

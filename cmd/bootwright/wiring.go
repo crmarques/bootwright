@@ -16,6 +16,7 @@ import (
 	environmentpreflight "github.com/crmarques/bootwright/internal/environment/preflight"
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 	"github.com/crmarques/bootwright/internal/machine/power"
+	"github.com/crmarques/bootwright/internal/machine/sessionpolicy"
 	"github.com/crmarques/bootwright/internal/managedos/diskdiscovery"
 	"github.com/crmarques/bootwright/internal/managedos/media"
 	"github.com/crmarques/bootwright/internal/nativeartifacts/comparisonlocal"
@@ -34,6 +35,7 @@ import (
 // and explicit-input validation, which acquire no terminal, account or process
 // capability.
 type processDependencies struct {
+	Delegated          bool
 	Confirmer          contexts.Confirmer
 	SessionConfirmer   machineaccess.Confirmer
 	Streams            machineaccess.Streams
@@ -69,6 +71,12 @@ type operatorFileSession interface {
 // services consume. Each field is a consumer-owned contract, so a test binds
 // the same graph through its own implementations.
 type serviceDependencies struct {
+	PolicyStore      sessionpolicy.Store
+	HoldPolicy       func(context.Context) (func(), error)
+	PublishPolicy    func(context.Context, contexts.Record, []byte) error
+	PolicyAccount    accountResolver
+	LookupSubject    func(context.Context, bool, string) (uint32, error)
+	Delegated        bool
 	Repository       contexts.Repository
 	Workspace        secretstore.Workspace
 	Selection        contexts.SelectionStore
@@ -111,7 +119,8 @@ func localServiceDependencies(process processDependencies) (serviceDependencies,
 	files := openerFiles{opener: account.files()}
 	controllerPorts, release := localControllerDependencies(repository, process)
 	return serviceDependencies{
-		Repository:       repository,
+		Repository:  repository,
+		PolicyStore: repository, PolicyAccount: account.resolver, LookupSubject: privilege.Resolver{}.LookupSubject, Delegated: process.Delegated, HoldPolicy: repository.HoldSessionAdmission, PublishPolicy: repository.ReplaceSessionPolicy,
 		Workspace:        repository,
 		Trust:            repository,
 		SessionConfirmer: process.SessionConfirmer,
@@ -161,13 +170,26 @@ func assembleServices(deps serviceDependencies) cli.Services {
 	services.Lifecycle = reconciler
 	services.Secrets = secrets.binder.WithHolds(reconciler)
 	services.Logs = wireLogs(deps.Lifecycle)
-	machine := wireMachine(machineDependencies{
+	policy := policyCommands{
+		service: sessionpolicy.Service{Store: deps.PolicyStore, Members: policyRoster(), Lookup: deps.LookupSubject},
+		account: deps.PolicyAccount, delegated: deps.Delegated, graph: effectiveGraph{state: services.DesiredState}, selection: currentSelection(deps.Selection),
+		files: inputReader(deps.Files), repository: deps.Repository, hold: deps.HoldPolicy, publish: deps.PublishPolicy,
+	}
+	if deps.PolicyStore != nil {
+		services.Policy = policy
+	}
+	machineDeps := machineDependencies{
 		State: services.DesiredState, Lifecycle: reconciler, Trust: deps.Trust,
 		Confirmer: deps.Confirmer, Session: deps.SessionConfirmer, Reporter: deps.Reporter,
 		Selection: deps.Selection, Streams: deps.Streams, Terminal: deps.Terminal,
 		CopyAccount: deps.CopyAccount, Home: deps.Home, Owner: deps.Owner, Files: deps.Files, Stager: deps.Controller.Stager,
 		Custody: secrets.binder,
-	})
+	}
+	if deps.Delegated {
+		machineDeps.Authorize = policy.authorize
+		machineDeps.Admit = deps.HoldPolicy
+	}
+	machine := wireMachine(machineDeps)
 	services.MachineInventory, services.MachineAccess = machine.MachineInventory, machine.MachineAccess
 	services.MachineCopy = machine.MachineCopy
 	services.MachineDiscovery = diskdiscovery.NewDiscoveryService(reconciler)

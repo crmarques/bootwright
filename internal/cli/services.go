@@ -3,6 +3,7 @@ package cli
 import "io"
 
 type Services struct {
+	Policy                PolicyService
 	Contexts              ContextService
 	AddOnCatalog          AddOnCatalogService
 	Secrets               SecretService

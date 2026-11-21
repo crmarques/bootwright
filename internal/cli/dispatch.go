@@ -31,20 +31,22 @@ var errMissingService = errors.New("application service is not configured")
 // commandResult is the closed set of successful application results understood
 // by this executable. Unavailable error-only ports return its zero value.
 type commandResult struct {
-	addOns           *addoncatalog.ListResult
-	addOnInfo        *addoncatalog.DescribeResult
-	validation       *compilation.Report
-	admission        *contexts.AdmissionResult
-	use              *contexts.UseResult
-	list             *contexts.ListResult
-	current          *contexts.CurrentResult
-	deletion         *contexts.DeleteResult
-	effective        *compilation.EffectiveResult
-	rendered         *artifactrendering.Result
-	controller       *prerequisites.Report
-	rebind           *prerequisites.RebindResult
-	uninstall        *prerequisites.UninstallResult
-	storagePreflight *storagepreflight.Report
+	policyInstall     *policyInstallation
+	policyPermissions *policyPermissions
+	addOns            *addoncatalog.ListResult
+	addOnInfo         *addoncatalog.DescribeResult
+	validation        *compilation.Report
+	admission         *contexts.AdmissionResult
+	use               *contexts.UseResult
+	list              *contexts.ListResult
+	current           *contexts.CurrentResult
+	deletion          *contexts.DeleteResult
+	effective         *compilation.EffectiveResult
+	rendered          *artifactrendering.Result
+	controller        *prerequisites.Report
+	rebind            *prerequisites.RebindResult
+	uninstall         *prerequisites.UninstallResult
+	storagePreflight  *storagepreflight.Report
 
 	lifecyclePlan      *lifecycle.PlanResult
 	lifecycleStatus    *lifecycle.StatusResult

@@ -30,6 +30,7 @@
   COMMAND   PURPOSE
   machine   Inspect, reach, trust and power a context's Machines
   cluster   Inspect and reach a context's clusters
+  policy    Manage delegated session access
 
   CLI tools
   COMMAND      PURPOSE

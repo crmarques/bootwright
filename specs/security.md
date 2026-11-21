@@ -50,9 +50,9 @@ admits one retry that reads the target again before any effect
 On the controller host the attacker is an unprivileged local account, and any
 network adversary between the host and the publishers it acquires from. Root,
 and anything only root can write, is trusted; the operator's sudo rule is
-treated as granting everything it permits. Every account it admits may act on
-every context of the host: Bootwright keeps no authority between those
-accounts. Every file the controller executes
+treated as granting everything it permits. Administrative sudo grants carry
+authority over every context. The [delegated session entry](api/session-access-policy.md#delegated-execution)
+requires an active grant and limits the operations that entry accepts. Every file the controller executes
 or loads, the re-executed Bootwright binary, the interpreter, its standard
 library and `lib-dynload`, the controller runtime, `rpm` and `dnf` included, is
 therefore admitted only when it and every directory above it are owned by root

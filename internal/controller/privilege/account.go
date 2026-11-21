@@ -60,6 +60,7 @@ type accountDirectory interface {
 	byUID(ctx context.Context, uid int) (passwdEntry, error)
 	byName(ctx context.Context, name string) (passwdEntry, error)
 	groupsOf(ctx context.Context, name string) ([]uint32, error)
+	groupID(ctx context.Context, name string) (uint32, error)
 }
 
 var (
@@ -109,8 +110,16 @@ func accountFrom(ctx context.Context, directory accountDirectory, request accoun
 	if named != entry {
 		return Account{}, accountRefusal{inconsistent}
 	}
-	if manual && (request.sudoUser != entry.name || request.sudoGID != strconv.Itoa(entry.gid)) {
-		return Account{}, accountRefusal{disagreeingSudo}
+	if manual {
+		if request.sudoGID != strconv.Itoa(entry.gid) || !accountName(request.sudoUser) {
+			return Account{}, accountRefusal{disagreeingSudo}
+		}
+		if request.sudoUser != entry.name {
+			alias, err := directory.byName(ctx, request.sudoUser)
+			if err != nil || alias != entry {
+				return Account{}, accountRefusal{disagreeingSudo}
+			}
+		}
 	}
 	groups, err := directory.groupsOf(ctx, entry.name)
 	if err != nil {
@@ -240,4 +249,41 @@ func decimalID(value string) (int, error) {
 		return 0, errAccount
 	}
 	return int(n), nil
+}
+
+func groupFields(line string) (string, int, error) {
+	fields := strings.Split(line, ":")
+	if len(fields) != 4 || !accountName(fields[0]) {
+		return "", 0, errMalformed
+	}
+	gid, err := decimalID(fields[2])
+	if err != nil {
+		return "", 0, errMalformed
+	}
+	return fields[0], gid, nil
+}
+
+func (f accountFiles) groupID(_ context.Context, name string) (uint32, error) {
+	var gid int
+	found := false
+	for _, line := range strings.Split(string(f.groups), "\n") {
+		if !strings.HasPrefix(line, name+":") {
+			continue
+		}
+		_, id, err := groupFields(line)
+		if found || err != nil {
+			return 0, errMalformed
+		}
+		gid, found = id, true
+	}
+	if !found {
+		return 0, errNoEntry
+	}
+	for _, line := range strings.Split(string(f.groups), "\n") {
+		canonical, id, err := groupFields(line)
+		if err == nil && gid == id && canonical != name {
+			return 0, errMalformed
+		}
+	}
+	return uint32(gid), nil
 }

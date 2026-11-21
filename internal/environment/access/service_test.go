@@ -30,12 +30,12 @@ type openedSession struct {
 
 type recordingSessions struct{ opened []openedSession }
 
-func (r *recordingSessions) Rsh(_ context.Context, contextName, name string, _ machine.SSHOptions) (*machine.SessionResult, error) {
+func (r *recordingSessions) Rsh(_ context.Context, contextName, name string, _ api.Catalog, _ machine.SSHOptions) (*machine.SessionResult, error) {
 	r.opened = append(r.opened, openedSession{context: contextName, machine: name, interactive: true})
 	return &machine.SessionResult{Context: contextName, Machine: name, ExitCode: 3}, nil
 }
 
-func (r *recordingSessions) Exec(_ context.Context, contextName string, names []string, _ machine.SSHOptions, command []string) (*machine.SessionResult, error) {
+func (r *recordingSessions) Exec(_ context.Context, contextName string, names []string, _ api.Catalog, _ machine.SSHOptions, command []string) (*machine.SessionResult, error) {
 	r.opened = append(r.opened, openedSession{context: contextName, machines: names, command: command})
 	return &machine.SessionResult{Context: contextName, Machine: strings.Join(names, ","), ExitCode: 4}, nil
 }

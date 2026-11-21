@@ -48,8 +48,23 @@ func processBoundary() privilegeBoundary {
 		sudoEnviron: privilege.ConfirmSudoEnvironment}
 }
 
+const delegatedSessionEntry = "__bootwright_delegate"
+
+func delegatedCommand(classification cli.InvocationClass) bool {
+	return sessionCommand(classification) || classification.Command == "policy permissions"
+}
+
 func (b privilegeBoundary) run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	delegated := len(args) > 0 && args[0] == delegatedSessionEntry
+	if delegated {
+		args = args[1:]
+	}
 	classification := cli.ClassifyInvocation(args)
+	if delegated {
+		if refusal := privilege.AdmitDelegatedEntry(classification.RequiresRoot && delegatedCommand(classification), b.euid()); refusal != nil {
+			return refuseAtBoundary(classification, stdout, stderr, *refusal, 1)
+		}
+	}
 	if classification.JSON && (classification.SecretStdin != "" || classification.URLStdin) && b.inputTerminal != nil {
 		terminal, err := b.inputTerminal()
 		if err != nil || terminal {
@@ -90,6 +105,7 @@ func (b privilegeBoundary) run(ctx context.Context, args []string, stdout, stder
 		return b.runElevated(ctx, classification, args, stdout, stderr, route)
 	}
 	process, hooks := interactiveProcess(classification, args, stdout, stderr, route)
+	process.Delegated = delegated
 	services, release := wireServices(process)
 	defer release()
 	return runServices(ctx, args, stdout, stderr, services, hooks)
@@ -122,6 +138,9 @@ func elevationInvocation(classification cli.InvocationClass, args []string, rout
 	}
 	if classification.SSHPassword {
 		invocation.SecretStdin = privilege.SSHPasswordInput
+	}
+	if delegatedCommand(classification) {
+		invocation.Arguments = append([]string{delegatedSessionEntry}, invocation.Arguments...)
 	}
 	if file, ok := terminalFile(stdout); ok {
 		invocation.OutputTerminal = file

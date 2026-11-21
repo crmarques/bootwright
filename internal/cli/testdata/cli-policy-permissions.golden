@@ -1,0 +1,8 @@
+diagnostics (as core)
+  Cluster selectors: apps
+  Machine selectors: gateway
+  Effective Machines: gateway, worker
+  Exec ["/usr/bin/uptime"]
+support (as core)
+  Effective Machines: worker
+  Interactive shell
