@@ -20,6 +20,7 @@ const (
 	collectionPlugins = "ansible/collections/ansible_collections/bootwright/core/plugins/"
 	scriptsRoot       = "scripts/"
 	toolsRoot         = "scripts/tools/"
+	scanRecordsRoot   = toolsRoot + "clientassets/scanrecords/"
 	e2eRoot           = "e2e/"
 	examplesRoot      = "examples/"
 
@@ -59,6 +60,11 @@ func sourceRow(name, firstLine string) (row string, mapped bool) {
 		return rowPython, strings.HasSuffix(name, ".py")
 	case strings.HasPrefix(name, toolsRoot):
 		if strings.HasSuffix(name, ".py") || strings.HasSuffix(name, ".go") && strings.Contains(strings.TrimPrefix(name, toolsRoot), "/") {
+			return rowRepositoryTool, true
+		}
+		// The scanner consumes these generated inputs as pinned data.
+		if entry, found := strings.CutPrefix(name, scanRecordsRoot); found && !strings.Contains(entry, "/") &&
+			(strings.HasSuffix(entry, ".json.gz") || strings.HasSuffix(entry, ".gomod")) {
 			return rowRepositoryTool, true
 		}
 		return rowRepositoryTool, slices.ContainsFunc(toolDataSuffixes, func(suffix string) bool { return strings.HasSuffix(name, suffix) })
@@ -154,6 +160,11 @@ func TestSourceMapRefusesAnUnmappedFile(t *testing.T) {
 		"ansible/collections/other/plugins/x.rb":    "",
 		"specs/architecture.md":                     "",
 		"scripts/tools/ansible-test-artifacts.json": "",
+		scanRecordsRoot + "helm.json.gz":            "",
+		scanRecordsRoot + "virtctl.gomod":           "",
+		scanRecordsRoot + "nested/helm.json.gz":     "",
+		scanRecordsRoot + "unknown.gz":              "",
+		"scripts/tools/unknown.json.gz":             "",
 		"e2e/render.sh":                             caseRendererShebang,
 		"e2e/README.md":                             "# End-to-end cases",
 		"e2e/lab-rhel/runbook.md":                   "",
@@ -190,8 +201,11 @@ func TestSourceMapRefusesAnUnmappedFile(t *testing.T) {
 		"examples/run.sh",
 		"scripts/bash-script",
 		"scripts/python-script",
+		scanRecordsRoot + "nested/helm.json.gz",
+		scanRecordsRoot + "unknown.gz",
 		"scripts/tools/launcher.rb",
 		"scripts/tools/loose.go",
+		"scripts/tools/unknown.json.gz",
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("unmapped = %q, want %q", got, want)

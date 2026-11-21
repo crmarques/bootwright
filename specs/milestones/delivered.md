@@ -18104,7 +18104,8 @@ owner's request to implement the dependency proposal.
 The [build gate](../security.md#the-vulnerability-gate) verifies and scans
 reviewed local records for pinned clients. Maintenance reproduces them from
 pinned publisher files. A container release requires a newly evaluated
-vulnerability verdict.
+vulnerability verdict. The language fitness check admits the compressed
+records and fallback module file only in the scan input directory.
 
 **Exit evidence:** reproduction from the four pinned publisher artifacts,
 changed-file refusal, and the live advisory gate with client publisher
