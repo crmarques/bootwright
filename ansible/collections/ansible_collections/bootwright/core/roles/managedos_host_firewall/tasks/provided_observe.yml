@@ -4,6 +4,7 @@
     operation: inspect
     mark: '{{ bootwright_os_firewall_material.mark }}'
     services: '{{ managedos_host_firewall_services }}'
+    ssh_sources: '{{ bootwright_os_firewall_request.sshSources | default([]) }}'
     ssh_address: "{{ bootwright_os_firewall_request.placement.address | default('') }}"
     ssh_port: '{{ bootwright_os_firewall_request.placement.port | default(0) }}'
   register: managedos_host_firewall_answer
@@ -33,6 +34,7 @@
     phase: completed
     digest: '{{ bootwright_os_firewall_digest }}'
     services: '{{ managedos_host_firewall_answer.evidence.services }}'
+    ssh_policy: "{{ managedos_host_firewall_answer.evidence.sshPolicy | default('') }}"
     ready: '{{ managedos_host_firewall_answer.ready }}'
     outcome: "{{ 'changed' if managedos_host_firewall_answer.changed else 'unchanged' }}"
     observed: true

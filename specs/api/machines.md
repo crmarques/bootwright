@@ -38,6 +38,35 @@ refused on a downstream-installer Machine. No zone name or port list is
 authored here: listener ports and addresses come from their owning capabilities.
 No setting changes upstream firewalls or the service's bind addresses.
 
+### SSH ingress
+
+`spec.firewall.ssh.allowedSources` admits new remote SSH connections to the
+installed OS from the listed sources. Omission leaves SSH admission to the
+host's existing policy. The list is a whole value for kind defaults and
+requires 1 to 64 entries. Each selects exactly one form.
+
+| Entry | Rule |
+| --- | --- |
+| `ip` | One unzoned IPv4 or IPv6 address. |
+| `cidr` | One IPv4 or IPv6 prefix with host bits clear. |
+| `machine` | A required scalar `machineRef` and a required `addressRef` naming one numeric `spec.network.addresses` entry on that Machine. |
+
+References read declared IPs at compilation and add no lifecycle ordering.
+The frozen allowlist contains sorted, unique network prefixes. A Machine
+reference expands to a single host prefix. Author the address visible on the
+target, including the translated source where routing uses NAT. Null, an empty
+list and DNS contacts are invalid.
+
+A provided Machine requires `firewall.management: managed` and its ordinary
+local or pinned lifecycle access. A Bootwright-installed Machine requires the
+`nftables` package in its install profile. The SSH filter applies independently
+of the install profile's firewalld setting. External firewall management and
+downstream-installed Machines refuse the field. Temporary installer and disk
+discovery endpoints keep their own access policy. The
+[host firewall capability](../managed-os.md#host-firewall-requirements) owns
+enforcement. [Ceph](../ceph-native-api.md#ssh-source-admission) owns the manager connectivity
+requirement.
+
 ## Kinds
 
 | Kind | Declares |

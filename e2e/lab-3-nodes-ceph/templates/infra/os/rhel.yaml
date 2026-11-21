@@ -53,6 +53,7 @@ spec:
         - lvm2
         - python3
         - firewalld
+        - nftables
 {{- if $nfs }}
         - nfs-utils
 {{- end }}

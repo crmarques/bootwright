@@ -68,8 +68,8 @@
     "fingerprint": "a243c24e27c1efa1e231f4fe42b25836cc14c3ffd41a36828822e6fbe18da469"
   },
   "os-host-firewall-v1": {
-    "contentDigest": "e2caf6dca8f1803cfb52b4c0acecdfaca45a5a691558021fdce62facb88c310d",
-    "fingerprint": "0ff94a16cb8a8f8125b481070b74cbfb60f13ffa6aa281a30ce9d2b741f238ae"
+    "contentDigest": "8550f82a2e2370513d4e35e0e14d2f2cc4965d910599abd0243df00126361efd",
+    "fingerprint": "d1b0da961109bdb92c338ebf588965da768cc47ffb5c572e441d5c97c850e75b"
   },
   "os-install-anaconda-v1": {
     "contentDigest": "aa6502872414cbb6385203565bca0b74aca545f8aa1b6b88053e5fd2fe6e610b",

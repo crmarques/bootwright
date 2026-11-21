@@ -145,7 +145,7 @@ func contractRecipes() map[string]digestRecipe {
 		hostfirewall.FirewallImplementation: digestOf(partDomain("bootwright.managedos.host-firewall-v1"), partImplementation(hostfirewall.FirewallImplementation),
 			partVersion(hostfirewall.FirewallEvidenceVersion), partPin(hostfirewall.FirewallServiceRoot),
 			partPin("bootwright-host-firewall context=context block=os-firewall-machine apply=operation"), partPin("bootwright-context-publisher"),
-			partPin("e04c153c9c84d6a73bfb3f05e09e0e7b4f4104332ee1d318cc4b3021570dc1a5"), partPin("power-cycled-guest-removal")),
+			partPin("e04c153c9c84d6a73bfb3f05e09e0e7b4f4104332ee1d318cc4b3021570dc1a5"), partPin("power-cycled-guest-removal"), partPin("nftables-systemd-ssh-ingress")),
 		installation.Implementation: digestOf(partDomain("bootwright.managedos.install-anaconda-v1"), partImplementation(installation.Implementation), partRequest("os-install-anaconda-v1"),
 			partVersion("kickstart-anaconda-v1"), partPin("os"), partPin("private"), partPin("public"), partPin(installation.MarkerPath), partPin(installation.HostKeyPath),
 			partPin(installation.NetworkDocumentPath), partPin(installation.NetworkMarkerPath), partPin(strconv.Itoa(300)), partPin("proved-installation-disk-boot,replay-safe-unread-registration,bond-permanent-lower-links"), partPin(substrate.RedfishMediaPolicy), partPin("anaconda-home-partition-policy"), partPin("subscription-package-source"), partPin("explicit-repository-proxy-policy"), partPin("power-cycled-guest-removal")),

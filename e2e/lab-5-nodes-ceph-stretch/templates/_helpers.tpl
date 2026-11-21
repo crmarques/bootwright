@@ -34,6 +34,20 @@ spec:
     install:
       profileRef: rhel
 
+  firewall:
+    ssh:
+      allowedSources:
+        - machine:
+            machineRef: controller
+            addressRef: guest-ssh
+{{- range $index, $name := concat $v.sites.dc1 $v.sites.dc2 }}
+{{- if eq (mod $index 2) 0 }}
+        - machine:
+            machineRef: {{ $name }}
+            addressRef: ip
+{{- end }}
+{{- end }}
+
   network:
     configRef: lab-guests
     installAddressRef: ip

@@ -27,6 +27,12 @@ def completion(arguments):
                 "request": adapter_protocol.request_digest(arguments.get("digest")),
                 "services": [dict(entry, memberships=[dict(item) for item in entry["memberships"]]) for entry in services],
                 "version": VERSION}
+    ssh = arguments.get("ssh_policy", "")
+    if ssh:
+        if ssh not in worker.SSH_STATES:
+            raise ValueError("host firewall SSH policy")
+        evidence["sshPolicy"] = ssh
+        evidence["postcondition"] = evidence["postcondition"] and ssh == ("absent" if removed else "ready")
     if adapter_protocol.publishes(evidence, arguments.get("observed")):
         return evidence, None
     return evidence, adapter_protocol.unreached("the host firewall", "not proved", ["services"])

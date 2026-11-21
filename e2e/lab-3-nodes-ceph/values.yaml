@@ -17,6 +17,7 @@ host:
   bridge: virbr-e2e
   cidr: 198.51.100.0/24
   gateway: 198.51.100.1
+  guestSSHSource: true
   prefix: 24
 
 # Media names as added with `bootwright catalog media add --name`.

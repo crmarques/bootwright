@@ -18,5 +18,8 @@ spec:
       - name: ip
         address: {{ include "address" . }}
 
+      - name: guest-ssh
+        address: {{ .Values.host.gateway }}
+
   access:
     local: {}

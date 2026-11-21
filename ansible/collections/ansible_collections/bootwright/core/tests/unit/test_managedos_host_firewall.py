@@ -565,7 +565,7 @@ def test_the_worker_source_runs_alone_with_only_the_standard_library():
     source = module.worker_source()
     compile(source, "worker", "exec")
     imports = {line.split()[1].split(".")[0] for line in source.splitlines() if line.startswith(("import ", "from "))}
-    assert imports <= {"__future__", "hashlib", "ipaddress", "json", "os", "re", "stat", "subprocess", "sys"}, imports
+    assert imports <= {"__future__", "fcntl", "hashlib", "ipaddress", "json", "os", "re", "stat", "subprocess", "sys", "tempfile"}, imports
 
 
 @pytest.mark.parametrize("operation", ["inspect", "remove"])
@@ -864,12 +864,12 @@ def test_apply_and_destroy_share_one_session_parameterized_by_operation(name, op
 
 
 @pytest.mark.parametrize("name, key", [("session.yml", "bootwright.core.managedos_firewall"), ("observe.yml", "bootwright.core.managedos_firewall")])
-def test_the_module_call_pins_the_frozen_connection_and_hands_it_only_the_mark_and_the_services(name, key):
+def test_the_module_call_pins_the_frozen_connection_and_hands_it_only_the_frozen_firewall_intent(name, key):
     task = calls(name, key)[0]
     assert task["failed_when"] is False and task["no_log"] is True
     arguments = task[key]
     assert set(arguments) == {"operation", "address", "user", "identity", "ssh_config", "known_hosts", "host_key_algorithms",
-                              "policy_host_key_algorithms", "mark", "services", "timeout"}
+                              "policy_host_key_algorithms", "mark", "services", "ssh_sources", "timeout"}
     scratch = "/var/tmp/bootwright-scratch-1-1/managedos-firewall"
     opened = role_tasks.guest_session(flattened(tasks(name)), key)[0][role_tasks.GUEST_SESSION]
     assert render(opened["directory"]) == scratch and render(opened["address"]) == "192.0.2.10"

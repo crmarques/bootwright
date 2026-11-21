@@ -45,6 +45,7 @@ spec:
 
       install:
         - chrony
+        - nftables
         - qemu-guest-agent
 
     services:

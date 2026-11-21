@@ -2149,6 +2149,22 @@ admit every client reaching the selected zones. Bind services on a network
 whose clients are appropriate under [listener exposure](security.md#listener-exposure).
 No authored zone name or duplicated port list is needed.
 
+A Machine can also publish its
+[SSH source policy](api/machines.md#ssh-ingress) without a listener grant.
+The host firewall block realizes it with an owned nftables input chain and a
+systemd unit ordered before sshd. Traffic to the system sshd ports from
+unlisted sources drops in that chain, even if a separate firewall chain admits
+the service. Existing sessions and loopback traffic continue. The policy
+applies to the machine's system sshd and refuses socket activation. SSH port
+changes must be coordinated with the filter. Firewalld and other listeners
+continue to apply their own rules.
+
+Apply checks the connected peer against the candidate before publishing the
+filter. Installed-host apply verifies the policy again through a fresh pinned
+session. Observation checks the persistent files, startup enablement and actual
+kernel chain. Removal deletes only this operation's owned filter and startup
+files.
+
 ### Implementations
 
 `installation.FirewallImplementation`, family `os-host-firewall`, realizes

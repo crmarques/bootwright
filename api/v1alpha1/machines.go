@@ -75,12 +75,16 @@ func machineSchema() *Shape {
 		field("installAddressRef", nestedIn(Scope{Noun: "address", Entries: []string{"network", "addresses"}})), field("addresses", named(record(required("name", nonempty()), required("address", lexical(LexicalHost)), field("interface", lexical(LexicalIfname))))),
 		field("interfaceMatches", &Shape{Type: Sequence, Atomic: true, NameKey: "interface", Element: record(required("interface", lexical(LexicalIfname)), required("nicRef", nestedIn(Scope{Noun: "hardware NIC", Entries: []string{"hardware", "nics"}})))}), field("overrides", native()))
 	os := choice(field("provided", record()), field("install", record(required("profileRef", ref(MachineInstallProfile)), field("hostKeyRef", secret("sshKeyPair")), field("ntp", serverSelections(NTPServer)))), field("clusterInstalled", record()))
+	source := choice(field("ip", ip()), field("cidr", cidr()), field("machine", record(
+		required("machineRef", ref(Machine)),
+		required("addressRef", nestedIn(Scope{Noun: "address", Owner: []string{"machineRef"}, Kind: Machine, Entries: []string{"network", "addresses"}})),
+	)))
 	return record(
 		field("site", name()),
 		field("hardware", machineHardwareSchema()),
 		required("os", os),
 		field("proxy", proxySelection()),
-		field("firewall", record(field("management", enumeration("managed", "external")))),
+		field("firewall", record(field("management", enumeration("managed", "external")), field("ssh", record(required("allowedSources", set(source)))))),
 		field("network", network), field("access", access),
 	)
 }

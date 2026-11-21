@@ -29,6 +29,9 @@ options:
     description: The service name a foreign or interfaceless refusal names, or the closed cause of a failed one.
     type: str
     required: false
+  ssh_policy:
+    description: Observed state of the configured SSH ingress filter.
+    type: str
   services:
     description: The services as the machine holds them, the module's evidence.
     type: list

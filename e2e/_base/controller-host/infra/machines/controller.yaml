@@ -18,5 +18,10 @@ spec:
       - name: ip
         address: {{ include "address" . }}
 
+{{- if .Values.host.guestSSHSource }}
+      - name: guest-ssh
+        address: {{ .Values.host.gateway }}
+
+{{- end }}
   access:
     local: {}

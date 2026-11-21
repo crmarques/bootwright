@@ -331,6 +331,9 @@ func (c HostCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 				impacts = append(impacts, "set host-wide Podman proxy defaults on "+host.Machine)
 			}
 			requires := hostRequirements(cluster.Controller, host)
+			if target, _ := catalog.Find(api.Machine, host.Machine); host.Provided && target.Spec().Has("firewall", "ssh") {
+				requires = append(requires, reconciliation.ObjectRef{Kind: string(api.Machine), Object: host.Machine, Family: machine.FirewallFamily})
+			}
 			for _, peer := range cluster.Hosts {
 				if peer.Physical {
 					requires = append(requires, hostRequirements(cluster.Controller, peer)...)

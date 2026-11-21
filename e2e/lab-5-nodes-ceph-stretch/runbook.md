@@ -35,6 +35,12 @@ test. A successful run includes all checks for the selected inputs, the
 required drills and cleanup. An unexpected failure fails the run; retain its
 private records for cleanup. Run each other input variant from the beginning.
 
+The rendered SSH filters admit only the controller's guest bridge address
+and the two manager-eligible data-node addresses. The arbiter installation
+uses the manager IPs from the shared render values, since the manager
+Machines belong to the separate Ceph context. Re-render both contexts with
+the same values whenever those addresses change.
+
 ## 1. Choose the inputs
 
 | `--set` | Default | Effect |

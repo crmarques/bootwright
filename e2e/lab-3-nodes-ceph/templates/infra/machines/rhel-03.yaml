@@ -15,6 +15,22 @@ spec:
     install:
       profileRef: rhel
 
+  firewall:
+    ssh:
+      allowedSources:
+        - machine:
+            machineRef: controller
+            addressRef: guest-ssh
+        - machine:
+            machineRef: rhel-01
+            addressRef: ip
+        - machine:
+            machineRef: rhel-02
+            addressRef: ip
+        - machine:
+            machineRef: rhel-03
+            addressRef: ip
+
   network:
     configRef: lab-guests
     installAddressRef: ip

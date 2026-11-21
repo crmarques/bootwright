@@ -71,6 +71,11 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		}
 		for _, r := range requests {
 			r.Controller = input.Controller
+			if r.Action == "cluster" && input.Verb == reconciliation.Apply {
+				if err := validateSSHSourceAdmission(catalog, r); err != nil {
+					return plan, err
+				}
+			}
 			definition, err := c.definition(input.Verb, object, r)
 			if err != nil {
 				return plan, err

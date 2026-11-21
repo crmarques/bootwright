@@ -29,6 +29,11 @@ test. A successful run includes all checks for the selected inputs, the
 required drills and cleanup. An unexpected failure fails the run; retain its
 private records for cleanup. Run each other input variant from the beginning.
 
+The rendered guest SSH filters admit only the controller's guest bridge
+address and the three manager-eligible node addresses. The manager service can
+place its two instances on any of those nodes. The policy filters SSH ports
+only, so Ceph's service and data traffic follows the existing firewall policy.
+
 ## 1. Choose the inputs
 
 | `--set` | Default | Effect |

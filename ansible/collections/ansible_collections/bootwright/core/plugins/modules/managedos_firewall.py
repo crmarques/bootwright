@@ -106,6 +106,11 @@ options:
         description: The exact bytes of the service file, ASCII starting with an XML declaration, at most 16384 bytes.
         type: str
         required: true
+  ssh_sources:
+    description: Canonical source prefixes for the SSH ingress filter.
+    type: list
+    elements: str
+    default: []
   timeout:
     description: Seconds the whole session may take, from 1 to 900.
     type: int
@@ -165,6 +170,7 @@ cause:
     - exit
     - answer
     - unreachable
+    - ssh-admission
 detail:
   description: The service name of a foreign or interfaceless service; or fixed text naming a refused session check.
   returned: for host-firewall-foreign, host-firewall-no-interface and a refused session
@@ -217,7 +223,10 @@ def check_arguments(params):
     if not worker.valid_mark(params["mark"]):
         raise ArgumentError("mark is not printable ASCII without markup characters of at most 256 bytes")
     services = params["services"]
-    if not isinstance(services, list) or not 0 < len(services) <= worker.MAX_SERVICES:
+    sources = params.get("ssh_sources", [])
+    if sources and not worker.valid_ssh_sources(sources):
+        raise ArgumentError("invalid SSH source prefixes")
+    if not isinstance(services, list) or len(services) > worker.MAX_SERVICES or not (services or sources):
         raise ArgumentError("services is not from 1 to 64 services")
     for service in services:
         check_service(service)
@@ -237,7 +246,12 @@ def refusal(reason, cause=None, detail=None):
 
 
 def valid_result(operation, names, value):
-    if not isinstance(value, dict) or set(value) != {"changed", "services"} or type(value["changed"]) is not bool:  # pylint: disable=unidiomatic-typecheck
+    keys = {"changed", "services"}
+    if not isinstance(value, dict) or not keys <= set(value) <= keys | {"sshPolicy"}:
+        return False
+    if type(value["changed"]) is not bool:  # pylint: disable=unidiomatic-typecheck
+        return False
+    if "sshPolicy" in value and value["sshPolicy"] not in worker.SSH_STATES:
         return False
     return (operation != "inspect" or value["changed"] is False) and worker.valid_evidence(value["services"], names)
 
@@ -281,7 +295,10 @@ def interpret(operation, names, outcome):
     if value is None:
         return refusal("transport", "answer")
     if value["ok"]:
-        return {"changed": value["result"]["changed"], "evidence": {"services": value["result"]["services"]}, "ok": True}
+        evidence = {"services": value["result"]["services"]}
+        if "sshPolicy" in value["result"]:
+            evidence["sshPolicy"] = value["result"]["sshPolicy"]
+        return {"changed": value["result"]["changed"], "evidence": evidence, "ok": True}
     if value["reason"] == "transport":
         return refusal("transport", "answer")
     return refusal(value["reason"], value.get("cause"), value.get("detail"))
@@ -293,7 +310,10 @@ def execute(params, run=managedos_guest_ssh.run):
     names = [service["name"] for service in params["services"]]
     services = [dict({key: value for key, value in service.items() if key != "addresses" or value is not None}, networks=list(service["networks"] or []))
                 for service in params["services"]]
-    payload = canonical({"mark": params["mark"], "operation": params["operation"], "services": services})
+    payload = {"mark": params["mark"], "operation": params["operation"], "services": services}
+    sources = params.get("ssh_sources", [])
+    if sources:
+        payload["sshSources"] = sources
     remote_argv = remote_command.fixed_worker_argv(worker_source())
     try:
         argv = managedos_guest_ssh.guest_argv(
@@ -302,7 +322,13 @@ def execute(params, run=managedos_guest_ssh.run):
             identity=params["identity"], user=params["user"], address=params["address"], remote_argv=remote_argv)
     except managedos_guest_ssh.SessionError as error:
         return refusal("transport", "session", str(error))
-    return interpret(params["operation"], names, run(argv, payload, params["timeout"]))
+    outcome = interpret(params["operation"], names, run(argv, canonical(payload), params["timeout"]))
+    if sources and params["operation"] == "apply" and outcome["ok"]:
+        probe = dict(payload, operation="inspect")
+        verified = interpret("inspect", names, run(argv, canonical(probe), params["timeout"]))
+        if not verified["ok"] or verified["evidence"].get("sshPolicy") != "ready":
+            return refusal("host-firewall-failed", "ssh-admission")
+    return outcome
 
 
 def main():
@@ -323,6 +349,7 @@ def main():
                 "content": {"type": "str", "required": True},
                 "addresses": {"type": "list", "elements": "str"},
             }},
+            "ssh_sources": {"type": "list", "elements": "str", "default": []},
             "timeout": {"type": "int", "default": 300},
         },
         supports_check_mode=False,

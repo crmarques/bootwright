@@ -30,6 +30,7 @@
     policy_host_key_algorithms: '{{ managedos_host_firewall_session.policy_host_key_algorithms }}'
     mark: '{{ bootwright_os_firewall_material.mark }}'
     services: '{{ managedos_host_firewall_services }}'
+    ssh_sources: '{{ bootwright_os_firewall_request.sshSources | default([]) }}'
     timeout: '{{ bootwright_os_firewall_request.budgets.session | int }}'
   register: managedos_host_firewall_answer
   failed_when: false

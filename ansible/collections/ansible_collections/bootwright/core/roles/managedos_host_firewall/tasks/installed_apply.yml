@@ -27,4 +27,5 @@
     outcome: "{{ 'changed' if managedos_host_firewall_answer.changed else 'unchanged' }}"
     digest: '{{ bootwright_os_firewall_digest }}'
     services: '{{ managedos_host_firewall_answer.evidence.services }}'
+    ssh_policy: "{{ managedos_host_firewall_answer.evidence.sshPolicy | default('') }}"
   no_log: true

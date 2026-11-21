@@ -588,3 +588,36 @@ func TestTheFirewallSessionAndDeadlineAreFrozen(t *testing.T) {
 		t.Fatalf("bounds %s for a %s firewall session", firewallDeadline, firewallSession)
 	}
 }
+
+func TestSSHSourcesPlanAFilterWithoutListenerGrants(t *testing.T) {
+	policy := func(ref string) api.FieldValue {
+		return field("firewall", api.MapValue(field("ssh", api.MapValue(field("allowedSources", api.ListValue(
+			api.MapValue(field("machine", api.MapValue(text("machineRef", ref), text("addressRef", "egress")))),
+			api.MapValue(text("cidr", "2001:db8:4::/64")),
+		))))))
+	}
+	controller, _ := labCatalog().Find(api.Machine, "controller")
+	addresses := controller.Spec().Get("network", "addresses").Items()
+	addresses = append(addresses, api.MapValue(text("name", "egress"), text("address", "192.0.2.12")))
+	controller = controller.WithSpec(controller.Spec().WithPath(api.ListValue(addresses...), "network", "addresses"))
+	provided := controller.WithSpec(controller.Spec().WithPath(api.StringValue("managed"), "firewall", "management").
+		WithPath(policy("controller").Value.Get("ssh"), "firewall", "ssh"))
+	for _, tc := range []struct {
+		catalog api.Catalog
+		blocks  int
+		direct  bool
+	}{
+		{labCatalog(firewallProfile(firewallDisabled), controller, guest(policy("controller"))), 1, false},
+		{api.NewCatalog([]api.Object{provided}), 2, true},
+	} {
+		blocks := firewallPlan(t, tc.catalog, staticPorts()).Definitions
+		if len(blocks) != tc.blocks {
+			t.Fatalf("planned %d blocks, want %d", len(blocks), tc.blocks)
+		}
+		request, err := DecodeFirewallRequest(blocks[len(blocks)-1].Request)
+		if err != nil || request.Direct != tc.direct || request.Preparation || len(request.Services) != 0 ||
+			!slices.Equal(request.SSHSources, []string{"192.0.2.12/32", "2001:db8:4::/64"}) {
+			t.Fatalf("request %+v, error %v", request, err)
+		}
+	}
+}

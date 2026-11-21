@@ -34,6 +34,11 @@ options:
     description: The address of this placement's SSH connection, empty for local execution.
     type: str
     default: ''
+  ssh_sources:
+    description: Canonical source prefixes for the SSH ingress filter.
+    type: list
+    elements: str
+    default: []
   ssh_port:
     description: The SSH port which must remain admitted before starting a remote firewall.
     type: int
@@ -270,6 +275,11 @@ def execute(params, guest=None):
     if not worker.valid_mark(params["mark"]) or not worker.valid_services(params["services"]):
         raise ValueError("invalid host firewall request")
     payload = {"operation": params["operation"], "mark": params["mark"], "services": params["services"]}
+    sources = params.get("ssh_sources", [])
+    if sources:
+        if not worker.valid_ssh_sources(sources):
+            raise ValueError("invalid SSH source prefixes")
+        payload["sshSources"] = sources
     try:
         changed = False
         if params["operation"] == "apply":
@@ -277,10 +287,13 @@ def execute(params, guest=None):
                 if guest.ownership(service["name"], params["mark"])[0] == "foreign":
                     raise worker.Refused("host-firewall-foreign", detail=service["name"])
             changed = prepare(guest, params)
-        result = worker.HANDLERS[params["operation"]](guest, payload)
+        result = worker.converge(guest, payload, remote=bool(params["ssh_port"]))
         code, output = guest.run([SYSTEMCTL, "is-enabled", "firewalld.service"])
         ready = code == 0 and output.strip() == b"enabled"
-        return {"changed": changed or result["changed"], "ok": True, "ready": ready, "evidence": {"services": result["services"]}}
+        evidence = {"services": result["services"]}
+        if "sshPolicy" in result:
+            evidence["sshPolicy"] = result["sshPolicy"]
+        return {"changed": changed or result["changed"], "ok": True, "ready": ready, "evidence": evidence}
     except worker.Refused as refused:
         return dict(worker.refusal(refused), changed=False)
 
@@ -292,6 +305,7 @@ def main():
         "services": {"type": "list", "elements": "dict", "required": True},
         "ssh_address": {"type": "str", "default": ""},
         "ssh_port": {"type": "int", "default": 0},
+        "ssh_sources": {"type": "list", "elements": "str", "default": []},
     }, supports_check_mode=False)
     try:
         result = execute(module.params)

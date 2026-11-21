@@ -212,6 +212,14 @@ Every selected data, DB and WAL path receives the same independent identity
 proof before its per-host stable alias enters the native service document.
 Only data devices count as OSDs in readiness evidence.
 
+### SSH source admission
+
+Each eligible MGR, including the bootstrap and standby managers, must reach
+the fleet SSH endpoints. Plan checks that any authored
+[Machine SSH source policy](api/machines.md#ssh-ingress) admits the declared
+numeric SSH addresses of all eligible managers. The operator includes any
+different source addresses selected by routing or NAT.
+
 ### Service identity and references
 
 The service registry keys each entry by its qualified native canonical service

@@ -32,6 +32,7 @@ Only the standard library is imported.
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import ipaddress
 import json
@@ -40,6 +41,7 @@ import re
 import stat
 import subprocess
 import sys
+import tempfile
 
 SERVICES_DIRECTORY = "/etc/firewalld/services"
 FIREWALL_CMD = "/usr/bin/firewall-cmd"
@@ -617,6 +619,296 @@ def zone_snapshot(output, owned):
     return result
 
 
+NFT = "/usr/sbin/nft"
+SYSTEMCTL = "/usr/bin/systemctl"
+SSHD = "/usr/sbin/sshd"
+SSH_TABLE = "bw_ssh_ingress"
+SSH_UNIT = "bw-ssh-ingress.service"
+SSH_CONFIG = "/etc/" + SSH_TABLE + ".nft"
+SSH_UNIT_PATH = "/etc/systemd/system/" + SSH_UNIT
+SSH_LOCK = "/run/" + SSH_TABLE + ".lock"
+SSH_STATES = ("absent", "drifted", "ready")
+
+
+def valid_ssh_sources(sources):
+    return (isinstance(sources, list) and 0 < len(sources) <= MAX_ADDRESSES
+            and all(valid_network(source) and "%" not in source and str(ipaddress.ip_network(source)) == source
+                    and getattr(ipaddress.ip_network(source).network_address, "ipv4_mapped", None) is None
+                    for source in sources)
+            and sources == sorted(set(sources)))
+
+
+def ssh_rules(sources, ports, mark):
+    def rule(left, right, verdict, operator="==", comment=None):
+        structure = {"family": "inet", "table": SSH_TABLE, "chain": "input",
+                     "expr": [{"match": {"op": operator, "left": left, "right": right}}, {verdict: None}]}
+        if comment:
+            structure["comment"] = comment
+        return {"rule": structure}
+
+    lines = ['iifname "lo" return comment "' + mark + '"', "ct state established return"]
+    structures = [
+        {"table": {"family": "inet", "name": SSH_TABLE}},
+        {"chain": {"family": "inet", "table": SSH_TABLE, "name": "input", "type": "filter",
+                   "hook": "input", "prio": 0, "policy": "accept"}},
+        rule({"meta": {"key": "iifname"}}, "lo", "return", comment=mark),
+        rule({"ct": {"key": "state"}}, 2, "return", operator="in"),
+    ]
+    for source in sources:
+        network = ipaddress.ip_network(source)
+        family = "ip" if network.version == 4 else "ip6"
+        address = str(network.network_address)
+        # A zero-length prefix matches its entire family. nft lowers it differently
+        # across releases, so express it as a family test directly.
+        if network.prefixlen == 0:
+            protocol = "ipv4" if network.version == 4 else "ipv6"
+            lines.append("meta nfproto " + protocol + " return")
+            structures.append(rule({"meta": {"key": "nfproto"}}, 2 if network.version == 4 else 10, "return"))
+        else:
+            host = network.prefixlen == network.max_prefixlen
+            lines.append(f"{family} saddr {address if host else source} return")
+            right = address if host else {"prefix": {"addr": address, "len": network.prefixlen}}
+            structures.append(rule({"payload": {"protocol": family, "field": "saddr"}}, right, "return"))
+    for port in ports:
+        lines.append(f"tcp dport {port} drop")
+        structures.append(rule({"payload": {"protocol": "tcp", "field": "dport"}}, port, "drop"))
+    identity = "inet " + SSH_TABLE
+    text = f"# {mark}\nadd table {identity}\ndelete table {identity}\ntable {identity} {{\n" + (
+        "  chain input {\n    type filter hook input priority filter; policy accept;\n    "
+        + "\n    ".join(lines) + "\n  }\n}\n")
+    return text.encode("ascii"), structures
+
+
+def ssh_ports(guest):
+    code, data = guest.run([SSHD, "-T"])
+    ports = {int(match) for match in re.findall(rb"^port ([0-9]{1,5})$", data, flags=re.MULTILINE)}
+    if code or not ports or len(ports) > 16 or min(ports) < 1 or max(ports) > 65535:
+        raise failed("ssh-admission")
+    # The supported sshd listener owns its sockets. A socket unit can listen
+    # on ports unrelated to sshd_config.
+    for unit in ("sshd.socket", "ssh.socket"):
+        active, _output = guest.run([SYSTEMCTL, "is-active", unit])
+        enabled, output = guest.run([SYSTEMCTL, "is-enabled", unit])
+        if active == 0 or enabled == 0 and output.strip() in (b"enabled", b"enabled-runtime"):
+            raise failed("ssh-admission")
+    ss = "/usr/sbin/ss" if os.path.exists("/usr/sbin/ss") else "/usr/bin/ss"
+    code, data = guest.run([ss, "-H", "-ltnp"])
+    try:
+        live = {int(line.split()[3].rsplit(b":", 1)[1])
+                for line in data.splitlines() if b'("sshd",pid=' in line}
+    except (IndexError, ValueError):
+        raise failed("ssh-admission") from None
+    if code or live - ports:
+        raise failed("ssh-admission")
+    return sorted(ports)
+
+
+def ssh_peer():
+    """Read the peer recorded by sshd in the invoking process ancestry."""
+    pid = os.getpid()
+    for _depth in range(32):
+        try:
+            with open(f"/proc/{pid}/environ", "rb") as file:
+                values = file.read(MAX_COMMAND_OUTPUT).split(b"\0")
+            peer = next((entry.split(b"=", 1)[1] for entry in values if entry.startswith(b"SSH_CONNECTION=")), None)
+            if peer is not None:
+                source, _source_port, _destination, destination_port = peer.decode("ascii").split()
+                return ipaddress.ip_address(source), int(destination_port)
+            with open(f"/proc/{pid}/stat", "rb") as file:
+                pid = int(file.read(8192).rsplit(b")", 1)[1].split()[1])
+        except (FileNotFoundError, ProcessLookupError):
+            return None
+        except (OSError, ValueError, IndexError):
+            raise failed("ssh-admission") from None
+        if pid <= 1:
+            return None
+    raise failed("ssh-admission")
+
+
+def require_ssh_peer(sources, ports, remote):
+    peer = ssh_peer()
+    if peer is None:
+        if remote:
+            raise failed("ssh-admission")
+        return
+    address, port = peer
+    address = getattr(address, "ipv4_mapped", None) or address
+    networks = [ipaddress.ip_network(source) for source in sources]
+    if port not in ports or not any(address in network for network in networks):
+        raise failed("ssh-admission")
+
+
+def ssh_unit(mark):
+    return (f"# {mark}\n[Unit]\nDescription=Restrict inbound SSH sources\n"
+            "Before=ssh.service sshd.service\n"
+            "[Service]\nType=oneshot\nRemainAfterExit=yes\n"
+            f"ExecStart={NFT} -f {SSH_CONFIG}\nExecReload={NFT} -f {SSH_CONFIG}\n"
+            "[Install]\nWantedBy=multi-user.target\nRequiredBy=sshd.service\n").encode("ascii")
+
+
+def ssh_file(path, mark):
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
+    except FileNotFoundError:
+        return None
+    except OSError:
+        raise failed("ssh-admission") from None
+    try:
+        status = os.fstat(descriptor)
+        if not stat.S_ISREG(status.st_mode) or status.st_uid != 0 or status.st_mode & 0o022 or status.st_nlink != 1:
+            raise failed("ssh-admission")
+        data = read_bounded(descriptor, MAX_SERVICE_FILE)
+        if len(data) > MAX_SERVICE_FILE or data.split(b"\n", 1)[0] != b"# " + mark.encode("ascii"):
+            raise failed("ssh-admission")
+        return data
+    finally:
+        os.close(descriptor)
+
+
+def publish_ssh_file(path, data):
+    directory = os.path.dirname(path)
+    temporary = None
+    try:
+        if os.path.realpath(directory) != directory:
+            raise failed("write")
+        if data is None:
+            os.unlink(path)
+        else:
+            with tempfile.NamedTemporaryFile(dir=directory, delete=False) as file:
+                temporary = file.name
+                os.fchmod(file.fileno(), 0o644)
+                file.write(data)
+                file.flush()
+                os.fsync(file.fileno())
+            os.replace(temporary, path)
+            temporary = None
+        descriptor = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+    except OSError:
+        raise failed("write") from None
+    finally:
+        if temporary is not None:
+            os.unlink(temporary)
+
+
+def nft_listing(guest, *args):
+    code, data = guest.run([NFT, "-j", "-s", "-nn", "list", *args])
+    if code:
+        return None
+    try:
+        entries = json.loads(data)["nftables"]
+        return [{kind: {key: value for key, value in row.items() if key != "handle"}}
+                for entry in entries for kind, row in entry.items() if kind != "metainfo"]
+    except (ValueError, TypeError, KeyError, AttributeError):
+        raise failed("ssh-admission") from None
+
+
+def ssh_runtime(guest, mark):
+    entries = nft_listing(guest, "table", "inet", SSH_TABLE)
+    if entries is None:
+        tables = nft_listing(guest, "tables")
+        if tables is None or {"table": {"family": "inet", "name": SSH_TABLE}} in tables:
+            raise failed("ssh-admission")
+        return None
+    if not any(entry.get("rule", {}).get("comment") == mark for entry in entries):
+        raise failed("ssh-admission")
+    return entries
+
+
+def ssh_command(guest, *arguments):
+    if guest.run(list(arguments))[0]:
+        raise failed("ssh-admission")
+
+
+def ssh_policy(guest, payload):
+    sources = payload["sshSources"]
+    mark = payload["mark"]
+    operation = payload["operation"]
+    config, unit = ssh_file(SSH_CONFIG, mark), ssh_file(SSH_UNIT_PATH, mark)
+    runtime = ssh_runtime(guest, mark)
+    wanted_unit = ssh_unit(mark)
+    if unit is not None and unit != wanted_unit:
+        raise failed("ssh-admission")
+    if operation == "remove":
+        if unit is not None:
+            ssh_command(guest, SYSTEMCTL, "disable", SSH_UNIT)
+            ssh_command(guest, SYSTEMCTL, "daemon-reload")
+            ssh_command(guest, SYSTEMCTL, "stop", SSH_UNIT)
+        if runtime is not None:
+            ssh_command(guest, NFT, "delete", "table", "inet", SSH_TABLE)
+        if config is not None:
+            publish_ssh_file(SSH_CONFIG, None)
+        if unit is not None:
+            publish_ssh_file(SSH_UNIT_PATH, None)
+            ssh_command(guest, SYSTEMCTL, "daemon-reload")
+        if ssh_runtime(guest, mark) is not None:
+            raise failed("ssh-admission")
+        return "absent", any(part is not None for part in (config, unit, runtime))
+    if config is None and unit is None and runtime is None and operation == "inspect":
+        return "absent", False
+    ports = ssh_ports(guest)
+    wanted_config, wanted_runtime = ssh_rules(sources, ports, mark)
+    enabled = guest.run([SYSTEMCTL, "is-enabled", SSH_UNIT])[1] == b"enabled\n"
+    if (config, unit, runtime, enabled) == (wanted_config, wanted_unit, wanted_runtime, True):
+        return "ready", False
+    if operation == "inspect":
+        return "drifted", False
+    # Test the full atomic replacement before writing persistent state.
+    with tempfile.NamedTemporaryFile(dir="/run") as candidate:
+        candidate.write(wanted_config)
+        candidate.flush()
+        ssh_command(guest, NFT, "-c", "-f", candidate.name)
+    if config != wanted_config:
+        publish_ssh_file(SSH_CONFIG, wanted_config)
+    if unit != wanted_unit:
+        publish_ssh_file(SSH_UNIT_PATH, wanted_unit)
+    ssh_command(guest, SYSTEMCTL, "daemon-reload")
+    code, properties = guest.run([SYSTEMCTL, "show", "--property=FragmentPath,DropInPaths", SSH_UNIT])
+    expected = {("FragmentPath=" + SSH_UNIT_PATH).encode("ascii"), b"DropInPaths="}
+    if code or set(properties.splitlines()) != expected:
+        raise failed("ssh-admission")
+    ssh_command(guest, SYSTEMCTL, "enable", SSH_UNIT)
+    ssh_command(guest, SYSTEMCTL, "reload-or-restart", SSH_UNIT)
+    if ssh_runtime(guest, mark) != wanted_runtime:
+        raise failed("ssh-admission")
+    return "ready", True
+
+
+def converge(guest, payload, remote=True):
+    if "sshSources" not in payload:
+        return HANDLERS[payload["operation"]](guest, payload)
+    operation = payload["operation"]
+    if operation == "apply":
+        require_ssh_peer(payload["sshSources"], ssh_ports(guest), remote)
+    if operation == "inspect":
+        return converge_ssh(guest, payload)
+    try:
+        descriptor = os.open(SSH_LOCK, os.O_CREAT | os.O_RDWR | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600)
+    except OSError:
+        raise failed("ssh-admission") from None
+    try:
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != 0 or info.st_mode & 0o077:
+            raise OSError("invalid SSH filter lock")
+        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        os.close(descriptor)
+        raise failed("ssh-admission") from None
+    try:
+        return converge_ssh(guest, payload)
+    finally:
+        os.close(descriptor)
+
+
+def converge_ssh(guest, payload):
+    result = HANDLERS[payload["operation"]](guest, payload) if payload["services"] else {"services": [], "changed": False}
+    state, changed = ssh_policy(guest, payload)
+    return dict(result, sshPolicy=state, changed=result["changed"] or changed)
+
+
 def apply_operation(guest, payload):
     guest.require_running()
     guest.owned_names = {service["name"] for service in payload["services"]}
@@ -683,9 +975,11 @@ def parse_request(data):
         payload = json.loads(data.decode("utf-8"))
     except (ValueError, UnicodeError):
         raise Refused("transport") from None
-    if not isinstance(payload, dict) or set(payload) != KEYS or payload["operation"] not in OPERATIONS:
+    if not isinstance(payload, dict) or not KEYS <= set(payload) <= KEYS | {"sshSources"} or payload["operation"] not in OPERATIONS:
         raise Refused("transport")
     if not valid_mark(payload["mark"]) or not valid_services(payload["services"]):
+        raise Refused("transport")
+    if "sshSources" in payload and not valid_ssh_sources(payload["sshSources"]):
         raise Refused("transport")
     if len({service["name"] for service in payload["services"]}) != len(payload["services"]):
         raise Refused("transport")
@@ -710,7 +1004,7 @@ def main(stdin=None, stdout=None, guest=None):
     try:
         source = stdin if stdin is not None else sys.stdin.buffer
         payload = parse_request(source.read(MAX_INPUT + 1))
-        reply = {"ok": True, "result": HANDLERS[payload["operation"]](guest if guest is not None else Guest(), payload)}
+        reply = {"ok": True, "result": converge(guest if guest is not None else Guest(), payload)}
     except Refused as refused:
         reply = refusal(refused)
     except BaseException:  # pylint: disable=broad-exception-caught

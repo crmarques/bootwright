@@ -78,6 +78,7 @@ type FirewallRequest struct {
 	Placement   machineref.Placement `json:"placement"`
 	Preparation bool                 `json:"preparation"`
 	Services    []FirewallService    `json:"services"`
+	SSHSources  []string             `json:"sshSources,omitempty"`
 	User        string               `json:"user"`
 	Version     string               `json:"version"`
 }
@@ -114,7 +115,7 @@ func FirewallContentDigest() string {
 	}, mark)))
 	return reconciliation.ContentDigestOf(
 		"bootwright.managedos.host-firewall-v1", FirewallImplementation, FirewallEvidenceVersion, FirewallServiceRoot,
-		mark, name, hex.EncodeToString(sample[:]), "power-cycled-guest-removal",
+		mark, name, hex.EncodeToString(sample[:]), "power-cycled-guest-removal", "nftables-systemd-ssh-ingress",
 	)
 }
 
@@ -180,7 +181,7 @@ func FirewallRequests(catalog api.Catalog, controllerMachine, contextName string
 		byMachine[requirement.Machine] = append(byMachine[requirement.Machine], requirement)
 	}
 	for _, object := range catalog.OfKind(api.Machine) {
-		if object.Spec().Get("firewall", "management").Text() == "managed" && api.MachineProvided(object) {
+		if object.Spec().Get("firewall", "management").Text() == "managed" && api.MachineProvided(object) || object.Spec().Has("firewall", "ssh") {
 			if _, found := byMachine[object.Name()]; !found {
 				byMachine[object.Name()] = nil
 			}
@@ -188,7 +189,7 @@ func FirewallRequests(catalog api.Catalog, controllerMachine, contextName string
 	}
 	var machines []string
 	for machine := range byMachine {
-		if RealizesHostPorts(catalog, machine) {
+		if object, _ := catalog.Find(api.Machine, machine); RealizesHostPorts(catalog, machine) || object.Spec().Has("firewall", "ssh") {
 			machines = append(machines, machine)
 		}
 	}
@@ -207,9 +208,17 @@ func FirewallRequests(catalog api.Catalog, controllerMachine, contextName string
 		if at >= 0 {
 			install = installs[at]
 		}
-		request, err := firewallRequestFor(install, contextName, byMachine[machine])
+		object, _ := catalog.Find(api.Machine, machine)
+		sources, issue := machineref.SSHSourcePrefixes(object, catalog)
+		if issue != nil {
+			return nil, firewallRequestInvalid.Fail("Machine/"+machine+" has invalid SSH sources", "")
+		}
+		requirements := byMachine[machine]
+		if !RealizesHostPorts(catalog, machine) {
+			requirements = nil
+		}
+		request, err := firewallRequestFor(install, contextName, requirements, sources)
 		if at < 0 {
-			object, _ := catalog.Find(api.Machine, machine)
 			placement, placementErr := machineref.PlacementFor(object, controllerMachine)
 			if placementErr != nil {
 				return nil, placementErr
@@ -222,10 +231,10 @@ func FirewallRequests(catalog api.Catalog, controllerMachine, contextName string
 		}
 		if request.Direct {
 			preparation := request
-			preparation.Preparation, preparation.Services = true, []FirewallService{}
+			preparation.Preparation, preparation.Services, preparation.SSHSources = true, []FirewallService{}, nil
 			preparation.Identity.Block = FirewallPreparationBlockID(machine)
 			requests = append(requests, preparation)
-			if len(request.Services) == 0 {
+			if len(request.Services) == 0 && len(request.SSHSources) == 0 {
 				continue
 			}
 		}
@@ -234,7 +243,7 @@ func FirewallRequests(catalog api.Catalog, controllerMachine, contextName string
 	return requests, nil
 }
 
-func firewallRequestFor(install installation.Request, contextName string, requirements []HostPortRequirement) (FirewallRequest, error) {
+func firewallRequestFor(install installation.Request, contextName string, requirements []HostPortRequirement, sources []string) (FirewallRequest, error) {
 	machine := install.Identity.Object
 	if len(requirements) > maxFirewallServices {
 		return FirewallRequest{}, firewallRequestInvalid.Fail("Machine/"+machine+" holds more than "+strconv.Itoa(maxFirewallServices)+" host port requirements", "")
@@ -243,7 +252,7 @@ func firewallRequestFor(install installation.Request, contextName string, requir
 	request := FirewallRequest{
 		Address: install.Address, Budgets: firewallBudgets(), FleetKeyRef: install.FleetKeyRef, Placement: install.Placement, User: install.User, Version: FirewallImplementation,
 		Identity: FirewallIdentity{Block: FirewallBlockID(machine), Context: contextName, Object: machine},
-		Services: []FirewallService{},
+		Services: []FirewallService{}, SSHSources: sources,
 	}
 	for _, requirement := range requirements {
 		ports := make([]FirewallPort, 0, len(requirement.Ports))
@@ -288,7 +297,7 @@ func validFirewallRequest(request FirewallRequest) error {
 	if request.Budgets != firewallBudgets() {
 		return invalid("freezes another worker session budget")
 	}
-	if request.Preparation && (!request.Direct || len(request.Services) != 0) {
+	if request.Preparation && (!request.Direct || len(request.Services) != 0 || len(request.SSHSources) != 0) {
 		return invalid("has an invalid daemon preparation")
 	}
 	if request.Direct {
@@ -312,8 +321,11 @@ func validFirewallRequest(request FirewallRequest) error {
 	if _, err := netip.ParseAddr(request.Address); !request.Direct && (err != nil || request.User == "" || request.FleetKeyRef == "") {
 		return invalid("names no guest address, account or fleet key")
 	}
-	if !request.Direct && len(request.Services) == 0 || len(request.Services) > maxFirewallServices {
+	if !request.Direct && len(request.Services) == 0 && len(request.SSHSources) == 0 || len(request.Services) > maxFirewallServices {
 		return invalid("holds no service or more than its bound")
+	}
+	if !validSSHSources(request.SSHSources) {
+		return invalid("holds too many SSH sources or an invalid SSH source prefix")
 	}
 	names := map[string]bool{}
 	for _, service := range request.Services {
@@ -326,6 +338,20 @@ func validFirewallRequest(request FirewallRequest) error {
 		}
 	}
 	return nil
+}
+
+func validSSHSources(sources []string) bool {
+	if len(sources) > machineref.MaxSSHSources {
+		return false
+	}
+	for index, source := range sources {
+		prefix, err := netip.ParsePrefix(source)
+		if err != nil || prefix != prefix.Masked() || prefix.String() != source || prefix.Addr().Is4In6() ||
+			index > 0 && sources[index-1] >= source {
+			return false
+		}
+	}
+	return true
 }
 
 func validService(service FirewallService) error {

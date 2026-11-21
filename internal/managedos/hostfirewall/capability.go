@@ -42,6 +42,7 @@ type FirewallEvidence struct {
 	Request       string                    `json:"request"`
 	Retired       bool                      `json:"retired,omitempty"`
 	Services      []FirewallServiceEvidence `json:"services"`
+	SSHPolicy     string                    `json:"sshPolicy,omitempty"`
 	Version       string                    `json:"version"`
 }
 
@@ -115,6 +116,9 @@ func firewallDescription(verb reconciliation.Verb, request FirewallRequest) stri
 	if verb == reconciliation.Destroy {
 		return "remove the host firewall services of " + request.Identity.Object
 	}
+	if len(request.SSHSources) > 0 {
+		return "converge SSH source admission and host port requirements on " + request.Identity.Object
+	}
 	return "admit the host port requirements of " + request.Identity.Object + " in its firewall"
 }
 
@@ -139,7 +143,7 @@ func (c Capability) Claimed(catalog api.Catalog) []string {
 	}
 	var claimed []string
 	for _, object := range catalog.OfKind(api.Machine) {
-		if RealizesHostPorts(catalog, object.Name()) && (api.MachineProvided(object) && object.Spec().Get("firewall", "management").Text() == "managed" || slices.ContainsFunc(requirements, func(r HostPortRequirement) bool { return r.Machine == object.Name() })) {
+		if object.Spec().Has("firewall", "ssh") || RealizesHostPorts(catalog, object.Name()) && (api.MachineProvided(object) && object.Spec().Get("firewall", "management").Text() == "managed" || slices.ContainsFunc(requirements, func(r HostPortRequirement) bool { return r.Machine == object.Name() })) {
 			claimed = append(claimed, object.Identity())
 		}
 	}
@@ -392,10 +396,24 @@ func firewallEffect(evidence FirewallEvidence, request FirewallRequest, digests 
 	if !evidence.Ready && !removal || len(evidence.Services) != len(request.Services) {
 		return reconciliation.EffectUnknown
 	}
-	if len(request.Services) == 0 {
+	complete, clean := true, true
+	if len(request.SSHSources) != 0 {
+		switch evidence.SSHPolicy {
+		case "ready":
+			clean = false
+		case "absent":
+			complete = false
+		case "drifted":
+			complete, clean = false, false
+		default:
+			return reconciliation.EffectUnknown
+		}
+	} else if evidence.SSHPolicy != "" {
+		return reconciliation.EffectUnknown
+	}
+	if len(request.Services) == 0 && len(request.SSHSources) == 0 {
 		return reconciliation.EffectCompleted
 	}
-	complete, clean := true, true
 	for index, service := range evidence.Services {
 		if service.Name != request.Services[index].Name || !validMemberships(service.Memberships) {
 			return reconciliation.EffectUnknown
@@ -472,6 +490,10 @@ func firewallRefusals(contextName string, request FirewallRequest, removal bool)
 			cause := installation.DetailOr(detail, func(value string) bool {
 				return slices.Contains([]string{"tooling", "reload", "zone", "write", "address", "runtime-drift", "enable", "ssh-admission"}, value)
 			})
+			if cause == "ssh-admission" && len(request.SSHSources) != 0 {
+				return refused(firewallChangeRefused, "SSH source admission on "+machine+" could not be proved",
+					"verify the connected peer is in spec.firewall.ssh.allowedSources and check the system sshd listeners and the SSH ingress unit journal on "+machine+", "+again)
+			}
 			return refused(firewallChangeRefused, "firewalld refused a change on "+machine+": "+cause, "read the firewalld journal on "+machine+", correct it, "+again)
 		}},
 	}
