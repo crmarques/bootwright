@@ -78,10 +78,11 @@ type progressEvent struct {
 // because the heartbeat fires on the clock's goroutine while blocks running at
 // the same time each report on their own.
 type progressPresenter struct {
-	out      io.Writer
-	clock    progressClock
-	columns  progressColumns
-	overview func() []string
+	out            io.Writer
+	clock          progressClock
+	columns        progressColumns
+	overview       func() []string
+	separateResult bool
 
 	mu      sync.Mutex
 	heading string
@@ -212,6 +213,10 @@ func (p *progressPresenter) finish() {
 	p.stopHeartbeat()
 	p.closeLine()
 	p.steps = nil
+	if p.separateResult && p.heading != "" {
+		io.WriteString(p.out, "\n")
+		p.heading = ""
+	}
 }
 
 // arm schedules the next moment any step needs a row: the next redraw on a

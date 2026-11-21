@@ -69,7 +69,10 @@ type LifecycleProgressPresenter struct {
 // the running row is rewritten in place within it; anywhere else rows are
 // appended.
 func NewLifecycleProgressPresenter(out io.Writer, columns func() int) *LifecycleProgressPresenter {
-	return &LifecycleProgressPresenter{progress: progressPresenter{out: out, clock: systemProgressClock(), columns: selectedProgressColumns(out, columns)}}
+	return &LifecycleProgressPresenter{progress: progressPresenter{
+		out: out, clock: systemProgressClock(), columns: selectedProgressColumns(out, columns),
+		separateResult: specFor(presentationFor(out).Command).separateProgress,
+	}}
 }
 
 // Finish terminates a row a terminal is still rewriting. The runner calls it

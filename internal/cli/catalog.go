@@ -42,6 +42,7 @@ type commandSpec struct {
 	results          []jsonResult
 	operation        bool
 	controllerReport bool
+	separateProgress bool
 	inspection       bool
 }
 

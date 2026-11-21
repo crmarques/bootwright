@@ -111,7 +111,7 @@ func TestAJSONInvocationWritesNoProgress(t *testing.T) {
 
 // The media reporter an interactive invocation composes streams through the
 // invocation's own progress, so a JSON media list writes its one document and
-// no check row, and a text one opens Checks with the image being read.
+// no check row, and a text one opens Checks with the image being read and leaves room for the result.
 func TestAJSONMediaListWritesNoProgress(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -133,7 +133,7 @@ func TestAJSONMediaListWritesNoProgress(t *testing.T) {
 	deps = localMediaDependencies(nil, nil, process.LifecycleProgress, process.MediaPresenter, controller.Route{}, nil)
 	deps.Progress.ReportProgress(ctx, verify)
 	hooks.finish()
-	if want := "\n  Checks\n  [RUNNING]  [1/1] Verify demo.iso\n"; out.String() != want || errOut.Len() != 0 {
+	if want := "\n  Checks\n  [RUNNING]  [1/1] Verify demo.iso\n\n"; out.String() != want || errOut.Len() != 0 {
 		t.Fatalf("a text media list reported stdout %q, stderr %q, want stdout %q", out.String(), errOut.String(), want)
 	}
 }

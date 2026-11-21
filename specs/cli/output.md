@@ -169,8 +169,9 @@ and media listings report no progress. Setup and controller readiness retain
 the headings their results define. `catalog media add` reports acquisition (or the
 re-verification an interrupted add needs) and publication as two steps;
 `catalog media list --checksums` reports one check per image and closes it with a
-verified match, the computed mismatching digest, or the read failure.
-An acquisition names its actual source and reports the bytes written when it
+verified match, the computed mismatching digest, or the read failure. When
+checks are shown in text output, one blank line separates them from the media
+list. An acquisition names its actual source and reports the bytes written when it
 settles. `machine list --power-status` reports one read check per host through
 which its selected management controllers are reached, with that role's groups as its
 sub-steps; it settles with the proved number of machines read or a failure.

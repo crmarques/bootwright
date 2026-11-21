@@ -18142,3 +18142,12 @@ The [CLI command tree](../cli.md#command-tree) defines help for incomplete
 invocations. Runner regressions compare implicit and explicit help in text,
 JSON and YAML and verify that malformed input still fails. The delivering
 commit records the verification results.
+
+## X645 — Media checksum output spacing
+
+**Owner:** CLI. **Item:** B1653 (defect). **Authority:** explicit owner request.
+
+The [progress output contract](../cli/output.md#long-running-progress) separates
+checksum checks from the media list. A runner regression exercises appended,
+terminal, suppressed, empty and structured output. The delivering commit
+records the verification results.
