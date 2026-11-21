@@ -10,8 +10,8 @@ func TestASoleEmptyOccurrenceOfARepeatableFlagIsAUsageError(t *testing.T) {
 		args []string
 		flag string
 	}{
-		{[]string{"check", "input", "--file="}, "file"},
-		{[]string{"check", "input", "-f", ""}, "file"},
+		{[]string{"check", "input", "--input-dir="}, "input-dir"},
+		{[]string{"check", "input", "--input-dir", ""}, "input-dir"},
 		{[]string{"context", "init", "--name", "demo", "--file="}, "file"},
 		{[]string{"context", "update", "--name", "demo", "--file=", "--input-dir", "in"}, "file"},
 		{[]string{"apply", "--authorize="}, "authorize"},

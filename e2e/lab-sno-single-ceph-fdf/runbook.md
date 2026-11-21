@@ -111,8 +111,8 @@ credential belongs in a tracked values file.
 
 ```bash
 e2e/render.sh lab-sno-single-ceph-fdf --values "$VALUES" --out-dir "$INPUT_DIR"
-bootwright check input -f "$INPUT_DIR/bootstrap"
-bootwright check input -f "$INPUT_DIR/fips"
+bootwright check input --input-dir "$INPUT_DIR/bootstrap"
+bootwright check input --input-dir "$INPUT_DIR/fips"
 
 helm template isolation "$ISOLATION_CASE/isolation" \
     -f "$CASE/values.yaml" -f "$VALUES" --output-dir "$PROFILE/rendered"

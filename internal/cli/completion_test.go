@@ -52,8 +52,8 @@ func TestCompletionCandidates(t *testing.T) {
 		{"flags", []string{"validate", "-"}, []string{"--context", "--file", "--help", "--output", "--strict", "-f", "-h", "-o"}},
 		{"boolean", []string{"validate", "--strict=tr"}, []string{"--strict=true"}},
 		{"free context", []string{"--context", ""}, nil},
-		{"free path", []string{"check", "input", "--file", ""}, nil},
-		{"free shorthand path", []string{"check", "input", "-f/tmp/"}, nil},
+		{"free path", []string{"check", "input", "--input-dir", ""}, nil},
+		{"free attached path", []string{"check", "input", "--input-dir=/tmp/"}, nil},
 		{"payload", []string{"check", "input", "--", ""}, nil},
 		{"unknown path", []string{"example", ""}, nil},
 		{"unknown flag", []string{"cluster", "--bogus", ""}, nil},
@@ -193,7 +193,7 @@ func TestPathCompletionAppendsNoSpaceOnlyAfterADirectory(t *testing.T) {
 		{"mixed", []string{"alpha/input.yaml", "alpha/nested/"}, noSpace},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			if got := completionResponse(t, test.candidates, "check", "input", "--file", "alpha/"); got != test.want {
+			if got := completionResponse(t, test.candidates, "check", "input", "--input-dir", "alpha/"); got != test.want {
 				t.Fatalf("directive = %q; want %q", got, test.want)
 			}
 		})

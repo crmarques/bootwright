@@ -18,7 +18,7 @@ func TestValidationSuccessHasExactStableRepresentations(t *testing.T) {
 	for _, jsonMode := range []bool{false, true} {
 		var out, errOut bytes.Buffer
 		record := &dispatchRecord{report: &compilation.Report{Counts: compilation.Counts{FilesSeen: 2, ObjectsDecoded: 4}}}
-		args := []string{"check", "input", "-f", "synthetic", "--context", "ignored"}
+		args := []string{"check", "input", "--input-dir", "synthetic", "--context", "ignored"}
 		if jsonMode {
 			args = append(args, "--output", "json")
 		}
@@ -95,7 +95,7 @@ func TestValidationFailuresNeverExposePartialReports(t *testing.T) {
 		if failure != nil {
 			record.report = &compilation.Report{Counts: compilation.Counts{FilesSeen: 999}}
 		}
-		code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"check", "input", "-f", "input.yaml", "--output", "json"})
+		code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"check", "input", "--input-dir", "input.yaml", "--output", "json"})
 		var envelope struct {
 			OK          bool
 			Result      any
@@ -118,7 +118,7 @@ func TestValidationOutputFailuresAndCancellation(t *testing.T) {
 		for _, jsonMode := range []bool{false, true} {
 			var errOut bytes.Buffer
 			record := &dispatchRecord{report: &compilation.Report{}}
-			args := []string{"check", "input", "-f", "input.yaml"}
+			args := []string{"check", "input", "--input-dir", "input.yaml"}
 			if jsonMode {
 				args = append(args, "--output", "json")
 			}
@@ -130,23 +130,42 @@ func TestValidationOutputFailuresAndCancellation(t *testing.T) {
 	}
 	var out bytes.Buffer
 	record := &dispatchRecord{report: &compilation.Report{Diagnostics: []diagnostic{{Severity: "warning", Code: "api.deferred", Message: "pending"}}}}
-	if code := New(Config{Out: &out, ErrOut: rejectingWriter{}, Services: dispatchSpies(record)}).Run(context.Background(), []string{"check", "input", "-f", "input.yaml"}); code != 1 || out.Len() != 0 {
+	if code := New(Config{Out: &out, ErrOut: rejectingWriter{}, Services: dispatchSpies(record)}).Run(context.Background(), []string{"check", "input", "--input-dir", "input.yaml"}); code != 1 || out.Len() != 0 {
 		t.Fatal("warning output failed but success was printed")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	record = &dispatchRecord{report: &compilation.Report{}}
-	if code := New(Config{Out: io.Discard, ErrOut: io.Discard, Services: dispatchSpies(record)}).Run(ctx, []string{"check", "input", "-f", "input.yaml"}); code != 1 || record.calls != 0 {
+	if code := New(Config{Out: io.Discard, ErrOut: io.Discard, Services: dispatchSpies(record)}).Run(ctx, []string{"check", "input", "--input-dir", "input.yaml"}); code != 1 || record.calls != 0 {
 		t.Fatal("canceled invocation reached service")
 	}
 }
 
 func TestValidationHelpAndMalformedCallsNeverDispatch(t *testing.T) {
-	for _, args := range [][]string{{"check", "input", "-f", "unopened", "--help"}, {"check", "input", "-f", "unopened", "--unknown"}, {"check", "input", "-f", "unopened", "--output", "bad"}, {"__bootwright_complete", "check", "input", ""}, {"version"}} {
+	for _, args := range [][]string{{"check", "input", "--input-dir", "unopened", "--help"}, {"check", "input", "--input-dir", "unopened", "--unknown"}, {"check", "input", "--input-dir", "unopened", "--output", "bad"}, {"__bootwright_complete", "check", "input", ""}, {"version"}} {
 		record := &dispatchRecord{report: &compilation.Report{}}
 		New(Config{Services: dispatchSpies(record)}).Run(context.Background(), args)
 		if record.calls != 0 {
 			t.Fatal("informational or malformed invocation reached service", args)
+		}
+	}
+}
+
+func TestCheckInputUsesInputDir(t *testing.T) {
+	args := []string{"check", "input", "--input-dir", "one,two", "--input-dir=three", "--context", "ignored"}
+	code, _, errOut, record := runRecorded(args)
+	want := compilation.ValidateRequest{Files: []string{"one,two", "three"}}
+	if code != 1 || record.calls != 1 || !reflect.DeepEqual(record.request, want) {
+		t.Fatalf("code=%d stderr=%q calls=%d request=%#v", code, errOut, record.calls, record.request)
+	}
+	if ClassifyInvocation(args).RequiresRoot {
+		t.Fatal("explicit input paths required privilege")
+	}
+	for _, flag := range []string{"-f", "--file"} {
+		args := []string{"check", "input", flag, "input"}
+		code, _, errOut, record := runRecorded(args)
+		if code != 2 || record.calls != 0 || !strings.Contains(errOut, "cli.usage") {
+			t.Fatalf("%s: code=%d stderr=%q calls=%d", flag, code, errOut, record.calls)
 		}
 	}
 }

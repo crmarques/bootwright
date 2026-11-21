@@ -73,7 +73,7 @@ e2e/render.sh lab-rhel --out-dir "$INPUT_DIR" \
   --set "registration.enabled=$REGISTER" \
   --set "registration.updateWithinRelease=$UPDATE_WITHIN_RELEASE"
 CONTROLLER_ADDRESS=$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')   # the host address
-./bin/bootwright check input -f "$INPUT_DIR"
+./bin/bootwright check input --input-dir "$INPUT_DIR"
 ./bin/bootwright context init --name "$CONTEXT" --input-dir "$INPUT_DIR"
 ./bin/bootwright secret generate --context "$CONTEXT"
 if [ "$REGISTER" = true ]; then
@@ -356,7 +356,7 @@ if [ "$REGISTER" = true ]; then
     --set "security.fips=$FIPS" --set "security.tpm2=$TPM2" \
     --set "registration.enabled=$REGISTER" \
     --set "registration.updateWithinRelease=$UPDATE_WITHIN_RELEASE"
-  ./bin/bootwright check input -f "$INPUT_DIR"
+  ./bin/bootwright check input --input-dir "$INPUT_DIR"
   ./bin/bootwright context init --name "$CONTEXT" --input-dir "$INPUT_DIR"
   ./bin/bootwright secret generate --context "$CONTEXT"
   ./bin/bootwright secret set --context "$CONTEXT" --name rhsm-org --value-file "$RHSM_ORG_FILE" --yes

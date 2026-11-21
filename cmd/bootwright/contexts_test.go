@@ -367,7 +367,7 @@ func TestContextReplayAndReadOnlyEffects(t *testing.T) {
 	if err := syscall.Mkfifo(filepath.Join(input, "secrets", "value"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	explicit, _ := contextRun(t, services, 0, "check", "input", "-f", input, "--output", "json")
+	explicit, _ := contextRun(t, services, 0, "check", "input", "--input-dir", input, "--output", "json")
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	frozen, _ := contextRun(t, services, 0, "check", "input", "--output", "json")
 	if explicit != frozen {
@@ -563,7 +563,7 @@ func TestCompleteExampleContextRoundTrip(t *testing.T) {
 			}
 		}
 	}
-	direct, _ := contextRun(t, services, 0, "check", "input", "-f", input, "--output", "json")
+	direct, _ := contextRun(t, services, 0, "check", "input", "--input-dir", input, "--output", "json")
 	contextRun(t, services, 0, "context", "init", "--name", "complete", "--input-dir", input)
 	if err := os.RemoveAll(input); err != nil {
 		t.Fatal(err)

@@ -90,7 +90,7 @@ func TestCompositionWiresEveryApplicationCommand(t *testing.T) {
 	t.Parallel()
 	services := isolatedServices(t)
 	commandsWithSyntheticInputs := [][]string{
-		{"check", "input", "-f", filepath.Join(t.TempDir(), "missing.yaml")},
+		{"check", "input", "--input-dir", filepath.Join(t.TempDir(), "missing.yaml")},
 		{"context", "init", "--name", "example", "--input-dir", "inputs"},
 		{"context", "update", "--name", "example", "--input-dir", "inputs"},
 		{"context", "use", "--name", "example"},
@@ -198,8 +198,8 @@ func TestComposedExplicitValidationIsContextFree(t *testing.T) {
 	repository := testRepository(state)
 	services := testServices(t, repository, state)
 	for _, args := range [][]string{
-		{"check", "input", "-f", input, "--context", "missing"},
-		{"check", "input", "-f", input, "--context", "missing", "--output", "json"},
+		{"check", "input", "--input-dir", input, "--context", "missing"},
+		{"check", "input", "--input-dir", input, "--context", "missing", "--output", "json"},
 	} {
 		var out, errOut bytes.Buffer
 		if code := runServices(context.Background(), args, &out, &errOut, services); code != 0 || errOut.Len() != 0 {
@@ -226,7 +226,7 @@ func TestComposedExplicitValidationIsContextFree(t *testing.T) {
 			t.Fatal("absent context failed without a typed state diagnostic", code, out.String(), errOut.String())
 		}
 	}
-	for _, args := range [][]string{{"version"}, {"check", "input", "-f", input, "--help"}, {"__bootwright_complete", "check", "input", ""}, {"check", "input", "-f", input, "--unknown"}} {
+	for _, args := range [][]string{{"version"}, {"check", "input", "--input-dir", input, "--help"}, {"__bootwright_complete", "check", "input", ""}, {"check", "input", "--input-dir", input, "--unknown"}} {
 		var out, errOut bytes.Buffer
 		runServices(context.Background(), args, &out, &errOut, services)
 	}
@@ -247,7 +247,7 @@ func TestComposedValidationPreservesTypedInputFailures(t *testing.T) {
 	}
 	var out, errOut bytes.Buffer
 	path := filepath.Join(t.TempDir(), "missing.yaml")
-	code := run(context.Background(), []string{"check", "input", "-f", path, "--output", "json"}, &out, &errOut)
+	code := run(context.Background(), []string{"check", "input", "--input-dir", path, "--output", "json"}, &out, &errOut)
 	var envelope struct {
 		OK          bool
 		Result      any

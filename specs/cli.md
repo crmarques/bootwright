@@ -150,7 +150,7 @@ the scalar comma-list flags `--clusters`, `--replace`, `--stage`,
 the `--name` that names several Machines and the `--name` and `--node` that name
 several clusters and nodes.
 Collection flags aggregate in command-line order only where this contract says
-they are repeatable. `check input -f` is repeatable. `--authorize` (with
+they are repeatable. `check input --input-dir` is repeatable. `--authorize` (with
 `erase=<machine>:<method>`, once per Machine, on `destroy` and `plan`) and
 `destroy --unregistered` are repeatable and each occurrence may also contain
 commas. Supplying an empty required value
@@ -212,22 +212,23 @@ artifacts, trust-store maintenance, or explicit access; it never changes
 effective state, dependency closure, ownership, lifecycle scope, the frozen
 plan, or continuation.
 
-`check input -f/--file` accepts a YAML file or directory and may be repeated. The
-set is compiled as one ordered desired-state input universe under [the API
-contract](api.md); supplying `-f` makes validation context-free, while omission
-uses the selected context input. For `context init` and `context update`, `-f/--file` instead accepts one
-standalone Context configuration file; `--input-dir` accepts one desired-state
-directory for immutable import. Both are optional at init. Update requires
-at least one. Omission never discovers the working directory.
+`check input --input-dir` accepts a YAML file or directory and may be repeated.
+The set is compiled as one ordered desired-state input universe under
+[the API contract](api.md). Supplying `--input-dir` makes validation
+context-free. Omission uses the selected context input. For `context init`
+and `context update`, `-f/--file` accepts one standalone Context configuration
+file and `--input-dir` accepts one desired-state directory for immutable
+import. Both are optional at init. Update requires at least one. Omission
+never discovers the working directory.
 
-This document owns public input acquisition and flag cardinality. Each `-f`
-occurrence is one path; commas are filename characters. Cleaned path strings
-are deduplicated and discovered files are globally sorted by cleaned path. The
-combined universe undergoes one Environment selection; its selected documents
-are decoded and validated as one graph without staging, copying, override, or
-flag-order precedence. Discovery,
-Environment selection, duplicate-object rules, and source provenance remain
-API-owned.
+This document owns public input acquisition and flag cardinality. Each
+`check input --input-dir` occurrence is one path. Commas are filename
+characters. Cleaned path strings are deduplicated and discovered files are
+globally sorted by cleaned path. The combined universe undergoes one
+Environment selection, and its selected documents are decoded and validated
+as one graph without staging, copying, override, or flag-order precedence.
+Discovery, Environment selection, duplicate-object rules, and source
+provenance remain API-owned.
 
 Commands accept no positional operands except those shown in the catalog.
 `machine exec`, `cluster exec`, `cluster oc` and `cluster kubectl` accept a
@@ -512,7 +513,7 @@ With `--output-dir`, `render effective` writes `effective-state.yaml`, the
 canonical YAML it otherwise prints, into that directory instead of standard output and
 reports `inputDir` (context-free only), `outputDir`, `effectiveStatePath` and
 the `objects` count. Context-free it reads `--input-dir`, a file or directory
-as `check input -f` does; context-backed it reads the selected context's input and
+as `check input --input-dir` does; context-backed it reads the selected context's input and
 requires `--sensitive`. A compile failure writes nothing. Publication runs
 with the invoking account's credentials, including when a
 context-backed read needs root. Context-free `render effective --input-dir` does not
@@ -565,7 +566,7 @@ order (`TestRenderEffectiveOriginsMarkEachLeaf`).
 
 `bootwright render acquisitions` lists every artifact the selected desired
 state acquires or hands a Machine to acquire, from the selected context's
-input or, with `--input-dir`, a context-free input as `check input --file` reads
+input or, with `--input-dir`, a context-free input as `check input --input-dir` reads
 it; `--input-dir` conflicts with `--context`. It registers nothing, contacts
 nothing and reads no host. Each row names its kind, the artifact, its
 version, its origin and that origin's

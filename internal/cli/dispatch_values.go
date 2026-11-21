@@ -89,13 +89,6 @@ func (v *requestValues) singleFile() string {
 	return files[0]
 }
 
-func (v *requestValues) validationContext() string {
-	if len(v.strings("file")) != 0 {
-		return ""
-	}
-	return v.text("context")
-}
-
 func (v *requestValues) authorizations() []string {
 	var tokens []string
 	for _, token := range v.authorizeTokens() {

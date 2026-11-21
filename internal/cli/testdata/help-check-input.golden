@@ -5,7 +5,7 @@
     bootwright check input [flags]
 
   Command flags
-      -f, --file  Supply an input file or directory (repeatable)
+      --input-dir  Supply an input file or directory (repeatable)
 
   Common flags
       --ascii       Use ASCII status markers
@@ -18,4 +18,4 @@
       --width       Set presentation width (0: automatic) · default 0
 
   Examples
-    bootwright check input --file ./input --output json
+    bootwright check input --input-dir ./input --output json

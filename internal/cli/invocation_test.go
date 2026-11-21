@@ -24,7 +24,7 @@ func TestPrivilegeClassificationHasNoInformationOrInvalidEffects(t *testing.T) {
 		{[]string{"context", "current"}, true},
 		{[]string{"context", "list"}, true},
 		{[]string{"context", "use", "--name", "test"}, true},
-		{[]string{"check", "input", "--file", "fixtures"}, false},
+		{[]string{"check", "input", "--input-dir", "fixtures"}, false},
 		{[]string{"check", "input"}, true},
 		{[]string{"render", "effective"}, true},
 		{[]string{"render"}, false},

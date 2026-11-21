@@ -248,8 +248,8 @@ if [ -n "${HOST_CHECKS:-}" ]; then
     declare -p HOST_CHECKS >> "$RUN_DIR/host-env.sh"
 fi
 printf 'Restore host variables with: source %s/host-env.sh\n' "$RUN_DIR"
-bootwright check input -f "$INPUT_DIR/bootstrap"
-bootwright check input -f "$INPUT_DIR/fips"
+bootwright check input --input-dir "$INPUT_DIR/bootstrap"
+bootwright check input --input-dir "$INPUT_DIR/fips"
 bootwright context init --name "$CTX_BOOT" --input-dir "$INPUT_DIR/bootstrap"
 bootwright secret generate --context "$CTX_BOOT"
 bootwright secret check --context "$CTX_BOOT"
@@ -330,7 +330,7 @@ declare -p CTX_FIPS RUN_DIR PROFILE MANIFESTS BOOTWRIGHT_BIN PATH > "$RUN_DIR/co
 bootwright version
 bootwright controller install --yes
 bootwright check controller                     # the FIPS mode check reports 1
-bootwright check input -f ~/fips
+bootwright check input --input-dir ~/fips
 bootwright context init --name "$CTX_FIPS" --input-dir ~/fips
 bootwright secret set --context "$CTX_FIPS" --name openshift-pull-secret --value-file ~/openshift-pull-secret --yes
 bootwright secret generate --context "$CTX_FIPS"

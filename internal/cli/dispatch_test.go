@@ -88,7 +88,11 @@ func TestDispatchEveryApplicationCommand(t *testing.T) {
 			failure := errors.New("application sentinel")
 			record := &dispatchRecord{err: failure}
 			ctx := context.WithValue(context.Background(), dispatchContextKey{}, tt.path)
-			_, err := dispatchSpies(record).invoke(ctx, tt.path, dispatchFlags(), []string{"get", "--help", ""})
+			flags := dispatchFlags()
+			if tt.path == "check input" {
+				flags = validationDispatchFlags(t)
+			}
+			_, err := dispatchSpies(record).invoke(ctx, tt.path, flags, []string{"get", "--help", ""})
 			if !errors.Is(err, failure) {
 				t.Fatalf("dispatch error = %v, want application error", err)
 			}
@@ -121,10 +125,15 @@ func TestRenderEffectiveWritesAFileOnlyWithAnOutputDirectory(t *testing.T) {
 	}
 }
 
+func validationDispatchFlags(t *testing.T) *pflag.FlagSet {
+	t.Helper()
+	return parsedCommand(t, []string{"check", "input", "--context", "example", "--input-dir", "inputs"}).Flags()
+}
+
 func TestDispatchPreservesTypedValidationResult(t *testing.T) {
 	want := &compilation.Report{Counts: compilation.Counts{FilesSeen: 2, ObjectsDecoded: 3}}
 	record := &dispatchRecord{report: want}
-	got, err := dispatchSpies(record).invoke(context.Background(), "check input", dispatchFlags(), nil)
+	got, err := dispatchSpies(record).invoke(context.Background(), "check input", validationDispatchFlags(t), nil)
 	if err != nil || got.validation != want || record.calls != 1 {
 		t.Fatalf("typed result = %#v, %v; calls = %d", got, err, record.calls)
 	}
@@ -210,12 +219,13 @@ func TestDispatchOwnsMutableRequests(t *testing.T) {
 	if args[1] != "pods" {
 		t.Fatal("caller aliases service request")
 	}
-	if _, err := services.invoke(context.Background(), "check input", flags, nil); err != nil {
+	validationFlags := validationDispatchFlags(t)
+	if _, err := services.invoke(context.Background(), "check input", validationFlags, nil); err != nil {
 		t.Fatal(err)
 	}
 	files := record.request.(compilation.ValidateRequest).Files
 	files[0] = "mutated"
-	original, err := flags.GetStringArray("file")
+	original, err := validationFlags.GetStringArray("input-dir")
 	if err != nil || original[0] != "inputs" {
 		t.Fatalf("file request aliases flags: %v, %v", original, err)
 	}

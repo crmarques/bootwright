@@ -18151,3 +18151,12 @@ The [progress output contract](../cli/output.md#long-running-progress) separates
 checksum checks from the media list. A runner regression exercises appended,
 terminal, suppressed, empty and structured output. The delivering commit
 records the verification results.
+
+## X646 — Explicit input path flag
+
+**Owner:** CLI. **Item:** B1654 (product). **Authority:** explicit owner request.
+
+The [command catalog](../cli/commands.md#command-and-flag-catalog) names the
+explicit input flag for validation. Runner and completion tests exercise
+its path handling, and current examples use the public spelling. The
+delivering commit records verification.

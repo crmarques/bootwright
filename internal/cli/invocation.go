@@ -100,6 +100,8 @@ func always(*pflag.FlagSet) bool { return true }
 
 func hasFiles(flags *pflag.FlagSet) bool { return len(arrayValue(flags, "file")) != 0 }
 
+func hasValidationInputs(flags *pflag.FlagSet) bool { return len(arrayValue(flags, "input-dir")) != 0 }
+
 func hasInputDir(flags *pflag.FlagSet) bool { return stringValue(flags, "input-dir") != "" }
 
 func dryRunSelected(flags *pflag.FlagSet) bool { return boolValue(flags, "dry-run") }

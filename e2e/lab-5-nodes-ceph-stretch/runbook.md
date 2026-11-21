@@ -106,8 +106,8 @@ CTX_CEPH="lab-5-nodes-ceph-stretch"
 INPUT_DIR="$HOME/bootwright-e2e/lab-5-nodes-ceph-stretch"
 CONTROLLER_ADDRESS=$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')
 umask 077; RUN_DIR=$(mktemp -d)
-./bin/bootwright check input -f "$INPUT_DIR/arbiter"
-./bin/bootwright check input -f "$INPUT_DIR/ceph"
+./bin/bootwright check input --input-dir "$INPUT_DIR/arbiter"
+./bin/bootwright check input --input-dir "$INPUT_DIR/ceph"
 ./bin/bootwright context init --name "$CTX_ARB" --input-dir "$INPUT_DIR/arbiter"
 ./bin/bootwright context init --name "$CTX_CEPH" --input-dir "$INPUT_DIR/ceph"
 ./bin/bootwright secret generate --context "$CTX_ARB"

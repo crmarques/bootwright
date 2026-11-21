@@ -168,7 +168,7 @@ CONTEXT="lab-3-nodes-ceph"; INPUT_DIR="$HOME/bootwright-e2e/lab-3-nodes-ceph"
 CONTROLLER_ADDRESS=$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')   # the host address
 umask 077
 RUN_DIR=$(mktemp -d) # Private records retained through final cleanup.
-./bin/bootwright check input -f "$INPUT_DIR"
+./bin/bootwright check input --input-dir "$INPUT_DIR"
 ./bin/bootwright context init --name "$CONTEXT" --input-dir "$INPUT_DIR"
 ./bin/bootwright secret generate --context "$CONTEXT"
 install -m 0600 /dev/null "$RUN_DIR/ibm-password"

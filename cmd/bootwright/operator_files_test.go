@@ -161,7 +161,7 @@ func TestTheRootChildOpensNoOperatorPathItself(t *testing.T) {
 	}{
 		{[]string{"context", "init", "--name", "alpha", "--input-dir", input, "-f", configuration}, []string{input, environment, host, declaration, configuration}},
 		{[]string{"secret", "set", "--name", "opaque", "--value-file", value}, []string{value}},
-		{[]string{"check", "input", "-f", input}, []string{input, environment, host, declaration}},
+		{[]string{"check", "input", "--input-dir", input}, []string{input, environment, host, declaration}},
 	} {
 		contextRun(t, services, 0, step.args...)
 		asked := files.take()
@@ -188,7 +188,7 @@ func TestValidateAndContextInitAgreeOnOneDirectory(t *testing.T) {
 	host := files.write(t, "env/controller.yaml", serviceHost)
 	input := filepath.Dir(environment)
 	services := operatorFileServices(t, files)
-	contextRun(t, services, 0, "check", "input", "-f", input)
+	contextRun(t, services, 0, "check", "input", "--input-dir", input)
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	files.deny(host)
 	want := diagnostics.Diagnostic{
@@ -196,7 +196,7 @@ func TestValidateAndContextInitAgreeOnOneDirectory(t *testing.T) {
 		Message:     "the invoking account cannot read this input path (permission denied)",
 		Remediation: "give the invoking account read access to it, or copy it to a directory that account can read",
 	}
-	validate := []string{"check", "input", "-f", input}
+	validate := []string{"check", "input", "--input-dir", input}
 	initialize := []string{"context", "init", "--name", "beta", "--input-dir", input}
 	text := "  error  input.read\n    " + host + "\n    " + want.Message + "\n    Next: " + want.Remediation
 	for _, args := range [][]string{validate, initialize} {

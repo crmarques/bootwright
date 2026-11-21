@@ -147,7 +147,7 @@ e2e/render.sh lab-network-variants "${FEATURE_ARGS[@]}"
 CONTEXT="lab-network-variants"
 INPUT_DIR="$HOME/bootwright-e2e/lab-network-variants"
 CONTROLLER_ADDRESS=$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')
-./bin/bootwright check input -f "$INPUT_DIR"
+./bin/bootwright check input --input-dir "$INPUT_DIR"
 ./bin/bootwright context init --name "$CONTEXT" --input-dir "$INPUT_DIR"
 ./bin/bootwright secret generate --context "$CONTEXT"
 if [ "$REGISTER" = true ]; then
@@ -543,7 +543,7 @@ under the context name `nv-cutoff`. Keep all four feature choices unchanged:
 ```sh
 e2e/render.sh lab-network-variants "${FEATURE_ARGS[@]}" --set name=nv-cutoff --set single=true --set cutoff=true --out-dir ~/bootwright-e2e/lab-network-variants-cutoff
 CUTOFF_CONTEXT="nv-cutoff"
-./bin/bootwright check input -f ~/bootwright-e2e/lab-network-variants-cutoff
+./bin/bootwright check input --input-dir ~/bootwright-e2e/lab-network-variants-cutoff
 ./bin/bootwright context init --name "$CUTOFF_CONTEXT" --input-dir ~/bootwright-e2e/lab-network-variants-cutoff
 ./bin/bootwright secret generate --context "$CUTOFF_CONTEXT"
 if [ "$REGISTER" = true ]; then

@@ -61,7 +61,7 @@ storage class's StorageProfile.
 ```sh
 export CONTEXT=lab-kubevirt
 export INPUT_DIR=examples/openshift-clusters/lab-kubevirt
-./bin/bootwright check input -f "$INPUT_DIR"
+./bin/bootwright check input --input-dir "$INPUT_DIR"
 ./bin/bootwright context init --name "$CONTEXT" --input-dir "$INPUT_DIR"
 ./bin/bootwright secret set --context "$CONTEXT" --name host-kubeconfig --value-file "${HOST_KUBECONFIG:?Set HOST_KUBECONFIG to the host kubeconfig file}" --yes
 ./bin/bootwright secret set --context "$CONTEXT" --name openshift-pull-secret --value-file "${PULL_SECRET_FILE:?Set PULL_SECRET_FILE to the pull-secret JSON file}" --yes

@@ -143,7 +143,7 @@ INPUT_DIR="$HOME/bootwright-e2e/lab-3-nodes-ocp-features"
 umask 077
 RUN_DIR=$(mktemp -d)
 printf 'Run records: %s\n' "$RUN_DIR"
-./bin/bootwright check input -f "$INPUT_DIR"
+./bin/bootwright check input --input-dir "$INPUT_DIR"
 ./bin/bootwright context init --name "$CONTEXT" --input-dir "$INPUT_DIR"
 ./bin/bootwright secret set --context "$CONTEXT" --name openshift-pull-secret --value-file "${PULL_SECRET_FILE:?Set PULL_SECRET_FILE to the private pull-secret JSON file}" --yes
 if [ "$MIRROR_ENABLED" = "true" ]; then

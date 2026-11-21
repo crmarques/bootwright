@@ -99,7 +99,7 @@ printf 'Retained evidence: %s\n' "$EVIDENCE_DIR"
 printf '%s\n' "$TEST_MODE" > "$EVIDENCE_DIR/test-mode"
 CONTROLLER_ADDRESS=$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')
 RUN_DIR=$(mktemp -d)                          # private scratch for this run
-./bin/bootwright check input -f "$INPUT_DIR"      # 28 files seen, 28 objects decoded
+./bin/bootwright check input --input-dir "$INPUT_DIR"      # 28 files seen, 28 objects decoded
 ./bin/bootwright context init --name "$CONTEXT" --input-dir "$INPUT_DIR"
 ./bin/bootwright secret generate --context "$CONTEXT"
 install -m 0600 /dev/null "$RUN_DIR/ibm-password"
@@ -462,7 +462,7 @@ CHANGE_INTENT
 Then validate, update and prove the refusal:
 
 ```sh
-./bin/bootwright check input -f "$INPUT_DIR"
+./bin/bootwright check input --input-dir "$INPUT_DIR"
 ./bin/bootwright context update --name "$CONTEXT" --input-dir "$INPUT_DIR" --yes
 ./bin/bootwright apply --context "$CONTEXT" --yes
 ```
@@ -484,7 +484,7 @@ if original.count(expected) != 1:
     raise SystemExit("Backup does not contain exactly one original autoscale stanza")
 pool.write_bytes(original)
 RESTORE_INTENT
-./bin/bootwright check input -f "$INPUT_DIR"
+./bin/bootwright check input --input-dir "$INPUT_DIR"
 ./bin/bootwright context update --name "$CONTEXT" --input-dir "$INPUT_DIR" --yes
 ```
 

@@ -53,6 +53,6 @@
     Use --help --detail full to include SSH overrides.
 
   Examples
-    bootwright check input --file ./input
+    bootwright check input --input-dir ./input
     bootwright plan apply --context lab
     bootwright status --context lab

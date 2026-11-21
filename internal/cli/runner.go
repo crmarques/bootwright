@@ -72,7 +72,7 @@ func New(config Config) *Runner {
 
 func newCommandTree(r *Runner) (*cobra.Command, error) {
 	root := &cobra.Command{Use: "bootwright", Short: "Coordinate declarative day-0 platform bootstrap", SilenceErrors: true, SilenceUsage: true, DisableSuggestions: true}
-	root.Example = "  bootwright check input --file ./input\n  bootwright plan apply --context lab\n  bootwright status --context lab"
+	root.Example = "  bootwright check input --input-dir ./input\n  bootwright plan apply --context lab\n  bootwright status --context lab"
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.SetOut(r.config.Out)
 	root.SetErr(r.config.ErrOut)

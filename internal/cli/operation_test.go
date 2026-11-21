@@ -44,7 +44,7 @@ func TestOperationBoundaryIsLazyForInformationalMalformedAndUnavailablePaths(t *
 
 func TestOperationBoundaryOwnsContextAndCleanupForEveryImplementedPath(t *testing.T) {
 	invocations := append(contextInvocations(),
-		[]string{"check", "input", "-f", "input"}, []string{"check", "input", "--context", "example"}, []string{"render", "effective"}, []string{"render", "effective", "--input-dir", "input", "--output-dir", "artifacts"},
+		[]string{"check", "input", "--input-dir", "input"}, []string{"check", "input", "--context", "example"}, []string{"render", "effective"}, []string{"render", "effective", "--input-dir", "input", "--output-dir", "artifacts"},
 		[]string{"secret", "set", "--name", "example", "--value-file", "value"}, []string{"secret", "generate"}, []string{"secret", "check"}, []string{"secret", "list"},
 		[]string{"secret", "show", "--name", "example", "--part", "value"}, []string{"secret", "delete", "--name", "example"},
 		[]string{"secret", "encryption", "init"}, []string{"secret", "encryption", "status"}, []string{"secret", "encryption", "rotate"},
@@ -98,7 +98,7 @@ func assertInterruptOutput(t *testing.T, code int, out, errOut string, jsonMode 
 }
 
 func TestInterruptDuringServiceDiscardsTypedResults(t *testing.T) {
-	invocations := append(contextInvocations(), []string{"check", "input", "-f", "input"}, []string{"check", "input", "--output", "json"}, []string{"render", "effective"}, []string{"render", "effective", "--output", "json"})
+	invocations := append(contextInvocations(), []string{"check", "input", "--input-dir", "input"}, []string{"check", "input", "--output", "json"}, []string{"render", "effective"}, []string{"render", "effective", "--output", "json"})
 	for _, args := range invocations {
 		var cancel context.CancelCauseFunc
 		finishes := 0

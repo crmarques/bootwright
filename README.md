@@ -14,7 +14,7 @@ owns required behavior.
 ```sh
 make build
 ./bin/bootwright --help
-./bin/bootwright check input -f examples/machines/lab-rhel
+./bin/bootwright check input --input-dir examples/machines/lab-rhel
 ```
 
 Use `check input` while authoring or in CI. Importing an input directory with

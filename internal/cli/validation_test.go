@@ -15,7 +15,7 @@ func TestFlagRelationshipsAndFormats(t *testing.T) {
 		valid bool
 	}{
 		{"context init --name demo -f input", true}, {"context init --name demo -f input -f other", false}, {"context init --name Demo -f input", false}, {"context delete --name demo --purge=false", false}, {"context delete --name demo --purge --yes=false", true},
-		{"check input -fone,two -fthree", true}, {"apply --authorize=data-loss", true}, {"destroy --authorize=all", false}, {"apply --authorize=data-loss,data-loss", false}, {"apply --authorize=data-loss --authorize=data-loss", false}, {"apply --authorize=data-loss,", false},
+		{"check input --input-dir=one,two --input-dir=three", true}, {"apply --authorize=data-loss", true}, {"destroy --authorize=all", false}, {"apply --authorize=data-loss,data-loss", false}, {"apply --authorize=data-loss --authorize=data-loss", false}, {"apply --authorize=data-loss,", false},
 		{"add-ons add", false}, {"add-ons delete", false},
 		{"secret set --name demo", true}, {"secret set --name demo --value-file source", true}, {"secret set --name demo --value-file source --yes=false", true}, {"secret set --name demo --value-file source --password-stdin=false", true}, {"secret set --name demo --value-stdin", true}, {"secret set --name demo --value-file source --value-stdin", false}, {"secret set --name demo --password-file password --username account", true}, {"secret set --name demo --password-stdin --username account", true}, {"secret set --name demo --password-file password --password-stdin --username account", false}, {"secret set --name demo --value-stdin --password-stdin", false}, {"secret set --name demo --password-file password", true}, {"secret set --name demo --username account", true}, {"secret set --name demo --certificate-file cert", true}, {"secret set --name demo --certificate-file cert --private-key-file key", true}, {"secret set --name demo --private-key-file key", true}, {"secret set --name demo --private-key-file key --public-key-file key.pub", true}, {"secret set --name demo --public-key-file key.pub", true}, {"secret set --name demo --value-file source --certificate-file cert", true}, {"secret set --name demo --certificate-file cert --private-key-file key --public-key-file key.pub", true},
 		{"secret show --name demo --part value", true}, {"secret show --name demo --part username", true}, {"secret show --name demo --part password", true}, {"secret show --name demo --part certificate", true}, {"secret show --name demo --part private-key", true}, {"secret show --name demo --part public-key", true}, {"secret show --name demo --part primary", false},
@@ -88,8 +88,8 @@ func TestResolvedValuesAndDefaults(t *testing.T) {
 	if stringValue(command.Flags(), "sha256") != strings.Repeat("ab", 32) {
 		t.Fatal("digest normalization")
 	}
-	command = parsedCommand(t, []string{"check", "input", "-fone,two", "-f", "three"})
-	if got := arrayValue(command.Flags(), "file"); len(got) != 2 || got[0] != "one,two" || got[1] != "three" {
+	command = parsedCommand(t, []string{"check", "input", "--input-dir=one,two", "--input-dir", "three"})
+	if got := arrayValue(command.Flags(), "input-dir"); len(got) != 2 || got[0] != "one,two" || got[1] != "three" {
 		t.Fatalf("file arguments %q", got)
 	}
 }

@@ -965,7 +965,7 @@ func cliGoldens() []cliGolden {
 		// Desired state: warnings reach standard error in text and the
 		// envelope's diagnostics in JSON; a failed validate has no result.
 		{
-			golden: "cli-validate", args: "check input -f inputs", record: func(r *dispatchRecord) { r.report = validation() },
+			golden: "cli-validate", args: "check input --input-dir inputs", record: func(r *dispatchRecord) { r.report = validation() },
 			stderr: "  warning  OpenShiftCluster/ocp-02\n" +
 				"    api.selection\n" +
 				"    clusters/ocp-02/cluster.yaml:4:9\n" +
@@ -979,9 +979,9 @@ func cliGoldens() []cliGolden {
 				"    CustomPlaybook is a reserved declaration and cannot execute.\n" +
 				"    Field: $.spec\n",
 		},
-		{golden: "cli-validate-json", args: "check input -f inputs --output json", record: func(r *dispatchRecord) { r.report = validation() }},
+		{golden: "cli-validate-json", args: "check input --input-dir inputs --output json", record: func(r *dispatchRecord) { r.report = validation() }},
 		{
-			args: "check input -f inputs", code: 1, record: func(r *dispatchRecord) { r.report, r.err = validation(), invalid },
+			args: "check input --input-dir inputs", code: 1, record: func(r *dispatchRecord) { r.report, r.err = validation(), invalid },
 			stderr: "  error  Environment/lab-rhel\n" +
 				"    api.required\n" +
 				"    environment.yaml:6:3\n" +
@@ -996,7 +996,7 @@ func cliGoldens() []cliGolden {
 				"    Field: $.spec.network.adresses\n" +
 				"    Next: rename the field to addresses\n",
 		},
-		{golden: "cli-validate-failed-json", args: "check input -f inputs --output json", code: 1, record: func(r *dispatchRecord) { r.report, r.err = validation(), invalid }},
+		{golden: "cli-validate-failed-json", args: "check input --input-dir inputs --output json", code: 1, record: func(r *dispatchRecord) { r.report, r.err = validation(), invalid }},
 		{golden: "cli-render-effective", args: "render effective", record: func(r *dispatchRecord) { r.result.effective = effective() }},
 		{golden: "cli-render-effective-json", args: "render effective --output json", record: func(r *dispatchRecord) { r.result.effective = effective() }},
 		{golden: "cli-render-acquisitions", args: "render acquisitions", record: func(r *dispatchRecord) { r.result.effective = effective() }},
