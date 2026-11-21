@@ -3,6 +3,7 @@ package verifiedfetch
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -112,5 +113,23 @@ func TestACachedFileIsFetchedOnceAndRefetchedWhenItIsReplaced(t *testing.T) {
 	refused := serving(t, "gone", http.StatusNotFound)
 	if _, err := Cached(refused.Client(), refused.URL+"/other.tar.gz", directory, pin); err == nil || !strings.Contains(err.Error(), "404") {
 		t.Errorf("a refused fetch = %v, want the server's status", err)
+	}
+}
+
+type redirectTransport struct{}
+
+func (redirectTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	return &http.Response{StatusCode: http.StatusFound, Header: http.Header{"Location": {"https://cdn.example.test/file?signature=synthetic-private-token"}}, Request: request}, nil
+}
+
+func TestAFailedRedirectKeepsItsSignedQueryPrivate(t *testing.T) {
+	const token = "synthetic-private-token"
+	client := &http.Client{Transport: redirectTransport{}}
+	client.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
+		return errors.New("redirect failure with " + token)
+	}
+	_, err := Cached(client, "https://publisher.example.test/asset", t.TempDir(), pinOf("artifact"))
+	if err == nil || !strings.Contains(err.Error(), "cdn.example.test") || strings.Contains(err.Error(), token) {
+		t.Fatalf("the fetch exposed its private redirect or omitted its destination: %v", err)
 	}
 }

@@ -5,11 +5,14 @@ package verifiedfetch
 
 import (
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -83,18 +86,47 @@ func Write(file string, pin Pin, mode os.FileMode, fill func(io.Writer) error) e
 	return os.Rename(partial.Name(), file)
 }
 
-func Download(client *http.Client, url string, pin Pin) func(io.Writer) error {
+func Download(client *http.Client, source string, pin Pin) func(io.Writer) error {
 	return func(sink io.Writer) error {
-		response, err := client.Get(url)
+		response, err := client.Get(source)
 		if err != nil {
-			return err
+			return downloadError(source, err)
 		}
 		defer response.Body.Close()
-		if response.StatusCode != http.StatusOK {
-			return fmt.Errorf("%s answered %s", url, response.Status)
+		if response.Request != nil && response.Request.URL != nil {
+			source = response.Request.URL.String()
 		}
-		_, err = io.Copy(sink, io.LimitReader(response.Body, pin.Bytes+1))
-		return err
+		if response.StatusCode != http.StatusOK {
+			return fmt.Errorf("%s answered HTTP %d", sourceHost(source), response.StatusCode)
+		}
+		if _, err := io.Copy(sink, io.LimitReader(response.Body, pin.Bytes+1)); err != nil {
+			return downloadError(source, err)
+		}
+		return nil
+	}
+}
+
+func sourceHost(source string) string {
+	if endpoint, err := url.Parse(source); err == nil && endpoint.Hostname() != "" {
+		return endpoint.Hostname()
+	}
+	return "the download host"
+}
+
+func downloadError(source string, err error) error {
+	var request *url.Error
+	if errors.As(err, &request) {
+		source = request.URL
+	}
+	var certificate *tls.CertificateVerificationError
+	var timeout net.Error
+	switch {
+	case errors.As(err, &certificate):
+		return fmt.Errorf("%s: TLS certificate verification failed", sourceHost(source))
+	case errors.As(err, &timeout) && timeout.Timeout():
+		return fmt.Errorf("%s: download timed out", sourceHost(source))
+	default:
+		return fmt.Errorf("%s: download failed", sourceHost(source))
 	}
 }
 
@@ -119,7 +151,7 @@ func Cached(client *http.Client, url, directory string, pin Pin) (*os.File, erro
 		return nil, err
 	}
 	if err := Write(cached, pin, 0o600, Download(client, url, pin)); err != nil {
-		return nil, fmt.Errorf("%s: %w", url, err)
+		return nil, fmt.Errorf("%s: %w", pin.Name, err)
 	}
 	return Open(cached, pin)
 }

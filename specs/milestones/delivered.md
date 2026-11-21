@@ -18083,3 +18083,15 @@ the Ansible check environment through `ansible-lint`.
 
 **Exit evidence:** the delivering commit records the hash-verified install,
 dependency check, repository gates and independent review.
+
+## X640 — Build download diagnostics
+
+**Owner:** Development tooling. **Item:** B1648 (defect). **Authority:** the
+owner's request to implement the dependency proposal.
+
+The verified build downloader reports the endpoint hostname and a controlled
+failure reason. A failed redirect never emits its URL query or a transport
+error's untrusted text.
+
+**Exit evidence:** a synthetic redirect reproduced the disclosure before the
+change. The delivering commit records its passing regression.
