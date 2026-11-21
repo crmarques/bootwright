@@ -14,7 +14,7 @@ func TestAReadyControllerCheckNamesContextInit(t *testing.T) {
 	report.Actions = nil
 	record := &dispatchRecord{result: commandResult{controller: report}}
 	var out, errOut bytes.Buffer
-	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"controller", "check"})
+	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"check", "controller"})
 	if code != 0 || errOut.Len() != 0 {
 		t.Fatalf("exit %d, stderr %q", code, errOut.String())
 	}
@@ -28,7 +28,7 @@ func TestAReadyControllerCheckNamesContextInit(t *testing.T) {
 func TestControllerCheckRefusesContext(t *testing.T) {
 	record := &dispatchRecord{}
 	var out, errOut bytes.Buffer
-	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"controller", "check", "--context", "lab"})
+	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"check", "controller", "--context", "lab"})
 	if code != 2 || out.Len() != 0 || !strings.Contains(errOut.String(), "cli.usage") || record.calls != 0 {
 		t.Fatalf("exit %d, stdout %q, stderr %q, calls %d", code, out.String(), errOut.String(), record.calls)
 	}

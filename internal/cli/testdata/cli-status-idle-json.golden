@@ -42,7 +42,7 @@
     },
     "readiness": [],
     "nextSteps": [
-      "bootwright plan --context lab",
+      "bootwright plan apply --context lab",
       "bootwright apply --context lab"
     ],
     "lifecycle": null,

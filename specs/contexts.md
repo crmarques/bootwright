@@ -291,7 +291,7 @@ confirmed setup:
 | Path | Purpose and retention |
 | --- | --- |
 | `registry.json` | One atomic map of context names to their selected inputs and status, plus the Controller descriptor once a first binding publishes it. |
-| `media/` | Host-wide installer media under the [Managed OS media contract](managed-os.md#media-store): each image's exact bytes beside its canonical record, created by the first `media add`, shared read-only by every context and frozen through shared reservations rather than copied. An image is [acquired](#media-acquisition) into a private stage in this directory while no root lock is held, then published exclusively and atomically with its record; a pinned stage whose publication met another command's lock is kept beside its record for the command's repetition; deletion is guarded by the reservation record. |
+| `media/` | Host-wide [installer media](managed-os.md#media-store), each image beside its canonical record. Contexts share the bytes read-only and freeze them through reservations. [Acquisition](#media-acquisition) stages, publishes and retains images here. Reservations guard deletion. |
 | `controller/` | The host-wide state no context owns, in a plain container no descriptor attributes, created with the setup subtree and, if missing, by the first binding. It holds only `install/` and `record/`, each a private directory; any other entry, either of them of another type, or a `record/` no descriptor declares refuses the store (`TestTheStoreAdmitsControllerWithOnlyInstallAndRecord`). |
 | `controller/record/` | The [Controller record](contexts/controller-record.md), its tool areas and its publication stages, in the directory the descriptor's inode names. |
 | `controller/install/` | Setup's own [subtree](contexts/controller-record.md#the-setup-subtree), independently versioned and outside the registry: its lock, its `prerequisites.SetupStateFormat` record with the pending intent and receipt, the published runtimes and the locked wheel cache. |
@@ -375,9 +375,9 @@ retained beside it.
 
 | Root lock | Lease | Commands |
 | --- | --- | --- |
-| shared | none | Every read: `context list` and `current`, `plan`, `status`, `logs` at each poll of an operation and as it opens a run's output, `preflight`, `controller check`, `secret check`, `list` and `show`, `secret encryption status`, `media list`, including the opening of each image `--checksums` then reads, the admission a `media add` or `media delete` without `--yes` reviews before its confirmation, the store check a `secret set` from standard input makes before it reads, the plan a `context update` or `context delete` without `--yes` presents before its confirmation, SSH-trust and input reads, and the reads that precede `apply` and `destroy`. |
-| exclusive | none | Every other command that may publish, such as `context use`, a `context update` that imports no input, `media delete`, the admission and publication of `media add`, the SSH trust that `machine trust` or a confirmed first use records, and the registry transaction in which `controller install` creates a missing setup subtree. |
-| none | none | The [acquisition](#media-acquisition) of `media add` between those two holds: its copy or download, or its re-read of a stage it adopts, its digest verification, and the record it retains beside a stage whose publication met another's lock; the full read of each image by `media list --checksums`, through the descriptor its shared hold opened; the confirmation prompt of `media add`, `media delete`, `context update` and `context delete`; the [read of standard input](secrets.md#acquisition-and-commands) by `secret set --value-stdin` or `--password-stdin`, including its terminal prompt; and every other part of `controller install`, which holds only [`controller/install/lock`](contexts/controller-record.md#the-setup-subtree). |
+| shared | none | Every read: `context list` and `current`, `plan`, `status`, `logs` at each poll of an operation and as it opens a run's output, `check environment`, `check controller`, `secret check`, `list` and `show`, `secret encryption status`, `catalog media list`, including the opening of each image `--checksums` then reads, the admission a `catalog media add` or `catalog media delete` without `--yes` reviews before its confirmation, the store check a `secret set` from standard input makes before it reads, the plan a `context update` or `context delete` without `--yes` presents before its confirmation, SSH-trust and input reads, and the reads that precede `apply` and `destroy`. |
+| exclusive | none | Every other command that may publish, such as `context use`, a `context update` that imports no input, `catalog media delete`, the admission and publication of `catalog media add`, the SSH trust that `machine trust` or a confirmed first use records, and the registry transaction in which `controller install` creates a missing setup subtree. |
+| none | none | The [acquisition](#media-acquisition) of `catalog media add` between those two holds: its copy or download, or its re-read of a stage it adopts, its digest verification, and the record it retains beside a stage whose publication met another's lock; the full read of each image by `catalog media list --checksums`, through the descriptor its shared hold opened; the confirmation prompt of `catalog media add`, `catalog media delete`, `context update` and `context delete`; the [read of standard input](secrets.md#acquisition-and-commands) by `secret set --value-stdin` or `--password-stdin`, including its terminal prompt; and every other part of `controller install`, which holds only [`controller/install/lock`](contexts/controller-record.md#the-setup-subtree). |
 | exclusive | held | `context init`; a `context update` that imports input; `context delete` of a ready context; `secret set` (from standard input, only to write what it read), `generate` and `delete`, `secret encryption init` and `rotate`, and the Secret binding `apply` and `destroy` take before they execute; and the short shared-state publications of `apply` and `destroy`. |
 | none during effects | exclusive | The execution of `apply` and `destroy`, between short root transactions. |
 | shared during admission, none during effects | shared | [Bounded runs](cli/output.md#bounded-run-output), including Machine power; their lease excludes lifecycle mutation of the same context. |
@@ -386,9 +386,9 @@ A read holds its lock until all stored input or secret-session files have been
 consumed, and a mutator holds its locks until it finishes, except that
 lifecycle effects and bounded runs release the root lock after admission
 while retaining their context lease;
-`media add` releases the root lock while it acquires,
-`media list --checksums` releases its shared hold before it reads any image
-in full, neither `media add`, `media delete`, `context update` nor
+`catalog media add` releases the root lock while it acquires,
+`catalog media list --checksums` releases its shared hold before it reads any image
+in full, neither `catalog media add`, `catalog media delete`, `context update` nor
 `context delete` holds one while it prompts, and a `secret set` from
 standard input holds none while it reads, then takes the exclusive root lock
 and the lease to write and re-proves its
@@ -738,7 +738,7 @@ build's services run; a store this build created is restored whole from a
 [matching backup](#format-and-restore-boundary).
 
 The root admits only the store's own published objects: `registry.json`, the
-`contexts` container, the `media` container once a `media add` has created
+`contexts` container, the `media` container once a `catalog media add` has created
 it, the private `controller` container, which admits only the `install` directory once
 setup creates it, whose content the root admission never reads, and the
 `record` subtree once the registry declares it, and verified private, bounded
@@ -750,7 +750,7 @@ deletion to make room.
 
 ### Media acquisition
 
-`media add` takes the exclusive root lock twice and holds no root lock
+`catalog media add` takes the exclusive root lock twice and holds no root lock
 between, because an image may take hours to arrive and every other store
 command on the host would refuse for that long. The first hold admits the
 request as the [media store](managed-os.md#media-store) requires and claims the
@@ -772,9 +772,9 @@ renames the stage to the image name without replacing anything, proves the
 renamed file is still that stage with that status, apart from the change time
 the rename itself sets, and only then publishes the record.
 
-Without `--yes`, a `media add` and a `media delete` first take a shared hold
-that admits the request as the media store requires. A `media add` that
-replaces an image and a `media delete` then ask for confirmation with no root
+Without `--yes`, a `catalog media add` and a `catalog media delete` first take a shared hold
+that admits the request as the media store requires. A `catalog media add` that
+replaces an image and a `catalog media delete` then ask for confirmation with no root
 lock held, and the exclusive hold that claims the stage or deletes refuses,
 changing nothing, when the name's occupancy, its published size and digest, its
 freeze or, for a deletion, its retained stage changed meanwhile, whether or not
@@ -803,14 +803,14 @@ A stage and the record beside it are a retained pair while no process holds
 the stage's lock, the record decodes as a canonical media record within its
 bound, the stage is the one named by the record's image, and the opened stage
 is a private regular file of exactly the size the record states. The next
-`media add` of that image whose `--sha256` equals the recorded digest adopts
+`catalog media add` of that image whose `--sha256` equals the recorded digest adopts
 the pair: its first hold takes the stage's lock, the add re-reads the stage in
 full with no root lock held, and its second hold publishes it as a filled stage
 with the retained source and its own publication time, then removes the
 retained record. An adopted stage whose bytes no longer match the record is
 removed and the add refuses; any other failure leaves it retained. An add of
 that image with another digest or none removes the pair before it claims, and
-`media delete` of that image removes it; either refuses while another add holds
+`catalog media delete` of that image removes it; either refuses while another add holds
 the stage's lock, and a frozen image's pair stays until its freeze ends.
 
 A failed, refused or cancelled acquisition removes its own stage while it still
@@ -819,14 +819,14 @@ the media store's failure, never as the source's: a capacity answer names only
 the kernel's answer and the remedy of freeing space or raising the quota on
 the filesystem that holds `/var/lib/bootwright/media`, while a source that
 fails mid-stream is still reported as the source's. A stage whose lock no process holds and that is not
-retained, such as one a killed `media add` left, is abandoned: it is never
-listed or adopted, and the next `media add` or `media delete` removes it, after
+retained, such as one a killed `catalog media add` left, is abandoned: it is never
+listed or adopted, and the next `catalog media add` or `catalog media delete` removes it, after
 the record beside it if any, under the exclusive root lock before it claims
 anything, as it removes a retained record whose stage is gone and the record
 temporary files named `pending-<32 lowercase hexadecimal digits>` that only an
 exclusive holder writes. At most 16 stages exist at once, live, retained or
-abandoned; a claim beyond them refuses until another `media add` finishes or
-`media delete` removes a retained stage.
+abandoned; a claim beyond them refuses until another `catalog media add` finishes or
+`catalog media delete` removes a retained stage.
 
 ## Recorded directory identity
 
@@ -1063,7 +1063,7 @@ name, initialization and
 input readiness, and the invoking user's current marker. List sorts by name;
 `current --short` emits only the name and LF. Human details show `Current` as
 `yes` or `no`, `Input` as `imported` or `not imported`, and retain the context
-`Mode`. Their `Next` names validation with `--context <name>` for a ready
+`Mode`. Their `Next` names `status --context <name>` for a ready
 context with imported input, input update with `--name <name>` otherwise,
 `context init` to resume initialization, or `context delete` to resume
 deletion. Input admission reports counts
@@ -1094,7 +1094,7 @@ root lock and the lease and proves again everything its plan presented, a
 deletion also the context's mutation evidence and the operation index naming
 its current operation, so an apply or destroy that ran between the prompt and
 the lock refuses it; it refuses with no write, naming the repetition of the
-command, when any of it changed meanwhile, as `media delete` does
+command, when any of it changed meanwhile, as `catalog media delete` does
 (`TestAStoreChangedWhileAPromptWasAnsweredRefusesWithNoWrite`,
 `TestAnInspectionHoldsTheSharedLockAndWritesNothing`). With `--yes` the
 command takes the exclusive lock and the lease alone.
@@ -1112,7 +1112,7 @@ plan presenter refuses with `context.state` rather than ask.
 
 Every context-backed command that needs desired state (validate, render,
 declaration-dependent secret commands, plan, status, apply, destroy, the
-machine commands and `preflight`) rejects a missing input
+machine commands and `check environment`) rejects a missing input
 revision with `context.input`, naming the context, and the remedy
 `bootwright context update --name <name> --input-dir <dir>`. An absent store or
 an absent named context refuses with `context.state`, naming that context, with

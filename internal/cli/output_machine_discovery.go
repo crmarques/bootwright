@@ -42,7 +42,7 @@ func displayMachineDiscovery(result *diskdiscovery.DiscoverResult) machineDiscov
 		out.Inventories = append(out.Inventories, row)
 	}
 	if result.Operation.Receipt.State == "done" {
-		out.Next = "bootwright plan --context " + escapeDisplayLine(result.Operation.Context.Name)
+		out.Next = "bootwright plan apply --context " + escapeDisplayLine(result.Operation.Context.Name)
 	}
 	return out
 }
@@ -70,7 +70,7 @@ func writeMachineDiscovery(out io.Writer, path string, result *diskdiscovery.Dis
 	}
 	if result.Operation.Receipt.State == "done" {
 		text.section("")
-		text.verbatimFields(field{Label: "Next", Value: "bootwright plan --context " + result.Operation.Context.Name, Tone: "command"})
+		text.verbatimFields(field{Label: "Next", Value: "bootwright plan apply --context " + result.Operation.Context.Name, Tone: "command"})
 	}
 	if len(text.blocks) != 0 {
 		if _, err := io.WriteString(out, "\n"); err != nil {

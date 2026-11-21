@@ -31,7 +31,7 @@ func statusReadiness(secrets secretReadiness, media installation.MediaRecords) l
 			if held, mediaErr = media.MediaRecords(ctx); mediaErr == nil {
 				for _, name := range names {
 					if _, ok := held[name]; !ok {
-						gaps = append(gaps, lifecycle.ReadinessGap{Kind: "media", Name: name, State: "missing", Remedy: "bootwright media add --name " + name + " --from-file <path>"})
+						gaps = append(gaps, lifecycle.ReadinessGap{Kind: "media", Name: name, State: "missing", Remedy: "bootwright catalog media add --name " + name + " --from-file <path>"})
 					}
 				}
 			}

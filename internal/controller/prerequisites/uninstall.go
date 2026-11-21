@@ -171,7 +171,7 @@ func (s Service) inspectUninstall(ctx context.Context, view UninstallView, reque
 	if len(view.Media) != 0 {
 		remedies := make([]string, 0, len(view.Media))
 		for _, image := range view.Media {
-			remedies = append(remedies, "bootwright media delete --name "+image)
+			remedies = append(remedies, "bootwright catalog media delete --name "+image)
 		}
 		return inspection, failure(uninstallCode, "the media store holds installer media the operator supplied: "+strings.Join(view.Media, ", "),
 			"run "+strings.Join(remedies, "; run ")+"; then run "+uninstallInvocation+" again")

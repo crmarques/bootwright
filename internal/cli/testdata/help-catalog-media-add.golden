@@ -1,4 +1,4 @@
-  bootwright / media add
+  bootwright / catalog media add
       Import one installer image into this host's media store, where every context shares it. A
       download requires --sha256 and follows no redirect. A URL whose query carries a signature
       is a credential: --from-url refuses any query, so give it with --from-url-file <path> or
@@ -6,7 +6,7 @@
       ordinary confirmation; --yes skips it.
 
   Usage
-    bootwright media add [flags]
+    bootwright catalog media add [flags]
 
   Command flags
       --from-file      Import a local image
@@ -26,4 +26,4 @@
       --width       Set presentation width (0: automatic) · default 0
 
   Examples
-    bootwright media add --name installer.iso --from-file ./installer.iso
+    bootwright catalog media add --name installer.iso --from-file ./installer.iso

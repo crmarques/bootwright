@@ -86,14 +86,17 @@ func writeAddOnInfo(out io.Writer, command string, result *catalog.DescribeResul
 
 func groupShort(part string) string {
 	return map[string]string{
-		"add-ons":    "Inspect built-in add-on packages",
+		"add-ons":    "Inspect add-on packages supported by this build",
 		"cluster":    "Inspect and reach a context's clusters",
 		"completion": "Generate shell completion scripts",
 		"context":    "Create, select, update and delete contexts",
-		"controller": "Prepare, check and remove this host's controller",
+		"controller": "Install, rebind or remove this host's controller",
+		"catalog":    "Browse installer media, built-in add-ons and the desired-state schema",
+		"check":      "Check input, this controller or an environment's prerequisites",
+		"plan":       "Preview an apply or a destroy without executing it",
 		"encryption": "Initialize, inspect and rotate the Secret store's key",
 		"machine":    "Inspect, reach, trust and power a context's Machines",
-		"media":      "Store installer images on this host",
+		"media":      "Manage installer media shared by contexts on this controller",
 		"render":     "Render effective desired state and external-tool artifacts",
 		"secret":     "Set, generate, check and reveal a context's Secrets",
 	}[part]

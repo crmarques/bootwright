@@ -1,4 +1,4 @@
-  ✓ Preflight synthetic
+  ✓ Environment checks for synthetic
     Stages  controller, infrastructure-services, substrates, machines, clusters
 
   Checks

@@ -18,7 +18,7 @@ the current implementation limits.
 - Connected install, direct access, release 4.21.15. The managed NAT network
   `virbr-lab` (`198.51.100.0/24`), the loopback HTTPS emulated BMC (port
   8000), DNS, NTP, a proxy and a private artifact server are all managed on
-  the controller. No `media add` is needed: the agent ISO is built and
+  the controller. No `catalog media add` is needed: the agent ISO is built and
   published privately.
 - All addresses and domains are synthetic. Replace the controller address,
   guest subnet and bridge, upstream DNS and NTP sources, and the release pin

@@ -9,6 +9,7 @@ import (
 )
 
 type PlanRequest struct {
+	Verb        reconciliation.Verb
 	ContextName string
 	Stages      []string
 	Until       string
@@ -181,6 +182,7 @@ type PlanResult struct {
 	Startable    int
 	Deferred     int
 	Continuation bool
+	Settled      bool
 	AddsTo       string
 	TakesBack    []string
 	// Finalizes marks a preview whose verb only completes the operation's

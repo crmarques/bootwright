@@ -45,7 +45,7 @@ func (s Service) Preflight(ctx context.Context, request PreflightRequest) (*Repo
 	}
 	stages, err := reconciliation.ParseStages(request.Stages)
 	if err != nil {
-		return nil, diagnostics.NewFailureWithRemediation("cli.usage", "--stage names a stage that does not exist", "", "name stages from bootwright help preflight")
+		return nil, diagnostics.NewFailureWithRemediation("cli.usage", "--stage names a stage that does not exist", "", "name stages from bootwright help check environment")
 	}
 	if len(stages) == 0 {
 		stages = CheckedStages()
@@ -111,7 +111,7 @@ func stageList(stages reconciliation.StageSelection) string {
 }
 
 func repeatCommand(selected string, clusters []string, stages reconciliation.StageSelection, explicit bool) string {
-	command := "bootwright preflight --context " + selected
+	command := "bootwright check environment --context " + selected
 	if explicit {
 		command += " --stage " + stageList(stages)
 	}

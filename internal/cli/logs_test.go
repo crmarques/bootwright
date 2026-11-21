@@ -223,11 +223,11 @@ func TestEveryLogsFieldHasItsHint(t *testing.T) {
 	}
 }
 
-func TestRootHelpListsLogsUnderContext(t *testing.T) {
+func TestRootHelpListsLogsWithTroubleshooting(t *testing.T) {
 	_, out, _ := runLogs(t, &dispatchRecord{}, "help")
-	context := strings.Index(out, "\n  Context\n")
-	status, logs, diff, resources := strings.Index(out, "\n  status "), strings.Index(out, "\n  logs "), strings.Index(out, "\n  diff "), strings.Index(out, "\n  Resources\n")
+	context := strings.Index(out, "\n  Inspect and troubleshoot\n")
+	status, logs, diff, resources := strings.Index(out, "\n  status "), strings.Index(out, "\n  logs "), strings.Index(out, "\n  diff "), strings.Index(out, "\n  Prepare Bootwright and its inputs\n")
 	if context < 0 || !(context < status && status < logs && logs < diff && diff < resources) {
-		t.Fatalf("logs is not listed after status in the Context group:\n%s", out)
+		t.Fatalf("logs is not listed after status in the troubleshooting group:\n%s", out)
 	}
 }

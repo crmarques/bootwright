@@ -82,7 +82,7 @@ func TestPhysicalEraseNamesEachRefusalWithItsCauseAndTheDestroyRemedy(t *testing
 		eraseReceiptTimeout:     {"within the erase deadline", stop, destroy},
 		eraseForeignCustody:     {"belongs to another request", destroy, retain},
 		eraseCustodyDrift:       {"differs from what its removal recorded", "inspect " + custody + " on the execution host", "under " + request.Install.Private.Path + " ", "remove " + custody + " whole", destroy},
-		eraseBootMediaMismatch:  {"no longer matches its size and SHA-256", "bootwright media add", destroy},
+		eraseBootMediaMismatch:  {"no longer matches its size and SHA-256", "bootwright catalog media add", destroy},
 		eraseImageBuildFailed:   {"could not be built", destroy},
 		eraseInstallNetwork:     {"cannot carry", retain},
 	} {

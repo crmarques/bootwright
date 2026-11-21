@@ -1,14 +1,14 @@
-  bootwright / media
-      Store installer images on this host
+  bootwright / catalog media list
+      List the images this host stores with their sizes, recorded digests and the contexts that
+      reserve them. The default reads records and file metadata only; --checksums reads every
+      image in full and reports each computed digest and whether the image still matches its
+      record.
 
   Usage
-    bootwright media [flags]
+    bootwright catalog media list [flags]
 
-  Commands
-  COMMAND   PURPOSE
-  add       Import and verify an installer image
-  delete    Delete an unbound installer image
-  list      List installer images
+  Command flags
+      --checksums  Compute image checksums
 
   Common flags
       --ascii       Use ASCII status markers
@@ -18,3 +18,6 @@
       -o, --output  Select output mode (values: text, json, yaml) · default text
       --progress    Select progress animation (values: auto, always, never) · default auto
       --width       Set presentation width (0: automatic) · default 0
+
+  Examples
+    bootwright catalog media list --checksums

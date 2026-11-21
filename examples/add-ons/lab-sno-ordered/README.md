@@ -20,7 +20,7 @@ Operator acceptance is pending.
   replace each pair with the operator's channel and its exact CSV. On a cluster
   whose catalog serves the package, read `status.channels[].name` and
   `status.channels[].currentCSV` from the lookup that
-  `bootwright add-ons info --name <package>` prints.
+  `bootwright catalog add-ons info --name <package>` prints.
 - The `services` pool holds eight machine-network addresses
   (`198.51.100.128-198.51.100.135`), separate from the node, its endpoints and
   the managed network's host address. Keep it outside any DHCP range on the

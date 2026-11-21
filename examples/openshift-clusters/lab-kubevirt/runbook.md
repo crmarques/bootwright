@@ -61,16 +61,16 @@ storage class's StorageProfile.
 ```sh
 export CONTEXT=lab-kubevirt
 export INPUT_DIR=examples/openshift-clusters/lab-kubevirt
-./bin/bootwright validate -f "$INPUT_DIR"
+./bin/bootwright check input -f "$INPUT_DIR"
 ./bin/bootwright context init --name "$CONTEXT" --input-dir "$INPUT_DIR"
 ./bin/bootwright secret set --context "$CONTEXT" --name host-kubeconfig --value-file "${HOST_KUBECONFIG:?Set HOST_KUBECONFIG to the host kubeconfig file}" --yes
 ./bin/bootwright secret set --context "$CONTEXT" --name openshift-pull-secret --value-file "${PULL_SECRET_FILE:?Set PULL_SECRET_FILE to the pull-secret JSON file}" --yes
 ./bin/bootwright secret generate --context "$CONTEXT"
 ./bin/bootwright secret check --context "$CONTEXT"
-./bin/bootwright plan --context "$CONTEXT"
+./bin/bootwright plan apply --context "$CONTEXT"
 ./bin/bootwright apply --context "$CONTEXT" --stage controller --yes
 ./bin/bootwright apply --context "$CONTEXT" --stage infrastructure-services --yes
-./bin/bootwright preflight --context "$CONTEXT" --stage clusters
+./bin/bootwright check environment --context "$CONTEXT" --stage clusters
 ```
 
 ## 3. Run

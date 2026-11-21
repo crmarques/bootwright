@@ -18123,3 +18123,13 @@ package repository, including its default key.
 **Exit evidence:** the disconnected Ceph example lists both its boot ISO and
 its hosted DVD and names the selected repository key. Acquisition goldens
 hold the rows for every example.
+
+## X643 — Explicit CLI checks and previews
+
+**Owner:** CLI. **Item:** B1651 (product). **Authority:** [D280](backlog.md#d280).
+The [catalog](../cli/commands.md#command-and-flag-catalog) gives input,
+controller and environment checks distinct targets and puts installer media
+beside built-in add-ons and the schema. [Lifecycle previews](../cli.md#lifecycle-behavior)
+name the operation. The same completed context can preview a settled apply
+and a removal. The lifecycle regression proves both previews leave the
+operation records unchanged. The delivering commit records the gates.

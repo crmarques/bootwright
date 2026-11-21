@@ -527,7 +527,7 @@ func TestADiscardOfAReadableStoreRemovesNoPackageAndKeepsTheContextAndMediaRefus
 	f = &uninstallFixture{views: []UninstallView{imaged}}
 	_, err = f.service().Uninstall(context.Background(), UninstallRequest{DiscardUnreadable: true, SkipConfirmation: true})
 	uninstallRefusal(t, err, uninstallCode, "installer media the operator supplied: rhel.iso")
-	if remedy := diagnostics.Of(err)[0].Remediation; !strings.Contains(remedy, "bootwright media delete --name rhel.iso") {
+	if remedy := diagnostics.Of(err)[0].Remediation; !strings.Contains(remedy, "bootwright catalog media delete --name rhel.iso") {
 		t.Fatalf("remedy %q", remedy)
 	}
 	if slices.Contains(f.events, "remove-state") || f.proofs != 0 {

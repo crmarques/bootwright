@@ -1,3 +1,4 @@
+  Installer media on this controller
   NAME                       SIZE      RELEASE      RESERVED           ADDED        STATE
   rhel-9.8-x86_64-boot.iso   997 MiB   9.8 x86_64   lab-rhel,lab-sno   2026-09-20   verified
   rhel-9.8-x86_64-dvd.iso    12 GiB    -            -                  2026-09-21   mismatch

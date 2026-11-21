@@ -175,5 +175,5 @@ func contextNext(summary contexts.Summary) string {
 	if !summary.Configured {
 		return "bootwright context update --name " + summary.Name + " --input-dir <directory>"
 	}
-	return "bootwright validate --context " + summary.Name
+	return "bootwright status --context " + summary.Name
 }

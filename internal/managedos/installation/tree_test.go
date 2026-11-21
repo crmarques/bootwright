@@ -126,7 +126,7 @@ func TestATreeApplyNamesItsRefusalsWithTheirRemedy(t *testing.T) {
 	for reason, test := range map[string]struct{ message, remediation string }{
 		"media-changed-tree": {
 			"the media store's image " + dvdImageName + " no longer has the size and SHA-256 this operation froze, so nothing was published or booted",
-			"take this context back with bootwright destroy --context lab-b, import the image again with bootwright media add --name " +
+			"take this context back with bootwright destroy --context lab-b, import the image again with bootwright catalog media add --name " +
 				dvdImageName + " --from-file <path>, or --from-url <url> --sha256 <digest>, then run bootwright apply --context lab-b",
 		},
 		"tree-source-drift": {

@@ -8,9 +8,8 @@ The tables define the complete public command tree, operands, flags and defaults
 Every command accepts and parses the presentation flags below. `--context`
 and the `--ssh-*` flags are accepted only by the commands whose use case reads
 them; any other command refuses them as flags it does not accept. The
-context-free commands, which refuse `--context`, are `controller install`,
-`controller check`, `controller rebind`, `controller uninstall`, `context` (every subcommand), `media` (every subcommand), `add-ons` (every subcommand), `help`, `completion`, `version`, `schema` and `sbom`; only `apply`, `destroy`,
-`machine rsh`, `machine exec`, `machine cp`, `cluster rsh`, `cluster exec` and `preflight` accept
+context-free commands, which refuse `--context`, are `controller` and `catalog` (all subcommands), `check controller`, `context` (all subcommands), `help`, `completion`, `version` and `sbom`; only `apply`, `destroy`,
+`machine rsh`, `machine exec`, `machine cp`, `cluster rsh`, `cluster exec` and `check environment` accept
 `--ssh-*`. `machine rsh`, `machine exec`, `cluster rsh` and `cluster exec`
 accept `--ssh-id-file`, `--ssh-user` and `--ssh-ask-password`. `machine cp`
 accepts `--ssh-id-file` and `--ssh-user`. Help and completion list each
@@ -100,8 +99,8 @@ by a related noun, and `--short` is the one flag that prints names only.
 | `bootwright context list` | none | contexts in canonical name order | read local state |
 | `bootwright context current` | `--short` false | current context details, or only its name with `--short` | read local state |
 | `bootwright context delete` | required `--name <name>` and `--purge`; `--allow-orphans` and `--yes` false | permanent local deletion summary, saying whether it abandoned objects, which its confirmation names by the inventory [permanent deletion](../contexts.md#permanent-deletion) defines or says cannot be listed, and the host reservation keys it released | guarded removal under [permanent deletion](../contexts.md#permanent-deletion); never resource mutation |
-| `bootwright add-ons list` | none | built-in packages, their capabilities, OLM package, default source and configuration members | read executable registry |
-| `bootwright add-ons info` | required `--name <package>`; an unknown name refuses | [one package described](../add-ons.md#the-package-listing) | read executable registry |
+| `bootwright catalog add-ons list` | none | built-in packages, their capabilities, OLM package, default source and configuration members | read executable registry |
+| `bootwright catalog add-ons info` | required `--name <package>`; an unknown name refuses | [one package described](../add-ons.md#the-package-listing) | read executable registry |
 | `bootwright secret set` | required `--name`; type-specific `--value-file`, `--value-stdin`, `--username`, `--password-file`, `--password-stdin`, `--certificate-file`, `--private-key-file`, `--public-key-file` under [Secrets](../secrets.md); `--yes` false | stored identity and parts, never values | local confidential write |
 | `bootwright secret generate` | optional `--name`; `--renew` false; `--yes` false | changed and unchanged Secret names | atomic selected generated-material batch |
 | `bootwright secret check` | none | declared availability/type checks | bounded material reads; no values emitted |
@@ -112,23 +111,24 @@ by a related noun, and `--short` is the one flag that prints names only.
 | `bootwright secret encryption init` | none | configured implementation and active key | idempotent initialization using Context configuration |
 | `bootwright secret encryption status` | none | keyring and encrypted-store status | read confidential metadata |
 | `bootwright secret encryption rotate` | `--yes` false | new active key, retired keys and re-encrypted version and part counts | atomic local key rotation and re-encryption |
-| `bootwright media add` | required `--name <filename.iso>` and exactly one of `--from-file <path>`, `--from-url <https-url>` or `--from-url-file <path\|->`; `--sha256 <digest>`; `--yes` false | stored media identity, size, and verified digest | local copy or bounded download over the [context-free route](../controller.md#the-context-free-acquisition-route) and atomic publication |
-| `bootwright media list` | `--checksums` false | media names, sizes, recorded digests and reserving contexts, and with `--checksums` each computed digest and its verification | read local media; `--checksums` reads each image in full |
-| `bootwright media delete` | required `--name <filename.iso>`; `--yes` false | deleted media identity | local media deletion when not frozen by an operation |
+| `bootwright catalog media add` | required `--name <filename.iso>` and exactly one of `--from-file <path>`, `--from-url <https-url>` or `--from-url-file <path\|->`; `--sha256 <digest>`; `--yes` false | stored media identity, size, and verified digest | local copy or bounded download over the [context-free route](../controller.md#the-context-free-acquisition-route) and atomic publication |
+| `bootwright catalog media list` | `--checksums` false | media names, sizes, recorded digests and reserving contexts, and with `--checksums` each computed digest and its verification | read local media; `--checksums` reads each image in full |
+| `bootwright catalog media delete` | required `--name <filename.iso>`; `--yes` false | deleted media identity | local media deletion when not frozen by an operation |
 
 The required controller declaration and context-free setup boundary follow
 [controller command applicability](../cli.md#controller-declaration-and-command-applicability).
-The three `media` commands follow the host-wide
+The three `catalog media` commands follow the host-wide
 [media store](../managed-os.md#media-store).
 
 ### Inspect and lifecycle commands
 
 | Invocation | Local flags and defaults | Successful result | Effects |
 | --- | --- | --- | --- |
-| `bootwright validate` | repeatable `-f, --file <file-or-dir>` | validation summary with admission counts, exclusions and advisories | read the supplied input, or the selected context's input when `-f` is omitted; no write |
-| `bootwright preflight` | `--stage <list>` default every stage but `add-ons`; `--clusters <list>` default all; `--dry-run` false; `--observe-host-keys=<bool>` default `true` | [one report](output.md#preflight) of the checks of each selected stage: `controller` the controller host and this context's controller-stage prerequisites, `infrastructure-services` the firewall admission of the controller's managed service sockets, `substrates` the capacity of the hosts that hold its Machines, `machines` none, `clusters` the selected OpenShiftClusters and CephClusters | observe unless `--dry-run`, which is local-only |
-| `bootwright plan` | repeatable `--authorize erase=<machine>:<method>[,erase=<machine>:<method>...]`; `--stage <list>` default all stages; `--until <cluster>.<package>` | next legal full-context plan, the additive plan or exact continuation point, with the steps each block waits for, how wide the plan is and how many blocks it starts at a time, and the blocks a stage or `--until` selection would start; with `erase=`, the destroy plan that relaxes those Machines' [removal erase](../state-reconciliation.md#opt-in-physical-logical-overwrite) and marks each relaxed step, so its `data-loss` digest is reviewed before `destroy --yes` | none |
-| `bootwright status` | `--paths` false | controller setup readiness, lifecycle state of the lineage, each running block's newest output and the bytes it holds, and next safe commands; with `--paths`, each root that holds the context's data on this host and whether it is present; beside no operation it also names each declared Secret whose material is missing or stale and each named installer image the media store lacks, with the remedy command ahead of `plan`, from keyring metadata and media records alone; it checks neither Secret material nor image bytes, which `secret check` and `media list --checksums` report | read local state; keyring metadata and media records use shared locks; with `--paths`, inspect each root entry's existence without reading it |
+| `bootwright check input` | repeatable `-f, --file <file-or-dir>` | validation summary with admission counts, exclusions and advisories | read the supplied input, or the selected context's input when `-f` is omitted; no write |
+| `bootwright check environment` | `--stage <list>` default every stage but `add-ons`; `--clusters <list>` default all; `--dry-run` false; `--observe-host-keys=<bool>` default `true` | [one report](output.md#preflight) of the checks of each selected stage: `controller` the controller host and this context's controller-stage prerequisites, `infrastructure-services` the firewall admission of the controller's managed service sockets, `substrates` the capacity of the hosts that hold its Machines, `machines` none, `clusters` the selected OpenShiftClusters and CephClusters | observe unless `--dry-run`, which is local-only |
+| `bootwright plan apply` | `--stage <list>` default all stages; `--until <cluster>.<package>` | preview the apply decision, including fresh or additive apply, continuation, finalization or a settled result, with the selection, execution order and impact of the planned steps | bounded local observation for applicable host checks; no lifecycle mutation |
+| `bootwright plan destroy` | repeatable `--authorize erase=<machine>:<method>[,erase=<machine>:<method>...]` | preview the removal decision, including continuation, finalization or a settled result, with the steps, stop prerequisites and required authorizations; erase relaxations are marked and bound to the displayed data-loss digest | read local state; no lifecycle mutation |
+| `bootwright status` | `--paths` false | recorded controller and lifecycle state, current block output, missing prerequisites and next steps; `--paths` includes the context roots and their presence | read local state; keyring metadata and media records use shared locks; with `--paths`, inspect each root entry's existence without reading it |
 | `bootwright logs` | `--operation <op-id>` default the current operation; `--block <block-id>`; `--raw` false; `--attempt <N>`; `--follow` false; `--run <run-NNNNNN>`; `--install` the newest controller install, or `--install=<install-NNNNNN>` | an operation's events as lines, one block's newest retained adapter output with `--raw`, a bounded run's or setup's output, or, with `--follow`, those lines streamed until the operation, run or setup ends, as [reading and following logs](output.md#reading-and-following-logs) states | read local state under short shared root locks and the log root through no-follow handles, `--install` under no root lock; never a lease, never a write |
 | `bootwright diff` | `--observe`, `--exit-code` false; `--output-dir <dir>` or `--tool <program>` | desired files beside what the apply lineage realized, from records or, with `--observe`, read live, as a [comparison](../cli.md#desired-and-realized-state-comparison) | read local state; `--output-dir`, `--tool` write files outside the store; `--observe` reads each block the lineage realized, read-only, on the host it froze, after the [cache-only rebuild](../controller.md#the-controller-runtime) of a missing runtime |
 | `bootwright render effective` | `--origins` false; `--input-dir <file-or-dir>`; `--output-dir <dir>`; `--sensitive` false | normalized effective desired state and object counts; with `--origins`, the [origin of each effective field](../cli.md#effective-field-origins) instead of the YAML; with `--output-dir`, the [effective-state file](../cli.md#validation-preflight-and-rendering) written there and its path | none without `--output-dir`; with it, local artifact writes only |
@@ -145,7 +145,7 @@ and answer `cli.not-implemented`; their contracts are intent, tracked as
 Every other command here is available.
 `TestUnavailableCommandsMatchTheStubWiring` holds this list.
 
-Not yet met: `preflight --stage add-ons` runs no add-on prerequisite check and answers
+Not yet met: `check environment --stage add-ons` runs no add-on prerequisite check and answers
 `cli.not-implemented`; tracked as [B770](../milestones/backlog.md#b770).
 
 ### Resource, access, and general commands
@@ -171,7 +171,7 @@ Not yet met: `preflight --stage add-ons` runs no add-on prerequisite check and a
 | Invocation | Local flags and defaults | Successful result | Effects |
 | --- | --- | --- | --- |
 | `bootwright controller install` | `--dry-run` false; `--yes` false | [context-independent controller prerequisite plan or completed setup](../controller.md#the-setup-flow); with `--dry-run --output json`, the plan and every locked wheel | host packages through the host's own dnf after its verbatim preview, over the [context-free route](../controller.md#the-context-free-acquisition-route), and the controller runtime from the locked wheels the executable carries, with no download; a ready host makes no request and no change; dry-run only lists requirement names |
-| `bootwright controller check` | none | [baseline controller readiness](../controller.md#the-setup-flow), including the acquisition route it resolved, and `context init` as the next step of a ready host | bounded local observation; no state publication |
+| `bootwright check controller` | none | [baseline controller readiness](../controller.md#the-setup-flow), including the acquisition route it resolved, and `context init` as the next step of a ready host | bounded local observation; no state publication |
 | `bootwright controller rebind` | `--yes` false; `--recorded-host-retired` false, required with `--yes`; `--machine-id <id>`, `--product-uuid <uuid>` and `--root-uuid <uuid>` default none, all three this host's and required with `--yes`, and a remedy repeating the command names them by placeholder | the outcome and the counts of the bindings and reservations it kept | [host identity rewrite](../contexts.md#controller-relationship-and-host-binding) of the controller record, once, under the exclusive root lock, after a confirmation naming the recorded and the new identity and affirming that the recorded host no longer runs this store; refuses a store whose directories are not the ones its registry attributed and an unchanged identity, and cannot tell a byte-for-byte clone from the store |
 | `bootwright controller uninstall` | `--keep-packages` false; `--discard-unreadable` false; `--yes` false | what it removed and kept or `Nothing to do.` | host packages, then the store, staging, log and hosted roots and an empty libvirt image prefix, whole, by the [uninstall flow](../controller.md#the-uninstall-flow); a discard removes no package |
 | `bootwright cluster list` | none | container and storage cluster names and kinds in canonical order | read local state |
@@ -184,7 +184,7 @@ Not yet met: `preflight --stage add-ons` runs no add-on prerequisite check and a
 | `bootwright cluster kubeconfig` | required `--name <cluster>` | kubeconfig through the explicit sensitive-output boundary | read and reveal one context-owned credential artifact |
 | `bootwright cluster keyring` | required `--name <cluster>`; required `--client <client>` | the Ceph keyring of one CephClient through the explicit sensitive-output boundary | read and reveal one context-owned credential artifact |
 | `bootwright version` | none | version, commit, source state, Go runtime and target, embedded dependency-bundle identity and the build's vulnerability verdict | none |
-| `bootwright schema` | required `--format json-schema` | the advisory [JSON Schema export](../cli.md#schema-export) of every registered kind | none |
+| `bootwright catalog schema` | required `--format json-schema` | the advisory [JSON Schema export](../cli.md#schema-export) of every registered kind | none |
 | `bootwright sbom` | required `--format cyclonedx-json` | this executable's [bill of materials](../cli.md#bill-of-materials) | none |
 | `bootwright explain` | `--code <code>` | every row of the [stop catalog](stops.md#catalog), or the one `--code` names, with its meaning, level, certainty, cause, recovery, whether repeating helps and its remedy; an unknown code is a `cli.usage` refusal | none |
 | `bootwright help [command ...]` | no local flags | help for the exact resolved command, human or structured | none |
@@ -227,11 +227,11 @@ values of each enum flag, and the refusal of an enum value lists them. A command
 that is recognized but unavailable says so in its own help, and an unavailable
 cluster command offers no execution example. The root listing marks a command
 group unavailable only when neither it nor any command under it is available, so
-`render` is unmarked while `render effective` works. The root listing groups
-commands by what they act on: Host (`controller`, `media`), Context (`context`,
-`secret`, `validate`, `preflight`, `plan`, `apply`, `destroy`, `status`,
-`logs`, `diff`), Resources (`machine`, `cluster`, `add-ons`, `render`) and Tools
-(`version`, `schema`, `sbom`, `completion`, `help`). A command group's help offers only
+`render` is unmarked while `render effective` works. The root listing groups commands into Run the lifecycle (`plan`, `apply`,
+`destroy`), Inspect and troubleshoot (`status`, `logs`, `diff`, `explain`,
+`check`), Prepare Bootwright and its inputs (`controller`, `catalog`,
+`context`, `secret`, `render`), Work with machines and clusters (`machine`,
+`cluster`) and CLI tools (`version`, `sbom`, `completion`, `help`). A command group's help offers only
 the inherited flags its commands accept: a group whose every command is
 context-free lists no `--context`, and one none of whose commands reads an SSH
 override names none (`TestGroupHelpOffersOnlyTheFlagsItsCommandsAccept`). A usage refusal for a flag
@@ -400,15 +400,15 @@ flag acknowledges, and when deletion refuses, follow
 abandons objects warns once on standard error with `context.orphaned`.
 
 `--stage` accepts only `controller`, `infrastructure-services`, `substrates`,
-`machines`, `clusters`, and `add-ons`, and only on `plan` and `apply`. Its
+`machines`, `clusters`, and `add-ons`, and only on `plan apply` and `apply`. Its
 members follow the [comma-list rules](../cli.md#parsing-and-input-conventions);
 a supplied value that resolves to no member and an unrecognized member are both
 usage errors. Omission selects every stage. What a selection gates is owned by
 [state reconciliation](../state-reconciliation.md#stages-and-the-pause-boundary).
 
-`--until` is accepted only on `plan` and `apply`. Its value names one add-on
+`--until` is accepted only on `plan apply` and `apply`. Its value names one add-on
 instance as `<cluster>.<package>`, two lowercase DNS labels, the `object` that
-`plan --output json` reports for the instance; any other form is a usage
+`plan apply --output json` reports for the instance; any other form is a usage
 error. It composes with `--stage`: a block starts only when both admit it.
 What it gates, and its refusals, are owned by
 [state reconciliation](../state-reconciliation.md#stopping-after-an-add-on-instance).
@@ -426,7 +426,7 @@ sixteen independent steps. Higher values can increase controller and target load
 `--authorize` accepts only `data-loss`, `data-loss=<digest>` with the 16
 lowercase hexadecimal digits a plan prints for the steps it authorizes,
 `rebind=<secret>` and `erase=<machine>:<method>`; the first three only on
-`apply` and `destroy`, `erase=` only on `destroy` and `plan`; `--yes`, or input
+`apply` and `destroy`, `erase=` only on `destroy` and `plan destroy`; `--yes`, or input
 that cannot answer a prompt, requires the `data-loss=<digest>` form.
 `erase=<machine>:<method>` relaxes the declared
 [removal erase](../state-reconciliation.md#opt-in-physical-logical-overwrite) of
@@ -436,7 +436,7 @@ Machine's name, a lowercase DNS label, and `<method>` is `metadataClear` or
 contain commas. A `logicalOverwrite` method, an unknown method, a name that is
 not a Machine name, an empty `erase=`, a missing `:` side and a Machine named
 twice are usage errors, and `logicalOverwrite` is refused because a relaxation
-never strengthens or restates the declared method. `plan` refuses any other
+never strengthens or restates the declared method. `plan destroy` refuses any other
 token. Whether a Machine can be relaxed, and what the relaxation changes, is
 owned by [state reconciliation](../state-reconciliation.md#confirmation-and-authorization).
 `rebind=<secret>` names one Secret by its API name and
@@ -497,13 +497,13 @@ and requires `--output-dir`. A non-empty `--context` or
 `render effective --output-dir` requires `--sensitive`, `--sensitive` requires
 `--output-dir`, and `--origins` conflicts with `--output-dir`.
 
-`preflight --stage` takes the stage names of `apply --stage`, follows the same
+`check environment --stage` takes the stage names of `apply --stage`, follows the same
 list rules and selects the checks the [preflight report](output.md#preflight)
 assigns each stage. A supplied `--clusters` requires the `clusters` stage when
 `--stage` is supplied; otherwise it is a usage error. A selection that includes
 `add-ons` answers `cli.not-implemented` as an
 [unavailable command](../cli.md#recognized-but-unavailable-commands) does,
-naming `preflight --stage add-ons`, before any context, privilege or
+naming `check environment --stage add-ons`, before any context, privilege or
 observation.
 
 `machine list --short=true` emits only sorted names as text and conflicts
@@ -535,7 +535,7 @@ without writing. Under `--yes`, [host-key trust](../cli.md#host-key-trust)
 records an `add` or `replace` only for a Machine whose fingerprint
 `--expect` or `--replace` names (D183, Q97).
 
-`media add --from-url` and `--from-url-file` require `--sha256`; the digest is
+`catalog media add --from-url` and `--from-url-file` require `--sha256`; the digest is
 optional verification for `--from-file`. `--from-url-file` reads the URL from
 the named file, opened under the invoking account like an image file, or from
 standard input for `-`: exactly one line of at most 16 KiB, an optional final

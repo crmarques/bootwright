@@ -19,7 +19,7 @@ host:
   gateway: 198.51.100.1
   prefix: 24
 
-# Media names as added with `bootwright media add --name`.
+# Media names as added with `bootwright catalog media add --name`.
 rhel:
   version: "9.8"
   bootMedia: rhel-9.8-x86_64-boot.iso

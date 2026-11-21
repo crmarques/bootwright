@@ -29,11 +29,11 @@ func TestInstallationShapesTheInstallationCannotUseRefuseAtValidate(t *testing.T
 		message, remedy     string
 	}{
 		"boot media fetched over https": {[]exampleEdit{{labImage, bootMedia, "bootMedia: https://images.example.test/rhel-9.8-x86_64-boot.iso"}},
-			"api.value", "MachineImage/rhel-9-8-boot", "$.spec.bootMedia", "host media store", "bootwright media add"},
+			"api.value", "MachineImage/rhel-9-8-boot", "$.spec.bootMedia", "host media store", "bootwright catalog media add"},
 		"boot media the store cannot name": {[]exampleEdit{{labImage, bootMedia, "bootMedia: local-media:CON.iso"}},
-			"api.value", "MachineImage/rhel-9-8-boot", "$.spec.bootMedia", "host media store", "bootwright media add"},
+			"api.value", "MachineImage/rhel-9-8-boot", "$.spec.bootMedia", "host media store", "bootwright catalog media add"},
 		"tree media read from a file URI": {[]exampleEdit{{labProfile, treeMedia, "fromMedia: file:///var/lib/media/rhel-9.8-x86_64-dvd.iso"}},
-			"api.value", "MachineInstallProfile/rhel-9-8", "$.spec.installer.anaconda.packageSource.hostedTree.fromMedia", "host media store", "bootwright media add"},
+			"api.value", "MachineInstallProfile/rhel-9-8", "$.spec.installer.anaconda.packageSource.hostedTree.fromMedia", "host media store", "bootwright catalog media add"},
 		"a profile without its virtual media endpoint": {[]exampleEdit{{labProfile, "      redfishVirtualMedia:\n        artifactServerEndpoint:\n          serverRef: lab-artifacts\n          endpointRef: ip-https\n\n", ""}},
 			"api.invariant", "MachineInstallProfile/rhel-9-8", "$.spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint", "Redfish virtual media",
 			"set spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint on MachineInstallProfile/rhel-9-8"},

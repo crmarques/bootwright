@@ -1,6 +1,7 @@
 package lifecycle
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -3506,7 +3507,7 @@ func TestARemovalOverRecordsThatContradictThemselvesRefuses(t *testing.T) {
 func TestPlanPreviewsWithoutWritingAnything(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
-	result, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab"})
+	result, err := h.service.Plan(context.Background(), PlanRequest{Verb: reconciliation.Apply, ContextName: "lab"})
 	if err != nil || result.Receipt.State != "preview" || result.Receipt.Next != "apply" || result.Receipt.Operation != "none" {
 		t.Fatalf("plan = %+v (%v)", result, err)
 	}
@@ -3519,9 +3520,17 @@ func TestPlanPreviewsWithoutWritingAnything(t *testing.T) {
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
 	}
-	after, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab"})
+	records, evidence, mutations := h.workspace.area.clone(), slices.Clone(h.workspace.evidence), h.workspace.mutations
+	repeated, err := h.service.Plan(context.Background(), PlanRequest{Verb: reconciliation.Apply, ContextName: "lab"})
+	if err != nil || !repeated.Settled || repeated.Verb != "apply" || len(repeated.Steps) != 0 || repeated.Receipt.Next != "none" {
+		t.Fatalf("apply preview after completed apply = %+v (%v)", repeated, err)
+	}
+	after, err := h.service.Plan(context.Background(), PlanRequest{Verb: reconciliation.Destroy, ContextName: "lab"})
 	if err != nil || after.Receipt.Next != "destroy" || after.Verb != "destroy" {
-		t.Fatalf("plan after apply = %+v (%v)", after, err)
+		t.Fatalf("destroy preview after apply = %+v (%v)", after, err)
+	}
+	if !sameFiles(h.workspace.area, records) || !bytes.Equal(h.workspace.evidence, evidence) || h.workspace.mutations != mutations {
+		t.Fatal("preview wrote state or took the exclusive lock")
 	}
 }
 

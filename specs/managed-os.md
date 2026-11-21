@@ -13,11 +13,11 @@ Machine being installed and the BMC it is booted through.
 Installer media is host-wide state shared by every context, because an image
 is an immutable publisher artifact rather than authored input: one copy serves
 every context on the host, and a context-scoped managed `ArtifactServer` is
-what publishes derived content to consumers. `media add`, `media list` and
-`media delete` therefore select no context, run with the store's root
+what publishes derived content to consumers. `catalog media add`, `catalog media list` and
+`catalog media delete` therefore select no context, run with the store's root
 privilege, and change nothing about any context.
 
-`media add --name <filename.iso>` acquires exactly one source. `--from-file`
+`catalog media add --name <filename.iso>` acquires exactly one source. `--from-file`
 opens the file under the
 [invoking account's credentials](cli.md#local-privilege-and-user-identity),
 never following a link at its name and never opening anything but a regular
@@ -46,7 +46,7 @@ frozen. A mismatch, an over-bound image, a non-regular source or an interrupted
 transfer publishes nothing. A mismatch names the image, its origin and both
 the expected and the computed digest.
 
-After the digest, `media add` reads the image's release from its `/.treeinfo`
+After the digest, `catalog media add` reads the image's release from its `/.treeinfo`
 or, when the root holds none, from its `/.discinfo` as the next paragraph
 states: the file at the root of the ISO 9660 image's Joliet directory, read
 from the staged bytes through the add's own descriptor, at most 1 MiB, never
@@ -58,7 +58,7 @@ An image with no Joliet directory, neither a `/.treeinfo` nor a `/.discinfo`
 naming a release, a larger or fragmented record, or a `[general]` section
 missing any of the three keys, or one its strict reading refuses (a repeated
 section or key, a value continued onto another line), is published with no
-`release`; `media add` never refuses for
+`release`; `catalog media add` never refuses for
 it, and refuses only when it cannot read back its own staged bytes, as the
 store's failure. Source:
 [productmd treeinfo 1.0](https://release-engineering.github.io/productmd/treeinfo-1.0.html),
@@ -102,7 +102,7 @@ refuses before it acquires anything. An add whose publication met another
 command's lock keeps the stage it verified against its `--sha256`, so repeating
 it publishes that image without acquiring it again.
 
-`media list` reads only records and file metadata, and names the contexts
+`catalog media list` reads only records and file metadata, and names the contexts
 that reserve each image separately from whether the image verified, and the
 release each record holds.
 `--checksums` opens every listed image under the shared root lock, releases
@@ -117,7 +117,7 @@ its read differs from that when it was opened, or that was deleted or replaced
 meanwhile. Neither kind of entry hides the rest of the store; only a
 cancellation or a store the listing cannot read at all fails the command. The
 [media results](cli/output.md#media-results) define the row.
-`media delete --name <filename.iso>` removes the image and its record, and a
+`catalog media delete --name <filename.iso>` removes the image and its record, and a
 stage an interrupted add retained for that name, after ordinary confirmation,
 which holds no store lock, and refuses while frozen. Each confirmation first
 shows the record of the image it would replace or delete.
@@ -132,26 +132,26 @@ replacement names each context that reserves it and that context's
 `bootwright destroy --context <name>`.
 A plan names an image by name, size and SHA-256, frozen from the store's
 record. Before registration it refuses an image the store does not hold,
-naming `bootwright media add --name <filename.iso>`; one the store lists as
+naming `bootwright catalog media add --name <filename.iso>`; one the store lists as
 failed, naming its cause, or whose record names no SHA-256 and positive size,
-naming `bootwright media delete` and `media add`; one whose bytes no longer
+naming `bootwright catalog media delete` and `catalog media add`; one whose bytes no longer
 have the size its record names; and one whose MachineImage `checksum` declares
 another digest than the record. For the image an installation installs
 packages from, the boot image of a profile with no `packageSource` and a
 hosted tree's DVD, it also refuses, naming the image and the
 `MachineInstallProfile`: a record with no `release`,
 `the media store holds no release for <image>, which this build reads from the
-image's .treeinfo or .discinfo when it is added`, remedied by `bootwright media
-delete --name <image>, then bootwright media add --name <image> with this
+image's .treeinfo or .discinfo when it is added`, remedied by `bootwright catalog media
+delete --name <image>, then bootwright catalog media add --name <image> with this
 build`; a `release` that names no `family`, `<image> names no release family,
 as a boot image's .discinfo does, and an installation installs packages only
 from an image whose .treeinfo names Red Hat Enterprise Linux`, remedied by
-`import the Red Hat Enterprise Linux DVD with bootwright media add and select
+`import the Red Hat Enterprise Linux DVD with bootwright catalog media add and select
 it for <profile>, or select a subscription package source there`; a release
 `family` other than `Red Hat Enterprise Linux`, or an `arch`
 other than `x86_64`, `<image> holds a <family> <arch> release, and an
 installation installs only Red Hat Enterprise Linux on x86_64`, remedied by
-`import a Red Hat Enterprise Linux x86_64 image with bootwright media add and
+`import a Red Hat Enterprise Linux x86_64 image with bootwright catalog media add and
 select it for <profile>`; and a release `version` other than the
 profile's `spec.os.version`, `<image> holds release <found> and
 <profile> declares spec.os.version <declared>`, remedied by `set

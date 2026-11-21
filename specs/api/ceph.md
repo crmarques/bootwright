@@ -272,7 +272,7 @@ the Ceph image ([frozen release and trust](../ceph.md#frozen-release-and-trust))
 
 `cephadm.clusterSSH.transport` accepts `native` or `verifiedTunnel`
 (D135). Omission selects `verifiedTunnel`, the only transport a build
-realizes; `native` is reserved and `validate` refuses it, and an empty, null or
+realizes; `native` is reserved and `check input` refuses it, and an empty, null or
 unknown value refuses. The frozen core request records the effective transport
 for the cluster and its children. A verified tunnel never qualifies the direct
 native channel, and this field grants no exception to host-key verification.

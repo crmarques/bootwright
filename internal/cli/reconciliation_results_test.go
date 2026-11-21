@@ -68,8 +68,8 @@ func TestPlanResultEndsWithItsReceipt(t *testing.T) {
 func TestPlanDispatchIsAnExplicitPreviewWithoutMutationOrPrompt(t *testing.T) {
 	record := &dispatchRecord{result: commandResult{lifecyclePlan: previewResult()}}
 	var out, errOut bytes.Buffer
-	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"plan", "--context", "lab"})
-	if code != 0 || errOut.Len() != 0 || record.calls != 1 || record.path != "plan" {
+	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"plan", "apply", "--context", "lab"})
+	if code != 0 || errOut.Len() != 0 || record.calls != 1 || record.path != "plan apply" {
 		t.Fatalf("plan dispatch: code %d, calls %d, command %q, stderr %q", code, record.calls, record.path, errOut.String())
 	}
 	if !strings.Contains(out.String(), "Preview only; no changes have been made.") || strings.Contains(out.String(), "Confirm apply") {

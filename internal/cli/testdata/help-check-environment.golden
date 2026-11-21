@@ -1,4 +1,4 @@
-  bootwright / preflight
+  bootwright / check environment
       Check, without changing anything, whether the selected context is ready for the stages
       apply runs, in one report. controller checks the controller host's prerequisites, the
       target tools this context's controller stage selects and its host binding;
@@ -10,10 +10,10 @@
       on other Machines are not checked, and apply checks them itself. The SSH and
       observe-host-keys options apply to the CephCluster checks. --dry-run runs no process and
       reports every check pending. For the controller host alone, before any context exists,
-      run controller check.
+      run check controller.
 
   Usage
-    bootwright preflight [flags]
+    bootwright check environment [flags]
 
   Command flags
       --clusters           Select comma-separated cluster names (default: all)
@@ -37,4 +37,4 @@
     Use --help --detail full to include SSH overrides.
 
   Examples
-    bootwright preflight --context lab --stage controller,substrates
+    bootwright check environment --context lab --stage controller,substrates

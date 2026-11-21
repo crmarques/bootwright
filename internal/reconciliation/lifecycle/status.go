@@ -360,7 +360,7 @@ func idleSteps(view View, unindexed []string) []string {
 		return []string{"bootwright controller install"}
 	}
 	name := view.Identity().Name
-	return []string{contextCommand(name, "plan"), contextCommand(name, string(reconciliation.Apply))}
+	return []string{contextCommand(name, "plan apply"), contextCommand(name, string(reconciliation.Apply))}
 }
 
 // offered is each command whose decision would pass over the records status

@@ -177,7 +177,7 @@ func (s *fakeStore) Stage(_ context.Context, name, pin string) (Stage, error) {
 		return nil, s.stageError
 	}
 	if s.live[name] {
-		return nil, errors.New("another bootwright media add is already acquiring image " + name)
+		return nil, errors.New("another bootwright catalog media add is already acquiring image " + name)
 	}
 	if s.live == nil {
 		s.live = map[string]bool{}

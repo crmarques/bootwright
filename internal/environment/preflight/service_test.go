@@ -154,7 +154,7 @@ func TestTheControllerAndSubstrateStagesReportTheControllerAndCapacityChecksAndN
 	controller.err = diagnostics.NewFailure("preflight.failed", "required controller prerequisites are not ready", "")
 	result, err := service.Preflight(context.Background(), PreflightRequest{Stages: infrastructure})
 	found := diagnostics.Of(err)
-	if result == nil || len(found) != 1 || found[0].Code != "preflight.failed" || found[0].Remediation != "resolve the reported prerequisites and repeat bootwright preflight --context lab --stage controller,infrastructure-services,substrates" {
+	if result == nil || len(found) != 1 || found[0].Code != "preflight.failed" || found[0].Remediation != "resolve the reported prerequisites and repeat bootwright check environment --context lab --stage controller,infrastructure-services,substrates" {
 		t.Fatalf("result %+v, error %#v", result, err)
 	}
 	want := []string{
@@ -363,7 +363,7 @@ func TestEveryStageMergesInfrastructureAndClusterChecks(t *testing.T) {
 	clusters.report.Checks = append(clusters.report.Checks, capacity.Check{ID: "capacity.memory", Target: "host", Status: capacity.Failed, Reason: "from clusters"})
 	result, err := service.Preflight(context.Background(), PreflightRequest{ObserveHostKeys: true, SSH: ssh})
 	found := diagnostics.Of(err)
-	if result == nil || len(found) != 1 || found[0].Code != "preflight.failed" || found[0].Remediation != "resolve the reported prerequisites and repeat bootwright preflight --context lab" {
+	if result == nil || len(found) != 1 || found[0].Code != "preflight.failed" || found[0].Remediation != "resolve the reported prerequisites and repeat bootwright check environment --context lab" {
 		t.Fatalf("result %+v, error %#v", result, err)
 	}
 	if result.Context != "lab" || result.Target != "controller,infrastructure-services,substrates,machines,clusters" {

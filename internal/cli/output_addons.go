@@ -33,6 +33,7 @@ func writeAddOns(out io.Writer, command string, result *catalog.ListResult, stru
 		rows = append(rows, []string{entry.Name, joinedOrNone(entry.Provides), joinedOrNone(entry.Requires), textOrNone(entry.OLMPackage), textOrNone(entry.DefaultSource), joinedOrNone(entry.Configuration)})
 	}
 	var text display
+	text.headline("", "Add-ons supported by this build")
 	text.resourceTable([]string{"NAME", "PROVIDES", "REQUIRES", "OLM PACKAGE", "DEFAULT SOURCE", "CONFIGURATION"}, rows, tableStyle{Kind: "add-on", Identity: 0})
 	return text.writeTo(out)
 }

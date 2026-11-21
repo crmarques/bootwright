@@ -277,14 +277,14 @@ reservation. The render's `host.address: auto` uses the default-route source.
 
 For a RHEL case, including Ceph, provide both RHEL 9.8
 x86_64 ISOs. OpenShift cases skip this step. If media is already present,
-verify its name and checksum with `media list --checksums`.
+verify its name and checksum with `catalog media list --checksums`.
 
 ```bash
 read -r -p 'Absolute path to the RHEL boot ISO: ' BOOT_ISO
 read -r -p 'Absolute path to the RHEL DVD ISO: ' DVD_ISO
-./bin/bootwright media add --name rhel-9.8-x86_64-boot.iso --from-file "${BOOT_ISO:?Enter the boot ISO path}"
-./bin/bootwright media add --name rhel-9.8-x86_64-dvd.iso --from-file "${DVD_ISO:?Enter the DVD ISO path}"
-./bin/bootwright media list --checksums
+./bin/bootwright catalog media add --name rhel-9.8-x86_64-boot.iso --from-file "${BOOT_ISO:?Enter the boot ISO path}"
+./bin/bootwright catalog media add --name rhel-9.8-x86_64-dvd.iso --from-file "${DVD_ISO:?Enter the DVD ISO path}"
+./bin/bootwright catalog media list --checksums
 ```
 
 ### 7. Prepare credential files

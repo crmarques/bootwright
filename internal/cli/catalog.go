@@ -53,10 +53,11 @@ var rootHelpGroups = []struct {
 	title string
 	names []string
 }{
-	{"Host", []string{"controller", "media"}},
-	{"Context", []string{"context", "secret", "validate", "preflight", "plan", "apply", "destroy", "status", "logs", "diff"}},
-	{"Resources", []string{"machine", "cluster", "add-ons", "render"}},
-	{"Tools", []string{"version", "schema", "sbom", "explain", "completion", "help"}},
+	{"Run the lifecycle", []string{"plan", "apply", "destroy"}},
+	{"Inspect and troubleshoot", []string{"status", "logs", "diff", "explain", "check"}},
+	{"Prepare Bootwright and its inputs", []string{"controller", "catalog", "context", "secret", "render"}},
+	{"Work with machines and clusters", []string{"machine", "cluster"}},
+	{"CLI tools", []string{"version", "sbom", "completion", "help"}},
 }
 
 func SessionCommand(path string) bool { return specFor(path).session }

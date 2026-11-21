@@ -142,8 +142,8 @@ func (s Service) planWithin(ctx context.Context, request PlanRequest, scope *rec
 	if err != nil {
 		return nil, err
 	}
-	if scope == nil {
-		if scope, _, err = s.automaticPreparation(ctx, name, selection, true); err != nil {
+	if scope == nil && request.Verb != reconciliation.Destroy {
+		if scope, _, err = s.automaticPreparation(ctx, name, selection, request.Verb == ""); err != nil {
 			return nil, err
 		}
 	}
@@ -152,12 +152,12 @@ func (s Service) planWithin(ctx context.Context, request PlanRequest, scope *rec
 	var read basis
 	err = s.workspace.ReadLifecycle(ctx, name, func(view View) error {
 		decision := s.decider(scope)
-		previewed, from, durable, err := s.preview(ctx, decision, view, selection)
+		previewed, from, durable, err := s.preview(ctx, decision, view, request.Verb, selection)
 		if err != nil {
 			return err
 		}
 		result, decided, read = previewed, from, durable
-		if s.options.PlanInspection != nil && decided.verb == reconciliation.Apply && !result.Finalizes {
+		if s.options.PlanInspection != nil && decided.verb == reconciliation.Apply && !result.Finalizes && !result.Settled {
 			state, err := decision.sources.compile(ctx, view)
 			if err != nil {
 				return err
@@ -183,9 +183,8 @@ func (s Service) planWithin(ctx context.Context, request PlanRequest, scope *rec
 // stops at the decision: it allocates no identity and writes nothing. It also
 // returns that decision and the durable state it was read from, before any
 // finalization it previews.
-func (s Service) preview(ctx context.Context, decision decider, view View, selection reconciliation.Selection) (*PlanResult, operationPlan, basis, error) {
-	var previewed reconciliation.Verb
-	if len(decision.relaxing.methods) != 0 {
+func (s Service) preview(ctx context.Context, decision decider, view View, previewed reconciliation.Verb, selection reconciliation.Selection) (*PlanResult, operationPlan, basis, error) {
+	if previewed == "" && len(decision.relaxing.methods) != 0 {
 		previewed = reconciliation.Destroy
 	}
 	decided, verb, err := decision.decideAs(ctx, view, previewed, selection)
@@ -211,8 +210,8 @@ func (s Service) preview(ctx context.Context, decision decider, view View, selec
 			given = append(given, "--until")
 		}
 		return nil, operationPlan{}, basis{}, destroyStageSelected.Fail(
-			"the next operation is a destroy, which accepts no stage selection",
-			"repeat "+contextCommand(view.Identity().Name, "plan")+" without "+strings.Join(given, " and "))
+			"plan destroy accepts no stage selection",
+			"repeat "+contextCommand(view.Identity().Name, "plan destroy")+" without "+strings.Join(given, " and "))
 	}
 	if err := s.refuseInapplicableRelaxations(view.Identity().Name, decided); err != nil {
 		return nil, operationPlan{}, basis{}, err
@@ -227,16 +226,25 @@ func (s Service) preview(ctx context.Context, decision decider, view View, selec
 	}
 	var result PlanResult
 	switch {
-	case decided.noop || guardedFinalization:
-		// Only a finalization leads here, because no verb a preview decides as
-		// settles over a record whose finalization is not due. What it calls
-		// for is read from the record it finalizes, not the one it leaves.
+	case finalizes && decided.noop || guardedFinalization:
 		result = planPreview(marked.plan, marked.states, reconciliation.Selection{}, s.Throttle())
 		result.Verb, result.Continuation, result.Finalizes = string(verb), true, true
 		result.Receipt = Receipt{Operation: marked.operation.ID, Verb: "plan", State: "preview", Next: string(verb)}
 		if !guardedFinalization {
 			result.Receipt.Next = nextAction(marked.operation, marked.plan, marked.states)
 		}
+	case decided.noop:
+		result = planPreview(reconciliation.Plan{}, nil, reconciliation.Selection{}, s.Throttle())
+		result.Verb, result.Settled = string(verb), true
+		operation := decided.operation.ID
+		if operation == "" {
+			operation = "none"
+		}
+		result.Receipt = Receipt{Operation: operation, Verb: "plan", State: "preview", Next: "none"}
+	case decided.unclaimed:
+		result = planPreview(reconciliation.Plan{}, nil, reconciliation.Selection{}, s.Throttle())
+		result.Verb = string(verb)
+		result.Receipt = Receipt{Operation: "none", Verb: "plan", State: "preview", Next: string(verb)}
 	case decided.fresh:
 		result = s.presentation(decided)
 		result.Receipt = Receipt{Operation: "none", Verb: "plan", State: "preview", Next: string(decided.verb)}

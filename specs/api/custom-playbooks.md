@@ -38,7 +38,7 @@ An enabled `CustomPlaybook` is an object no capability realizes, so a fresh
 `plan` and a fresh `apply` refuse it under the
 [unrealizable-kind rule](../state-reconciliation.md#stages-and-the-pause-boundary)
 before content access or operation registration, with no authorization bypass,
-and `validate` warns it `api.unrealized`
+and `check input` warns it `api.unrealized`
 ([admitted but unrealized](../api.md#admitted-but-unrealized)). A disabled
 declaration plans no work and is warned `api.deferred`.
 

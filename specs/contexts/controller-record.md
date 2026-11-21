@@ -121,7 +121,7 @@ because the store is readable and holds no context
 published by the first binding of an apply on a root that holds none, and a
 root holding one never gets a second. The fresh install also drops the host's
 contexts with their Secrets and its stored media, which `bootwright context init`
-and `bootwright media add` recreate from the input directories and images; the
+and `bootwright catalog media add` recreate from the input directories and images; the
 refusal says so and leaves the record unchanged
 (`TestAControllerRecordOfAnotherVersionNamesTheFreshInstall`).
 Workspace stores them and, before it publishes a context's entries, applies

@@ -15,12 +15,12 @@ func TestFlagRelationshipsAndFormats(t *testing.T) {
 		valid bool
 	}{
 		{"context init --name demo -f input", true}, {"context init --name demo -f input -f other", false}, {"context init --name Demo -f input", false}, {"context delete --name demo --purge=false", false}, {"context delete --name demo --purge --yes=false", true},
-		{"validate -fone,two -fthree", true}, {"apply --authorize=data-loss", true}, {"destroy --authorize=all", false}, {"apply --authorize=data-loss,data-loss", false}, {"apply --authorize=data-loss --authorize=data-loss", false}, {"apply --authorize=data-loss,", false},
+		{"check input -fone,two -fthree", true}, {"apply --authorize=data-loss", true}, {"destroy --authorize=all", false}, {"apply --authorize=data-loss,data-loss", false}, {"apply --authorize=data-loss --authorize=data-loss", false}, {"apply --authorize=data-loss,", false},
 		{"add-ons add", false}, {"add-ons delete", false},
 		{"secret set --name demo", true}, {"secret set --name demo --value-file source", true}, {"secret set --name demo --value-file source --yes=false", true}, {"secret set --name demo --value-file source --password-stdin=false", true}, {"secret set --name demo --value-stdin", true}, {"secret set --name demo --value-file source --value-stdin", false}, {"secret set --name demo --password-file password --username account", true}, {"secret set --name demo --password-stdin --username account", true}, {"secret set --name demo --password-file password --password-stdin --username account", false}, {"secret set --name demo --value-stdin --password-stdin", false}, {"secret set --name demo --password-file password", true}, {"secret set --name demo --username account", true}, {"secret set --name demo --certificate-file cert", true}, {"secret set --name demo --certificate-file cert --private-key-file key", true}, {"secret set --name demo --private-key-file key", true}, {"secret set --name demo --private-key-file key --public-key-file key.pub", true}, {"secret set --name demo --public-key-file key.pub", true}, {"secret set --name demo --value-file source --certificate-file cert", true}, {"secret set --name demo --certificate-file cert --private-key-file key --public-key-file key.pub", true},
 		{"secret show --name demo", false}, {"secret show --name demo --part value", true}, {"secret show --name demo --part username", true}, {"secret show --name demo --part password", true}, {"secret show --name demo --part certificate", true}, {"secret show --name demo --part private-key", true}, {"secret show --name demo --part public-key", true}, {"secret show --name demo --part primary", false},
 		{"secret encryption init", true}, {"secret encryption init --type local-keyring", false}, {"secret encryption init --type future-store", false}, {"secret encryption init --type LOCAL", false}, {"secret encryption init --type local/keyring", false}, {"secret encryption init --type -local", false},
-		{"media add --name image.iso --from-file image.iso --sha256=", true}, {"media add --name image.iso --from-url https://example.invalid/image.iso", false}, {"media add --name image.iso --from-file image.iso --from-url https://example.invalid/image.iso", false}, {"media add --name image.iso --from-file image.iso --sha256 invalid", false},
+		{"catalog media add --name image.iso --from-file image.iso --sha256=", true}, {"catalog media add --name image.iso --from-url https://example.invalid/image.iso", false}, {"catalog media add --name image.iso --from-file image.iso --from-url https://example.invalid/image.iso", false}, {"catalog media add --name image.iso --from-file image.iso --sha256 invalid", false},
 		{"render effective --input-dir input", false}, {"render effective --input-dir input --output-dir output", true}, {"render effective --input-dir input --output-dir output --sensitive", false}, {"render effective --input-dir input --output-dir output --context demo", false}, {"render effective --input-dir input --output-dir output --context=", true}, {"render effective --output-dir output", false}, {"render effective --output-dir output --sensitive", true},
 		{"render effective --sensitive", false}, {"render effective --origins", true}, {"render effective --origins --output-dir output --sensitive", false}, {"render effective --origins --input-dir input --output-dir output", false},
 		{"machine start --name demo", true}, {"machine start --name demo --output json", true}, {"machine start", false}, {"machine start --name demo --force", false},
@@ -28,7 +28,7 @@ func TestFlagRelationshipsAndFormats(t *testing.T) {
 		{"machine restart --name demo --output json", false}, {"machine restart --name demo --output json --yes", true},
 		{"machine trust --output json", false}, {"machine trust --output json --dry-run", true}, {"machine trust --output json --yes", true}, {"machine trust --name one,two --replace two", true}, {"machine trust --name one --replace two", false},
 		{"cluster info --secrets", false}, {"cluster info --name demo --secrets", true}, {"cluster info --secrets=false", true},
-		{"preflight --stage clusters --clusters=", true}, {"preflight --stage clusters --clusters=,", false}, {"preflight --clusters one", true}, {"preflight --stage controller --clusters one", false}, {"preflight --stage controller,clusters --clusters one", true}, {"preflight --stage=", false}, {"preflight --stage unknown", false}, {"preflight --stage add-ons", true}, {"render storage --clusters=,", false}, {"machine list --clusters=,", true}, {"machine trust --name=, --replace=,", true}, {"machine trust --name=", true},
+		{"check environment --stage clusters --clusters=", true}, {"check environment --stage clusters --clusters=,", false}, {"check environment --clusters one", true}, {"check environment --stage controller --clusters one", false}, {"check environment --stage controller,clusters --clusters one", true}, {"check environment --stage=", false}, {"check environment --stage unknown", false}, {"check environment --stage add-ons", true}, {"render storage --clusters=,", false}, {"machine list --clusters=,", true}, {"machine trust --name=, --replace=,", true}, {"machine trust --name=", true},
 		{"machine list --power-status", true}, {"machine list --power-status --output json", true}, {"machine list --power-status --short", false}, {"machine list --power-status --short=false", true},
 		{"version --context=", false}, {"version --context=bad.name", false}, {"apply --ssh-user=account", true}, {"apply --ssh-user=Account", false}, {"apply --ssh-user-for-provisioned", false}, {"apply --ssh-user=account --ssh-user-for-provisioned", true}, {"apply --ssh-ask-sudo-password --output=json", false}, {"apply --ssh-ask-sudo-password=false --output=json", true},
 		{"status --output yaml", true}, {"version -oyaml", true}, {"version -o=json", true}, {"controller install --output yaml --yes", true},
@@ -72,7 +72,7 @@ func parsedCommand(t *testing.T, args []string) *cobra.Command {
 }
 
 func TestResolvedValuesAndDefaults(t *testing.T) {
-	command := parsedCommand(t, []string{"preflight", "--stage", "clusters", "--clusters", " one, two,one, ", "--ssh-user", " account "})
+	command := parsedCommand(t, []string{"check", "environment", "--stage", "clusters", "--clusters", " one, two,one, ", "--ssh-user", " account "})
 	if stringValue(command.Flags(), "clusters") != "one,two" || stringValue(command.Flags(), "ssh-user") != "account" || !boolValue(command.Flags(), "observe-host-keys") || stringValue(command.Flags(), "output") != "text" {
 		t.Fatal("preflight normalized values or defaults")
 	}
@@ -84,11 +84,11 @@ func TestResolvedValuesAndDefaults(t *testing.T) {
 	if stringValue(command.Flags(), "clusters") != "" {
 		t.Fatal("blank selection should mean all")
 	}
-	command = parsedCommand(t, []string{"media", "add", "--name", "image.iso", "--from-url", "https://example.invalid/image.iso", "--sha256", "sha256:" + strings.Repeat("AB", 32)})
+	command = parsedCommand(t, []string{"catalog", "media", "add", "--name", "image.iso", "--from-url", "https://example.invalid/image.iso", "--sha256", "sha256:" + strings.Repeat("AB", 32)})
 	if stringValue(command.Flags(), "sha256") != strings.Repeat("ab", 32) {
 		t.Fatal("digest normalization")
 	}
-	command = parsedCommand(t, []string{"validate", "-fone,two", "-f", "three"})
+	command = parsedCommand(t, []string{"check", "input", "-fone,two", "-f", "three"})
 	if got := arrayValue(command.Flags(), "file"); len(got) != 2 || got[0] != "one,two" || got[1] != "three" {
 		t.Fatalf("file arguments %q", got)
 	}
@@ -107,7 +107,7 @@ func TestTheCLIMediaNameIsTheStoreRule(t *testing.T) {
 		} else {
 			refused++
 		}
-		code, _, errOut, record := runRecorded([]string{"media", "add", "--name", value, "--from-file", "image.iso"})
+		code, _, errOut, record := runRecorded([]string{"catalog", "media", "add", "--name", value, "--from-file", "image.iso"})
 		if refusedHere := code == 2 && record.calls == 0; refusedHere == valid || !valid && !strings.Contains(errOut, "--name") {
 			t.Errorf("--name %q: code=%d calls=%d err=%q, want a refusal exactly when the media store refuses it (store admits: %t)", value, code, record.calls, errOut, valid)
 		}
@@ -134,14 +134,14 @@ func TestMediaURLBoundaries(t *testing.T) {
 		"https://example.invalid/image.iso?X-Amz-Signature=secret": "--from-url must not carry a query; pass a signed URL through --from-url-file <path|->",
 		"https://example.invalid/image.iso?":                       "--from-url must not carry a query; pass a signed URL through --from-url-file <path|->",
 	} {
-		args := []string{"media", "add", "--name", "image.iso", "--from-url", value, "--sha256", strings.Repeat("a", 64)}
+		args := []string{"catalog", "media", "add", "--name", "image.iso", "--from-url", value, "--sha256", strings.Repeat("a", 64)}
 		code, _, errOut, record := runRecorded(args)
 		if code != 2 || record.calls != 0 || !strings.Contains(strings.Join(strings.Fields(errOut), " "), want) || strings.Contains(errOut, "secret") {
 			t.Errorf("--from-url %q: code=%d calls=%d err=%q, want exit 2 naming %q", value, code, record.calls, errOut, want)
 		}
 	}
 	for _, args := range [][]string{{"--from-url", longest}, {"--from-url-file", "signed-url.txt"}, {"--from-url-file", "-", "--yes"}} {
-		args = append([]string{"media", "add", "--name", "image.iso", "--sha256", strings.Repeat("a", 64)}, args...)
+		args = append([]string{"catalog", "media", "add", "--name", "image.iso", "--sha256", strings.Repeat("a", 64)}, args...)
 		if code, _, errOut, record := runRecorded(args); code == 2 || record.calls != 1 {
 			t.Errorf("%q: code=%d calls=%d err=%q, want it dispatched", args, code, record.calls, errOut)
 		}
@@ -155,13 +155,13 @@ func TestMediaFileBoundaries(t *testing.T) {
 		"images/image.iso\n":    "--from-file must not contain a control character",
 		longest + "a":           "--from-file must name a path whose file:// URL is at most 512 bytes",
 	} {
-		code, _, errOut, record := runRecorded([]string{"media", "add", "--name", "image.iso", "--from-file", value})
+		code, _, errOut, record := runRecorded([]string{"catalog", "media", "add", "--name", "image.iso", "--from-file", value})
 		if code != 2 || record.calls != 0 || !strings.Contains(strings.Join(strings.Fields(errOut), " "), want) {
 			t.Errorf("--from-file %q: code=%d calls=%d err=%q, want exit 2 naming %q", value, code, record.calls, errOut, want)
 		}
 	}
 	for _, value := range []string{longest, "/images/" + strings.Repeat("./", 300) + "image.iso", strings.Repeat("a", 600) + ".iso"} {
-		if code, _, errOut, record := runRecorded([]string{"media", "add", "--name", "image.iso", "--from-file", value}); code == 2 || record.calls != 1 {
+		if code, _, errOut, record := runRecorded([]string{"catalog", "media", "add", "--name", "image.iso", "--from-file", value}); code == 2 || record.calls != 1 {
 			t.Errorf("--from-file of %d bytes: code=%d calls=%d err=%q, want it dispatched", len(value), code, record.calls, errOut)
 		}
 	}
@@ -193,7 +193,7 @@ func TestStageSelectionIsAClosedCommaList(t *testing.T) {
 	if got := stringValue(command.Flags(), "stage"); got != "clusters,infrastructure-services" {
 		t.Fatalf("normalized stages = %q", got)
 	}
-	command = parsedCommand(t, []string{"plan", "--stage", "machines"})
+	command = parsedCommand(t, []string{"plan", "apply", "--stage", "machines"})
 	if got := stringValue(command.Flags(), "stage"); got != "machines" {
 		t.Fatalf("plan stages = %q", got)
 	}
@@ -201,7 +201,7 @@ func TestStageSelectionIsAClosedCommaList(t *testing.T) {
 		{"apply", "--stage", "storage"},
 		{"apply", "--stage", ",,"},
 		{"apply", "--stage="},
-		{"plan", "--stage", "Machines"},
+		{"plan", "apply", "--stage", "Machines"},
 		{"destroy", "--stage", "machines"},
 	} {
 		code, _, _, record := runRecorded(args)
@@ -228,8 +228,8 @@ func TestUntilNamesOneAddOnInstance(t *testing.T) {
 	for _, args := range [][]string{
 		{"apply", "--until", "gitops"},
 		{"apply", "--until="},
-		{"plan", "--until", "Compact.gitops"},
-		{"plan", "--until", "compact.gitops.extra"},
+		{"plan", "apply", "--until", "Compact.gitops"},
+		{"plan", "apply", "--until", "compact.gitops.extra"},
 		{"destroy", "--until", "compact.gitops"},
 	} {
 		code, _, _, record := runRecorded(args)

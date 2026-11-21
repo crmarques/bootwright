@@ -174,7 +174,7 @@ func TestStatusStepsAreExactlyWhatTheVerbsDecisionsDerive(t *testing.T) {
 				if verdict.decided {
 					derived = append(derived, "bootwright "+string(verb)+" --context "+testContextName)
 					if idle {
-						derived = append(derived, "bootwright plan --context "+testContextName)
+						derived = append(derived, "bootwright plan apply --context "+testContextName)
 					}
 				}
 				derived = append(derived, verdict.exits...)

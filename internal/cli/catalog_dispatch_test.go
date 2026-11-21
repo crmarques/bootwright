@@ -37,17 +37,17 @@ func TestCommandModesComeFromTheCatalog(t *testing.T) {
 		"secret set": true, "secret generate": true, "secret check": true,
 		"secret list": true, "secret info": true, "secret show": true, "secret delete": true,
 		"secret encryption init": true, "secret encryption status": true,
-		"secret encryption rotate": true, "validate": true, "render effective": true, "render acquisitions": true,
-		"media add": true, "media list": true, "media delete": true,
-		"controller install": true, "controller rebind": true, "controller uninstall": true, "controller check": true, "preflight": true,
-		"plan": true, "status": true, "logs": true, "diff": true, "apply": true, "destroy": true,
+		"secret encryption rotate": true, "check input": true, "render effective": true, "render acquisitions": true,
+		"catalog media add": true, "catalog media list": true, "catalog media delete": true,
+		"controller install": true, "controller rebind": true, "controller uninstall": true, "check controller": true, "check environment": true,
+		"plan apply": true, "plan destroy": true, "status": true, "logs": true, "diff": true, "apply": true, "destroy": true,
 		"machine cp": true, "machine list": true, "machine info": true, "machine rsh": true, "machine exec": true,
 		"cluster update-admin-creds": true, "cluster rsh": true, "cluster exec": true, "cluster list": true, "cluster info": true,
 		"machine discover": true, "machine start": true, "machine stop": true, "machine restart": true, "machine eject-media": true, "machine trust": true,
 		"cluster oc": true, "cluster kubectl": true, "cluster kubeconfig": true, "cluster keyring": true,
 	}
 	for _, spec := range commandCatalog() {
-		if specFor(spec.path).implemented != (want[spec.path] || spec.path == "add-ons list" || spec.path == "add-ons info") {
+		if specFor(spec.path).implemented != (want[spec.path] || spec.path == "catalog add-ons list" || spec.path == "catalog add-ons info") {
 			t.Errorf("%s: implemented = %t, want %t", spec.path, specFor(spec.path).implemented, want[spec.path])
 		}
 		if privilegedOperation(spec.path) != want[spec.path] {

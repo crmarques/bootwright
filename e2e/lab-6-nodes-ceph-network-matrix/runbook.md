@@ -151,7 +151,7 @@ clock elapsed seconds. Retain the private evidence directory for diagnostics.
     RENDER_ARGS=()
     if [ -n "$VALUES_FILE" ]; then RENDER_ARGS+=(--values "$VALUES_FILE"); fi
     e2e/render.sh "$CONTEXT" "${RENDER_ARGS[@]}" --out-dir "$INPUT_DIR"
-    ./bin/bootwright validate -f "$INPUT_DIR"
+    ./bin/bootwright check input -f "$INPUT_DIR"
     ./bin/bootwright context init --name "$CONTEXT" --input-dir "$INPUT_DIR"
     ./bin/bootwright secret generate --context "$CONTEXT"
     cut -d: -f2- "$IBM_REGISTRY_FILE" > "$RUN_DIR/ibm-password"
@@ -159,7 +159,7 @@ clock elapsed seconds. Retain the private evidence directory for diagnostics.
         --username cp --password-file "$RUN_DIR/ibm-password" --yes
     rm -f -- "$RUN_DIR/ibm-password"
     ./bin/bootwright secret check --context "$CONTEXT"
-    ./bin/bootwright plan --context "$CONTEXT" | tee "$RUN_DIR/plan.txt"
+    ./bin/bootwright plan apply --context "$CONTEXT" | tee "$RUN_DIR/plan.txt"
     sudo -v
 
     START_SECONDS=$(date +%s)
@@ -303,7 +303,7 @@ if [ -n "$VALUES_FILE" ]; then RENDER_ARGS+=(--values "$VALUES_FILE"); fi
 e2e/render.sh "$CONTEXT" "${RENDER_ARGS[@]}"
 CONTROLLER_ADDRESS=$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p'); printf 'Controller address: %s\n' "$CONTROLLER_ADDRESS"
 grep -h -A1 'name: ip$' "$INPUT_DIR/infra/machines/controller.yaml"   # must show CONTROLLER_ADDRESS
-./bin/bootwright validate -f "$INPUT_DIR"
+./bin/bootwright check input -f "$INPUT_DIR"
 ./bin/bootwright context init --name "$CONTEXT" --input-dir "$INPUT_DIR"
 ./bin/bootwright secret generate --context "$CONTEXT"
 install -m 0600 /dev/null "$RUN_DIR/ibm-password"
@@ -311,7 +311,7 @@ cut -d: -f2- "${IBM_REGISTRY_FILE:?Set IBM_REGISTRY_FILE to the IBM entitlement 
 ./bin/bootwright secret set --context "$CONTEXT" --name ibm-registry --username cp --password-file "$RUN_DIR/ibm-password" --yes
 rm -f -- "$RUN_DIR/ibm-password"
 ./bin/bootwright secret check --context "$CONTEXT"
-./bin/bootwright plan --context "$CONTEXT"
+./bin/bootwright plan apply --context "$CONTEXT"
 ```
 
 Require the plan to admit `ceph-03` with no replication address (B1266) and
@@ -322,7 +322,7 @@ validates, import it and plan:
 ```sh
 e2e/render.sh "$CONTEXT" "${RENDER_ARGS[@]}" --set bond.mode=802.3ad --out-dir "$RUN_DIR/input-mode"
 ./bin/bootwright context update --name "$CONTEXT" --input-dir "$RUN_DIR/input-mode" --yes
-./bin/bootwright plan --context "$CONTEXT"
+./bin/bootwright plan apply --context "$CONTEXT"
 ./bin/bootwright context update --name "$CONTEXT" --input-dir "$INPUT_DIR" --yes
 ```
 
@@ -352,9 +352,9 @@ creates wait for that provider. Complete
 require `ready` before starting services:
 
 ```sh
-./bin/bootwright preflight --context "$CONTEXT" --stage controller
+./bin/bootwright check environment --context "$CONTEXT" --stage controller
 ./bin/bootwright apply --context "$CONTEXT" --stage infrastructure-services,substrates --yes
-./bin/bootwright preflight --context "$CONTEXT" --stage infrastructure-services,substrates
+./bin/bootwright check environment --context "$CONTEXT" --stage infrastructure-services,substrates
 sudo virsh --connect qemu:///system net-dumpxml "bootwright-$CONTEXT-app-users"
 ip -br address show "$USER_BRIDGE"; sudo firewall-cmd --get-zone-of-interface="$USER_BRIDGE"
 nmcli -t -f NAME,UUID,TYPE,DEVICE connection show --active | grep "^bootwright-$CONTEXT-"
@@ -624,7 +624,7 @@ uplink through its one `postrouting` rule.
 ## 7. Build and verify the cluster
 
 ```sh
-./bin/bootwright preflight --context "$CONTEXT" --stage clusters
+./bin/bootwright check environment --context "$CONTEXT" --stage clusters
 ./bin/bootwright apply --context "$CONTEXT" --stage clusters --yes
 ./bin/bootwright status --context "$CONTEXT"
 ./bin/bootwright diff --context "$CONTEXT" --observe
@@ -1002,7 +1002,7 @@ Detach `app-01`, then destroy as the plan directs:
 
 ```sh
 ./bin/bootwright machine exec --context "$CONTEXT" --name app-01 -- sudo -n bash e2e-sample/app-teardown.sh
-./bin/bootwright plan --context "$CONTEXT"
+./bin/bootwright plan destroy --context "$CONTEXT"
 ./bin/bootwright destroy --context "$CONTEXT" --authorize data-loss
 ./bin/bootwright machine stop --context "$CONTEXT" --name "$GUESTS" --yes
 ./bin/bootwright destroy --context "$CONTEXT" --authorize data-loss

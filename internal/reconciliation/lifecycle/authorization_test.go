@@ -209,13 +209,13 @@ func TestAnUnattendedAuthorizationIsBoundToTheStepsItAuthorizes(t *testing.T) {
 			t.Fatal("a refused authorization asked, mutated or ran a block")
 		}
 	}
-	review := "review them with bootwright plan --context lab, then repeat bootwright apply --context lab --authorize data-loss=<digest bootwright plan prints>"
+	review := "review them with bootwright plan apply --context lab, then repeat bootwright apply --context lab --authorize data-loss=<digest bootwright plan prints>"
 	refused(ApplyRequest{ContextName: "lab", Authorizations: []string{"data-loss"}, SkipConfirmation: true, Unattended: true},
 		"an unattended apply must bind --authorize data-loss to the steps it authorizes: step 1 (serve artifacts)", review)
 	stale := "data-loss=0123456789abcdef"
 	refused(ApplyRequest{ContextName: "lab", Authorizations: []string{stale}},
 		"--authorize "+stale+" names steps this plan no longer holds: its data-loss steps are now step 1 (serve artifacts)",
-		"review them with bootwright plan --context lab, then repeat bootwright apply --context lab --authorize data-loss")
+		"review them with bootwright plan apply --context lab, then repeat bootwright apply --context lab --authorize data-loss")
 	h.service.options.Confirmer = pipedConfirmer{h.confirmer}
 	refused(ApplyRequest{ContextName: "lab", Authorizations: []string{"data-loss"}},
 		"an unattended apply must bind --authorize data-loss to the steps it authorizes: step 1 (serve artifacts)", review)

@@ -18,7 +18,7 @@ var (
 		Meaning: "the declared Machine, profile or package source cannot compose an installation", Remedy: "correct the declaration the message names"}
 	installMediaUnusable = diagnostics.Stop{Code: "install.media-unusable", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryFixThenRepeat,
-		Meaning: "the host media store holds no usable image of the installation media a profile names", Remedy: "import the image again with bootwright media add"}
+		Meaning: "the host media store holds no usable image of the installation media a profile names", Remedy: "import the image again with bootwright catalog media add"}
 	installUnsupported = diagnostics.Stop{Code: "install.unsupported", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
 		Meaning: "the declared installation names a shape this build cannot install", Remedy: "change the declaration the message names"}

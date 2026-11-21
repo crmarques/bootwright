@@ -99,7 +99,7 @@ printf 'Retained evidence: %s\n' "$EVIDENCE_DIR"
 printf '%s\n' "$TEST_MODE" > "$EVIDENCE_DIR/test-mode"
 CONTROLLER_ADDRESS=$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')
 RUN_DIR=$(mktemp -d)                          # private scratch for this run
-./bin/bootwright validate -f "$INPUT_DIR"      # 28 files seen, 28 objects decoded
+./bin/bootwright check input -f "$INPUT_DIR"      # 28 files seen, 28 objects decoded
 ./bin/bootwright context init --name "$CONTEXT" --input-dir "$INPUT_DIR"
 ./bin/bootwright secret generate --context "$CONTEXT"
 install -m 0600 /dev/null "$RUN_DIR/ibm-password"
@@ -110,7 +110,7 @@ rm -f "$RUN_DIR/ibm-password"
 ./bin/bootwright secret set --context "$CONTEXT" --name rhsm-key --value-file "${RHSM_KEY_FILE:?Set RHSM_KEY_FILE to the RHSM activation key file}" --yes
 ./bin/bootwright secret set --context "$CONTEXT" --name luks-recovery --value-file "${LUKS_RECOVERY_FILE:?Set LUKS_RECOVERY_FILE to the recovery passphrase file}" --yes
 ./bin/bootwright secret check --context "$CONTEXT"
-./bin/bootwright plan --context "$CONTEXT"
+./bin/bootwright plan apply --context "$CONTEXT"
 ```
 
 Set every credential before the first apply: it freezes them. Prepare the
@@ -151,15 +151,15 @@ The controller stage prepares the listener firewall. See
 Require controller preflight to report `ready`:
 
 ```sh
-./bin/bootwright preflight --context "$CONTEXT" --stage controller
+./bin/bootwright check environment --context "$CONTEXT" --stage controller
 ./bin/bootwright apply --context "$CONTEXT" --stage infrastructure-services,substrates --yes
 ./bin/bootwright apply --context "$CONTEXT" --stage machines --yes
 ./bin/bootwright machine list --context "$CONTEXT" --power-status
 ./bin/bootwright machine exec --context "$CONTEXT" --name rhel-01,rhel-02,rhel-03 -- lsblk -b -o NAME,TYPE,SIZE,SERIAL,ROTA,FSTYPE,MOUNTPOINTS
 ./bin/bootwright machine exec --context "$CONTEXT" --name rhel-01,rhel-02,rhel-03 -- getent hosts cp.icr.io public.dhe.ibm.com
 ./bin/bootwright machine exec --context "$CONTEXT" --name rhel-01,rhel-02,rhel-03 -- chronyc tracking
-./bin/bootwright preflight --context "$CONTEXT" --stage clusters
-./bin/bootwright plan --context "$CONTEXT" --stage clusters
+./bin/bootwright check environment --context "$CONTEXT" --stage clusters
+./bin/bootwright plan apply --context "$CONTEXT" --stage clusters
 ```
 
 Require the declared disks (the data disk `/dev/sda`, `ROTA=0`, the root a
@@ -462,7 +462,7 @@ CHANGE_INTENT
 Then validate, update and prove the refusal:
 
 ```sh
-./bin/bootwright validate -f "$INPUT_DIR"
+./bin/bootwright check input -f "$INPUT_DIR"
 ./bin/bootwright context update --name "$CONTEXT" --input-dir "$INPUT_DIR" --yes
 ./bin/bootwright apply --context "$CONTEXT" --yes
 ```
@@ -484,7 +484,7 @@ if original.count(expected) != 1:
     raise SystemExit("Backup does not contain exactly one original autoscale stanza")
 pool.write_bytes(original)
 RESTORE_INTENT
-./bin/bootwright validate -f "$INPUT_DIR"
+./bin/bootwright check input -f "$INPUT_DIR"
 ./bin/bootwright context update --name "$CONTEXT" --input-dir "$INPUT_DIR" --yes
 ```
 

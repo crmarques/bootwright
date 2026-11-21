@@ -74,7 +74,7 @@
         ]
       }
     ],
-    "next": "bootwright plan --context lab"
+    "next": "bootwright plan apply --context lab"
   },
   "diagnostics": [],
   "logs": []

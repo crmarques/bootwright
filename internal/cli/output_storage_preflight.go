@@ -60,8 +60,15 @@ func writeStoragePreflight(out, errOut io.Writer, command string, report *prefli
 
 func writeStoragePreflightText(out io.Writer, report *preflight.Report) error {
 	var text display
-	text.headline(storagePreflightHeadlineStatus(report.Summary), "Preflight "+report.Context)
+	headline := storagePreflightHeadlineStatus(report.Summary)
+	if len(report.Checks) == 0 {
+		headline = ""
+	}
+	text.headline(headline, "Environment checks for "+report.Context)
 	text.fields(field{Label: "Stages", Value: strings.ReplaceAll(report.Target, ",", ", ")})
+	if len(report.Checks) == 0 {
+		text.lines([]string{"No checks available for the selected stages."})
+	}
 	for n, check := range report.Checks {
 		if n == 0 {
 			text.section("Checks")

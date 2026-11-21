@@ -324,7 +324,7 @@ func controllerNextCommand(command string, report *prerequisites.Report) string 
 		return "bootwright context init --name <name> --input-dir <dir>"
 	}
 	if report.Outcome == "changed" || report.Outcome == "unchanged" {
-		return "bootwright controller check"
+		return "bootwright check controller"
 	}
 	return ""
 }

@@ -30,9 +30,9 @@ func runRecorded(args []string) (int, string, string, *dispatchRecord) {
 func TestRunnerDispatchesEveryApplicationCommand(t *testing.T) {
 	cases := []string{
 		"context init --name demo -f input", "context update --name demo -f input", "context use --name demo", "context list", "context current", "context delete --name demo --purge",
-		"add-ons list", "add-ons info --name demo",
+		"catalog add-ons list", "catalog add-ons info --name demo",
 		"secret set --name demo --value-file secret.bin", "secret generate", "secret check", "secret list", "secret show --name demo --part value", "secret delete --name demo", "secret encryption init", "secret encryption status", "secret encryption rotate",
-		"media add --name demo.iso --from-file image.iso", "media list", "media delete --name demo.iso", "validate", "controller check", "preflight", "preflight --stage clusters --clusters demo", "plan", "status", "render effective --output-dir artifacts --sensitive", "render effective", "render installer", "render storage", "apply", "destroy",
+		"catalog media add --name demo.iso --from-file image.iso", "catalog media list", "catalog media delete --name demo.iso", "check input", "check controller", "check environment", "check environment --stage clusters --clusters demo", "plan apply", "plan destroy", "status", "render effective --output-dir artifacts --sensitive", "render effective", "render installer", "render storage", "apply", "destroy",
 		"machine list", "machine rsh --name demo", "machine exec --name demo echo", "machine trust", "controller install", "cluster list", "cluster info", "cluster rsh --name demo", "cluster exec --name demo echo", "cluster oc --name demo get", "cluster kubectl --name demo get", "cluster kubeconfig --name demo", "cluster keyring --name demo --client vm-disks",
 	}
 	for _, invocation := range cases {
@@ -133,7 +133,7 @@ func TestWithdrawnFlagsAreUsageErrors(t *testing.T) {
 	for _, args := range [][]string{
 		{"status", "--watch"}, {"status", "--watch=false"}, {"status", "--watch-interval", "5s"}, {"status", "--watch", "--help"},
 		{"apply", "--verbose"}, {"apply", "-v"}, {"apply", "--yes", "--verbose=false"}, {"destroy", "--verbose"}, {"destroy", "-v", "--help"},
-		{"preflight", "--verbose"}, {"preflight", "-v"}, {"controller", "check", "--verbose"},
+		{"check", "environment", "--verbose"}, {"check", "environment", "-v"}, {"check", "controller", "--verbose"},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			code, out, errOut, record := runRecorded(args)
@@ -156,11 +156,11 @@ func TestWithdrawnFlagsAreUsageErrors(t *testing.T) {
 
 func TestTheRetiredTrustOnFirstUseSpellingIsAnUnknownFlag(t *testing.T) {
 	for _, args := range [][]string{
-		{"preflight", "--trust-on-first-use"}, {"preflight", "--trust-on-first-use=false"}, {"preflight", "--stage", "clusters", "--trust-on-first-use=true"},
+		{"check", "environment", "--trust-on-first-use"}, {"check", "environment", "--trust-on-first-use=false"}, {"check", "environment", "--stage", "clusters", "--trust-on-first-use=true"},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			code, out, errOut, record := runRecorded(args)
-			if code != 2 || out != "" || record.calls != 0 || errOut != "  error  cli.usage\n    unknown flag: \"--trust-on-first-use\"\nUsage: bootwright preflight [flags]\nRun 'bootwright help' for available commands.\n" {
+			if code != 2 || out != "" || record.calls != 0 || errOut != "  error  cli.usage\n    unknown flag: \"--trust-on-first-use\"\nUsage: bootwright check environment [flags]\nRun 'bootwright help' for available commands.\n" {
 				t.Fatalf("code=%d out=%q stderr=%q calls=%d", code, out, errOut, record.calls)
 			}
 		})
@@ -172,10 +172,10 @@ func TestPreflightPassesHostKeyObservationAndNeverRefusesIt(t *testing.T) {
 		args []string
 		want bool
 	}{
-		{[]string{"preflight"}, true},
-		{[]string{"preflight", "--stage", "controller", "--observe-host-keys"}, true},
-		{[]string{"preflight", "--stage", "controller", "--observe-host-keys=false"}, false},
-		{[]string{"preflight", "--stage", "clusters", "--observe-host-keys=true"}, true},
+		{[]string{"check", "environment"}, true},
+		{[]string{"check", "environment", "--stage", "controller", "--observe-host-keys"}, true},
+		{[]string{"check", "environment", "--stage", "controller", "--observe-host-keys=false"}, false},
+		{[]string{"check", "environment", "--stage", "clusters", "--observe-host-keys=true"}, true},
 	} {
 		t.Run(strings.Join(test.args, " "), func(t *testing.T) {
 			code, _, _, record := runRecorded(test.args)

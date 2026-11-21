@@ -120,7 +120,7 @@ func TestYAMLUsesJSONNamesAndPreservesIntegerPrecision(t *testing.T) {
 	var out bytes.Buffer
 	writer := WithPresentation(&out, PresentationOptions{Format: "yaml"})
 	const size = int64(9007199254740993)
-	if err := writeStructuredResult(writer, "media add", mediaMutationPresentation{Name: "demo.iso", Outcome: "stored", Size: size}, nil, nil, 0); err != nil {
+	if err := writeStructuredResult(writer, "catalog media add", mediaMutationPresentation{Name: "demo.iso", Outcome: "stored", Size: size}, nil, nil, 0); err != nil {
 		t.Fatal(err)
 	}
 	document := structuredDocument(t, out.String())
@@ -132,7 +132,7 @@ func TestYAMLUsesJSONNamesAndPreservesIntegerPrecision(t *testing.T) {
 		t.Fatal(document)
 	}
 	out.Reset()
-	if err := writeDiagnostics(writer, io.Discard, "validate", []diagnostic{{Severity: "error", Code: "api.required", Message: "missing input"}}, 1, true, nil); err != nil {
+	if err := writeDiagnostics(writer, io.Discard, "check input", []diagnostic{{Severity: "error", Code: "api.required", Message: "missing input"}}, 1, true, nil); err != nil {
 		t.Fatal(err)
 	}
 	document = structuredDocument(t, out.String())
@@ -154,7 +154,7 @@ func TestStructuredContextAndPlanUseReturnedFacts(t *testing.T) {
 			{[]string{"context", "init", "--name", "demo"}, commandResult{admission: &contexts.AdmissionResult{Context: contexts.Summary{Name: "demo", Mode: contexts.Ready}}}, "filesCopied"},
 			{[]string{"context", "update", "--name", "demo", "--input-dir", "input", "--yes"}, commandResult{admission: &contexts.AdmissionResult{Context: contexts.Summary{Name: "demo", Mode: contexts.Ready}, FilesCopied: 3, InputChanged: true}}, "filesCopied"},
 			{[]string{"context", "delete", "--name", "demo", "--purge", "--yes"}, commandResult{deletion: &contexts.DeleteResult{Name: "demo", Outcome: "deleted", OrphansAbandoned: true}}, "orphansAbandoned"},
-			{[]string{"plan"}, commandResult{lifecyclePlan: &lifecycle.PlanResult{Context: lifecycle.ContextIdentity{Name: "demo"}, Verb: "apply", Steps: []lifecycle.PlanStep{{ID: "prepare", Description: "Prepare demo", Stage: "machines", After: []int{1}, Wave: 2}}, Startable: 1, Deferred: 2, Waves: 2, Bound: 8, Receipt: lifecycle.Receipt{Operation: "none", Verb: "apply", State: "preview", Next: "apply"}}}, "steps"},
+			{[]string{"plan", "apply"}, commandResult{lifecyclePlan: &lifecycle.PlanResult{Context: lifecycle.ContextIdentity{Name: "demo"}, Verb: "apply", Steps: []lifecycle.PlanStep{{ID: "prepare", Description: "Prepare demo", Stage: "machines", After: []int{1}, Wave: 2}}, Startable: 1, Deferred: 2, Waves: 2, Bound: 8, Receipt: lifecycle.Receipt{Operation: "none", Verb: "apply", State: "preview", Next: "apply"}}}, "steps"},
 		} {
 			args := append([]string{"--output", format}, test.args...)
 			record := &dispatchRecord{result: test.result}
@@ -309,7 +309,7 @@ func TestYAMLKeepsRawDocumentStringsAndKeysExact(t *testing.T) {
 
 func TestStructuredControllerRetainsNextAndExecutionEvidence(t *testing.T) {
 	for _, format := range []string{"json", "yaml"} {
-		for _, path := range []string{"controller install", "controller check"} {
+		for _, path := range []string{"controller install", "check controller"} {
 			for _, failed := range []bool{false, true} {
 				report := controllerReport("ready", false)
 				if path == "controller install" {
@@ -353,8 +353,8 @@ func TestStructuredMutationsUseMetadataResults(t *testing.T) {
 			{[]string{"secret", "set", "--name", "demo", "--value-file", "value", "--yes"}, commandResult{secretMutation: &custody.MutationResult{Context: secretResultContext(), Name: "demo", Changed: 1, Parts: []secrets.Part{secrets.ValuePart}}}, "parts"},
 			{[]string{"secret", "generate"}, commandResult{secretMutation: &custody.MutationResult{Context: secretResultContext(), Changed: 1, ChangedNames: []string{"demo"}}}, "changedNames"},
 			{[]string{"secret", "delete", "--name", "demo", "--yes"}, commandResult{secretMutation: &custody.MutationResult{Context: secretResultContext(), Name: "demo", Changed: 1}}, "changed"},
-			{[]string{"media", "add", "--name", "demo.iso", "--from-file", "image", "--yes"}, commandResult{mediaMutation: &media.MutationResult{Name: "demo.iso", Outcome: "stored", Size: 42}}, "size"},
-			{[]string{"media", "delete", "--name", "demo.iso", "--yes"}, commandResult{mediaMutation: &media.MutationResult{Name: "demo.iso", Outcome: "deleted"}}, "outcome"},
+			{[]string{"catalog", "media", "add", "--name", "demo.iso", "--from-file", "image", "--yes"}, commandResult{mediaMutation: &media.MutationResult{Name: "demo.iso", Outcome: "stored", Size: 42}}, "size"},
+			{[]string{"catalog", "media", "delete", "--name", "demo.iso", "--yes"}, commandResult{mediaMutation: &media.MutationResult{Name: "demo.iso", Outcome: "deleted"}}, "outcome"},
 			{[]string{"secret", "encryption", "init"}, commandResult{encryptionMutation: &encryption.MutationResult{Context: secretResultContext(), Implementation: selection, ActiveKey: "key-1", Changed: true}}, "implementation"},
 			{[]string{"secret", "encryption", "rotate", "--yes"}, commandResult{encryptionMutation: &encryption.MutationResult{Context: secretResultContext(), Implementation: selection, ActiveKey: "key-2", Changed: true, RetiredKeys: []string{"key-1"}, ReencryptedParts: 2, ReencryptedVersions: 1}}, "reencryptedParts"},
 			{[]string{"apply", "--yes"}, commandResult{lifecycleOperation: &lifecycle.OperationResult{Verb: "apply", Receipt: lifecycle.Receipt{Operation: "op-demo", Verb: "apply", State: "done", Next: "none"}}}, "receipt"},
@@ -407,7 +407,7 @@ func TestYAMLQuotesEveryStringValue(t *testing.T) {
 			t.Fatalf("%s: retyped: %v", value, document)
 		}
 		out.Reset()
-		if err := writeStructuredResult(writer, "media add", mediaMutationPresentation{Name: value}, nil, nil, 0); err != nil {
+		if err := writeStructuredResult(writer, "catalog media add", mediaMutationPresentation{Name: value}, nil, nil, 0); err != nil {
 			t.Fatal(err)
 		}
 		if !strings.Contains(out.String(), "name: "+quoted+"\n") || structuredDocument(t, out.String())["result"].(map[string]any)["name"] != value {
@@ -463,18 +463,18 @@ func TestStructuredExportsCarryControlBytesExactly(t *testing.T) {
 // places it in result.schema beside result.format in JSON mode, calling no
 // service.
 func TestSchemaWritesTheAdvisoryExport(t *testing.T) {
-	code, out, errOut, record := runRecorded([]string{"schema", "--format", "json-schema"})
+	code, out, errOut, record := runRecorded([]string{"catalog", "schema", "--format", "json-schema"})
 	var document map[string]any
 	if code != 0 || errOut != "" || record.calls != 0 || json.Unmarshal([]byte(out), &document) != nil || document["$schema"] != api.JSONSchemaDialect {
 		t.Fatalf("schema: code %d stderr %q calls %d stdout %.200s", code, errOut, record.calls, out)
 	}
-	code, out, _, _ = runRecorded([]string{"schema", "--format", "json-schema", "-o", "json"})
+	code, out, _, _ = runRecorded([]string{"catalog", "schema", "--format", "json-schema", "-o", "json"})
 	result, _ := structuredDocument(t, out)["result"].(map[string]any)
 	schema, _ := result["schema"].(map[string]any)
 	if code != 0 || result["format"] != "json-schema" || schema["$schema"] != api.JSONSchemaDialect {
 		t.Fatalf("schema -o json: code %d stdout %.300s", code, out)
 	}
-	if code, _, _, _ := runRecorded([]string{"schema"}); code != 2 {
+	if code, _, _, _ := runRecorded([]string{"catalog", "schema"}); code != 2 {
 		t.Fatalf("schema without --format exited %d, want the usage refusal", code)
 	}
 }

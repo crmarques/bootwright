@@ -2,7 +2,7 @@
       Inspect, reach, trust and power a context's Machines
 
   Usage
-    bootwright machine [flags]
+    bootwright machine <command> [flags]
 
   Commands
   ○ Command | cp

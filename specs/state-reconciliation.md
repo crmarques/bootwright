@@ -1289,7 +1289,7 @@ at every run of its block, its removal included. Each such block is one
 holding a delimiter or such a key, how many more of its fields hold one, and
 the remedy: remove the delimiters and keys from the values the object is
 planned from, import them with `bootwright context update`, then run
-`bootwright plan --context` with the context. A removal or a continuation
+`bootwright plan apply --context` with the context. A removal or a continuation
 planned from a frozen plan is never refused this way. A bounded run, which a
 `machine start`, `stop` or `restart` and the power reading of
 `machine list --power-status` each carry and which is never planned, refuses
@@ -1298,10 +1298,8 @@ bound. It names the Machine whose value holds the delimiter or key and the
 field, read from that Machine's request, and its remedy ends with that same
 command, with `--context`.
 
-Every `plan` previews exactly the decision the verb it previews takes, and one
-path takes both. That verb is a fresh `apply` over no operation or a completed
-destroy, over a completed apply its [additive apply](#additive-apply) when
-admitted, else its `destroy`, and an incomplete operation's own verb. A fresh
+The operator selects `plan apply` or `plan destroy`. Each uses the decision
+path of its named verb. A fresh
 apply's decision refuses, over no operation, state no index
 accounts for, and over a completed destroy one holding a block that is not
 `done` ([lifecycle unit](#lifecycle-unit)); it then compiles the frozen input,
@@ -1318,9 +1316,8 @@ apply holding a block that is not `done`, records that leave nothing to remove,
 and a frozen request this executable cannot read. A failed removal is previewed
 as the fresh removal `destroy` starts over what it has not yet proved gone,
 unless its blocks are all `done`, when its finalization is due.
-`plan` over an incomplete apply previews its continuation, never the removal a
-`destroy` would start over it, so the refusal of records that contradict what
-an incomplete apply started stays that `destroy`'s. Where a
+Over unfinished apply, `plan apply` previews its continuation and
+`plan destroy` previews the removal of its owned effects. Where a
 [finalization](#lifecycle-unit) is due, the preview decides as the verb does
 once that finalization is done, without performing it, and where the verb then
 settles, the preview says the verb only completes that finalization. The

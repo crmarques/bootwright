@@ -7,7 +7,7 @@ import (
 )
 
 func controllerCheckCommand() commandSpec {
-	return available(commandSpec{path: "controller check", results: []jsonResult{controllerPresentation{}}, render: renderController(), controllerReport: true, inspection: true, classify: classifyRules{ambient: always}, example: "", contextFree: true, invoke: Services.invokeControllerCheck, short: "Check what controller install prepares on this host", long: "Verify, without installing or changing anything, the context-independent controller prerequisites controller install prepares on this host: its host packages, the controller runtime and the state root. It selects no context; the prerequisites a context adds are checked by preflight --stage controller and installed by the controller stage of apply."})
+	return available(commandSpec{path: "check controller", results: []jsonResult{controllerPresentation{}}, render: renderController(), controllerReport: true, inspection: true, classify: classifyRules{ambient: always}, example: "", contextFree: true, invoke: Services.invokeControllerCheck, short: "Check what controller install prepares on this host", long: "Verify, without installing or changing anything, the context-independent controller prerequisites controller install prepares on this host: its host packages, the controller runtime and the state root. It selects no context; the prerequisites a context adds are checked by check environment --stage controller and installed by the controller stage of apply."})
 }
 
 func controllerSetupCommand() commandSpec {

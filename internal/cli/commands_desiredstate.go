@@ -8,7 +8,7 @@ import (
 )
 
 func validationCommand() commandSpec {
-	return available(commandSpec{path: "validate", results: []jsonResult{validationResult{}}, render: renderValidate(), classify: classifyRules{localInput: hasFiles}, example: "--file ./input --output json", invoke: Services.invokeValidate, short: "Validate a complete desired-state input universe", flags: []flagSpec{{name: "file", short: "f", help: "Supply an input file or directory (repeatable)", kind: "stringArray", path: "file"}}})
+	return available(commandSpec{path: "check input", results: []jsonResult{validationResult{}}, render: renderValidate(), classify: classifyRules{localInput: hasFiles}, example: "--file ./input --output json", invoke: Services.invokeValidate, short: "Validate a complete desired-state input universe", flags: []flagSpec{{name: "file", short: "f", help: "Supply an input file or directory (repeatable)", kind: "stringArray", path: "file"}}})
 }
 
 func effectiveStateCommand() commandSpec {

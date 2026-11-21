@@ -2,7 +2,7 @@
       Generate shell completion scripts
 
   Usage
-    bootwright completion [flags]
+    bootwright completion <command> [flags]
 
   Commands
   COMMAND      PURPOSE

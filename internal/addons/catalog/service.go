@@ -69,7 +69,7 @@ func (s Service) Describe(ctx context.Context, request DescribeRequest) (*Descri
 	}
 	p, ok := s.registry.Find(request.Name)
 	if !ok {
-		return nil, diagnostics.NewFailureWithRemediation("access.target", "no built-in add-on package is named "+strconv.Quote(request.Name), "", "name a package that bootwright add-ons list shows")
+		return nil, diagnostics.NewFailureWithRemediation("access.target", "no built-in add-on package is named "+strconv.Quote(request.Name), "", "name a package that bootwright catalog add-ons list shows")
 	}
 	description := Description{Name: p.Name, Summary: p.Summary, Provides: slices.Clone(p.Provides), Requires: slices.Clone(p.Requires), Namespaces: []string{}, Configuration: []Field{}}
 	if p.OLM != nil {

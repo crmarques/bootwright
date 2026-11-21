@@ -90,14 +90,14 @@ func TestCompositionWiresEveryApplicationCommand(t *testing.T) {
 	t.Parallel()
 	services := isolatedServices(t)
 	commandsWithSyntheticInputs := [][]string{
-		{"validate", "-f", filepath.Join(t.TempDir(), "missing.yaml")},
+		{"check", "input", "-f", filepath.Join(t.TempDir(), "missing.yaml")},
 		{"context", "init", "--name", "example", "--input-dir", "inputs"},
 		{"context", "update", "--name", "example", "--input-dir", "inputs"},
 		{"context", "use", "--name", "example"},
 		{"context", "list"},
 		{"context", "current"},
 		{"context", "delete", "--name", "example", "--purge"},
-		{"add-ons", "list"},
+		{"catalog", "add-ons", "list"},
 		{"secret", "set", "--name", "example", "--value-file", "secret.bin"},
 		{"secret", "generate"},
 		{"secret", "check"},
@@ -108,14 +108,15 @@ func TestCompositionWiresEveryApplicationCommand(t *testing.T) {
 		{"secret", "encryption", "init"},
 		{"secret", "encryption", "status"},
 		{"secret", "encryption", "rotate"},
-		{"media", "add", "--name", "example.iso", "--from-file", "source.iso"},
-		{"media", "list"},
-		{"media", "delete", "--name", "example.iso"},
-		{"validate"},
-		{"preflight"},
-		{"preflight", "--stage", "clusters"},
-		{"preflight", "--stage", "add-ons"},
-		{"plan"},
+		{"catalog", "media", "add", "--name", "example.iso", "--from-file", "source.iso"},
+		{"catalog", "media", "list"},
+		{"catalog", "media", "delete", "--name", "example.iso"},
+		{"check", "input"},
+		{"check", "environment"},
+		{"check", "environment", "--stage", "clusters"},
+		{"check", "environment", "--stage", "add-ons"},
+		{"plan", "apply"},
+		{"plan", "destroy"},
 		{"status"},
 		{"render", "effective", "--input-dir", "inputs", "--output-dir", "artifacts"},
 		{"render", "effective"},
@@ -144,9 +145,9 @@ func TestCompositionWiresEveryApplicationCommand(t *testing.T) {
 			var stdout, stderr bytes.Buffer
 			code := runServices(context.Background(), args, &stdout, &stderr, services)
 			prefix := "  error  cli.not-implemented\n    bootwright "
-			if args[0] == "validate" && len(args) > 1 || args[0] == "context" && (args[1] == "init" || args[1] == "update") || args[0] == "render" && args[1] == "effective" && len(args) > 2 && args[2] == "--input-dir" {
+			if strings.HasPrefix(strings.Join(args, " "), "check input") && len(args) > 2 || args[0] == "context" && (args[1] == "init" || args[1] == "update") || args[0] == "render" && args[1] == "effective" && len(args) > 2 && args[2] == "--input-dir" {
 				prefix = "  error  input.not-found\n"
-			} else if args[0] == "context" || args[0] == "secret" || args[0] == "validate" || args[0] == "preflight" && (len(args) == 1 || args[2] == "clusters") ||
+			} else if args[0] == "context" || args[0] == "secret" || strings.HasPrefix(strings.Join(args, " "), "check input") || strings.HasPrefix(strings.Join(args, " "), "check environment") && (len(args) == 2 || args[3] == "clusters") ||
 				args[0] == "plan" || args[0] == "status" || args[0] == "apply" || args[0] == "destroy" ||
 				args[0] == "machine" || args[0] == "cluster" && (args[1] == "kubeconfig" || args[1] == "oc" || args[1] == "kubectl" || args[1] == "rsh" || args[1] == "exec" || args[1] == "list" || args[1] == "info") ||
 				args[0] == "render" && len(args) > 1 && args[1] == "effective" {
@@ -158,7 +159,7 @@ func TestCompositionWiresEveryApplicationCommand(t *testing.T) {
 				}
 				return
 			}
-			if args[0] == "add-ons" && args[1] == "list" {
+			if strings.Join(args, " ") == "catalog add-ons list" {
 				if code != 0 || stderr.Len() != 0 || !strings.Contains(stdout.String(), "nmstate") {
 					t.Fatalf("built-in list: %d %s %s", code, stdout.String(), stderr.String())
 				}
@@ -197,8 +198,8 @@ func TestComposedExplicitValidationIsContextFree(t *testing.T) {
 	repository := testRepository(state)
 	services := testServices(t, repository, state)
 	for _, args := range [][]string{
-		{"validate", "-f", input, "--context", "missing"},
-		{"validate", "-f", input, "--context", "missing", "--output", "json"},
+		{"check", "input", "-f", input, "--context", "missing"},
+		{"check", "input", "-f", input, "--context", "missing", "--output", "json"},
 	} {
 		var out, errOut bytes.Buffer
 		if code := runServices(context.Background(), args, &out, &errOut, services); code != 0 || errOut.Len() != 0 {
@@ -219,13 +220,13 @@ func TestComposedExplicitValidationIsContextFree(t *testing.T) {
 			t.Fatal(out.String())
 		}
 	}
-	for _, args := range [][]string{{"validate", "--context", "missing"}, {"render", "effective", "--context", "missing"}} {
+	for _, args := range [][]string{{"check", "input", "--context", "missing"}, {"render", "effective", "--context", "missing"}} {
 		var out, errOut bytes.Buffer
 		if code := runServices(context.Background(), args, &out, &errOut, services); code != 1 || out.Len() != 0 || !strings.Contains(errOut.String(), "context.state") {
 			t.Fatal("absent context failed without a typed state diagnostic", code, out.String(), errOut.String())
 		}
 	}
-	for _, args := range [][]string{{"version"}, {"validate", "-f", input, "--help"}, {"__bootwright_complete", "validate", ""}, {"validate", "-f", input, "--unknown"}} {
+	for _, args := range [][]string{{"version"}, {"check", "input", "-f", input, "--help"}, {"__bootwright_complete", "check", "input", ""}, {"check", "input", "-f", input, "--unknown"}} {
 		var out, errOut bytes.Buffer
 		runServices(context.Background(), args, &out, &errOut, services)
 	}
@@ -246,7 +247,7 @@ func TestComposedValidationPreservesTypedInputFailures(t *testing.T) {
 	}
 	var out, errOut bytes.Buffer
 	path := filepath.Join(t.TempDir(), "missing.yaml")
-	code := run(context.Background(), []string{"validate", "-f", path, "--output", "json"}, &out, &errOut)
+	code := run(context.Background(), []string{"check", "input", "-f", path, "--output", "json"}, &out, &errOut)
 	var envelope struct {
 		OK          bool
 		Result      any

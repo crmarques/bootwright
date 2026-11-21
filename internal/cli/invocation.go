@@ -113,7 +113,7 @@ func urlFromStdin(flags *pflag.FlagSet) bool { return stringValue(flags, "from-u
 
 func preflightUnavailable(flags *pflag.FlagSet) string {
 	if slices.Contains(normalizeNames(stringValue(flags, "stage")), "add-ons") {
-		return "preflight --stage add-ons"
+		return "check environment --stage add-ons"
 	}
 	return ""
 }

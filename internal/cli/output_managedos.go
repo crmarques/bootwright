@@ -72,7 +72,8 @@ func writeMediaList(out io.Writer, command string, result *media.ListResult, jso
 	}
 	var text display
 	if len(result.Media) == 0 {
-		text.headline("OK", "No stored media")
+		text.headline("", "Installer media on this controller")
+		text.lines([]string{"No stored media."})
 		return text.writeTo(out)
 	}
 	full := presentationFor(out).Detail == "full"
@@ -94,6 +95,7 @@ func writeMediaList(out io.Writer, command string, result *media.ListResult, jso
 			failed = append(failed, field{Label: row.Name, Value: row.Failure})
 		}
 	}
+	text.headline("", "Installer media on this controller")
 	text.resourceTable([]string{"NAME", "SIZE", "RELEASE", "RESERVED", "ADDED", "STATE"}, rows, tableStyle{Kind: "media", Identity: 0, States: []int{5}})
 	if result.Checksums || full {
 		text.section("Digests")
@@ -114,8 +116,8 @@ func writeMediaList(out io.Writer, command string, result *media.ListResult, jso
 		text.section("Failed")
 		text.fields(failed...)
 		text.section("")
-		text.lines([]string{"Remove a failed image with bootwright media delete --name <name> or replace it with " +
-			"bootwright media add --name <name> --from-file <path>, or --from-url <url> --sha256 <digest>; repeat bootwright media list --checksums for one that changed while it was read."})
+		text.lines([]string{"Remove a failed image with bootwright catalog media delete --name <name> or replace it with " +
+			"bootwright catalog media add --name <name> --from-file <path>, or --from-url <url> --sha256 <digest>; repeat bootwright catalog media list --checksums for one that changed while it was read."})
 	}
 	return text.writeTo(out)
 }

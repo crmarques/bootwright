@@ -309,7 +309,7 @@ func writeStatusReadiness(text *display, gaps []lifecycle.ReadinessGap) {
 	if len(gaps) == 0 {
 		return
 	}
-	text.section("Readiness")
+	text.section("Recorded prerequisites")
 	rows := make([][]string, 0, len(gaps))
 	for _, gap := range gaps {
 		rows = append(rows, []string{gap.State, strings.ToUpper(gap.Kind[:1]) + gap.Kind[1:] + "/" + gap.Name})

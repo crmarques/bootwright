@@ -25,7 +25,7 @@ func (p *readinessProbe) read(_ context.Context, name string, _ api.Catalog) ([]
 var (
 	missingSecret = ReadinessGap{Kind: "secret", Name: "token", State: "missing", Remedy: "bootwright secret set --context lab --name token --value-file <path>"}
 	staleSecret   = ReadinessGap{Kind: "secret", Name: "key", State: "stale", Remedy: "bootwright secret generate --context lab --name key"}
-	missingMedia  = ReadinessGap{Kind: "media", Name: "rhel.iso", State: "missing", Remedy: "bootwright media add --name rhel.iso --from-file <path>"}
+	missingMedia  = ReadinessGap{Kind: "media", Name: "rhel.iso", State: "missing", Remedy: "bootwright catalog media add --name rhel.iso --from-file <path>"}
 )
 
 func readinessStatus(t *testing.T, h *harness, probe *readinessProbe) *StatusResult {
@@ -40,7 +40,7 @@ func readinessStatus(t *testing.T, h *harness, probe *readinessProbe) *StatusRes
 
 func TestStatusNamesWhatPlanAndApplyWouldStopOnAheadOfThem(t *testing.T) {
 	t.Parallel()
-	plan, apply := contextCommand(testContextName, "plan"), contextCommand(testContextName, "apply")
+	plan, apply := contextCommand(testContextName, "plan apply"), contextCommand(testContextName, "apply")
 	for name, gaps := range map[string][]ReadinessGap{
 		"a missing Secret": {missingSecret},
 		"a stale Secret":   {staleSecret},
@@ -68,7 +68,7 @@ func TestStatusNamesWhatPlanAndApplyWouldStopOnAheadOfThem(t *testing.T) {
 
 func TestStatusAddsNothingWhenNothingIsMissingOrTheReadFails(t *testing.T) {
 	t.Parallel()
-	plan, apply := contextCommand(testContextName, "plan"), contextCommand(testContextName, "apply")
+	plan, apply := contextCommand(testContextName, "plan apply"), contextCommand(testContextName, "apply")
 	for name, probe := range map[string]*readinessProbe{
 		"none missing":      {},
 		"a read that fails": {gaps: []ReadinessGap{missingSecret}, err: errors.New("keyring unavailable")},

@@ -1,6 +1,6 @@
 {
   "schemaVersion": "v1alpha1",
-  "command": "preflight",
+  "command": "check environment",
   "ok": false,
   "exitCode": 1,
   "result": {
@@ -48,7 +48,7 @@
       "severity": "error",
       "code": "preflight.failed",
       "message": "infrastructure readiness is not proved; inspect the failed, unknown and pending checks",
-      "remediation": "resolve the reported prerequisites and repeat bootwright preflight --context synthetic --stage controller,infrastructure-services,substrates"
+      "remediation": "resolve the reported prerequisites and repeat bootwright check environment --context synthetic --stage controller,infrastructure-services,substrates"
     }
   ],
   "logs": []

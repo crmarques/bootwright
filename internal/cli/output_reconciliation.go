@@ -314,6 +314,13 @@ func writeLifecyclePlan(out io.Writer, result *lifecycle.PlanResult) error {
 	var text display
 	text.headline("", lifecycleHeadline(*result))
 	text.lines([]string{"Preview only; no changes have been made."})
+	if result.Settled {
+		text.lines([]string{"Nothing to do."})
+		if err := text.writeTo(out); err != nil {
+			return err
+		}
+		return writeReceipt(out, result.Receipt)
+	}
 	if result.Finalizes {
 		text.section("")
 		text.lines([]string{"Nothing to run: every block is done, so bootwright " + result.Verb + " only completes this operation's interrupted finalization."})

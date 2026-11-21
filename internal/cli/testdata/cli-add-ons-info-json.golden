@@ -1,6 +1,6 @@
 {
   "schemaVersion": "v1alpha1",
-  "command": "add-ons info",
+  "command": "catalog add-ons info",
   "ok": true,
   "exitCode": 0,
   "result": {

@@ -186,7 +186,7 @@ corresponding kind. Omission of either list selects every loaded root of that
 class. Objects outside the selected cluster-owned graph are absent from
 effective state, while fleet-global objects and shared services remain
 available. Each excluded cluster
-root produces a deterministic `validate` warning. These fields are selection
+root produces a deterministic `check input` warning. These fields are selection
 lists, not `Ref` fields, and no CLI flag can further narrow them.
 
 The cluster-selection closure is authoritative and independent of file layout:
@@ -204,7 +204,7 @@ Machines and its other attached exports and their chains included. A
 `CephCluster` retained only through a `CephConsumer` keeps its node
 Machines and their provider and provider-host closure, but not every object
 naming it and no other attached `OpenShiftCluster`. When an attachment reaches
-a cluster root that its authored list omits, `validate` refuses with an error
+a cluster root that its authored list omits, `check input` refuses with an error
 on that list naming the root and the export that reached it, because the
 selection of a completed apply cannot change
 ([lifecycle unit](../state-reconciliation.md#lifecycle-unit),
@@ -216,7 +216,7 @@ either end of the relationship retains it; this widens nothing else, so a
 `CephCluster` retained only through a `CephConsumer` still keeps its node
 closure alone. A `Machine` or `InfraProvider` not reached by the rules above is
 excluded; when no excluded cluster root accounts for it as a node, a node's
-provider or a provider host, `validate` warns, naming it and stating that no
+provider or a provider host, `check input` warns, naming it and stating that no
 selection field retains it. A reference from any retained object to an excluded
 object is not an implicit retention edge unless a row above lists it; it is an
 unresolved-reference error naming the selection field that would retain the
@@ -385,7 +385,7 @@ Mirror artifact `tlsVerification` is an optional sibling of `trustBundleRef`,
 defaulting to `full`. Other modes refuse under
 [client TLS trust](../secrets.md#client-tls-trust).
 
-Before the stage runs, [`preflight`](../cli/output.md#preflight) reads the
+Before the stage runs, [`check environment`](../cli/output.md#preflight) reads the
 size of each file the stage would read from the mirror, with no body: an
 HTTPS `HEAD`, or a one-byte ranged `GET` where the server refuses `HEAD`,
 through the controller Machine's [proxy choice](machines.md#machine-proxy)
@@ -409,7 +409,7 @@ reads a mirror, and admission refuses another protocol or port at
 `$.spec.mirror.artifacts.endpointRef`. Without `trustBundleRef` the anchor is
 the generated `caBundle` that issues the server's serving certificate, and
 admission refuses at `$.spec.mirror.artifacts.serverRef` a certificate with
-no issuer. `preflight` reports a file such a mirror answers 404 or 410 for as
+no issuer. `check environment` reports a file such a mirror answers 404 or 410 for as
 pending, since the apply fills it before the controller stage reads it; a file
 served at another size still fails, and a transport or TLS failure stays
 unknown. The server may be placed on the controller Machine, around which the

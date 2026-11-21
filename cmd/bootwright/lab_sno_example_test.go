@@ -39,7 +39,7 @@ func TestLabSNOExampleSelectsItsInstallerFromTheDeclaredRelease(t *testing.T) {
 	if len(sources.Files) != snoExampleFiles {
 		t.Fatalf("sno example discovery: got %d files, want %d", len(sources.Files), snoExampleFiles)
 	}
-	out, errOut := contextRun(t, isolatedServices(t), 0, "validate", "-f", sources.Roots[0], "--output", "json")
+	out, errOut := contextRun(t, isolatedServices(t), 0, "check", "input", "-f", sources.Roots[0], "--output", "json")
 	var validation struct {
 		OK          bool
 		Result      struct{ Counts compilation.Counts }

@@ -1,12 +1,11 @@
   bootwright / controller
-      Prepare, check and remove this host's controller
+      Install, rebind or remove this host's controller
 
   Usage
-    bootwright controller [flags]
+    bootwright controller <command> [flags]
 
   Commands
   COMMAND     PURPOSE
-  check       Check what controller install prepares on this host
   install     Install context-independent controller prerequisites
   rebind      Rebind the controller record to this host's changed identity
   uninstall   Remove what controller install added to this host

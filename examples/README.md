@@ -74,7 +74,7 @@ secrets as its README directs. Placeholder
 checksums and registry digests are not real content identities: replace them
 with values verified for your media and release. An IBM Storage Ceph Entitlement carries `license.accept: true` as a
 placeholder; reviewing the IBM license terms and accepting them is your explicit
-act. `validate` proves admission, not connectivity or readiness.
+act. `check input` proves admission, not connectivity or readiness.
 
 Context import freezes a copy of the input; edits to the source directory do
 not update the context. To replace applied intent, complete destroy while
@@ -85,7 +85,7 @@ edited input:
 C=''  # Name of the retained context.
 IN='' # Absolute path to the edited input directory outside the repository.
 ./bin/bootwright context update --name "${C:?Set C to the retained context}" --input-dir "${IN:?Set IN to the edited input directory}"
-./bin/bootwright plan --context "${C:?Set C to the retained context}"
+./bin/bootwright plan apply --context "${C:?Set C to the retained context}"
 ```
 
 Review that plan before a fresh apply. For input already imported, `diff`

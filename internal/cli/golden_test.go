@@ -340,7 +340,7 @@ func cliGoldens() []cliGolden {
 			StorageClusters: []lifecycle.ClusterSummary{},
 			Shared:          []lifecycle.ServiceSummary{{Kind: "ArtifactServer", Name: "lab-artifacts", Machine: "controller", Status: lifecycle.RealizationPending}},
 			Secrets:         lifecycle.SecretSummary{Declared: 3},
-			NextSteps:       []string{"bootwright plan --context lab", "bootwright apply --context lab"},
+			NextSteps:       []string{"bootwright plan apply --context lab", "bootwright apply --context lab"},
 			Handoff:         lifecycle.HandoffSummary{Reasons: []string{"no apply is recorded"}},
 		}
 	}
@@ -393,7 +393,7 @@ func cliGoldens() []cliGolden {
 		result.Readiness = []lifecycle.ReadinessGap{
 			{Kind: "secret", Name: "ssh-key", State: "stale", Remedy: "bootwright secret generate --context lab --name ssh-key"},
 			{Kind: "secret", Name: "token", State: "missing", Remedy: "bootwright secret set --context lab --name token --value-file <path>"},
-			{Kind: "media", Name: "rhel-9.iso", State: "missing", Remedy: "bootwright media add --name rhel-9.iso --from-file <path>"},
+			{Kind: "media", Name: "rhel-9.iso", State: "missing", Remedy: "bootwright catalog media add --name rhel-9.iso --from-file <path>"},
 		}
 		result.NextSteps = append(lifecycleRemedies(result.Readiness), result.NextSteps...)
 		return result
@@ -587,62 +587,62 @@ func cliGoldens() []cliGolden {
 			"nothing repairs it, because Bootwright never changes the owner or mode of an existing state root")
 	}
 	return append([]cliGolden{
-		{golden: "cli-add-ons-list", args: "add-ons list", record: func(r *dispatchRecord) {
+		{golden: "cli-add-ons-list", args: "catalog add-ons list", record: func(r *dispatchRecord) {
 			r.result.addOns, _ = addoncatalog.New(addonpackages.Builtin()).List(context.Background(), addoncatalog.ListRequest{})
 		}},
-		{golden: "cli-add-ons-list-json", args: "add-ons list --output json", record: func(r *dispatchRecord) {
+		{golden: "cli-add-ons-list-json", args: "catalog add-ons list --output json", record: func(r *dispatchRecord) {
 			r.result.addOns, _ = addoncatalog.New(addonpackages.Builtin()).List(context.Background(), addoncatalog.ListRequest{})
 		}},
-		{golden: "cli-add-ons-info", args: "add-ons info --name metallb", record: func(r *dispatchRecord) {
+		{golden: "cli-add-ons-info", args: "catalog add-ons info --name metallb", record: func(r *dispatchRecord) {
 			r.result.addOnInfo, _ = addoncatalog.New(addonpackages.Builtin()).Describe(context.Background(), addoncatalog.DescribeRequest{Name: "metallb"})
 		}},
-		{golden: "cli-add-ons-info-json", args: "add-ons info --name gitops --output json", record: func(r *dispatchRecord) {
+		{golden: "cli-add-ons-info-json", args: "catalog add-ons info --name gitops --output json", record: func(r *dispatchRecord) {
 			r.result.addOnInfo, _ = addoncatalog.New(addonpackages.Builtin()).Describe(context.Background(), addoncatalog.DescribeRequest{Name: "gitops"})
 		}},
-		{args: "add-ons info --name metalb", code: 1, stderr: "  error  access.target\n    no built-in add-on package is named \"metalb\"\n    Next: name a package that bootwright add-ons list shows\n", record: func(r *dispatchRecord) {
+		{args: "catalog add-ons info --name metalb", code: 1, stderr: "  error  access.target\n    no built-in add-on package is named \"metalb\"\n    Next: name a package that bootwright catalog add-ons list shows\n", record: func(r *dispatchRecord) {
 			_, r.err = addoncatalog.New(addonpackages.Builtin()).Describe(context.Background(), addoncatalog.DescribeRequest{Name: "metalb"})
 		}},
-		{golden: "cli-preflight-openshift", args: "preflight --context synthetic --stage clusters --clusters sno", record: func(r *dispatchRecord) { r.result.storagePreflight = containerPreflightReport(false) }},
-		{golden: "cli-preflight-openshift-json", args: "preflight --context synthetic --stage clusters --clusters sno --output json", record: func(r *dispatchRecord) { r.result.storagePreflight = containerPreflightReport(false) }},
-		{golden: "cli-preflight-openshift-pending-json", args: "preflight --context synthetic --stage clusters --clusters sno --dry-run --output json", code: 1, record: func(r *dispatchRecord) {
+		{golden: "cli-preflight-openshift", args: "check environment --context synthetic --stage clusters --clusters sno", record: func(r *dispatchRecord) { r.result.storagePreflight = containerPreflightReport(false) }},
+		{golden: "cli-preflight-openshift-json", args: "check environment --context synthetic --stage clusters --clusters sno --output json", record: func(r *dispatchRecord) { r.result.storagePreflight = containerPreflightReport(false) }},
+		{golden: "cli-preflight-openshift-pending-json", args: "check environment --context synthetic --stage clusters --clusters sno --dry-run --output json", code: 1, record: func(r *dispatchRecord) {
 			r.result.storagePreflight = containerPreflightReport(true)
-			r.err = diagnostics.NewFailureWithRemediation("preflight.unknown", "cluster readiness is not proved; inspect the failed, unknown and pending checks", "", "resolve the reported prerequisites and repeat bootwright preflight --context synthetic --stage clusters --clusters sno")
+			r.err = diagnostics.NewFailureWithRemediation("preflight.unknown", "cluster readiness is not proved; inspect the failed, unknown and pending checks", "", "resolve the reported prerequisites and repeat bootwright check environment --context synthetic --stage clusters --clusters sno")
 		}},
 
-		{golden: "cli-preflight-ceph", args: "preflight --context synthetic --stage clusters --clusters ceph", record: func(r *dispatchRecord) { r.result.storagePreflight = successfulStoragePreflight() }},
-		{golden: "cli-preflight-ceph-json", args: "preflight --context synthetic --stage clusters --clusters ceph --output json", record: func(r *dispatchRecord) { r.result.storagePreflight = successfulStoragePreflight() }},
-		{golden: "cli-preflight-ceph-pending-json", args: "preflight --context synthetic --stage clusters --clusters ceph --output json", code: 1, record: func(r *dispatchRecord) {
+		{golden: "cli-preflight-ceph", args: "check environment --context synthetic --stage clusters --clusters ceph", record: func(r *dispatchRecord) { r.result.storagePreflight = successfulStoragePreflight() }},
+		{golden: "cli-preflight-ceph-json", args: "check environment --context synthetic --stage clusters --clusters ceph --output json", record: func(r *dispatchRecord) { r.result.storagePreflight = successfulStoragePreflight() }},
+		{golden: "cli-preflight-ceph-pending-json", args: "check environment --context synthetic --stage clusters --clusters ceph --output json", code: 1, record: func(r *dispatchRecord) {
 			r.result.storagePreflight = pendingStoragePreflight()
-			r.err = diagnostics.NewFailureWithRemediation("preflight.unknown", "cluster readiness is not proved; inspect the failed, unknown and pending checks", "", "resolve the reported prerequisites and repeat bootwright preflight --context synthetic --stage clusters --clusters ceph")
+			r.err = diagnostics.NewFailureWithRemediation("preflight.unknown", "cluster readiness is not proved; inspect the failed, unknown and pending checks", "", "resolve the reported prerequisites and repeat bootwright check environment --context synthetic --stage clusters --clusters ceph")
 		}},
 
-		{golden: "cli-preflight-clusters", args: "preflight --context synthetic --stage clusters", record: func(r *dispatchRecord) { r.result.storagePreflight = clustersPreflightReport(false) }},
-		{golden: "cli-preflight-clusters-json", args: "preflight --context synthetic --stage clusters --output json", record: func(r *dispatchRecord) { r.result.storagePreflight = clustersPreflightReport(false) }},
-		{golden: "cli-preflight-clusters-pending-json", args: "preflight --context synthetic --stage clusters --dry-run --output json", code: 1, record: func(r *dispatchRecord) {
+		{golden: "cli-preflight-clusters", args: "check environment --context synthetic --stage clusters", record: func(r *dispatchRecord) { r.result.storagePreflight = clustersPreflightReport(false) }},
+		{golden: "cli-preflight-clusters-json", args: "check environment --context synthetic --stage clusters --output json", record: func(r *dispatchRecord) { r.result.storagePreflight = clustersPreflightReport(false) }},
+		{golden: "cli-preflight-clusters-pending-json", args: "check environment --context synthetic --stage clusters --dry-run --output json", code: 1, record: func(r *dispatchRecord) {
 			r.result.storagePreflight = clustersPreflightReport(true)
-			r.err = diagnostics.NewFailureWithRemediation("preflight.unknown", "cluster readiness is not proved; inspect the failed, unknown and pending checks", "", "resolve the reported prerequisites and repeat bootwright preflight --context synthetic --stage clusters")
+			r.err = diagnostics.NewFailureWithRemediation("preflight.unknown", "cluster readiness is not proved; inspect the failed, unknown and pending checks", "", "resolve the reported prerequisites and repeat bootwright check environment --context synthetic --stage clusters")
 		}},
 
 		{golden: "cli-render-effective-write", args: "render effective --input-dir inputs --output-dir artifacts", record: func(r *dispatchRecord) { r.result.rendered = renderedArtifacts(false) }},
 		{golden: "cli-render-effective-write-json", args: "render effective --input-dir inputs --output-dir artifacts --output json", record: func(r *dispatchRecord) { r.result.rendered = renderedArtifacts(false) }},
 		{golden: "cli-render-effective-write-context-json", args: "render effective --output-dir artifacts --sensitive --context synthetic --output json", record: func(r *dispatchRecord) { r.result.rendered = renderedArtifacts(true) }},
 
-		{golden: "cli-preflight-infrastructure", args: "preflight --context synthetic --stage controller,infrastructure-services,substrates", record: func(r *dispatchRecord) { r.result.storagePreflight = infraPreflightReport(false) }},
-		{golden: "cli-preflight-infrastructure-json", args: "preflight --context synthetic --stage controller,infrastructure-services,substrates --output json", record: func(r *dispatchRecord) { r.result.storagePreflight = infraPreflightReport(false) }},
-		{golden: "cli-preflight-infrastructure-unready", args: "preflight --context synthetic --stage controller,infrastructure-services,substrates", code: 1,
-			stderr: "  error  preflight.failed\n    controller readiness is not proved; inspect the failed checks\n    Next: resolve the reported prerequisites and repeat bootwright preflight --context\n    synthetic --stage controller,infrastructure-services,substrates\n", record: func(r *dispatchRecord) {
+		{golden: "cli-preflight-infrastructure", args: "check environment --context synthetic --stage controller,infrastructure-services,substrates", record: func(r *dispatchRecord) { r.result.storagePreflight = infraPreflightReport(false) }},
+		{golden: "cli-preflight-infrastructure-json", args: "check environment --context synthetic --stage controller,infrastructure-services,substrates --output json", record: func(r *dispatchRecord) { r.result.storagePreflight = infraPreflightReport(false) }},
+		{golden: "cli-preflight-infrastructure-unready", args: "check environment --context synthetic --stage controller,infrastructure-services,substrates", code: 1,
+			stderr: "  error  preflight.failed\n    controller readiness is not proved; inspect the failed checks\n    Next: resolve the reported prerequisites and repeat bootwright check environment --context\n    synthetic --stage controller,infrastructure-services,substrates\n", record: func(r *dispatchRecord) {
 				r.result.storagePreflight = infraPreflightReport(true)
-				r.err = diagnostics.NewFailureWithRemediation("preflight.failed", "controller readiness is not proved; inspect the failed checks", "", "resolve the reported prerequisites and repeat bootwright preflight --context synthetic --stage controller,infrastructure-services,substrates")
+				r.err = diagnostics.NewFailureWithRemediation("preflight.failed", "controller readiness is not proved; inspect the failed checks", "", "resolve the reported prerequisites and repeat bootwright check environment --context synthetic --stage controller,infrastructure-services,substrates")
 			}},
-		{golden: "cli-preflight-infrastructure-unready-json", args: "preflight --context synthetic --stage controller,infrastructure-services,substrates --output json", code: 1, record: func(r *dispatchRecord) {
+		{golden: "cli-preflight-infrastructure-unready-json", args: "check environment --context synthetic --stage controller,infrastructure-services,substrates --output json", code: 1, record: func(r *dispatchRecord) {
 			r.result.storagePreflight = infraPreflightReport(true)
-			r.err = diagnostics.NewFailureWithRemediation("preflight.failed", "infrastructure readiness is not proved; inspect the failed, unknown and pending checks", "", "resolve the reported prerequisites and repeat bootwright preflight --context synthetic --stage controller,infrastructure-services,substrates")
+			r.err = diagnostics.NewFailureWithRemediation("preflight.failed", "infrastructure readiness is not proved; inspect the failed, unknown and pending checks", "", "resolve the reported prerequisites and repeat bootwright check environment --context synthetic --stage controller,infrastructure-services,substrates")
 		}},
-		{golden: "cli-preflight", args: "preflight --context synthetic", record: func(r *dispatchRecord) { r.result.storagePreflight = allPreflightReport(false) }},
-		{golden: "cli-preflight-json", args: "preflight --context synthetic --output json", record: func(r *dispatchRecord) { r.result.storagePreflight = allPreflightReport(false) }},
-		{golden: "cli-preflight-pending-json", args: "preflight --context synthetic --dry-run --output json", code: 1, record: func(r *dispatchRecord) {
+		{golden: "cli-preflight", args: "check environment --context synthetic", record: func(r *dispatchRecord) { r.result.storagePreflight = allPreflightReport(false) }},
+		{golden: "cli-preflight-json", args: "check environment --context synthetic --output json", record: func(r *dispatchRecord) { r.result.storagePreflight = allPreflightReport(false) }},
+		{golden: "cli-preflight-pending-json", args: "check environment --context synthetic --dry-run --output json", code: 1, record: func(r *dispatchRecord) {
 			r.result.storagePreflight = allPreflightReport(true)
-			r.err = diagnostics.NewFailureWithRemediation("preflight.unknown", "environment readiness is not proved; inspect the failed, unknown and pending checks", "", "resolve the reported prerequisites and repeat bootwright preflight --context synthetic")
+			r.err = diagnostics.NewFailureWithRemediation("preflight.unknown", "environment readiness is not proved; inspect the failed, unknown and pending checks", "", "resolve the reported prerequisites and repeat bootwright check environment --context synthetic")
 		}},
 
 		// Controller reports: an unpresented dry-run plan in text and JSON, a
@@ -692,7 +692,7 @@ func cliGoldens() []cliGolden {
 		// gives a held check: the platform, the verified local identity, the
 		// interpreter and ansible-core of the runtime, the baseline packages and
 		// the setup state.
-		{golden: "cli-controller-check", args: "controller check", record: func(r *dispatchRecord) {
+		{golden: "cli-controller-check", args: "check controller", record: func(r *dispatchRecord) {
 			held := func(id, summary, scope string) prerequisites.Check {
 				return prerequisites.Check{ID: id, Required: summary, Observed: summary, Status: "ready", Scope: scope}
 			}
@@ -714,7 +714,7 @@ func cliGoldens() []cliGolden {
 		}},
 		// A host whose table looks whole still shows the host check that is not
 		// ready, here an interrupted setup.
-		{golden: "cli-controller-check-interrupted", args: "controller check", code: 1,
+		{golden: "cli-controller-check-interrupted", args: "check controller", code: 1,
 			stderr: "  error  preflight.failed\n" +
 				"    required controller prerequisites are not ready\n" +
 				"    Next: run bootwright controller install\n",
@@ -761,7 +761,7 @@ func cliGoldens() []cliGolden {
 		// left, an apply that ran and failed, one that paused, lost an outcome
 		// or stopped running, each naming the command that continues it, and a
 		// refusal that registered nothing.
-		{golden: "cli-plan", args: "plan --stage infrastructure-services,substrates", record: func(r *dispatchRecord) {
+		{golden: "cli-plan", args: "plan apply --stage infrastructure-services,substrates", record: func(r *dispatchRecord) {
 			r.result.lifecyclePlan = &lifecycle.PlanResult{
 				Context: lifecycle.ContextIdentity{Name: "lab", Revision: revision}, Verb: "apply",
 				Steps: []lifecycle.PlanStep{
@@ -775,11 +775,11 @@ func cliGoldens() []cliGolden {
 				Receipt: lifecycle.Receipt{Operation: "none", Verb: "plan", State: "preview", Next: "apply"},
 			}
 		}},
-		{golden: "cli-plan-until", args: "plan --until lab.gitops", record: func(r *dispatchRecord) { r.result.lifecyclePlan = untilPlanFixture(revision) }},
-		{golden: "cli-plan-until-json", args: "plan --until lab.gitops --output json", record: func(r *dispatchRecord) { r.result.lifecyclePlan = untilPlanFixture(revision) }},
-		{golden: "cli-plan-firewall", args: "plan", record: func(r *dispatchRecord) { r.result.lifecyclePlan = firewallPlanFixture() }},
-		{golden: "cli-plan-firewall-json", args: "plan --output json", record: func(r *dispatchRecord) { r.result.lifecyclePlan = firewallPlanFixture() }},
-		{golden: "cli-plan-finalization", args: "plan", record: func(r *dispatchRecord) {
+		{golden: "cli-plan-until", args: "plan apply --until lab.gitops", record: func(r *dispatchRecord) { r.result.lifecyclePlan = untilPlanFixture(revision) }},
+		{golden: "cli-plan-until-json", args: "plan apply --until lab.gitops --output json", record: func(r *dispatchRecord) { r.result.lifecyclePlan = untilPlanFixture(revision) }},
+		{golden: "cli-plan-firewall", args: "plan apply", record: func(r *dispatchRecord) { r.result.lifecyclePlan = firewallPlanFixture() }},
+		{golden: "cli-plan-firewall-json", args: "plan apply --output json", record: func(r *dispatchRecord) { r.result.lifecyclePlan = firewallPlanFixture() }},
+		{golden: "cli-plan-finalization", args: "plan apply", record: func(r *dispatchRecord) {
 			r.result.lifecyclePlan = &lifecycle.PlanResult{
 				Context: lifecycle.ContextIdentity{Name: "lab", Revision: revision}, Verb: "apply",
 				Steps: []lifecycle.PlanStep{
@@ -794,7 +794,7 @@ func cliGoldens() []cliGolden {
 		// A continuation another build previews names the build that registered
 		// the operation and the steps this build runs: the finished first step
 		// is left out of them.
-		{golden: "cli-plan-continuation-other-build", args: "plan", record: func(r *dispatchRecord) {
+		{golden: "cli-plan-continuation-other-build", args: "plan apply", record: func(r *dispatchRecord) {
 			r.result.lifecyclePlan = &lifecycle.PlanResult{
 				Context: lifecycle.ContextIdentity{Name: "lab", Revision: revision}, Verb: "apply",
 				Steps: []lifecycle.PlanStep{
@@ -965,7 +965,7 @@ func cliGoldens() []cliGolden {
 		// Desired state: warnings reach standard error in text and the
 		// envelope's diagnostics in JSON; a failed validate has no result.
 		{
-			golden: "cli-validate", args: "validate -f inputs", record: func(r *dispatchRecord) { r.report = validation() },
+			golden: "cli-validate", args: "check input -f inputs", record: func(r *dispatchRecord) { r.report = validation() },
 			stderr: "  warning  OpenShiftCluster/ocp-02\n" +
 				"    api.selection\n" +
 				"    clusters/ocp-02/cluster.yaml:4:9\n" +
@@ -979,9 +979,9 @@ func cliGoldens() []cliGolden {
 				"    CustomPlaybook is a reserved declaration and cannot execute.\n" +
 				"    Field: $.spec\n",
 		},
-		{golden: "cli-validate-json", args: "validate -f inputs --output json", record: func(r *dispatchRecord) { r.report = validation() }},
+		{golden: "cli-validate-json", args: "check input -f inputs --output json", record: func(r *dispatchRecord) { r.report = validation() }},
 		{
-			args: "validate -f inputs", code: 1, record: func(r *dispatchRecord) { r.report, r.err = validation(), invalid },
+			args: "check input -f inputs", code: 1, record: func(r *dispatchRecord) { r.report, r.err = validation(), invalid },
 			stderr: "  error  Environment/lab-rhel\n" +
 				"    api.required\n" +
 				"    environment.yaml:6:3\n" +
@@ -996,7 +996,7 @@ func cliGoldens() []cliGolden {
 				"    Field: $.spec.network.adresses\n" +
 				"    Next: rename the field to addresses\n",
 		},
-		{golden: "cli-validate-failed-json", args: "validate -f inputs --output json", code: 1, record: func(r *dispatchRecord) { r.report, r.err = validation(), invalid }},
+		{golden: "cli-validate-failed-json", args: "check input -f inputs --output json", code: 1, record: func(r *dispatchRecord) { r.report, r.err = validation(), invalid }},
 		{golden: "cli-render-effective", args: "render effective", record: func(r *dispatchRecord) { r.result.effective = effective() }},
 		{golden: "cli-render-effective-json", args: "render effective --output json", record: func(r *dispatchRecord) { r.result.effective = effective() }},
 		{golden: "cli-render-acquisitions", args: "render acquisitions", record: func(r *dispatchRecord) { r.result.effective = effective() }},
@@ -1126,40 +1126,40 @@ func cliGoldens() []cliGolden {
 		{golden: "cli-secret-encryption-status-json", args: "secret encryption status --output json", record: func(r *dispatchRecord) { r.result.encryptionStatus = encryptionStatus() }},
 
 		// Media.
-		{golden: "cli-media-add", args: "media add --name rhel-9.8-x86_64-dvd.iso --from-file rhel-9.8-x86_64-dvd.iso", record: func(r *dispatchRecord) {
+		{golden: "cli-media-add", args: "catalog media add --name rhel-9.8-x86_64-dvd.iso --from-file rhel-9.8-x86_64-dvd.iso", record: func(r *dispatchRecord) {
 			r.result.mediaMutation = &media.MutationResult{Name: "rhel-9.8-x86_64-dvd.iso", Size: 13123217408, SHA256: "4c1f8e2b9d7a6c5e3f0b1a2d4e6f8a0c2b4d6e8f0a1c3e5b7d9f1a3c5e7b9d0f", Outcome: "stored"}
 		}},
-		{golden: "cli-media-delete", args: "media delete --name rhel-9.8-x86_64-dvd.iso --yes", record: func(r *dispatchRecord) {
+		{golden: "cli-media-delete", args: "catalog media delete --name rhel-9.8-x86_64-dvd.iso --yes", record: func(r *dispatchRecord) {
 			r.result.mediaMutation = &media.MutationResult{Name: "rhel-9.8-x86_64-dvd.iso", Size: 13123217408, SHA256: "4c1f8e2b9d7a6c5e3f0b1a2d4e6f8a0c2b4d6e8f0a1c3e5b7d9f1a3c5e7b9d0f", Outcome: "deleted"}
 		}},
 		{
-			golden: "cli-media-replace-plan", args: "media add --name rhel-9.8-x86_64-dvd.iso --from-file rhel-9.8-x86_64-dvd.iso", code: 1,
+			golden: "cli-media-replace-plan", args: "catalog media add --name rhel-9.8-x86_64-dvd.iso --from-file rhel-9.8-x86_64-dvd.iso", code: 1,
 			record: func(r *dispatchRecord) {
 				r.mediaChange = &media.Change{Action: media.ReplaceChange, Name: storedImage.Name, Stored: true, Readable: true, Entry: storedImage, NewOrigin: "file:///srv/images/rhel-9.8-x86_64-dvd.iso"}
-				r.err = declinedConfirmation("media add --name rhel-9.8-x86_64-dvd.iso --from-file rhel-9.8-x86_64-dvd.iso", "media replace", storedImage.Name)
+				r.err = declinedConfirmation("catalog media add --name rhel-9.8-x86_64-dvd.iso --from-file rhel-9.8-x86_64-dvd.iso", "media replace", storedImage.Name)
 			},
 			stderr: "  error  media.store\n" +
 				"    media confirmation was declined; nothing changed\n" +
-				"    Next: review it, then repeat bootwright media add --from-file rhel-9.8-x86_64-dvd.iso\n" +
-				"    --name rhel-9.8-x86_64-dvd.iso with --yes\n",
+				"    Next: review it, then repeat bootwright catalog media add --from-file\n" +
+				"    rhel-9.8-x86_64-dvd.iso --name rhel-9.8-x86_64-dvd.iso with --yes\n",
 		},
 		{
-			golden: "cli-media-delete-plan", args: "media delete --name rhel-9.8-x86_64-dvd.iso", code: 1,
+			golden: "cli-media-delete-plan", args: "catalog media delete --name rhel-9.8-x86_64-dvd.iso", code: 1,
 			record: func(r *dispatchRecord) {
 				r.mediaChange = &media.Change{Action: media.DeleteChange, Name: storedImage.Name, Stored: true, Readable: true, Entry: storedImage, Retained: true}
-				r.err = declinedConfirmation("media delete --name rhel-9.8-x86_64-dvd.iso", "media delete", storedImage.Name)
+				r.err = declinedConfirmation("catalog media delete --name rhel-9.8-x86_64-dvd.iso", "media delete", storedImage.Name)
 			},
 			stderr: "  error  media.store\n" +
 				"    media confirmation was declined; nothing changed\n" +
-				"    Next: review it, then repeat bootwright media delete --name rhel-9.8-x86_64-dvd.iso with\n" +
-				"    --yes\n",
+				"    Next: review it, then repeat bootwright catalog media delete --name rhel-9.8-x86_64-dvd.iso\n" +
+				"    with --yes\n",
 		},
-		{golden: "cli-media-list", args: "media list --checksums", record: func(r *dispatchRecord) { r.result.mediaList = stored(true) }},
-		{golden: "cli-media-list-json", args: "media list --checksums --output json", record: func(r *dispatchRecord) { r.result.mediaList = stored(true) }},
-		{golden: "cli-media-list-unchecked", args: "media list", record: func(r *dispatchRecord) { r.result.mediaList = stored(false) }},
-		{golden: "cli-media-list-unchecked-json", args: "media list --output json", record: func(r *dispatchRecord) { r.result.mediaList = stored(false) }},
-		{golden: "cli-media-list-failed", args: "media list --checksums", record: func(r *dispatchRecord) { r.result.mediaList = failed() }},
-		{golden: "cli-media-list-failed-json", args: "media list --checksums --output json", record: func(r *dispatchRecord) { r.result.mediaList = failed() }},
+		{golden: "cli-media-list", args: "catalog media list --checksums", record: func(r *dispatchRecord) { r.result.mediaList = stored(true) }},
+		{golden: "cli-media-list-json", args: "catalog media list --checksums --output json", record: func(r *dispatchRecord) { r.result.mediaList = stored(true) }},
+		{golden: "cli-media-list-unchecked", args: "catalog media list", record: func(r *dispatchRecord) { r.result.mediaList = stored(false) }},
+		{golden: "cli-media-list-unchecked-json", args: "catalog media list --output json", record: func(r *dispatchRecord) { r.result.mediaList = stored(false) }},
+		{golden: "cli-media-list-failed", args: "catalog media list --checksums", record: func(r *dispatchRecord) { r.result.mediaList = failed() }},
+		{golden: "cli-media-list-failed-json", args: "catalog media list --checksums --output json", record: func(r *dispatchRecord) { r.result.mediaList = failed() }},
 
 		// Machines. A power verb's service also reports where its run's
 		// output is kept, through a reporter outside this boundary, which a
@@ -1408,10 +1408,10 @@ func TestEveryAvailableCommandHasAGolden(t *testing.T) {
 		}
 	}
 	jsonContracts := []string{
-		"add-ons list", "add-ons info",
+		"catalog add-ons list", "catalog add-ons info",
 		"validate", "preflight", "render effective", "render acquisitions", "status", "logs", "diff",
 		"secret check", "secret list", "secret info", "secret encryption status", "machine trust", "controller install",
-		"machine cp", "machine list", "machine info", "machine start", "machine stop", "machine restart", "machine eject-media", "media list", "cluster list", "cluster info",
+		"machine cp", "machine list", "machine info", "machine start", "machine stop", "machine restart", "machine eject-media", "catalog media list", "cluster list", "cluster info",
 	}
 	implemented := map[string]bool{}
 	for _, spec := range commandCatalog() {

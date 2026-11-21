@@ -163,7 +163,7 @@ CONTEXT="lab-3-nodes-ceph"; INPUT_DIR="$HOME/bootwright-e2e/lab-3-nodes-ceph"
 CONTROLLER_ADDRESS=$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')   # the host address
 umask 077
 RUN_DIR=$(mktemp -d) # Private records retained through final cleanup.
-./bin/bootwright validate -f "$INPUT_DIR"
+./bin/bootwright check input -f "$INPUT_DIR"
 ./bin/bootwright context init --name "$CONTEXT" --input-dir "$INPUT_DIR"
 ./bin/bootwright secret generate --context "$CONTEXT"
 install -m 0600 /dev/null "$RUN_DIR/ibm-password"
@@ -174,7 +174,7 @@ if [ "$FILE_ENABLED" = "true" ] && [ "$SMB_ENABLED" = "true" ]; then
     ./bin/bootwright secret set --context "$CONTEXT" --name files-smb-user --value-file "${SMB_PASSWORD_FILE:?Set SMB_PASSWORD_FILE to the protected SMB password file}" --yes
 fi
 ./bin/bootwright secret check --context "$CONTEXT"
-./bin/bootwright plan --context "$CONTEXT"
+./bin/bootwright plan apply --context "$CONTEXT"
 ```
 
 Set every `contextStore` Secret before the first apply: it freezes them. Apply
@@ -190,7 +190,7 @@ The controller stage prepares the listener firewall. See
 Require controller preflight to report `ready` before starting services:
 
 ```sh
-./bin/bootwright preflight --context "$CONTEXT" --stage controller
+./bin/bootwright check environment --context "$CONTEXT" --stage controller
 ./bin/bootwright apply --context "$CONTEXT" --stage infrastructure-services,substrates --yes
 ```
 
@@ -208,7 +208,7 @@ chronyd -Q -t 10 "server $CONTROLLER_ADDRESS iburst port 123"
 ./bin/bootwright machine list --context "$CONTEXT" --power-status
 ./bin/bootwright machine exec --context "$CONTEXT" --name rhel-01,rhel-02,rhel-03 -- lsblk -b -o NAME,TYPE,SIZE,SERIAL,ROTA,FSTYPE,MOUNTPOINTS
 ./bin/bootwright machine exec --context "$CONTEXT" --name rhel-01,rhel-02,rhel-03 -- getent hosts cp.icr.io public.dhe.ibm.com
-./bin/bootwright preflight --context "$CONTEXT" --stage clusters
+./bin/bootwright check environment --context "$CONTEXT" --stage clusters
 ```
 
 The IBM hosts must resolve on every guest, and each OSD disk is nonrotational
@@ -223,12 +223,11 @@ the object ingress hosts, `9443/tcp` and the gateway's internal `29443/tcp` on
 the management ingress hosts. This run makes no manual firewall change.
 
 Before the apply, read the plan's host firewall requirement rows
-([`host-port` rows](../../specs/managed-os.md#host-firewall-requirements)). A
-completed apply leaves only the destroy preview in the plan, so these rows
-exist only before it:
+([`host-port` rows](../../specs/managed-os.md#host-firewall-requirements)). Review these rows before the apply runs. A repeated apply over the
+completed, unchanged input would settle.
 
 ```sh
-./bin/bootwright plan --context "$CONTEXT"
+./bin/bootwright plan apply --context "$CONTEXT"
 ```
 
 After the apply, require each guest's `firewall-cmd --list-services` to list
@@ -254,7 +253,7 @@ interruption drill (B492, B626): press Ctrl-C once while a pool or the
 filesystem block is running, then inspect and continue:
 
 ```sh
-./bin/bootwright plan --context "$CONTEXT" --stage clusters
+./bin/bootwright plan apply --context "$CONTEXT" --stage clusters
 ./bin/bootwright apply --context "$CONTEXT" --stage clusters --yes      # Ctrl-C once during a pool or filesystem block
 ./bin/bootwright status --context "$CONTEXT"
 ./bin/bootwright apply --context "$CONTEXT" --stage clusters --yes
@@ -914,7 +913,7 @@ it off again. If removal is interrupted, repeat destroy to continue its
 original plan.
 
 ```sh
-./bin/bootwright plan --context "$CONTEXT"
+./bin/bootwright plan destroy --context "$CONTEXT"
 ./bin/bootwright machine stop --context "$CONTEXT" --name rhel-01,rhel-02,rhel-03 --yes
 ./bin/bootwright destroy --context "$CONTEXT" --authorize data-loss
 ./bin/bootwright status --context "$CONTEXT"

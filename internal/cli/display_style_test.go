@@ -13,7 +13,7 @@ func styledSample(t *testing.T, options PresentationOptions) string {
 	var text display
 	text.resourceTable([]string{"NAME", "SIZE", "STATE"}, [][]string{{"boot.iso", "997 MiB", "verified"}, {"dvd.iso", "12 GiB", "mismatch"}}, tableStyle{Kind: "media", Identity: 0, States: []int{2}})
 	text.section("")
-	text.fields(field{Label: "Mode", Value: "ready", Tone: "state"}, field{Label: "Revision", Value: "rev-1"}, field{Label: "Next", Value: "bootwright validate --context lab", Tone: "command"})
+	text.fields(field{Label: "Mode", Value: "ready", Tone: "state"}, field{Label: "Revision", Value: "rev-1"}, field{Label: "Next", Value: "bootwright check input --context lab", Tone: "command"})
 	text.mutedFields(field{Label: "Contact", Value: "rhel-01.lab.example.test"}, field{Label: "Fingerprint", Value: "AB:CD", Tone: "muted"})
 	var out bytes.Buffer
 	if err := text.writeTo(WithPresentation(&out, options)); err != nil {
@@ -33,7 +33,7 @@ func TestValuesReadAsTextWhileLabelsAndHeadersStayMuted(t *testing.T) {
 		options.Color = "always"
 		for _, want := range []string{
 			styleIdentity("boot.iso", options), styleState("verified", options), styleState("mismatch", options),
-			styleState("ready", options), styleCommand("bootwright validate --context lab", options),
+			styleState("ready", options), styleCommand("bootwright check input --context lab", options),
 			styleMuted("AB:CD", options),
 		} {
 			if !strings.Contains(colored, want) {

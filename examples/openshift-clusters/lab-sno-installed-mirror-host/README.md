@@ -25,4 +25,4 @@ profile](../../../specs/milestones/backlog.md#b1250) owns its acceptance.
   (`controller-mirrored-clients`), then every other block.
 - Everything else is [lab-sno-mirror-host](../lab-sno-mirror-host/README.md)
   and [lab-sno](../lab-sno/README.md). Supply the RHEL boot and DVD media the
-  profile names with `bootwright media add`.
+  profile names with `bootwright catalog media add`.

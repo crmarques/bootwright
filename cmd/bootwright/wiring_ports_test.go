@@ -19,7 +19,7 @@ func TestCompositionAcceptsIndependentWorkspacePorts(t *testing.T) {
 	deps.Repository, deps.Workspace = contextRepositoryPort{repository}, secretWorkspacePort{repository}
 	services := assembleServices(deps)
 	contextRun(t, services, 0, "context", "init", "--name", "synthetic", "--input-dir", input)
-	contextRun(t, services, 0, "validate")
+	contextRun(t, services, 0, "check", "input")
 	contextRun(t, services, 0, "secret", "encryption", "init")
 	status := secretResult(t, services, 0, "secret", "encryption", "status")
 	if string(status["initialized"]) != "true" {

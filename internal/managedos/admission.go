@@ -543,7 +543,7 @@ func storeMediaReference(raw string) bool {
 
 func storeMediaIssue(field, message string, owner api.Object) api.Issue {
 	return api.Issue{Code: "api.value", Field: "$." + field, Message: message,
-		Remediation: "import the image with bootwright media add --name <filename.iso> and set " + field + " to local-media:<filename.iso> on " + owner.Identity()}
+		Remediation: "import the image with bootwright catalog media add --name <filename.iso> and set " + field + " to local-media:<filename.iso> on " + owner.Identity()}
 }
 
 func validateCloneCustomizations(o api.Object) []api.Issue {

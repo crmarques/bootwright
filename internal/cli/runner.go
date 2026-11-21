@@ -72,7 +72,7 @@ func New(config Config) *Runner {
 
 func newCommandTree(r *Runner) (*cobra.Command, error) {
 	root := &cobra.Command{Use: "bootwright", Short: "Coordinate declarative day-0 platform bootstrap", SilenceErrors: true, SilenceUsage: true, DisableSuggestions: true}
-	root.Example = "  bootwright help context init\n  bootwright version\n  bootwright validate --file ./input"
+	root.Example = "  bootwright check input --file ./input\n  bootwright plan apply --context lab\n  bootwright status --context lab"
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.SetOut(r.config.Out)
 	root.SetErr(r.config.ErrOut)
@@ -235,7 +235,7 @@ func (r *Runner) run(ctx context.Context, args []string) int {
 			return r.failure(command, path, "cli.usage", message, 2, selectedJSON(command))
 		}
 	}
-	if path == "" || path == "completion" {
+	if path == "" || path == "completion" || path == "check" || path == "plan" {
 		if err := r.writeSelectedHelp(command); err != nil {
 			return 1
 		}

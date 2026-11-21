@@ -24,21 +24,21 @@ func TestPrivilegeClassificationHasNoInformationOrInvalidEffects(t *testing.T) {
 		{[]string{"context", "current"}, true},
 		{[]string{"context", "list"}, true},
 		{[]string{"context", "use", "--name", "test"}, true},
-		{[]string{"validate", "--file", "fixtures"}, false},
-		{[]string{"validate"}, true},
+		{[]string{"check", "input", "--file", "fixtures"}, false},
+		{[]string{"check", "input"}, true},
 		{[]string{"render", "effective"}, true},
 		{[]string{"render"}, false},
 		{[]string{"render", "--output", "json"}, false},
 		{[]string{"render", "effective", "--input-dir", "inputs", "--output-dir", "artifacts"}, false},
 		{[]string{"render", "effective", "--context", "synthetic", "--output-dir", "artifacts", "--sensitive"}, true},
-		{[]string{"controller", "check"}, true},
-		{[]string{"controller", "check", "--context", "lab"}, false},
-		{[]string{"preflight"}, true},
-		{[]string{"preflight", "--stage", "add-ons"}, false},
-		{[]string{"preflight", "--stage", "controller", "--clusters", "one"}, false},
+		{[]string{"check", "controller"}, true},
+		{[]string{"check", "controller", "--context", "lab"}, false},
+		{[]string{"check", "environment"}, true},
+		{[]string{"check", "environment", "--stage", "add-ons"}, false},
+		{[]string{"check", "environment", "--stage", "controller", "--clusters", "one"}, false},
 		{[]string{"apply"}, true},
 		{[]string{"apply", "--help"}, false},
-		{[]string{"plan"}, true},
+		{[]string{"plan", "apply"}, true},
 		{[]string{"controller", "prerequisites"}, false},
 		{[]string{"secret", "encryption", "types"}, false},
 	} {
@@ -114,18 +114,18 @@ func TestOnlyContextFreeAcquisitionConsumesTheInvokingEnvironment(t *testing.T) 
 		{"controller install", []string{"--dry-run", "--output", "json"}, readsRoute},
 		// The controller check is context-free, so it reads the route whatever
 		// else it is given.
-		{"controller check", nil, readsRoute},
-		{"controller check", []string{"--output", "json"}, readsRoute},
+		{"check controller", nil, readsRoute},
+		{"check controller", []string{"--output", "json"}, readsRoute},
 		// The media store is host-wide, so only the source decides: a URL is
 		// downloaded, a local file is copied.
-		{"media add", []string{"--name", "image.iso", "--from-url", source, "--sha256", digest}, readsRoute},
-		{"media add", []string{"--name", "image.iso", "--from-url-file", "-", "--sha256", digest}, readsRoute},
-		{"media add", []string{"--name", "image.iso", "--from-url-file", "/run/url", "--sha256", digest}, readsRoute},
-		{"media add", []string{"--name", "image.iso", "--from-file", "/images/image.iso"}, ignoresRoute},
-		{"media add", []string{"--name", "image.iso", "--from-file", "/images/image.iso", "--sha256", digest}, ignoresRoute},
-		{"media list", nil, ignoresRoute},
-		{"media list", []string{"--checksums"}, ignoresRoute},
-		{"media delete", []string{"--name", "image.iso"}, ignoresRoute},
+		{"catalog media add", []string{"--name", "image.iso", "--from-url", source, "--sha256", digest}, readsRoute},
+		{"catalog media add", []string{"--name", "image.iso", "--from-url-file", "-", "--sha256", digest}, readsRoute},
+		{"catalog media add", []string{"--name", "image.iso", "--from-url-file", "/run/url", "--sha256", digest}, readsRoute},
+		{"catalog media add", []string{"--name", "image.iso", "--from-file", "/images/image.iso"}, ignoresRoute},
+		{"catalog media add", []string{"--name", "image.iso", "--from-file", "/images/image.iso", "--sha256", digest}, ignoresRoute},
+		{"catalog media list", nil, ignoresRoute},
+		{"catalog media list", []string{"--checksums"}, ignoresRoute},
+		{"catalog media delete", []string{"--name", "image.iso"}, ignoresRoute},
 		{"controller rebind", nil, ignoresRoute},
 		{"controller uninstall", nil, readsRoute},
 		{"controller uninstall", []string{"--keep-packages"}, ignoresRoute},
@@ -137,8 +137,8 @@ func TestOnlyContextFreeAcquisitionConsumesTheInvokingEnvironment(t *testing.T) 
 		{"context list", nil, ignoresRoute},
 		{"context current", nil, ignoresRoute},
 		{"context delete", []string{"--name", "lab", "--purge"}, ignoresRoute},
-		{"add-ons list", nil, ignoresRoute},
-		{"add-ons info", []string{"--name", "metallb"}, ignoresRoute},
+		{"catalog add-ons list", nil, ignoresRoute},
+		{"catalog add-ons info", []string{"--name", "metallb"}, ignoresRoute},
 		{"secret set", []string{"--name", "demo", "--value-file", "secret.bin"}, ignoresRoute},
 		{"secret generate", nil, ignoresRoute},
 		{"secret check", nil, ignoresRoute},
@@ -149,12 +149,13 @@ func TestOnlyContextFreeAcquisitionConsumesTheInvokingEnvironment(t *testing.T) 
 		{"secret encryption init", nil, ignoresRoute},
 		{"secret encryption status", nil, ignoresRoute},
 		{"secret encryption rotate", nil, ignoresRoute},
-		{"validate", nil, ignoresRoute},
-		{"preflight", nil, ignoresRoute},
-		{"preflight", []string{"--context", "lab"}, ignoresRoute},
-		{"preflight", []string{"--stage", "clusters", "--clusters", "sno"}, ignoresRoute},
-		{"plan", nil, ignoresRoute},
-		{"plan", []string{"--stage", "controller"}, ignoresRoute},
+		{"check input", nil, ignoresRoute},
+		{"check environment", nil, ignoresRoute},
+		{"check environment", []string{"--context", "lab"}, ignoresRoute},
+		{"check environment", []string{"--stage", "clusters", "--clusters", "sno"}, ignoresRoute},
+		{"plan apply", nil, ignoresRoute},
+		{"plan destroy", nil, ignoresRoute},
+		{"plan apply", []string{"--stage", "controller"}, ignoresRoute},
 		{"status", nil, ignoresRoute},
 		{"logs", nil, ignoresRoute},
 		{"logs", []string{"--install", "--follow"}, ignoresRoute},
@@ -193,7 +194,7 @@ func TestOnlyContextFreeAcquisitionConsumesTheInvokingEnvironment(t *testing.T) 
 		{"cluster kubeconfig", []string{"--name", "demo"}, ignoresRoute},
 		{"cluster keyring", []string{"--name", "demo", "--client", "vm-disks"}, ignoresRoute},
 		{"version", nil, notAdmitted},
-		{"schema", []string{"--format", "json-schema"}, notAdmitted},
+		{"catalog schema", []string{"--format", "json-schema"}, notAdmitted},
 		{"sbom", []string{"--format", "cyclonedx-json"}, notAdmitted},
 		{"explain", []string{"--code", "runner.deadline"}, notAdmitted},
 		{"help", nil, notAdmitted},
@@ -203,11 +204,11 @@ func TestOnlyContextFreeAcquisitionConsumesTheInvokingEnvironment(t *testing.T) 
 		{"completion powershell", nil, notAdmitted},
 		// An invocation that is not admitted reads no route.
 		{"controller install", []string{"--help"}, notAdmitted},
-		{"preflight", []string{"--context", "Lab"}, notAdmitted},
-		{"preflight", []string{"--stage", "add-ons"}, notAdmitted},
-		{"controller check", []string{"--context", "lab"}, notAdmitted},
-		{"media add", []string{"--name", "image.iso", "--from-url", source}, notAdmitted},
-		{"media add", []string{"--name", "image.iso", "--from-url", source, "--from-file", "/images/image.iso", "--sha256", digest}, notAdmitted},
+		{"check environment", []string{"--context", "Lab"}, notAdmitted},
+		{"check environment", []string{"--stage", "add-ons"}, notAdmitted},
+		{"check controller", []string{"--context", "lab"}, notAdmitted},
+		{"catalog media add", []string{"--name", "image.iso", "--from-url", source}, notAdmitted},
+		{"catalog media add", []string{"--name", "image.iso", "--from-url", source, "--from-file", "/images/image.iso", "--sha256", digest}, notAdmitted},
 	}
 	covered := map[string]bool{}
 	for _, test := range tests {
@@ -265,17 +266,17 @@ func TestOnlyAStandardInputMediaURLIsMarkedForTheBoundary(t *testing.T) {
 		args []string
 		want bool
 	}{
-		{[]string{"media", "add", "--name", "i.iso", "--from-url-file", "-", "--sha256", digest}, true},
-		{[]string{"media", "add", "--name", "i.iso", "--from-url-file", "/run/url", "--sha256", digest}, false},
-		{[]string{"media", "add", "--name", "i.iso", "--from-url", "https://example.test/i.iso", "--sha256", digest}, false},
+		{[]string{"catalog", "media", "add", "--name", "i.iso", "--from-url-file", "-", "--sha256", digest}, true},
+		{[]string{"catalog", "media", "add", "--name", "i.iso", "--from-url-file", "/run/url", "--sha256", digest}, false},
+		{[]string{"catalog", "media", "add", "--name", "i.iso", "--from-url", "https://example.test/i.iso", "--sha256", digest}, false},
 	} {
 		if classified := ClassifyInvocation(test.args); !classified.RequiresRoot || classified.URLStdin != test.want {
 			t.Errorf("%v: requires root %v, URL on standard input %v, want %v", test.args, classified.RequiresRoot, classified.URLStdin, test.want)
 		}
 	}
 	for _, args := range [][]string{
-		{"media", "add", "--name", "i.iso", "--from-url-file", "-"},
-		{"media", "add", "--name", "i.iso", "--from-url-file", "-", "--from-url", "https://example.test/i.iso", "--sha256", digest},
+		{"catalog", "media", "add", "--name", "i.iso", "--from-url-file", "-"},
+		{"catalog", "media", "add", "--name", "i.iso", "--from-url-file", "-", "--from-url", "https://example.test/i.iso", "--sha256", digest},
 	} {
 		if code, _, _, record := runRecorded(args); code != 2 || record.calls != 0 {
 			t.Errorf("%v: code=%d calls=%d, want a usage error", args, code, record.calls)

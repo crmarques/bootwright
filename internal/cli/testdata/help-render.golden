@@ -2,7 +2,7 @@
       Render effective desired state and external-tool artifacts
 
   Usage
-    bootwright render [flags]
+    bootwright render <command> [flags]
 
   Commands
   COMMAND        PURPOSE

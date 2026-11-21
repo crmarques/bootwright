@@ -44,4 +44,4 @@
     Readiness  all required prerequisites verified
     Logs       /var/log/bootwright/controller/install-000003.output
     Follow     bootwright logs --install=install-000003
-    Next       bootwright controller check
+    Next       bootwright check controller

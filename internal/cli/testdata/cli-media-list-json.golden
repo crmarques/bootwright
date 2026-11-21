@@ -1,6 +1,6 @@
 {
   "schemaVersion": "v1alpha1",
-  "command": "media list",
+  "command": "catalog media list",
   "ok": true,
   "exitCode": 0,
   "result": {

@@ -20,7 +20,7 @@ func TestANotReadyControllerCheckWithoutACommandOffersNone(t *testing.T) {
 	record := &dispatchRecord{result: commandResult{controller: report}, err: diagnostics.NewFailureWithRemediation("controller.unsupported", "RHEL libvirt requires an authenticated AppStream source adapter", "",
 		"Use a Fedora controller for libvirt preparation until RHEL AppStream credential acquisition is configured.")}
 	var out, errOut bytes.Buffer
-	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"controller", "check"})
+	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"check", "controller"})
 	if code != 1 || !strings.Contains(out.String(), "    Outcome  not-ready\n") || strings.Contains(out.String(), "Next") {
 		t.Fatalf("exit %d, out %q", code, out.String())
 	}

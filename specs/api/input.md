@@ -69,11 +69,11 @@ An authored empty cluster-selection list is invalid. It is reported once, at
 its field, and selection otherwise proceeds as if it were omitted. A refused
 cluster-selection entry is reported at its own index. Operations all consume
 the same complete selected state; selection is not a partial operation flag.
-`validate` warns deterministically for excluded cluster roots and for an
+`check input` warns deterministically for excluded cluster roots and for an
 excluded Machine or InfraProvider no excluded root accounts for. `render effective` has no
 success-warning channel.
 
-`validate` also warns deterministically, with `input.secrets-directory`, for a
+`check input` also warns deterministically, with `input.secrets-directory`, for a
 skipped `secrets` directory that holds a `.yaml` or `.yml` file at any depth,
 naming the directory. The check lists names within the entry and depth
 ceilings, opens no file, and warns nothing about a directory it cannot list. A reference to a Secret that no

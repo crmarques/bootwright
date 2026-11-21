@@ -71,7 +71,7 @@ func validatePlanFlags(command *cobra.Command) string {
 	}
 	for _, token := range tokens {
 		if !lifecycle.IsEraseAuthorization(token) {
-			return "plan accepts only --authorize erase=<machine>:metadataClear or erase=<machine>:retain; data-loss and rebind=<secret> are consumed by apply and destroy"
+			return "plan destroy accepts only --authorize erase=<machine>:metadataClear or erase=<machine>:retain; data-loss and rebind=<secret> are consumed by apply and destroy"
 		}
 	}
 	_, err := lifecycle.ParseEraseRelaxations(tokens)
@@ -97,7 +97,7 @@ func validateAuthorizations(command *cobra.Command, erase bool) string {
 		}
 	}
 	if len(relaxing) != 0 && !erase {
-		return "--authorize erase=<machine>:<method> relaxes a removal and applies only to destroy and plan, not " + command.Name()
+		return "--authorize erase=<machine>:<method> relaxes a removal and applies only to destroy and plan destroy, not " + command.Name()
 	}
 	if _, err := lifecycle.ParseEraseRelaxations(relaxing); err != nil {
 		return err.Error()

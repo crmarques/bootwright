@@ -1,6 +1,6 @@
 {
   "schemaVersion": "v1alpha1",
-  "command": "validate",
+  "command": "check input",
   "ok": true,
   "exitCode": 0,
   "result": {

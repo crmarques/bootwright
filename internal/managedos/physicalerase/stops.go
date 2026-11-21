@@ -57,7 +57,7 @@ var (
 		Meaning: "the private erase custody on the execution host belongs to another request or differs from what the removal recorded, so it was not used", Remedy: "inspect the custody on the execution host, then repeat the destroy"}
 	stopBootMediaMismatch = diagnostics.Stop{Code: "erase.boot-media-mismatch", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseEnvironment, Recovery: diagnostics.RecoveryFixThenRepeat,
-		Meaning: "the installer image the apply pinned is missing from the media store or no longer matches, so no erase image was built", Remedy: "restore the image with bootwright media add, then repeat the destroy"}
+		Meaning: "the installer image the apply pinned is missing from the media store or no longer matches, so no erase image was built", Remedy: "restore the image with bootwright catalog media add, then repeat the destroy"}
 	stopImageBuildFailed = diagnostics.Stop{Code: "erase.image-build-failed", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseBuild, Recovery: diagnostics.RecoveryFixThenRepeat,
 		Meaning: "the erase image could not be built from its pinned installer image within its time bound, so the machine was not booted", Remedy: "check the execution host's free space and tools, then repeat the destroy"}

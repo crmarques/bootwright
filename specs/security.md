@@ -107,7 +107,7 @@ Native tool output is no principal: it is untrusted input decoded under the
 Passwords, tokens, pull secrets, private keys, kubeconfigs, provider and
 management-controller credentials, credential-bearing URLs, generated secret
 material, and outputs containing them are sensitive. A URL whose query carries
-a signature is a credential (D183, Q99): `media add` takes one through
+a signature is a credential (D183, Q99): `catalog media add` takes one through
 `--from-url-file <path|->` and refuses a `--from-url` carrying any query
 ([flag safeguards](cli/commands.md#flag-relationships-and-safeguards)),
 records only its scheme, host and path, and names it in no output. The
@@ -127,7 +127,7 @@ controller necessarily receives a private virtual-media URL to fetch an image
 and may retain it or log it in its own access records; treat those records as
 confidential too. An emulated BMC has the same behavior.
 
-`validate` and `render effective` read no Secret material under the
+`check input` and `render effective` read no Secret material under the
 [compiler boundary](api.md#compiler-boundary), and desired state names no
 Secret payload path, so `secret set` is the only command that opens an
 operator's Secret file. A

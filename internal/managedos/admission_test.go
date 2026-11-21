@@ -159,7 +159,7 @@ func TestMachineImageAcceptsOnlyStoreMedia(t *testing.T) {
 			o := obj(api.MachineImage, "image", m("bootMedia", raw))
 			issues := Validate(o, consumers)
 			if len(issues) != 1 || issues[0].Code != "api.value" || issues[0].Field != "$.spec.bootMedia" ||
-				!strings.Contains(issues[0].Remediation, "bootwright media add") || !strings.Contains(issues[0].Remediation, "local-media:") ||
+				!strings.Contains(issues[0].Remediation, "bootwright catalog media add") || !strings.Contains(issues[0].Remediation, "local-media:") ||
 				!strings.Contains(issues[0].Remediation, "MachineImage/image") {
 				t.Fatalf("refusal = %#v, want one api.value at $.spec.bootMedia naming the media import", issues)
 			}
@@ -199,7 +199,7 @@ func TestHostedTreeAcceptsOnlyStoreMedia(t *testing.T) {
 			profile, catalog := hostedTreeProfile(raw)
 			issues := Validate(profile, catalog)
 			if len(issues) != 1 || issues[0].Code != "api.value" || issues[0].Field != field ||
-				!strings.Contains(issues[0].Remediation, "bootwright media add") || !strings.Contains(issues[0].Remediation, "MachineInstallProfile/install") {
+				!strings.Contains(issues[0].Remediation, "bootwright catalog media add") || !strings.Contains(issues[0].Remediation, "MachineInstallProfile/install") {
 				t.Fatalf("refusal = %#v, want one api.value at %s naming the media import", issues, field)
 			}
 		})

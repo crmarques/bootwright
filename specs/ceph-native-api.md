@@ -978,7 +978,7 @@ conflicting ownership, `unmanaged` owned services and unsafe container/mount
 options refuse before registration. Native-valid but unsupported input gets
 a different explanation from a schema error. Diagnostics name the cluster or
 resource, field/binding path, unmet requirement and correction without echoing
-untrusted scalar values. `validate` remains pure; lifecycle support refusal
+untrusted scalar values. `check input` remains pure; lifecycle support refusal
 does not masquerade as a successful deployment.
 
 ## Consumer promotion

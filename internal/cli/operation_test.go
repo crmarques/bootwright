@@ -21,10 +21,10 @@ func TestOperationBoundaryIsLazyForInformationalMalformedAndUnavailablePaths(t *
 		"--help", "context init --help", "help render effective", "completion bash", "version",
 		"__bootwright_complete context", "__bootwright_complete_no_desc render",
 		"context init --name example -f one -f two", "context delete --name example --purge=false",
-		"validate --output json --unknown", "render effective -f input", "render --output json",
-		"add-ons list",
-		"add-ons info --name metallb",
-		"preflight --stage add-ons",
+		"check input --output json --unknown", "render effective -f input", "render --output json",
+		"catalog add-ons list",
+		"catalog add-ons info --name metallb",
+		"check environment --stage add-ons",
 		"render installer", "render storage",
 	} {
 		t.Run(invocation, func(t *testing.T) {
@@ -44,13 +44,13 @@ func TestOperationBoundaryIsLazyForInformationalMalformedAndUnavailablePaths(t *
 
 func TestOperationBoundaryOwnsContextAndCleanupForEveryImplementedPath(t *testing.T) {
 	invocations := append(contextInvocations(),
-		[]string{"validate", "-f", "input"}, []string{"validate", "--context", "example"}, []string{"render", "effective"}, []string{"render", "effective", "--input-dir", "input", "--output-dir", "artifacts"},
+		[]string{"check", "input", "-f", "input"}, []string{"check", "input", "--context", "example"}, []string{"render", "effective"}, []string{"render", "effective", "--input-dir", "input", "--output-dir", "artifacts"},
 		[]string{"secret", "set", "--name", "example", "--value-file", "value"}, []string{"secret", "generate"}, []string{"secret", "check"}, []string{"secret", "list"},
 		[]string{"secret", "show", "--name", "example", "--part", "value"}, []string{"secret", "delete", "--name", "example"},
 		[]string{"secret", "encryption", "init"}, []string{"secret", "encryption", "status"}, []string{"secret", "encryption", "rotate"},
-		[]string{"media", "add", "--name", "example.iso", "--from-file", "image.iso"}, []string{"media", "list"}, []string{"media", "delete", "--name", "example.iso"},
-		[]string{"controller", "install"}, []string{"controller", "install", "--dry-run"}, []string{"controller", "check"}, []string{"preflight"}, []string{"preflight", "--stage", "clusters"}, []string{"preflight", "--stage", "controller,infrastructure-services,substrates"},
-		[]string{"plan"}, []string{"status"}, []string{"apply", "--yes"}, []string{"destroy", "--yes"},
+		[]string{"catalog", "media", "add", "--name", "example.iso", "--from-file", "image.iso"}, []string{"catalog", "media", "list"}, []string{"catalog", "media", "delete", "--name", "example.iso"},
+		[]string{"controller", "install"}, []string{"controller", "install", "--dry-run"}, []string{"check", "controller"}, []string{"check", "environment"}, []string{"check", "environment", "--stage", "clusters"}, []string{"check", "environment", "--stage", "controller,infrastructure-services,substrates"},
+		[]string{"plan", "apply"}, []string{"plan", "destroy"}, []string{"status"}, []string{"apply", "--yes"}, []string{"destroy", "--yes"},
 		[]string{"machine", "list"}, []string{"cluster", "list"}, []string{"cluster", "info"}, []string{"machine", "rsh", "--name", "example"},
 		[]string{"machine", "exec", "--name", "example", "uptime"},
 		[]string{"machine", "start", "--name", "example"}, []string{"machine", "stop", "--name", "example", "--yes"},
@@ -98,7 +98,7 @@ func assertInterruptOutput(t *testing.T, code int, out, errOut string, jsonMode 
 }
 
 func TestInterruptDuringServiceDiscardsTypedResults(t *testing.T) {
-	invocations := append(contextInvocations(), []string{"validate", "-f", "input"}, []string{"validate", "--output", "json"}, []string{"render", "effective"}, []string{"render", "effective", "--output", "json"})
+	invocations := append(contextInvocations(), []string{"check", "input", "-f", "input"}, []string{"check", "input", "--output", "json"}, []string{"render", "effective"}, []string{"render", "effective", "--output", "json"})
 	for _, args := range invocations {
 		var cancel context.CancelCauseFunc
 		finishes := 0
@@ -166,7 +166,7 @@ func TestOperationBoundaryPreservesOrdinaryCancellationAndDeadline(t *testing.T)
 	cancel(ErrInterrupted)
 	begins := 0
 	var out, errOut bytes.Buffer
-	code := New(Config{Out: &out, ErrOut: &errOut, BeginOperation: func(ctx context.Context) (context.Context, func()) { begins++; return ctx, func() {} }}).Run(ctx, []string{"validate", "--output", "json"})
+	code := New(Config{Out: &out, ErrOut: &errOut, BeginOperation: func(ctx context.Context) (context.Context, func()) { begins++; return ctx, func() {} }}).Run(ctx, []string{"check", "input", "--output", "json"})
 	assertInterruptOutput(t, code, out.String(), errOut.String(), true)
 	if begins != 0 {
 		t.Fatal("already canceled operation acquired capability")

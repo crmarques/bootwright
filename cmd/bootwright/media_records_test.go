@@ -70,7 +70,7 @@ func TestLabRHELExamplePlanRefusesAnImageMissingFromTheStore(t *testing.T) {
 	})
 	reported := diagnostics.Of(err)
 	if len(reported) != 1 || !strings.Contains(reported[0].Message, "holds no image rhel-9.8-x86_64-dvd.iso") ||
-		!strings.Contains(reported[0].Remediation, "bootwright media add --name rhel-9.8-x86_64-dvd.iso ") {
+		!strings.Contains(reported[0].Remediation, "bootwright catalog media add --name rhel-9.8-x86_64-dvd.iso ") {
 		t.Fatalf("diagnostics = %+v (%v)", reported, err)
 	}
 }
@@ -108,7 +108,7 @@ func TestLabRHELExamplePlanRefusesAnImageTheStoreCannotRead(t *testing.T) {
 	reported := diagnostics.Of(err)
 	if len(reported) != 1 || !strings.Contains(reported[0].Message, "cannot read its image rhel-9.8-x86_64-dvd.iso") ||
 		!strings.HasSuffix(reported[0].Message, ": its record cannot be decoded") ||
-		!strings.Contains(reported[0].Remediation, "bootwright media delete --name rhel-9.8-x86_64-dvd.iso") {
+		!strings.Contains(reported[0].Remediation, "bootwright catalog media delete --name rhel-9.8-x86_64-dvd.iso") {
 		t.Fatalf("diagnostics = %+v (%v)", reported, err)
 	}
 }

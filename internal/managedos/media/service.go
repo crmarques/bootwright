@@ -332,7 +332,7 @@ func revalidate(ctx context.Context, view View, name string, replacing bool) err
 	}
 	if occupied != replacing {
 		return failure("image "+name+" changed in the media store while it was being acquired",
-			"review the store with bootwright media list, then repeat the command")
+			"review the store with bootwright catalog media list, then repeat the command")
 	}
 	return nil
 }
@@ -398,7 +398,7 @@ func unpublished(ctx context.Context, err error, stage Stage, record []byte, nam
 	return mediaStoreBusy.Fail(
 		"another Bootwright command holds the media store, so image "+name+" was verified but not published",
 		"repeat this command once that command finishes: it re-verifies the image it retained and publishes it without acquiring it again; "+
-			"or discard it with bootwright media delete --name "+name)
+			"or discard it with bootwright catalog media delete --name "+name)
 }
 
 // acquire fills the stage from the source and proves the bytes against the
@@ -652,7 +652,7 @@ func deletable(ctx context.Context, view View, name string) (observed, error) {
 	}
 	retained := slices.ContainsFunc(listed, func(entry managedos.MediaEntry) bool { return entry.Name == name })
 	if !slices.Contains(occupied, name) && !retained {
-		return observed{}, failure("the media store holds no image named "+name, "list the store with bootwright media list")
+		return observed{}, failure("the media store holds no image named "+name, "list the store with bootwright catalog media list")
 	}
 	reservations, err := view.Reservations(ctx)
 	if err != nil {
@@ -676,7 +676,7 @@ func selectSource(request AddMediaRequest) (Source, error) {
 
 func changedFailure(name, while string) error {
 	return failure("image "+name+" changed in the media store "+while,
-		"review the store with bootwright media list, then repeat the command")
+		"review the store with bootwright catalog media list, then repeat the command")
 }
 
 // frozenFailure names each context reserving the image. Only a completed

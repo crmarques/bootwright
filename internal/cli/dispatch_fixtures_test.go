@@ -90,11 +90,11 @@ func (s contextsSpy) Delete(ctx context.Context, request contexts.DeleteRequest)
 type addOnCatalogSpy struct{ record *dispatchRecord }
 
 func (s addOnCatalogSpy) List(ctx context.Context, request addoncatalog.ListRequest) (*addoncatalog.ListResult, error) {
-	return s.record.result.addOns, s.record.called(ctx, "add-ons list", request)
+	return s.record.result.addOns, s.record.called(ctx, "catalog add-ons list", request)
 }
 
 func (s addOnCatalogSpy) Describe(ctx context.Context, request addoncatalog.DescribeRequest) (*addoncatalog.DescribeResult, error) {
-	return s.record.result.addOnInfo, s.record.called(ctx, "add-ons info", request)
+	return s.record.result.addOnInfo, s.record.called(ctx, "catalog add-ons info", request)
 }
 
 type secretsSpy struct{ record *dispatchRecord }
@@ -143,7 +143,7 @@ func (s mediaSpy) Add(ctx context.Context, request media.AddMediaRequest) (*medi
 	if err := s.present(ctx); err != nil {
 		return nil, err
 	}
-	return s.record.result.mediaMutation, s.record.called(ctx, "media add", request)
+	return s.record.result.mediaMutation, s.record.called(ctx, "catalog media add", request)
 }
 
 func (s mediaSpy) present(ctx context.Context) error {
@@ -154,20 +154,20 @@ func (s mediaSpy) present(ctx context.Context) error {
 }
 
 func (s mediaSpy) List(ctx context.Context, request media.ListMediaRequest) (*media.ListResult, error) {
-	return s.record.result.mediaList, s.record.called(ctx, "media list", request)
+	return s.record.result.mediaList, s.record.called(ctx, "catalog media list", request)
 }
 
 func (s mediaSpy) Delete(ctx context.Context, request media.DeleteMediaRequest) (*media.MutationResult, error) {
 	if err := s.present(ctx); err != nil {
 		return nil, err
 	}
-	return s.record.result.mediaMutation, s.record.called(ctx, "media delete", request)
+	return s.record.result.mediaMutation, s.record.called(ctx, "catalog media delete", request)
 }
 
 type desiredStateSpy struct{ record *dispatchRecord }
 
 func (s desiredStateSpy) Validate(ctx context.Context, request compilation.ValidateRequest) (*compilation.Report, error) {
-	return s.record.report, s.record.called(ctx, "validate", request)
+	return s.record.report, s.record.called(ctx, "check input", request)
 }
 
 func (s desiredStateSpy) RenderEffective(ctx context.Context, request compilation.EffectiveRequest) (*compilation.EffectiveResult, error) {
@@ -177,7 +177,7 @@ func (s desiredStateSpy) RenderEffective(ctx context.Context, request compilatio
 type controllerSpy struct{ record *dispatchRecord }
 
 func (s controllerSpy) Check(ctx context.Context, request prerequisites.CheckRequest) (*prerequisites.Report, error) {
-	return s.record.result.controller, s.record.called(ctx, "controller check", request)
+	return s.record.result.controller, s.record.called(ctx, "check controller", request)
 }
 
 func (s controllerSpy) Setup(ctx context.Context, request prerequisites.SetupRequest) (*prerequisites.Report, error) {
@@ -195,7 +195,7 @@ func (s controllerSpy) Uninstall(ctx context.Context, request prerequisites.Unin
 type environmentSpy struct{ record *dispatchRecord }
 
 func (s environmentSpy) Preflight(ctx context.Context, request environmentpreflight.PreflightRequest) (*environmentpreflight.Report, error) {
-	return s.record.result.storagePreflight, s.record.called(ctx, "preflight", request)
+	return s.record.result.storagePreflight, s.record.called(ctx, "check environment", request)
 }
 
 func (s environmentSpy) ListClusters(ctx context.Context, request inspection.ListClustersRequest) (*inspection.ListResult, error) {
@@ -221,7 +221,7 @@ func (s environmentSpy) ClusterExec(ctx context.Context, request environmentacce
 type lifecycleSpy struct{ record *dispatchRecord }
 
 func (s lifecycleSpy) Plan(ctx context.Context, request lifecycle.PlanRequest) (*lifecycle.PlanResult, error) {
-	return s.record.result.lifecyclePlan, s.record.called(ctx, "plan", request)
+	return s.record.result.lifecyclePlan, s.record.called(ctx, "plan "+string(request.Verb), request)
 }
 
 func (s lifecycleSpy) Status(ctx context.Context, request lifecycle.StatusRequest) (*lifecycle.StatusResult, error) {

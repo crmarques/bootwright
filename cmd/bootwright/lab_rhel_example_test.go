@@ -97,7 +97,7 @@ func TestLabRHELExampleSelectsControllerDependenciesFromDesiredState(t *testing.
 	if len(sources.Files) != labExampleFiles {
 		t.Fatalf("lab example discovery: got %d files, want %d", len(sources.Files), labExampleFiles)
 	}
-	out, errOut := contextRun(t, isolatedServices(t), 0, "validate", "-f", sources.Roots[0], "--output", "json")
+	out, errOut := contextRun(t, isolatedServices(t), 0, "check", "input", "-f", sources.Roots[0], "--output", "json")
 	var validation struct {
 		OK          bool
 		Result      struct{ Counts compilation.Counts }
@@ -499,7 +499,7 @@ func TestLabRHELExampleContextAndControllerPreparationJourney(t *testing.T) {
 	if err := os.RemoveAll(input); err != nil {
 		t.Fatal(err)
 	}
-	contextRun(t, services, 0, "validate")
+	contextRun(t, services, 0, "check", "input")
 	rendered, _ := contextRun(t, services, 0, "render", "effective", "--output", "json")
 	var effective struct {
 		Result struct{ EffectiveState []json.RawMessage }
@@ -533,8 +533,8 @@ func TestLabRHELExampleContextAndControllerPreparationJourney(t *testing.T) {
 	// Preflight's controller stage keeps the context arm: it reports what the
 	// example still needs on this host, including the binding its first apply
 	// publishes, and the baseline check names the host's own readiness.
-	report, diagnostics := contextRun(t, services, 1, "preflight", "--context", "lab-rhel", "--stage", "controller")
-	for _, expected := range []string{"Preflight lab-rhel", "Stages  controller", "controller.controller-binding", "required controller"} {
+	report, diagnostics := contextRun(t, services, 1, "check", "environment", "--context", "lab-rhel", "--stage", "controller")
+	for _, expected := range []string{"Environment checks for lab-rhel", "Stages  controller", "controller.controller-binding", "required controller"} {
 		if !strings.Contains(report, expected) {
 			t.Fatalf("context preflight lacks %q:\n%s", expected, report)
 		}
@@ -544,11 +544,11 @@ func TestLabRHELExampleContextAndControllerPreparationJourney(t *testing.T) {
 	if !strings.Contains(diagnostics, "preflight.failed") {
 		t.Fatalf("preflight before setup must fail:\nstdout=%s\nstderr=%s", report, diagnostics)
 	}
-	baseline, baselineDiagnostics := contextRun(t, services, 1, "controller", "check")
+	baseline, baselineDiagnostics := contextRun(t, services, 1, "check", "controller")
 	if !strings.Contains(baseline, "Scope     baseline") || !strings.Contains(baselineDiagnostics, "run bootwright controller install") {
 		t.Fatalf("controller check before setup must name setup:\nstdout=%s\nstderr=%s", baseline, baselineDiagnostics)
 	}
-	_, diagnostics = contextRun(t, services, 1, "preflight", "--context", "missing", "--stage", "controller")
+	_, diagnostics = contextRun(t, services, 1, "check", "environment", "--context", "missing", "--stage", "controller")
 	if !strings.Contains(diagnostics, "context") {
 		t.Fatal("unknown explicit context was not refused", diagnostics)
 	}
@@ -599,7 +599,7 @@ func TestLifecycleCommandsRequireAResolvedContext(t *testing.T) {
 	t.Parallel()
 	services := isolatedServices(t)
 	for _, args := range [][]string{
-		{"plan", "--context", "missing"},
+		{"plan", "apply", "--context", "missing"},
 		{"status", "--context", "missing"},
 		{"apply", "--context", "missing", "--yes"},
 		{"destroy", "--context", "missing", "--yes"},
@@ -618,7 +618,7 @@ func TestLifecycleCommandsRequireAResolvedContext(t *testing.T) {
 func TestLifecycleReachesTheStoreForAnUnknownContext(t *testing.T) {
 	t.Parallel()
 	services := isolatedServices(t)
-	_, errOut := contextRun(t, services, 1, "plan", "--context", "missing")
+	_, errOut := contextRun(t, services, 1, "plan", "apply", "--context", "missing")
 	if !strings.Contains(errOut, "context.state") {
 		t.Fatalf("plan for an unknown context = %q", errOut)
 	}

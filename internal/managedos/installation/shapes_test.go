@@ -301,8 +301,8 @@ func TestRequestRefusalsNameTheFieldThatDeclaresIt(t *testing.T) {
 		"an image endpoint": {labCatalog(unresolved), "correct artifactServerEndpoint.endpointRef on MachineInstallProfile/rhel-9-8"},
 		"boot media": {labCatalog(api.NewObject(api.MachineImage, "rhel-9-8-boot", api.Value{}, api.MapValue(
 			text("bootMedia", "https://example.test/boot.iso"),
-		))), "import the image with bootwright media add --name <filename.iso> and set spec.bootMedia to local-media:<filename.iso> on MachineImage/rhel-9-8-boot"},
-		"tree media": {labCatalog(treeless), "import the image with bootwright media add --name <filename.iso> and set " +
+		))), "import the image with bootwright catalog media add --name <filename.iso> and set spec.bootMedia to local-media:<filename.iso> on MachineImage/rhel-9-8-boot"},
+		"tree media": {labCatalog(treeless), "import the image with bootwright catalog media add --name <filename.iso> and set " +
 			"spec.installer.anaconda.packageSource.hostedTree.fromMedia to local-media:<filename.iso> on MachineInstallProfile/rhel-9-8"},
 	} {
 		t.Run(name, func(t *testing.T) {

@@ -672,7 +672,7 @@ func TestAnApplyNamesAChangedStoreEntry(t *testing.T) {
 	if !strings.Contains(reported[0].Message, bootImageName) {
 		t.Fatalf("the message %q does not name the boot image", reported[0].Message)
 	}
-	want := "take this context back with bootwright destroy --context lab-b, import the image again with bootwright media add --name " +
+	want := "take this context back with bootwright destroy --context lab-b, import the image again with bootwright catalog media add --name " +
 		bootImageName + " --from-file <path>, or --from-url <url> --sha256 <digest>, then run bootwright apply --context lab-b"
 	if reported[0].Remediation != want {
 		t.Fatalf("remediation = %q", reported[0].Remediation)

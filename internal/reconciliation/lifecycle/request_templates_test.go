@@ -34,7 +34,7 @@ func heldRefusal(kind, name, held, removed string) diagnostics.Diagnostic {
 		Message: "the request planned for " + kind + "/" + name + " holds " + held,
 		Object:  &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: kind, Name: name},
 		Remediation: "remove " + removed + " from the desired-state values " + kind + "/" + name + " is planned from, import them with bootwright context update --name " +
-			testContextName + " --input-dir <dir>, then run bootwright plan --context " + testContextName,
+			testContextName + " --input-dir <dir>, then run bootwright plan apply --context " + testContextName,
 	}
 }
 

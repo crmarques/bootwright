@@ -36,7 +36,7 @@ make build
 ./bin/bootwright version
 ./bin/bootwright controller install --dry-run
 ./bin/bootwright controller install
-./bin/bootwright controller check
+./bin/bootwright check controller
 ```
 
 `make build` stamps `bin/bootwright` with the commit and source state of the
@@ -50,13 +50,13 @@ which `bootwright sbom --format cyclonedx-json` prints again, names every
 component it carries and every client and image it pins, for the host's
 security tooling. `controller install`
 prepares the foundation every context on the host shares and reads no desired
-state; the dry run previews it, and `controller check` reports what it
+state; the dry run previews it, and `check controller` reports what it
 proved. Each context's first `apply` then binds the context to this host
 ([binding](../specs/contexts.md#controller-relationship-and-host-binding)), and
 its `controller` stage installs the clients its graph selects
 ([controller](../specs/controller.md#the-controller-stage)). Media images live
 in one host-wide store that every context shares, so `controller install` runs before the
-first `media add`.
+first `catalog media add`.
 
 ### What setup admits and installs
 
@@ -112,7 +112,7 @@ the install's output and the versions setup records are the truth.
 A ready host is reported in under a second with the receipt table, which
 names the host, the runtime and where each package came from, and
 `Nothing to do.`, with no network request, confirmation or write;
-`controller check` prints the same table
+`check controller` prints the same table
 ([results](../specs/controller.md#results-and-qualification)). A new
 Bootwright build with the same lock, and an operating-system upgrade that keeps
 the interpreter, need no setup at all; a build whose lock changed needs one
@@ -145,7 +145,7 @@ file's SHA-256.
 
 ### On a proxied network
 
-`controller install`, `controller check` and `media add --from-url`
+`controller install`, `check controller` and `catalog media add --from-url`
 run before any Environment exists, so they take their route from the invoking
 environment. Export `HTTPS_PROXY`, and `NO_PROXY` when internal hosts must be
 reached directly, before running them; the
@@ -164,7 +164,7 @@ variables to its elevated child on the sudo command line; a sudoers rule that
 grants neither `ALL` nor `SETENV` refuses that, and running as root avoids it.
 `bootwright controller install --dry-run` never elevates, so the route it prints under
 `Route` in its scope block shows only how the values parse.
-`bootwright controller check` elevates and prints the same `Route` field,
+`bootwright check controller` elevates and prints the same `Route` field,
 which confirms that the variables crossed sudo.
 
 #### Destinations to allow
@@ -176,7 +176,7 @@ names. Bootwright names no repository host of its own. A proxy that admits
 only listed destinations must also admit HTTPS, on port 443, to these hosts,
 which a context's controller stage contacts, directly or through a redirect
 the download follows; `controller install` contacts none of them, and
-`media add --from-url` contacts the URL it is given. A proxy that inspects TLS re-signs every certificate, so its certificate
+`catalog media add --from-url` contacts the URL it is given. A proxy that inspects TLS re-signs every certificate, so its certificate
 authority must be in the host's system trust store, which every acquisition
 verifies against.
 
@@ -222,7 +222,7 @@ runs:
 | The OKD clients and installer | The controller | GitHub | Not possible yet: their release metadata is read from GitHub |
 | A managed service's image | The Machine the service runs on | The registry its compiled default names | `spec.mirror.registry` on the Environment, or `spec.image.local` on the service: see the images below |
 | The emulated BMC's image | The libvirt provider's host | `quay.io` | `spec.mirror.registry` on the Environment |
-| Installation media | The controller | The file or URL you name | `media add --from-file`, or `--from-url` from your own server |
+| Installation media | The controller | The file or URL you name | `catalog media add --from-file`, or `--from-url` from your own server |
 | An OpenShift release | The controller while it builds the image, then every node | `quay.io`, where the release payload is published | `spec.mirror.registry` on the Environment, or `spec.install.registries` on the cluster |
 | A cluster's operators | The cluster's nodes | The registries of the catalog each add-on binding names; the `add-on catalog image` rows name each catalog image, and what a catalog's index points at is the cluster's mirror tooling's (`oc-mirror`) | Nothing to do for a Red Hat catalog or IBM's Data Foundation on `icr.io`, vendor origins, beyond allowing the `registry blob host` rows of `render acquisitions`; another's repositories are mapped by the same `imageDigestSources` where the cluster pulls them by digest |
 | A cluster's default catalogs and update service | The cluster's nodes | `registry.redhat.io` for the `default catalog image` rows and `api.openshift.com` for the `update service` row, vendor origins, until your GitOps disables the default sources and the update server | Nothing to do while they stay enabled, beyond allowing the `registry blob host` rows of `render acquisitions` |
@@ -237,7 +237,7 @@ each is read from `<url>/<kind>/v<release>/<publisher file name>` by its pinned
 checksum, so the controller reaches no client publisher, GitHub included. Fill it
 with the files the `client` rows of `bootwright render acquisitions` name,
 from a machine that reaches the publishers, then run
-`bootwright preflight --context <name> --stage controller`: it reads each
+`bootwright check environment --context <name> --stage controller`: it reads each
 file's size from the mirror, without downloading it, and names every file the
 mirror lacks or serves at another size, with the publisher file to copy
 there. When your own certificate authority issued the mirror's certificate,
@@ -475,10 +475,10 @@ the host's crypto policy, and the runtime carries no OpenSSL of its own;
 Bootwright's own executable stays outside the host's FIPS-validated modules,
 so running it on a FIPS-mode controller claims no FIPS compliance
 ([security](../specs/security.md#the-controller-hosts-attacker-model)).
-`controller check`, like `controller install`, reports the kernel's FIPS mode as its
+`check controller`, like `controller install`, reports the kernel's FIPS mode as its
 `FIPS mode` check with that statement; the check never changes readiness,
 except that a FIPS flag that cannot be read as 0 or 1 refuses `controller install` and
-`controller check` with `controller.unsupported`.
+`check controller` with `controller.unsupported`.
 
 Under the FIPS crypto policy (`update-crypto-policies --show` prints `FIPS`),
 OpenSSH accepts no Ed25519 key. Declare `remoteMachinesAccessKey` and every SSH
@@ -520,7 +520,7 @@ names the other exits.
 ### Uninstalling Bootwright from this host
 
 Once every environment is destroyed, every context deleted and every image
-removed with `bootwright media delete`, remove what `controller install` added,
+removed with `bootwright catalog media delete`, remove what `controller install` added,
 from your own account; it asks for authorization as other commands do:
 
 ```sh
@@ -876,12 +876,12 @@ bare-metal hosts keep running.
 A `ClusterAddonBinding` installs operators on a cluster after it is up. This
 section routes the journey; each linked section owns its rules.
 
-- Choose a package: `bootwright add-ons list` shows the built-in packages and
-  `bootwright add-ons info --name <package>` describes one and prints a binding
+- Choose a package: `bootwright catalog add-ons list` shows the built-in packages and
+  `bootwright catalog add-ons info --name <package>` describes one and prints a binding
   skeleton ([the package listing](../specs/add-ons.md#the-package-listing)).
 - Start from a worked binding in the `add-ons` category of the
   [examples](../examples/README.md). Their channels and CSVs are illustrative:
-  read the pair your catalog serves with the lookup `add-ons info` prints.
+  read the pair your catalog serves with the lookup `catalog add-ons info` prints.
 - Install an operator Bootwright does not ship: author a `ClusterAddon` of the
   [executable OLM shape](../specs/api/addons.md#executable-olm-add-ons), select
   it under `spec.addonRefs` of a binding, and start from the
@@ -893,7 +893,7 @@ section routes the journey; each linked section owns its rules.
 - Share a channel and CSV across bindings with Environment kind defaults: a
   default fills only the packages a binding declares and never selects one
   ([the rule](../specs/api/environment.md#kind-defaults)).
-- Run it: `validate`, `plan` and `apply` as for any journey. `apply --until
+- Run it: `check input`, `plan` and `apply` as for any journey. `apply --until
   <cluster>.<package>` pauses after one instance
   ([stopping after an add-on instance](../specs/state-reconciliation.md#stopping-after-an-add-on-instance)),
   and an instance is done when its [readiness](../specs/add-ons.md#readiness)
@@ -996,7 +996,7 @@ Review the relaxed plan first, then destroy with the same tokens and the digest
 the plan printed:
 
 ```sh
-bootwright plan --context <name> --authorize erase=<machine>:metadataClear
+bootwright plan destroy --context <name> --authorize erase=<machine>:metadataClear
 bootwright destroy --context <name> --authorize data-loss=<digest> --authorize erase=<machine>:metadataClear
 ```
 

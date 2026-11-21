@@ -111,8 +111,8 @@ credential belongs in a tracked values file.
 
 ```bash
 e2e/render.sh lab-sno-single-ceph-fdf --values "$VALUES" --out-dir "$INPUT_DIR"
-bootwright validate -f "$INPUT_DIR/bootstrap"
-bootwright validate -f "$INPUT_DIR/fips"
+bootwright check input -f "$INPUT_DIR/bootstrap"
+bootwright check input -f "$INPUT_DIR/fips"
 
 helm template isolation "$ISOLATION_CASE/isolation" \
     -f "$CASE/values.yaml" -f "$VALUES" --output-dir "$PROFILE/rendered"
@@ -144,9 +144,9 @@ The optional block/file-only render sets `ceph.object=false` consistently in
 bootwright context init --name "$CTX_BOOT" --input-dir "$INPUT_DIR/bootstrap"
 bootwright secret generate --context "$CTX_BOOT"
 bootwright secret check --context "$CTX_BOOT"
-bootwright plan --context "$CTX_BOOT"
+bootwright plan apply --context "$CTX_BOOT"
 bootwright apply --context "$CTX_BOOT" --stage controller --yes
-bootwright preflight --context "$CTX_BOOT" --stage controller
+bootwright check environment --context "$CTX_BOOT" --stage controller
 bootwright apply --context "$CTX_BOOT" --yes
 bootwright machine exec --context "$CTX_BOOT" --name "$CONTROLLER_NAME" -- \
     cat /proc/sys/crypto/fips_enabled
@@ -203,9 +203,9 @@ through private installer media and later proves the installed Ceph VM.
 
 ```bash
 bootwright secret check --context "$CTX_FIPS"
-bootwright plan --context "$CTX_FIPS"
+bootwright plan apply --context "$CTX_FIPS"
 bootwright apply --context "$CTX_FIPS" --stage controller --yes
-bootwright preflight --context "$CTX_FIPS" --stage controller
+bootwright check environment --context "$CTX_FIPS" --stage controller
 bootwright apply --context "$CTX_FIPS" --stage infrastructure-services,substrates --yes
 bootwright apply --context "$CTX_FIPS" --until sno.nmstate --yes
 ```

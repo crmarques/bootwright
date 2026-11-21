@@ -165,9 +165,9 @@ before it starts. Effects appear under `Progress`, after the private `Logs`
 location and its `Follow` command when one exists. Read-only proofs appear under `Checks`; a machine
 power reading and a media checksum check retain no log. Plain local machine
 and media listings report no progress. Setup and controller readiness retain
-the headings their results define. `media add` reports acquisition (or the
+the headings their results define. `catalog media add` reports acquisition (or the
 re-verification an interrupted add needs) and publication as two steps;
-`media list --checksums` reports one check per image and closes it with a
+`catalog media list --checksums` reports one check per image and closes it with a
 verified match, the computed mismatching digest, or the read failure.
 An acquisition names its actual source and reports the bytes written when it
 settles. `machine list --power-status` reports one read check per host through
@@ -255,7 +255,7 @@ realize says so and may name its backlog item.
 `TestRefusalsNameNoVendorRelease` check the Go sources and the collection's
 plugins.
 A context-backed next action carries `--context <name>` for the context the
-invocation resolved. The context-free commands (`controller install`, `media`, `version`, `schema` and the
+invocation resolved. The context-free commands (`controller install`, `media`, `version`, `catalog schema` and the
 others [listed with the global flags](commands.md#global-flags)) take none and
 refuse `--context`. No diagnostic carries confidential material.
 
@@ -290,9 +290,15 @@ and their output goldens:
 
 | Command | Result fields |
 | --- | --- |
-| `add-ons info` | `package` |
-| `add-ons list` | `addOns` |
 | `apply`, `destroy` | `context`, `verb`, `steps`, `blocks`, `settled`, `recovered`, `next`, `receipt` |
+| `catalog add-ons info` | `package` |
+| `catalog add-ons list` | `addOns` |
+| `catalog media add`, `catalog media delete` | `name`, `outcome`, `size`, optional `sha256` |
+| `catalog media list` | `media` |
+| `catalog schema` | `format`, `schema` |
+| `check controller` | optional `context`, optional `machine`, optional `route`, `dryRun`, `outcome`, `platform`, `checks`, `actions`, `requirements`, `files`, optional `preview`, `progress`, optional `receipt`, `next` |
+| `check environment` | `context`, `target`, `checks`, `summary` |
+| `check input` | `counts`, `excludedContainerClusters`, `excludedStorageClusters`, `advisories` |
 | `cluster info` | `context`, `clusters`, `storage` |
 | `cluster keyring`, `cluster kubeconfig`, `completion bash`, `completion fish`, `completion powershell`, `completion zsh`, `secret show` | `export` |
 | `cluster kubectl`, `cluster oc` | `context`, `cluster`, `client`, `arguments`, `kubeconfigCommand`, `instructions` |
@@ -302,7 +308,6 @@ and their output goldens:
 | `context delete` | `name`, `outcome`, `currentCleared`, `orphansAbandoned`, `releasedReservations` |
 | `context init`, `context update` | `context`, `counts`, `filesCopied`, `inputChanged` |
 | `context list` | `contexts` |
-| `controller check` | optional `context`, optional `machine`, optional `route`, `dryRun`, `outcome`, `platform`, `checks`, `actions`, `requirements`, `files`, optional `preview`, `progress`, optional `receipt`, `next` |
 | `controller install` | optional `context`, optional `machine`, optional `route`, `dryRun`, `outcome`, `platform`, `checks`, `actions`, `requirements`, `files`, optional `preview`, optional `progress`, optional `receipt`, optional `next` |
 | `controller rebind` | `outcome`, `bindings`, `reservations` |
 | `controller uninstall` | `outcome`, `packages`, `paths`, `kept` |
@@ -311,24 +316,19 @@ and their output goldens:
 | `help` | `command`, `usage`, `description`, `commands`, `flags` |
 | `logs` | optional `context`, optional `operation`, optional `verb`, optional `state`, optional `events`, optional `source`, optional `path`, optional `bytes`, optional `truncated`, optional `output` |
 | `machine cp` | `context`, `source`, `machines` |
-| `machine discover` | optional `checks`, optional `context`, optional `verb`, optional `steps`, optional `stages`, optional `until`, optional `waves`, optional `widest`, optional `bound`, optional `startable`, optional `deferred`, optional `continuation`, optional `finalizes`, optional `addsTo`, optional `takesBack`, optional `anotherBuild`, optional `stops`, optional `stopsAfterOnline`, optional `authorizations`, optional `receipt`, optional `operation`, optional `inventories`, optional `next` |
+| `machine discover` | optional `checks`, optional `context`, optional `verb`, optional `steps`, optional `stages`, optional `until`, optional `waves`, optional `widest`, optional `bound`, optional `startable`, optional `deferred`, optional `continuation`, optional `settled`, optional `finalizes`, optional `addsTo`, optional `takesBack`, optional `anotherBuild`, optional `stops`, optional `stopsAfterOnline`, optional `authorizations`, optional `receipt`, optional `operation`, optional `inventories`, optional `next` |
 | `machine eject-media`, `machine restart`, `machine start`, `machine stop` | `context`, `verb`, `machines` |
 | `machine info`, `machine list` | `context`, `machines`, `powerRead` |
 | `machine trust` | `context`, `dryRun`, `pending`, `recorded`, `hosts` |
-| `media add`, `media delete` | `name`, `outcome`, `size`, optional `sha256` |
-| `media list` | `media` |
-| `plan` | optional `checks`, `context`, `verb`, `steps`, `stages`, optional `until`, `waves`, `widest`, `bound`, `startable`, `deferred`, `continuation`, `finalizes`, optional `addsTo`, optional `takesBack`, optional `anotherBuild`, `stops`, `stopsAfterOnline`, optional `authorizations`, `receipt` |
-| `preflight` | `context`, `target`, `checks`, `summary` |
+| `plan apply`, `plan destroy` | optional `checks`, `context`, `verb`, `steps`, `stages`, optional `until`, `waves`, `widest`, `bound`, `startable`, `deferred`, `continuation`, optional `settled`, `finalizes`, optional `addsTo`, optional `takesBack`, optional `anotherBuild`, `stops`, `stopsAfterOnline`, optional `authorizations`, `receipt` |
 | `render acquisitions` | `acquisitions` |
 | `render effective` | optional `counts`, optional `effectiveState`, optional `origins`, optional `inputDir`, optional `outputDir`, optional `effectiveStatePath`, optional `objects` |
 | `sbom` | `format`, `bom` |
-| `schema` | `format`, `schema` |
 | `secret check`, `secret info`, `secret list` | `context`, `secrets` |
 | `secret delete`, `secret generate`, `secret set` | `context`, optional `name`, `changed`, `unchanged`, `changedNames`, `unchangedNames`, `parts` |
 | `secret encryption init`, `secret encryption rotate` | `context`, `implementation`, `activeKey`, `changed`, `retiredKeys`, `reencryptedVersions`, `reencryptedParts` |
 | `secret encryption status` | `initialized`, `implementation`, `activeKey`, `keys`, `items` |
 | `status` | `context`, `setupChecks`, `desired`, `clusters`, `storageClusters`, `shared`, `secrets`, `readiness`, `nextSteps`, `lifecycle`, `handoff`, `contradictions`, optional `outdatedClients`, optional `paths` |
-| `validate` | `counts`, `excludedContainerClusters`, `excludedStorageClusters`, `advisories` |
 | `version` | `version`, `commit`, `source`, `go`, `target`, `dependencyBundle`, `vulnerabilityCheck` |
 
 A `contexts` entry of `context list` whose context holds an operation that has
@@ -427,7 +427,7 @@ writes the same fields with `ok` `false` and the refusal in `diagnostics`,
 including the `state-root` check, and nothing else on standard output: the
 human plan is not written beside it.
 
-The `validate` result orders its fields as listed above and has this exact
+The `check input` result orders its fields as listed above and has this exact
 shape:
 
 ```json
@@ -443,7 +443,7 @@ extend.
 `advisories` contains the ordered `api.deferred` and `api.unrealized` warning
 subset using the diagnostic shape below. Those warnings also remain in envelope `diagnostics`;
 human output presents each diagnostic only once. All four arrays are always
-present, including when empty. Every failed `validate` invocation returns
+present, including when empty. Every failed `check input` invocation returns
 `result: null`; partial loader counts remain internal.
 
 Each `secret check` entry carries both `version`, the durable identifier or
@@ -461,7 +461,7 @@ ordered array of complete effective objects, and with `--origins` also
 the final LF, with empty stderr, or with `--origins` the origin listing. Context commands also support their tagged
 structured result presentations.
 
-A successful human `validate` writes exactly one summary line to standard
+A successful human `check input` writes exactly one summary line to standard
 output, substituting the decimal counts:
 
 ```text
@@ -583,7 +583,7 @@ media, the media before it and its power.
 
 ## Media results
 
-Each `media` entry of `media list` orders its fields as follows:
+Each `media` entry of `catalog media list` orders its fields as follows:
 
 ```json
 {"name":"rhel-9.8-x86_64-dvd.iso","size":1045430272,"sha256":"e8b0f3a61d9c2e47b5a803f6d1c94e27a0b6d3f81c5e9a24d7b0e3f6a19c5d82","source":"file:///srv/images/rhel-9.8-x86_64-dvd.iso","added":"2026-09-20T08:15:00Z","release":{"family":"Red Hat Enterprise Linux","version":"9.8","arch":"x86_64"},"frozen":true,"reservedBy":["lab-rhel"],"verified":"ok","computed":"e8b0f3a61d9c2e47b5a803f6d1c94e27a0b6d3f81c5e9a24d7b0e3f6a19c5d82"}
@@ -618,14 +618,14 @@ not be read. With `--checksums` or `--detail full` a `Digests` group follows:
 under each name, `Recorded` and, with `--checksums`, `Computed`, red when it
 differs, each `sha256:`-prefixed or `-`. `RESERVED` joins the reserving contexts with
 commas, or shows `-`. `STATE` is `verified` for an `ok` image; `mismatch` for a
-`mismatch` one, which `media add` replaces or `media delete` removes; `failed`
+`mismatch` one, which `catalog media add` replaces or `catalog media delete` removes; `failed`
 for a `failed` one; and `stored` for an image whose bytes were not read and
 whose size matches its record. When any image failed, a `Failed` group follows
 the table, naming each failed image and its reason, and then one remedy line:
-remove the image with `media delete`, replace it with `media add`, or repeat
-`media list --checksums` for one that changed while it was read.
+remove the image with `catalog media delete`, replace it with `catalog media add`, or repeat
+`catalog media list --checksums` for one that changed while it was read.
 
-Before a replacing `media add` or a `media delete` prompts, standard output
+Before a replacing `catalog media add` or a `catalog media delete` prompts, standard output
 shows the stored image under a `Media replacement` or `Media deletion` title:
 its `Name`, then the `Size` (binary units and bytes), `Digest`, `Added` and `Source` of its record, or a
 `Record` field reading `unreadable` when the name holds an image whose record
@@ -636,16 +636,16 @@ name, that stage's source, and otherwise the origin of the source it names
 removes the stage an interrupted add retained
 adds `Retained`, and one that removes only such a stage shows its name and
 `Retained` alone. A presentation that cannot be written refuses the command
-before it prompts. The result of `media delete` names the image and, when its
+before it prompts. The result of `catalog media delete` names the image and, when its
 record could be read, the size and digest that record stated.
 
 ## Preflight
 
-`preflight` reports, as one storage-preflight report, the checks of each stage
+`check environment` reports, as one storage-preflight report, the checks of each stage
 `--stage` selects, by default every stage but `add-ons`. `target` is the
 selected stages in canonical order, joined by commas. Human output uses the
-[shared layout](#shared-human-layout): a `Preflight <context>` headline marked
-`✓` when every check passed, `!` when any failed or is unknown and `○` when
+[shared layout](#shared-human-layout): an `Environment checks for <context>` headline marked
+`✓` when at least one check ran and every check passed, `!` when any failed or is unknown and `○` when
 the rest are pending; a `Stages` field; a `Checks` section with one resource
 heading per check, its `id` as identity and its status as state, over grey
 `Target`, `Reason`, `Capacity` and `Next` details, the last two only when the
@@ -655,7 +655,7 @@ Each stage holds these checks:
 
 - `controller`: every check the controller's readiness reports for the
   selected context, the host prerequisites of
-  [`controller check`](../controller.md#the-setup-flow) and the target tools,
+  [`check controller`](../controller.md#the-setup-flow) and the target tools,
   native closures and host binding its controller stage selects, except the
   `listener-firewall` rows, as `controller.<check>` with target `controller`:
   `ready` is `passed`, `not-ready` is `failed` and any other status is
@@ -678,7 +678,7 @@ Each stage holds these checks:
 - `substrates`: the `capacity.*` checks of the host capacity budget for every
   Machine the context's substrates project, the same checks the clusters stage
   reports for the hosts of their nodes;
-- `machines`: none, so a selection of it alone reports no check and passes;
+- `machines`: none, so a selection of it alone succeeds with “No checks available for the selected stages.”;
 - `clusters`: the OpenShiftCluster checks of
   [openshift-clusters](../openshift-clusters.md#preflight) and the CephCluster
   checks of [ceph](../ceph.md#plan-and-prerequisites). `--clusters` names
@@ -713,7 +713,7 @@ OpenShiftCluster checks before the CephCluster checks. The summary counts the
 merged list, and one diagnostic stands for the whole report:
 `preflight.failed` when any check failed, otherwise `preflight.unknown` when
 any is unknown or pending, whose remediation repeats
-`bootwright preflight --context <context>` with the invocation's own
+`bootwright check environment --context <context>` with the invocation's own
 `--stage` and `--clusters`. Errors come in this order, each the command's
 only output: the stage selection, the selected context, its effective graph
 and the SSH rule below, all before any check runs; then an error that stops a
@@ -1028,8 +1028,8 @@ probe. Its result orders these fields:
 | `storageClusters` | Ordered `{name, kind, status, resources}` rows for selected CephClusters. `resources` holds one `{kind, name, status}` row for each selected storage child object (a kind whose `clusterRef` names a CephCluster) whose `clusterRef` names this cluster, ordered by API kind order then name, `status` in the realization vocabulary below; it is `[]` for an external CephCluster and for one with no such object. |
 | `shared` | Ordered `{kind, name, machine, status}` rows for selected managed shared services, `status` in the realization vocabulary below. |
 | `secrets` | `declared`, the Secret objects the selected input declares, and `bindings`, the Secret bindings the current operation's record holds: one per operation however many Secrets it covers, and 0 beside no operation and once a completed removal finalized, which its pristine evidence proves without reading the keyring. |
-| `readiness` | Ordered `{kind, name, state, remedy}` rows for what the next `plan` and `apply` read from the selected input and the host does not hold: each declared Secret whose material is `missing` or `stale` as [`secret check`](../secrets.md) reports it (`kind` `secret`, ordered by name), then each installer image a MachineImage's `bootMedia` or a MachineInstallProfile's `hostedTree.fromMedia` names that [`media list`](../managed-os.md) does not show (`kind` `media`, `state` `missing`, ordered by name). `remedy` is the command that supplies it: `bootwright secret set --context <name> --name <secret> ...` or `bootwright secret generate ...` as `secret check` names it, and `bootwright media add --name <image> --from-file <path>`, with `<path>` left for the operator. The rows come from the keyring's metadata and the media store's records alone, never from Secret material or image bytes, under the shared reads those commands take, and run no effect. `[]` beside an operation, where the frozen plan and its Secret binding decide, while a deletion or `bootwright controller install` is the only step, when nothing is missing, and when a read fails (`secret check` and `media list` report the failure); a failed read leaves only its own rows out. Human output has a Readiness section listing each row's state and `Kind/name`, omitted when empty. |
-| `nextSteps` | Ordered command strings whose decision would pass over the records `status` read, as the [lifecycle receipt](../cli.md#lifecycle-receipt) states; empty when none would. Each `readiness` remedy, in row order, precedes the `plan` step. |
+| `readiness` | Ordered `{kind, name, state, remedy}` rows for what the next `plan` and `apply` read from the selected input and the host does not hold: each declared Secret whose material is `missing` or `stale` as [`secret check`](../secrets.md) reports it (`kind` `secret`, ordered by name), then each installer image a MachineImage's `bootMedia` or a MachineInstallProfile's `hostedTree.fromMedia` names that [`catalog media list`](../managed-os.md) does not show (`kind` `media`, `state` `missing`, ordered by name). `remedy` is the command that supplies it: `bootwright secret set --context <name> --name <secret> ...` or `bootwright secret generate ...` as `secret check` names it, and `bootwright catalog media add --name <image> --from-file <path>`, with `<path>` left for the operator. The rows come from the keyring's metadata and the media store's records alone, never from Secret material or image bytes, under the shared reads those commands take, and run no effect. `[]` beside an operation, where the frozen plan and its Secret binding decide, while a deletion or `bootwright controller install` is the only step, when nothing is missing, and when a read fails (`secret check` and `catalog media list` report the failure); a failed read leaves only its own rows out. Human output has a Recorded prerequisites section listing each row's state and `Kind/name`, omitted when empty. |
+| `nextSteps` | Ordered command strings whose decision would pass over the records `status` read, as the [lifecycle receipt](../cli.md#lifecycle-receipt) states; empty when none would. Each `readiness` remedy, in row order, precedes the `plan apply` step. |
 | `lifecycle` | `null` when no operation exists, else `operation`, `verb`, `state`, `next` (the receipt's action token, which the human Lifecycle `Next` row prints as the receipt does; the command it maps to is in `nextSteps`), `anotherBuild` (boolean: the build in hand is not the one that registered the operation, by the rule of [another build](../state-reconciliation.md#dependency-safety-during-recovery)), `lineage` (present only when the operation is an [additive apply](../state-reconciliation.md#additive-apply): the applies it adds to, root first and itself last, each `{operation, verb, state}`), ordered `blocks` of `{id, description, stage, state, outcome, attempts}` with the `failure` a result block carries, `logs` of safe paths relative to the log root, in the order and form the envelope's [`logs`](#private-operation-logs) list them, and `live`, each block the records hold `running` in plan order as `{block, attempt, resolution, output, present, bytes}`, its newest output relative to the log root, `present` false and `bytes` 0 while that file is not yet written, `[]` when none runs. A block that is `unknown` or `running` adds `unresolved`, `{reason, remedy}`: why its outcome is unproved and what the operator does, which for a block no resolution observed is the exact command, with `--context` and the frozen plan's `--authorize` tokens, that observes it, as its [resolution](../state-reconciliation.md#attempts-and-unknown-outcomes) names them; every other block omits it. |
 | `handoff` | `{ready, reasons}` derived from the [handoff predicate](../state-reconciliation.md#bootstrap-completion-and-gitops-readiness), with a boolean `ready` and ordered reason strings; `reasons` is `[]` when ready. Human output has a Handoff section with `ready`, or `not ready` followed by each reason. A completed apply with a latched log fault over unchanged input offers the settled apply in `nextSteps` as the invocation that [restores](../state-reconciliation.md#converging-an-effect) that boundary. |
 | `contradictions` | Ordered strings naming what the context's durable records contradict, each worded as the [refusal](../state-reconciliation.md#continuation-and-removal) over those records names it, and last an operation whose continuation or removal reopens a frozen Secret binding the context's keyring no longer lists, or whose keyring listing fails reporting the material corrupt or undecryptable; empty when nothing does. |
@@ -1277,7 +1277,7 @@ duplicates only when every present or absent member is equal.
 
 ## Private operation logs
 
-Help, completion, `version`, `schema`, `sbom`, every `validate`, `render effective`, `plan`, and
+Help, completion, `version`, `catalog schema`, `sbom`, every `check input`, `render effective`, `plan`, and
 local list/current/status reads create no cache, temporary file, state record,
 output path, or log. Other render commands create only their declared
 artifacts. Preflight, local setup, sensitive export, and access handoff allocate

@@ -53,8 +53,8 @@ func TestInvalidParallelismRefusesBeforeDispatchAndElevation(t *testing.T) {
 }
 
 func TestOnlyLifecycleMutationsAcceptParallelism(t *testing.T) {
-	for _, verb := range []string{"plan", "status", "diff"} {
-		code, _, _, record := runRecorded([]string{verb, "--parallelism=16"})
+	for _, verb := range []string{"plan apply", "plan destroy", "status", "diff"} {
+		code, _, _, record := runRecorded(append(strings.Fields(verb), "--parallelism=16"))
 		if code != 2 || record.calls != 0 {
 			t.Fatalf("%s accepted parallelism: code=%d calls=%d", verb, code, record.calls)
 		}

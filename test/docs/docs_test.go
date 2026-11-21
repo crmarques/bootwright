@@ -914,18 +914,18 @@ var askRuleMarkers = []struct{ phrase, flag string }{
 var askRuleNoAsk = map[string]string{
 	"context init": "local", "context update": "local", "context use": "local",
 	"context list": "read local state", "context current": "read local state",
-	"add-ons list": "read executable registry", "add-ons info": "read executable registry",
+	"catalog add-ons list": "read executable registry", "catalog add-ons info": "read executable registry",
 	"secret set": "local confidential write", "secret generate": "generated-material batch",
 	"secret check": "no values emitted", "secret list": "read confidential-store metadata",
 	"secret info":            "read confidential-store metadata only",
 	"secret encryption init": "idempotent initialization", "secret encryption status": "read confidential metadata",
-	"media list": "read local media", "validate": "no write",
-	"controller check": "bounded local observation", "preflight": "observe unless", "plan": "none", "status": "read local state", "logs": "read local state",
+	"catalog media list": "read local media", "check input": "no write",
+	"check controller": "bounded local observation", "check environment": "observe unless", "plan apply": "bounded local observation", "plan destroy": "read local state", "status": "read local state", "logs": "read local state",
 	"diff": "read local state", "render storage": "never execution",
 	"machine list": "read local state", "machine info": "read local inventory",
 	"cluster list": "read local state", "cluster oc": "read context-owned access metadata",
 	"cluster kubectl": "read context-owned access metadata", "version": "none", "help": "none",
-	"schema": "none", "sbom": "none", "explain": "none", "render acquisitions": "none", "completion bash": "none", "completion zsh": "none", "completion fish": "none",
+	"catalog schema": "none", "sbom": "none", "explain": "none", "render acquisitions": "none", "completion bash": "none", "completion zsh": "none", "completion fish": "none",
 	"completion powershell": "none",
 }
 
@@ -942,7 +942,7 @@ var askRuleInvocations = []string{
 // askRuleGroupFlagCommands are the grouped commands whose ask pattern must
 // also match global flags written between the group and the subcommand, as in
 // "render --context c effective"; B1219 extends this to every grouped command.
-var askRuleGroupFlagCommands = []string{"render effective", "render installer", "context delete", "secret delete", "secret encryption rotate", "media delete"}
+var askRuleGroupFlagCommands = []string{"render effective", "render installer", "context delete", "secret delete", "secret encryption rotate", "catalog media delete"}
 
 // catalogCommand is one command row of the catalog: its local flags and its
 // Effects cell with a "same" cell replaced by the cell it repeats.
@@ -1272,10 +1272,10 @@ func TestDocsAskRulesCoverEveryEffectfulCommand(t *testing.T) {
 
 func TestDocsCodexRuleViolations(t *testing.T) {
 	commands := map[string]catalogCommand{
-		"apply":        {flags: "`--yes` false", effects: "complete planned mutation"},
-		"cluster info": {flags: "`--secrets` false", effects: "read local state and optional confidential material"},
-		"media delete": {flags: "`--yes` false", effects: "local media deletion when not frozen"},
-		"status":       {flags: "none", effects: "read local state"},
+		"apply":                {flags: "`--yes` false", effects: "complete planned mutation"},
+		"cluster info":         {flags: "`--secrets` false", effects: "read local state and optional confidential material"},
+		"catalog media delete": {flags: "`--yes` false", effects: "local media deletion when not frozen"},
+		"status":               {flags: "none", effects: "read local state"},
 	}
 	text := `# comment
 prefix_rule(
@@ -1287,7 +1287,7 @@ prefix_rule(
     decision = "prompt",
 )
 prefix_rule(
-    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "media", "delete"],
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "catalog", "media", "delete"],
     decision = "forbidden",
 )
 `
@@ -1302,10 +1302,10 @@ prefix_rule(
 		rules []codexRule
 		want  string
 	}{
-		"media rule removed": {rules[:2], `bootwright media delete has "local media deletion" effects, but no prompt rule`},
+		"media rule removed": {rules[:2], `bootwright catalog media delete has "local media deletion" effects, but no prompt rule`},
 		"apply rule removed": {rules[1:], `no prompt rule in .codex/rules/bootwright.rules matches "./bin/bootwright apply"`},
-		"binary missing": {[]codexRule{rules[0], rules[1], {pattern: [][]string{{"bootwright"}, {"media"}, {"delete"}}, decision: "prompt"}},
-			`matches "bin/bootwright media delete"`},
+		"binary missing": {[]codexRule{rules[0], rules[1], {pattern: [][]string{{"bootwright"}, {"catalog"}, {"media"}, {"delete"}}, decision: "prompt"}},
+			`matches "bin/bootwright catalog media delete"`},
 		"allowed":       {append(slices.Clone(rules), codexRule{pattern: [][]string{codexBinaries, {"status"}}, decision: "allow"}), `rule for bootwright "status" allows a command`},
 		"unlisted":      {append(slices.Clone(rules), codexRule{pattern: [][]string{codexBinaries, {"machine"}, {"wipe"}}, decision: "prompt"}), `rule for bootwright "machine wipe" names a command`},
 		"allow only":    {append(slices.Clone(rules[1:]), codexRule{pattern: [][]string{codexBinaries, {"apply"}}, decision: "allow"}), `matches "bootwright apply"`},

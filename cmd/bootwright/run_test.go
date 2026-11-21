@@ -26,10 +26,10 @@ func proxyEnvironment(t *testing.T, values map[string]string) {
 }
 
 var (
-	routeFromURL      = []string{"media", "add", "--name", "image.iso", "--from-url", "https://images.example/image.iso", "--sha256", strings.Repeat("a1", 32)}
-	routeFromFile     = []string{"media", "add", "--name", "image.iso", "--from-file", "/images/image.iso"}
-	routeHostPreview  = []string{"controller", "check"}
-	routeContextCheck = []string{"preflight", "--context", "lab", "--stage", "controller"}
+	routeFromURL      = []string{"catalog", "media", "add", "--name", "image.iso", "--from-url", "https://images.example/image.iso", "--sha256", strings.Repeat("a1", 32)}
+	routeFromFile     = []string{"catalog", "media", "add", "--name", "image.iso", "--from-file", "/images/image.iso"}
+	routeHostPreview  = []string{"check", "controller"}
+	routeContextCheck = []string{"check", "environment", "--context", "lab", "--stage", "controller"}
 )
 
 // A local import or a context-backed preflight takes nothing from the invoking
@@ -115,7 +115,7 @@ func TestAJSONInvocationWritesNoProgress(t *testing.T) {
 func TestAJSONMediaListWritesNoProgress(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	list := []string{"media", "list", "--checksums"}
+	list := []string{"catalog", "media", "list", "--checksums"}
 	verify := media.ProgressEvent{Check: true, Step: "verify", Label: "Verify demo.iso", Status: "running", Position: 1, Total: 1}
 	classification := cli.ClassifyInvocation(append(slices.Clone(list), "--output", "json"))
 	if !classification.JSON {

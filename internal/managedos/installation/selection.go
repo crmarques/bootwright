@@ -364,7 +364,7 @@ func storeMedia(reference, checksum, field, identity string) (Media, error) {
 	name, local := strings.CutPrefix(reference, "local-media:")
 	if !local || !managedos.ValidMediaName(name) {
 		return Media{}, installMediaUnusable.Fail("this installation supports only media the host store holds",
-			"import the image with bootwright media add --name <filename.iso> and set "+field+" to local-media:<filename.iso> on "+identity)
+			"import the image with bootwright catalog media add --name <filename.iso> and set "+field+" to local-media:<filename.iso> on "+identity)
 	}
 	media := Media{Name: name}
 	if checksum != "" {
@@ -409,17 +409,17 @@ func pinned(media Media, records map[string]MediaRecord, owner, field, image str
 	}
 	if record.Failure != "" {
 		return Media{}, installMediaUnusable.Fail("the host media store cannot read its image "+media.Name+", which "+owner+" names in "+field+": "+record.Failure,
-			"inspect it with bootwright media list, remove it with bootwright media delete --name "+media.Name+
+			"inspect it with bootwright catalog media list, remove it with bootwright catalog media delete --name "+media.Name+
 				", import it again with "+mediaAdd(media.Name, "")+", then repeat the command")
 	}
 	if digest, ok := managedos.NormalizeMediaDigest(record.SHA256); !ok || digest == "" || digest != record.SHA256 || record.Size <= 0 {
 		return Media{}, installMediaUnusable.Fail("the host media store's record of "+media.Name+" names no SHA-256 and size a plan can freeze",
-			"inspect it with bootwright media list, remove it with bootwright media delete --name "+media.Name+
+			"inspect it with bootwright catalog media list, remove it with bootwright catalog media delete --name "+media.Name+
 				", import it again with "+mediaAdd(media.Name, "")+", then repeat the command")
 	}
 	if record.Observed != record.Size {
 		return Media{}, installMediaUnusable.Fail("the host media store's image "+media.Name+" no longer has the size its record names",
-			"compare it with bootwright media list --checksums and import it again with "+mediaAdd(media.Name, ""))
+			"compare it with bootwright catalog media list --checksums and import it again with "+mediaAdd(media.Name, ""))
 	}
 	if media.declared != "" && media.declared != record.SHA256 {
 		return Media{}, installMediaUnusable.Fail("the host media store's image "+media.Name+" has SHA-256 "+record.SHA256+", not the "+
@@ -449,13 +449,13 @@ func refusedRelease(image string, records map[string]MediaRecord, profile api.Ob
 	switch {
 	case !release.Present():
 		message = "the media store holds no release for " + image + ", which this build reads from the image's .treeinfo or .discinfo when it is added"
-		remediation = "bootwright media delete --name " + image + ", then bootwright media add --name " + image + " with this build"
+		remediation = "bootwright catalog media delete --name " + image + ", then bootwright catalog media add --name " + image + " with this build"
 	case packages && release.Family == "":
 		message = image + " names no release family, as a boot image's .discinfo does, and an installation installs packages only from an image whose .treeinfo names Red Hat Enterprise Linux"
-		remediation = "import the Red Hat Enterprise Linux DVD with bootwright media add and select it for " + profile.Identity() + ", or select a subscription package source there"
+		remediation = "import the Red Hat Enterprise Linux DVD with bootwright catalog media add and select it for " + profile.Identity() + ", or select a subscription package source there"
 	case release.Family != "" && release.Family != "Red Hat Enterprise Linux" || release.Arch != "x86_64":
 		message = image + " holds a " + strings.TrimSpace(release.Family+" "+release.Arch) + " release, and an installation installs only Red Hat Enterprise Linux on x86_64"
-		remediation = "import a Red Hat Enterprise Linux x86_64 image with bootwright media add and select it for " + profile.Identity()
+		remediation = "import a Red Hat Enterprise Linux x86_64 image with bootwright catalog media add and select it for " + profile.Identity()
 	case release.Version != declared:
 		message = image + " holds release " + release.Version + " and " + profile.Identity() + " declares spec.os.version " + declared
 		remediation = "set spec.os.version on " + profile.Identity() + " to " + release.Version + ", or import the " + declared + " image"
@@ -470,9 +470,9 @@ func refusedRelease(image string, records map[string]MediaRecord, profile api.Ob
 // source, and a digest the remedy knows verifies either.
 func mediaAdd(name, digest string) string {
 	if digest == "" {
-		return "bootwright media add --name " + name + " --from-file <path>, or --from-url <url> --sha256 <digest>"
+		return "bootwright catalog media add --name " + name + " --from-file <path>, or --from-url <url> --sha256 <digest>"
 	}
-	return "bootwright media add --name " + name + " --from-file <path> --sha256 " + digest + ", or --from-url <url> --sha256 " + digest
+	return "bootwright catalog media add --name " + name + " --from-file <path> --sha256 " + digest + ", or --from-url <url> --sha256 " + digest
 }
 
 // mediaRefusals are the diagnostics an apply names for its boot image when it

@@ -1,13 +1,14 @@
-  bootwright / schema
-      Export the advisory schema of every desired-state kind. The export states types, required
-      fields, closed field sets, enum values and numeric bounds; bootwright validate stays the
-      authority on lexical grammars, references and cross-field rules.
+  bootwright / catalog media
+      Manage installer media shared by contexts on this controller
 
   Usage
-    bootwright schema [flags]
+    bootwright catalog media <command> [flags]
 
-  Command flags
-      --format  Select the schema format (values: json-schema) (required)
+  Commands
+  COMMAND   PURPOSE
+  add       Import and verify an installer image
+  delete    Delete an unbound installer image
+  list      List installer images
 
   Common flags
       --ascii       Use ASCII status markers
@@ -17,6 +18,3 @@
       -o, --output  Select output mode (values: text, json, yaml) · default text
       --progress    Select progress animation (values: auto, always, never) · default auto
       --width       Set presentation width (0: automatic) · default 0
-
-  Examples
-    bootwright schema --format json-schema

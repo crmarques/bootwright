@@ -2,7 +2,7 @@
       Create, select, update and delete contexts
 
   Usage
-    bootwright context [flags]
+    bootwright context <command> [flags]
 
   Commands
   COMMAND   PURPOSE

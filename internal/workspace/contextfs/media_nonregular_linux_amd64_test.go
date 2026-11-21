@@ -74,7 +74,7 @@ func TestAFailedNonRegularMediaEntryIsRemovedByMediaDelete(t *testing.T) {
 		reported := diagnostics.Of(err)
 		if len(reported) != 1 || reported[0].Code != "media.store" ||
 			reported[0].Message != "media entry media/demo.iso is a directory that still holds entries, which media delete never removes" ||
-			reported[0].Remediation != "remove media/demo.iso beneath the state root, then repeat bootwright media delete --name demo.iso" {
+			reported[0].Remediation != "remove media/demo.iso beneath the state root, then repeat bootwright catalog media delete --name demo.iso" {
 			t.Fatalf("refusal = %#v", reported)
 		}
 		if _, err := os.Stat(filepath.Join(image, "kept")); err != nil {

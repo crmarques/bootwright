@@ -20,7 +20,7 @@
     Declared  3
     Bindings  0
 
-  Readiness
+  Recorded prerequisites
   stale     Secret/ssh-key
   missing   Secret/token
   missing   Media/rhel-9.iso
@@ -28,8 +28,8 @@
   Next steps
     bootwright secret generate --context lab --name ssh-key
     bootwright secret set --context lab --name token --value-file <path>
-    bootwright media add --name rhel-9.iso --from-file <path>
-    bootwright plan --context lab
+    bootwright catalog media add --name rhel-9.iso --from-file <path>
+    bootwright plan apply --context lab
     bootwright apply --context lab
 
   Handoff

@@ -1,6 +1,6 @@
 {
   "schemaVersion": "v1alpha1",
-  "command": "plan",
+  "command": "plan apply",
   "ok": true,
   "exitCode": 0,
   "result": {

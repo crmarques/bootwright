@@ -43,7 +43,7 @@ func TestMultidcExampleDeclaresItsReferenceFilesystem(t *testing.T) {
 	t.Parallel()
 	sources := exampleSources(t)
 	var out, errOut bytes.Buffer
-	run(context.Background(), []string{"validate", "-f", sources.Roots[0], "--output", "json"}, &out, &errOut)
+	run(context.Background(), []string{"check", "input", "-f", sources.Roots[0], "--output", "json"}, &out, &errOut)
 	var result struct{ Diagnostics []diagnostics.Diagnostic }
 	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
 		t.Fatal(err, out.String())

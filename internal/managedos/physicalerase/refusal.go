@@ -95,7 +95,7 @@ func eraseRefusals(contextName, continuation, machine, endpoint, address, custod
 			"inspect "+custody+" on the execution host as root: first remove the private erase image directory its custody.json names under "+publication+
 				" (when it names none you can read, remove there only the erase images of "+identity+"), then remove "+custody+" whole, "+again),
 		eraseBootMediaMismatch: refused(stopBootMediaMismatch, "the installer image the apply of "+identity+" pinned is missing from the controller's media store or no longer matches its size and SHA-256, so no erase image was built and the machine was not booted",
-			"restore that image with bootwright media add and check it with bootwright media list --checksums, "+again),
+			"restore that image with bootwright catalog media add and check it with bootwright catalog media list --checksums, "+again),
 		eraseImageBuildFailed: refused(stopImageBuildFailed, "the erase image of "+identity+" could not be built from its pinned installer image within its time bound, so the machine was not booted",
 			"check the execution host's free space and its mkksiso and xorriso installation, "+again),
 		eraseInstallNetwork: refused(stopInstallNetwork, "the install network of "+identity+" names a bond option or VLAN that the erase image's boot arguments cannot carry, so no erase image was built and the machine was not booted",

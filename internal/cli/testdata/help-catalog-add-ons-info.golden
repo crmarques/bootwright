@@ -1,4 +1,4 @@
-  bootwright / add-ons info
+  bootwright / catalog add-ons info
       Describe one built-in package from the executable alone, with no context, file or
       network: its purpose, the capabilities it provides and requires, its OLM package and
       default catalog source, every configuration field with whether it is required and its
@@ -7,7 +7,7 @@
       name refuses and names add-ons list.
 
   Usage
-    bootwright add-ons info [flags]
+    bootwright catalog add-ons info [flags]
 
   Command flags
       --name  Select one built-in package by name (required)
@@ -22,4 +22,4 @@
       --width       Set presentation width (0: automatic) · default 0
 
   Examples
-    bootwright add-ons info --name metallb
+    bootwright catalog add-ons info --name metallb

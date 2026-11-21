@@ -50,6 +50,7 @@ func authorize(contextName string, verb reconciliation.Verb, selection reconcili
 	}
 	authFlags = append(authFlags, relaxationFlags(frozenRelaxations(plan))...)
 	passing := contextCommand(contextName, string(verb), invocationFlags(selection, authFlags, unregistered)...)
+	preview := contextCommand(contextName, "plan "+string(verb), invocationFlags(selection, relaxationFlags(frozenRelaxations(plan)), nil)...)
 	supplied := slices.Compact(slices.Sorted(slices.Values(authorizations)))
 	for _, token := range supplied {
 		if !slices.Contains(required, token) {
@@ -69,11 +70,11 @@ func authorize(contextName string, verb reconciliation.Verb, selection reconcili
 		case digest != "" && digest != expected:
 			return authorizeStale.Fail(
 				"--authorize "+token+"="+digest+" names steps this plan no longer holds: its "+token+" steps are now "+strings.Join(consumers[token], ", "),
-				"review them with "+contextCommand(contextName, "plan")+", then repeat "+passing)
+				"review them with "+preview+", then repeat "+passing)
 		case digest == "" && unattended:
 			return authorizeStale.Fail(
 				"an unattended "+string(verb)+" must bind --authorize "+token+" to the steps it authorizes: "+strings.Join(consumers[token], ", "),
-				"review them with "+contextCommand(contextName, "plan")+", then repeat "+passing)
+				"review them with "+preview+", then repeat "+passing)
 		}
 	}
 	return nil

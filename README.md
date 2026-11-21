@@ -14,8 +14,13 @@ owns required behavior.
 ```sh
 make build
 ./bin/bootwright --help
-./bin/bootwright validate -f examples/machines/lab-rhel
+./bin/bootwright check input -f examples/machines/lab-rhel
 ```
+
+Use `check input` while authoring or in CI. Importing an input directory with
+`context init` validates it before publishing it. Interactive `apply` shows
+its plan before confirmation. Use `plan apply` or `plan destroy` for a standalone
+preview, and start with `status` when returning to a context.
 
 A host with only Docker or Podman runs `make container-build` instead;
 [building in a container](docs/development.md#building-in-a-container) covers

@@ -186,7 +186,7 @@ func (r *Runner) writeSelectedHelp(command *cobra.Command) error {
 	if description == "" {
 		description = command.Short
 	}
-	shown := helpPresentation{Command: escapeDisplayLine(path), Usage: escapeDisplayLine(command.UseLine()), Description: escapeDisplayLine(description), Commands: []helpCommandPresentation{}, Flags: []helpFlagPresentation{}}
+	shown := helpPresentation{Command: escapeDisplayLine(path), Usage: escapeDisplayLine(helpUsage(command)), Description: escapeDisplayLine(description), Commands: []helpCommandPresentation{}, Flags: []helpFlagPresentation{}}
 	for _, child := range command.Commands() {
 		if !child.Hidden {
 			shown.Commands = append(shown.Commands, helpCommandPresentation{Name: escapeDisplayLine(child.Name()), Description: escapeDisplayLine(child.Short)})
@@ -251,7 +251,7 @@ func (r *Runner) writeSelectedSchema() error {
 		_, err = r.config.Out.Write(data)
 		return err
 	}
-	return writeStructuredResult(r.config.Out, "schema", schemaPresentation{Format: "json-schema", Schema: json.RawMessage(bytes.TrimSpace(data))}, nil, nil, 0)
+	return writeStructuredResult(r.config.Out, "catalog schema", schemaPresentation{Format: "json-schema", Schema: json.RawMessage(bytes.TrimSpace(data))}, nil, nil, 0)
 }
 
 type billOfMaterialsPresentation struct {

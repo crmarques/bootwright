@@ -877,7 +877,7 @@ func TestADestroyPreviewRefusesAStageSelection(t *testing.T) {
 			records, evidence, mutations := h.workspace.area.clone(), slices.Clone(h.workspace.evidence), h.workspace.mutations
 			_, err := h.service.Plan(context.Background(), PlanRequest{ContextName: testContextName, Stages: []string{"infrastructure-services"}})
 			reported := diagnostics.Of(err)
-			if len(reported) != 1 || reported[0].Code != "destroy.stage-selected" || reported[0].Remediation != "repeat bootwright plan --context lab without --stage" {
+			if len(reported) != 1 || reported[0].Code != "destroy.stage-selected" || reported[0].Remediation != "repeat bootwright plan destroy --context lab without --stage" {
 				t.Fatalf("preview = %+v (%v)", reported, err)
 			}
 			if !sameFiles(h.workspace.area, records) || !bytes.Equal(h.workspace.evidence, evidence) || h.workspace.mutations != mutations {

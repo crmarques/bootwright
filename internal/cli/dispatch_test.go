@@ -42,8 +42,8 @@ func TestDispatchEveryApplicationCommand(t *testing.T) {
 		{"context list", contexts.ListRequest{}},
 		{"context current", contexts.CurrentRequest{}},
 		{"context delete", contexts.DeleteRequest{Name: "demo", Purge: true, AllowOrphans: true, SkipConfirmation: true}},
-		{"add-ons list", addoncatalog.ListRequest{}},
-		{"add-ons info", addoncatalog.DescribeRequest{Name: "demo"}},
+		{"catalog add-ons list", addoncatalog.ListRequest{}},
+		{"catalog add-ons info", addoncatalog.DescribeRequest{Name: "demo"}},
 		{"secret set", custody.SetRequest{ContextName: "example", Name: "demo", Input: secrets.Input{ValueFile: "secret.bin"}, SkipConfirmation: true}},
 		{"secret generate", custody.GenerateRequest{ContextName: "example", Name: "demo", Renew: true, SkipConfirmation: true}},
 		{"secret check", custody.CheckRequest{ContextName: "example"}},
@@ -53,19 +53,20 @@ func TestDispatchEveryApplicationCommand(t *testing.T) {
 		{"secret encryption init", encryption.EncryptionInitRequest{ContextName: "example"}},
 		{"secret encryption status", encryption.EncryptionStatusRequest{ContextName: "example"}},
 		{"secret encryption rotate", encryption.EncryptionRotateRequest{ContextName: "example", SkipConfirmation: true}},
-		{"media add", media.AddMediaRequest{Name: "demo", SourceFile: "", SourceURL: "https://example.invalid/image.iso", SHA256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", SkipConfirmation: true}},
-		{"media list", media.ListMediaRequest{Checksums: true}},
-		{"media delete", media.DeleteMediaRequest{Name: "demo", SkipConfirmation: true}},
-		{"validate", compilation.ValidateRequest{ContextName: "", Files: []string{"inputs"}}},
-		{"controller check", prerequisites.CheckRequest{}},
+		{"catalog media add", media.AddMediaRequest{Name: "demo", SourceFile: "", SourceURL: "https://example.invalid/image.iso", SHA256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", SkipConfirmation: true}},
+		{"catalog media list", media.ListMediaRequest{Checksums: true}},
+		{"catalog media delete", media.DeleteMediaRequest{Name: "demo", SkipConfirmation: true}},
+		{"check input", compilation.ValidateRequest{ContextName: "", Files: []string{"inputs"}}},
+		{"check controller", prerequisites.CheckRequest{}},
 		{"controller install", prerequisites.SetupRequest{DryRun: true, SkipConfirmation: true}},
-		{"preflight", environmentpreflight.PreflightRequest{ContextName: "example", Stages: []string{"infrastructure-services", "substrates"}, Clusters: []string{"first", "second"}, DryRun: true, ObserveHostKeys: true, SSH: ssh}},
+		{"check environment", environmentpreflight.PreflightRequest{ContextName: "example", Stages: []string{"infrastructure-services", "substrates"}, Clusters: []string{"first", "second"}, DryRun: true, ObserveHostKeys: true, SSH: ssh}},
 		{"cluster update-admin-creds", lifecycle.UpdateAdminCredentialsRequest{ContextName: "example", Name: "demo", Logins: []string{"prometheus", "grafana"}, SkipConfirmation: true}},
 		{"cluster list", inspection.ListClustersRequest{ContextName: "example"}},
 		{"cluster info", inspection.ClusterInfoRequest{ContextName: "example", Names: []string{"demo"}, Secrets: true}},
 		{"cluster rsh", environmentaccess.ClusterRshRequest{ContextName: "example", Name: "demo", Node: "node-a", SSH: account}},
 		{"cluster exec", environmentaccess.ClusterExecRequest{ContextName: "example", Names: []string{"demo"}, Nodes: []string{"node-a"}, SSH: account, Command: []string{"get", "--help", ""}}},
-		{"plan", lifecycle.PlanRequest{ContextName: "example", Stages: []string{"infrastructure-services", "substrates"}, Until: "compact.gitops", Relaxations: map[string]string{"srv-01": "retain", "srv-02": "metadataClear"}}},
+		{"plan apply", lifecycle.PlanRequest{Verb: "apply", ContextName: "example", Stages: []string{"infrastructure-services", "substrates"}, Until: "compact.gitops"}},
+		{"plan destroy", lifecycle.PlanRequest{Verb: "destroy", ContextName: "example", Relaxations: map[string]string{"srv-01": "retain", "srv-02": "metadataClear"}}},
 		{"status", lifecycle.StatusRequest{ContextName: "example"}},
 		{"diff", lifecycle.DiffRequest{ContextName: "example", Observe: true}},
 		{"apply", lifecycle.ApplyRequest{ContextName: "example", Parallelism: 16, Stages: []string{"infrastructure-services", "substrates"}, Until: "compact.gitops", Authorizations: []string{"data-loss"}, SkipConfirmation: true, Unattended: true, SSH: ssh}},
@@ -123,7 +124,7 @@ func TestRenderEffectiveWritesAFileOnlyWithAnOutputDirectory(t *testing.T) {
 func TestDispatchPreservesTypedValidationResult(t *testing.T) {
 	want := &compilation.Report{Counts: compilation.Counts{FilesSeen: 2, ObjectsDecoded: 3}}
 	record := &dispatchRecord{report: want}
-	got, err := dispatchSpies(record).invoke(context.Background(), "validate", dispatchFlags(), nil)
+	got, err := dispatchSpies(record).invoke(context.Background(), "check input", dispatchFlags(), nil)
 	if err != nil || got.validation != want || record.calls != 1 {
 		t.Fatalf("typed result = %#v, %v; calls = %d", got, err, record.calls)
 	}
@@ -135,7 +136,7 @@ func TestEnvironmentCapabilitiesAreIndependent(t *testing.T) {
 		commands []string
 		wire     func(*dispatchRecord) Services
 	}{
-		{"preflight", []string{"preflight"}, func(record *dispatchRecord) Services {
+		{"preflight", []string{"check environment"}, func(record *dispatchRecord) Services {
 			return Services{EnvironmentPreflight: environmentSpy{record}}
 		}},
 		{"inspection", []string{"cluster list", "cluster info", "cluster keyring"}, func(record *dispatchRecord) Services {
@@ -169,8 +170,8 @@ func TestDispatchFailsClosed(t *testing.T) {
 		path     string
 		flags    *pflag.FlagSet
 	}{
-		{"missing service", Services{}, "plan", dispatchFlags()},
-		{"missing flags", dispatchSpies(&dispatchRecord{}), "plan", nil},
+		{"missing service", Services{}, "plan apply", dispatchFlags()},
+		{"missing flags", dispatchSpies(&dispatchRecord{}), "plan apply", nil},
 		{"unknown command", dispatchSpies(&dispatchRecord{}), "removed", dispatchFlags()},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -180,13 +181,13 @@ func TestDispatchFailsClosed(t *testing.T) {
 		})
 	}
 	record := &dispatchRecord{}
-	_, err := dispatchSpies(record).invoke(context.Background(), "plan", pflag.NewFlagSet("incomplete", pflag.ContinueOnError), nil)
+	_, err := dispatchSpies(record).invoke(context.Background(), "plan apply", pflag.NewFlagSet("incomplete", pflag.ContinueOnError), nil)
 	if err == nil || record.calls != 0 {
 		t.Fatalf("missing required flag: error=%v, calls=%d", err, record.calls)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err = dispatchSpies(record).invoke(ctx, "plan", dispatchFlags(), nil)
+	_, err = dispatchSpies(record).invoke(ctx, "plan apply", dispatchFlags(), nil)
 	if !errors.Is(err, context.Canceled) || record.calls != 0 {
 		t.Fatalf("canceled invocation: error=%v, calls=%d", err, record.calls)
 	}
@@ -209,7 +210,7 @@ func TestDispatchOwnsMutableRequests(t *testing.T) {
 	if args[1] != "pods" {
 		t.Fatal("caller aliases service request")
 	}
-	if _, err := services.invoke(context.Background(), "validate", flags, nil); err != nil {
+	if _, err := services.invoke(context.Background(), "check input", flags, nil); err != nil {
 		t.Fatal(err)
 	}
 	files := record.request.(compilation.ValidateRequest).Files

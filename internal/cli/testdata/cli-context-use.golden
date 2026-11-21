@@ -4,4 +4,4 @@
     Mode     ready
     Current  yes
     Input    imported
-    Next     bootwright validate --context lab
+    Next     bootwright status --context lab

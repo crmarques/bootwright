@@ -1,6 +1,6 @@
 {
   "schemaVersion": "v1alpha1",
-  "command": "plan",
+  "command": "plan destroy",
   "ok": true,
   "exitCode": 0,
   "result": {

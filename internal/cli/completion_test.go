@@ -52,9 +52,9 @@ func TestCompletionCandidates(t *testing.T) {
 		{"flags", []string{"validate", "-"}, []string{"--context", "--file", "--help", "--output", "--strict", "-f", "-h", "-o"}},
 		{"boolean", []string{"validate", "--strict=tr"}, []string{"--strict=true"}},
 		{"free context", []string{"--context", ""}, nil},
-		{"free path", []string{"validate", "--file", ""}, nil},
-		{"free shorthand path", []string{"validate", "-f/tmp/"}, nil},
-		{"payload", []string{"validate", "--", ""}, nil},
+		{"free path", []string{"check", "input", "--file", ""}, nil},
+		{"free shorthand path", []string{"check", "input", "-f/tmp/"}, nil},
+		{"payload", []string{"check", "input", "--", ""}, nil},
 		{"unknown path", []string{"example", ""}, nil},
 		{"unknown flag", []string{"cluster", "--bogus", ""}, nil},
 		{"private path", []string{completionRequest, ""}, nil},
@@ -193,12 +193,12 @@ func TestPathCompletionAppendsNoSpaceOnlyAfterADirectory(t *testing.T) {
 		{"mixed", []string{"alpha/input.yaml", "alpha/nested/"}, noSpace},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			if got := completionResponse(t, test.candidates, "validate", "--file", "alpha/"); got != test.want {
+			if got := completionResponse(t, test.candidates, "check", "input", "--file", "alpha/"); got != test.want {
 				t.Fatalf("directive = %q; want %q", got, test.want)
 			}
 		})
 	}
-	if got := completionResponse(t, []string{"alpha/nested/"}, "validate", "--output", ""); got != plain {
+	if got := completionResponse(t, []string{"alpha/nested/"}, "check", "input", "--output", ""); got != plain {
 		t.Fatalf("a value flag that is not a path reported %q", got)
 	}
 }

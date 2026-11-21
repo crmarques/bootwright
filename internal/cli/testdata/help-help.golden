@@ -2,39 +2,39 @@
       Coordinate declarative day-0 platform bootstrap
 
   Usage
-    bootwright [flags]
+    bootwright [command] [flags]
 
-  Host
+  Run the lifecycle
+  COMMAND   PURPOSE
+  plan      Preview an apply or a destroy without executing it
+  apply     Apply the complete selected lifecycle unit
+  destroy   Destroy the complete selected lifecycle unit
+
+  Inspect and troubleshoot
+  COMMAND   PURPOSE
+  status    Show recorded lifecycle progress and next steps
+  logs      Show a context's operation events and retained adapter output
+  diff      Compare desired state with what this context realized
+  explain   Explain the stop codes apply and destroy report
+  check     Check input, this controller or an environment's prerequisites
+
+  Prepare Bootwright and its inputs
   COMMAND      PURPOSE
-  controller   Prepare, check and remove this host's controller
-  media        Store installer images on this host
+  controller   Install, rebind or remove this host's controller
+  catalog      Browse installer media, built-in add-ons and the desired-state schema
+  context      Create, select, update and delete contexts
+  secret       Set, generate, check and reveal a context's Secrets
+  render       Render effective desired state and external-tool artifacts
 
-  Context
-  COMMAND     PURPOSE
-  context     Create, select, update and delete contexts
-  secret      Set, generate, check and reveal a context's Secrets
-  validate    Validate a complete desired-state input universe
-  preflight   Check the selected context's readiness for apply, stage by stage
-  plan        Preview the next complete lifecycle operation
-  apply       Apply the complete selected lifecycle unit
-  destroy     Destroy the complete selected lifecycle unit
-  status      Show context readiness and lifecycle state
-  logs        Show a context's operation events and retained adapter output
-  diff        Compare desired state with what this context realized
-
-  Resources
+  Work with machines and clusters
   COMMAND   PURPOSE
   machine   Inspect, reach, trust and power a context's Machines
   cluster   Inspect and reach a context's clusters
-  add-ons   Inspect built-in add-on packages
-  render    Render effective desired state and external-tool artifacts
 
-  Tools
+  CLI tools
   COMMAND      PURPOSE
   version      Show executable and dependency build identities
-  schema       Export the advisory schema of every desired-state kind
   sbom         Export this executable's software bill of materials
-  explain      Explain the stop codes apply and destroy report
   completion   Generate shell completion scripts
   help         Show help for an exact command path
 
@@ -52,6 +52,6 @@
     Use --help --detail full to include SSH overrides.
 
   Examples
-    bootwright help context init
-    bootwright version
-    bootwright validate --file ./input
+    bootwright check input --file ./input
+    bootwright plan apply --context lab
+    bootwright status --context lab

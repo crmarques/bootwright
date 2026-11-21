@@ -44,15 +44,15 @@ prefix_rule(
 )
 
 prefix_rule(
-    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "media", "add"],
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "catalog", "media", "add"],
     decision = "prompt",
-    justification = "bootwright media add acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+    justification = "bootwright catalog media add acts beyond a read of local state; the owner asks for it (AGENTS.md)",
 )
 
 prefix_rule(
-    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "media", "delete"],
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "catalog", "media", "delete"],
     decision = "prompt",
-    justification = "bootwright media delete acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+    justification = "bootwright catalog media delete acts beyond a read of local state; the owner asks for it (AGENTS.md)",
 )
 
 prefix_rule(

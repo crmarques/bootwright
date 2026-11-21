@@ -9486,3 +9486,10 @@ collection alias set and the tests and comments that narrate earlier builds,
 and raises the components the vulnerability gates name. The owner asked for
 the change to reach origin after the full gate; no host operation is
 authorized.
+
+### D280
+
+**owner** (2026-11-21): asked to implement the CLI proposal with installer
+media in the catalog. Authorizes X643, B1651. This revisits the command naming
+in [D243](#d243) and makes the operation explicit in the
+[lifecycle preview](../cli.md#lifecycle-behavior).

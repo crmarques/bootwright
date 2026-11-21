@@ -51,20 +51,20 @@ func TestEveryCommandNamesAnAbsentContextAndItsNextCommand(t *testing.T) {
 			{"context", "use", "--name", "ghost"},
 			{"context", "update", "--name", "ghost", "--input-dir", input, "--yes"},
 			{"context", "delete", "--name", "ghost", "--purge", "--yes"},
-			{"validate", "--context", "ghost"},
+			{"check", "input", "--context", "ghost"},
 			{"render", "effective", "--context", "ghost"},
 			{"status", "--context", "ghost"},
-			{"plan", "--context", "ghost"},
+			{"plan", "apply", "--context", "ghost"},
 			{"secret", "list", "--context", "ghost"},
 			{"machine", "list", "--context", "ghost"},
 		}
 	}
 	implicit := [][]string{
 		{"context", "current"},
-		{"validate"},
+		{"check", "input"},
 		{"render", "effective"},
 		{"status"},
-		{"plan"},
+		{"plan", "apply"},
 		{"secret", "list"},
 		{"machine", "list"},
 	}
@@ -107,13 +107,13 @@ func TestOneCodeNamesAMissingInput(t *testing.T) {
 	services, _, _, _ := contextFixture(t)
 	contextRun(t, services, 0, "context", "init", "--name", "empty")
 	for _, args := range [][]string{
-		{"validate", "--context", "empty"},
+		{"check", "input", "--context", "empty"},
 		{"render", "effective", "--context", "empty"},
 		{"secret", "check", "--context", "empty"},
 		{"status", "--context", "empty"},
-		{"plan", "--context", "empty"},
+		{"plan", "apply", "--context", "empty"},
 		{"machine", "list", "--context", "empty"},
-		{"validate"},
+		{"check", "input"},
 		{"status"},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
@@ -122,9 +122,9 @@ func TestOneCodeNamesAMissingInput(t *testing.T) {
 	}
 	t.Run("preflight --context empty --stage controller", func(t *testing.T) {
 		controllerServices, _, _ := labContextServices(t)
-		requireContextRefusal(t, controllerServices, absentEmpty, "preflight", "--context", "empty", "--stage", "controller")
+		requireContextRefusal(t, controllerServices, absentEmpty, "check", "environment", "--context", "empty", "--stage", "controller")
 		contextRun(t, controllerServices, 0, "context", "init", "--name", "empty")
-		requireContextRefusal(t, controllerServices, missingEmptyInput, "preflight", "--context", "empty", "--stage", "controller")
+		requireContextRefusal(t, controllerServices, missingEmptyInput, "check", "environment", "--context", "empty", "--stage", "controller")
 	})
 }
 
@@ -148,11 +148,11 @@ func TestNoSelectionReadsTheSameEverywhere(t *testing.T) {
 			store.prepare(t, services, input)
 			for _, args := range [][]string{
 				{"context", "current"},
-				{"validate"},
+				{"check", "input"},
 				{"render", "effective"},
 				{"secret", "list"},
 				{"status"},
-				{"plan"},
+				{"plan", "apply"},
 				{"machine", "list"},
 			} {
 				t.Run(strings.Join(args, " "), func(t *testing.T) {
@@ -202,7 +202,7 @@ func TestAnUnsafeSelectionFileIsNamedWithItsRepair(t *testing.T) {
 				t.Fatal(err)
 			}
 			want := "  error  context.state\n    " + unsafe.message + "\n    Next: " + unsafe.next + "\n"
-			for _, args := range [][]string{{"context", "current"}, {"validate"}, {"context", "use", "--name", "alpha"}} {
+			for _, args := range [][]string{{"context", "current"}, {"check", "input"}, {"context", "use", "--name", "alpha"}} {
 				requireContextRefusal(t, services, want, args...)
 			}
 			requireContextRefusal(t, services, "  error  context.state\n    context beta was created, but the current selection could not be updated: "+

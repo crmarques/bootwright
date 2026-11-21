@@ -71,7 +71,7 @@ func (s Service) PlanPreparation(ctx context.Context, request PrepareRequest) (*
 	if err != nil {
 		return nil, err
 	}
-	return s.planWithin(ctx, PlanRequest{ContextName: request.ContextName}, scope)
+	return s.planWithin(ctx, PlanRequest{Verb: reconciliation.Apply, ContextName: request.ContextName}, scope)
 }
 
 func (s Service) requestedPreparation(request PrepareRequest) (*reconciliation.PreparationScope, error) {

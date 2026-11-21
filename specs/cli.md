@@ -28,8 +28,8 @@ before output or ambient access.
 
 The [catalog](cli/commands.md#command-and-flag-catalog) is the sole list of
 command paths. With no arguments, the root prints root help and succeeds.
-Bare `help` prints root help; bare `completion` prints completion help. Both
-succeed. Every incomplete domain parent, `render` included, prints help and
+Bare `help` prints root help. Bare `completion`, `check` and `plan` print their
+group help and succeed. Every incomplete domain parent, `render` included, prints help and
 fails with a usage error.
 
 The former root groups `example` and `container-cluster` are absent, with no
@@ -145,7 +145,7 @@ the scalar comma-list flags `--clusters`, `--replace`, `--stage`,
 the `--name` that names several Machines and the `--name` and `--node` that name
 several clusters and nodes.
 Collection flags aggregate in command-line order only where this contract says
-they are repeatable. `validate -f` is repeatable. `--authorize` (with
+they are repeatable. `check input -f` is repeatable. `--authorize` (with
 `erase=<machine>:<method>`, once per Machine, on `destroy` and `plan`) and
 `destroy --unregistered` are repeatable and each occurrence may also contain
 commas. Supplying an empty required value
@@ -207,7 +207,7 @@ artifacts, trust-store maintenance, or explicit access; it never changes
 effective state, dependency closure, ownership, lifecycle scope, the frozen
 plan, or continuation.
 
-`validate -f/--file` accepts a YAML file or directory and may be repeated. The
+`check input -f/--file` accepts a YAML file or directory and may be repeated. The
 set is compiled as one ordered desired-state input universe under [the API
 contract](api.md); supplying `-f` makes validation context-free, while omission
 uses the selected context input. For `context init` and `context update`, `-f/--file` instead accepts one
@@ -462,10 +462,10 @@ completion, or context initialization without input. Context-free validation
 can run away from the declared controller; it checks input relationships and
 never verifies the invoking host.
 
-`controller install` and `controller check` follow the
+`controller install` and `check controller` follow the
 [Controller journeys](controller.md#the-setup-flow), including
 preparation before context creation or Environment import; neither selects a
-context. `preflight --stage controller` checks what a context's controller
+context. `check environment --stage controller` checks what a context's controller
 stage adds. Which invocations read the invoking environment's proxy route is
 owned by the [context-free acquisition route](controller.md#the-context-free-acquisition-route).
 Controller selection alone does not cause setup, install a container runtime or
@@ -479,7 +479,7 @@ their execution authority.
 
 ## Validation, preflight, and rendering
 
-`validate` performs discovery, strict decoding, normalization, complete graph
+`check input` performs discovery, strict decoding, normalization, complete graph
 validation, and deterministic diagnostics. It opens no declared payload,
 secret material, process, or network endpoint. A context-free invocation opens
 no context store; a context-backed invocation reads only the selected immutable
@@ -488,7 +488,7 @@ successful exit; an invalid input set exits `1`. After the CLI has resolved the
 input universe, discovery and Environment selection are defined by
 [the API contract](api.md).
 
-`preflight` reports current readiness, stage by stage, as
+`check environment` reports current readiness, stage by stage, as
 [its report](cli/output.md#preflight) assigns checks to stages, but grants no
 mutation authority and never replaces a fresh lifecycle operation's
 effect-boundary probes. A live
@@ -507,7 +507,7 @@ With `--output-dir`, `render effective` writes `effective-state.yaml`, the
 canonical YAML it otherwise prints, into that directory instead of standard output and
 reports `inputDir` (context-free only), `outputDir`, `effectiveStatePath` and
 the `objects` count. Context-free it reads `--input-dir`, a file or directory
-as `validate -f` does; context-backed it reads the selected context's input and
+as `check input -f` does; context-backed it reads the selected context's input and
 requires `--sensitive`. A compile failure writes nothing. Publication runs
 with the invoking account's credentials, including when a
 context-backed read needs root. Context-free `render effective --input-dir` does not
@@ -560,7 +560,7 @@ order (`TestRenderEffectiveOriginsMarkEachLeaf`).
 
 `bootwright render acquisitions` lists every artifact the selected desired
 state acquires or hands a Machine to acquire, from the selected context's
-input or, with `--input-dir`, a context-free input as `validate --file` reads
+input or, with `--input-dir`, a context-free input as `check input --file` reads
 it; `--input-dir` conflicts with `--context`. It registers nothing, contacts
 nothing and reads no host. Each row names its kind, the artifact, its
 version, its origin and that origin's
@@ -650,7 +650,7 @@ only an entitled client; tracked as
 
 #### Schema export
 
-`bootwright schema --format json-schema` writes one advisory JSON Schema
+`bootwright catalog schema --format json-schema` writes one advisory JSON Schema
 (draft 2020-12) document: a `oneOf` over every registered kind, each stating
 the envelope, field types, closed field sets, enum values and numeric bounds of
 its `spec`, with Environment kind defaults as partial specs (the `Environment`
@@ -658,7 +658,7 @@ entry without `defaults`). A required field is stated only inside a list
 element or open-map value, which kind defaults copy whole; a record field a
 kind default can supply is not required in the authored document
 (`TestTheAdvisoryJSONSchemaAdmitsAFieldAKindDefaultSupplies`).
-It reads no context and contacts nothing. `validate` stays the authority:
+It reads no context and contacts nothing. `check input` stays the authority:
 lexical grammars, references, unions and cross-field rules are not in the
 export, and every tracked example validates alike under both
 (`TestEveryExampleValidatesAlikeUnderTheAdvisoryJSONSchema`). Text mode writes
@@ -720,32 +720,21 @@ Text mode writes the document; either structured mode places it in
 
 ## Lifecycle behavior
 
-`plan`, `apply`, and `destroy` act on the complete selected lifecycle unit.
-They accept no positional operand, partial selector, range, mode,
-reconciliation, adoption, reclaim, force, or resource-specific subcommand.
+`plan apply`, `plan destroy`, `apply` and `destroy` act on the complete
+selected lifecycle unit. They accept no positional operand, partial selector,
+range, mode, reconciliation, adoption, reclaim, force or resource-specific
+subcommand.
 
-`plan` is a pure text preview of the next legal full operation or frozen
-continuation point. Each preview is the
-[decision](state-reconciliation.md#stages-and-the-pause-boundary) of the verb
-it previews, so wherever that decision refuses, it refuses with the same
-diagnostics and no receipt. With no operation, or a completed destroy, it
-previews the fresh operation the current state would start, listing every block
-in frozen order with the description and impacts of the verb it previews. With
-an incomplete operation it previews that exact continuation point instead,
-showing which blocks are already done and which block resumes, and never a
-re-planned alternative, except that a failed destroy previews the fresh removal
-`destroy` starts over what it has not yet proved gone. When every block of a
-`running` or `unknown` operation, or of a `failed` destroy, is done, its own
-verb completes the
-operation's [finalization](state-reconciliation.md#lifecycle-unit) and then
-settles, and the preview says so in one line above those blocks; an `apply`
-whose input changed refuses there instead, and so does its preview. With a
-completed apply it previews the
-[additive apply](state-reconciliation.md#additive-apply) when that apply
-admits the changed input, under `--stage` and `--until`, and otherwise, over
-unchanged input or any other change, the destroy that the recorded ownership
-evidence defines. It reads context state, allocates no identity, writes nothing and
-creates no log.
+Each preview uses the decision of the verb the operator names. `plan apply`
+previews a fresh or additive apply, the exact continuation of an unfinished
+apply, or a settled apply over unchanged input. Changed input that apply
+cannot admit refuses with apply's diagnostic. `plan destroy` previews the
+removal the ownership records support. This includes a replacement after a
+failed destroy or removal of the owned effects of an unfinished apply.
+A settled verb previews no steps. An interrupted finalization is identified
+when the selected verb would finish it. Previews allocate no identity,
+create no log, and consume no authorization. An apply preview can include
+read-only host checks, while execution still performs its own required proofs.
 
 An invocation whose work durable state already proves settles before any of
 that: it presents no plan, asks for no confirmation, requires and refuses no
@@ -760,7 +749,7 @@ completed blocks is never read as work this invocation performed.
 
 `apply` and `destroy` present the frozen plan, which marks each step that
 consumes an authorization and closes with the tokens it requires; a `destroy`,
-and a `plan --authorize erase=<machine>:<method>` that previews it, also marks
+and a `plan destroy --authorize erase=<machine>:<method>` that previews it, also marks
 each step an erase relaxation changes, naming the Machine and the method in the
 step's description, so the relaxation is reviewed in the plan and bound by its
 `data-loss` digest. Then they check the authorizations, then ask the ordinary
@@ -798,8 +787,8 @@ unless `--yes` was supplied. Under `--yes`, or input that cannot answer a
 prompt, an authorization must carry that digest. A flag bypasses no state or
 safety gate.
 
-The add-on journey runs these commands in order: `add-ons list` and `add-ons info
---name <package>` choose a package and give its binding skeleton, `validate`
+The add-on journey runs these commands in order: `catalog add-ons list` and `add-ons info
+--name <package>` choose a package and give its binding skeleton, `check input`
 admits the binding, `plan` previews the `add-ons` stage, `apply` installs it
 (`apply --until <cluster>.<package>` pauses after one
 [instance](state-reconciliation.md#stopping-after-an-add-on-instance)), `status`
@@ -811,7 +800,7 @@ reports its readiness and `destroy` [retires](add-ons.md#retirement) it. The
 `plan` and `apply` accept the [`--stage` flag](cli/commands.md#flag-relationships-and-safeguards);
 what a selection gates, pauses and refuses is owned by the
 [stage contract](state-reconciliation.md#stages-and-the-pause-boundary).
-`plan --stage` previews which blocks the next `apply` would resolve, retry or
+`plan apply --stage` previews which blocks the next `apply` would resolve, retry or
 start and which it would defer, as the
 [stage contract](state-reconciliation.md#stages-and-the-pause-boundary) admits
 them, with the markers of the
@@ -898,10 +887,9 @@ replacement, those of the blocks it retains. A finalization carries none, and
 neither does `bootwright destroy --context <name>` offered beside an incomplete
 apply, since its presented plan names them.
 
-`status` draws its next steps from one candidate list, in this order: the
-operation's own verb (`plan` and `apply` beside no operation), the `destroy`
-that supersedes an incomplete apply, `bootwright controller install`, and the context
-deletion `bootwright context delete --name <name> --purge`. A candidate verb is
+`status` considers, in order, the current operation's verb (`plan apply` and
+`apply` when idle), `destroy` over an incomplete apply, `controller install`,
+and `context delete --name <name> --purge`. A candidate verb is
 offered only where its decision would pass over the records `status` read, so
 `status` never offers a command those records refuse; where the decision
 refuses, the exit its refusal names (`controller install` or the deletion) is offered in its
@@ -915,7 +903,7 @@ by running its verb over the records and holds the steps to exactly them):
 - beside no operation, `controller install` alone while the host's controller
   setup has not completed, because an apply claims the host only after it
   ([host identity](controller.md#host-identity-and-shared-prerequisites)), and
-  otherwise `bootwright plan --context <name>` and
+  otherwise `bootwright plan apply --context <name>` and
   `bootwright apply --context <name>`; but where it names
   records or evidence no index accounts for, which both verbs refuse, only the
   deletion their refusal names,
@@ -978,17 +966,17 @@ Beside no operation, where the first `plan` and `apply` are offered, `status`
 also reads what they would stop on from the selected input and the host,
 without an effect, an exclusive lock or a flag: each declared Secret whose
 material is missing or stale as `secret check` decides it, and each installer
-image the input names that the media store `media list` reads does not hold.
+image the input names that the media store `catalog media list` reads does not hold.
 It names each in the `readiness` member of its
 [result](cli/output.md#lifecycle-and-status-results) and, ahead of the
 `plan` step, offers each one's remedy, `bootwright secret set` or
-`generate` for a Secret and `bootwright media add --name <image>` for an
+`generate` for a Secret and `bootwright catalog media add --name <image>` for an
 image, in the order of the rows. These steps are the one place a next step
 carries a placeholder the operator fills, because the material or file is the
 operator's. They are omitted when nothing is missing, over an operation, where
 the frozen plan and its Secret binding decide, and when the only step is
 `controller install` or a deletion. A read that fails adds no row, because
-`secret check` and `media list` report it when run.
+`secret check` and `catalog media list` report it when run.
 
 An apply that has not completed owns every block it started, whichever state
 it stopped in, so taking them back is as legitimate a way forward as

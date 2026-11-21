@@ -500,7 +500,7 @@ var ansibleReservedKeys = []string{"__ansible_type", "__ansible_unsafe", "__ansi
 // Ansible as data; this keeps a value that would be code there, or that no
 // runner could encode, out of a plan at all.
 func RefuseTemplateDelimiters(contextName string, definitions []reconciliation.BlockDefinition) error {
-	return refuseTemplateValues(contextName, contextCommand(contextName, "plan"), definitions)
+	return refuseTemplateValues(contextName, contextCommand(contextName, "plan apply"), definitions)
 }
 
 // RefuseBoundedTemplateDelimiters refuses a bounded run's requests as

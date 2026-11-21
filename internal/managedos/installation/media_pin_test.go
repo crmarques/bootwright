@@ -129,7 +129,7 @@ func TestPlanRefusesAnImageMissingFromTheStore(t *testing.T) {
 				reported.Message != "the host media store holds no image "+test.image+", which "+test.owner+" names in "+test.field {
 				t.Fatalf("diagnostic = %+v", reported)
 			}
-			if !strings.Contains(reported.Remediation, "bootwright media add --name "+test.image+" ") {
+			if !strings.Contains(reported.Remediation, "bootwright catalog media add --name "+test.image+" ") {
 				t.Fatalf("remediation = %q", reported.Remediation)
 			}
 		})
@@ -145,7 +145,7 @@ func TestPlanRefusesADeclaredChecksumThatDiffers(t *testing.T) {
 			t.Fatalf("the message %q does not name %s", reported.Message, part)
 		}
 	}
-	if !strings.Contains(reported.Remediation, "bootwright media add --name "+bootImageName+" --from-file <path> --sha256 "+declared+", or --from-url <url> --sha256 "+declared) {
+	if !strings.Contains(reported.Remediation, "bootwright catalog media add --name "+bootImageName+" --from-file <path> --sha256 "+declared+", or --from-url <url> --sha256 "+declared) {
 		t.Fatalf("remediation = %q", reported.Remediation)
 	}
 }
@@ -165,7 +165,7 @@ func TestPlanRefusesAnImageWhoseBytesNoLongerHaveTheirRecordedSize(t *testing.T)
 	_, err := planWith(&fixtureMedia{records: records}, labCatalog())
 	reported := onlyDiagnostic(t, err)
 	if reported.Message != "the host media store's image "+dvdImageName+" no longer has the size its record names" ||
-		!strings.Contains(reported.Remediation, "bootwright media add --name "+dvdImageName+" --from-file <path>, or --from-url <url> --sha256 <digest>") {
+		!strings.Contains(reported.Remediation, "bootwright catalog media add --name "+dvdImageName+" --from-file <path>, or --from-url <url> --sha256 <digest>") {
 		t.Fatalf("diagnostic = %+v", reported)
 	}
 }
@@ -188,8 +188,8 @@ func TestPlanRefusesAnImageTheStoreCannotRead(t *testing.T) {
 				(record.Failure != "" && !strings.HasSuffix(reported.Message, ": "+record.Failure)) {
 				t.Fatalf("diagnostic = %+v", reported)
 			}
-			for _, part := range []string{"bootwright media list", "bootwright media delete --name " + dvdImageName,
-				"bootwright media add --name " + dvdImageName + " --from-file <path>"} {
+			for _, part := range []string{"bootwright catalog media list", "bootwright catalog media delete --name " + dvdImageName,
+				"bootwright catalog media add --name " + dvdImageName + " --from-file <path>"} {
 				if !strings.Contains(reported.Remediation, part) {
 					t.Fatalf("remediation %q does not name %s", reported.Remediation, part)
 				}
@@ -232,16 +232,16 @@ func TestPlanRefusesAnImageThatIsNotTheDeclaredRelease(t *testing.T) {
 	}{
 		"no release": {managedos.MediaRelease{},
 			"the media store holds no release for %s, which this build reads from the image's .treeinfo or .discinfo when it is added",
-			"bootwright media delete --name %s, then bootwright media add --name %s with this build"},
+			"bootwright catalog media delete --name %s, then bootwright catalog media add --name %s with this build"},
 		"no family": {managedos.MediaRelease{Version: "9.8", Arch: "x86_64"},
 			"%s names no release family, as a boot image's .discinfo does, and an installation installs packages only from an image whose .treeinfo names Red Hat Enterprise Linux",
-			"import the Red Hat Enterprise Linux DVD with bootwright media add and select it for " + profile + ", or select a subscription package source there"},
+			"import the Red Hat Enterprise Linux DVD with bootwright catalog media add and select it for " + profile + ", or select a subscription package source there"},
 		"another family": {managedos.MediaRelease{Family: "CentOS Stream", Version: "9.8", Arch: "x86_64"},
 			"%s holds a CentOS Stream x86_64 release, and an installation installs only Red Hat Enterprise Linux on x86_64",
-			"import a Red Hat Enterprise Linux x86_64 image with bootwright media add and select it for " + profile},
+			"import a Red Hat Enterprise Linux x86_64 image with bootwright catalog media add and select it for " + profile},
 		"another arch": {managedos.MediaRelease{Family: "Red Hat Enterprise Linux", Version: "9.8", Arch: "aarch64"},
 			"%s holds a Red Hat Enterprise Linux aarch64 release, and an installation installs only Red Hat Enterprise Linux on x86_64",
-			"import a Red Hat Enterprise Linux x86_64 image with bootwright media add and select it for " + profile},
+			"import a Red Hat Enterprise Linux x86_64 image with bootwright catalog media add and select it for " + profile},
 		"another minor": {rhelRelease("9.6"),
 			"%s holds release 9.6 and " + profile + " declares spec.os.version 9.8",
 			"set spec.os.version on " + profile + " to 9.6, or import the 9.8 image"},

@@ -1,13 +1,8 @@
-  bootwright / media delete
-      Delete one stored image and its record. An image any context reserves is refused, because
-      a frozen operation still needs exactly those bytes.
+  bootwright / catalog add-ons list
+      List built-in add-on packages
 
   Usage
-    bootwright media delete [flags]
-
-  Command flags
-      --name  Select the exact object name (required)
-      --yes   Confirm the command's ordinary confirmation
+    bootwright catalog add-ons list [flags]
 
   Common flags
       --ascii       Use ASCII status markers
@@ -19,4 +14,4 @@
       --width       Set presentation width (0: automatic) · default 0
 
   Examples
-    bootwright media delete --name installer.iso
+    bootwright catalog add-ons list --output json

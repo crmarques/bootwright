@@ -98,7 +98,7 @@ func TestAGroupWithAnAvailableSubcommandIsNotListedUnavailable(t *testing.T) {
 }
 
 func TestScalarEnumRefusalListsAllowedValues(t *testing.T) {
-	code, out, errOut, record := runRecorded([]string{"validate", "--output", "unsupported"})
+	code, out, errOut, record := runRecorded([]string{"check", "input", "--output", "unsupported"})
 	if code != 2 || out != "" || record.calls != 0 || !strings.Contains(errOut, "--output must be one of: text, json, yaml") {
 		t.Fatalf("%d %q %q", code, out, errOut)
 	}

@@ -1,11 +1,13 @@
-  bootwright / controller check
-      Verify, without installing or changing anything, the context-independent controller
-      prerequisites controller install prepares on this host: its host packages, the controller
-      runtime and the state root. It selects no context; the prerequisites a context adds are
-      checked by preflight --stage controller and installed by the controller stage of apply.
+  bootwright / catalog media delete
+      Delete one stored image and its record. An image any context reserves is refused, because
+      a frozen operation still needs exactly those bytes.
 
   Usage
-    bootwright controller check [flags]
+    bootwright catalog media delete [flags]
+
+  Command flags
+      --name  Select the exact object name (required)
+      --yes   Confirm the command's ordinary confirmation
 
   Common flags
       --ascii       Use ASCII status markers
@@ -17,4 +19,4 @@
       --width       Set presentation width (0: automatic) · default 0
 
   Examples
-    bootwright controller check
+    bootwright catalog media delete --name installer.iso

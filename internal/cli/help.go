@@ -18,7 +18,7 @@ func writeHelp(w io.Writer, command *cobra.Command) error {
 	}
 	text.mutedLines([]string{description})
 	text.section("Usage")
-	text.lines([]string{command.UseLine()})
+	text.lines([]string{helpUsage(command)})
 	if command == command.Root() {
 		for _, group := range rootHelpGroups {
 			var rows [][]string
@@ -80,6 +80,21 @@ func writeHelp(w io.Writer, command *cobra.Command) error {
 		}
 	}
 	return text.writeTo(w)
+}
+
+func helpUsage(command *cobra.Command) string {
+	switch command.CommandPath() {
+	case "bootwright":
+		return "bootwright [command] [flags]"
+	case "bootwright check":
+		return "bootwright check <target> [flags]"
+	case "bootwright plan":
+		return "bootwright plan <operation> [flags]"
+	}
+	if command.HasAvailableSubCommands() {
+		return command.CommandPath() + " <command> [flags]"
+	}
+	return command.UseLine()
 }
 
 func writeConciseHelp(w io.Writer, command *cobra.Command) error {

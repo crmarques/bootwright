@@ -337,7 +337,7 @@ func (a *mediaArea) Hold(ctx context.Context, name string) (media.Held, error) {
 		if managedos.ValidMediaName(name) {
 			absent = "the media store holds no image named " + name
 		}
-		return nil, mediaFailure(absent, "list the store with bootwright media list")
+		return nil, mediaFailure(absent, "list the store with bootwright catalog media list")
 	}
 	file, err := kernel.OpenRelative(a.dir, name, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
@@ -639,7 +639,7 @@ func (a *mediaArea) Stage(ctx context.Context, name, pin string) (media.Stage, e
 	own := mediaStageName(name)
 	if len(slices.DeleteFunc(entries, func(entry string) bool { return !stagedMediaName(entry) || entry == own })) >= maxStagedMedia {
 		return nil, mediaFailure("the media store is already acquiring its maximum number of images",
-			"retry after another bootwright media add finishes, or discard an image retained for a repeated add with bootwright media delete --name <name>")
+			"retry after another bootwright catalog media add finishes, or discard an image retained for a repeated add with bootwright catalog media delete --name <name>")
 	}
 	stage, err := a.openStage(ctx, name)
 	if err != nil {
@@ -690,8 +690,8 @@ func (s *mediaStage) claim(ctx context.Context) error {
 }
 
 func acquiringFailure(image string) error {
-	return mediaFailure("another bootwright media add is already acquiring image "+image,
-		"wait for it to finish, then review the store with bootwright media list")
+	return mediaFailure("another bootwright catalog media add is already acquiring image "+image,
+		"wait for it to finish, then review the store with bootwright catalog media list")
 }
 
 // lockRetained takes the lock of this image's stage when a record is retained
@@ -1151,7 +1151,7 @@ func (a *mediaArea) removeEntry(entry, image string) error {
 		return nil
 	case syscall.ENOTEMPTY, syscall.EEXIST:
 		return mediaFailure("media entry "+storeEntry(a.dir, entry)+" is a directory that still holds entries, which media delete never removes",
-			"remove "+storeEntry(a.dir, entry)+" beneath the state root, then repeat bootwright media delete --name "+image)
+			"remove "+storeEntry(a.dir, entry)+" beneath the state root, then repeat bootwright catalog media delete --name "+image)
 	}
 	return safeError(errno)
 }

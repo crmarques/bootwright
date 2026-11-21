@@ -1,6 +1,6 @@
 {
   "schemaVersion": "v1alpha1",
-  "command": "preflight",
+  "command": "check environment",
   "ok": true,
   "exitCode": 0,
   "result": {

@@ -20,7 +20,7 @@ journeys.
   never reach it. Machine output uses CLI-owned, tagged presentation types.
 - Every emitted diagnostic code appears in the output taxonomy, and a refusal
   names the object, the reason and the next step.
-- `validate` rejects a value the only implementation refuses; no default always
+- `check input` rejects a value the only implementation refuses; no default always
   refuses at plan time.
 - A declared flag is read; an unimplemented one is refused, never ignored.
 - A runbook lives in its e2e case, `e2e/<case>/runbook.md`, and runs as
@@ -46,7 +46,7 @@ assertions otherwise.
    whether the field is shared intent or implementation-shaped
    ([native fields](../../../specs/api.md#native-and-implementation-shaped-fields)).
 3. Make the field truthful: every admitted value is realized, refused at
-   `validate` or plan with a named diagnostic, or reported with the
+   `check input` or plan with a named diagnostic, or reported with the
    `api.deferred` warning; one that plan refuses until an item realizes it is
    a row of the [admitted but unrealized](../../../specs/api.md#admitted-but-unrealized)
    table. Never admit a field that plan preserves but ignores.

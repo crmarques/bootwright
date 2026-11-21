@@ -91,7 +91,7 @@ func (p *acceptingMediaPrompt) Confirm(context.Context, string, string) error {
 func TestTheShippedMediaServiceReportsAndPresentsOnStdout(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	args := []string{"media", "list", "--checksums"}
+	args := []string{"catalog", "media", "list", "--checksums"}
 	var out, errOut bytes.Buffer
 	process, hooks := interactiveProcess(cli.ClassifyInvocation(args), args, &out, &errOut, controller.Route{})
 	defer hooks.finish()

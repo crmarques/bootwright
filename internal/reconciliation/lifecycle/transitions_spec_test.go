@@ -496,7 +496,7 @@ func requirePreviewShape(t *testing.T, h *harness, where string, test stateMachi
 		if _, chosen, refusal = h.service.decider(nil).decideAs(ctx, view, "", reconciliation.Selection{}); refusal != nil {
 			return nil
 		}
-		result, after, _, refusal = h.service.preview(ctx, h.service.decider(nil), view, reconciliation.Selection{})
+		result, after, _, refusal = h.service.preview(ctx, h.service.decider(nil), view, chosen, reconciliation.Selection{})
 		return nil
 	})
 	if err != nil {

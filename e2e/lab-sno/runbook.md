@@ -27,7 +27,7 @@ Test another selection in a new complete run after cleanup.
 
 | `--set` | Default | Effect | Needs |
 | --- | --- | --- | --- |
-| `security.fips=true` | `false` | FIPS cluster; the fleet and cluster keys become ECDSA P-256 | a FIPS-mode controller (`cat /proc/sys/crypto/fips_enabled` prints `1`); otherwise `./bin/bootwright plan --context "$CONTEXT"` and `./bin/bootwright preflight --context "$CONTEXT" --stage controller` refuse `controller.unsupported` |
+| `security.fips=true` | `false` | FIPS cluster; the fleet and cluster keys become ECDSA P-256 | a FIPS-mode controller (`cat /proc/sys/crypto/fips_enabled` prints `1`); otherwise `./bin/bootwright plan apply --context "$CONTEXT"` and `./bin/bootwright check environment --context "$CONTEXT" --stage controller` refuse `controller.unsupported` |
 | `security.tpm2=true` | `false` | TPM2-bound LUKS on the node's installation disk | nothing; the profile already carries `tpm: {}` |
 | `addons.nmstate=true` | `false` | binding `lab-sno-nmstate`: Kubernetes NMState operator and instance | `addons.subscriptions.nmstate.channel` and `.startingCSV` |
 | `addons.metallb=true` | `false` | binding `lab-sno-metallb`: MetalLB operator, instance and layer 2 pool `services` | `addons.subscriptions.metallb.channel` and `.startingCSV` |
@@ -46,7 +46,7 @@ a single node has no virtual IPs and MetalLB never serves the API or ingress.
   `openshift.version`, installed independently of Bootwright. Require
   `oc version --client` to succeed. No RHEL media is needed: the agent ISO
   is built from the release.
-- Capacity, which the apply gate and `./bin/bootwright preflight --context "$CONTEXT" --stage clusters` count
+- Capacity, which the apply gate and `./bin/bootwright check environment --context "$CONTEXT" --stage clusters` count
   ([capacity admission](../../specs/substrates.md#capacity-admission)): the
   guest plus the provider's `capacityReserve` (1 CPU, 2 GiB, 10 GiB) need 9
   host CPUs not reserved by other libvirt domains, 18 GiB of `MemAvailable` in
@@ -135,12 +135,12 @@ umask 077
 RUN_DIR=$(mktemp -d)
 printf 'Run records: %s\n' "$RUN_DIR"
 CONTROLLER_ADDRESS="$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')"
-./bin/bootwright validate -f "$INPUT_DIR"
+./bin/bootwright check input -f "$INPUT_DIR"
 ./bin/bootwright context init --name "$CONTEXT" --input-dir "$INPUT_DIR"
 ./bin/bootwright secret set --context "$CONTEXT" --name openshift-pull-secret --value-file "${PULL_SECRET_FILE:?Set PULL_SECRET_FILE to the private pull-secret JSON file}" --yes
 ./bin/bootwright secret generate --context "$CONTEXT"
 ./bin/bootwright secret check --context "$CONTEXT"
-./bin/bootwright plan --context "$CONTEXT"
+./bin/bootwright plan apply --context "$CONTEXT"
 ```
 
 ## 3. Prepare the controller and services
@@ -153,7 +153,7 @@ Complete [Prepare listener firewall](../README.md#prepare-listener-firewall)
 in this shell, then require controller preflight to report `ready`:
 
 ```sh
-./bin/bootwright preflight --context "$CONTEXT" --stage controller
+./bin/bootwright check environment --context "$CONTEXT" --stage controller
 command -v nmstatectl                      # B706: now installed by the controller stage
 ./bin/bootwright apply --context "$CONTEXT" --stage infrastructure-services --yes
 ```
@@ -178,7 +178,7 @@ The initial check must succeed so an existing file is never overwritten:
     printf '[Resolve]\nDNS=%s\nDomains=~e2e.example.test\n' "$CONTROLLER_ADDRESS" | sudo tee /etc/systemd/resolved.conf.d/bootwright-e2e.conf
     sudo systemctl restart systemd-resolved
 )
-./bin/bootwright preflight --context "$CONTEXT" --stage clusters
+./bin/bootwright check environment --context "$CONTEXT" --stage clusters
 ```
 
 Every `resolution.*` and `capacity.*` check must be `passed`.
@@ -205,7 +205,7 @@ Start the installation in the original terminal and perform the table's
 Ctrl-C drills and the selected observations as their phases arrive:
 
 ```sh
-./bin/bootwright plan --context "$CONTEXT"
+./bin/bootwright plan apply --context "$CONTEXT"
 ./bin/bootwright apply --context "$CONTEXT" --yes
 ```
 
@@ -415,9 +415,9 @@ start the apply in the original terminal:
 
 ```sh
 ./bin/bootwright apply --context "$CONTEXT" --stage controller --yes
-./bin/bootwright preflight --context "$CONTEXT" --stage controller
+./bin/bootwright check environment --context "$CONTEXT" --stage controller
 ./bin/bootwright apply --context "$CONTEXT" --stage infrastructure-services --yes
-./bin/bootwright preflight --context "$CONTEXT" --stage clusters
+./bin/bootwright check environment --context "$CONTEXT" --stage clusters
 ./bin/bootwright apply --context "$CONTEXT" --yes
 ```
 

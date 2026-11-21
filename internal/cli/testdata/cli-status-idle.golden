@@ -21,7 +21,7 @@
     Bindings  0
 
   Next steps
-    bootwright plan --context lab
+    bootwright plan apply --context lab
     bootwright apply --context lab
 
   Handoff

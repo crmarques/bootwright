@@ -902,7 +902,7 @@ func TestMediaStagingRefusesBeyondItsBound(t *testing.T) {
 	}
 	err = claim("overflow.iso")
 	expectMediaRefusal(t, err, "maximum number of images")
-	if remedy := diagnostics.Of(err)[0].Remediation; !strings.Contains(remedy, "bootwright media delete") {
+	if remedy := diagnostics.Of(err)[0].Remediation; !strings.Contains(remedy, "bootwright catalog media delete") {
 		t.Fatalf("the bound's remedy names no way to discard a retained stage: %q", remedy)
 	}
 	if err := claim("image-00.iso"); err != nil {

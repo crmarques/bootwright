@@ -299,7 +299,7 @@ func TestActualCLIRefusesFutureReferenceFeatures(t *testing.T) {
 		t.Fatalf("reference discovery: got %d files, want 103", len(sources.Files))
 	}
 	var out, errOut bytes.Buffer
-	code := run(context.Background(), []string{"validate", "-f", sources.Roots[0], "--output", "json"}, &out, &errOut)
+	code := run(context.Background(), []string{"check", "input", "-f", sources.Roots[0], "--output", "json"}, &out, &errOut)
 	var result struct {
 		OK          bool
 		Diagnostics []diagnostics.Diagnostic

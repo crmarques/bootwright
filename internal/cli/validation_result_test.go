@@ -18,7 +18,7 @@ func TestValidationSuccessHasExactStableRepresentations(t *testing.T) {
 	for _, jsonMode := range []bool{false, true} {
 		var out, errOut bytes.Buffer
 		record := &dispatchRecord{report: &compilation.Report{Counts: compilation.Counts{FilesSeen: 2, ObjectsDecoded: 4}}}
-		args := []string{"validate", "-f", "synthetic", "--context", "ignored"}
+		args := []string{"check", "input", "-f", "synthetic", "--context", "ignored"}
 		if jsonMode {
 			args = append(args, "--output", "json")
 		}
@@ -28,7 +28,7 @@ func TestValidationSuccessHasExactStableRepresentations(t *testing.T) {
 		}
 		want := "  ✓ Desired state is valid (files seen: 2, objects decoded: 4)\n"
 		if jsonMode {
-			want = "{\"schemaVersion\":\"v1alpha1\",\"command\":\"validate\",\"ok\":true,\"exitCode\":0,\"result\":{\"counts\":{\"filesSeen\":2,\"objectsDecoded\":4},\"excludedContainerClusters\":[],\"excludedStorageClusters\":[],\"advisories\":[]},\"diagnostics\":[],\"logs\":[]}\n"
+			want = "{\"schemaVersion\":\"v1alpha1\",\"command\":\"check input\",\"ok\":true,\"exitCode\":0,\"result\":{\"counts\":{\"filesSeen\":2,\"objectsDecoded\":4},\"excludedContainerClusters\":[],\"excludedStorageClusters\":[],\"advisories\":[]},\"diagnostics\":[],\"logs\":[]}\n"
 		}
 		if out.String() != want {
 			t.Fatalf("got %q, want %q", out.String(), want)
@@ -45,7 +45,7 @@ func TestValidationWarningsAreSortedEscapedOnceAndPreserved(t *testing.T) {
 	report := &compilation.Report{Counts: compilation.Counts{FilesSeen: 3, ObjectsDecoded: 2}, ExcludedContainerClusters: []string{"z", "a", "a"}, ExcludedStorageClusters: []string{raw}, Advisories: warnings[:1], Diagnostics: warnings}
 	before, _ := json.Marshal(report)
 	var jsonOut, jsonErr bytes.Buffer
-	if err := writeValidation(&jsonOut, &jsonErr, "validate", report, true); err != nil {
+	if err := writeValidation(&jsonOut, &jsonErr, "check input", report, true); err != nil {
 		t.Fatal(err)
 	}
 	var envelope struct {
@@ -72,7 +72,7 @@ func TestValidationWarningsAreSortedEscapedOnceAndPreserved(t *testing.T) {
 		t.Fatal(envelope)
 	}
 	var out, errOut bytes.Buffer
-	if err := writeValidation(&out, &errOut, "validate", report, false); err != nil {
+	if err := writeValidation(&out, &errOut, "check input", report, false); err != nil {
 		t.Fatal(err)
 	}
 	wantWarnings := "  warning  api.excluded\n    a.yaml\n    excluded\n\n" +
@@ -95,7 +95,7 @@ func TestValidationFailuresNeverExposePartialReports(t *testing.T) {
 		if failure != nil {
 			record.report = &compilation.Report{Counts: compilation.Counts{FilesSeen: 999}}
 		}
-		code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"validate", "-f", "input.yaml", "--output", "json"})
+		code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"check", "input", "-f", "input.yaml", "--output", "json"})
 		var envelope struct {
 			OK          bool
 			Result      any
@@ -118,7 +118,7 @@ func TestValidationOutputFailuresAndCancellation(t *testing.T) {
 		for _, jsonMode := range []bool{false, true} {
 			var errOut bytes.Buffer
 			record := &dispatchRecord{report: &compilation.Report{}}
-			args := []string{"validate", "-f", "input.yaml"}
+			args := []string{"check", "input", "-f", "input.yaml"}
 			if jsonMode {
 				args = append(args, "--output", "json")
 			}
@@ -130,19 +130,19 @@ func TestValidationOutputFailuresAndCancellation(t *testing.T) {
 	}
 	var out bytes.Buffer
 	record := &dispatchRecord{report: &compilation.Report{Diagnostics: []diagnostic{{Severity: "warning", Code: "api.deferred", Message: "pending"}}}}
-	if code := New(Config{Out: &out, ErrOut: rejectingWriter{}, Services: dispatchSpies(record)}).Run(context.Background(), []string{"validate", "-f", "input.yaml"}); code != 1 || out.Len() != 0 {
+	if code := New(Config{Out: &out, ErrOut: rejectingWriter{}, Services: dispatchSpies(record)}).Run(context.Background(), []string{"check", "input", "-f", "input.yaml"}); code != 1 || out.Len() != 0 {
 		t.Fatal("warning output failed but success was printed")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	record = &dispatchRecord{report: &compilation.Report{}}
-	if code := New(Config{Out: io.Discard, ErrOut: io.Discard, Services: dispatchSpies(record)}).Run(ctx, []string{"validate", "-f", "input.yaml"}); code != 1 || record.calls != 0 {
+	if code := New(Config{Out: io.Discard, ErrOut: io.Discard, Services: dispatchSpies(record)}).Run(ctx, []string{"check", "input", "-f", "input.yaml"}); code != 1 || record.calls != 0 {
 		t.Fatal("canceled invocation reached service")
 	}
 }
 
 func TestValidationHelpAndMalformedCallsNeverDispatch(t *testing.T) {
-	for _, args := range [][]string{{"validate", "-f", "unopened", "--help"}, {"validate", "-f", "unopened", "--unknown"}, {"validate", "-f", "unopened", "--output", "bad"}, {"__bootwright_complete", "validate", ""}, {"version"}} {
+	for _, args := range [][]string{{"check", "input", "-f", "unopened", "--help"}, {"check", "input", "-f", "unopened", "--unknown"}, {"check", "input", "-f", "unopened", "--output", "bad"}, {"__bootwright_complete", "check", "input", ""}, {"version"}} {
 		record := &dispatchRecord{report: &compilation.Report{}}
 		New(Config{Services: dispatchSpies(record)}).Run(context.Background(), args)
 		if record.calls != 0 {

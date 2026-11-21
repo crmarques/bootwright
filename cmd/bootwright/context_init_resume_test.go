@@ -81,7 +81,7 @@ func TestAnInterruptedInitResumesFromAnotherDirectoryAndFromNoInput(t *testing.T
 			if record := registry.Contexts[0]; record.Mode != contexts.Ready || record.Revision == "" || record.EnvironmentDirectory != second {
 				t.Fatalf("the resumed init recorded %+v, want a ready record admitted from %s", record, second)
 			}
-			contextRun(t, services, 0, "validate", "--context", "alpha")
+			contextRun(t, services, 0, "check", "input", "--context", "alpha")
 		})
 	}
 	t.Run("refusals over the reservation name both exits", func(t *testing.T) {
@@ -90,7 +90,7 @@ func TestAnInterruptedInitResumesFromAnotherDirectoryAndFromNoInput(t *testing.T
 		const want = "  error  context.state\n    context alpha is still initializing: an earlier context init did not finish\n    " +
 			"Next: finish it with bootwright context init --name alpha and its original Context file, from any input directory, " +
 			"or discard it with bootwright context delete --name alpha --purge\n"
-		for _, args := range [][]string{{"context", "use", "--name", "alpha"}, {"validate", "--context", "alpha"}} {
+		for _, args := range [][]string{{"context", "use", "--name", "alpha"}, {"check", "input", "--context", "alpha"}} {
 			requireContextRefusal(t, services, want, args...)
 		}
 		_, errOut := contextRun(t, services, 0, "context", "delete", "--name", "alpha", "--purge", "--yes")

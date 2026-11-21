@@ -12,17 +12,17 @@ import (
 // whatever else the stage list names and in either output mode.
 func TestPreflightStageAddOnsIsRefusedAsNotImplementedBeforeAnyEffect(t *testing.T) {
 	for _, stage := range []string{"add-ons", "clusters,add-ons", "add-ons,controller"} {
-		args := []string{"preflight", "--stage", stage}
+		args := []string{"check", "environment", "--stage", stage}
 		if class := ClassifyInvocation(args); class.RequiresRoot || class.AmbientRoute {
 			t.Errorf("%v requested privilege or the ambient route: %+v", args, class)
 		}
 		code, out, errOut, record := runRecorded(args)
-		want := "  error  cli.not-implemented\n    bootwright preflight --stage add-ons is not implemented\n    Next: run bootwright preflight without that selection\n"
+		want := "  error  cli.not-implemented\n    bootwright check environment --stage add-ons is not implemented\n    Next: run bootwright check environment without that selection\n"
 		if code != 1 || out != "" || errOut != want || record.calls != 0 {
 			t.Errorf("%v: exit=%d stdout=%q stderr=%q calls=%d", args, code, out, errOut, record.calls)
 		}
 		code, out, errOut, record = runRecorded(append(args, "--output", "json"))
-		if code != 1 || errOut != "" || record.calls != 0 || !strings.Contains(out, `"command":"preflight"`) || !strings.Contains(out, `"code":"cli.not-implemented"`) || !strings.Contains(out, `bootwright preflight --stage add-ons is not implemented`) {
+		if code != 1 || errOut != "" || record.calls != 0 || !strings.Contains(out, `"command":"check environment"`) || !strings.Contains(out, `"code":"cli.not-implemented"`) || !strings.Contains(out, `bootwright check environment --stage add-ons is not implemented`) {
 			t.Errorf("%v json: exit=%d stdout=%q stderr=%q calls=%d", args, code, out, errOut, record.calls)
 		}
 	}
@@ -33,15 +33,15 @@ func TestPreflightStageAddOnsIsRefusedAsNotImplementedBeforeAnyEffect(t *testing
 // service, and the default stage list keeps accepting them.
 func TestPreflightClustersRequireTheClustersStage(t *testing.T) {
 	for _, args := range [][]string{
-		{"preflight", "--stage", "controller", "--clusters", "one"},
-		{"preflight", "--stage", "substrates,machines", "--clusters=one,two"},
+		{"check", "environment", "--stage", "controller", "--clusters", "one"},
+		{"check", "environment", "--stage", "substrates,machines", "--clusters=one,two"},
 	} {
 		code, out, errOut, record := runRecorded(args)
 		if code != 2 || out != "" || record.calls != 0 || !strings.HasPrefix(errOut, "  error  cli.usage\n    --clusters requires the clusters stage\n") {
 			t.Errorf("%v: exit=%d stdout=%q stderr=%q calls=%d", args, code, out, errOut, record.calls)
 		}
 	}
-	for _, args := range [][]string{{"preflight", "--clusters", "one"}, {"preflight", "--stage", "clusters", "--clusters", "one"}} {
+	for _, args := range [][]string{{"check", "environment", "--clusters", "one"}, {"check", "environment", "--stage", "clusters", "--clusters", "one"}} {
 		if code, out, errOut, record := runRecorded(args); code == 2 || record.calls != 1 {
 			t.Errorf("%v: exit=%d stdout=%q stderr=%q calls=%d", args, code, out, errOut, record.calls)
 		}
@@ -80,14 +80,14 @@ func TestGroupHelpOffersOnlyTheFlagsItsCommandsAccept(t *testing.T) {
 		context, sshHint bool
 	}{
 		{"controller", false, false},
-		{"media", false, false},
-		{"add-ons", false, false},
+		{"catalog media", false, false},
+		{"catalog add-ons", false, false},
 		{"completion", false, false},
 		{"machine", true, true},
 		{"cluster", true, true},
 	} {
 		var out, errOut bytes.Buffer
-		if code := New(Config{Out: &out, ErrOut: &errOut}).Run(context.Background(), []string{test.group, "--help"}); code != 0 || errOut.Len() != 0 {
+		if code := New(Config{Out: &out, ErrOut: &errOut}).Run(context.Background(), append(strings.Fields(test.group), "--help")); code != 0 || errOut.Len() != 0 {
 			t.Fatalf("%s --help: exit=%d stderr=%q", test.group, code, errOut.String())
 		}
 		if has := strings.Contains(out.String(), "--context "); has != test.context {

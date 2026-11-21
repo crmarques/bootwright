@@ -1,13 +1,14 @@
-  bootwright / add-ons
-      Inspect built-in add-on packages
+  bootwright / catalog
+      Browse installer media, built-in add-ons and the desired-state schema
 
   Usage
-    bootwright add-ons [flags]
+    bootwright catalog <command> [flags]
 
   Commands
   COMMAND   PURPOSE
-  info      Describe one built-in add-on package
-  list      List built-in add-on packages
+  add-ons   Inspect add-on packages supported by this build
+  media     Manage installer media shared by contexts on this controller
+  schema    Export the advisory schema of every desired-state kind
 
   Common flags
       --ascii       Use ASCII status markers

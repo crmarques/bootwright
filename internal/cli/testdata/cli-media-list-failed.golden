@@ -1,3 +1,4 @@
+  Installer media on this controller
   NAME                       SIZE      RELEASE      RESERVED           ADDED        STATE
   rhel-9.8-x86_64-boot.iso   997 MiB   9.8 x86_64   lab-rhel,lab-sno   2026-09-20   verified
   broken.iso                 -         -            -                  -            failed
@@ -18,6 +19,7 @@
     broken.iso               its record is malformed, not canonical or names another image
     rhel-9.8-x86_64-dvd.iso  its bytes changed while they were read
 
-    Remove a failed image with bootwright media delete --name <name> or replace it with
-    bootwright media add --name <name> --from-file <path>, or --from-url <url> --sha256
-    <digest>; repeat bootwright media list --checksums for one that changed while it was read.
+    Remove a failed image with bootwright catalog media delete --name <name> or replace it with
+    bootwright catalog media add --name <name> --from-file <path>, or --from-url <url> --sha256
+    <digest>; repeat bootwright catalog media list --checksums for one that changed while it
+    was read.

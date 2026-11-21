@@ -105,7 +105,7 @@ func mustList(t *testing.T) []catalog.Entry {
 func TestDescribeRefusesAnUnknownNameWithARemedy(t *testing.T) {
 	_, err := catalog.New(packages.Builtin()).Describe(context.Background(), catalog.DescribeRequest{Name: "metalb"})
 	found := diagnostics.Of(err)
-	if len(found) != 1 || found[0].Code != "access.target" || !strings.Contains(found[0].Remediation, "bootwright add-ons list") {
+	if len(found) != 1 || found[0].Code != "access.target" || !strings.Contains(found[0].Remediation, "bootwright catalog add-ons list") {
 		t.Fatalf("diagnostics %+v", found)
 	}
 	ctx, cancel := context.WithCancel(context.Background())

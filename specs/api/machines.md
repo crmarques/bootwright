@@ -963,7 +963,7 @@ frozen request keeps its shape:
 `<filename.iso>` follows the [media name grammar](../cli/commands.md#flag-relationships-and-safeguards)
 and names an entry of the host-wide [media store](../managed-os.md#media-store),
 the only source the installation boots from; any other source is rejected at
-`spec.bootMedia`, naming the `bootwright media add` import that fixes it. Store
+`spec.bootMedia`, naming the `bootwright catalog media add` import that fixes it. Store
 media is pinned by the immutable-operation workflow, so the checksum stays
 optional. Validation is lexical only.
 

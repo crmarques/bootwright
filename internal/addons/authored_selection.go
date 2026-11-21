@@ -8,7 +8,7 @@ import (
 func validateAuthoredIdentity(cluster string, members []selectedMember, add selectionReporter) {
 	for i, m := range members {
 		if m.shadows {
-			add(m, "api.invariant", fmt.Sprintf("ClusterAddon/%s has the name of built-in package %s", m.name, m.name), fmt.Sprintf("rename ClusterAddon/%s; bootwright add-ons list names the built-in packages", m.name))
+			add(m, "api.invariant", fmt.Sprintf("ClusterAddon/%s has the name of built-in package %s", m.name, m.name), fmt.Sprintf("rename ClusterAddon/%s; bootwright catalog add-ons list names the built-in packages", m.name))
 			continue
 		}
 		if !m.authored {

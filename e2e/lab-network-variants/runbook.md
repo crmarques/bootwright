@@ -147,7 +147,7 @@ e2e/render.sh lab-network-variants "${FEATURE_ARGS[@]}"
 CONTEXT="lab-network-variants"
 INPUT_DIR="$HOME/bootwright-e2e/lab-network-variants"
 CONTROLLER_ADDRESS=$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')
-./bin/bootwright validate -f "$INPUT_DIR"
+./bin/bootwright check input -f "$INPUT_DIR"
 ./bin/bootwright context init --name "$CONTEXT" --input-dir "$INPUT_DIR"
 ./bin/bootwright secret generate --context "$CONTEXT"
 if [ "$REGISTER" = true ]; then
@@ -155,7 +155,7 @@ if [ "$REGISTER" = true ]; then
     ./bin/bootwright secret set --context "$CONTEXT" --name rhsm-key --value-file "${RHSM_KEY_FILE:?Set RHSM_KEY_FILE}" --yes
 fi
 ./bin/bootwright secret check --context "$CONTEXT"
-./bin/bootwright plan --context "$CONTEXT"
+./bin/bootwright plan apply --context "$CONTEXT"
 ```
 
 ## 4. Verify the unsupported bond mode is refused
@@ -166,7 +166,7 @@ second directory, which validates, and import it:
 ```sh
 e2e/render.sh lab-network-variants "${FEATURE_ARGS[@]}" --set bond.mode=802.3ad --out-dir ~/bootwright-e2e/lab-network-variants-mode
 ./bin/bootwright context update --name "$CONTEXT" --input-dir ~/bootwright-e2e/lab-network-variants-mode --yes
-./bin/bootwright plan --context "$CONTEXT"
+./bin/bootwright plan apply --context "$CONTEXT"
 ```
 
 Require the plan to report "a libvirt bridge qualifies only active-backup
@@ -189,7 +189,7 @@ The controller stage prepares the listener firewall. See
 Continue only when the following preflight reports `ready`:
 
 ```sh
-./bin/bootwright preflight --context "$CONTEXT" --stage controller
+./bin/bootwright check environment --context "$CONTEXT" --stage controller
 ./bin/bootwright apply --context "$CONTEXT" --stage infrastructure-services --yes
 ```
 
@@ -543,7 +543,7 @@ under the context name `nv-cutoff`. Keep all four feature choices unchanged:
 ```sh
 e2e/render.sh lab-network-variants "${FEATURE_ARGS[@]}" --set name=nv-cutoff --set single=true --set cutoff=true --out-dir ~/bootwright-e2e/lab-network-variants-cutoff
 CUTOFF_CONTEXT="nv-cutoff"
-./bin/bootwright validate -f ~/bootwright-e2e/lab-network-variants-cutoff
+./bin/bootwright check input -f ~/bootwright-e2e/lab-network-variants-cutoff
 ./bin/bootwright context init --name "$CUTOFF_CONTEXT" --input-dir ~/bootwright-e2e/lab-network-variants-cutoff
 ./bin/bootwright secret generate --context "$CUTOFF_CONTEXT"
 if [ "$REGISTER" = true ]; then
@@ -552,7 +552,7 @@ if [ "$REGISTER" = true ]; then
 fi
 ./bin/bootwright secret check --context "$CUTOFF_CONTEXT"
 ./bin/bootwright apply --context "$CUTOFF_CONTEXT" --stage controller --yes
-./bin/bootwright preflight --context "$CUTOFF_CONTEXT" --stage controller
+./bin/bootwright check environment --context "$CUTOFF_CONTEXT" --stage controller
 ./bin/bootwright apply --context "$CUTOFF_CONTEXT" --stage infrastructure-services --yes
 ```
 

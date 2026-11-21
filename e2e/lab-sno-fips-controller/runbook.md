@@ -248,12 +248,12 @@ if [ -n "${HOST_CHECKS:-}" ]; then
     declare -p HOST_CHECKS >> "$RUN_DIR/host-env.sh"
 fi
 printf 'Restore host variables with: source %s/host-env.sh\n' "$RUN_DIR"
-bootwright validate -f "$INPUT_DIR/bootstrap"
-bootwright validate -f "$INPUT_DIR/fips"
+bootwright check input -f "$INPUT_DIR/bootstrap"
+bootwright check input -f "$INPUT_DIR/fips"
 bootwright context init --name "$CTX_BOOT" --input-dir "$INPUT_DIR/bootstrap"
 bootwright secret generate --context "$CTX_BOOT"
 bootwright secret check --context "$CTX_BOOT"
-bootwright plan --context "$CTX_BOOT"
+bootwright plan apply --context "$CTX_BOOT"
 bootwright apply --context "$CTX_BOOT" --stage controller --yes
 CONTEXT="$CTX_BOOT"
 ```
@@ -262,7 +262,7 @@ Complete [Prepare listener firewall](../README.md#prepare-listener-firewall)
 in this shell, then:
 
 ```sh
-bootwright preflight --context "$CTX_BOOT" --stage controller
+bootwright check environment --context "$CTX_BOOT" --stage controller
 bootwright apply --context "$CTX_BOOT" --stage infrastructure-services --yes
 bootwright apply --context "$CTX_BOOT" --yes
 bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- cat /proc/sys/crypto/fips_enabled
@@ -329,8 +329,8 @@ hash -r
 declare -p CTX_FIPS RUN_DIR PROFILE MANIFESTS BOOTWRIGHT_BIN PATH > "$RUN_DIR/controller-env.sh"
 bootwright version
 bootwright controller install --yes
-bootwright controller check                     # the FIPS mode check reports 1
-bootwright validate -f ~/fips
+bootwright check controller                     # the FIPS mode check reports 1
+bootwright check input -f ~/fips
 bootwright context init --name "$CTX_FIPS" --input-dir ~/fips
 bootwright secret set --context "$CTX_FIPS" --name openshift-pull-secret --value-file ~/openshift-pull-secret --yes
 bootwright secret generate --context "$CTX_FIPS"
@@ -395,7 +395,7 @@ Podman attachment networks remain E2E fixtures, created after the substrate.
 
 ```sh
 bootwright secret check --context "$CTX_FIPS"
-bootwright plan --context "$CTX_FIPS"          # no controller.unsupported: this controller is FIPS
+bootwright plan apply --context "$CTX_FIPS"          # no controller.unsupported: this controller is FIPS
 bootwright apply --context "$CTX_FIPS" --stage controller --yes
 CONTEXT="$CTX_FIPS"
 CONTROLLER_ADDRESS="198.51.100.10"
@@ -406,7 +406,7 @@ for the controller stage's automatic grants. Then build the services and the
 substrate on `libvirt-host`:
 
 ```sh
-bootwright preflight --context "$CTX_FIPS" --stage controller
+bootwright check environment --context "$CTX_FIPS" --stage controller
 bootwright apply --context "$CTX_FIPS" --stage infrastructure-services,substrates --yes
 dig @198.51.100.10 +short api.sno.e2e.example.test test.apps.sno.e2e.example.test   # both 198.51.100.31
 dig @198.51.100.10 +short mirror.openshift.com                                       # declared upstreams
@@ -425,7 +425,7 @@ preflight prove all installer names and capacity:
 ```sh
 getent ahostsv4 api.sno.e2e.example.test
 getent ahostsv4 api-int.sno.e2e.example.test
-bootwright preflight --context "$CTX_FIPS" --stage clusters
+bootwright check environment --context "$CTX_FIPS" --stage clusters
 ```
 
 Every `resolution.*` and `capacity.*` check must be `passed`.
@@ -472,7 +472,7 @@ its traffic checks. Remove the peers before destroying the provider's links.
 | Installation wait | Ctrl-C | Installation continues |
 
 ```sh
-bootwright plan --context "$CTX_FIPS"
+bootwright plan apply --context "$CTX_FIPS"
 bootwright apply --context "$CTX_FIPS" --yes
 ```
 
@@ -831,7 +831,7 @@ done
 Then, in the **FIPS controller** session:
 
 ```sh
-bootwright plan --context "$CTX_FIPS" --output json > "$RUN_DIR/destroy-plan.json"
+bootwright plan destroy --context "$CTX_FIPS" --output json > "$RUN_DIR/destroy-plan.json"
 jq '.result | {verb,steps,authorizations,stops}' "$RUN_DIR/destroy-plan.json"
 AUTH=$(jq -er '.result | select(.verb == "destroy") | .authorizations | select(length == 1) | .[0] | select(startswith("data-loss="))' "$RUN_DIR/destroy-plan.json")
 if bootwright destroy --context "$CTX_FIPS" --authorize "$AUTH" --yes \
@@ -843,7 +843,7 @@ cat "$RUN_DIR/destroy-while-running.json"
 jq -e '.diagnostics | any(.code == "lifecycle.start-power" and (.message | contains("sno-01")) and (.message | contains("the hypervisor reports the domain in use")))' \
     "$RUN_DIR/destroy-while-running.json" >/dev/null
 bootwright machine stop --context "$CTX_FIPS" --name sno-01 --yes
-bootwright plan --context "$CTX_FIPS" --output json > "$RUN_DIR/destroy-plan-stopped.json"
+bootwright plan destroy --context "$CTX_FIPS" --output json > "$RUN_DIR/destroy-plan-stopped.json"
 AUTH=$(jq -er '.result | select(.verb == "destroy") | .authorizations | select(length == 1) | .[0] | select(startswith("data-loss="))' "$RUN_DIR/destroy-plan-stopped.json")
 bootwright destroy --context "$CTX_FIPS" --authorize "$AUTH" --yes
 bootwright status --context "$CTX_FIPS"
@@ -956,7 +956,7 @@ Remove the controller guest and the bootstrap context:
 
 ```sh
 bootwright machine stop --context "$CTX_BOOT" --name fips-controller --yes
-bootwright plan --context "$CTX_BOOT" --output json > "$RUN_DIR/destroy-bootstrap-plan.json"
+bootwright plan destroy --context "$CTX_BOOT" --output json > "$RUN_DIR/destroy-bootstrap-plan.json"
 jq '.result | {verb,steps,authorizations,stops}' "$RUN_DIR/destroy-bootstrap-plan.json"
 AUTH=$(jq -er '.result | select(.verb == "destroy") | .authorizations | select(length == 1) | .[0] | select(startswith("data-loss="))' "$RUN_DIR/destroy-bootstrap-plan.json")
 bootwright destroy --context "$CTX_BOOT" --authorize "$AUTH" --yes
@@ -995,7 +995,7 @@ read -r -p 'Private host run directory: ' RUN_DIR
 source "$RUN_DIR/host-env.sh"
 sudo -v
 sha256sum -c "$RUN_DIR/bootwright.sha256"
-bootwright controller check
+bootwright check controller
 ip -4 route get 1.1.1.1
 bootwright machine list --context "$CTX_BOOT" --power-status
 ```
@@ -1012,7 +1012,7 @@ are persistent; do not recreate them with `ip link`.
 
 ```sh
 sudo systemctl start sshd
-bootwright preflight --context "$CTX_BOOT" --stage controller
+bootwright check environment --context "$CTX_BOOT" --stage controller
 bootwright machine start --context "$CTX_BOOT" --name fips-controller
 bootwright machine rsh --context "$CTX_BOOT" --name fips-controller
 ```

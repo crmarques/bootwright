@@ -2,7 +2,7 @@
       Inspect and reach a context's clusters
 
   Usage
-    bootwright cluster [flags]
+    bootwright cluster <command> [flags]
 
   Commands
   ○ Command | exec

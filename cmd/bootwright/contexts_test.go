@@ -55,7 +55,7 @@ func contextRun(t *testing.T, services cli.Services, want int, args ...string) (
 // context's plan shows, as an unattended invocation must supply it.
 func reviewedDataLoss(t *testing.T, services cli.Services, contextName string) string {
 	t.Helper()
-	out, _ := contextRun(t, services, 0, "plan", "--context", contextName, "--output", "json")
+	out, _ := contextRun(t, services, 0, "plan", "destroy", "--context", contextName, "--output", "json")
 	var envelope struct {
 		Result struct {
 			Authorizations []string `json:"authorizations"`
@@ -179,7 +179,7 @@ func TestCompleteContextJourney(t *testing.T) {
 	}
 	contextRun(t, services, 0, "context", "delete", "--name", "alpha", "--purge", "--yes")
 	contextRun(t, services, 1, "context", "current", "--short")
-	contextRun(t, services, 1, "validate", "--context", "alpha")
+	contextRun(t, services, 1, "check", "input", "--context", "alpha")
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	registry, err = repository.View(context.Background())
 	if err != nil {
@@ -296,7 +296,7 @@ func TestContextInitWithoutInputCreatesSelectableEncryptedContext(t *testing.T) 
 	if string(status["initialized"]) != "true" {
 		t.Fatal("default keyring was not eagerly initialized", status)
 	}
-	contextRun(t, services, 1, "validate")
+	contextRun(t, services, 1, "check", "input")
 	_, stderr = contextRun(t, services, 1, "secret", "generate")
 	if !strings.Contains(stderr, "context update --name test --input-dir") {
 		t.Fatal("missing input diagnostic does not explain import", stderr)
@@ -308,7 +308,7 @@ func TestContextInitWithoutInputCreatesSelectableEncryptedContext(t *testing.T) 
 		t.Fatal("equivalent context configuration changed durable state")
 	}
 	contextRun(t, services, 0, "context", "update", "--name", "test", "--input-dir", input, "--yes")
-	contextRun(t, services, 0, "validate")
+	contextRun(t, services, 0, "check", "input")
 	updated, err := repository.View(context.Background())
 	if err != nil || updated.Contexts[0].Name != record.Name || updated.Contexts[0].Revision == "" {
 		t.Fatal("first import did not preserve the context identity", updated, err)
@@ -335,7 +335,7 @@ func TestUserSelectionRefusesAnAbsentContextAndFollowsNameReuse(t *testing.T) {
 		t.Fatal(err)
 	}
 	before := stateFingerprint(t, root)
-	for _, args := range [][]string{{"context", "current"}, {"validate"}, {"secret", "encryption", "status"}} {
+	for _, args := range [][]string{{"context", "current"}, {"check", "input"}, {"secret", "encryption", "status"}} {
 		_, stderr := contextRun(t, services, 1, args...)
 		if !strings.Contains(stderr, "context.state") {
 			t.Fatal("marker naming an absent context was accepted", args, stderr)
@@ -350,7 +350,7 @@ func TestUserSelectionRefusesAnAbsentContextAndFollowsNameReuse(t *testing.T) {
 		t.Fatal(err)
 	}
 	contextRun(t, services, 0, "context", "current")
-	contextRun(t, services, 0, "validate")
+	contextRun(t, services, 0, "check", "input")
 	contextRun(t, services, 0, "secret", "encryption", "status")
 }
 
@@ -367,9 +367,9 @@ func TestContextReplayAndReadOnlyEffects(t *testing.T) {
 	if err := syscall.Mkfifo(filepath.Join(input, "secrets", "value"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	explicit, _ := contextRun(t, services, 0, "validate", "-f", input, "--output", "json")
+	explicit, _ := contextRun(t, services, 0, "check", "input", "-f", input, "--output", "json")
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
-	frozen, _ := contextRun(t, services, 0, "validate", "--output", "json")
+	frozen, _ := contextRun(t, services, 0, "check", "input", "--output", "json")
 	if explicit != frozen {
 		t.Fatalf("frozen admission changed results:\n%s\n%s", explicit, frozen)
 	}
@@ -408,7 +408,7 @@ func TestContextReplayAndReadOnlyEffects(t *testing.T) {
 	if err := json.Unmarshal([]byte(output), &envelope); err != nil || !envelope.OK || len(envelope.Result.EffectiveState) != 3 || envelope.Result.Counts.FilesSeen != 3 || len(envelope.Diagnostics) != 0 || len(envelope.Logs) != 0 {
 		t.Fatalf("effective result %s: %v", output, err)
 	}
-	frozen, _ = contextRun(t, services, 0, "validate", "--context", "alpha", "--output", "json")
+	frozen, _ = contextRun(t, services, 0, "check", "input", "--context", "alpha", "--output", "json")
 	if frozen != explicit {
 		t.Fatal("original deletion changed replay")
 	}
@@ -436,7 +436,7 @@ func TestInvalidAdmissionAndUnavailableRoutesDoNotWrite(t *testing.T) {
 	}
 	// An implemented lifecycle route validates the context instead, and a
 	// failed admission still leaves no state behind.
-	for _, args := range [][]string{{"apply", "--context", "alpha", "--yes"}, {"destroy", "--context", "alpha", "--yes"}, {"status", "--context", "alpha"}, {"plan", "--context", "alpha"}, {"machine", "list", "--context", "alpha"}, {"machine", "trust", "--context", "alpha", "--yes"}} {
+	for _, args := range [][]string{{"apply", "--context", "alpha", "--yes"}, {"destroy", "--context", "alpha", "--yes"}, {"status", "--context", "alpha"}, {"plan", "apply", "--context", "alpha"}, {"machine", "list", "--context", "alpha"}, {"machine", "trust", "--context", "alpha", "--yes"}} {
 		_, stderr := contextRun(t, services, 1, args...)
 		if !strings.Contains(stderr, "context.state") {
 			t.Fatal(stderr)
@@ -480,7 +480,7 @@ func TestProtectedContextCannotBeDeleted(t *testing.T) {
 	if len(registry.Contexts) != 1 || registry.Contexts[0].Mode != contexts.Ready {
 		t.Fatal(registry)
 	}
-	contextRun(t, services, 0, "validate")
+	contextRun(t, services, 0, "check", "input")
 	contextRun(t, services, 0, "context", "use", "--name", "alpha")
 	contextRun(t, services, 1, "context", "init", "--name", "alpha", "--input-dir", input)
 	contextRun(t, services, 1, "context", "update", "--name", "alpha", "--input-dir", input, "--yes")
@@ -563,12 +563,12 @@ func TestCompleteExampleContextRoundTrip(t *testing.T) {
 			}
 		}
 	}
-	direct, _ := contextRun(t, services, 0, "validate", "-f", input, "--output", "json")
+	direct, _ := contextRun(t, services, 0, "check", "input", "-f", input, "--output", "json")
 	contextRun(t, services, 0, "context", "init", "--name", "complete", "--input-dir", input)
 	if err := os.RemoveAll(input); err != nil {
 		t.Fatal(err)
 	}
-	replay, _ := contextRun(t, services, 0, "validate", "--output", "json")
+	replay, _ := contextRun(t, services, 0, "check", "input", "--output", "json")
 	if replay != direct {
 		t.Fatal("complete example did not replay equivalently")
 	}

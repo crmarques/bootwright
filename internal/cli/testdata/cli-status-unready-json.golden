@@ -57,14 +57,14 @@
         "kind": "media",
         "name": "rhel-9.iso",
         "state": "missing",
-        "remedy": "bootwright media add --name rhel-9.iso --from-file <path>"
+        "remedy": "bootwright catalog media add --name rhel-9.iso --from-file <path>"
       }
     ],
     "nextSteps": [
       "bootwright secret generate --context lab --name ssh-key",
       "bootwright secret set --context lab --name token --value-file <path>",
-      "bootwright media add --name rhel-9.iso --from-file <path>",
-      "bootwright plan --context lab",
+      "bootwright catalog media add --name rhel-9.iso --from-file <path>",
+      "bootwright plan apply --context lab",
       "bootwright apply --context lab"
     ],
     "lifecycle": null,

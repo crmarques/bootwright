@@ -79,7 +79,7 @@ func templatedRefusals(t *testing.T, example string, edits []exampleEdit, added 
 	for _, reported := range diagnostics.Of(lifecycle.RefuseTemplateDelimiters(example, definitions)) {
 		object := reported.Object.Kind + "/" + reported.Object.Name
 		_, where, found := strings.Cut(reported.Message, `" in `)
-		if reported.Code != "plan.template-value" || !found || !strings.HasSuffix(reported.Remediation, "bootwright plan --context "+example) {
+		if reported.Code != "plan.template-value" || !found || !strings.HasSuffix(reported.Remediation, "bootwright plan apply --context "+example) {
 			t.Fatalf("%s refused as %+v", object, reported)
 		}
 		if earlier, repeated := refused[object]; repeated {

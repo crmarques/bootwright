@@ -146,7 +146,7 @@ func TestAddonExamplesPreviewWithAllProducedInputs(t *testing.T) {
 	for _, name := range []string{"lab-compact-df", "lab-compact-hub"} {
 		t.Run(name, func(t *testing.T) {
 			services, _ := productionExampleContext(t, name, name)
-			out, _ := contextRun(t, services, 0, "plan", "--context", name, "--output", "json")
+			out, _ := contextRun(t, services, 0, "plan", "apply", "--context", name, "--output", "json")
 			if name == "lab-compact-df" && (!strings.Contains(out, "ceph-consumer-compact-storage") || !strings.Contains(out, "addon-fdf-compact")) {
 				t.Fatal("preview omitted export or its consumer", out)
 			}

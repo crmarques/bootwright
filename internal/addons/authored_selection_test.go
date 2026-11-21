@@ -73,7 +73,7 @@ func TestAnAuthoredAddOnNamedLikeABuiltInPackageIsRefusedAtItsSelectingEntry(t *
 	if len(selected) != 0 || len(issues) != 1 {
 		t.Fatalf("%+v %+v", selected, issues)
 	}
-	want := SelectionIssue{Binding: "binding", Issue: api.Issue{Code: "api.invariant", Field: "$.spec.addonRefs[0]", Message: "ClusterAddon/example has the name of built-in package example", Remediation: "rename ClusterAddon/example; bootwright add-ons list names the built-in packages"}}
+	want := SelectionIssue{Binding: "binding", Issue: api.Issue{Code: "api.invariant", Field: "$.spec.addonRefs[0]", Message: "ClusterAddon/example has the name of built-in package example", Remediation: "rename ClusterAddon/example; bootwright catalog add-ons list names the built-in packages"}}
 	if issues[0] != want {
 		t.Fatalf("%+v", issues[0])
 	}

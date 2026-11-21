@@ -48,7 +48,7 @@ func TestStatusReadinessListsMissingSecretsThenMediaTheStoreLacks(t *testing.T) 
 	want := []lifecycle.ReadinessGap{
 		{Kind: "secret", Name: "key", State: "stale", Remedy: "bootwright secret generate --context lab --name key"},
 		{Kind: "secret", Name: "token", State: "missing", Remedy: "bootwright secret set --context lab --name token --value-file <path>"},
-		{Kind: "media", Name: "rhel.iso", State: "missing", Remedy: "bootwright media add --name rhel.iso --from-file <path>"},
+		{Kind: "media", Name: "rhel.iso", State: "missing", Remedy: "bootwright catalog media add --name rhel.iso --from-file <path>"},
 	}
 	if err != nil || !slices.Equal(gaps, want) {
 		t.Fatalf("gaps = %v (%v), want %v", gaps, err, want)
