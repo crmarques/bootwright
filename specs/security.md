@@ -844,11 +844,14 @@ substitutes an update silently; recovery follows
 carries or pins: `govulncheck` over the executable's packages, failing only on
 a finding whose trace reaches a function, and OSV for every
 [locked wheel](controller.md#the-runtime-lock). Each default client of the
-[tool table](controller.md#the-tool-table) is judged by what its own binary
-holds: the gate downloads the release file the table pins, keeps it in the
-shared cache directory and checks it against the table's size and SHA-256 on
-every use, extracts the executable from an archive, and runs `govulncheck` in
-binary mode, which reads the Go toolchain and the modules the executable's
+[tool table](controller.md#the-tool-table) is judged by the compact scanner
+record extracted from its exact pinned binary. The refresh checks the size
+and digest of the publisher file before extraction and records the scanner
+version, release digest and compressed record digest in the reviewed scan
+lock. The tool-table workflow reproduces the records from the pinned files.
+The build gate verifies the lock and the local records, then runs
+`govulncheck` in binary mode against them,
+which reads the Go toolchain and the modules the executable's
 build information names and fails only on a finding whose symbols the binary
 links. A server component that the client's top-level module also holds
 therefore fails nothing unless the client links it. Binary mode cannot judge a
@@ -858,8 +861,8 @@ about each, at the client's own release, from a table that maps govc's
 one it does not map. An executable that names no module beyond the toolchain,
 as `virtctl`'s release does, is also judged by its top-level Go module through
 OSV and by every module of the `go.mod` its release was built from: the gate
-downloads the publisher's `go.mod` at the release tag, keeps it in the same
-cache by the SHA-256 and size pinned in
+reads a local copy of the publisher's `go.mod` at the release tag, verified
+against the SHA-256 and size pinned in
 `scripts/tools/clientassets/buildmodules.json` (a release with no pin fails
 the gate, and `make tool-table` reads the publisher's file and fails on a
 pin that differs or names a release the table no longer defaults), applies its
@@ -901,7 +904,7 @@ tree with any modified or untracked file (again after the build), a missing
 forced on, in either the host build (the default) or the container build
 (`RELEASE_BUILD=container`), each run with an allowlisted environment and no
 go env file. It then runs the executable and
-refuses unless `version` reports a passed vulnerability check, the requested
+refuses unless `version` reports a passed vulnerability check from the current UTC date, the requested
 version, `HEAD` and a clean source, unless `bootwright.cdx.json` is what that
 executable's `sbom` writes, and unless `bootwright.notices.txt` names the
 SHA-256 of that document. It ships the executable, the two documents and a

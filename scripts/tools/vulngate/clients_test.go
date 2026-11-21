@@ -36,7 +36,7 @@ func TestAReleaseFileIsKeptByItsDigestAndNeverTrustedUnverified(t *testing.T) {
 		_, _ = w.Write(body)
 	}))
 	t.Cleanup(server.Close)
-	source := clientSource{cache: t.TempDir(), db: "unused", client: server.Client()}
+	source := clientSource{cache: t.TempDir(), client: server.Client()}
 	entry := releaseOf(body)
 	asset := clientassets.Asset{URL: server.URL + "/release/kubectl"}
 	want := verifiedfetch.Pin{Name: "client", Bytes: entry.Default.Bytes, SHA256: entry.Default.SHA256}

@@ -1,4 +1,4 @@
-.PHONY: build release wheels vulngate licenses licenses-check tool-table tool-table-outdated container-build test vet fmt-check modules-check tidy-check completion-test vulncheck ansible-check docs-check execution-contracts-check focus quick race check-offline check check-go staticcheck cover cover-floors
+.PHONY: build release wheels vulngate licenses licenses-check tool-table tool-table-outdated tool-records-refresh tool-records-verify container-build test vet fmt-check modules-check tidy-check completion-test vulncheck ansible-check docs-check execution-contracts-check focus quick race check-offline check check-go staticcheck cover cover-floors
 
 GO := ./scripts/go
 VULNDB ?= https://vuln.go.dev
@@ -14,12 +14,12 @@ SOURCE ?= $(if $(COMMIT),$(if $(shell git status --porcelain --untracked-files=n
 STAMP = -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.source=$(SOURCE) -X main.vulnerabilityCheck=$(VULNERABILITY_CHECK)
 
 # The vulnerability gate runs before every build, and the build stamps its
-# verdict. It scans each default client's release file, which it keeps verified
-# by the tool table's SHA-256 in the shared cache directory, so a warm cache
-# downloads none. VULNCHECK=skip builds without the databases and stamps the
-# executable unchecked.
+# verdict. It scans reviewed compact records extracted from the pinned client
+# release files. Only the explicit record refresh and verification use the
+# release-file cache. VULNCHECK=skip stamps the executable unchecked.
 VULNCHECK ?= on
 CLIENTS_CACHE ?= $(shell ./scripts/cache-dir)/client-releases
+CLIENT_RECORDS = $(CURDIR)/scripts/tools/clientassets/scanrecords
 VULNERABILITY_CHECK = $(shell cat bin/vulnerability-check 2>/dev/null)
 vulngate: wheels
 	@set -eu; mkdir -p bin; rm -f bin/vulnerability-check; \
@@ -32,7 +32,7 @@ vulngate: wheels
 	$(GO) -C scripts/tools run ./vulngate -govulncheck "$(CURDIR)/bin/govulncheck.json" \
 		-lock "$(CURDIR)/internal/controller/runtimelock/lock.json" -table "$(CURDIR)/internal/controller/tooltable/tooltable.json" \
 		-exceptions "$(CURDIR)/cmd/bootwright/vulnerability-exceptions.json" -verdict "$(CURDIR)/bin/vulnerability-check" \
-		-artifacts "$(CLIENTS_CACHE)" -db "$(VULNDB)"
+		-records "$(CLIENT_RECORDS)" -db "$(VULNDB)"
 
 # The container build takes its Go image from the Dockerfile, which pins it by
 # tag and digest. Each proxy and module-mirror
@@ -64,6 +64,14 @@ tool-table:
 
 tool-table-outdated:
 	$(GO) -C scripts/tools run ./tooltable -table "$(TOOL_TABLE)" outdated
+
+tool-records-refresh:
+	$(GO) -C scripts/tools run ./vulngate -table "$(TOOL_TABLE)" -records "$(CLIENT_RECORDS)" \
+		-artifacts "$(CLIENTS_CACHE)" -refresh-records
+
+tool-records-verify:
+	$(GO) -C scripts/tools run ./vulngate -table "$(TOOL_TABLE)" -records "$(CLIENT_RECORDS)" \
+		-artifacts "$(CLIENTS_CACHE)" -verify-records
 
 # The Go modules' licenses are read from the module cache here and held to it
 # by licenses-check, and the build reads the table alone. The runtime lock's
@@ -115,6 +123,7 @@ container-build:
 	echo "$$engine build into $(CONTAINER_OUT) in the Go image $(or $(GO_IMAGE),the Dockerfile pins); settings passed as a secret:$${passed:- none}"; \
 	"$$engine" build --output type=local,dest="$$stage" \
 		--build-arg VERSION='$(VERSION)' --build-arg COMMIT='$(COMMIT)' --build-arg SOURCE='$(SOURCE)' --build-arg VULNCHECK='$(VULNCHECK)' \
+		--build-arg VULN_EVALUATION="$$(date -u +%s.%N)" \
 		$(if $(GO_IMAGE),--build-arg GO_IMAGE='$(GO_IMAGE)') \
 		--secret id=build-env,src="$$settings" \
 		$(if $(PROXY_CA),--secret id=proxy-ca$(comma)src='$(PROXY_CA)') \

@@ -11,6 +11,7 @@ ARG VERSION=
 ARG COMMIT=
 ARG SOURCE=
 ARG VULNCHECK=on
+ARG VULN_EVALUATION=
 
 WORKDIR /src
 COPY . .
@@ -20,7 +21,6 @@ RUN --mount=type=secret,id=build-env \
     --mount=type=cache,id=bootwright-go-mod,target=/go/pkg/mod \
     --mount=type=cache,id=bootwright-go-build,target=/root/.cache/go-build \
     --mount=type=cache,id=bootwright-runtime-wheels,target=/root/.cache/bootwright-runtime-wheels \
-    --mount=type=cache,id=bootwright-client-releases,target=/root/.cache/bootwright-client-releases \
     set -eu; \
     if test -s /run/secrets/build-env; then \
         while IFS= read -r setting; do export "$setting"; done </run/secrets/build-env; \
@@ -32,8 +32,6 @@ RUN --mount=type=secret,id=build-env \
     ./scripts/go mod download; \
     ./scripts/go -C scripts/tools mod download; \
     export WHEELS_CACHE=/root/.cache/bootwright-runtime-wheels; \
-    make wheels; \
-    export CLIENTS_CACHE=/root/.cache/bootwright-client-releases; \
     test -n "$VERSION" || unset VERSION; \
     test -n "$COMMIT" || unset COMMIT; \
     test -n "$SOURCE" || unset SOURCE; \

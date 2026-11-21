@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 const head = "0123456789abcdef0123456789abcdef01234567"
@@ -61,6 +62,10 @@ func goodConfig() config {
 	}
 }
 
+func freshVerdict() string {
+	return "passed " + time.Now().UTC().Format(time.DateOnly)
+}
+
 func envelope(version, check, source string) string {
 	return `{"schemaVersion":"v1","ok":true,"result":{"version":"` + version + `","commit":"` + head + `","source":"` + source + `","vulnerabilityCheck":"` + check + `"},"diagnostics":[]}`
 }
@@ -68,7 +73,7 @@ func envelope(version, check, source string) string {
 func goodCommands() *fakeCommands {
 	bill := "{\"bom\":\"one\"}\n"
 	digest := sha256.Sum256([]byte(bill))
-	f := &fakeCommands{version: envelope("v1.2.3", "passed 2026-11-10", "clean"), sbom: bill}
+	f := &fakeCommands{version: envelope("v1.2.3", freshVerdict(), "clean"), sbom: bill}
 	f.build = func(_ []string, arguments []string) error {
 		var stage string
 		for _, argument := range arguments {
@@ -271,9 +276,10 @@ func TestEachStagedFileIsHeldToItsCheckAndARefusedReleaseLeavesThePreviousWhole(
 	}{
 		"no pass":            {func(f *fakeCommands) { f.version = envelope("v1.2.3", "unchecked", "clean") }, "not a pass"},
 		"a failed pass":      {func(f *fakeCommands) { f.version = envelope("v1.2.3", "failed 2026-11-10", "clean") }, "not a pass"},
+		"a stale pass":       {func(f *fakeCommands) { f.version = envelope("v1.2.3", "passed 2000-01-01", "clean") }, "fresh UTC-day verdict"},
 		"a pass with text":   {func(f *fakeCommands) { f.version = envelope("v1.2.3", "passed 2026-11-10 and more", "clean") }, "not a pass"},
-		"another version":    {func(f *fakeCommands) { f.version = envelope("v9.9.9", "passed 2026-11-10", "clean") }, "reports version 'v9.9.9'"},
-		"a modified source":  {func(f *fakeCommands) { f.version = envelope("v1.2.3", "passed 2026-11-10", "modified") }, "reports source 'modified'"},
+		"another version":    {func(f *fakeCommands) { f.version = envelope("v9.9.9", freshVerdict(), "clean") }, "reports version 'v9.9.9'"},
+		"a modified source":  {func(f *fakeCommands) { f.version = envelope("v1.2.3", freshVerdict(), "modified") }, "reports source 'modified'"},
 		"not JSON":           {func(f *fakeCommands) { f.version = "version v1.2.3" }, "is not JSON"},
 		"no result":          {func(f *fakeCommands) { f.version = `{"ok":true}` }, "not a pass"},
 		"another bill":       {func(f *fakeCommands) { f.sbom = "{\"bom\":\"two\"}\n" }, "is not the bill of materials of this executable"},
@@ -346,7 +352,7 @@ func withNotices(text string) func([]string, []string) error {
 
 func TestTheVersionIsDecodedFromTheResultNotScannedForAKey(t *testing.T) {
 	t.Chdir(t.TempDir())
-	pretty := "{\n  \"diagnostics\": [{\"version\": \"v9.9.9\", \"commit\": \"x\"}],\n  \"result\": {\n    \"source\": \"clean\",\n    \"vulnerabilityCheck\": \"passed 2026-11-10\",\n    \"commit\": \"" + head + "\",\n    \"version\": \"v1.2.3\",\n    \"go\": \"go1.26\"\n  }\n}\n"
+	pretty := "{\n  \"diagnostics\": [{\"version\": \"v9.9.9\", \"commit\": \"x\"}],\n  \"result\": {\n    \"source\": \"clean\",\n    \"vulnerabilityCheck\": \"" + freshVerdict() + "\",\n    \"commit\": \"" + head + "\",\n    \"version\": \"v1.2.3\",\n    \"go\": \"go1.26\"\n  }\n}\n"
 	f := goodCommands()
 	f.version = pretty
 	if err := runRelease(t, goodConfig(), f); err != nil {
@@ -354,7 +360,7 @@ func TestTheVersionIsDecodedFromTheResultNotScannedForAKey(t *testing.T) {
 	}
 	t.Chdir(t.TempDir())
 	f = goodCommands()
-	f.version = `{"result":{"version":"v1.2.3","note":"a \"version\":\"v1.2.3\" inside text","commit":"` + head + `","source":"modified","vulnerabilityCheck":"passed 2026-11-10"}}`
+	f.version = `{"result":{"version":"v1.2.3","note":"a \"version\":\"v1.2.3\" inside text","commit":"` + head + `","source":"modified","vulnerabilityCheck":"` + freshVerdict() + `"}}`
 	if err := runRelease(t, goodConfig(), f); err == nil || !strings.Contains(err.Error(), "reports source 'modified'") {
 		t.Fatalf("err = %v", err)
 	}

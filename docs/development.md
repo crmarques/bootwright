@@ -108,17 +108,14 @@ inside them, so the build's `git status` sees the clean checkout while local
 worktrees, evidence and caches never reach the engine
 (`TestTheContainerBuildContextHoldsGitAndEveryTrackedFileAlone`).
 
-The build runs `make wheels` while the proxy settings below are set, into a
-cache mount of its own, so a warm cache fetches no wheel, and its vulnerability
-gate keeps the clients' release files in a second cache mount. Go's module and
-build caches are cache mounts the engine keeps between builds:
-on the reference host a cold build took 31 seconds, a rebuild after a source
-change 8, and a build that leaves go.mod unchanged downloads nothing. The
-compile runs with `GOPROXY=off`; its vulnerability gate still reaches
-`vuln.go.dev` and `api.osv.dev` through the same proxy settings and CA, and
-`make container-build VULNCHECK=skip` builds without them, stamped
-`unchecked`. `podman image prune --build-cache` or
-`docker builder prune` empties the caches.
+The container build keeps Go modules, compiled objects and the locked wheels
+in engine cache mounts. A warm build reuses them. The Make wrapper gives each
+checked invocation a fresh vulnerability evaluation while retaining those
+caches. `make build` prepares the wheels once. Before it runs, the Dockerfile
+preloads both Go module graphs. Compilation runs with `GOPROXY=off`. The
+vulnerability gate still queries `vuln.go.dev` and `api.osv.dev` through the
+same proxy settings and CA. It reads the reviewed client scan inputs locally.
+`make container-build VULNCHECK=skip` produces an unchecked development build.
 
 Behind a proxy, set it in the environment or on the command line:
 
@@ -442,15 +439,17 @@ that reaches the releases below it, and never above its default.
 tool changes and weekly, with `make tool-table-outdated` as an advisory
 summary.
 
-`make build` first runs `make vulngate`, the
-[vulnerability gate](../specs/security.md#the-vulnerability-gate): it needs
-`vuln.go.dev` and `api.osv.dev`, scans each default client's release file by
-the Go toolchain and modules that binary names (for `virtctl`, whose binary names none, the modules of its pinned release `go.mod`), fails on a finding no reviewed
-exception in `cmd/bootwright/vulnerability-exceptions.json` covers, and stamps
-its verdict, which `bootwright version` prints. The first run downloads the four
-release files, about 160 MB, and `virtctl`'s release `go.mod`, into `CLIENTS_CACHE` (`client-releases` in the
-shared cache directory), checking each against the tool table's SHA-256 and
-again on every reuse, so a warm cache downloads none. `make check` runs the gate
+`make vulngate` needs `vuln.go.dev` and `api.osv.dev`. It scans the
+executable's reachable Go code, the locked wheel versions and the reviewed
+client scan records. The verdict is stamped into the build and printed by
+`bootwright version`. Run `make tool-records-refresh` when a default client or
+the scanner pin changes. The refresh reads the pinned release files from
+`CLIENTS_CACHE` or downloads them, checks their size and digest, and replaces
+the compressed scan inputs and their lock. Where the client carries no module
+data, it also prepares the release's pinned `go.mod`. Review the resulting
+changes and run `make tool-records-verify` to reproduce them from the pinned
+files. The tool-table workflow does this comparison. A checked build reads
+these inputs without contacting the client publishers. `make check` runs the gate
 too, and `.github/workflows/vulnerability.yml` runs it daily, so a new advisory
 against an unchanged build fails within a day. The workflow's `images` job also
 scans on a schedule the managed services' and the emulated BMC's images, read by

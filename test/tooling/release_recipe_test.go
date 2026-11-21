@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 var (
@@ -104,7 +105,7 @@ func (b releaseBuild) script() string {
 }
 
 func goodRelease() releaseBuild {
-	return releaseBuild{check: "passed 2026-11-10", source: "clean", sbom: `{"bom":"one"}`, digest: `${digest%% *}`}
+	return releaseBuild{check: "passed " + time.Now().UTC().Format(time.DateOnly), source: "clean", sbom: `{"bom":"one"}`, digest: `${digest%% *}`}
 }
 
 // nativeGo stands in for scripts/go on the host build: it records the Go
@@ -129,7 +130,7 @@ for argument in "$@"; do
 done
 case "$*" in
 *runtimewheels*) ;;
-*vulngate*) printf 'passed:2026-11-10\n' >"$verdict" ;;
+*vulngate*) printf 'passed:%s\n' "$(date -u +%F)" >"$verdict" ;;
 *"./licenses notices"*)
 	digest="$(sha256sum "$sbom")"
 	printf 'Third-party notices of bootwright\n\nBill of materials: sha256:%s\n' "${digest%% *}" >"$out" ;;
@@ -476,7 +477,7 @@ func TestReleaseOnTheHostRunsTheBuildWithAnEnvironmentThatCannotChangeTheCompile
 		t.Fatalf("release on the host failed: %v\n%s", err, output)
 	}
 	files := checkout.shipped(t)
-	if !strings.Contains(files["bootwright"], `"version":"v1.2.3"`) || !strings.Contains(files["bootwright"], `"vulnerabilityCheck":"passed 2026-11-10"`) {
+	if !strings.Contains(files["bootwright"], `"version":"v1.2.3"`) || !strings.Contains(files["bootwright"], `"vulnerabilityCheck":"`+goodRelease().check+`"`) {
 		t.Errorf("the host build was not stamped with the release and a passed gate:\n%s", files["bootwright"])
 	}
 	log, err := os.ReadFile(filepath.Join(checkout.dir, "go.log"))

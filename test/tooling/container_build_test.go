@@ -49,7 +49,7 @@ func TestTheContainerBuildPinsTheGoImageOfGoMod(t *testing.T) {
 // buildArguments are the only values the container build takes as build
 // arguments, which an engine records in image metadata and build history;
 // every other setting may carry a credential and travels as a build secret.
-var buildArguments = []string{"GO_IMAGE", "VERSION", "COMMIT", "SOURCE", "VULNCHECK"}
+var buildArguments = []string{"GO_IMAGE", "VERSION", "COMMIT", "SOURCE", "VULNCHECK", "VULN_EVALUATION"}
 
 func TestContainerBuildPassesSettingsOnlyAsASecret(t *testing.T) {
 	root := filepath.Join("..", "..")
@@ -74,6 +74,9 @@ func TestContainerBuildPassesSettingsOnlyAsASecret(t *testing.T) {
 		if !slices.Contains(buildArguments, match[1]) {
 			t.Errorf("the container-build recipe passes build argument %s; a setting that may carry a credential belongs in the build-env secret", match[1])
 		}
+	}
+	if !strings.Contains(recipe, `--build-arg VULN_EVALUATION="$$(date -u +%s.%N)"`) {
+		t.Error("the container build must invalidate a cached vulnerability evaluation without taking an external argument")
 	}
 	if !strings.Contains(recipe, "--secret id=build-env,src=") {
 		t.Error("the container-build recipe does not pass the build-env secret")

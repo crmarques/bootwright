@@ -18095,3 +18095,17 @@ error's untrusted text.
 
 **Exit evidence:** a synthetic redirect reproduced the disclosure before the
 change. The delivering commit records its passing regression.
+
+## X641 — Reviewed client scan inputs
+
+**Owner:** Development tooling. **Item:** B1649 (enabling). **Authority:** the
+owner's request to implement the dependency proposal.
+
+The [build gate](../security.md#the-vulnerability-gate) verifies and scans
+reviewed local records for pinned clients. Maintenance reproduces them from
+pinned publisher files. A container release requires a newly evaluated
+vulnerability verdict.
+
+**Exit evidence:** reproduction from the four pinned publisher artifacts,
+changed-file refusal, and the live advisory gate with client publisher
+downloads blocked. The delivering commit records exact results.

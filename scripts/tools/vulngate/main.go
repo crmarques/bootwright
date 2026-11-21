@@ -87,7 +87,11 @@ func main() {
 	flag.StringVar(&o.exceptions, "exceptions", "", "the reviewed vulnerability exceptions")
 	flag.StringVar(&o.verdict, "verdict", "", "where to write the verdict the build stamps")
 	flag.StringVar(&o.osv, "osv", "https://api.osv.dev", "the OSV API base")
-	artifacts, db := "", ""
+	artifacts, db, records := "", "", ""
+	var refresh, verify bool
+	flag.StringVar(&records, "records", "", "directory of reviewed client scan inputs")
+	flag.BoolVar(&refresh, "refresh-records", false, "regenerate reviewed client scan inputs from pinned releases")
+	flag.BoolVar(&verify, "verify-records", false, "reproduce and compare the reviewed client scan inputs")
 	flag.StringVar(&artifacts, "artifacts", "", "a directory that keeps each client's verified release file across builds")
 	flag.StringVar(&db, "db", "https://vuln.go.dev", "the Go vulnerability database")
 	flag.StringVar(&today, "today", "", "the date to judge expiry by, YYYY-MM-DD; today when empty")
@@ -101,7 +105,25 @@ func main() {
 		o.today = parsed
 	}
 	o.client = &http.Client{Timeout: 2 * time.Minute}
-	source := clientSource{cache: artifacts, db: db, client: &http.Client{Timeout: 10 * time.Minute}}
+	if refresh || verify {
+		if refresh == verify || records == "" || o.table == "" {
+			fail(errors.New("choose -refresh-records or -verify-records with -records and -table"))
+		}
+		source := clientSource{cache: artifacts, client: &http.Client{Timeout: 10 * time.Minute}}
+		if err := refreshRecords(source, o.table, records, verify); err != nil {
+			fail(err)
+		}
+		return
+	}
+	if o.verdict != "" {
+		if err := os.Remove(o.verdict); err != nil && !errors.Is(err, os.ErrNotExist) {
+			fail(err)
+		}
+	}
+	source, err := openRecords(records, db, o.table)
+	if err != nil {
+		fail(err)
+	}
 	o.scanClient, o.buildModules = source.scan, source.buildModules
 	if err := run(o, os.Stdout); err != nil {
 		fail(err)

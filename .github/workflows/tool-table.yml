@@ -6,12 +6,18 @@ on:
       - internal/controller/tooltable/tooltable.json
       - scripts/tools/tooltable/**
       - scripts/tools/clientassets/**
+      - scripts/tools/vulngate/**
+      - scripts/tools/go.mod
+      - scripts/tools/go.sum
       - .github/workflows/tool-table.yml
   pull_request:
     paths:
       - internal/controller/tooltable/tooltable.json
       - scripts/tools/tooltable/**
       - scripts/tools/clientassets/**
+      - scripts/tools/vulngate/**
+      - scripts/tools/go.mod
+      - scripts/tools/go.sum
       - .github/workflows/tool-table.yml
   schedule:
     - cron: "41 5 * * 1"
@@ -31,6 +37,8 @@ jobs:
           go-version-file: go.mod
       - name: Verify every default against its publisher
         run: make tool-table
+      - name: Compare reviewed scan inputs to the pinned release files
+        run: make tool-records-verify
 
   outdated:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'

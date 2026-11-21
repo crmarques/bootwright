@@ -28,18 +28,18 @@ const maxExecutable = 1 << 30
 var scanning sync.Mutex
 
 type clientSource struct {
-	cache, db string
-	client    *http.Client
-	pins      func(kind, version string) (clientassets.Module, error)
+	cache  string
+	client *http.Client
+	pins   func(kind, version string) (clientassets.Module, error)
 }
 
-func (s clientSource) scan(entry pin) ([]byte, error) {
+func (s clientSource) extractRecord(entry pin) ([]byte, error) {
 	asset, known := clientassets.Of(entry.Kind, entry.Default.Version)
 	if !known {
 		return nil, fmt.Errorf("the tool table pins %s, whose publisher file this gate does not know", entry.Kind)
 	}
-	if s.cache == "" || s.db == "" || s.client == nil {
-		return nil, errors.New("-artifacts and -db are required to scan the clients")
+	if s.cache == "" || s.client == nil {
+		return nil, errors.New("-artifacts is required to refresh client records")
 	}
 	sweep(s.cache)
 	release, err := s.fetch(asset.URL, verifiedfetch.Pin{Name: entry.Kind + " " + entry.Default.Version, Bytes: entry.Default.Bytes, SHA256: entry.Default.SHA256})
@@ -64,13 +64,13 @@ func (s clientSource) scan(entry pin) ([]byte, error) {
 	scanning.Lock()
 	defer scanning.Unlock()
 	var out, problems bytes.Buffer
-	command := scan.Command(context.Background(), "-db", s.db, "-mode", "binary", "-format", "json", executable)
+	command := scan.Command(context.Background(), "-mode", "extract", executable)
 	command.Stdout, command.Stderr = &out, &problems
 	if err := command.Start(); err != nil {
 		return nil, err
 	}
 	if err := command.Wait(); err != nil {
-		return nil, fmt.Errorf("govulncheck could not scan %s %s; VULNCHECK=skip builds an executable stamped unchecked: %w: %s", entry.Kind, entry.Default.Version, err, bytes.TrimSpace(problems.Bytes()))
+		return nil, fmt.Errorf("govulncheck could not extract %s %s: %w: %s", entry.Kind, entry.Default.Version, err, bytes.TrimSpace(problems.Bytes()))
 	}
 	return out.Bytes(), nil
 }

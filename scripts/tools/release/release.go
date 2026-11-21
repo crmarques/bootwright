@@ -17,6 +17,7 @@ import (
 	"slices"
 	"strings"
 	"syscall"
+	"time"
 )
 
 const (
@@ -271,6 +272,9 @@ func verifyIdentity(c config, sys commands, executable, head string) error {
 	result := reported.Result
 	if !passed.MatchString(result.VulnerabilityCheck) {
 		return fmt.Errorf("the executable's vulnerability check is '%s', not a pass; a release needs the gate to have passed", result.VulnerabilityCheck)
+	}
+	if result.VulnerabilityCheck != "passed "+time.Now().UTC().Format(time.DateOnly) {
+		return fmt.Errorf("the executable's vulnerability check is '%s'; rebuild with a fresh UTC-day verdict", result.VulnerabilityCheck)
 	}
 	if result.Version != c.Version {
 		return fmt.Errorf("the executable reports version '%s', not '%s'", result.Version, c.Version)
