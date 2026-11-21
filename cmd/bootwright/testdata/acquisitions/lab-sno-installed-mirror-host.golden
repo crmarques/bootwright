@@ -34,6 +34,7 @@ default catalog image|registry.redhat.io/redhat/community-operator-index|v4.21|r
 default catalog image|registry.redhat.io/redhat/redhat-marketplace-index|v4.21|registry.redhat.io/redhat/redhat-marketplace-index|vendor||0|sno-01|OpenShiftCluster/sno
 update service|the cluster's update graph|stable-4.21|https://api.openshift.com/api/upgrades_info/v1/graph|vendor||0|sno-01|OpenShiftCluster/sno
 installation media|local-media:rhel-9.8-x86_64-boot.iso||the file or URL media add named|media store||0|controller|MachineImage/rhel-9-8-boot
+installation media|local-media:rhel-9.8-x86_64-dvd.iso||the file or URL media add named|media store||0|controller|MachineInstallProfile/rhel-9-8-mirror
 registry blob host|cdn.quay.io||cdn.quay.io|vendor delivery||0|controller,mirror,sno-01,sno-01,sno-01,sno-01|ArtifactServer/lab-artifacts, ArtifactServer/mirror-artifacts, OpenShiftCluster/sno
 registry blob host|cdn01.quay.io||cdn01.quay.io|vendor delivery||0|controller,mirror,sno-01,sno-01,sno-01,sno-01|ArtifactServer/lab-artifacts, ArtifactServer/mirror-artifacts, OpenShiftCluster/sno
 registry blob host|cdn02.quay.io||cdn02.quay.io|vendor delivery||0|controller,mirror,sno-01,sno-01,sno-01,sno-01|ArtifactServer/lab-artifacts, ArtifactServer/mirror-artifacts, OpenShiftCluster/sno

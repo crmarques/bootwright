@@ -30,6 +30,7 @@ release|quay.io/openshift-release-dev/ocp-v4.0-art-dev|4.21.15|quay.io/openshift
 storage image|cp.icr.io/cp/ibm-ceph/ceph-9-rhel10|v9.9.2-26947|cp.icr.io/cp/ibm-ceph/ceph-9-rhel10|vendor||0|controller,rhel-01,rhel-02,rhel-03|CephCluster/ceph-lab
 storage image|cp.icr.io/cp/synthetic/prometheus|sha256:1111111111111111111111111111111111111111111111111111111111111111|cp.icr.io/cp/synthetic/prometheus|vendor|1111111111111111111111111111111111111111111111111111111111111111|0|controller,rhel-01,rhel-02,rhel-03|CephCluster/ceph-lab
 storage packages|cephadm and its packages|20.2.2-349.el9cp|https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64|vendor||0|rhel-01,rhel-02,rhel-03|CephCluster/ceph-lab
+storage package key|Ceph RPM signing key||https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/RPM-GPG-KEY-IBM-CEPH|vendor||0|rhel-01,rhel-02,rhel-03|CephCluster/ceph-lab
 add-on catalog image|icr.io/cpopen/isf-data-foundation-catalog|sha256:2222222222222222222222222222222222222222222222222222222222222222|icr.io/cpopen/isf-data-foundation-catalog|vendor|2222222222222222222222222222222222222222222222222222222222222222|0|compact-01,compact-02,compact-03|ClusterAddonBinding/compact-data-foundation
 default catalog image|registry.redhat.io/redhat/redhat-operator-index|v4.21|registry.redhat.io/redhat/redhat-operator-index|vendor||0|compact-01,compact-02,compact-03|OpenShiftCluster/compact
 default catalog image|registry.redhat.io/redhat/certified-operator-index|v4.21|registry.redhat.io/redhat/certified-operator-index|vendor||0|compact-01,compact-02,compact-03|OpenShiftCluster/compact
@@ -39,6 +40,7 @@ update service|the cluster's update graph|stable-4.21|https://api.openshift.com/
 machine repository|ibm-storage-ceph-9|9.8|https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64/|vendor||0|rhel-01,rhel-02,rhel-03|MachineInstallProfile/rhel-9-8
 machine repository key|ibm-storage-ceph-9||https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/RPM-GPG-KEY-IBM-CEPH|vendor||0|rhel-01,rhel-02,rhel-03|MachineInstallProfile/rhel-9-8
 installation media|local-media:rhel-9.8-x86_64-boot.iso||the file or URL media add named|media store||0|controller|MachineImage/rhel-9-8-boot
+installation media|local-media:rhel-9.8-x86_64-dvd.iso||the file or URL media add named|media store||0|controller|MachineInstallProfile/rhel-9-8
 registry blob host|cdn.quay.io||cdn.quay.io|vendor delivery||0|controller,compact-01,compact-02,compact-03,compact-01,compact-02,compact-03,compact-01,compact-02,compact-03,compact-01,compact-02,compact-03|ArtifactServer/lab-artifacts, OpenShiftCluster/compact
 registry blob host|cdn01.quay.io||cdn01.quay.io|vendor delivery||0|controller,compact-01,compact-02,compact-03,compact-01,compact-02,compact-03,compact-01,compact-02,compact-03,compact-01,compact-02,compact-03|ArtifactServer/lab-artifacts, OpenShiftCluster/compact
 registry blob host|cdn02.quay.io||cdn02.quay.io|vendor delivery||0|controller,compact-01,compact-02,compact-03,compact-01,compact-02,compact-03,compact-01,compact-02,compact-03,compact-01,compact-02,compact-03|ArtifactServer/lab-artifacts, OpenShiftCluster/compact

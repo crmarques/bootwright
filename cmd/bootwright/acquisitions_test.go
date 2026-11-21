@@ -351,3 +351,25 @@ func TestTheReleaseMirrorProfileAdmitsVendorDeliveryAndDeniesPublicRegistries(t 
 		t.Fatalf("the cluster does not select the restricted proxy and bypass its internal mirror: %v", selected)
 	}
 }
+
+func TestDisconnectedCephInventoryNamesBothMediaAndThePackageSigningKey(t *testing.T) {
+	t.Parallel()
+	state, _ := compileAcceptance(t, exampleDirectory(t, "libvirt-3-nodes-ceph-disconnected"))
+	acquired, err := listAcquisitions(state.Effective())
+	if err != nil {
+		t.Fatal(err)
+	}
+	media := map[string]bool{}
+	key := false
+	for _, item := range acquired {
+		if item.Kind == "installation media" {
+			media[item.Artifact] = slices.Equal(item.Machines, []string{"controller"})
+		}
+		if item.Kind == "storage package key" {
+			key = strings.HasSuffix(item.Origin, "/keys/RPM-GPG-KEY-IBM-CEPH") && len(item.Machines) == 3
+		}
+	}
+	if len(media) != 2 || !media["local-media:rhel-9.8-x86_64-boot.iso"] || !media["local-media:rhel-9.8-x86_64-dvd.iso"] || !key {
+		t.Fatalf("installation media = %v, storage package key listed = %v", media, key)
+	}
+}

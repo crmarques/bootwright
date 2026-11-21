@@ -9,7 +9,9 @@ service image|docker.io/4km3/dnsmasq|sha256:52e25fb2601156ab66f6a0872c180b285df7
 service image|docker.io/dockurr/chrony|sha256:f584829f268b26b26b351000b60aa7c3507933873b6a6d77ffe9dcabcfdc7025|docker.io/dockurr/chrony|public|f584829f268b26b26b351000b60aa7c3507933873b6a6d77ffe9dcabcfdc7025|0|controller|NTPServer/lab-ntp
 storage image|cp.icr.io/cp/ibm-ceph/ceph-9-rhel10|v9.9.2-26947|cp.icr.io/cp/ibm-ceph/ceph-9-rhel10|vendor||0|controller,metal-01,metal-02,metal-03|CephCluster/ceph-lab
 storage packages|cephadm and its packages|20.2.2-349.el9cp|https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64|vendor||0|metal-01,metal-02,metal-03|CephCluster/ceph-lab
+storage package key|Ceph RPM signing key||https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/RPM-GPG-KEY-IBM-CEPH|vendor||0|metal-01,metal-02,metal-03|CephCluster/ceph-lab
 installation media|local-media:rhel-9.8-x86_64-boot.iso||the file or URL media add named|media store||0|controller|MachineImage/rhel-9-8-boot
+installation media|local-media:rhel-9.8-x86_64-dvd.iso||the file or URL media add named|media store||0|controller|MachineInstallProfile/rhel-9-8
 registry blob host|cdn.quay.io||cdn.quay.io|vendor delivery||0|controller|ArtifactServer/lab-artifacts
 registry blob host|cdn01.quay.io||cdn01.quay.io|vendor delivery||0|controller|ArtifactServer/lab-artifacts
 registry blob host|cdn02.quay.io||cdn02.quay.io|vendor delivery||0|controller|ArtifactServer/lab-artifacts

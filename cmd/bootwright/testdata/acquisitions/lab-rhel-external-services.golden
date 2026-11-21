@@ -16,6 +16,7 @@ host package|binutils||the controller's dnf repositories|host repositories||0|co
 service image|registry.access.redhat.com/ubi9/nginx-124|sha256:bff0f204cfef8af0b21a2e683a9d1231da98a429d856ee29ebd0e2691d919b56|registry.access.redhat.com/ubi9/nginx-124|vendor|bff0f204cfef8af0b21a2e683a9d1231da98a429d856ee29ebd0e2691d919b56|0|controller|ArtifactServer/lab-artifacts
 emulated BMC image|quay.io/metal3-io/sushy-tools|sha256:f760343718e1175343f230ec43496a4f0d850f1d0a3139b92db1e475ac91d11e|quay.io/metal3-io/sushy-tools|public|f760343718e1175343f230ec43496a4f0d850f1d0a3139b92db1e475ac91d11e|0|controller|InfraProvider/lab-libvirt
 installation media|local-media:rhel-9.8-x86_64-boot.iso||the file or URL media add named|media store||0|controller|MachineImage/rhel-9-8-boot
+installation media|local-media:rhel-9.8-x86_64-dvd.iso||the file or URL media add named|media store||0|controller|MachineInstallProfile/rhel-9-8
 registry blob host|cdn.quay.io||cdn.quay.io|vendor delivery||0|controller|ArtifactServer/lab-artifacts
 registry blob host|cdn01.quay.io||cdn01.quay.io|vendor delivery||0|controller|ArtifactServer/lab-artifacts
 registry blob host|cdn02.quay.io||cdn02.quay.io|vendor delivery||0|controller|ArtifactServer/lab-artifacts

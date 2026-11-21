@@ -8,6 +8,7 @@ service image|registry.access.redhat.com/ubi9/nginx-124|sha256:bff0f204cfef8af0b
 service image|docker.io/4km3/dnsmasq|sha256:52e25fb2601156ab66f6a0872c180b285df7cafaa41267d8d65689f066490641|docker.io/4km3/dnsmasq|public|52e25fb2601156ab66f6a0872c180b285df7cafaa41267d8d65689f066490641|0|controller|DNSServer/lab-dns
 service image|docker.io/dockurr/chrony|sha256:f584829f268b26b26b351000b60aa7c3507933873b6a6d77ffe9dcabcfdc7025|docker.io/dockurr/chrony|public|f584829f268b26b26b351000b60aa7c3507933873b6a6d77ffe9dcabcfdc7025|0|controller|NTPServer/lab-ntp
 installation media|local-media:rhel-9.8-x86_64-boot.iso||the file or URL media add named|media store||0|controller|MachineImage/rhel-9-8-boot
+installation media|local-media:rhel-9.8-x86_64-dvd.iso||the file or URL media add named|media store||0|controller|MachineInstallProfile/rhel-9-8
 registry blob host|cdn.quay.io||cdn.quay.io|vendor delivery||0|controller|ArtifactServer/lab-artifacts
 registry blob host|cdn01.quay.io||cdn01.quay.io|vendor delivery||0|controller|ArtifactServer/lab-artifacts
 registry blob host|cdn02.quay.io||cdn02.quay.io|vendor delivery||0|controller|ArtifactServer/lab-artifacts

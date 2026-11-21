@@ -25,7 +25,9 @@ storage image|mirror.lab.example.test/ceph/keepalived|sha256:5555555555555555555
 storage image|mirror.lab.example.test/ceph/node_exporter|sha256:6666666666666666666666666666666666666666666666666666666666666666|mirror.lab.example.test/ceph/node_exporter|declared|6666666666666666666666666666666666666666666666666666666666666666|0|controller,rhel-01,rhel-02,rhel-03|CephCluster/ceph-lab
 storage image|mirror.lab.example.test/ceph/prometheus|sha256:7777777777777777777777777777777777777777777777777777777777777777|mirror.lab.example.test/ceph/prometheus|declared|7777777777777777777777777777777777777777777777777777777777777777|0|controller,rhel-01,rhel-02,rhel-03|CephCluster/ceph-lab
 storage packages|cephadm and its packages|20.2.2-349.el9cp|https://mirror.lab.example.test/packages/ceph/9/rhel9/x86_64|declared||0|rhel-01,rhel-02,rhel-03|CephCluster/ceph-lab
+storage package key|Ceph RPM signing key||https://mirror.lab.example.test/keys/RPM-GPG-KEY-IBM-CEPH|declared||0|rhel-01,rhel-02,rhel-03|CephCluster/ceph-lab
 installation media|local-media:rhel-9.8-x86_64-boot.iso||the file or URL media add named|media store||0|controller|MachineImage/rhel-9-8-boot
+installation media|local-media:rhel-9.8-x86_64-dvd.iso||the file or URL media add named|media store||0|controller|MachineInstallProfile/rhel-9-8
 registry blob host|cdn.quay.io||cdn.quay.io|vendor delivery||0|controller|ArtifactServer/lab-artifacts
 registry blob host|cdn01.quay.io||cdn01.quay.io|vendor delivery||0|controller|ArtifactServer/lab-artifacts
 registry blob host|cdn02.quay.io||cdn02.quay.io|vendor delivery||0|controller|ArtifactServer/lab-artifacts

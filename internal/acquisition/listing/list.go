@@ -67,5 +67,11 @@ func (t Tools) List(catalog api.Catalog) ([]Row, error) {
 		acquired = append(acquired, Row{Kind: "installation media", Artifact: image.Spec().Get("bootMedia").Text(), Class: classMediaStore,
 			Origin: "the file or URL media add named", SHA256: strings.TrimPrefix(image.Spec().Get("checksum").Text(), "sha256:"), Machines: []string{controllerMachine}, Consumer: image.Identity()})
 	}
+	for _, profile := range catalog.OfKind(api.MachineInstallProfile) {
+		if dvd := profile.Spec().Get("installer", "anaconda", "packageSource", "hostedTree", "fromMedia").Text(); dvd != "" {
+			acquired = append(acquired, Row{Kind: "installation media", Artifact: dvd, Class: classMediaStore,
+				Origin: "the file or URL media add named", Machines: []string{controllerMachine}, Consumer: profile.Identity()})
+		}
+	}
 	return withRegistryHosts(acquired), nil
 }

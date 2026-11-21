@@ -582,8 +582,8 @@ The rows, sorted by kind, artifact and selecting object, cover:
   controller and the cluster's nodes; and each declared `imageDigestSources`
   mirror;
 - each storage cluster's image and auxiliary images, read by the controller
-  and its hosts, and its package repository;
-- each MachineImage of the media store;
+  and its hosts, and its package repository and signing key;
+- each MachineImage and hosted installation DVD of the media store;
 - each add-on binding's catalog image, which the add-on's `catalogSource`
   authors for a package or a `ClusterAddon`, read by the bound cluster's
   nodes and named alone: the operator images the catalog's index names are

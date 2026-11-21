@@ -18109,3 +18109,16 @@ vulnerability verdict.
 **Exit evidence:** reproduction from the four pinned publisher artifacts,
 changed-file refusal, and the live advisory gate with client publisher
 downloads blocked. The delivering commit records exact results.
+
+## X642 — Package sources in acquisition inventory
+
+**Owner:** Acquisition listing. **Item:** B1650 (defect). **Authority:** the
+owner's request to implement the dependency proposal.
+
+The [acquisition list](../cli.md#acquisition-list) names the media store DVD
+that supplies a hosted Anaconda package tree and the signing key for the Ceph
+package repository, including its default key.
+
+**Exit evidence:** the disconnected Ceph example lists both its boot ISO and
+its hosted DVD and names the selected repository key. Acquisition goldens
+hold the rows for every example.

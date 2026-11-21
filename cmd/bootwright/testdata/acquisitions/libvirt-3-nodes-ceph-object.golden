@@ -20,9 +20,11 @@ service image|docker.io/ubuntu/squid|sha256:6a097f68bae708cedbabd6188d68c7e2e7a3
 emulated BMC image|quay.io/metal3-io/sushy-tools|sha256:f760343718e1175343f230ec43496a4f0d850f1d0a3139b92db1e475ac91d11e|quay.io/metal3-io/sushy-tools|public|f760343718e1175343f230ec43496a4f0d850f1d0a3139b92db1e475ac91d11e|0|controller|InfraProvider/lab-libvirt
 storage image|cp.icr.io/cp/ibm-ceph/ceph-9-rhel10|v9.9.2-26947|cp.icr.io/cp/ibm-ceph/ceph-9-rhel10|vendor||0|controller,rhel-01,rhel-02,rhel-03|CephCluster/ceph-lab
 storage packages|cephadm and its packages|20.2.2-349.el9cp|https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64|vendor||0|rhel-01,rhel-02,rhel-03|CephCluster/ceph-lab
+storage package key|Ceph RPM signing key||https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/RPM-GPG-KEY-IBM-CEPH|vendor||0|rhel-01,rhel-02,rhel-03|CephCluster/ceph-lab
 machine repository|ibm-storage-ceph-9|9.8|https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64/|vendor||0|rhel-01,rhel-02,rhel-03|MachineInstallProfile/rhel-9-8
 machine repository key|ibm-storage-ceph-9||https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/RPM-GPG-KEY-IBM-CEPH|vendor||0|rhel-01,rhel-02,rhel-03|MachineInstallProfile/rhel-9-8
 installation media|local-media:rhel-9.8-x86_64-boot.iso||the file or URL media add named|media store||0|controller|MachineImage/rhel-9-8-boot
+installation media|local-media:rhel-9.8-x86_64-dvd.iso||the file or URL media add named|media store||0|controller|MachineInstallProfile/rhel-9-8
 registry blob host|cdn.quay.io||cdn.quay.io|vendor delivery||0|controller|ArtifactServer/lab-artifacts
 registry blob host|cdn01.quay.io||cdn01.quay.io|vendor delivery||0|controller|ArtifactServer/lab-artifacts
 registry blob host|cdn02.quay.io||cdn02.quay.io|vendor delivery||0|controller|ArtifactServer/lab-artifacts

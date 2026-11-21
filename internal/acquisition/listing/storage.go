@@ -37,11 +37,17 @@ func storageAcquisitions(catalog api.Catalog, controllerMachine string) []Row {
 				Machines: append([]string{controllerMachine}, hosts...), Consumer: cluster.Identity()})
 		}
 		repository := spec.Get("packageRepository").Text()
+		key := spec.Get("packageRepositoryKey").Text()
 		if repository == "" {
 			repository = cephnative.DefaultPackageRepository
+			key = cephnative.DefaultPackageRepositoryKey
 		}
 		rows = append(rows, Row{Kind: "storage packages", Artifact: "cephadm and its packages", Version: spec.Get("packageVersion").Text(), Origin: repository, Class: originClass(repository),
 			Machines: hosts, Consumer: cluster.Identity()})
+		if key != "" {
+			rows = append(rows, Row{Kind: "storage package key", Artifact: "Ceph RPM signing key",
+				Origin: redactedLocation(key), Class: originClass(key), Machines: hosts, Consumer: cluster.Identity()})
+		}
 	}
 	return rows
 }

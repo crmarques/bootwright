@@ -24,6 +24,7 @@ mirror image|docker.io/dockurr/chrony|sha256:f584829f268b26b26b351000b60aa7c3507
 mirror image|docker.io/ubuntu/squid|sha256:6a097f68bae708cedbabd6188d68c7e2e7a38cedd05a176e1cc0ba29e3bbe029|docker.io/ubuntu/squid|public|6a097f68bae708cedbabd6188d68c7e2e7a38cedd05a176e1cc0ba29e3bbe029|0|mirror|Registry/mirror-registry
 mirror image|quay.io/metal3-io/sushy-tools|sha256:f760343718e1175343f230ec43496a4f0d850f1d0a3139b92db1e475ac91d11e|quay.io/metal3-io/sushy-tools|public|f760343718e1175343f230ec43496a4f0d850f1d0a3139b92db1e475ac91d11e|0|mirror|Registry/mirror-registry
 installation media|local-media:rhel-9.8-x86_64-boot.iso||the file or URL media add named|media store||0|controller|MachineImage/rhel-9-8-boot
+installation media|local-media:rhel-9.8-x86_64-dvd.iso||the file or URL media add named|media store||0|controller|MachineInstallProfile/rhel-9-8
 registry blob host|cdn.quay.io||cdn.quay.io|vendor delivery||0|controller|ArtifactServer/lab-artifacts
 registry blob host|cdn01.quay.io||cdn01.quay.io|vendor delivery||0|controller|ArtifactServer/lab-artifacts
 registry blob host|cdn02.quay.io||cdn02.quay.io|vendor delivery||0|controller|ArtifactServer/lab-artifacts
