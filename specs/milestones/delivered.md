@@ -18069,3 +18069,17 @@ The controller keeps command output private.
 **Exit evidence:** the delivering commit records the regression suite,
 the repository gates and the independent review. The change has no new
 operator acceptance requirement.
+
+## X639 — Ansible check tooling wcmatch advisory
+
+**Owner:** Development tooling. **Item:** B1647 (safety). **Authority:** the
+owner's request to fix Dependabot alert 16.
+
+The Ansible check lock `scripts/tools/ansible-requirements.txt` pins the first
+`wcmatch` release that fixes
+[CVE-2026-132276](https://github.com/advisories/GHSA-53pm-wgxf-c6qf) and the
+`bracex` release it requires. Both wheel hashes come from PyPI. The pins serve
+the Ansible check environment through `ansible-lint`.
+
+**Exit evidence:** the delivering commit records the hash-verified install,
+dependency check, repository gates and independent review.
