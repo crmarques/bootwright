@@ -101,7 +101,7 @@ func validateEmulatedCertificate(bmc api.Value, c api.Catalog) []api.Issue {
 	}
 	return []api.Issue{{Code: "api.invariant", Field: "$.spec.libvirt.bmcEmulation.certificateRef",
 		Message: "the emulated BMC serves HTTPS at " + address + ", which the generated certificate of Secret/" + name + " does not name",
-		Remediation: "add " + address + " to spec.source.generated.ipAddresses of Secret/" + name + ", import the change with bootwright context update --name <context> --input-dir <dir>, " +
+		Remediation: "add " + address + " to spec.source.generated.ipAddresses of Secret/" + name + ", import the change with bootwright update --name <context> --input-dir <dir>, " +
 			"then run bootwright secret generate --name " + name + " --context <context>"}}
 }
 

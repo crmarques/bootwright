@@ -49,7 +49,7 @@ func requireRemovalRefusedUntouched(t *testing.T, h *harness, code, message, rem
 }
 
 // anotherHostRemedy names the exits of a host mismatch in order.
-const anotherHostRemedy = "run on the host this controller state belongs to, or restore that host's machine-id, DMI product UUID and root filesystem UUID on this one; if this host keeps the same state store under the changed values, rebind its record with bootwright controller rebind; otherwise bootwright context delete --name lab --purge --allow-orphans, which abandons every object the context realized"
+const anotherHostRemedy = "run on the host this controller state belongs to, or restore that host's machine-id, DMI product UUID and root filesystem UUID on this one; if this host keeps the same state store under the changed values, rebind its record with bootwright rebind-host; otherwise bootwright context delete --name lab --purge --allow-orphans, which abandons every object the context realized"
 
 // A fresh removal of a completed apply proves the host before anything else:
 // on a host the controller state does not record it refuses, presenting no
@@ -89,7 +89,7 @@ func TestAFreshDestroyOverIncompleteSetupRefuses(t *testing.T) {
 	h := newHarness(t, "alpha")
 	failedApply(t, h)
 	h.workspace.controller.Prepared = false
-	requireRemovalRefusedUntouched(t, h, "engine.controller-unprepared", "this host has no completed controller setup", "run bootwright controller install")
+	requireRemovalRefusedUntouched(t, h, "engine.controller-unprepared", "this host has no completed controller setup", "run bootwright install")
 }
 
 // A context the controller state records no binding for is admitted once its
@@ -151,7 +151,7 @@ func TestAFreshDestroyReprovesItsHostUnderTheExclusiveLock(t *testing.T) {
 			func(_ *testing.T, h *harness) {
 				h.workspace.controller.State.Bindings[0].HostDigest = strings.Repeat("0", 64)
 			}},
-		{"incomplete setup", "engine.controller-unprepared", "this host has no completed controller setup", "run bootwright controller install",
+		{"incomplete setup", "engine.controller-unprepared", "this host has no completed controller setup", "run bootwright install",
 			func(_ *testing.T, h *harness) { h.workspace.controller.Prepared = false }},
 	}
 	operations := []struct {

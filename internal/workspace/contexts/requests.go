@@ -9,12 +9,14 @@ type InitRequest struct {
 	Name              string
 	ConfigurationFile string
 	InputDirectory    string
+	Check             bool
 }
 
 type UpdateRequest struct {
 	ConfigurationFile string
 	Name              string
 	InputDirectory    string
+	Check             bool
 	SkipConfirmation  bool
 }
 
@@ -49,6 +51,7 @@ type AdmissionResult struct {
 	Counts       compilation.Counts
 	FilesCopied  int
 	InputChanged bool
+	Checked      bool
 	Diagnostics  []diagnostics.Diagnostic
 	// Presented reports that the update's plan, with these diagnostics, was
 	// shown before its confirmation.

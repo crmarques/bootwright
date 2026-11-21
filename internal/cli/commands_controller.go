@@ -6,16 +6,12 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
 
-func controllerCheckCommand() commandSpec {
-	return available(commandSpec{path: "check controller", results: []jsonResult{controllerPresentation{}}, render: renderController(), controllerReport: true, inspection: true, classify: classifyRules{ambient: always}, example: "", contextFree: true, invoke: Services.invokeControllerCheck, short: "Check what controller install prepares on this host", long: "Verify, without installing or changing anything, the context-independent controller prerequisites controller install prepares on this host: its host packages, the controller runtime and the state root. It selects no context; the prerequisites a context adds are checked by check environment --stage controller and installed by the controller stage of apply."})
-}
-
 func controllerSetupCommand() commandSpec {
-	return available(commandSpec{path: "controller install", results: []jsonResult{controllerPresentation{}, setupPlanResult{}}, render: renderController(), controllerReport: true, classify: classifyRules{rootless: dryRunSelected, ambient: always}, example: "--dry-run", contextFree: true, invoke: Services.invokeControllerInstall, short: "Install context-independent controller prerequisites", flags: []flagSpec{dryRunFlag(), confirmationFlag()}, long: "Prepare this host's context-independent controller prerequisites: the baseline host packages, installed through the host's own dnf, and the controller runtime, a venv on the OS Python holding exactly the wheels this build locks and carries, so it downloads no wheel. This command selects no context; the prerequisites a context adds are installed by the controller stage of apply. A ready host makes no request and no change. Otherwise the plan shows dnf's own preview before confirmation. --dry-run never elevates: it names the host package requirements without a preview and makes no changes, and --dry-run --output json or --output yaml also lists every locked wheel's file, URL and SHA-256. Review the plan before confirming; --yes skips ordinary confirmation."})
+	return available(commandSpec{path: "install", results: []jsonResult{controllerPresentation{}, setupPlanResult{}}, render: renderController(), controllerReport: true, classify: classifyRules{ambient: installAmbient}, example: "--dry-run", contextFree: true, invoke: Services.invokeControllerInstall, short: "Install context-independent controller prerequisites", flags: []flagSpec{dryRunFlag(), confirmationFlag()}, long: "Prepare this host's context-independent controller prerequisites: the baseline host packages, installed through the host's own dnf, and the controller runtime, a venv on the OS Python holding exactly the wheels this build locks and carries, so it downloads no wheel. This command selects no context; the prerequisites a context adds are installed by the controller stage of apply. A ready host makes no request and no change. Otherwise the plan shows dnf's own preview before confirmation. --dry-run verifies host readiness and lists planned changes without calling dnf, and --dry-run --output json or --output yaml also lists every locked wheel's file, URL and SHA-256. Review the plan before confirming; --yes skips ordinary confirmation."})
 }
 
 func controllerRebindCommand() commandSpec {
-	return available(commandSpec{path: "controller rebind", results: []jsonResult{rebindPresentation{}}, render: renderRebind(), example: "", contextFree: true, invoke: Services.invokeControllerRebind, short: "Rebind the controller record to this host's changed identity", flags: []flagSpec{
+	return available(commandSpec{path: "rebind-host", results: []jsonResult{rebindPresentation{}}, render: renderRebind(), example: "", contextFree: true, invoke: Services.invokeControllerRebind, short: "Rebind the controller record to this host's changed identity", flags: []flagSpec{
 		confirmationFlag(),
 		undisclosedFlag("machine-id", "Name this host's machine-id; required with --yes"),
 		undisclosedFlag("product-uuid", "Name this host's DMI product UUID; required with --yes"),
@@ -25,11 +21,12 @@ func controllerRebindCommand() commandSpec {
 }
 
 func controllerUninstallCommand() commandSpec {
-	return available(commandSpec{path: "controller uninstall", results: []jsonResult{uninstallPresentation{}}, render: renderUninstall(), validate: validateUninstall, classify: classifyRules{ambient: uninstallAmbient}, example: "", contextFree: true, invoke: Services.invokeControllerUninstall, short: "Remove what controller install added to this host", flags: []flagSpec{
+	return available(commandSpec{path: "uninstall", results: []jsonResult{uninstallPresentation{}}, render: renderUninstall(), validate: validateUninstall, classify: classifyRules{ambient: uninstallAmbient}, example: "", contextFree: true, invoke: Services.invokeControllerUninstall, short: "Remove the Bootwright host installation", flags: []flagSpec{
+		dryRunFlag(),
 		confirmationFlag(),
 		boolFlag("discard-unreadable", "Discard what this build cannot read or attribute: a store another build wrote, or guest disks no removal took back; never removes packages"),
 		boolFlag("keep-packages", "Leave every host package installed and remove only Bootwright's state"),
-	}, long: "Remove, on a host that holds no context and no installer media, the host packages controller install recorded as its own, through the host's own dnf, then every root Bootwright keeps on this host, whole: the store /var/lib/bootwright, the staging directory /var/lib/bootwright-staging, the log root /var/log/bootwright, the hosted root /var/lib/bootwright-hosted with any physical-erase receipts, and the libvirt image prefix /var/lib/libvirt/images/bootwright when it is empty. It never removes a package present before Bootwright, a package a controller stage installed, this executable, or what a context realized on an SSH placement host. It refuses before any effect while a context or an image remains, naming the commands that remove each, while any libvirt domain, network or pool, systemd unit, quadlet source or podman container Bootwright owns remains, naming each, while another command holds the store, while guest disks remain under the libvirt image prefix, and, without --keep-packages, when the install record cannot say what install added or another installed package requires one of them. --discard-unreadable is the exit for a store this build cannot read, such as one an earlier build wrote, and for guest disks no removal took back: after the same proof that no owned object remains, it removes every root and the libvirt image prefix whole, and never a package. The plan shows dnf's own removal preview and what stays before confirmation. A host with nothing to remove prints Nothing to do. Review the plan before confirming; --yes skips ordinary confirmation."})
+	}, long: "Remove, on a host that holds no context and no installer media, the host packages install recorded as its own, through the host's own dnf, then every root Bootwright keeps on this host, whole: the store /var/lib/bootwright, the staging directory /var/lib/bootwright-staging, the log root /var/log/bootwright, the hosted root /var/lib/bootwright-hosted with any physical-erase receipts, and the libvirt image prefix /var/lib/libvirt/images/bootwright when it is empty. It never removes a package present before Bootwright, a package a controller stage installed, this executable, or what a context realized on an SSH placement host. It refuses before any effect while a context or an image remains, naming the commands that remove each, while any libvirt domain, network or pool, systemd unit, quadlet source or podman container Bootwright owns remains, naming each, while another command holds the store, while guest disks remain under the libvirt image prefix, and, without --keep-packages, when the install record cannot say what install added or another installed package requires one of them. --discard-unreadable is the exit for a store this build cannot read, such as one an earlier build wrote, and for guest disks no removal took back: after the same proof that no owned object remains, it removes every root and the libvirt image prefix whole, and never a package. --dry-run checks ownership and package dependencies and lists what would be removed and kept. Execution shows dnf's own removal preview before confirmation. A host with nothing to remove prints Nothing to do. Review the plan before confirming; --yes skips ordinary confirmation."})
 }
 
 type ControllerService interface {
@@ -39,20 +36,13 @@ type ControllerService interface {
 	Uninstall(context.Context, prerequisites.UninstallRequest) (*prerequisites.UninstallResult, error)
 }
 
-func (s Services) invokeControllerCheck(ctx context.Context, values *requestValues, _ []string) (commandResult, error) {
-	if s.Controller == nil {
-		return commandResult{}, errMissingService
-	}
-	result, err := invokeResult(ctx, values, prerequisites.CheckRequest{}, s.Controller.Check)
-	return commandResult{controller: result}, err
-}
-
 func (s Services) invokeControllerInstall(ctx context.Context, values *requestValues, _ []string) (commandResult, error) {
 	if s.Controller == nil {
 		return commandResult{}, errMissingService
 	}
 	result, err := invokeResult(ctx, values, prerequisites.SetupRequest{
 		DryRun:           values.boolean("dry-run"),
+		Verify:           true,
 		SkipConfirmation: values.boolean("yes"),
 	}, s.Controller.Setup)
 	return commandResult{controller: result}, err
@@ -77,6 +67,7 @@ func (s Services) invokeControllerUninstall(ctx context.Context, values *request
 		return commandResult{}, errMissingService
 	}
 	result, err := invokeResult(ctx, values, prerequisites.UninstallRequest{
+		DryRun:            values.boolean("dry-run"),
 		SkipConfirmation:  values.boolean("yes"),
 		KeepPackages:      values.boolean("keep-packages"),
 		DiscardUnreadable: values.boolean("discard-unreadable"),

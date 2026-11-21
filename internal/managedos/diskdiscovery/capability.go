@@ -195,7 +195,7 @@ func (c Capability) Roots(ctx context.Context, input lifecycle.PlanInput) (map[s
 			return nil, err
 		}
 		if !found {
-			return nil, discoveryInventoryMissing.Fail("Machine/"+r.Identity.Object+" has no completed disk discovery for the current policy and media", "run bootwright apply --context "+input.Context.Name+" to prepare inventory, or bootwright machine discover --context "+input.Context.Name+" --name "+r.Identity.Object+" --prepare-prerequisites")
+			return nil, discoveryInventoryMissing.Fail("Machine/"+r.Identity.Object+" has no completed disk discovery for the current policy and media", "run bootwright apply --context "+input.Context.Name+" to prepare inventory, or bootwright machine discover --context "+input.Context.Name+" --name "+r.Identity.Object+" --stage controller")
 		}
 		m, _ := input.State.Effective().Find(api.Machine, r.Identity.Object)
 		policy, err := diskselection.PolicyFromValue(substrate.MachineDiscoveryPolicy(m))

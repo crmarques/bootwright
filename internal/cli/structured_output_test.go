@@ -72,12 +72,12 @@ func TestStructuredPresentationAndUsageAreSingleDocuments(t *testing.T) {
 		code int
 	}{
 		{[]string{"version", "-oyaml"}, 0},
-		{[]string{"help", "context", "init", "-o=json"}, 0},
+		{[]string{"help", "init", "-o=json"}, 0},
 		{[]string{"completion", "bash", "--output", "yaml"}, 0},
 		{[]string{"render", "-o", "yaml"}, 0},
 		{[]string{"--output", "yaml", "unknown"}, 2},
 		{[]string{"version", "--bad", "-o", "yaml"}, 2},
-		{[]string{"context", "init", "-o", "yaml"}, 0},
+		{[]string{"init", "-o", "yaml"}, 0},
 		{[]string{"version", "--width", "23", "-o", "json"}, 2},
 	} {
 		code, out, errOut, record := runRecorded(invocation.args)
@@ -132,7 +132,7 @@ func TestYAMLUsesJSONNamesAndPreservesIntegerPrecision(t *testing.T) {
 		t.Fatal(document)
 	}
 	out.Reset()
-	if err := writeDiagnostics(writer, io.Discard, "check input", []diagnostic{{Severity: "error", Code: "api.required", Message: "missing input"}}, 1, true, nil); err != nil {
+	if err := writeDiagnostics(writer, io.Discard, "validate", []diagnostic{{Severity: "error", Code: "api.required", Message: "missing input"}}, 1, true, nil); err != nil {
 		t.Fatal(err)
 	}
 	document = structuredDocument(t, out.String())
@@ -151,10 +151,10 @@ func TestStructuredContextAndPlanUseReturnedFacts(t *testing.T) {
 			{[]string{"context", "list"}, commandResult{list: &contexts.ListResult{Contexts: []contexts.Summary{{Name: "demo", Mode: contexts.Ready, Current: true, Configured: true}}}}, "contexts"},
 			{[]string{"context", "current"}, commandResult{current: &contexts.CurrentResult{Context: contexts.Summary{Name: "demo", Mode: contexts.Ready}}}, "context"},
 			{[]string{"context", "use", "--name", "demo"}, commandResult{use: &contexts.UseResult{Context: contexts.Summary{Name: "demo", Mode: contexts.Ready}}}, "context"},
-			{[]string{"context", "init", "--name", "demo"}, commandResult{admission: &contexts.AdmissionResult{Context: contexts.Summary{Name: "demo", Mode: contexts.Ready}}}, "filesCopied"},
-			{[]string{"context", "update", "--name", "demo", "--input-dir", "input", "--yes"}, commandResult{admission: &contexts.AdmissionResult{Context: contexts.Summary{Name: "demo", Mode: contexts.Ready}, FilesCopied: 3, InputChanged: true}}, "filesCopied"},
+			{[]string{"init", "--name", "demo"}, commandResult{admission: &contexts.AdmissionResult{Context: contexts.Summary{Name: "demo", Mode: contexts.Ready}}}, "filesCopied"},
+			{[]string{"update", "--name", "demo", "--input-dir", "input", "--yes"}, commandResult{admission: &contexts.AdmissionResult{Context: contexts.Summary{Name: "demo", Mode: contexts.Ready}, FilesCopied: 3, InputChanged: true}}, "filesCopied"},
 			{[]string{"context", "delete", "--name", "demo", "--purge", "--yes"}, commandResult{deletion: &contexts.DeleteResult{Name: "demo", Outcome: "deleted", OrphansAbandoned: true}}, "orphansAbandoned"},
-			{[]string{"plan", "apply"}, commandResult{lifecyclePlan: &lifecycle.PlanResult{Context: lifecycle.ContextIdentity{Name: "demo"}, Verb: "apply", Steps: []lifecycle.PlanStep{{ID: "prepare", Description: "Prepare demo", Stage: "machines", After: []int{1}, Wave: 2}}, Startable: 1, Deferred: 2, Waves: 2, Bound: 8, Receipt: lifecycle.Receipt{Operation: "none", Verb: "apply", State: "preview", Next: "apply"}}}, "steps"},
+			{[]string{"apply", "--dry-run"}, commandResult{lifecyclePlan: &lifecycle.PlanResult{Context: lifecycle.ContextIdentity{Name: "demo"}, Verb: "apply", Steps: []lifecycle.PlanStep{{ID: "prepare", Description: "Prepare demo", Stage: "machines", After: []int{1}, Wave: 2}}, Startable: 1, Deferred: 2, Waves: 2, Bound: 8, Receipt: lifecycle.Receipt{Operation: "none", Verb: "apply", State: "preview", Next: "apply"}}}, "steps"},
 		} {
 			args := append([]string{"--output", format}, test.args...)
 			record := &dispatchRecord{result: test.result}
@@ -309,14 +309,14 @@ func TestYAMLKeepsRawDocumentStringsAndKeysExact(t *testing.T) {
 
 func TestStructuredControllerRetainsNextAndExecutionEvidence(t *testing.T) {
 	for _, format := range []string{"json", "yaml"} {
-		for _, path := range []string{"controller install", "check controller"} {
+		for _, path := range []string{"install", "install --dry-run"} {
 			for _, failed := range []bool{false, true} {
 				report := controllerReport("ready", false)
-				if path == "controller install" {
+				if path == "install" {
 					report.Outcome = "unchanged"
 				}
-				report.Route, report.Next = "direct", "bootwright controller install"
-				if path == "controller install" {
+				report.Route, report.Next = "direct", "bootwright install"
+				if path == "install" {
 					report.ContextName, report.Machine = "demo", "controller"
 				}
 				report.Progress = []prerequisites.ActionProgress{{ID: "python-runtime", Phase: "observed", Outcome: "unchanged"}}

@@ -97,7 +97,7 @@ func TestLabRHELExampleSelectsControllerDependenciesFromDesiredState(t *testing.
 	if len(sources.Files) != labExampleFiles {
 		t.Fatalf("lab example discovery: got %d files, want %d", len(sources.Files), labExampleFiles)
 	}
-	out, errOut := contextRun(t, isolatedServices(t), 0, "check", "input", "--input-dir", sources.Roots[0], "--output", "json")
+	out, errOut := contextRun(t, isolatedServices(t), 0, "validate", "--input-dir", sources.Roots[0], "--output", "json")
 	var validation struct {
 		OK          bool
 		Result      struct{ Counts compilation.Counts }
@@ -486,20 +486,25 @@ func labContextServices(t *testing.T) (cli.Services, string, *setupPorts) {
 	options.Repository, options.Workspace = repository, repository
 	options.Controller = ports.setupDependencies(repository, repository)
 	options.Controller.Tools = labToolCatalog{ports}
+	options.Lifecycle = lifecycleDependencies{
+		Workspace: repository, Host: ports, Guard: testLifecycleGuard{}, Selection: options.Selection, Setup: repository,
+		Presenter: testLifecyclePresenter{}, Confirmer: options.Confirmer,
+		Capabilities: buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{}),
+	}
 	return assembleServices(options), input, ports
 }
 
 func TestLabRHELExampleContextAndControllerPreparationJourney(t *testing.T) {
 	t.Parallel()
 	services, input, ports := labContextServices(t)
-	out, _ := contextRun(t, services, 0, "context", "init", "--name", "lab-rhel", "--input-dir", input)
+	out, _ := contextRun(t, services, 0, "init", "--name", "lab-rhel", "--input-dir", input)
 	if !strings.Contains(out, "Files copied     16") || !strings.Contains(out, "Objects decoded  16") {
 		t.Fatal("context import did not admit the complete lab example", out)
 	}
 	if err := os.RemoveAll(input); err != nil {
 		t.Fatal(err)
 	}
-	contextRun(t, services, 0, "check", "input")
+	contextRun(t, services, 0, "validate")
 	rendered, _ := contextRun(t, services, 0, "render", "effective", "--output", "json")
 	var effective struct {
 		Result struct{ EffectiveState []json.RawMessage }
@@ -519,8 +524,8 @@ func TestLabRHELExampleContextAndControllerPreparationJourney(t *testing.T) {
 	// Setup plans the same context-independent prerequisites whatever context
 	// is selected, so its dry run names the baseline and neither the example's
 	// target tools nor its host binding.
-	plan, _ := contextRun(t, services, 0, "controller", "install", "--dry-run")
-	for _, expected := range []string{"Scope     baseline", "[UNKNOWN]   Controller runtime", "Outcome  planned", "Next     bootwright controller install"} {
+	plan, _ := contextRun(t, services, 0, "install", "--dry-run")
+	for _, expected := range []string{"Scope     baseline", "[FAIL]   Controller runtime", "Outcome  planned", "Next     bootwright install"} {
 		if !strings.Contains(plan, expected) {
 			t.Fatalf("baseline dry-run lacks %q:\n%s", expected, plan)
 		}
@@ -530,25 +535,24 @@ func TestLabRHELExampleContextAndControllerPreparationJourney(t *testing.T) {
 			t.Fatalf("context-free setup planned %q:\n%s", refused, plan)
 		}
 	}
-	// Preflight's controller stage keeps the context arm: it reports what the
-	// example still needs on this host, including the binding its first apply
-	// publishes, and the baseline check names the host's own readiness.
-	report, diagnostics := contextRun(t, services, 1, "check", "environment", "--context", "lab-rhel", "--stage", "controller")
-	for _, expected := range []string{"Environment checks for lab-rhel", "Stages  controller", "controller.controller-binding", "required controller"} {
+	// An unprepared host can still show the context's controller plan.
+	// It stops at the host readiness boundary before making further probes.
+	report, diagnostics := contextRun(t, services, 1, "apply", "--dry-run", "--context", "lab-rhel", "--stage", "controller")
+	for _, expected := range []string{"Apply plan", "install the controller prerequisites"} {
 		if !strings.Contains(report, expected) {
 			t.Fatalf("context preflight lacks %q:\n%s", expected, report)
 		}
 	}
 	// The host itself is unprepared, so the one actionable next command is
 	// setup rather than the context's own controller stage.
-	if !strings.Contains(diagnostics, "preflight.failed") {
+	if !strings.Contains(diagnostics, "engine.controller-unprepared") {
 		t.Fatalf("preflight before setup must fail:\nstdout=%s\nstderr=%s", report, diagnostics)
 	}
-	baseline, baselineDiagnostics := contextRun(t, services, 1, "check", "controller")
-	if !strings.Contains(baseline, "Scope     baseline") || !strings.Contains(baselineDiagnostics, "run bootwright controller install") {
+	baseline, baselineDiagnostics := contextRun(t, services, 0, "install", "--dry-run")
+	if !strings.Contains(baseline, "Scope     baseline") || !strings.Contains(baseline, "bootwright install") {
 		t.Fatalf("controller check before setup must name setup:\nstdout=%s\nstderr=%s", baseline, baselineDiagnostics)
 	}
-	_, diagnostics = contextRun(t, services, 1, "check", "environment", "--context", "missing", "--stage", "controller")
+	_, diagnostics = contextRun(t, services, 1, "apply", "--dry-run", "--context", "missing", "--stage", "controller")
 	if !strings.Contains(diagnostics, "context") {
 		t.Fatal("unknown explicit context was not refused", diagnostics)
 	}
@@ -599,7 +603,7 @@ func TestLifecycleCommandsRequireAResolvedContext(t *testing.T) {
 	t.Parallel()
 	services := isolatedServices(t)
 	for _, args := range [][]string{
-		{"plan", "apply", "--context", "missing"},
+		{"apply", "--dry-run", "--context", "missing"},
 		{"status", "--context", "missing"},
 		{"apply", "--context", "missing", "--yes"},
 		{"destroy", "--context", "missing", "--yes"},
@@ -618,7 +622,7 @@ func TestLifecycleCommandsRequireAResolvedContext(t *testing.T) {
 func TestLifecycleReachesTheStoreForAnUnknownContext(t *testing.T) {
 	t.Parallel()
 	services := isolatedServices(t)
-	_, errOut := contextRun(t, services, 1, "plan", "apply", "--context", "missing")
+	_, errOut := contextRun(t, services, 1, "apply", "--dry-run", "--context", "missing")
 	if !strings.Contains(errOut, "context.state") {
 		t.Fatalf("plan for an unknown context = %q", errOut)
 	}

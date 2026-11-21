@@ -394,6 +394,14 @@ func (d decider) namedChange(ctx context.Context, view View, operation operation
 // start, so a selection that admits none of the failed blocks refuses whichever
 // one comes first.
 func refuseStageBoundary(contextName string, plan reconciliation.Plan, states map[string]reconciliation.BlockState, selection reconciliation.Selection) error {
+	if !selection.Stages.Selects(reconciliation.StageController) {
+		for _, block := range plan.Blocks {
+			if block.Stage == reconciliation.StageController && unproved(states[block.ID]) {
+				return applyStageEmpty.Fail("the controller stage has an unproved effect",
+					"resolve it with "+contextCommand(contextName, string(reconciliation.Apply), append([]string{"--stage", "controller"}, authorizing(plan)...)...))
+			}
+		}
+	}
 	kind, admitted := firstAdmission(plan, states, selection, nil, nil, nil)
 	if len(admitted) != 0 {
 		return nil

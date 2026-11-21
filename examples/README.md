@@ -74,7 +74,7 @@ secrets as its README directs. Placeholder
 checksums and registry digests are not real content identities: replace them
 with values verified for your media and release. An IBM Storage Ceph Entitlement carries `license.accept: true` as a
 placeholder; reviewing the IBM license terms and accepting them is your explicit
-act. `check input` proves admission, not connectivity or readiness.
+act. `validate` proves admission, not connectivity or readiness.
 
 Context import freezes a copy of the input; edits to the source directory do
 not update the context. To replace applied intent, complete destroy while
@@ -84,15 +84,15 @@ edited input:
 ```sh
 C=''  # Name of the retained context.
 IN='' # Absolute path to the edited input directory outside the repository.
-./bin/bootwright context update --name "${C:?Set C to the retained context}" --input-dir "${IN:?Set IN to the edited input directory}"
-./bin/bootwright plan apply --context "${C:?Set C to the retained context}"
+./bin/bootwright update --name "${C:?Set C to the retained context}" --input-dir "${IN:?Set IN to the edited input directory}"
+./bin/bootwright apply --dry-run --context "${C:?Set C to the retained context}"
 ```
 
 Review that plan before a fresh apply. For input already imported, `diff`
 compares it with the context's recorded realization. Review the full `plan`
-after `context init` and
+after `init` and
 before the first `apply --stage`: while a staged operation is paused,
-`context update` refuses until it completes or is destroyed.
+`update` refuses until it completes or is destroyed.
 An unfinished apply continues with the same stage selection after the cause is
 resolved. Follow the refusal's remedy if frozen intent or execution inputs
 changed; do not delete context evidence to force a retry. An e2e case runbook

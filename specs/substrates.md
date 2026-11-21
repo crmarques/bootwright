@@ -111,7 +111,7 @@ whose `certificateRef` names a generated `tlsCertificate` whose
 `ipAddresses` do not include that `bindAddress`, compared as Go's hostname
 verification compares an IP, also refuses at admission, with the remedy to add
 the address to the Secret's `spec.source.generated.ipAddresses`, import the
-change with `bootwright context update`, then run `bootwright secret generate`.
+change with `bootwright update`, then run `bootwright secret generate`.
 A stored certificate's names are proved only when a fresh apply binds it.
 
 ### Refusal table
@@ -2303,22 +2303,22 @@ the machine reports the declared hardware in full or, to correct the
 declaration instead, by taking the context back with
 `bootwright destroy --context <context>`, correcting
 `spec.hardware.bmc.address` or `spec.hardware.nics`, importing that
-input with `bootwright context update --name <context> --input-dir <directory>`
+input with `bootwright update --name <context> --input-dir <directory>`
 and running `bootwright apply --context <context>`; `identity-mismatch`, a
 physical machine answering as another system than its pin, remedied by the same
 destroy, correcting that address if it names another BMC, the same
-context update and apply, so the machine is proved again; and
+update and apply, so the machine is proved again; and
 `machine-running`, on either arm, remedied by stopping it with
 `bootwright machine stop --context <context> --name <machine>`, then running
 the refusing apply's continuation; `firmware-setting-mismatch`, a
 `mode: prove` [firmware block](#physical-firmware) the machine does not match,
 remedied by setting the declared values through the BMC, then running the
 continuation or, to have Bootwright set them, by the same destroy, setting
-`firmware.mode: enforce`, the same context update and apply; and
+`firmware.mode: enforce`, the same update and apply; and
 `firmware-setting-not-applied`, an `enforce` block the BMC refused or did not
 apply, remedied by reading the BMC's message in the attempt's retained output
 and correcting the cause through the BMC, then running the continuation or, to
-correct the declaration instead, by the same destroy, context update and
+correct the declaration instead, by the same destroy, update and
 apply. That continuation is the exact command the
 lifecycle hands the attempt, `bootwright apply --context <context>` with every
 `--authorize` token its frozen plan consumes, and the plain apply when the

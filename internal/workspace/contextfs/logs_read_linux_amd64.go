@@ -205,7 +205,7 @@ func (s *Store) OpenRun(ctx context.Context, name, run string) (logview.Stream, 
 
 func (s *Store) OpenSetup(ctx context.Context, setup string) (logview.Stream, bool, error) {
 	if _, valid := setupRunNumber(setup); setup != "" && !valid {
-		return nil, false, state("a controller install output is named install-NNNNNN")
+		return nil, false, state("a install output is named install-NNNNNN")
 	}
 	root, err := s.openLogRoot(ctx, false)
 	if errors.Is(err, syscall.ENOENT) {

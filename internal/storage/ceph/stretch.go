@@ -143,7 +143,7 @@ func fleetHostKey(h Host, security *Security, e lifecycle.Execution, readers Dep
 }
 
 func stretchRefusals() map[string]error {
-	retire := "take back the whole cluster with bootwright destroy --context <context>, restore or change spec.topology.stretch with bootwright context update, then apply; Bootwright never runs mon disable_stretch_mode and never repeats an interrupted stretch stage"
+	retire := "take back the whole cluster with bootwright destroy --context <context>, restore or change spec.topology.stretch with bootwright update, then apply; Bootwright never runs mon disable_stretch_mode and never repeats an interrupted stretch stage"
 	return map[string]error{
 		"stretch-intent":         cephStretchIntent.Fail("the CephCluster's spec.topology.stretch, its tiebreaker, failure domain, rule or a host's site differs from the stretch intent the cluster was created with; stretch is frozen day-1 intent", "restore spec.topology.stretch and every node's site as they were applied, or "+retire),
 		"stretch-interrupted":    cephUnproved.Fail("a stretch activation stage was attempted and its readback does not show its result, so its outcome is unknown and Bootwright does not repeat it", "inspect the stage the native error names with ceph osd crush tree, ceph osd crush rule dump, ceph mon dump and ceph osd dump; "+retire),

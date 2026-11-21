@@ -26,21 +26,21 @@ prefix_rule(
 )
 
 prefix_rule(
-    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "controller", "install"],
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "install"],
     decision = "prompt",
-    justification = "bootwright controller install acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+    justification = "bootwright install acts beyond a read of local state; the owner asks for it (AGENTS.md)",
 )
 
 prefix_rule(
-    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "controller", "uninstall"],
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "uninstall"],
     decision = "prompt",
-    justification = "bootwright controller uninstall acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+    justification = "bootwright uninstall acts beyond a read of local state; the owner asks for it (AGENTS.md)",
 )
 
 prefix_rule(
-    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "controller", "rebind"],
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "rebind-host"],
     decision = "prompt",
-    justification = "bootwright controller rebind acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+    justification = "bootwright rebind-host acts beyond a read of local state; the owner asks for it (AGENTS.md)",
 )
 
 prefix_rule(

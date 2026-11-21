@@ -13,10 +13,17 @@ var _ prerequisites.UninstallPresenter = (*ControllerPresenter)(nil)
 const controllerUninstallHeadline = "Controller uninstall"
 
 type uninstallPresentation struct {
-	Outcome  string   `json:"outcome"`
-	Packages []string `json:"packages"`
-	Paths    []string `json:"paths"`
-	Kept     []string `json:"kept"`
+	Outcome  string                        `json:"outcome"`
+	Packages []string                      `json:"packages"`
+	Paths    []string                      `json:"paths"`
+	Kept     []string                      `json:"kept"`
+	Actions  []uninstallActionPresentation `json:"actions,omitempty"`
+}
+
+type uninstallActionPresentation struct {
+	ID          string   `json:"id"`
+	Description string   `json:"description"`
+	Items       []string `json:"items"`
 }
 
 func (uninstallPresentation) documentedResult() {}
@@ -28,6 +35,14 @@ func (p *ControllerPresenter) PresentUninstallPlan(ctx context.Context, plan pre
 	if p == nil || p.progress.out == nil || len(plan.Actions) == 0 {
 		return &controllerOutputFailure{}
 	}
+	if err := writeUninstallPlan(p.progress.out, plan); err != nil {
+		return &controllerOutputFailure{}
+	}
+	p.headline = true
+	return nil
+}
+
+func writeUninstallPlan(out io.Writer, plan prerequisites.UninstallPlan) error {
 	var text display
 	text.headline("", controllerUninstallHeadline)
 	if plan.Preview != nil {
@@ -42,11 +57,7 @@ func (p *ControllerPresenter) PresentUninstallPlan(ctx context.Context, plan pre
 	text.steps(actions)
 	text.section("Stays on this host")
 	text.lines(displayLines(plan.Kept))
-	if err := text.writeTo(p.progress.out); err != nil {
-		return &controllerOutputFailure{}
-	}
-	p.headline = true
-	return nil
+	return text.writeTo(out)
 }
 
 func (p *ControllerPresenter) RemovalOutput() prerequisites.RunOutput {
@@ -70,15 +81,24 @@ func (w escapedLines) Write(p []byte) (int, error) {
 }
 
 func validUninstall(result *prerequisites.UninstallResult) bool {
-	return result != nil && (result.Outcome == "removed" || result.Outcome == "unchanged")
+	return result != nil && (result.Outcome == "removed" || result.Outcome == "unchanged" || result.Outcome == "planned" && result.Plan != nil)
 }
 
 func displayUninstall(result *prerequisites.UninstallResult) uninstallPresentation {
-	return uninstallPresentation{Outcome: escapeDisplayLine(result.Outcome), Packages: displayLines(result.Packages),
+	shown := uninstallPresentation{Outcome: escapeDisplayLine(result.Outcome), Packages: displayLines(result.Packages),
 		Paths: displayLines(result.Paths), Kept: displayLines(result.Kept)}
+	if result.Plan != nil {
+		for _, action := range result.Plan.Actions {
+			shown.Actions = append(shown.Actions, uninstallActionPresentation{ID: action.ID, Description: escapeDisplayLine(action.Text), Items: displayLines(action.Items)})
+		}
+	}
+	return shown
 }
 
 func writeUninstall(out io.Writer, result *prerequisites.UninstallResult) error {
+	if result.Plan != nil {
+		return writeUninstallPlan(out, *result.Plan)
+	}
 	var text display
 	if result.Outcome == "unchanged" {
 		text.headline("OK", controllerUninstallHeadline)

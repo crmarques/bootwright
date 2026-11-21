@@ -368,7 +368,7 @@ func (c MediaCapability) runWithOutputs(ctx context.Context, execution lifecycle
 func ToolPath(ctx context.Context, execution lifecycle.Execution, tool Tool, executable string) (string, error) {
 	if execution.LocateTool == nil {
 		return "", refusal("controller.state", "the retained controller areas are unavailable",
-			"run bootwright controller install, then bootwright apply --context "+execution.Context+" --stage controller")
+			"run bootwright install, then bootwright apply --context "+execution.Context+" --stage controller")
 	}
 	return execution.LocateTool(ctx, evidence.InstalledTool{
 		Kind: tool.Kind, Compatibility: tool.Compatibility, Version: tool.Version, Executable: executable,

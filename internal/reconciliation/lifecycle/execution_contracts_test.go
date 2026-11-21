@@ -62,7 +62,7 @@ func TestChangedExecutionFingerprintRefusesBeforeEffects(t *testing.T) {
 	h.service.options.Executable.Commit = "1234567"
 	refusedUnchanged(t, h, reconciliation.Apply,
 		"this executable does not support the recorded execution contract of block artifact-server-lab",
-		"install bootwright devel (abcdef1), which registered this operation, and run bootwright controller install")
+		"install bootwright devel (abcdef1), which registered this operation, and run bootwright install")
 }
 
 func TestChangedPredecessorContractRefusesEvidenceUse(t *testing.T) {

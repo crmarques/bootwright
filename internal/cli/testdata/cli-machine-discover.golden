@@ -20,4 +20,4 @@ next: none
   DISK                     SIZE    MODEL         CONTROLLER     TRANSPORT
   wwn:0x5000000000000001   1 GiB   EXAMPLE SSD   0000:01:00.0   scsi
 
-    Next  bootwright plan apply --context lab
+    Next  bootwright apply --dry-run --context lab

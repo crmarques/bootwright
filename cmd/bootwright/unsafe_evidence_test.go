@@ -45,7 +45,7 @@ func TestUnsafeEvidenceIsRefusedNamingItsContextEntryAndExit(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			services, repository, input, root := contextFixture(t)
-			contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
+			contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
 			evidence := filepath.Join(root, "contexts", "alpha", "state", "mutation.json")
 			outside := filepath.Join(filepath.Dir(root), "outside.json")
 			original, err := os.ReadFile(evidence)
@@ -56,7 +56,7 @@ func TestUnsafeEvidenceIsRefusedNamingItsContextEntryAndExit(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, args := range [][]string{
-				{"context", "update", "--name", "alpha", "--input-dir", input, "--yes"},
+				{"update", "--name", "alpha", "--input-dir", input, "--yes"},
 				{"context", "delete", "--name", "alpha", "--purge", "--yes"},
 				{"context", "delete", "--name", "alpha", "--purge", "--allow-orphans", "--yes"},
 				{"status", "--context", "alpha"},

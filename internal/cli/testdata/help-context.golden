@@ -8,9 +8,7 @@
   COMMAND   PURPOSE
   current   Show the current context
   delete    Permanently delete a context and its local files
-  init      Initialize a configured context and select it
   list      List contexts
-  update    Update Context configuration or Environment input
   use       Select the current context
 
   Common flags

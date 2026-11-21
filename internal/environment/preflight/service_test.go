@@ -144,7 +144,7 @@ var infrastructure = []string{"substrates", "controller", "infrastructure-servic
 
 func TestTheControllerAndSubstrateStagesReportTheControllerAndCapacityChecksAndNothingTheyDoNotObserve(t *testing.T) {
 	service, controller, budget, clusters := fixture()
-	controller.report = &prerequisites.Report{Next: "bootwright controller install", Checks: []prerequisites.Check{
+	controller.report = &prerequisites.Report{Next: "bootwright install", Checks: []prerequisites.Check{
 		ready("host-packages", "podman", "podman 5"),
 		{ID: "controller-binding", Required: "this host", Observed: "another host", Status: "not-ready", Scope: prerequisites.ContextScope},
 		{ID: "fips-mode", Required: "the host's FIPS mode", Observed: "unverified", Status: "unverified", Scope: prerequisites.HostScope},
@@ -154,7 +154,7 @@ func TestTheControllerAndSubstrateStagesReportTheControllerAndCapacityChecksAndN
 	controller.err = diagnostics.NewFailure("preflight.failed", "required controller prerequisites are not ready", "")
 	result, err := service.Preflight(context.Background(), PreflightRequest{Stages: infrastructure})
 	found := diagnostics.Of(err)
-	if result == nil || len(found) != 1 || found[0].Code != "preflight.failed" || found[0].Remediation != "resolve the reported prerequisites and repeat bootwright check environment --context lab --stage controller,infrastructure-services,substrates" {
+	if result == nil || len(found) != 1 || found[0].Code != "preflight.failed" || found[0].Remediation != "resolve the reported prerequisites and repeat bootwright apply --dry-run --context lab --stage controller,infrastructure-services,substrates" {
 		t.Fatalf("result %+v, error %#v", result, err)
 	}
 	want := []string{
@@ -175,7 +175,7 @@ func TestTheControllerAndSubstrateStagesReportTheControllerAndCapacityChecksAndN
 		t.Fatalf("controller %+v, dry-run %t, cluster calls %d", controller.request, budget.dryRun, clusters.calls)
 	}
 	for _, check := range result.Checks {
-		if check.Status != capacity.Passed && check.Next != "run bootwright controller install" {
+		if check.Status != capacity.Passed && check.Next != "run bootwright install" {
 			t.Fatalf("an unready controller check does not name the command that settles it: %+v", check)
 		}
 	}
@@ -363,7 +363,7 @@ func TestEveryStageMergesInfrastructureAndClusterChecks(t *testing.T) {
 	clusters.report.Checks = append(clusters.report.Checks, capacity.Check{ID: "capacity.memory", Target: "host", Status: capacity.Failed, Reason: "from clusters"})
 	result, err := service.Preflight(context.Background(), PreflightRequest{ObserveHostKeys: true, SSH: ssh})
 	found := diagnostics.Of(err)
-	if result == nil || len(found) != 1 || found[0].Code != "preflight.failed" || found[0].Remediation != "resolve the reported prerequisites and repeat bootwright check environment --context lab" {
+	if result == nil || len(found) != 1 || found[0].Code != "preflight.failed" || found[0].Remediation != "resolve the reported prerequisites and repeat bootwright apply --dry-run --context lab" {
 		t.Fatalf("result %+v, error %#v", result, err)
 	}
 	if result.Context != "lab" || result.Target != "controller,infrastructure-services,substrates,machines,clusters" {
@@ -475,5 +475,51 @@ func TestPreflightRefusesSSHOverridesNoCephClusterReachesBeforeAnyCheckRuns(t *t
 	service, _, _, clusters = fixture()
 	if _, err = service.Preflight(context.Background(), PreflightRequest{SSH: ssh}); err != nil || clusters.request.SSH != ssh {
 		t.Fatalf("a declared CephCluster takes the overrides: %v", err)
+	}
+}
+
+func TestApplyPreviewDistinguishesControllerWorkFromBlockers(t *testing.T) {
+	for _, tc := range []struct {
+		next, scope, status string
+	}{
+		{"bootwright apply --context lab --stage controller", prerequisites.ContextScope, capacity.Pending},
+		{"bootwright install", prerequisites.HostScope, capacity.Failed},
+		{"", prerequisites.ContextScope, ""},
+	} {
+		t.Run(tc.next, func(t *testing.T) {
+			service, controller, budget, clusters := fixture()
+			controller.report = &prerequisites.Report{Next: tc.next, Checks: []prerequisites.Check{
+				{ID: "target-tools", Required: "qualified tools", Observed: "missing", Status: "not-ready", Scope: tc.scope},
+			}}
+			controller.err = diagnostics.NewFailure("preflight.failed", "required controller prerequisites are not ready", "")
+			report, err := service.Preflight(t.Context(), PreflightRequest{Stages: []string{"controller"}, ApplyPreview: true})
+			if err == nil || !controller.request.SkipListeners || !controller.request.Quiet || budget.calls+clusters.calls != 0 {
+				t.Fatalf("controller stage called outside its scope or lost its status: %+v (%v)", report, err)
+			}
+			if tc.status == "" {
+				if report != nil {
+					t.Fatalf("fatal controller refusal got a readiness report: %+v", report)
+				}
+			} else if report == nil || len(report.Checks) != 1 || report.Checks[0].Status != tc.status {
+				t.Fatalf("controller prerequisite = %+v, want %s", report, tc.status)
+			}
+		})
+	}
+}
+
+func TestApplyPreviewPassesSSHOptionsOnlyToACheckThatUsesThem(t *testing.T) {
+	service, _, _, clusters := fixture()
+	service.Graph = graph{api.NewCatalog([]api.Object{object(api.CephCluster, "store"), object(api.OpenShiftCluster, "sno")})}
+	options := machine.SSHOptions{User: "operator"}
+	for _, tc := range []struct {
+		name string
+		want machine.SSHOptions
+	}{{"sno", machine.SSHOptions{}}, {"store", options}} {
+		if _, err := service.Preflight(t.Context(), PreflightRequest{Stages: []string{"clusters"}, Clusters: []string{tc.name}, SSH: options, ApplyPreview: true}); err != nil {
+			t.Fatal(err)
+		}
+		if clusters.request.SSH != tc.want {
+			t.Fatalf("%s received unexpected SSH options: %+v", tc.name, clusters.request.SSH)
+		}
 	}
 }

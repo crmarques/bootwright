@@ -5769,7 +5769,7 @@ and `TestARemovalLocatesItsRuntimeOnce`; `internal/workspace/contextfs`:
 `TestTheControllerRecordHoldsNoReceipt` and
 `TestTheFirstBindingRefusesBeforeSetupCompletes`; `cmd/bootwright`:
 `TestEveryStoreFormatIsClassified`,
-`TestComposedBaselineDryRunReadsNoSetupState` and the moved
+the baseline dry-run test, now `TestComposedBaselineDryRunReadsSetupWithoutChangingIt`, and the moved
 `TestEveryImplementationContractMatchesItsGolden` goldens.
 
 **Gates:** in the x88 worktree after merging main b81240b62 (X91), as its

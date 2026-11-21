@@ -40,7 +40,7 @@ var defaultRemediations = map[string]string{
 	"runtime.internal":    "repeat the command; a repeated failure is a Bootwright defect to report",
 
 	"context.configuration": "correct the context setup the message names and repeat the command",
-	"context.input":         "import a desired-state revision with bootwright context update --name <context> --input-dir <dir>",
+	"context.input":         "import a desired-state revision with bootwright update --name <context> --input-dir <dir>",
 	"context.state":         "run bootwright context list to see the contexts",
 	"context.unsafe-delete": "resolve the evidence the message names and repeat the deletion",
 	"context.orphaned":      "review the abandoned objects the message names",
@@ -62,13 +62,13 @@ var defaultRemediations = map[string]string{
 	"preflight.failed":  "resolve the failed checks and repeat the preflight",
 	"preflight.unknown": "resolve the unknown and pending checks and repeat the preflight",
 
-	"controller.unsupported": "run bootwright controller install on a qualified host, or choose a supported dependency combination or route",
-	"controller.identity":    "run bootwright controller install to record the controller binding and host evidence",
-	"controller.state":       "run bootwright controller install to replace the retained setup evidence",
+	"controller.unsupported": "run bootwright install on a qualified host, or choose a supported dependency combination or route",
+	"controller.identity":    "run bootwright install to record the controller binding and host evidence",
+	"controller.state":       "run bootwright install to replace the retained setup evidence",
 	"controller.conflict":    "wait for the other setup or context to finish and repeat the command",
-	"controller.install":     "resolve the failed action the message names and repeat controller install",
-	"controller.uninstall":   "resolve what the message names and repeat bootwright controller uninstall",
-	"controller.unknown":     "repeat bootwright controller install to resolve the unknown action",
+	"controller.install":     "resolve the failed action the message names and repeat install",
+	"controller.uninstall":   "resolve what the message names and repeat bootwright uninstall",
+	"controller.unknown":     "repeat bootwright install to resolve the unknown action",
 
 	"logs.not-found": "run bootwright status --context <context> to see the operation records that remain",
 

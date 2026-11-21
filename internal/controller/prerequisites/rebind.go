@@ -20,7 +20,7 @@ type RebindResult struct {
 	Reservations int
 }
 
-const rebindCommand = "bootwright controller rebind"
+const rebindCommand = "bootwright rebind-host"
 
 func (s Service) Rebind(ctx context.Context, request RebindRequest) (*RebindResult, error) {
 	if err := ctx.Err(); err != nil {
@@ -28,7 +28,7 @@ func (s Service) Rebind(ctx context.Context, request RebindRequest) (*RebindResu
 	}
 	rebinder, ok := s.storage.(ControllerRebinder)
 	if s.storage == nil || s.host == nil || !ok {
-		return nil, failure("controller.identity", "controller rebind is not configured", "")
+		return nil, failure("controller.identity", "rebind-host is not configured", "")
 	}
 	current, err := s.host.Identity(ctx)
 	if err != nil {
@@ -61,9 +61,9 @@ func (s Service) Rebind(ctx context.Context, request RebindRequest) (*RebindResu
 	}
 	if !request.SkipConfirmation {
 		if s.options.Confirmer == nil {
-			return nil, failure("controller.identity", "controller rebind requires an interactive terminal, or --yes with --recorded-host-retired and the new identity named", "")
+			return nil, failure("controller.identity", "rebind-host requires an interactive terminal, or --yes with --recorded-host-retired and the new identity named", "")
 		}
-		if err := s.options.Confirmer.Confirm(ctx, "controller rebind", identityText(recorded)+" to "+identityText(current)); err != nil {
+		if err := s.options.Confirmer.Confirm(ctx, "rebind-host", identityText(recorded)+" to "+identityText(current)); err != nil {
 			return nil, err
 		}
 	}

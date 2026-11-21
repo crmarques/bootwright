@@ -69,7 +69,7 @@ func TestARebindAsksNamingBothIdentitiesOrTakesThemNamed(t *testing.T) {
 	if _, err := service(store, asked).Rebind(ctx, RebindRequest{}); err == nil || store.rebound != 0 {
 		t.Fatalf("a declined rebind = %v, rebound %d", err, store.rebound)
 	}
-	if asked.action != "controller rebind" || !strings.Contains(asked.name, "machine-id "+old.MachineID()) || !strings.Contains(asked.name, "to machine-id "+current.MachineID()) ||
+	if asked.action != "rebind-host" || !strings.Contains(asked.name, "machine-id "+old.MachineID()) || !strings.Contains(asked.name, "to machine-id "+current.MachineID()) ||
 		!strings.Contains(asked.name, "DMI product UUID") || !strings.Contains(asked.name, "root filesystem UUID") {
 		t.Fatalf("the confirmation asked %q %q", asked.action, asked.name)
 	}

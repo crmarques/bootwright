@@ -269,7 +269,7 @@ func (s Service) install(ctx context.Context, tx SetupTransaction, current *insp
 	held := HeldIdentities(before)
 	if len(held) > MaxHeldPackages {
 		return nil, failure("controller.install", "the host holds more than "+strconv.Itoa(MaxHeldPackages)+" packages, which the install record cannot hold",
-			"remove the packages this host no longer needs with dnf, then run bootwright controller install again")
+			"remove the packages this host no longer needs with dnf, then run bootwright install again")
 	}
 	state.Pending.Transaction = &PendingTransaction{Start: start, Held: held}
 	if err := tx.Record(ctx, *state); err != nil {
@@ -285,7 +285,7 @@ func (s Service) install(ctx context.Context, tx SetupTransaction, current *insp
 		return nil, err
 	}
 	if len(still) != 0 {
-		return nil, failure("controller.install", "dnf finished but nothing provides "+strings.Join(still, ", "), "check the host's dnf configuration, then run bootwright controller install again")
+		return nil, failure("controller.install", "dnf finished but nothing provides "+strings.Join(still, ", "), "check the host's dnf configuration, then run bootwright install again")
 	}
 	after, err := s.ports.Packages.Snapshot(ctx)
 	if err != nil {
@@ -476,7 +476,7 @@ func setupOutput(ctx context.Context, tx SetupTransaction) (string, SetupRun, er
 func addedBound(added []InstalledPackage) error {
 	if len(added) > MaxAddedPackages {
 		return failure("controller.install", "the install transactions added more than "+strconv.Itoa(MaxAddedPackages)+" packages, which the install record cannot hold",
-			"run "+uninstallInvocation+" --keep-packages, which leaves every host package and removes Bootwright's state on this host, then run bootwright controller install again")
+			"run "+uninstallInvocation+" --keep-packages, which leaves every host package and removes Bootwright's state on this host, then run bootwright install again")
 	}
 	return nil
 }

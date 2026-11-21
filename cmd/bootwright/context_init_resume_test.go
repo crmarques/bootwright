@@ -73,7 +73,7 @@ func TestAnInterruptedInitResumesFromAnotherDirectoryAndFromNoInput(t *testing.T
 			}
 			interruptInit(t, repository, environment)
 			second := secondInput(t)
-			contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", second)
+			contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", second)
 			registry, err := repository.View(context.Background())
 			if err != nil || len(registry.Contexts) != 1 {
 				t.Fatalf("registry %+v %v", registry, err)
@@ -81,16 +81,16 @@ func TestAnInterruptedInitResumesFromAnotherDirectoryAndFromNoInput(t *testing.T
 			if record := registry.Contexts[0]; record.Mode != contexts.Ready || record.Revision == "" || record.EnvironmentDirectory != second {
 				t.Fatalf("the resumed init recorded %+v, want a ready record admitted from %s", record, second)
 			}
-			contextRun(t, services, 0, "check", "input", "--context", "alpha")
+			contextRun(t, services, 0, "validate", "--context", "alpha")
 		})
 	}
 	t.Run("refusals over the reservation name both exits", func(t *testing.T) {
 		services, repository, first, _ := contextFixture(t)
 		interruptInit(t, repository, first)
-		const want = "  error  context.state\n    context alpha is still initializing: an earlier context init did not finish\n    " +
-			"Next: finish it with bootwright context init --name alpha and its original Context file, from any input directory, " +
+		const want = "  error  context.state\n    context alpha is still initializing: an earlier init did not finish\n    " +
+			"Next: finish it with bootwright init --name alpha and its original Context file, from any input directory, " +
 			"or discard it with bootwright context delete --name alpha --purge\n"
-		for _, args := range [][]string{{"context", "use", "--name", "alpha"}, {"check", "input", "--context", "alpha"}} {
+		for _, args := range [][]string{{"context", "use", "--name", "alpha"}, {"validate", "--context", "alpha"}} {
 			requireContextRefusal(t, services, want, args...)
 		}
 		_, errOut := contextRun(t, services, 0, "context", "delete", "--name", "alpha", "--purge", "--yes")

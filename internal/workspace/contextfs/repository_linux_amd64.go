@@ -25,7 +25,7 @@ const (
 	unsupportedRootStateMessage = "the context store root contains unsupported state"
 	unsafeRootRemediation       = "nothing repairs it, because Bootwright never changes the owner or mode of an existing state root; " + otherBuildGuidance
 	pendingRegistryMessage      = "context initialization is incomplete"
-	pendingRegistryRemediation  = "retry context init with the original options"
+	pendingRegistryRemediation  = "retry init with the original options"
 )
 
 // unsafeRoot names what the state root is and what it must be.

@@ -127,7 +127,7 @@ controller necessarily receives a private virtual-media URL to fetch an image
 and may retain it or log it in its own access records; treat those records as
 confidential too. An emulated BMC has the same behavior.
 
-`check input` and `render effective` read no Secret material under the
+`validate` and `render effective` read no Secret material under the
 [compiler boundary](api.md#compiler-boundary), and desired state names no
 Secret payload path, so `secret set` is the only command that opens an
 operator's Secret file. A

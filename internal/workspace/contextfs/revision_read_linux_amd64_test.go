@@ -42,7 +42,7 @@ func retainedFixture(t *testing.T) (*Store, contexts.Record, contexts.Record) {
 	}
 	selected := requireSelectedInput(t, store, retained, []byte("version: updated\n"), 2)
 	if selected.Revision == retained.Revision {
-		t.Fatal("the context update selected no new revision")
+		t.Fatal("the update selected no new revision")
 	}
 	return store, retained, selected
 }

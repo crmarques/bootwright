@@ -165,22 +165,16 @@ func validControllerReport(report *prerequisites.Report) bool {
 			return false
 		}
 	}
-	return !report.DryRun || report.Outcome == "planned"
+	return !report.DryRun || report.Outcome == "planned" || report.Outcome == "not-ready" || report.Outcome == "unchanged"
 }
 
 func successfulControllerReport(command string, report *prerequisites.Report) bool {
-	if specFor(command).inspection {
-		return report.Outcome == "ready" && !report.DryRun
-	}
-	return report.DryRun && report.Outcome == "planned" || !report.DryRun && (report.Outcome == "unchanged" || report.Outcome == "changed")
+	return report.DryRun && (report.Outcome == "planned" || report.Outcome == "unchanged") || !report.DryRun && (report.Outcome == "unchanged" || report.Outcome == "changed")
 }
 
 // controllerHeadline names what the reader is looking at. Readiness inspection
 // never presents a plan, so only setup announces one.
 func controllerHeadline(command string, report *prerequisites.Report) string {
-	if specFor(command).inspection {
-		return "Controller readiness"
-	}
 	if report.PlanPresented || !report.DryRun {
 		return controllerSetupHeadline
 	}
@@ -320,11 +314,8 @@ func controllerNextCommand(command string, report *prerequisites.Report) string 
 	if report.Next != "" {
 		return report.Next
 	}
-	if report.Outcome == "ready" && specFor(command).inspection {
-		return "bootwright context init --name <name> --input-dir <dir>"
-	}
 	if report.Outcome == "changed" || report.Outcome == "unchanged" {
-		return "bootwright check controller"
+		return "bootwright init --name <name> --input-dir <dir>"
 	}
 	return ""
 }
@@ -388,7 +379,7 @@ func controllerScopeText(text *display, report *prerequisites.Report) {
 }
 
 func showReceiptTable(command string, report *prerequisites.Report) bool {
-	return report.Table != nil && (specFor(command).inspection || report.Outcome == "unchanged")
+	return report.Table != nil && (report.DryRun || report.Outcome == "unchanged")
 }
 
 // controllerPlanText writes the plan body. The scope and checks are skipped

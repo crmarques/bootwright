@@ -37,11 +37,11 @@ func TestAnUninstallPlanAndPromptNameWhatTheyRemove(t *testing.T) {
 	answers := strings.NewReader("n\n")
 	read := func(_ context.Context, p []byte) (int, error) { return answers.Read(p) }
 	var prompt bytes.Buffer
-	refusal := NewConfirmation(read, &prompt, func() (bool, error) { return true, nil }).Repeating([]string{"controller", "uninstall", "--keep-packages"}).
-		Confirm(context.Background(), "controller uninstall", "this host")
+	refusal := NewConfirmation(read, &prompt, func() (bool, error) { return true, nil }).Repeating([]string{"uninstall", "--keep-packages"}).
+		Confirm(context.Background(), "uninstall", "this host")
 	reported := diagnostics.Of(refusal)
-	if prompt.String() != "Confirm controller uninstall on this host? [y/N] " || len(reported) != 1 || reported[0].Code != "controller.uninstall" ||
-		!strings.Contains(reported[0].Remediation, "controller uninstall --keep-packages") || !strings.Contains(reported[0].Remediation, "--yes") {
+	if prompt.String() != "Confirm uninstall on this host? [y/N] " || len(reported) != 1 || reported[0].Code != "controller.uninstall" ||
+		!strings.Contains(reported[0].Remediation, "uninstall --keep-packages") || !strings.Contains(reported[0].Remediation, "--yes") {
 		t.Fatalf("prompt %q, refusal %+v", prompt.String(), reported)
 	}
 }
@@ -49,7 +49,7 @@ func TestAnUninstallPlanAndPromptNameWhatTheyRemove(t *testing.T) {
 // A discard removes no package, so it conflicts with --keep-packages before
 // any service runs.
 func TestADiscardWithKeepPackagesIsAUsageError(t *testing.T) {
-	code, out, errOut, record := runRecorded([]string{"controller", "uninstall", "--discard-unreadable", "--keep-packages"})
+	code, out, errOut, record := runRecorded([]string{"uninstall", "--discard-unreadable", "--keep-packages"})
 	if code != 2 || out != "" || record.calls != 0 ||
 		!strings.HasPrefix(errOut, "  error  cli.usage\n    --discard-unreadable conflicts with --keep-packages; a discard removes no package\n") {
 		t.Fatalf("exit=%d stdout=%q stderr=%q calls=%d", code, out, errOut, record.calls)
@@ -91,5 +91,21 @@ func TestDnfRemovalOutputReachesTheTerminalEscaped(t *testing.T) {
 	}
 	if want := "Removing: evil\\u001b]0;owned\\u0007 pkg\\r\nComplete\\u001b[2J!\n"; out.String() != want {
 		t.Fatalf("got %q, want %q", out.String(), want)
+	}
+}
+
+func TestUninstallPreviewReportsActionsAndRetainedPackages(t *testing.T) {
+	plan := &prerequisites.UninstallPlan{
+		Actions: []prerequisites.UninstallAction{{ID: "remove-state", Text: "Remove the state root", Items: []string{"/path/to/state"}}},
+		Kept:    []string{"openssh-clients"},
+	}
+	record := &dispatchRecord{result: commandResult{uninstall: &prerequisites.UninstallResult{Outcome: "planned", Plan: plan, Kept: plan.Kept}}}
+	for _, format := range []string{"text", "json"} {
+		var out, stderr bytes.Buffer
+		code := New(Config{Out: &out, ErrOut: &stderr, Services: dispatchSpies(record)}).Run(t.Context(),
+			[]string{"uninstall", "--dry-run", "--output", format})
+		if code != 0 || stderr.Len() != 0 || !strings.Contains(out.String(), "remove-state") || !strings.Contains(out.String(), "openssh-clients") {
+			t.Fatalf("%s preview: code=%d stdout=%s stderr=%s", format, code, &out, &stderr)
+		}
 	}
 }

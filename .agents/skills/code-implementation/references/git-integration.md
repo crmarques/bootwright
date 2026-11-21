@@ -105,7 +105,7 @@ refuse something an earlier build left: an incomplete operation or a frozen
 request. `scripts/check-commits` refuses it unless its subject carries the
 Conventional Commit `!` and its body a `BREAKING CHANGE: ` footer naming what it refuses and the remedy, such as
 finishing or destroying the operation with the earlier build, or a fresh
-`controller install` ([pre-1.0 policy](../../../../specs/project.md#design-priorities-and-non-goals)).
+`install` ([pre-1.0 policy](../../../../specs/project.md#design-priorities-and-non-goals)).
 `git log --grep '^BREAKING CHANGE:'` lists them for release notes.
 
 ## Integration variants

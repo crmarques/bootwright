@@ -73,7 +73,7 @@ func TestTheDeletionWalkNamesItsContextEntryAndExit(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			services, repository, input, root := contextFixture(t)
-			contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
+			contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
 			path := test.damage(t, filepath.Join(root, "contexts", "alpha"))
 			entry, err := filepath.Rel(root, path)
 			if err != nil {
@@ -117,7 +117,7 @@ func TestAStateRootThatIsALinkIsRefusedAsARootOfAnotherType(t *testing.T) {
 	t.Parallel()
 	owner := strconv.Itoa(os.Geteuid()) + ":" + strconv.Itoa(os.Getegid())
 	services, _, input, root := contextFixture(t)
-	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
 	if err := os.Rename(root, root+"-real"); err != nil {
 		t.Fatal(err)
 	}

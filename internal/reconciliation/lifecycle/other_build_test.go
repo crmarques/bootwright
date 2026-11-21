@@ -89,7 +89,7 @@ func TestAnotherBuildContinuesAnOperationWhoseBlocksItFreezesTheSame(t *testing.
 // Unsupported effects and unreadable requests still refuse without effects.
 func TestAnotherBuildRefusesUnsupportedFrozenExecution(t *testing.T) {
 	t.Parallel()
-	const install = "install bootwright devel (abcdef1), which registered this operation, and run bootwright controller install"
+	const install = "install bootwright devel (abcdef1), which registered this operation, and run bootwright install"
 	const differently = "this executable does not support the execution contract of block artifact-server-lab"
 	const unreadable = "the request the block artifact-server-lab froze cannot be read by this executable: the frozen request has an unsupported version"
 	for _, test := range []struct {

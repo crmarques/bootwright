@@ -5,8 +5,8 @@
       effective-state.yaml into that directory instead of standard output, creating it when it
       is absent, and prints where it wrote; it replaces an earlier file of that name only when
       that is a regular file, and conflicts with --origins. Context-free, --input-dir reads a
-      file or directory as bootwright check input does, requires --output-dir and conflicts
-      with --context and --sensitive. Context-backed, --output-dir requires --sensitive, which
+      file or directory as bootwright validate does, requires --output-dir and conflicts with
+      --context and --sensitive. Context-backed, --output-dir requires --sensitive, which
       writes mode 0600 under a 0700 directory it creates and refuses an existing output
       directory another account owns or that its group or others can write.
 

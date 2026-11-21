@@ -43,7 +43,7 @@ one that restores the bytes apply froze still leaves the apply refusing, so
 `destroy` stays the way on ([B598](milestones/backlog.md#b598) proposes
 settling over restored bytes).
 Unchanged input is the context's selected revision and its frozen bytes, which
-a [context update](contexts.md#frozen-input-and-provenance) of identical input
+a [update](contexts.md#frozen-input-and-provenance) of identical input
 keeps, so that update leaves a completed apply settled. A settled apply attests
 only that its own records are complete for the unchanged input; drift that
 `bootwright diff --observe` [shows](#comparing-desired-and-real-state) is
@@ -1117,7 +1117,10 @@ The capability that plans a block owns its stage. Stages are not strata: a
 block depends on blocks, never on a stage, so a `substrates` block may wait on
 an `add-ons` block when an add-on enables the cluster hosting a provider.
 
-The `controller` stage is the one exception, owned by the engine. Once
+The `controller` stage is the one exception, owned by the engine.
+A first apply may bind the context to this host when it registers any work.
+That ownership proof runs even when the selected graph has no controller
+prerequisites, or when an explicit selection excludes the controller stage. Once
 requirements resolve, each block depends on each controller block, whose
 clients run its adapters, but what it waits for: a controller block, run
 first, or one its capability runs without them, past the first after an
@@ -1215,9 +1218,10 @@ Before any effect, an apply refuses with `lifecycle.stage`:
 A destroy accepts neither selection, so its preview refuses `lifecycle.stage`
 for either.
 
-Selection never weakens a safety rule. An unproved effect is resolved before
-anything else whatever stages are selected, because resolution is a read-only
-observation; several unproved effects may be observed together, and nothing
+Selection never weakens a safety rule. An unproved effect is resolved before anything else. When an explicit
+selection excludes controller and a controller block has an unproved effect,
+apply refuses and names the controller recovery invocation. For other
+blocks resolution is a read-only observation; several unproved effects may be observed together, and nothing
 starts, retries or is removed beside them. Failed blocks are then retried
 under the rules a first attempt follows: each whose stage is selected starts
 once the bound and its exclusive resources admit it, beside the other retries
@@ -1288,8 +1292,8 @@ at every run of its block, its removal included. Each such block is one
 `api.value` diagnostic whose object is the block's, naming the first field
 holding a delimiter or such a key, how many more of its fields hold one, and
 the remedy: remove the delimiters and keys from the values the object is
-planned from, import them with `bootwright context update`, then run
-`bootwright plan apply --context` with the context. A removal or a continuation
+planned from, import them with `bootwright update`, then run
+`bootwright apply --dry-run --context` with the context. A removal or a continuation
 planned from a frozen plan is never refused this way. A bounded run, which a
 `machine start`, `stop` or `restart` and the power reading of
 `machine list --power-status` each carry and which is never planned, refuses
@@ -1298,7 +1302,7 @@ bound. It names the Machine whose value holds the delimiter or key and the
 field, read from that Machine's request, and its remedy ends with that same
 command, with `--context`.
 
-The operator selects `plan apply` or `plan destroy`. Each uses the decision
+The operator selects `apply --dry-run` or `destroy --dry-run`. Each uses the decision
 path of its named verb. A fresh
 apply's decision refuses, over no operation, state no index
 accounts for, and over a completed destroy one holding a block that is not
@@ -1316,8 +1320,8 @@ apply holding a block that is not `done`, records that leave nothing to remove,
 and a frozen request this executable cannot read. A failed removal is previewed
 as the fresh removal `destroy` starts over what it has not yet proved gone,
 unless its blocks are all `done`, when its finalization is due.
-Over unfinished apply, `plan apply` previews its continuation and
-`plan destroy` previews the removal of its owned effects. Where a
+Over unfinished apply, `apply --dry-run` previews its continuation and
+`destroy --dry-run` previews the removal of its owned effects. Where a
 [finalization](#lifecycle-unit) is due, the preview decides as the verb does
 once that finalization is done, without performing it, and where the verb then
 settles, the preview says the verb only completes that finalization. The
@@ -1369,7 +1373,7 @@ Every effect of an operation runs inside the controller runtime of the build
 in hand: the venv its embedded runtime lock builds on the interpreter the setup
 receipt names ([controller runtime](controller.md#host-identity-and-shared-prerequisites)).
 An operation locates that runtime once, before it registers, and refuses
-`controller.state` with `run bootwright controller install` when the setup record holds no
+`controller.state` with `run bootwright install` when the setup record holds no
 receipt, records an interrupted setup or another build's format, or this host
 has published no runtime for the build's lock. A registration freezes the
 runtime's Python and Ansible *execution closure* in the operation record:
@@ -1455,7 +1459,7 @@ runtime or refuses as the
 [cache-only rebuild](controller.md#the-controller-runtime) says. A host whose
 setup has not completed, or whose runtime for the running build is not
 prepared, refuses every verb that runs a block or registers, naming
-`run bootwright controller install`, and `status` offers it in their place.
+`run bootwright install`, and `status` offers it in their place.
 
 ### Attempts and unknown outcomes
 
@@ -2152,7 +2156,7 @@ moved since the first read. It proves this context is bound to this host as a
 continuation does, refusing `controller.identity` or `controller.state` with
 the remedy `run bootwright diff --context <name> without --observe` for an
 unbound context, and locates this build's controller runtime, refusing
-`controller.state` with `run bootwright controller install` when it is not prepared. It starts
+`controller.state` with `run bootwright install` when it is not prepared. It starts
 observations in frozen plan order, each inside its own execution guard, at
 most as many at once as an operation runs and at most a
 [throttle's](#stages-and-the-pause-boundary) capacity of the blocks naming one
@@ -2943,7 +2947,7 @@ a SHA-256 over those steps' identity, kind, object, implementation, content
 digest and request digest in frozen order, which every presentation of the
 plan prints beside the token. A digest the frozen plan does not give refuses
 `authorize.stale` before registration, naming the steps the plan holds
-now and `bootwright plan` to review them. An invocation no reviewed prompt
+now and the verb with `--dry-run` to review them. An invocation no reviewed prompt
 precedes, under `--yes` or with input that cannot answer one, must carry it, and
 a bare token there refuses the same way, so an unattended authorization is
 always bound to the steps someone reviewed (D183, Q117). The

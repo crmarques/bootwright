@@ -694,3 +694,24 @@ func TestAStoreTheSetupReadRefusesPreviewsNothing(t *testing.T) {
 		t.Fatalf("a refused store ran %v", f.events)
 	}
 }
+
+func TestVerifiedInstallPreviewChecksTheReceiptWithoutEffects(t *testing.T) {
+	for _, prepared := range []bool{false, true} {
+		f := newSetupFixture(t)
+		want := "planned"
+		if prepared {
+			want = "unchanged"
+			f.prepared()
+		}
+		report, err := f.service.Setup(t.Context(), SetupRequest{DryRun: true, Verify: true})
+		if err != nil || report.Outcome != want || !report.DryRun || len(report.Files) != len(testLock.Files) {
+			t.Fatalf("verified install preview = %+v (%v)", report, err)
+		}
+		if f.count("read") != 1 || f.count("identity") != 1 || len(f.effects()) != 0 || f.count("confirm") != 0 {
+			t.Fatalf("install preview ran unexpected steps: %v", f.events)
+		}
+		if prepared != (len(report.Actions) == 0) {
+			t.Fatalf("install preview planned the wrong actions: %v", report.Actions)
+		}
+	}
+}

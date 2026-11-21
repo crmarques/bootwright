@@ -36,6 +36,9 @@ func flagsReadBy(t *testing.T, path string) map[string]bool {
 	for _, withFiles := range []bool{true, false} {
 		flags := dispatchFlags()
 		if !withFiles {
+			if err := flags.Set("dry-run", "false"); err != nil {
+				t.Fatal(err)
+			}
 			if err := flags.Set("file", ""); err != nil {
 				t.Fatal(err)
 			}

@@ -15,7 +15,7 @@ func validContextSummary(summary contexts.Summary) bool {
 }
 
 func validAdmission(result *contexts.AdmissionResult) bool {
-	return result != nil && validContextSummary(result.Context) && result.FilesCopied >= 0 && result.Counts.FilesSeen >= 0 && result.Counts.ObjectsDecoded >= 0
+	return result != nil && (validContextSummary(result.Context) || result.Checked && result.Context.Name != "") && result.FilesCopied >= 0 && result.Counts.FilesSeen >= 0 && result.Counts.ObjectsDecoded >= 0
 }
 
 func validContextList(result *contexts.ListResult) bool {
@@ -54,6 +54,23 @@ func writeAdmission(out, errOut io.Writer, update bool, result *contexts.Admissi
 		if err := writeHumanDiagnostics(errOut, displayDiagnostics(result.Diagnostics)); err != nil {
 			return err
 		}
+	}
+	if result.Checked {
+		var text display
+		text.headline("OK", "Context definition accepted")
+		input := "unchanged"
+		switch {
+		case result.InputChanged && update:
+			input = "would replace the frozen input"
+		case result.InputChanged:
+			input = "would import the supplied input"
+		case !update:
+			input = "empty context"
+		}
+		text.fields(field{Label: "Name", Value: result.Context.Name}, field{Label: "Input", Value: input},
+			field{Label: "Files seen", Value: strconv.Itoa(result.Counts.FilesSeen)},
+			field{Label: "Objects decoded", Value: strconv.Itoa(result.Counts.ObjectsDecoded)})
+		return text.writeTo(out)
 	}
 	action := "initialized"
 	if update {
@@ -168,12 +185,12 @@ func contextInput(configured bool) string {
 func contextNext(summary contexts.Summary) string {
 	switch summary.Mode {
 	case contexts.Initializing:
-		return "bootwright context init --name " + summary.Name
+		return "bootwright init --name " + summary.Name
 	case contexts.Deleting:
 		return "bootwright context delete --name " + summary.Name + " --purge"
 	}
 	if !summary.Configured {
-		return "bootwright context update --name " + summary.Name + " --input-dir <directory>"
+		return "bootwright update --name " + summary.Name + " --input-dir <directory>"
 	}
 	return "bootwright status --context " + summary.Name
 }

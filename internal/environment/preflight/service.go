@@ -45,7 +45,7 @@ func (s Service) Preflight(ctx context.Context, request PreflightRequest) (*Repo
 	}
 	stages, err := reconciliation.ParseStages(request.Stages)
 	if err != nil {
-		return nil, diagnostics.NewFailureWithRemediation("cli.usage", "--stage names a stage that does not exist", "", "name stages from bootwright help check environment")
+		return nil, diagnostics.NewFailureWithRemediation("cli.usage", "--stage names a stage that does not exist", "", "name stages from bootwright help apply --dry-run")
 	}
 	if len(stages) == 0 {
 		stages = CheckedStages()
@@ -68,13 +68,13 @@ func (s Service) Preflight(ctx context.Context, request PreflightRequest) (*Repo
 	storageSelected := clusters && slices.ContainsFunc(catalog.OfCategory(api.StorageClusterCategory), func(cluster api.Object) bool {
 		return len(request.Clusters) == 0 || slices.Contains(request.Clusters, cluster.Name())
 	})
-	if err := clusterpreflight.RefuseUnreachedSSH(request.SSH, storageSelected); err != nil {
+	if err := clusterpreflight.RefuseUnreachedSSH(request.SSH, storageSelected); err != nil && !request.ApplyPreview {
 		return nil, err
 	}
 	var parts []clusterpreflight.Part
 	if slices.Contains(stages, reconciliation.StageController) || slices.Contains(stages, reconciliation.StageInfrastructureServices) {
 		parts = append(parts, func(checks context.Context) (*Report, error) {
-			return s.controllerReport(checks, selected, request.DryRun, stages)
+			return s.controllerReport(checks, selected, request.DryRun, stages, request.ApplyPreview)
 		})
 	}
 	if mirror, _ := tooltable.ArtifactMirror(catalog); mirror != "" && slices.Contains(stages, reconciliation.StageController) {
@@ -92,7 +92,7 @@ func (s Service) Preflight(ctx context.Context, request PreflightRequest) (*Repo
 	}
 	if clusters {
 		parts = append(parts, func(checks context.Context) (*Report, error) {
-			return s.Clusters.Check(checks, clusterpreflight.PreflightRequest{ContextName: selected, Clusters: request.Clusters, DryRun: request.DryRun, ObserveHostKeys: request.ObserveHostKeys, SSH: request.SSH})
+			return s.Clusters.Check(checks, clusterpreflight.PreflightRequest{ContextName: selected, Clusters: request.Clusters, DryRun: request.DryRun, ObserveHostKeys: request.ObserveHostKeys, SSH: sshForClusters(request.SSH, storageSelected)})
 		})
 	}
 	reports, err := clusterpreflight.RunTogether(ctx, parts...)
@@ -100,6 +100,13 @@ func (s Service) Preflight(ctx context.Context, request PreflightRequest) (*Repo
 		return nil, err
 	}
 	return clusterpreflight.Assemble(selected, stageList(stages), repeatCommand(selected, request.Clusters, stages, len(request.Stages) != 0), reports...)
+}
+
+func sshForClusters(ssh machine.SSHOptions, storageSelected bool) machine.SSHOptions {
+	if storageSelected {
+		return ssh
+	}
+	return machine.SSHOptions{}
 }
 
 func stageList(stages reconciliation.StageSelection) string {
@@ -111,7 +118,7 @@ func stageList(stages reconciliation.StageSelection) string {
 }
 
 func repeatCommand(selected string, clusters []string, stages reconciliation.StageSelection, explicit bool) string {
-	command := "bootwright check environment --context " + selected
+	command := "bootwright apply --dry-run --context " + selected
 	if explicit {
 		command += " --stage " + stageList(stages)
 	}
@@ -121,7 +128,7 @@ func repeatCommand(selected string, clusters []string, stages reconciliation.Sta
 	return command
 }
 
-func (s Service) controllerReport(ctx context.Context, selected string, dryRun bool, stages reconciliation.StageSelection) (*Report, error) {
+func (s Service) controllerReport(ctx context.Context, selected string, dryRun bool, stages reconciliation.StageSelection, preview bool) (*Report, error) {
 	controller := slices.Contains(stages, reconciliation.StageController)
 	listeners := slices.Contains(stages, reconciliation.StageInfrastructureServices)
 	if dryRun {
@@ -134,12 +141,21 @@ func (s Service) controllerReport(ctx context.Context, selected string, dryRun b
 		}
 		return &Report{Checks: checks}, nil
 	}
-	report, err := s.Controller.Check(ctx, prerequisites.CheckRequest{ContextName: selected})
+	report, err := s.Controller.Check(ctx, prerequisites.CheckRequest{ContextName: selected, SkipListeners: preview, Quiet: preview})
 	if report == nil {
 		return nil, err
 	}
 	checks := controllerChecks(report)
-	if err != nil && !anyUnready(checks) {
+	if preview && report.Next != "" && report.Next != "bootwright install" {
+		for i, row := range report.Checks {
+			if row.Scope == prerequisites.ContextScope && checks[i].Status == capacity.Failed {
+				checks[i].Status = capacity.Pending
+				checks[i].Reason += " (apply prepares this prerequisite)"
+				checks[i].Next = ""
+			}
+		}
+	}
+	if err != nil && (preview && report.Next == "" || !anyUnready(checks)) {
 		return nil, err
 	}
 	return &Report{Checks: slices.DeleteFunc(checks, func(check capacity.Check) bool {

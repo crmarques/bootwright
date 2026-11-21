@@ -10,12 +10,14 @@ import (
 )
 
 type UninstallRequest struct {
+	DryRun            bool
 	SkipConfirmation  bool
 	KeepPackages      bool
 	DiscardUnreadable bool
 }
 
 type UninstallResult struct {
+	Plan     *UninstallPlan
 	Outcome  string
 	Packages []string
 	Paths    []string
@@ -39,7 +41,7 @@ const (
 	RemoveStateAction        = "remove-state"
 	DiscardAction            = "discard"
 	FinishRemovalAction      = "finish-removal"
-	uninstallInvocation      = "bootwright controller uninstall"
+	uninstallInvocation      = "bootwright uninstall"
 	discardInvocation        = uninstallInvocation + " --discard-unreadable"
 	uninstallCode            = "controller.uninstall"
 )
@@ -98,8 +100,8 @@ func (s Service) Uninstall(ctx context.Context, request UninstallRequest) (*Unin
 		return nil, failure(uninstallCode, "--discard-unreadable removes no package, so it takes no --keep-packages", "repeat with one of them")
 	}
 	keep := request.KeepPackages || request.DiscardUnreadable
-	if !stores || !presents || s.ports.Owned == nil || !keep && !removes {
-		return nil, failure(uninstallCode, "controller uninstall is not configured", "")
+	if !stores || !request.DryRun && !presents || s.ports.Owned == nil || !keep && !removes {
+		return nil, failure(uninstallCode, "uninstall is not configured", "")
 	}
 	var planned uninstallInspection
 	err := store.Uninstall(ctx, func(tx UninstallTransaction) error {
@@ -114,6 +116,9 @@ func (s Service) Uninstall(ctx context.Context, request UninstallRequest) (*Unin
 		return &UninstallResult{Outcome: "unchanged", Packages: []string{}, Paths: []string{}, Kept: []string{}}, nil
 	}
 	plan := planned.plan()
+	if request.DryRun {
+		return &UninstallResult{Outcome: "planned", Plan: &plan, Packages: []string{}, Paths: []string{}, Kept: slices.Clone(plan.Kept)}, nil
+	}
 	if len(planned.packages) != 0 {
 		preview, err := s.removalPreview(ctx, removal, planned)
 		if err != nil {
@@ -126,9 +131,9 @@ func (s Service) Uninstall(ctx context.Context, request UninstallRequest) (*Unin
 	}
 	if !request.SkipConfirmation {
 		if s.options.Confirmer == nil {
-			return nil, failure(uninstallCode, "controller uninstall requires confirmation", "review the plan and repeat with --yes")
+			return nil, failure(uninstallCode, "uninstall requires confirmation", "review the plan and repeat with --yes")
 		}
-		if err := s.options.Confirmer.Confirm(ctx, "controller uninstall", "this host"); err != nil {
+		if err := s.options.Confirmer.Confirm(ctx, "uninstall", "this host"); err != nil {
 			return nil, err
 		}
 	}
@@ -255,7 +260,7 @@ func (s Service) ownedObjectsGone(ctx context.Context) error {
 func receiptNames(setup SetupView, keep bool) ([]InstalledPackage, []string, error) {
 	refuse := func(message string) ([]InstalledPackage, []string, error) {
 		return nil, nil, failure(uninstallCode, message+", so the host packages it added are not known",
-			"run bootwright controller install, then run "+uninstallInvocation+" again; or pass --keep-packages to leave every host package")
+			"run bootwright install, then run "+uninstallInvocation+" again; or pass --keep-packages to leave every host package")
 	}
 	if !keep && setup.Foreign != "" {
 		return refuse("the install record was written by another Bootwright build")

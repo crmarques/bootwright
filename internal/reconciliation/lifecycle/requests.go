@@ -10,6 +10,8 @@ import (
 
 type PlanRequest struct {
 	Verb        reconciliation.Verb
+	Readiness   bool
+	Parallelism int
 	ContextName string
 	Stages      []string
 	Until       string

@@ -17,7 +17,7 @@ import (
 )
 
 // Capability realizes the controller prerequisites one context adds to the
-// host `bootwright controller install` prepared: the target clients its graph selects, and
+// host `bootwright install` prepared: the target clients its graph selects, and
 // the host packages of the libvirt client a declared capability, a hosted
 // provider or a Machine on a libvirt provider selects, of the hypervisor
 // closure a hosted provider selects and of the installer-media tooling an
@@ -777,7 +777,7 @@ func (c Capability) published(ctx context.Context, execution lifecycle.Execution
 		return true, nil
 	}
 	if execution.Stage.Setup.OpenBundle == nil {
-		return false, refuse("controller.state", "the retained controller areas are unavailable", "run bootwright controller install")
+		return false, refuse("controller.state", "the retained controller areas are unavailable", "run bootwright install")
 	}
 	area, err := execution.Stage.Setup.OpenBundle(ctx, prerequisites.ToolsDigest(tools))
 	if err != nil || area == nil {

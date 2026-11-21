@@ -33,5 +33,5 @@ func CheckClusterFIPS(ctx context.Context, inspector FIPSInspector, catalog api.
 			return ctx.Err()
 		}
 	}
-	return failure("controller.unsupported", "a selected FIPS cluster requires the controller kernel FIPS flag /proc/sys/crypto/fips_enabled to be 1", "use a FIPS-enabled controller, then repeat bootwright check environment --stage controller and plan")
+	return failure("controller.unsupported", "a selected FIPS cluster requires the controller kernel FIPS flag /proc/sys/crypto/fips_enabled to be 1", "use a FIPS-enabled controller, then repeat bootwright apply --dry-run --stage controller and plan")
 }

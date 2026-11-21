@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"slices"
 	"strconv"
 	"strings"
 
@@ -54,10 +53,21 @@ func validateUninstall(command *cobra.Command) string {
 }
 
 func validateLifecycleFlags(command *cobra.Command) string {
+	if dryRunSelected(command.Flags()) && len(arrayValue(command.Flags(), "authorize")) != 0 {
+		return "--authorize is used when executing apply"
+	}
 	return validateAuthorizations(command, false)
 }
 
 func validateDestroyFlags(command *cobra.Command) string {
+	if dryRunSelected(command.Flags()) {
+		if problem := validatePlanFlags(command); problem != "" {
+			return problem
+		}
+		if len(arrayValue(command.Flags(), "unregistered")) > 0 {
+			return "--unregistered is used when executing destroy"
+		}
+	}
 	return validateAuthorizations(command, true)
 }
 
@@ -68,7 +78,7 @@ func validatePlanFlags(command *cobra.Command) string {
 	}
 	for _, token := range tokens {
 		if !lifecycle.IsEraseAuthorization(token) {
-			return "plan destroy accepts only --authorize erase=<machine>:metadataClear or erase=<machine>:retain; data-loss and rebind=<secret> are consumed by apply and destroy"
+			return "destroy --dry-run accepts only --authorize erase=<machine>:metadataClear or erase=<machine>:retain; data-loss and rebind=<secret> are consumed by apply and destroy"
 		}
 	}
 	_, err := lifecycle.ParseEraseRelaxations(tokens)
@@ -94,7 +104,7 @@ func validateAuthorizations(command *cobra.Command, erase bool) string {
 		}
 	}
 	if len(relaxing) != 0 && !erase {
-		return "--authorize erase=<machine>:<method> relaxes a removal and applies only to destroy and plan destroy, not " + command.Name()
+		return "--authorize erase=<machine>:<method> relaxes a removal and applies only to destroy and destroy --dry-run, not " + command.Name()
 	}
 	if _, err := lifecycle.ParseEraseRelaxations(relaxing); err != nil {
 		return err.Error()
@@ -149,16 +159,6 @@ func missingMediaSource(flags *pflag.FlagSet) bool {
 
 func validateMediaAdd(command *cobra.Command) string {
 	return firstRefusal(validateMediaName, func(command *cobra.Command) string { return validateMediaSource(command.Flags()) })(command)
-}
-
-func validatePreflight(command *cobra.Command) string {
-	flags := command.Flags()
-	if stages := normalizeNames(stringValue(flags, "stage")); flags.Changed("stage") && len(stages) == 0 {
-		return "--stage must name at least one stage"
-	} else if len(stages) != 0 && !slices.Contains(stages, "clusters") && stringValue(flags, "clusters") != "" {
-		return "--clusters requires the clusters stage"
-	}
-	return ""
 }
 
 func validateMachineList(command *cobra.Command) string {

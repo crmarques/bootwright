@@ -63,7 +63,7 @@ spec:
         - sshd
 
     # The installed system's own repositories: the hosted DVD tree, from which
-    # `bootwright controller install` and the controller stage install there.
+    # `bootwright install` and the controller stage install there.
     repositories:
       configure:
         - id: bootwright-dvd-baseos

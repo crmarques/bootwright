@@ -93,7 +93,7 @@ CLI owns its temporary message and exit status. Such an invocation:
 `<command>` is the resolved canonical command path without arguments. Human
 wording may evolve under the [compatibility rule](cli/output.md#compatibility),
 but the code, command identity, streams, result absence, exit meaning, and
-no-effect boundary are stable. An unavailable `plan`, `apply`, or `destroy`
+no-effect boundary are stable. An unavailable `apply` or `destroy`
 emits no lifecycle receipt because no trustworthy lifecycle result exists.
 
 ## Parsing and input conventions
@@ -150,8 +150,8 @@ the scalar comma-list flags `--clusters`, `--replace`, `--stage`,
 the `--name` that names several Machines and the `--name` and `--node` that name
 several clusters and nodes.
 Collection flags aggregate in command-line order only where this contract says
-they are repeatable. `check input --input-dir` is repeatable. `--authorize` (with
-`erase=<machine>:<method>`, once per Machine, on `destroy` and `plan`) and
+they are repeatable. `validate --input-dir` is repeatable. `--authorize` (with
+`erase=<machine>:<method>`, once per Machine, on `destroy` and `destroy --dry-run`) and
 `destroy --unregistered` are repeatable and each occurrence may also contain
 commas. Supplying an empty required value
 is a usage error.
@@ -212,17 +212,22 @@ artifacts, trust-store maintenance, or explicit access; it never changes
 effective state, dependency closure, ownership, lifecycle scope, the frozen
 plan, or continuation.
 
-`check input --input-dir` accepts a YAML file or directory and may be repeated.
+`validate --input-dir` accepts a YAML file or directory and may be repeated.
 The set is compiled as one ordered desired-state input universe under
 [the API contract](api.md). Supplying `--input-dir` makes validation
-context-free. Omission uses the selected context input. For `context init`
-and `context update`, `-f/--file` accepts one standalone Context configuration
+context-free. Omission uses the selected context input. For `init`
+and `update`, `-f/--file` accepts one standalone Context configuration
 file and `--input-dir` accepts one desired-state directory for immutable
 import. Both are optional at init. Update requires at least one. Omission
-never discovers the working directory.
+never discovers the working directory. `init --check` requires an unused name,
+including when the store does not exist. `update --check` requires a ready
+name and applies the same read-only admission decision and lifecycle guards
+as update. Both forms inspect the supplied files without selecting a
+context, copying input, creating keys or publishing a revision. They validate
+the declared controller relationship without preparing the host.
 
 This document owns public input acquisition and flag cardinality. Each
-`check input --input-dir` occurrence is one path. Commas are filename
+`validate --input-dir` occurrence is one path. Commas are filename
 characters. Cleaned path strings are deduplicated and discovered files are
 globally sorted by cleaned path. The combined universe undergoes one
 Environment selection, and its selected documents are decoded and validated
@@ -263,7 +268,7 @@ exclusive lock or a remote observation (a removal's resolution of every effect
 it takes back and its quiescence gate, the reopened Secret binding, a power
 command's controller identity) follows the prompt and still refuses before
 registration or any effect. Every prompt names the object it acts on and, for
-an object of a context, the context it acts in; `controller install`, `controller uninstall` and `media` act on the
+an object of a context, the context it acts in; `install`, `uninstall` and `media` act on the
 host and name none. Only `y` or `yes`, case-insensitive with surrounding
 whitespace ignored, accepts. Read one answer of at most 64 bytes including LF
 without read-ahead. Decline, non-interactive input, cancellation or an I/O
@@ -296,13 +301,12 @@ answer the same way. `--yes` suppresses only this prompt, under
 ### Local privilege and user identity
 
 Classify and validate arguments before privilege effects. Help, completion,
-version, invalid invocations, unavailable commands, explicit-input validate and
-`controller install --dry-run` never elevate. The same classification selects, from the
+version, invalid invocations, unavailable commands and explicit-input
+`validate` never elevate. The install preview can elevate for private host
+setup and runtime evidence. The same classification selects, from the
 parsed flags, invocations reading the
 [context-free acquisition route](controller.md#the-context-free-acquisition-route)
-before `sudo` can prompt. Available controller setup and inspection may
-need private shared-host metadata or install privilege; their
-effects follow [Controller](controller.md#the-setup-flow).
+before `sudo` can prompt. [Controller](controller.md#the-setup-flow) owns host setup effects.
 Available commands requiring context state run as root; a
 non-root invocation keeps an unprivileged supervisor and launches one exact
 Bootwright child as UID 0 through the qualified absolute sudo executable. Pin
@@ -449,7 +453,7 @@ semantic validation and uses the selected human or structured representation.
 A context is one self-contained lifecycle unit, and its name, a lowercase DNS
 label, is its identity. [Contexts](contexts.md) defines storage, selection,
 initialization, input replacement, [permanent deletion](contexts.md#permanent-deletion)
-and successful context command results; `context init --name <name>` requires
+and successful context command results; `init --name <name>` requires
 no desired state.
 
 Media, secret, add-on, and context writes use verified roots, safe
@@ -468,10 +472,10 @@ completion, or context initialization without input. Context-free validation
 can run away from the declared controller; it checks input relationships and
 never verifies the invoking host.
 
-`controller install` and `check controller` follow the
+`install` and its dry run follow the
 [Controller journeys](controller.md#the-setup-flow), including
 preparation before context creation or Environment import; neither selects a
-context. `check environment --stage controller` checks what a context's controller
+context. `apply --dry-run --stage controller` checks what a context's controller
 stage adds. Which invocations read the invoking environment's proxy route is
 owned by the [context-free acquisition route](controller.md#the-context-free-acquisition-route).
 Controller selection alone does not cause setup, install a container runtime or
@@ -485,7 +489,7 @@ their execution authority.
 
 ## Validation, preflight, and rendering
 
-`check input` performs discovery, strict decoding, normalization, complete graph
+`validate` performs discovery, strict decoding, normalization, complete graph
 validation, and deterministic diagnostics. It opens no declared payload,
 secret material, process, or network endpoint. A context-free invocation opens
 no context store; a context-backed invocation reads only the selected immutable
@@ -494,7 +498,7 @@ successful exit; an invalid input set exits `1`. After the CLI has resolved the
 input universe, discovery and Environment selection are defined by
 [the API contract](api.md).
 
-`check environment` reports current readiness, stage by stage, as
+`apply --dry-run` reports current readiness, stage by stage, as
 [its report](cli/output.md#preflight) assigns checks to stages, but grants no
 mutation authority and never replaces a fresh lifecycle operation's
 effect-boundary probes. A live
@@ -513,7 +517,7 @@ With `--output-dir`, `render effective` writes `effective-state.yaml`, the
 canonical YAML it otherwise prints, into that directory instead of standard output and
 reports `inputDir` (context-free only), `outputDir`, `effectiveStatePath` and
 the `objects` count. Context-free it reads `--input-dir`, a file or directory
-as `check input --input-dir` does; context-backed it reads the selected context's input and
+as `validate --input-dir` does; context-backed it reads the selected context's input and
 requires `--sensitive`. A compile failure writes nothing. Publication runs
 with the invoking account's credentials, including when a
 context-backed read needs root. Context-free `render effective --input-dir` does not
@@ -566,7 +570,7 @@ order (`TestRenderEffectiveOriginsMarkEachLeaf`).
 
 `bootwright render acquisitions` lists every artifact the selected desired
 state acquires or hands a Machine to acquire, from the selected context's
-input or, with `--input-dir`, a context-free input as `check input --input-dir` reads
+input or, with `--input-dir`, a context-free input as `validate --input-dir` reads
 it; `--input-dir` conflicts with `--context`. It registers nothing, contacts
 nothing and reads no host. Each row names its kind, the artifact, its
 version, its origin and that origin's
@@ -664,7 +668,7 @@ entry without `defaults`). A required field is stated only inside a list
 element or open-map value, which kind defaults copy whole; a record field a
 kind default can supply is not required in the authored document
 (`TestTheAdvisoryJSONSchemaAdmitsAFieldAKindDefaultSupplies`).
-It reads no context and contacts nothing. `check input` stays the authority:
+It reads no context and contacts nothing. `validate` stays the authority:
 lexical grammars, references, unions and cross-field rules are not in the
 export, and every tracked example validates alike under both
 (`TestEveryExampleValidatesAlikeUnderTheAdvisoryJSONSchema`). Text mode writes
@@ -726,21 +730,20 @@ Text mode writes the document; either structured mode places it in
 
 ## Lifecycle behavior
 
-`plan apply`, `plan destroy`, `apply` and `destroy` act on the complete
+`apply --dry-run`, `destroy --dry-run`, `apply` and `destroy` act on the complete
 selected lifecycle unit. They accept no positional operand, partial selector,
 range, mode, reconciliation, adoption, reclaim, force or resource-specific
 subcommand.
 
-Each preview uses the decision of the verb the operator names. `plan apply`
+Each preview uses the decision of the verb the operator names. `apply --dry-run`
 previews a fresh or additive apply, the exact continuation of an unfinished
 apply, or a settled apply over unchanged input. Changed input that apply
-cannot admit refuses with apply's diagnostic. `plan destroy` previews the
+cannot admit refuses with apply's diagnostic. `destroy --dry-run` previews the
 removal the ownership records support. This includes a replacement after a
 failed destroy or removal of the owned effects of an unfinished apply.
 A settled verb previews no steps. An interrupted finalization is identified
 when the selected verb would finish it. Previews allocate no identity,
-create no log, and consume no authorization. An apply preview can include
-read-only host checks, while execution still performs its own required proofs.
+create no log, and consume no authorization. Previews include available read-only prerequisite checks for the verb. Execution still performs its own required proofs.
 
 An invocation whose work durable state already proves settles before any of
 that: it presents no plan, asks for no confirmation, requires and refuses no
@@ -755,7 +758,7 @@ completed blocks is never read as work this invocation performed.
 
 `apply` and `destroy` present the frozen plan, which marks each step that
 consumes an authorization and closes with the tokens it requires; a `destroy`,
-and a `plan destroy --authorize erase=<machine>:<method>` that previews it, also marks
+and a `destroy --dry-run --authorize erase=<machine>:<method>` that previews it, also marks
 each step an erase relaxation changes, naming the Machine and the method in the
 step's description, so the relaxation is reviewed in the plan and bound by its
 `data-loss` digest. Then they check the authorizations, then ask the ordinary
@@ -794,8 +797,8 @@ prompt, an authorization must carry that digest. A flag bypasses no state or
 safety gate.
 
 The add-on journey runs these commands in order: `catalog add-ons list` and `add-ons info
---name <package>` choose a package and give its binding skeleton, `check input`
-admits the binding, `plan` previews the `add-ons` stage, `apply` installs it
+--name <package>` choose a package and give its binding skeleton, `validate`
+admits the binding, `apply --dry-run` previews the `add-ons` stage, `apply` installs it
 (`apply --until <cluster>.<package>` pauses after one
 [instance](state-reconciliation.md#stopping-after-an-add-on-instance)), `status`
 reports its readiness and `destroy` [retires](add-ons.md#retirement) it. The
@@ -803,10 +806,10 @@ reports its readiness and `destroy` [retires](add-ons.md#retirement) it. The
 
 ### Stage selection
 
-`plan` and `apply` accept the [`--stage` flag](cli/commands.md#flag-relationships-and-safeguards);
+`apply` accepts the [`--stage` flag](cli/commands.md#flag-relationships-and-safeguards);
 what a selection gates, pauses and refuses is owned by the
 [stage contract](state-reconciliation.md#stages-and-the-pause-boundary).
-`plan apply --stage` previews which blocks the next `apply` would resolve, retry or
+`apply --dry-run --stage` previews which blocks the next `apply` would resolve, retry or
 start and which it would defer, as the
 [stage contract](state-reconciliation.md#stages-and-the-pause-boundary) admits
 them, with the markers of the
@@ -819,7 +822,7 @@ work, with `--authorize <token>` for each token the plan consumes, since that
 
 ### Lifecycle receipt
 
-Every resolved `plan`, `apply`, or `destroy` invocation ends its text result
+Every resolved `apply` or `destroy` invocation ends its text result
 with this stable machine-readable receipt unless no trustworthy lifecycle
 result exists:
 
@@ -841,7 +844,7 @@ the steps `status` offers name the command the token maps to:
 | `resolve` | the operation's own verb: `bootwright apply --context <name>` or `bootwright destroy --context <name>` |
 | `none` | no step |
 
-The labels, order, enum values, escaping, and final LF are stable. Every `plan`
+The labels, order, enum values, escaping, and final LF are stable. Every lifecycle preview
 receipt has state `preview`, a CLI-only marker that is never persisted as an
 operation state. Its `operation` names the incomplete operation the plan would
 continue, or `none` when it previews a fresh operation, and its `next` names
@@ -866,8 +869,8 @@ failed attempt's adapter diagnostic names its block and the
 [log directory](cli/output.md#private-operation-logs).
 
 `next` names what the operation's own records call for, by one rule the
-receipt, `plan` and `status` share over the operation the result reports, for
-`plan` the one it continues: `none` once the operation is `done`;
+receipt, lifecycle preview and `status` share over the operation the result reports, for a preview
+the one it continues: `none` once the operation is `done`;
 `destroy` for a `failed` destroy holding a block that is not `done`, an
 `unknown` one included, because `destroy` replaces it with a fresh removal of
 what it has not removed rather than continuing or resolving it; `resolve` while
@@ -878,7 +881,7 @@ which is also how that verb completes a
 [finalization](state-reconciliation.md#lifecycle-unit). A settled verb reports
 `done` and `none` too, over the completed operation it proved, or over `none`
 when the context owns no operation at all. A completed apply never names its
-destroy next, which would invite undoing what just succeeded; `plan` reports
+destroy next, which would invite undoing what just succeeded; the preview reports
 the verbs a context admits. `apply`
 appears only as the previewed verb of a pure plan, and `destroy` only as that
 or as what a failed destroy calls for. Where `status` offers a next step it
@@ -893,12 +896,12 @@ replacement, those of the blocks it retains. A finalization carries none, and
 neither does `bootwright destroy --context <name>` offered beside an incomplete
 apply, since its presented plan names them.
 
-`status` considers, in order, the current operation's verb (`plan apply` and
-`apply` when idle), `destroy` over an incomplete apply, `controller install`,
+`status` considers, in order, the current operation's verb (`apply --dry-run` and
+`apply` when idle), `destroy` over an incomplete apply, `install`,
 and `context delete --name <name> --purge`. A candidate verb is
 offered only where its decision would pass over the records `status` read, so
 `status` never offers a command those records refuse; where the decision
-refuses, the exit its refusal names (`controller install` or the deletion) is offered in its
+refuses, the exit its refusal names (`install` or the deletion) is offered in its
 place when `status` can run it, else no step. The decisions belong to
 [state reconciliation](state-reconciliation.md#continuation-and-removal); the
 cases below apply that rule and restate no decision, and a change of a decision
@@ -906,10 +909,10 @@ changes the case it governs
 (`TestStatusStepsAreExactlyWhatTheVerbsDecisionsDerive` derives each candidate
 by running its verb over the records and holds the steps to exactly them):
 
-- beside no operation, `controller install` alone while the host's controller
+- beside no operation, `install` alone while the host's controller
   setup has not completed, because an apply claims the host only after it
   ([host identity](controller.md#host-identity-and-shared-prerequisites)), and
-  otherwise `bootwright plan apply --context <name>` and
+  otherwise `bootwright apply --dry-run --context <name>` and
   `bootwright apply --context <name>`; but where it names
   records or evidence no index accounts for, which both verbs refuse, only the
   deletion their refusal names,
@@ -940,7 +943,7 @@ by running its verb over the records and holds the steps to exactly them):
   refusal names is offered where it names one, and otherwise no step. `status`
   probes no host, so a binding recorded for another host is left to the
   continuation's own refusal;
-- over either incomplete operation, `controller install` in place of a
+- over either incomplete operation, `install` in place of a
   continuation or resolution that still has a block to run while the host's
   controller setup has not completed or while its retained receipt holds no
   execution definition, because that continuation re-proves the setup and
@@ -953,7 +956,7 @@ by running its verb over the records and holds the steps to exactly them):
   the context, as beside unindexed records, which abandons what the operation
   owns; and over a completed apply holding such a block, whose repeated
   `apply` refuses: there `bootwright destroy --context <name>`, which takes
-  back its frozen plan, or `controller install` in its place while setup
+  back its frozen plan, or `install` in its place while setup
   gates it, then that deletion;
 - over an operation whose continuation or removal reopens a Secret binding the
   context's keyring no longer lists, or whose keyring listing fails reporting
@@ -968,20 +971,20 @@ by running its verb over the records and holds the steps to exactly them):
   blocks are all `done` reopens none, because the `destroy` offered above
   finalizes it.
 
-Beside no operation, where the first `plan` and `apply` are offered, `status`
+Beside no operation, where the first `apply --dry-run` and `apply` are offered, `status`
 also reads what they would stop on from the selected input and the host,
 without an effect, an exclusive lock or a flag: each declared Secret whose
 material is missing or stale as `secret check` decides it, and each installer
 image the input names that the media store `catalog media list` reads does not hold.
 It names each in the `readiness` member of its
 [result](cli/output.md#lifecycle-and-status-results) and, ahead of the
-`plan` step, offers each one's remedy, `bootwright secret set` or
+preview step, offers each one's remedy, `bootwright secret set` or
 `generate` for a Secret and `bootwright catalog media add --name <image>` for an
 image, in the order of the rows. These steps are the one place a next step
 carries a placeholder the operator fills, because the material or file is the
 operator's. They are omitted when nothing is missing, over an operation, where
 the frozen plan and its Secret binding decide, and when the only step is
-`controller install` or a deletion. A read that fails adds no row, because
+`install` or a deletion. A read that fails adds no row, because
 `secret check` and `catalog media list` report it when run.
 
 An apply that has not completed owns every block it started, whichever state

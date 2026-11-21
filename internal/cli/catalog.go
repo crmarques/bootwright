@@ -43,7 +43,6 @@ type commandSpec struct {
 	operation        bool
 	controllerReport bool
 	separateProgress bool
-	inspection       bool
 }
 
 type classifyRules struct {
@@ -55,9 +54,10 @@ var rootHelpGroups = []struct {
 	title string
 	names []string
 }{
-	{"Run the lifecycle", []string{"plan", "apply", "destroy"}},
-	{"Inspect and troubleshoot", []string{"status", "logs", "diff", "explain", "check"}},
-	{"Prepare Bootwright and its inputs", []string{"controller", "catalog", "context", "secret", "render"}},
+	{"Run the lifecycle", []string{"apply", "destroy"}},
+	{"Inspect and troubleshoot", []string{"status", "logs", "diff", "explain"}},
+	{"Prepare Bootwright and its inputs", []string{"install", "uninstall", "init", "update", "validate", "context", "catalog", "secret", "render"}},
+	{"Recovery", []string{"rebind-host"}},
 	{"Work with machines and clusters", []string{"machine", "cluster", "policy"}},
 	{"CLI tools", []string{"version", "sbom", "completion", "help"}},
 }
@@ -180,7 +180,6 @@ func buildCommandCatalog() []commandSpec {
 	catalog = append(catalog, secretCommands()...)
 	catalog = append(catalog, mediaCommands()...)
 	catalog = append(catalog, validationCommand())
-	catalog = append(catalog, preflightCommand())
 	catalog = append(catalog, lifecycleInspectionCommands()...)
 	catalog = append(catalog, effectiveStateCommand())
 	catalog = append(catalog, acquisitionsCommand())
@@ -191,7 +190,6 @@ func buildCommandCatalog() []commandSpec {
 	catalog = append(catalog, policyCommands()...)
 	catalog = append(catalog, machineTrustCommand())
 	catalog = append(catalog, controllerSetupCommand())
-	catalog = append(catalog, controllerCheckCommand())
 	catalog = append(catalog, controllerRebindCommand())
 	catalog = append(catalog, controllerUninstallCommand())
 	catalog = append(catalog, environmentClusterCommands()...)
@@ -277,21 +275,9 @@ func destroyAuthorizationFlag() flagSpec {
 	return flag
 }
 
-func eraseAuthorizationFlag() flagSpec {
-	flag := stringFlag("authorize", "Preview a destroy that relaxes one Machine's declared removal erase (erase=<machine>:metadataClear or erase=<machine>:retain)")
-	flag.kind = "stringArray"
-	return flag
-}
-
 func unregisteredFlag() flagSpec {
 	flag := stringFlag("unregistered", "Name a Machine whose subscription registration you removed with the subscription service's own tools")
 	flag.kind = "stringArray"
-	return flag
-}
-
-func observeHostKeysFlag() flagSpec {
-	flag := boolFlag("observe-host-keys", "Observe unknown SSH keys without accepting them")
-	flag.defaultValue = "true"
 	return flag
 }
 

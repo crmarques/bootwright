@@ -145,7 +145,7 @@ network for installation and administration.
 
 If the FIPS context was initialized from the earlier provided-network input
 but has not started an apply, transfer the regenerated `fips` directory and
-run `bootwright context update --name "$CTX_FIPS" --input-dir "$HOME/fips" --yes`
+run `bootwright update --name "$CTX_FIPS" --input-dir "$HOME/fips" --yes`
 on the FIPS controller before its first plan. If an apply has registered,
 keep its frozen input and complete its destroy before importing the changed
 network ownership. A pre-existing fixture bridge is never silently adopted.

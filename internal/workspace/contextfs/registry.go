@@ -12,7 +12,7 @@ import (
 // running from it.
 const otherBuildGuidance = "another Bootwright build may have created this root and may manage live environments there: " +
 	"run this build on another controller host, or retire that build's environments before archiving its root, " +
-	"and never move it aside while its services run; once none of them remains, bootwright controller uninstall --discard-unreadable removes it with every root Bootwright keeps on this host"
+	"and never move it aside while its services run; once none of them remains, bootwright uninstall --discard-unreadable removes it with every root Bootwright keeps on this host"
 
 type anotherBuildsStore struct{ failure error }
 

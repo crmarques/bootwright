@@ -26,7 +26,7 @@ profile](../../../specs/milestones/backlog.md#b1250) owns its acceptance.
   (`controller-prerequisites`), then starts the mirror's server and fills it
   on `mirror`, each file fetched from its publisher and published only at its
   pinned SHA-256, then installs the stage's clients
-  (`controller-mirrored-clients`), then every other block. `check environment` reports
+  (`controller-mirrored-clients`), then every other block. `apply --dry-run` reports
   a file the fill has not yet published as pending. Placing `mirror-artifacts`
   on `controller`, with `mirror-tls` naming `192.0.2.1`, instead runs the
   server and the fill locally between the same two blocks.

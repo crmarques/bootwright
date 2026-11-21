@@ -1118,7 +1118,7 @@ func checkpointSelected(ctx context.Context, store *Store, content string, retai
 	return nil
 }
 
-// checkpointInitialize is context init as the Workspace service runs it: it
+// checkpointInitialize is init as the Workspace service runs it: it
 // reserves the name, initializes the keyring through the transaction's secret
 // area, publishes the input and marks the context ready.
 func checkpointInitialize(ctx context.Context, store *Store) error {
@@ -1129,7 +1129,7 @@ func checkpointInitialize(ctx context.Context, store *Store) error {
 	return store.Transact(ctx, true, sources.Roots, func(tx contexts.Transaction) error {
 		registry := tx.Registry()
 		if index := slices.IndexFunc(registry.Contexts, named); index >= 0 && registry.Contexts[index].Mode != contexts.Initializing {
-			return contexts.StateError("context name already exists; use context update or delete it explicitly")
+			return contexts.StateError("context name already exists; use update or delete it explicitly")
 		}
 		record, err := tx.Reserve(ctx, checkpointContext, sources.Roots[0], config)
 		if err != nil {
@@ -1156,7 +1156,7 @@ func checkpointInitialize(ctx context.Context, store *Store) error {
 
 // checkpointPendingRegistry reports the refusal specs/contexts.md requires of a
 // read while the root holds only an unpublished initial registry: it directs
-// the operator to repeat context init.
+// the operator to repeat init.
 func checkpointPendingRegistry(err error) bool {
 	reported := diagnostics.Of(err)
 	return len(reported) == 1 && reported[0].Code == "context.state" && reported[0].Message == pendingRegistryMessage
@@ -1174,7 +1174,7 @@ func checkpointTolerant(step func(context.Context, *Store) error) checkpointStep
 }
 
 // checkpointTolerantView reads the registry, accepting the refusal that
-// directs the operator to repeat context init.
+// directs the operator to repeat init.
 func checkpointTolerantView(_ *testing.T, ctx context.Context, store *Store) error {
 	if _, err := store.View(ctx); err != nil && !checkpointPendingRegistry(err) {
 		return err
@@ -1217,7 +1217,7 @@ func checkpointInitScenario() checkpointScenario {
 }
 
 // checkpointRecoveryScenario interrupts the recovery of an unpublished initial
-// registry, which every creating transaction, and so context init, runs before
+// registry, which every creating transaction, and so init, runs before
 // its callback. The root holds only the pending initial registry an init left
 // when it was refused before that registry's rename.
 func checkpointRecoveryScenario() checkpointScenario {

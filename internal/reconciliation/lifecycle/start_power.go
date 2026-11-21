@@ -263,7 +263,7 @@ func (s Service) finishBeforeStart(ctx context.Context, identity ContextIdentity
 	marked.verb = marked.operation.Verb
 	result := settled(identity, marked, RecoveredBeforeStart)
 	result.Receipt.Next = string(next)
-	result.NextCommand = contextCommand(identity.Name, "plan apply", invocationFlags(selection, nil, nil)...)
+	result.NextCommand = contextCommand(identity.Name, "apply --dry-run", invocationFlags(selection, nil, nil)...)
 	return result, nil
 }
 

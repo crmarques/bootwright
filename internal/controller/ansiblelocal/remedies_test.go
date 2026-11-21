@@ -15,7 +15,7 @@ func TestAdapterFailuresNameTheirScope(t *testing.T) {
 	for _, code := range []string{"controller.install", "controller.identity", "controller.unknown", "controller.unsupported"} {
 		err := failure(code, "the Ansible operation has no complete result")
 		setup := diagnostics.Of(err)
-		if len(setup) != 1 || setup[0].Code != code || setup[0].Source != nil || !strings.HasSuffix(setup[0].Remediation, ", then rerun bootwright controller install.") {
+		if len(setup) != 1 || setup[0].Code != code || setup[0].Source != nil || !strings.HasSuffix(setup[0].Remediation, ", then rerun bootwright install.") {
 			t.Errorf("setup scope: %+v", setup)
 		}
 		staged := diagnostics.Of(prerequisites.InStage(err, "lab"))

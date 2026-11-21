@@ -22,7 +22,7 @@ func planCommand(contextName string, plan reconciliation.Plan, flags ...string) 
 	scope := plan.Preparation
 	scoped := []string{"--name", strings.Join(scope.Targets, ",")}
 	if scope.PreparePrerequisites {
-		scoped = append(scoped, "--prepare-prerequisites")
+		scoped = append(scoped, "--stage", "controller")
 	}
 	return contextCommand(contextName, scope.Command, append(scoped, flags...)...)
 }

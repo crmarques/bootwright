@@ -36,7 +36,7 @@ func TestLogsRefusesConflictingSelections(t *testing.T) {
 		{[]string{"--attempt", "1", "--raw", "--block", "b", "--run", "run-000001"}, "--run and --install select one whole output"},
 		{[]string{"--run", "run-000001", "--install"}, "--run and --install select different outputs"},
 		{[]string{"--operation", "op-0123456789abcdef0123456789abcdef", "--run", "run-000001"}, "--run and --install select one whole output"},
-		{[]string{"--install", "--context", "lab"}, "--install reads the host's controller install output and takes no --context"},
+		{[]string{"--install", "--context", "lab"}, "--install reads the host's install output and takes no --context"},
 		{[]string{"--raw"}, "--raw needs the --block"},
 		{[]string{"--attempt", "2"}, "--attempt selects the output --raw reads"},
 		{[]string{"--attempt", "0", "--raw", "--block", "b"}, "--attempt is a number from 1 to 999999"},
@@ -46,7 +46,7 @@ func TestLogsRefusesConflictingSelections(t *testing.T) {
 		{[]string{"--operation", "op-1"}, "--operation names an operation as op- and 32 lowercase hexadecimal digits"},
 		{[]string{"--block", "Bad/Block"}, "--block names a block of the operation's plan"},
 		{[]string{"--run", "run-1"}, "--run names a bounded run as run-NNNNNN"},
-		{[]string{"--install=latest"}, "--install names a controller install as newest or install-NNNNNN"},
+		{[]string{"--install=latest"}, "--install names a install as newest or install-NNNNNN"},
 	} {
 		args := append([]string{"logs"}, test.args...)
 		if ClassifyInvocation(args).RequiresRoot {
@@ -80,7 +80,7 @@ func TestFollowRefusesStructuredOutputBeforePrivilege(t *testing.T) {
 	}
 }
 
-// A bare --install reads the newest controller install, and its value is taken only after
+// A bare --install reads the newest install, and its value is taken only after
 // =: one written after a space is an operand, refused with the spelling.
 func TestInstallOptionalValueNeedsEquals(t *testing.T) {
 	for _, test := range []struct {
@@ -205,7 +205,7 @@ func TestEveryLogsFieldHasItsHint(t *testing.T) {
 		"running status": {statusResult("running"), "bootwright logs --context lab --follow\n"},
 		"settled status": {statusResult("done"), "bootwright logs --context lab --operation " + operation + "\n"},
 		"setup result": {render(func(text *display) {
-			text.fields(controllerOutcomeFields("controller install", &prerequisites.Report{Outcome: "changed", LogLocation: "/logs", SetupRun: "install-000003"})...)
+			text.fields(controllerOutcomeFields("install", &prerequisites.Report{Outcome: "changed", LogLocation: "/logs", SetupRun: "install-000003"})...)
 		}), "bootwright logs --install=install-000003\n"},
 		"power result": {func() string {
 			var out bytes.Buffer

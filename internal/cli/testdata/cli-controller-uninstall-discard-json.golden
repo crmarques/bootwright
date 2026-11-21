@@ -1,6 +1,6 @@
 {
   "schemaVersion": "v1alpha1",
-  "command": "controller uninstall",
+  "command": "uninstall",
   "ok": true,
   "exitCode": 0,
   "result": {

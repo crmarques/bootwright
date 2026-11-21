@@ -157,11 +157,11 @@ func (s Service) openStream(ctx context.Context, selection Selection) (Stream, s
 			setup = ""
 		}
 		if validInstallID(setup) {
-			return nil, "", notFound("controller install "+setup+" retained no output", "run bootwright logs --install to read the newest controller install's output")
+			return nil, "", notFound("install "+setup+" retained no output", "run bootwright logs --install to read the newest install's output")
 		}
 		stream, found, err := s.workspace.OpenSetup(ctx, setup)
 		if err == nil && !found {
-			err = notFound("this host retains no controller install output"+named(setup), "the log root keeps the newest 8 controller installs' output; run bootwright check controller to see the host's install")
+			err = notFound("this host retains no install output"+named(setup), "the log root keeps the newest 8 controller installs' output; run bootwright install --dry-run to see the host's install")
 		}
 		return stream, "", err
 	}

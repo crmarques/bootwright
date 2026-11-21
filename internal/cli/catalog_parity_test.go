@@ -62,7 +62,7 @@ func TestUsageDistinguishesUnknownAndMisplacedFlags(t *testing.T) {
 		{[]string{"version", "--checksums"}, "flag is not accepted by this command"},
 		{[]string{"machine", "list", "--yes"}, "flag is not accepted by this command"},
 		{[]string{"context", "--purge", "list"}, "flag is not accepted at this position"},
-		{[]string{"--name", "example", "context", "init"}, "flag is not accepted at this position"},
+		{[]string{"--name", "example", "init"}, "flag is not accepted at this position"},
 	} {
 		code, out, errOut, record := runRecorded(test.args)
 		if code != 2 || out != "" || record.calls != 0 || !strings.Contains(errOut, test.message) {

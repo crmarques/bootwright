@@ -35,7 +35,6 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 	"github.com/crmarques/bootwright/internal/secrets/encryption"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
-	storagepreflight "github.com/crmarques/bootwright/internal/storage/preflight"
 	"github.com/crmarques/bootwright/internal/trust/enrollment"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
@@ -340,7 +339,7 @@ func cliGoldens() []cliGolden {
 			StorageClusters: []lifecycle.ClusterSummary{},
 			Shared:          []lifecycle.ServiceSummary{{Kind: "ArtifactServer", Name: "lab-artifacts", Machine: "controller", Status: lifecycle.RealizationPending}},
 			Secrets:         lifecycle.SecretSummary{Declared: 3},
-			NextSteps:       []string{"bootwright plan apply --context lab", "bootwright apply --context lab"},
+			NextSteps:       []string{"bootwright apply --dry-run --context lab", "bootwright apply --context lab"},
 			Handoff:         lifecycle.HandoffSummary{Reasons: []string{"no apply is recorded"}},
 		}
 	}
@@ -382,7 +381,7 @@ func cliGoldens() []cliGolden {
 	unprepared := func() *lifecycle.StatusResult {
 		result := idle()
 		result.SetupChecks = []lifecycle.SetupCheck{{ID: "controller-binding", Status: "pending"}, {ID: "execution-bundle", Status: "not-ready"}}
-		result.NextSteps = []string{"bootwright controller install"}
+		result.NextSteps = []string{"bootwright install"}
 		return result
 	}
 	// An idle context whose input declares a Secret with no stored material,
@@ -577,7 +576,7 @@ func cliGoldens() []cliGolden {
 	authorizeMissing := lifecycle.Stops()[slices.IndexFunc(lifecycle.Stops(), func(stop diagnostics.Stop) bool { return stop.Code == "authorize.missing" })]
 	unauthorized := authorizeMissing.Fail("this plan has data-loss consequences that are not authorized: step 3 (install the operating system of metal-01)",
 		"repeat it with the authorization: bootwright apply --context lab --stage machines --authorize data-loss")
-	noInput := diagnostics.NewFailureWithRemediation("context.input", "context lab has no desired state", "", "import input with bootwright context update --name lab --input-dir <dir>")
+	noInput := diagnostics.NewFailureWithRemediation("context.input", "context lab has no desired state", "", "import input with bootwright update --name lab --input-dir <dir>")
 	stateRootRefused := func(r *dispatchRecord) {
 		r.result.controller = setupDryRun(platform)
 		r.result.controller.Route = "direct (no HTTPS_PROXY)"
@@ -602,57 +601,18 @@ func cliGoldens() []cliGolden {
 		{args: "catalog add-ons info --name metalb", code: 1, stderr: "  error  access.target\n    no built-in add-on package is named \"metalb\"\n    Next: name a package that bootwright catalog add-ons list shows\n", record: func(r *dispatchRecord) {
 			_, r.err = addoncatalog.New(addonpackages.Builtin()).Describe(context.Background(), addoncatalog.DescribeRequest{Name: "metalb"})
 		}},
-		{golden: "cli-preflight-openshift", args: "check environment --context synthetic --stage clusters --clusters sno", record: func(r *dispatchRecord) { r.result.storagePreflight = containerPreflightReport(false) }},
-		{golden: "cli-preflight-openshift-json", args: "check environment --context synthetic --stage clusters --clusters sno --output json", record: func(r *dispatchRecord) { r.result.storagePreflight = containerPreflightReport(false) }},
-		{golden: "cli-preflight-openshift-pending-json", args: "check environment --context synthetic --stage clusters --clusters sno --dry-run --output json", code: 1, record: func(r *dispatchRecord) {
-			r.result.storagePreflight = containerPreflightReport(true)
-			r.err = diagnostics.NewFailureWithRemediation("preflight.unknown", "cluster readiness is not proved; inspect the failed, unknown and pending checks", "", "resolve the reported prerequisites and repeat bootwright check environment --context synthetic --stage clusters --clusters sno")
-		}},
-
-		{golden: "cli-preflight-ceph", args: "check environment --context synthetic --stage clusters --clusters ceph", record: func(r *dispatchRecord) { r.result.storagePreflight = successfulStoragePreflight() }},
-		{golden: "cli-preflight-ceph-json", args: "check environment --context synthetic --stage clusters --clusters ceph --output json", record: func(r *dispatchRecord) { r.result.storagePreflight = successfulStoragePreflight() }},
-		{golden: "cli-preflight-ceph-pending-json", args: "check environment --context synthetic --stage clusters --clusters ceph --output json", code: 1, record: func(r *dispatchRecord) {
-			r.result.storagePreflight = pendingStoragePreflight()
-			r.err = diagnostics.NewFailureWithRemediation("preflight.unknown", "cluster readiness is not proved; inspect the failed, unknown and pending checks", "", "resolve the reported prerequisites and repeat bootwright check environment --context synthetic --stage clusters --clusters ceph")
-		}},
-
-		{golden: "cli-preflight-clusters", args: "check environment --context synthetic --stage clusters", record: func(r *dispatchRecord) { r.result.storagePreflight = clustersPreflightReport(false) }},
-		{golden: "cli-preflight-clusters-json", args: "check environment --context synthetic --stage clusters --output json", record: func(r *dispatchRecord) { r.result.storagePreflight = clustersPreflightReport(false) }},
-		{golden: "cli-preflight-clusters-pending-json", args: "check environment --context synthetic --stage clusters --dry-run --output json", code: 1, record: func(r *dispatchRecord) {
-			r.result.storagePreflight = clustersPreflightReport(true)
-			r.err = diagnostics.NewFailureWithRemediation("preflight.unknown", "cluster readiness is not proved; inspect the failed, unknown and pending checks", "", "resolve the reported prerequisites and repeat bootwright check environment --context synthetic --stage clusters")
-		}},
-
 		{golden: "cli-render-effective-write", args: "render effective --input-dir inputs --output-dir artifacts", record: func(r *dispatchRecord) { r.result.rendered = renderedArtifacts(false) }},
 		{golden: "cli-render-effective-write-json", args: "render effective --input-dir inputs --output-dir artifacts --output json", record: func(r *dispatchRecord) { r.result.rendered = renderedArtifacts(false) }},
 		{golden: "cli-render-effective-write-context-json", args: "render effective --output-dir artifacts --sensitive --context synthetic --output json", record: func(r *dispatchRecord) { r.result.rendered = renderedArtifacts(true) }},
 
-		{golden: "cli-preflight-infrastructure", args: "check environment --context synthetic --stage controller,infrastructure-services,substrates", record: func(r *dispatchRecord) { r.result.storagePreflight = infraPreflightReport(false) }},
-		{golden: "cli-preflight-infrastructure-json", args: "check environment --context synthetic --stage controller,infrastructure-services,substrates --output json", record: func(r *dispatchRecord) { r.result.storagePreflight = infraPreflightReport(false) }},
-		{golden: "cli-preflight-infrastructure-unready", args: "check environment --context synthetic --stage controller,infrastructure-services,substrates", code: 1,
-			stderr: "  error  preflight.failed\n    controller readiness is not proved; inspect the failed checks\n    Next: resolve the reported prerequisites and repeat bootwright check environment --context\n    synthetic --stage controller,infrastructure-services,substrates\n", record: func(r *dispatchRecord) {
-				r.result.storagePreflight = infraPreflightReport(true)
-				r.err = diagnostics.NewFailureWithRemediation("preflight.failed", "controller readiness is not proved; inspect the failed checks", "", "resolve the reported prerequisites and repeat bootwright check environment --context synthetic --stage controller,infrastructure-services,substrates")
-			}},
-		{golden: "cli-preflight-infrastructure-unready-json", args: "check environment --context synthetic --stage controller,infrastructure-services,substrates --output json", code: 1, record: func(r *dispatchRecord) {
-			r.result.storagePreflight = infraPreflightReport(true)
-			r.err = diagnostics.NewFailureWithRemediation("preflight.failed", "infrastructure readiness is not proved; inspect the failed, unknown and pending checks", "", "resolve the reported prerequisites and repeat bootwright check environment --context synthetic --stage controller,infrastructure-services,substrates")
-		}},
-		{golden: "cli-preflight", args: "check environment --context synthetic", record: func(r *dispatchRecord) { r.result.storagePreflight = allPreflightReport(false) }},
-		{golden: "cli-preflight-json", args: "check environment --context synthetic --output json", record: func(r *dispatchRecord) { r.result.storagePreflight = allPreflightReport(false) }},
-		{golden: "cli-preflight-pending-json", args: "check environment --context synthetic --dry-run --output json", code: 1, record: func(r *dispatchRecord) {
-			r.result.storagePreflight = allPreflightReport(true)
-			r.err = diagnostics.NewFailureWithRemediation("preflight.unknown", "environment readiness is not proved; inspect the failed, unknown and pending checks", "", "resolve the reported prerequisites and repeat bootwright check environment --context synthetic")
-		}},
-
 		// Controller reports: an unpresented dry-run plan in text and JSON, a
 		// presented setup that changed the host, and the host's readiness.
-		{golden: "cli-setup-plan", args: "controller install --dry-run", record: func(r *dispatchRecord) { r.result.controller = setupDryRun(platform) }},
-		{golden: "cli-setup-plan-json", args: "controller install --dry-run --output json", record: func(r *dispatchRecord) {
+		{golden: "cli-setup-plan", args: "install --dry-run", record: func(r *dispatchRecord) { r.result.controller = setupDryRun(platform) }},
+		{golden: "cli-setup-plan-json", args: "install --dry-run --output json", record: func(r *dispatchRecord) {
 			r.result.controller = setupDryRun(platform)
 			r.result.controller.Warnings = []diagnostics.Diagnostic{{Severity: "warning", Code: "controller.untested-release", Message: "Fedora 45 is newer than the releases this build was tested on (43, 44); setup checks its floors and continues"}}
 		}},
-		{golden: "cli-setup-changed", args: "controller install --yes", record: func(r *dispatchRecord) {
+		{golden: "cli-setup-changed", args: "install --yes", record: func(r *dispatchRecord) {
 			r.result.controller = &prerequisites.Report{
 				Platform: platform, Route: "direct", Outcome: "changed", PlanPresented: true,
 				Checks:      []prerequisites.Check{ready("host", "fedora 43/amd64"), ready("python-runtime", "Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5"), ready("host-packages", "openssh-clients, podman"), ready("setup-state", "complete")},
@@ -662,82 +622,33 @@ func cliGoldens() []cliGolden {
 		}},
 		// Refused setups: a confirmation refusal's remedy repeats the
 		// operator's invocation with --yes (internal/cli/confirmation.go).
-		{golden: "cli-setup-confirmation-refused", args: "controller install", code: 1,
+		{golden: "cli-setup-confirmation-refused", args: "install", code: 1,
 			stderr: "  error  controller.install\n" +
 				"    install confirmation requires an interactive terminal\n" +
-				"    Next: review the plan, then repeat bootwright controller install with --yes\n",
+				"    Next: review the plan, then repeat bootwright install with --yes\n",
 			record: func(r *dispatchRecord) {
 				r.result.controller = &prerequisites.Report{
 					Platform: platform, Route: "direct (no HTTPS_PROXY)", Outcome: "planned", PlanPresented: true, ProgressPresented: true,
 					Checks:  []prerequisites.Check{ready("host", "fedora 43/amd64"), {ID: "host-packages", Required: "openssh-clients, podman", Observed: "missing podman", Status: "not-ready", Scope: prerequisites.HostScope}},
 					Actions: []string{"Install host packages with dnf: podman"},
 				}
-				r.err = diagnostics.NewFailureWithRemediation("controller.install", "install confirmation requires an interactive terminal", "", "review the plan, then repeat bootwright controller install with --yes")
+				r.err = diagnostics.NewFailureWithRemediation("controller.install", "install confirmation requires an interactive terminal", "", "review the plan, then repeat bootwright install with --yes")
 			}},
 		// A dry run over a state root this build cannot use reports the row
 		// and the store's refusal of it
 		// (internal/workspace/contextfs/root_inspection_linux_amd64.go).
-		{golden: "cli-setup-plan-state-root", args: "controller install --dry-run", code: 1,
+		{golden: "cli-setup-plan-state-root", args: "install --dry-run", code: 1,
 			stderr: "  error  context.state\n" +
 				"    the state root is a directory owned by root:root with mode 0755, but it must be a directory\n" +
 				"    owned by root:root with mode 0700\n" +
 				"    Next: nothing repairs it, because Bootwright never changes the owner or mode of an existing\n" +
 				"    state root\n",
 			record: stateRootRefused},
-		{golden: "cli-setup-plan-state-root-json", args: "controller install --dry-run --output json", code: 1, record: func(r *dispatchRecord) {
+		{golden: "cli-setup-plan-state-root-json", args: "install --dry-run --output json", code: 1, record: func(r *dispatchRecord) {
 			stateRootRefused(r)
 			r.result.controller.Warnings = []diagnostics.Diagnostic{{Severity: "warning", Code: "controller.untested-release", Message: "Fedora 45 is newer than the releases this build was tested on (43, 44); setup checks its floors and continues"}}
 		}},
-		// Each check carries the summary internal/controller/prerequisites
-		// gives a held check: the platform, the verified local identity, the
-		// interpreter and ansible-core of the runtime, the baseline packages and
-		// the setup state.
-		{golden: "cli-controller-check", args: "check controller", record: func(r *dispatchRecord) {
-			held := func(id, summary, scope string) prerequisites.Check {
-				return prerequisites.Check{ID: id, Required: summary, Observed: summary, Status: "ready", Scope: scope}
-			}
-			r.result.controller = &prerequisites.Report{
-				Platform: platform, Route: "direct", Outcome: "ready",
-				Checks: []prerequisites.Check{
-					held("host", "fedora 43/amd64", prerequisites.HostScope),
-					held("installed-host", "verified local identity", prerequisites.HostScope),
-					held("python-runtime", "Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5", prerequisites.HostScope),
-					held("host-packages", "openssh-clients, podman", prerequisites.HostScope),
-					held("setup-state", "complete", prerequisites.HostScope),
-				},
-				Table: &prerequisites.ReceiptTable{
-					Host:     "Fedora Linux 43 (amd64), glibc 2.42 — tested",
-					Runtime:  "Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5 — ready",
-					Packages: "podman 5:5.8.1-1.fc43 (updates), openssh-clients 10.2p1-1.fc43 (present before bootwright)",
-				},
-			}
-		}},
-		// A host whose table looks whole still shows the host check that is not
-		// ready, here an interrupted setup.
-		{golden: "cli-controller-check-interrupted", args: "check controller", code: 1,
-			stderr: "  error  preflight.failed\n" +
-				"    required controller prerequisites are not ready\n" +
-				"    Next: run bootwright controller install\n",
-			record: func(r *dispatchRecord) {
-				r.result.controller = &prerequisites.Report{
-					Platform: platform, Route: "direct", Outcome: "not-ready", Next: "bootwright controller install",
-					Checks: []prerequisites.Check{
-						ready("host", "fedora 43/amd64"),
-						ready("python-runtime", "Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5"),
-						ready("host-packages", "openssh-clients, podman"),
-						{ID: "setup-state", Required: "complete", Observed: "interrupted (install-000042)", Status: "not-ready", Scope: prerequisites.HostScope},
-					},
-					Table: &prerequisites.ReceiptTable{
-						Host:     "Fedora Linux 43 (amd64), glibc 2.42 — tested",
-						Runtime:  "Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5 — ready",
-						Packages: "podman 5:5.8.1-1.fc43 (updates), openssh-clients 10.2p1-1.fc43 (present before bootwright)",
-					},
-				}
-				r.err = diagnostics.NewFailureWithRemediation("preflight.failed", "required controller prerequisites are not ready", "", "run bootwright controller install")
-			}},
-		// A host that is already ready renders the same table and nothing else
-		// to do; its informational lines go to standard error.
-		{golden: "cli-setup-ready", args: "controller install", stderr: "  warning  controller.loader-preload\n" +
+		{golden: "cli-setup-ready", args: "install", stderr: "  warning  controller.loader-preload\n" +
 			"    /etc/ld.so.preload is not empty, so it loads libraries into every process, root dnf runs\n" +
 			"    included; setup continues\n",
 			record: func(r *dispatchRecord) {
@@ -761,7 +672,7 @@ func cliGoldens() []cliGolden {
 		// left, an apply that ran and failed, one that paused, lost an outcome
 		// or stopped running, each naming the command that continues it, and a
 		// refusal that registered nothing.
-		{golden: "cli-plan", args: "plan apply --stage infrastructure-services,substrates", record: func(r *dispatchRecord) {
+		{golden: "cli-plan", args: "apply --dry-run --stage infrastructure-services,substrates", record: func(r *dispatchRecord) {
 			r.result.lifecyclePlan = &lifecycle.PlanResult{
 				Context: lifecycle.ContextIdentity{Name: "lab", Revision: revision}, Verb: "apply",
 				Steps: []lifecycle.PlanStep{
@@ -775,11 +686,11 @@ func cliGoldens() []cliGolden {
 				Receipt: lifecycle.Receipt{Operation: "none", Verb: "plan", State: "preview", Next: "apply"},
 			}
 		}},
-		{golden: "cli-plan-until", args: "plan apply --until lab.gitops", record: func(r *dispatchRecord) { r.result.lifecyclePlan = untilPlanFixture(revision) }},
-		{golden: "cli-plan-until-json", args: "plan apply --until lab.gitops --output json", record: func(r *dispatchRecord) { r.result.lifecyclePlan = untilPlanFixture(revision) }},
-		{golden: "cli-plan-firewall", args: "plan apply", record: func(r *dispatchRecord) { r.result.lifecyclePlan = firewallPlanFixture() }},
-		{golden: "cli-plan-firewall-json", args: "plan apply --output json", record: func(r *dispatchRecord) { r.result.lifecyclePlan = firewallPlanFixture() }},
-		{golden: "cli-plan-finalization", args: "plan apply", record: func(r *dispatchRecord) {
+		{golden: "cli-plan-until", args: "apply --dry-run --until lab.gitops", record: func(r *dispatchRecord) { r.result.lifecyclePlan = untilPlanFixture(revision) }},
+		{golden: "cli-plan-until-json", args: "apply --dry-run --until lab.gitops --output json", record: func(r *dispatchRecord) { r.result.lifecyclePlan = untilPlanFixture(revision) }},
+		{golden: "cli-plan-firewall", args: "apply --dry-run", record: func(r *dispatchRecord) { r.result.lifecyclePlan = firewallPlanFixture() }},
+		{golden: "cli-plan-firewall-json", args: "apply --dry-run --output json", record: func(r *dispatchRecord) { r.result.lifecyclePlan = firewallPlanFixture() }},
+		{golden: "cli-plan-finalization", args: "apply --dry-run", record: func(r *dispatchRecord) {
 			r.result.lifecyclePlan = &lifecycle.PlanResult{
 				Context: lifecycle.ContextIdentity{Name: "lab", Revision: revision}, Verb: "apply",
 				Steps: []lifecycle.PlanStep{
@@ -794,7 +705,7 @@ func cliGoldens() []cliGolden {
 		// A continuation another build previews names the build that registered
 		// the operation and the steps this build runs: the finished first step
 		// is left out of them.
-		{golden: "cli-plan-continuation-other-build", args: "plan apply", record: func(r *dispatchRecord) {
+		{golden: "cli-plan-continuation-other-build", args: "apply --dry-run", record: func(r *dispatchRecord) {
 			r.result.lifecyclePlan = &lifecycle.PlanResult{
 				Context: lifecycle.ContextIdentity{Name: "lab", Revision: revision}, Verb: "apply",
 				Steps: []lifecycle.PlanStep{
@@ -965,7 +876,7 @@ func cliGoldens() []cliGolden {
 		// Desired state: warnings reach standard error in text and the
 		// envelope's diagnostics in JSON; a failed validate has no result.
 		{
-			golden: "cli-validate", args: "check input --input-dir inputs", record: func(r *dispatchRecord) { r.report = validation() },
+			golden: "cli-validate", args: "validate --input-dir inputs", record: func(r *dispatchRecord) { r.report = validation() },
 			stderr: "  warning  OpenShiftCluster/ocp-02\n" +
 				"    api.selection\n" +
 				"    clusters/ocp-02/cluster.yaml:4:9\n" +
@@ -979,9 +890,9 @@ func cliGoldens() []cliGolden {
 				"    CustomPlaybook is a reserved declaration and cannot execute.\n" +
 				"    Field: $.spec\n",
 		},
-		{golden: "cli-validate-json", args: "check input --input-dir inputs --output json", record: func(r *dispatchRecord) { r.report = validation() }},
+		{golden: "cli-validate-json", args: "validate --input-dir inputs --output json", record: func(r *dispatchRecord) { r.report = validation() }},
 		{
-			args: "check input --input-dir inputs", code: 1, record: func(r *dispatchRecord) { r.report, r.err = validation(), invalid },
+			args: "validate --input-dir inputs", code: 1, record: func(r *dispatchRecord) { r.report, r.err = validation(), invalid },
 			stderr: "  error  Environment/lab-rhel\n" +
 				"    api.required\n" +
 				"    environment.yaml:6:3\n" +
@@ -996,7 +907,7 @@ func cliGoldens() []cliGolden {
 				"    Field: $.spec.network.adresses\n" +
 				"    Next: rename the field to addresses\n",
 		},
-		{golden: "cli-validate-failed-json", args: "check input --input-dir inputs --output json", code: 1, record: func(r *dispatchRecord) { r.report, r.err = validation(), invalid }},
+		{golden: "cli-validate-failed-json", args: "validate --input-dir inputs --output json", code: 1, record: func(r *dispatchRecord) { r.report, r.err = validation(), invalid }},
 		{golden: "cli-render-effective", args: "render effective", record: func(r *dispatchRecord) { r.result.effective = effective() }},
 		{golden: "cli-render-effective-json", args: "render effective --output json", record: func(r *dispatchRecord) { r.result.effective = effective() }},
 		{golden: "cli-render-acquisitions", args: "render acquisitions", record: func(r *dispatchRecord) { r.result.effective = effective() }},
@@ -1004,7 +915,7 @@ func cliGoldens() []cliGolden {
 
 		// Contexts.
 		{
-			golden: "cli-context-init", args: "context init --name lab -f context.yaml --input-dir inputs",
+			golden: "cli-context-init", args: "init --name lab -f context.yaml --input-dir inputs",
 			record: func(r *dispatchRecord) {
 				r.result.admission = &contexts.AdmissionResult{Context: lab, Counts: compilation.Counts{FilesSeen: 14, ObjectsDecoded: 14}, FilesCopied: 14, InputChanged: true, Diagnostics: []diagnostic{deferred}}
 			},
@@ -1014,7 +925,7 @@ func cliGoldens() []cliGolden {
 				"    CustomPlaybook is a reserved declaration and cannot execute.\n" +
 				"    Field: $.spec\n",
 		},
-		{golden: "cli-context-update", args: "context update --name lab --input-dir inputs --yes", record: func(r *dispatchRecord) {
+		{golden: "cli-context-update", args: "update --name lab --input-dir inputs --yes", record: func(r *dispatchRecord) {
 			r.result.admission = &contexts.AdmissionResult{Context: lab, Counts: compilation.Counts{FilesSeen: 14, ObjectsDecoded: 14}}
 		}},
 		{golden: "cli-context-use", args: "context use --name lab", record: func(r *dispatchRecord) { r.result.use = &contexts.UseResult{Context: lab} }},
@@ -1024,13 +935,13 @@ func cliGoldens() []cliGolden {
 			}}
 		}},
 		{golden: "cli-context-list-unfinished", args: "context list", record: unfinishedContexts},
-		{golden: "cli-controller-rebind", args: "controller rebind", record: rebound},
-		{golden: "cli-controller-rebind-json", args: "controller rebind --output json", record: rebound},
-		{golden: "cli-controller-uninstall", args: "controller uninstall --yes", record: uninstalled},
-		{golden: "cli-controller-uninstall-json", args: "controller uninstall --yes --output json", record: uninstalled},
-		{golden: "cli-controller-uninstall-discard", args: "controller uninstall --discard-unreadable --yes", record: discarded},
-		{golden: "cli-controller-uninstall-discard-json", args: "controller uninstall --discard-unreadable --yes --output json", record: discarded},
-		{golden: "cli-controller-uninstall-nothing", args: "controller uninstall", record: func(r *dispatchRecord) {
+		{golden: "cli-controller-rebind", args: "rebind-host", record: rebound},
+		{golden: "cli-controller-rebind-json", args: "rebind-host --output json", record: rebound},
+		{golden: "cli-controller-uninstall", args: "uninstall --yes", record: uninstalled},
+		{golden: "cli-controller-uninstall-json", args: "uninstall --yes --output json", record: uninstalled},
+		{golden: "cli-controller-uninstall-discard", args: "uninstall --discard-unreadable --yes", record: discarded},
+		{golden: "cli-controller-uninstall-discard-json", args: "uninstall --discard-unreadable --yes --output json", record: discarded},
+		{golden: "cli-controller-uninstall-nothing", args: "uninstall", record: func(r *dispatchRecord) {
 			r.result.uninstall = &prerequisites.UninstallResult{Outcome: "unchanged", Packages: []string{}, Paths: []string{}, Kept: []string{}}
 		}},
 		{golden: "cli-context-list-unfinished-json", args: "context list --output json", record: unfinishedContexts},
@@ -1087,7 +998,7 @@ func cliGoldens() []cliGolden {
 			args: "secret list --context lab", code: 1, record: func(r *dispatchRecord) { r.err = noInput },
 			stderr: "  error  context.input\n" +
 				"    context lab has no desired state\n" +
-				"    Next: import input with bootwright context update --name lab --input-dir <dir>\n",
+				"    Next: import input with bootwright update --name lab --input-dir <dir>\n",
 		},
 		{golden: "cli-secret-list-refused-json", args: "secret list --context lab --output json", code: 1, record: func(r *dispatchRecord) { r.err = noInput }},
 		// An explicit sensitive result is the requested bytes with no added
@@ -1414,7 +1325,7 @@ func TestEveryAvailableCommandHasAGolden(t *testing.T) {
 	jsonContracts := []string{
 		"catalog add-ons list", "catalog add-ons info",
 		"validate", "preflight", "render effective", "render acquisitions", "status", "logs", "diff",
-		"secret check", "secret list", "secret info", "secret encryption status", "machine trust", "controller install",
+		"secret check", "secret list", "secret info", "secret encryption status", "machine trust", "install",
 		"machine cp", "machine list", "machine info", "machine start", "machine stop", "machine restart", "machine eject-media", "catalog media list", "cluster list", "cluster info",
 	}
 	implemented := map[string]bool{}
@@ -1453,7 +1364,7 @@ func TestEveryAvailableCommandHasAGolden(t *testing.T) {
 // interpreter it found but whose runtime and setup record it cannot read.
 func setupDryRun(platform prerequisites.Platform) *prerequisites.Report {
 	return &prerequisites.Report{
-		Platform: platform, Route: "direct", DryRun: true, Outcome: "planned", Next: "bootwright controller install",
+		Platform: platform, Route: "direct", DryRun: true, Outcome: "planned", Next: "bootwright install",
 		Checks: []prerequisites.Check{
 			{ID: "host", Required: "the Fedora or RHEL family on amd64", Observed: "fedora 43/amd64", Status: "ready", Scope: prerequisites.HostScope},
 			{ID: "python-runtime", Required: "Python 3.14, 3.13, 3.12 with ansible-core 2.21.5", Observed: "Python 3.14.8 (/usr/bin/python3.14); runtime not verified without privilege", Status: "unverified", Scope: prerequisites.HostScope},
@@ -1472,67 +1383,12 @@ func setupDryRun(platform prerequisites.Platform) *prerequisites.Report {
 	}
 }
 
-func successfulStoragePreflight() *storagepreflight.Report {
-	return &storagepreflight.Report{Context: "synthetic", Target: "clusters", Checks: []storagepreflight.Check{{ID: "capacity.memory", Target: "controller", Status: "passed", Reason: "available capacity covers declared guests and reserve", Capacity: &storagepreflight.Capacity{Resource: "memory", Unit: "bytes", Required: 1024, Available: 4096, Reserve: 1024, Observed: true}}}, Summary: storagepreflight.Summary{Passed: 1}}
-}
-
-func pendingStoragePreflight() *storagepreflight.Report {
-	return &storagepreflight.Report{Context: "synthetic", Target: "clusters", Checks: []storagepreflight.Check{{ID: "host.prerequisites", Target: "guest", Status: "pending", Reason: "the Machine has not been installed", Next: "run bootwright apply --context synthetic --stage machines"}, {ID: "capacity.memory", Target: "controller", Status: "unknown", Reason: "the capacity read did not complete", Capacity: &storagepreflight.Capacity{Resource: "memory", Unit: "bytes", Required: 1024, Reserve: 1024}}}, Summary: storagepreflight.Summary{Unknown: 1, Pending: 1}}
-}
-
-func containerPreflightReport(pending bool) *storagepreflight.Report {
-	status, reason, next := "passed", "api.sno.example.test resolves to 192.0.2.10", ""
-	summary := storagepreflight.Summary{Passed: 1}
-	if pending {
-		status, reason, next = "pending", "dry-run would resolve api.sno.example.test to 192.0.2.10", "route zone sno.example.test to DNSServer dns at 192.0.2.53"
-		summary = storagepreflight.Summary{Pending: 1}
-	}
-	return &storagepreflight.Report{Context: "synthetic", Target: "clusters", Checks: []storagepreflight.Check{{ID: "resolution.api", Target: "api.sno.example.test", Status: status, Reason: reason, Next: next}}, Summary: summary}
-}
-
-func clustersPreflightReport(pending bool) *storagepreflight.Report {
-	report := &storagepreflight.Report{Context: "synthetic", Target: "clusters"}
-	report.Checks = append(containerPreflightReport(pending).Checks, successfulStoragePreflight().Checks...)
-	report.Summary = storagepreflight.Summary{Passed: 2}
-	if pending {
-		report.Checks[1].Status, report.Checks[1].Reason = "pending", "dry-run would check capacity.memory on controller"
-		report.Summary = storagepreflight.Summary{Pending: 2}
-	}
-	return report
-}
-
 func renderedArtifacts(contextBacked bool) *artifactrendering.Result {
 	result := &artifactrendering.Result{InputPath: "/work/inputs", OutputDirectory: "/work/artifacts", EffectiveStatePath: "/work/artifacts/effective-state.yaml", Objects: 4}
 	if contextBacked {
 		result.InputPath = ""
 	}
 	return result
-}
-
-func infraPreflightReport(unready bool) *storagepreflight.Report {
-	report := &storagepreflight.Report{Context: "synthetic", Target: "controller,infrastructure-services,substrates", Checks: []storagepreflight.Check{
-		{ID: "controller.host-packages", Target: "controller", Status: "passed", Reason: "podman, nmstate"},
-		{ID: "controller.listener-firewall", Target: "DNSServer/dns 192.0.2.53:53/udp", Status: "passed", Reason: "DNSServer/dns 192.0.2.53:53/udp: open (interface virbr0, zone libvirt); the zone admits the socket"},
-		successfulStoragePreflight().Checks[0],
-	}, Summary: storagepreflight.Summary{Passed: 3}}
-	if unready {
-		report.Checks[1].Status, report.Checks[1].Reason, report.Checks[1].Next = "failed", "required DNSServer/dns inbound socket; observed DNSServer/dns 192.0.2.53:53/udp: closed (interface virbr0, zone libvirt)", "run bootwright apply --context synthetic --stage controller"
-		report.Summary = storagepreflight.Summary{Passed: 2, Failed: 1}
-	}
-	return report
-}
-
-func allPreflightReport(pending bool) *storagepreflight.Report {
-	report := &storagepreflight.Report{Context: "synthetic", Target: "controller,infrastructure-services,substrates,machines,clusters"}
-	report.Checks = append(append([]storagepreflight.Check{}, infraPreflightReport(false).Checks[:3]...), clustersPreflightReport(false).Checks[0])
-	report.Summary = storagepreflight.Summary{Passed: 4}
-	if pending {
-		for index := range report.Checks {
-			report.Checks[index].Status, report.Checks[index].Reason = "pending", "dry-run would check "+report.Checks[index].ID+" on "+report.Checks[index].Target
-		}
-		report.Summary = storagepreflight.Summary{Pending: 4}
-	}
-	return report
 }
 
 // unfinishedContexts lists one context whose apply has not completed, with

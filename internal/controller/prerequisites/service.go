@@ -68,7 +68,11 @@ func (s Service) Check(ctx context.Context, request CheckRequest) (*Report, erro
 	}
 	var result *Report
 	err = s.storage.ReadController(ctx, request.ContextName, func(stored StorageView) error {
-		current, err := s.inspect(ctx, view, stored, ReadinessPhase, false)
+		phase := ReadinessPhase
+		if request.Quiet {
+			phase = ""
+		}
+		current, err := s.inspect(ctx, view, stored, phase, false)
 		if err != nil {
 			if len(current.report.Checks) != 0 {
 				current.report.Outcome = "not-ready"
@@ -78,7 +82,7 @@ func (s Service) Check(ctx context.Context, request CheckRequest) (*Report, erro
 			return err
 		}
 		result = &current.report
-		if s.options.ListenerChecks != nil && current.stored.Context.Name != "" {
+		if !request.SkipListeners && s.options.ListenerChecks != nil && current.stored.Context.Name != "" {
 			checks, err := s.options.ListenerChecks(ctx, current.catalog, current.stored.Context.Name)
 			if err != nil {
 				return err
@@ -138,12 +142,28 @@ func (s Service) setup(ctx context.Context, request SetupRequest) (*Report, erro
 	if err := s.available(ctx); err != nil {
 		return nil, err
 	}
-	if request.DryRun {
+	if request.DryRun && !request.Verify {
 		return s.dryRun(ctx)
 	}
 	view, err := s.ports.Setup.ReadSetup(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if request.DryRun {
+		current, err := s.inspect(ctx, view, StorageView{}, "", false)
+		current.report.DryRun = true
+		current.report.Files = s.lockedFiles()
+		if err != nil {
+			return &current.report, err
+		}
+		if current.ready() {
+			current.report.Outcome = "unchanged"
+			current.report.Next = "bootwright init --name <name> --input-dir <dir>"
+		} else {
+			current.plan()
+			current.report.Next = setupInvocation
+		}
+		return &current.report, s.stateRoot(ctx, &current.report)
 	}
 	current, err := s.inspect(ctx, view, StorageView{}, InspectionPhase, false)
 	if err != nil {
@@ -167,9 +187,9 @@ func (s Service) setup(ctx context.Context, request SetupRequest) (*Report, erro
 	current.report.PresentedWarnings = len(current.report.Warnings)
 	if !request.SkipConfirmation {
 		if s.options.Confirmer == nil {
-			return &current.report, failure("controller.install", "controller install requires confirmation", "review the plan and repeat with --yes")
+			return &current.report, failure("controller.install", "install requires confirmation", "review the plan and repeat with --yes")
 		}
-		if err := s.options.Confirmer.Confirm(ctx, "controller install", "this host"); err != nil {
+		if err := s.options.Confirmer.Confirm(ctx, "install", "this host"); err != nil {
 			return &current.report, err
 		}
 	}
@@ -281,7 +301,7 @@ func readiness(id, required string, ready bool, scope string) Check {
 
 func setupCommand() string { return "run " + setupInvocation }
 
-const setupInvocation = "bootwright controller install"
+const setupInvocation = "bootwright install"
 
 func stageInvocation(name string) string {
 	return "bootwright apply --stage controller --context " + name

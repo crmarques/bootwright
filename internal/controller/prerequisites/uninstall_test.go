@@ -176,6 +176,26 @@ func uninstallRefusal(t *testing.T, err error, code, message string) {
 	}
 }
 
+func TestUninstallDryRunProvesPrerequisitesWithoutRemovingAnything(t *testing.T) {
+	f := &uninstallFixture{views: []UninstallView{installReceipt()}, installed: []string{"openssh-clients", "podman"}}
+	result, err := f.service().Uninstall(t.Context(), UninstallRequest{DryRun: true})
+	if err != nil || result == nil || result.Outcome != "planned" || result.Plan == nil || len(result.Plan.Actions) != 2 {
+		t.Fatalf("preview = %+v (%v)", result, err)
+	}
+	if !slices.Equal(f.events, []string{"rpm -qa", "rpm --erase --test " + argument("podman")}) || f.proofs != 1 || f.asked != "" {
+		t.Fatalf("uninstall preview used unexpected effects: %v", f.events)
+	}
+	if !slices.Equal(result.Plan.Actions[0].Items, []string{argument("podman")}) {
+		t.Fatalf("uninstall preview lists the wrong packages: %+v", result.Plan)
+	}
+	f.views[0].Contexts = []string{"lab"}
+	result, err = f.service().Uninstall(t.Context(), UninstallRequest{DryRun: true})
+	if result != nil {
+		t.Fatal("blocked uninstall presented a removal as admitted")
+	}
+	uninstallRefusal(t, err, uninstallCode, "holds contexts: lab")
+}
+
 // An uninstall erases only the receipt's own packages, by name, that rpm still
 // reports: it tests the erasure before the plan, previews it with dnf, asks,
 // inspects, tests and previews again, removes the packages and checks them
@@ -192,7 +212,7 @@ func TestAnUninstallRemovesThePackagesBeforeTheState(t *testing.T) {
 		"rpm -qa", "rpm --erase --test " + argument("podman"), "dnf remove --assumeno", "plan", "confirm",
 		"rpm -qa", "rpm --erase --test " + argument("podman"), "rpm -qa", "dnf remove", "rpm -qa", "remove-state",
 	}
-	if !slices.Equal(f.events, want) || f.asked != "controller uninstall" {
+	if !slices.Equal(f.events, want) || f.asked != "uninstall" {
 		t.Fatalf("events = %q (asked %q), want %q", f.events, f.asked, want)
 	}
 	if result.Outcome != "removed" || !slices.Equal(result.Packages, []string{argument("podman")}) ||
@@ -467,7 +487,7 @@ func TestAnUninstallRefusesOwnedObjectsAndGuestDisks(t *testing.T) {
 	f = &uninstallFixture{views: []UninstallView{disks}, installed: []string{"podman"}}
 	_, err = f.service().Uninstall(context.Background(), UninstallRequest{})
 	uninstallRefusal(t, err, uninstallCode, "guest disks no removal took back remain under /var/lib/libvirt/images/bootwright: /var/lib/libvirt/images/bootwright/lab")
-	if remedy := diagnostics.Of(err)[0].Remediation; !strings.Contains(remedy, "bootwright controller uninstall --discard-unreadable") {
+	if remedy := diagnostics.Of(err)[0].Remediation; !strings.Contains(remedy, "bootwright uninstall --discard-unreadable") {
 		t.Fatalf("remedy = %q", remedy)
 	}
 	if slices.Contains(f.events, "plan") || slices.Contains(f.events, "remove-state") {

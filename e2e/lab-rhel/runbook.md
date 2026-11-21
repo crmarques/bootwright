@@ -73,8 +73,8 @@ e2e/render.sh lab-rhel --out-dir "$INPUT_DIR" \
   --set "registration.enabled=$REGISTER" \
   --set "registration.updateWithinRelease=$UPDATE_WITHIN_RELEASE"
 CONTROLLER_ADDRESS=$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')   # the host address
-./bin/bootwright check input --input-dir "$INPUT_DIR"
-./bin/bootwright context init --name "$CONTEXT" --input-dir "$INPUT_DIR"
+./bin/bootwright validate --input-dir "$INPUT_DIR"
+./bin/bootwright init --name "$CONTEXT" --input-dir "$INPUT_DIR"
 ./bin/bootwright secret generate --context "$CONTEXT"
 if [ "$REGISTER" = true ]; then
   ./bin/bootwright secret set --context "$CONTEXT" --name rhsm-org --value-file "${RHSM_ORG_FILE:?Set RHSM_ORG_FILE to the RHSM organization ID file}" --yes
@@ -88,7 +88,7 @@ fi
 Install the context-selected packages and bind the context to this controller:
 
 ```sh
-./bin/bootwright plan apply --context "$CONTEXT"
+./bin/bootwright apply --dry-run --context "$CONTEXT"
 ./bin/bootwright apply --context "$CONTEXT" --stage controller --yes
 ```
 
@@ -100,10 +100,10 @@ The controller stage prepares the listener firewall automatically; see
 [Prepare listener firewall](../README.md#prepare-listener-firewall).
 `CONTROLLER_ADDRESS` must match the address in the rendered input.
 
-Then check controller readiness:
+Then install --dry-run readiness:
 
 ```sh
-./bin/bootwright check environment --context "$CONTEXT" --stage controller
+./bin/bootwright apply --dry-run --context "$CONTEXT" --stage controller
 ```
 
 Require `Outcome ready` before step 6.
@@ -356,15 +356,15 @@ if [ "$REGISTER" = true ]; then
     --set "security.fips=$FIPS" --set "security.tpm2=$TPM2" \
     --set "registration.enabled=$REGISTER" \
     --set "registration.updateWithinRelease=$UPDATE_WITHIN_RELEASE"
-  ./bin/bootwright check input --input-dir "$INPUT_DIR"
-  ./bin/bootwright context init --name "$CONTEXT" --input-dir "$INPUT_DIR"
+  ./bin/bootwright validate --input-dir "$INPUT_DIR"
+  ./bin/bootwright init --name "$CONTEXT" --input-dir "$INPUT_DIR"
   ./bin/bootwright secret generate --context "$CONTEXT"
   ./bin/bootwright secret set --context "$CONTEXT" --name rhsm-org --value-file "$RHSM_ORG_FILE" --yes
   ./bin/bootwright secret set --context "$CONTEXT" --name rhsm-key --value-file "$RHSM_KEY_FILE" --yes
   ./bin/bootwright secret check --context "$CONTEXT"
-  ./bin/bootwright plan apply --context "$CONTEXT"
+  ./bin/bootwright apply --dry-run --context "$CONTEXT"
   ./bin/bootwright apply --context "$CONTEXT" --stage controller --yes
-  ./bin/bootwright check environment --context "$CONTEXT" --stage controller
+  ./bin/bootwright apply --dry-run --context "$CONTEXT" --stage controller
 fi
 ```
 

@@ -20,7 +20,7 @@ func JSONSchema() ([]byte, error) {
 		"$schema":     JSONSchemaDialect,
 		"$id":         "https://bootwright.io/schemas/" + strings.TrimPrefix(APIVersion, "bootwright.io/") + ".json",
 		"title":       "Bootwright " + APIVersion + " desired state (advisory)",
-		"description": "An advisory export; bootwright check input is the authority on admission.",
+		"description": "An advisory export; bootwright validate is the authority on admission.",
 		"oneOf":       choices,
 		"$defs":       definitions,
 	}

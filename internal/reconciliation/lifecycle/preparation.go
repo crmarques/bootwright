@@ -195,7 +195,7 @@ func (d decider) preparationCommand(name string, plan reconciliation.Plan) strin
 	}
 	flags := []string{"--name", strings.Join(plan.Preparation.Targets, ",")}
 	if plan.Preparation.PreparePrerequisites {
-		flags = append(flags, "--prepare-prerequisites")
+		flags = append(flags, "--stage", "controller")
 	}
 	return contextCommand(name, definition.Command, flags...)
 }

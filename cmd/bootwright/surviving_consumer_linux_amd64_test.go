@@ -126,9 +126,9 @@ func TestADestroyRefusesWhileAPhysicalCompactConsumerSurvives(t *testing.T) {
 		Capabilities: buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{}),
 	}
 	services := assembleServices(deps)
-	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
 	const pair = "OpenShiftCluster/compact consumes CephConsumer/compact-storage"
-	if _, stderr := contextRun(t, services, 0, "plan", "apply", "--context", "alpha"); !strings.Contains(stderr, "plan.consumer-outlives-destroy") || !strings.Contains(humanContent(stderr), humanContent(pair+" and outlives")) {
+	if _, stderr := contextRun(t, services, 1, "apply", "--dry-run", "--context", "alpha"); !strings.Contains(stderr, "plan.consumer-outlives-destroy") || !strings.Contains(humanContent(stderr), humanContent(pair+" and outlives")) {
 		t.Fatalf("the apply plan warns %q", stderr)
 	}
 	appliedDone(t, repository, applied)
@@ -142,7 +142,7 @@ func TestADestroyRefusesWhileAPhysicalCompactConsumerSurvives(t *testing.T) {
 		t.Fatal(diagnostics.Of(err))
 	}
 	before := stateFingerprint(t, root)
-	_, stderr := contextRun(t, services, 1, "destroy", "--context", "alpha", "--authorize", reviewedDataLoss(t, services, "alpha"), "--yes")
+	_, stderr := contextRun(t, services, 1, "destroy", "--context", "alpha", "--authorize", reviewedDataLoss(t, services, "alpha", 1), "--yes")
 	for _, want := range []string{"destroy.consumer-survives", pair + " and survives this destroy, which takes back CephConsumer/compact-storage,", "CephCluster/ceph-lab"} {
 		if !strings.Contains(humanContent(stderr), humanContent(want)) {
 			t.Fatalf("the destroy refusal does not name %q:\n%s", want, stderr)

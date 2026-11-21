@@ -106,10 +106,10 @@ CTX_CEPH="lab-5-nodes-ceph-stretch"
 INPUT_DIR="$HOME/bootwright-e2e/lab-5-nodes-ceph-stretch"
 CONTROLLER_ADDRESS=$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')
 umask 077; RUN_DIR=$(mktemp -d)
-./bin/bootwright check input --input-dir "$INPUT_DIR/arbiter"
-./bin/bootwright check input --input-dir "$INPUT_DIR/ceph"
-./bin/bootwright context init --name "$CTX_ARB" --input-dir "$INPUT_DIR/arbiter"
-./bin/bootwright context init --name "$CTX_CEPH" --input-dir "$INPUT_DIR/ceph"
+./bin/bootwright validate --input-dir "$INPUT_DIR/arbiter"
+./bin/bootwright validate --input-dir "$INPUT_DIR/ceph"
+./bin/bootwright init --name "$CTX_ARB" --input-dir "$INPUT_DIR/arbiter"
+./bin/bootwright init --name "$CTX_CEPH" --input-dir "$INPUT_DIR/ceph"
 ./bin/bootwright secret generate --context "$CTX_ARB"
 ./bin/bootwright secret generate --context "$CTX_CEPH"
 install -m 0600 /dev/null "$RUN_DIR/ibm-password"
@@ -134,13 +134,13 @@ Review both plans and see
 
 ```bash
 CONTEXT="$CTX_ARB"
-./bin/bootwright plan apply --context "$CTX_CEPH"
+./bin/bootwright apply --dry-run --context "$CTX_CEPH"
 ```
 
 Require controller preflight to report `ready`:
 
 ```sh
-./bin/bootwright check environment --context "$CTX_ARB" --stage controller
+./bin/bootwright apply --dry-run --context "$CTX_ARB" --stage controller
 ./bin/bootwright apply --context "$CTX_ARB" --stage infrastructure-services --yes
 dig @"$CONTROLLER_ADDRESS" +short arbiter-01.e2e.example.test
 ./bin/bootwright apply --context "$CTX_ARB" --yes
@@ -178,15 +178,15 @@ and repeat the same apply until it completes:
 
 ```sh
 ./bin/bootwright secret check --context "$CTX_CEPH"
-./bin/bootwright plan apply --context "$CTX_CEPH"
+./bin/bootwright apply --dry-run --context "$CTX_CEPH"
 ./bin/bootwright apply --context "$CTX_CEPH" --stage controller --yes
-./bin/bootwright check environment --context "$CTX_CEPH" --stage controller
+./bin/bootwright apply --dry-run --context "$CTX_CEPH" --stage controller
 ./bin/bootwright apply --context "$CTX_CEPH" --stage infrastructure-services,substrates --yes
 ./bin/bootwright apply --context "$CTX_CEPH" --stage machines --yes      # Ctrl-C once during the installations
 ./bin/bootwright status --context "$CTX_CEPH"
 ./bin/bootwright apply --context "$CTX_CEPH" --stage machines --yes
 ./bin/bootwright machine exec --context "$CTX_CEPH" --name ceph-01,ceph-02,ceph-03,ceph-04 -- getent hosts cp.icr.io public.dhe.ibm.com
-./bin/bootwright check environment --context "$CTX_CEPH" --stage clusters
+./bin/bootwright apply --dry-run --context "$CTX_CEPH" --stage clusters
 ./bin/bootwright apply --context "$CTX_CEPH" --stage clusters --yes
 ```
 

@@ -246,7 +246,7 @@ func requireCapacity(t *testing.T, store *Store, err error, code, message string
 func TestStoreCapacityNamesOnlyTheErrno(t *testing.T) {
 	const limit = 64 << 10
 	large := "large: " + strings.Repeat("x", 3*limit) + "\n"
-	t.Run("context update", func(t *testing.T) {
+	t.Run("update", func(t *testing.T) {
 		store, sources := fixture(t)
 		record := publish(t, store, "example", sources)
 		input := desiredstate.Sources{Roots: sources.Roots, Files: []desiredstate.SourceFile{desiredstate.NewSourceFile(filepath.Join(sources.Roots[0], "environment.yaml"), []byte(large))}, Markers: []desiredstate.SourceFile{}}
@@ -434,7 +434,7 @@ func requireOtherBuildRemedy(t *testing.T, operation string, err error) {
 	if len(reported) != 1 || reported[0].Code != "context.state" || reported[0].Message != missingRegistryMessage || reported[0].Remediation != storeRecoveryRemediation {
 		t.Fatalf("%s refused with %v %#v", operation, err, reported)
 	}
-	for _, fragment := range []string{"another Bootwright build may have created this root and may manage live environments there", "run this build on another controller host", "never move it aside while its services run", "bootwright controller uninstall --discard-unreadable removes it", "restored whole from a matching backup"} {
+	for _, fragment := range []string{"another Bootwright build may have created this root and may manage live environments there", "run this build on another controller host", "never move it aside while its services run", "bootwright uninstall --discard-unreadable removes it", "restored whole from a matching backup"} {
 		if !strings.Contains(reported[0].Remediation, fragment) {
 			t.Fatalf("%s refused without %q: %#v", operation, fragment, reported)
 		}

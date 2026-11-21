@@ -21,4 +21,4 @@
       ansible-core 2.21.5: 1 of 2 wheels to copy from this executable (2.4 MB), 1 cached
 
     Outcome  planned (dry run)
-    Next     bootwright controller install
+    Next     bootwright install

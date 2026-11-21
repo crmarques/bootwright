@@ -61,6 +61,7 @@ type contextAdmissionPresentation struct {
 	Counts       admissionCounts            `json:"counts"`
 	FilesCopied  int                        `json:"filesCopied"`
 	InputChanged bool                       `json:"inputChanged"`
+	Checked      bool                       `json:"checked,omitempty"`
 }
 
 func (contextAdmissionPresentation) documentedResult() {}

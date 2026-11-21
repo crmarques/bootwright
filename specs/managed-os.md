@@ -2120,9 +2120,9 @@ quiescence follows the consumers under the lifecycle removal gate.
 
 The new block, installation request version and libvirt path versions change
 frozen plans. Retire live contexts with the build that applied them before
-`controller install` with this build, then start fresh. An old incomplete apply cannot
+`install` with this build, then start fresh. An old incomplete apply cannot
 silently continue across these changes. A moved automation digest alone
-freezes no block differently, so an apply continues across it once `controller install` has
+freezes no block differently, so an apply continues across it once `install` has
 run ([dependency safety](state-reconciliation.md#dependency-safety-during-recovery)).
 
 ## Host firewall requirements

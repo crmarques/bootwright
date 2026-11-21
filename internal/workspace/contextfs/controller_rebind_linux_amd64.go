@@ -11,7 +11,7 @@ import (
 
 var _ prerequisites.ControllerRebinder = (*Store)(nil)
 
-const rebindRetry = "repeat bootwright controller rebind, which reads the record again"
+const rebindRetry = "repeat bootwright rebind-host, which reads the record again"
 
 func (s *Store) RebindController(ctx context.Context, recorded, next evidence.InstalledHostIdentity) (prerequisites.RebindResult, error) {
 	if !recorded.Valid() {

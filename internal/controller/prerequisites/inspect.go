@@ -166,7 +166,7 @@ func (s Service) selectContext(ctx context.Context, current *inspection) error {
 		return err
 	}
 	if state == nil {
-		return failure("context.input", "context input could not be admitted", "import Environment input with context update")
+		return failure("context.input", "context input could not be admitted", "import Environment input with update")
 	}
 	current.catalog = state.Effective()
 	if current.selection, err = controller.Select(state.Effective()); err != nil {

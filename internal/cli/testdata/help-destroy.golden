@@ -6,9 +6,9 @@
       required guest cleanup and stops them again. Stop after online cleanup lists the Machines
       whose power is checked again. Repeating an unfinished destroy continues its work. A plan
       that deletes disks needs --authorize data-loss; with --yes or without a terminal it must
-      be --authorize data-loss=<digest>, the digest bootwright plan destroy prints for those
-      steps. A rotated management controller or registry login credential is presented at its
-      current version only with --authorize rebind=<secret>, which records a new binding
+      be --authorize data-loss=<digest>, the digest bootwright destroy --dry-run prints for
+      those steps. A rotated management controller or registry login credential is presented at
+      its current version only with --authorize rebind=<secret>, which records a new binding
       version. A Machine whose declared removal erase you know to be more than you need is
       relaxed for this destroy only with --authorize erase=<machine>:metadataClear, which
       clears only metadata, or --authorize erase=<machine>:retain, which erases nothing and
@@ -16,8 +16,9 @@
       and its digest show the relaxation. A Machine whose subscription registration cannot be
       read and that you unregistered with the subscription service's own tools is named with
       --unregistered. --parallelism limits running steps (default 8); dependencies, exclusive
-      resources and group throttles still apply. Review the plan before confirming; --yes skips
-      ordinary confirmation.
+      resources and group throttles still apply. Use --dry-run to preview the selected work and
+      check prerequisites without making changes. --yes skips ordinary confirmation during
+      execution.
 
   Usage
     bootwright destroy [flags]
@@ -29,6 +30,7 @@
                       relax one Machine's declared removal erase for this destroy
                       (erase=<machine>:metadataClear or erase=<machine>:retain) (values:
                       data-loss)
+      --dry-run       Limit work to the command's dry-run boundary
       --parallelism   Set the maximum number of running steps (positive integer) · default 8
       --unregistered  Name a Machine whose subscription registration you removed with the
                       subscription service's own tools

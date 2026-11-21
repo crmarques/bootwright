@@ -111,8 +111,8 @@ credential belongs in a tracked values file.
 
 ```bash
 e2e/render.sh lab-sno-single-ceph-fdf --values "$VALUES" --out-dir "$INPUT_DIR"
-bootwright check input --input-dir "$INPUT_DIR/bootstrap"
-bootwright check input --input-dir "$INPUT_DIR/fips"
+bootwright validate --input-dir "$INPUT_DIR/bootstrap"
+bootwright validate --input-dir "$INPUT_DIR/fips"
 
 helm template isolation "$ISOLATION_CASE/isolation" \
     -f "$CASE/values.yaml" -f "$VALUES" --output-dir "$PROFILE/rendered"
@@ -141,12 +141,12 @@ The optional block/file-only render sets `ceph.object=false` consistently in
 ## Bootstrap and hand over to the FIPS controller
 
 ```bash
-bootwright context init --name "$CTX_BOOT" --input-dir "$INPUT_DIR/bootstrap"
+bootwright init --name "$CTX_BOOT" --input-dir "$INPUT_DIR/bootstrap"
 bootwright secret generate --context "$CTX_BOOT"
 bootwright secret check --context "$CTX_BOOT"
-bootwright plan apply --context "$CTX_BOOT"
+bootwright apply --dry-run --context "$CTX_BOOT"
 bootwright apply --context "$CTX_BOOT" --stage controller --yes
-bootwright check environment --context "$CTX_BOOT" --stage controller
+bootwright apply --dry-run --context "$CTX_BOOT" --stage controller
 bootwright apply --context "$CTX_BOOT" --yes
 bootwright machine exec --context "$CTX_BOOT" --name "$CONTROLLER_NAME" -- \
     cat /proc/sys/crypto/fips_enabled
@@ -185,7 +185,7 @@ On the controller, initialize this context and bind its credentials:
 
 ```bash
 CTX_FIPS=lab-sno-single-ceph-fdf
-bootwright context init --name "$CTX_FIPS" --input-dir "$HOME/fips"
+bootwright init --name "$CTX_FIPS" --input-dir "$HOME/fips"
 bootwright secret set --context "$CTX_FIPS" --name openshift-pull-secret \
     --value-file "$HOME/openshift-pull-secret" --yes
 bootwright secret set --context "$CTX_FIPS" --name ibm-registry \
@@ -203,9 +203,9 @@ through private installer media and later proves the installed Ceph VM.
 
 ```bash
 bootwright secret check --context "$CTX_FIPS"
-bootwright plan apply --context "$CTX_FIPS"
+bootwright apply --dry-run --context "$CTX_FIPS"
 bootwright apply --context "$CTX_FIPS" --stage controller --yes
-bootwright check environment --context "$CTX_FIPS" --stage controller
+bootwright apply --dry-run --context "$CTX_FIPS" --stage controller
 bootwright apply --context "$CTX_FIPS" --stage infrastructure-services,substrates --yes
 bootwright apply --context "$CTX_FIPS" --until sno.nmstate --yes
 ```

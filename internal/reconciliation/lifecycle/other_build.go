@@ -84,5 +84,5 @@ func remediationFor(view View, operation operationstore.Operation, takeBack bool
 	if takeBack {
 		return takeBackUnder(view.Identity().Name, "this executable") + ", or install " + registered + ", which registered it"
 	}
-	return "install " + registered + ", which registered this operation, and run bootwright controller install"
+	return "install " + registered + ", which registered this operation, and run bootwright install"
 }

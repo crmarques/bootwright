@@ -1,6 +1,6 @@
 {
   "schemaVersion": "v1alpha1",
-  "command": "controller rebind",
+  "command": "rebind-host",
   "ok": true,
   "exitCode": 0,
   "result": {

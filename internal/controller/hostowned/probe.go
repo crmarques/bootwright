@@ -1,4 +1,4 @@
-// Package hostowned proves for controller uninstall that no Bootwright-owned host object remains.
+// Package hostowned proves for uninstall that no Bootwright-owned host object remains.
 package hostowned
 
 import (
@@ -28,7 +28,7 @@ const (
 	maxObjects       = 4096
 	maxName          = 256
 	uninstallCode    = "controller.uninstall"
-	uninstallAgain   = "then run bootwright controller uninstall again"
+	uninstallAgain   = "then run bootwright uninstall again"
 )
 
 type Config struct {

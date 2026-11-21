@@ -40,7 +40,7 @@ func TestControllerRefusalsNameTheirOwnRemedies(t *testing.T) {
 			message = "locally hosted services require a completed controller setup on this host"
 		}
 		if len(reported) != 1 || reported[0].Code != "controller.identity" || reported[0].Message != message ||
-			reported[0].Remediation != "run bootwright controller install, then repeat the command" || reported[0].Source != nil {
+			reported[0].Remediation != "run bootwright install, then repeat the command" || reported[0].Source != nil {
 			t.Errorf("%s: refusal = %+v", name, reported)
 		}
 	}
@@ -56,7 +56,7 @@ func TestControllerRefusalsNameTheirOwnRemedies(t *testing.T) {
 		name, machine, remedy string
 		host                  evidence.InstalledHostIdentity
 	}{
-		{"another host", "controller", "run on the host this controller state belongs to, or restore that host's machine-id, DMI product UUID and root filesystem UUID on this one; if this host keeps the same state store under the changed values, rebind its record with bootwright controller rebind; otherwise bootwright context delete --name example --purge --allow-orphans, which abandons every object the context realized", other},
+		{"another host", "controller", "run on the host this controller state belongs to, or restore that host's machine-id, DMI product UUID and root filesystem UUID on this one; if this host keeps the same state store under the changed values, rebind its record with bootwright rebind-host; otherwise bootwright context delete --name example --purge --allow-orphans, which abandons every object the context realized", other},
 		{"another Machine", "replacement", "restore the bound controller Machine input, or create a context on this host", host},
 	} {
 		err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error { return tx.Bind(ctx, test.machine, test.host) })
@@ -74,7 +74,7 @@ func TestAToolAreaSetupMustSettleNamesSetup(t *testing.T) {
 	stored := controllerStored{bundles: []controllerBundleReservation{{ID: clientClosure, Mode: "sealed"}}}
 	_, err := openControllerBundle(context.Background(), nil, nil, contexts.Registry{}, stored, clientClosure, func() bool { return true }, false, nil)
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Message != "required controller bundle is not attributable" || reported[0].Remediation != "run bootwright controller install" {
+	if len(reported) != 1 || reported[0].Message != "required controller bundle is not attributable" || reported[0].Remediation != "run bootwright install" {
 		t.Errorf("refusal = %+v", reported)
 	}
 }

@@ -31,7 +31,7 @@ func TestValidatePrintsOneRefusalAlikeInTextAndJSON(t *testing.T) {
 	const field = "$.spec.network.installAdressRef"
 	const remediation = "rename it to installAddressRef"
 	var out, errOut bytes.Buffer
-	if code := run(context.Background(), []string{"check", "input", "--input-dir", root}, &out, &errOut); code != 1 {
+	if code := run(context.Background(), []string{"validate", "--input-dir", root}, &out, &errOut); code != 1 {
 		t.Fatalf("validate exit = %d\nstdout=%s\nstderr=%s", code, out.String(), errOut.String())
 	}
 	text := out.String() + errOut.String()
@@ -40,7 +40,7 @@ func TestValidatePrintsOneRefusalAlikeInTextAndJSON(t *testing.T) {
 	}
 	out.Reset()
 	errOut.Reset()
-	if code := run(context.Background(), []string{"check", "input", "--input-dir", root, "--output", "json"}, &out, &errOut); code != 1 || errOut.Len() != 0 {
+	if code := run(context.Background(), []string{"validate", "--input-dir", root, "--output", "json"}, &out, &errOut); code != 1 || errOut.Len() != 0 {
 		t.Fatalf("validate --output json exit = %d\nstdout=%s\nstderr=%s", code, out.String(), errOut.String())
 	}
 	var envelope struct {

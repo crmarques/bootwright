@@ -117,7 +117,7 @@ func resolveContext(ctx context.Context, selection CurrentSelection, name string
 	}
 	if selected == "" {
 		return "", failure("context.state", "no current context is selected",
-			"select one with bootwright context use --name <context>, or create one with bootwright context init --name <context>")
+			"select one with bootwright context use --name <context>, or create one with bootwright init --name <context>")
 	}
 	return selected, nil
 }
@@ -127,6 +127,10 @@ func (s Service) store(view View) OperationStore {
 }
 
 func (s Service) Plan(ctx context.Context, request PlanRequest) (*PlanResult, error) {
+	s, err := s.withParallelism(request.Parallelism)
+	if err != nil {
+		return nil, err
+	}
 	return s.relaxingFor(relaxingPlan, request.Relaxations).planWithin(ctx, request, nil)
 }
 
@@ -143,37 +147,80 @@ func (s Service) planWithin(ctx context.Context, request PlanRequest, scope *rec
 		return nil, err
 	}
 	if scope == nil && request.Verb != reconciliation.Destroy {
-		if scope, _, err = s.automaticPreparation(ctx, name, selection, request.Verb == ""); err != nil {
+		if scope, _, err = s.automaticPreparation(ctx, name, selection, request.Readiness || request.Verb == ""); err != nil {
 			return nil, err
 		}
 	}
 	var result *PlanResult
 	var decided operationPlan
 	var read basis
+	decision := s.decider(scope)
 	err = s.workspace.ReadLifecycle(ctx, name, func(view View) error {
-		decision := s.decider(scope)
-		previewed, from, durable, err := s.preview(ctx, decision, view, request.Verb, selection)
-		if err != nil {
-			return err
-		}
-		result, decided, read = previewed, from, durable
-		if s.options.PlanInspection != nil && decided.verb == reconciliation.Apply && !result.Finalizes && !result.Settled {
-			state, err := decision.sources.compile(ctx, view)
-			if err != nil {
-				return err
-			}
-			result.Checks, err = s.options.PlanInspection(ctx, name, state.Effective(), decided.plan, decided.starting())
-			return err
-		}
-		return nil
+		var err error
+		result, decided, read, err = s.preview(ctx, decision, view, request.Verb, selection)
+		return err
 	})
 	if err != nil {
 		return nil, err
 	}
 	if err := s.refuseLostBinding(ctx, name, decided, read); err != nil {
-		return nil, err
+		return result, err
 	}
-	return result, nil
+	inspectApply := s.options.PlanInspection != nil && decided.verb == reconciliation.Apply
+	if result.Finalizes || result.Settled || decided.unclaimed || (!request.Readiness && !inspectApply) {
+		return result, nil
+	}
+
+	err = s.workspace.ReadLifecycle(ctx, name, func(view View) error {
+		// Read the same snapshot again before making an observation. A concurrent
+		// invocation can move the context while the binding is inspected.
+		if view.Identity() != result.Context || decided.basis.input != "" && inputDigest(view) != decided.basis.input {
+			return engineInputMoved.Fail("the input changed before preview checks", "repeat the dry run for this context")
+		}
+		refuse := func(latest basis) error { return contextChanged(decided.verb, read, latest) }
+		if _, _, _, err := s.verifyBasis(ctx, s.store(view), read, refuse); err != nil {
+			return err
+		}
+		if request.Readiness {
+			if err := s.previewReadiness(ctx, view, decided, read, result); err != nil {
+				return err
+			}
+		}
+		if inspectApply {
+			state, err := decision.sources.compile(ctx, view)
+			if err != nil {
+				return err
+			}
+			checks, err := s.options.PlanInspection(ctx, name, state.Effective(), decided.plan, decided.starting())
+			result.Checks = append(result.Checks, checks...)
+			return err
+		}
+		return nil
+	})
+	return result, err
+}
+
+func (s Service) previewReadiness(ctx context.Context, view View, decided operationPlan, read basis, result *PlanResult) error {
+	if err := s.verifyRemovalHost(ctx, view); err != nil {
+		return err
+	}
+	if _, err := s.locateRuntime(ctx, false); err != nil {
+		return err
+	}
+	check, err := s.prepareStart(ctx, view, decided, read)
+	if err != nil {
+		return err
+	}
+	if check != nil {
+		if err := check(view); err != nil {
+			return err
+		}
+		result.Checks = append(result.Checks, PlanCheck{ID: "initial-power", Status: "passed", Summary: "Managed Machines are stopped or absent"})
+	}
+	if decided.verb == reconciliation.Destroy {
+		result.Checks = append(result.Checks, PlanCheck{ID: "removal-evidence", Status: "deferred", Summary: "Removal proofs run against recorded ownership before effects"})
+	}
+	return nil
 }
 
 // preview takes the decision of the verb it previews, through the path that
@@ -210,8 +257,8 @@ func (s Service) preview(ctx context.Context, decision decider, view View, previ
 			given = append(given, "--until")
 		}
 		return nil, operationPlan{}, basis{}, destroyStageSelected.Fail(
-			"plan destroy accepts no stage selection",
-			"repeat "+contextCommand(view.Identity().Name, "plan destroy")+" without "+strings.Join(given, " and "))
+			"destroy --dry-run accepts no stage selection",
+			"repeat "+contextCommand(view.Identity().Name, "destroy --dry-run")+" without "+strings.Join(given, " and "))
 	}
 	if err := s.refuseInapplicableRelaxations(view.Identity().Name, decided); err != nil {
 		return nil, operationPlan{}, basis{}, err
@@ -312,6 +359,12 @@ func planPreview(plan reconciliation.Plan, states map[string]reconciliation.Bloc
 	}
 	deferrals := reconciliation.Deferrals(plan, states, selection)
 	for index, step := range result.Steps {
+		if step.Stage == string(reconciliation.StageController) && !selection.Stages.Selects(reconciliation.StageController) && step.State != string(reconciliation.BlockDone) {
+			result.Steps[index].Selection = StepNotSelected
+			result.Steps[index].Impacts = nil
+			result.Deferred++
+			continue
+		}
 		if slices.Contains(admitted, index) {
 			result.Steps[index].Selection = kind
 			if kind == StepRetry && step.State != string(reconciliation.BlockFailed) {

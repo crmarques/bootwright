@@ -14,12 +14,12 @@ owns required behavior.
 ```sh
 make build
 ./bin/bootwright --help
-./bin/bootwright check input --input-dir examples/machines/lab-rhel
+./bin/bootwright validate --input-dir examples/machines/lab-rhel
 ```
 
-Use `check input` while authoring or in CI. Importing an input directory with
-`context init` validates it before publishing it. Interactive `apply` shows
-its plan before confirmation. Use `plan apply` or `plan destroy` for a standalone
+Use `validate` while authoring or in CI. Importing an input directory with
+`init` validates it before publishing it. Interactive `apply` shows
+its plan before confirmation. Use `apply --dry-run` or `destroy --dry-run` for a standalone
 preview, and start with `status` when returning to a context.
 
 A host with only Docker or Podman runs `make container-build` instead;

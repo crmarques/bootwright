@@ -195,7 +195,7 @@ func TestTheFirstBindingRefusesBeforeSetupCompletes(t *testing.T) {
 				return tx.Bind(context.Background(), "controller", syntheticHost(t))
 			})
 			if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "controller.identity" || found[0].Message != "this host has no completed controller setup" ||
-				found[0].Remediation != "run bootwright controller install, then repeat the command" {
+				found[0].Remediation != "run bootwright install, then repeat the command" {
 				t.Fatalf("binding before setup = %#v", found)
 			}
 			if _, err := os.Stat(filepath.Join(store.options.Root, controllerContainer, controllerSubtree)); !errors.Is(err, os.ErrNotExist) {
@@ -296,7 +296,7 @@ func TestControllerReadDeclaresNothingAndContextWritesPreserveTheDescriptor(t *t
 	}
 	registry, err := store.View(context.Background())
 	if err != nil || registry.Contexts[0].Name != record.Name || registry.Controller.Mode != "ready" {
-		t.Fatal("ordinary context update discarded the enclosing controller descriptor")
+		t.Fatal("ordinary update discarded the enclosing controller descriptor")
 	}
 }
 
@@ -765,7 +765,7 @@ func TestAControllerRecordOfAnotherVersionNamesTheFreshInstall(t *testing.T) {
 			reported := diagnostics.Of(operation())
 			want := "controller evidence version " + version + " is unsupported: this build reads version 1 only and converts none"
 			if len(reported) != 1 || reported[0].Code != "context.state" || reported[0].Message != want || reported[0].Remediation != controllerVersionRemedy ||
-				!strings.Contains(reported[0].Remediation, "then run bootwright controller uninstall --discard-unreadable and bootwright controller install") {
+				!strings.Contains(reported[0].Remediation, "then run bootwright uninstall --discard-unreadable and bootwright install") {
 				t.Errorf("version %s, %s refused with %#v, want %q with the fresh install", version, name, reported, want)
 			}
 		}

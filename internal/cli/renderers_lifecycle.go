@@ -1,5 +1,7 @@
 package cli
 
+import "slices"
+
 func renderValidate() commandRenderer {
 	return commandRenderer{human: func(r *Runner, c renderCall) (bool, error) {
 		if c.result.validation == nil {
@@ -7,23 +9,6 @@ func renderValidate() commandRenderer {
 		}
 		return true, writeValidation(r.config.Out, r.config.ErrOut, c.path, c.result.validation, selectedJSON(c.command))
 	}}
-}
-
-func renderPreflight() commandRenderer {
-	return commandRenderer{
-		human: func(r *Runner, c renderCall) (bool, error) {
-			if c.result.storagePreflight == nil {
-				return false, nil
-			}
-			return true, writeStoragePreflight(r.config.Out, r.config.ErrOut, c.path, c.result.storagePreflight, nil, 0, selectedJSON(c.command))
-		},
-		failed: func(r *Runner, c renderCall, reported []diagnostic) (bool, error) {
-			if c.result.storagePreflight == nil {
-				return false, nil
-			}
-			return true, writeStoragePreflight(r.config.Out, r.config.ErrOut, c.path, c.result.storagePreflight, reported, 1, selectedJSON(c.command))
-		},
-	}
 }
 
 func renderController() commandRenderer {
@@ -152,6 +137,37 @@ func renderLogs() commandRenderer {
 
 func lifecycleFailed(r *Runner, c renderCall, reported []diagnostic) (bool, error) {
 	return r.writeExecutedLifecycle(c.path, c.result, reported)
+}
+
+func renderLifecycle() commandRenderer {
+	plan, operation := renderPlan(), renderOperation()
+	return commandRenderer{
+		structured: func(r *Runner, c renderCall) (bool, error) {
+			if boolValue(c.command.Flags(), "dry-run") {
+				return plan.structured(r, c)
+			}
+			return operation.structured(r, c)
+		},
+		human: func(r *Runner, c renderCall) (bool, error) {
+			if boolValue(c.command.Flags(), "dry-run") {
+				return plan.human(r, c)
+			}
+			return operation.human(r, c)
+		},
+		failed: func(r *Runner, c renderCall, reported []diagnostic) (bool, error) {
+			if c.result.lifecyclePlan == nil {
+				return operation.failed(r, c, reported)
+			}
+			if selectedStructured(c.command) {
+				plan := c.result.lifecyclePlan
+				return true, writeStructuredResult(r.config.Out, c.path, displayPlan(plan), append(slices.Clone(plan.Warnings), reported...), nil, 1)
+			}
+			if _, err := plan.human(r, c); err != nil {
+				return true, err
+			}
+			return true, writeHumanDiagnostics(r.config.ErrOut, reported)
+		},
+	}
 }
 
 func renderOperation() commandRenderer {

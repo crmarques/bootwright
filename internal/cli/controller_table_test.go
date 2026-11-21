@@ -35,8 +35,8 @@ func TestAReadySetupStreamedItsChecksAndEndsWithTheTable(t *testing.T) {
 	report := tableReport("unchanged")
 	report.ProgressPresented = true
 	want := "\n    Host      Fedora Linux 44 (amd64), glibc 2.43 — tested\n    Runtime   Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5 — ready\n" +
-		"    Packages  podman 5:5.8.1-1.fc44 (updates)\n    Nothing to do.\n\n    Outcome  unchanged\n    Next     bootwright check controller\n"
-	if got := runControllerResult(t, report, nil, "controller", "install"); got != want {
+		"    Packages  podman 5:5.8.1-1.fc44 (updates)\n    Nothing to do.\n\n    Outcome  unchanged\n    Next     bootwright init --name <name> --input-dir <dir>\n"
+	if got := runControllerResult(t, report, nil, "install"); got != want {
 		t.Fatalf("result = %q, want %q", got, want)
 	}
 }
@@ -45,11 +45,12 @@ func TestAReadySetupStreamedItsChecksAndEndsWithTheTable(t *testing.T) {
 // check that is not ready and plans nothing.
 func TestANotReadyControllerCheckShowsTheTableAndNoPlan(t *testing.T) {
 	report := tableReport("not-ready")
+	report.DryRun = true
 	report.Table.Packages = "missing podman"
 	report.Table.Runtime = "Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5 — not prepared"
-	report.Next = "bootwright controller install"
-	got := runControllerResult(t, report, diagnostics.NewFailureWithRemediation("preflight.failed", "required controller prerequisites are not ready", "", "run bootwright controller install"), "check", "controller")
-	for _, want := range []string{"    Packages  missing podman\n", "    Outcome  not-ready\n", "[FAIL]   Controller runtime"} {
+	report.Next = "bootwright install"
+	got := runControllerResult(t, report, diagnostics.NewFailureWithRemediation("preflight.failed", "required controller prerequisites are not ready", "", "run bootwright install"), "install", "--dry-run")
+	for _, want := range []string{"    Packages  missing podman\n", "    Outcome  not-ready (dry run)\n", "[FAIL]   Controller runtime"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("result %q lacks %q", got, want)
 		}
@@ -66,7 +67,7 @@ func TestANotReadyControllerCheckShowsTheTableAndNoPlan(t *testing.T) {
 func TestASetupThatChangedTheHostShowsNoTable(t *testing.T) {
 	report := tableReport("changed")
 	report.PlanPresented, report.Actions = true, []string{"Install host packages with dnf: podman"}
-	if got := runControllerResult(t, report, nil, "controller", "install", "--yes"); strings.Contains(got, "Packages") || strings.Contains(got, "Nothing to do.") {
+	if got := runControllerResult(t, report, nil, "install", "--yes"); strings.Contains(got, "Packages") || strings.Contains(got, "Nothing to do.") {
 		t.Fatalf("result = %q", got)
 	}
 }

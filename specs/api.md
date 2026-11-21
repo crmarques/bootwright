@@ -20,7 +20,7 @@ boundaries.
 
 ## Compiler boundary
 
-`check input` and `render effective` discover desired-state YAML and the permitted
+`validate` and `render effective` discover desired-state YAML and the permitted
 add-on provenance marker, then decode, normalize, validate and render selected
 state. They never follow typed payload paths to stat, open, hash, extract or
 execute Secret, media, manifest, playbook or other payload bytes. They perform
@@ -38,10 +38,10 @@ than restate it.
 
 ### Admitted but unrealized
 
-`check input`, `plan` and `apply` warn `api.unrealized` at the path of each
+`validate`, `plan` and `apply` warn `api.unrealized` at the path of each
 declaration below, naming the object and the item that tracks its
 realization, so an operator learns before planning that `plan` refuses it.
-The warning is also in `check input`'s `advisories`
+The warning is also in `validate`'s `advisories`
 ([JSON output](cli/output.md#json-output)). The rows are data in
 `api/v1alpha1` (`UnrealizedDeclarations`), and
 `TestUnrealizedTableMatchesUnsupported` holds this table to that data and
@@ -537,7 +537,7 @@ schema forbids those fields. Effective output is not a replacement authored
 input format: the compiler never accepts a trust flag, marker, alternate
 entrypoint or decoder mode that bypasses authored-field checks. Internal
 serialization stability does not imply that inspection YAML can be submitted
-to `check input`. The [context store](contexts.md#frozen-input-and-provenance)
+to `validate`. The [context store](contexts.md#frozen-input-and-provenance)
 retains exact authored input and its origins separately, never reconstructing them from
 inspection output.
 

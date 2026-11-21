@@ -242,7 +242,7 @@ func TestTheAddedSetBoundNamesARemedy(t *testing.T) {
 	f.store.view.State.Receipt.Added = MergeAdded(added)
 	_, err := f.service.Setup(context.Background(), SetupRequest{})
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || !strings.Contains(reported[0].Message, "more than 1024 packages") || !strings.Contains(reported[0].Remediation, "run bootwright controller uninstall") {
+	if len(reported) != 1 || !strings.Contains(reported[0].Message, "more than 1024 packages") || !strings.Contains(reported[0].Remediation, "run bootwright uninstall") {
 		t.Fatalf("bound refusal = %#v", reported)
 	}
 }

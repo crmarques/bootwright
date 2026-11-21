@@ -196,8 +196,8 @@ func TestEachConfirmationNamesItsObjectAndContextAndKeepsItsConsumersCode(t *tes
 		args                                                 []string
 		identity                                             *diagnostics.ObjectIdentity
 	}{
-		{action: "controller install", object: "this host", prompt: "Confirm controller install on this host? [y/N] ", args: []string{"controller", "install"},
-			code: "controller.install", label: "install", remedy: "review the plan, then repeat bootwright controller install with --yes"},
+		{action: "install", object: "this host", prompt: "Confirm install on this host? [y/N] ", args: []string{"install"},
+			code: "controller.install", label: "install", remedy: "review the plan, then repeat bootwright install with --yes"},
 		{action: "media replace", object: "rhel.iso", prompt: "Confirm replace of stored media rhel.iso? [y/N] ",
 			args: []string{"catalog", "media", "add", "--name", "rhel.iso", "--from-file", "/srv/rhel.iso"},
 			code: "media.store", label: "media", remedy: "review it, then repeat bootwright catalog media add --from-file /srv/rhel.iso --name rhel.iso with --yes"},
@@ -212,8 +212,8 @@ func TestEachConfirmationNamesItsObjectAndContextAndKeepsItsConsumersCode(t *tes
 		{action: "rotate secret encryption", object: "lab", prompt: "Confirm rotation of the secret encryption key of context lab? [y/N] ",
 			args: []string{"secret", "encryption", "rotate"},
 			code: "secret.store.conflict", label: "key rotation", remedy: "review it, then repeat bootwright secret encryption rotate --context lab with --yes"},
-		{action: "update", object: "lab", prompt: "Confirm update for context lab? [y/N] ", args: []string{"context", "update", "--name", "lab", "--input-dir", "infra"},
-			code: "context.state", label: "context", remedy: "review it, then repeat bootwright context update --input-dir infra --name lab with --yes"},
+		{action: "update", object: "lab", prompt: "Confirm update for context lab? [y/N] ", args: []string{"update", "--name", "lab", "--input-dir", "infra"},
+			code: "context.state", label: "context", remedy: "review it, then repeat bootwright update --input-dir infra --name lab with --yes"},
 		{action: "replace secret", object: "token", context: "lab", prompt: "Confirm replacement of secret token in context lab? [y/N] ",
 			args: []string{"secret", "set", "--name", "token", "--value-file", "token.txt"},
 			code: "secret.store.conflict", label: "secret replacement", identity: secret("token"),
@@ -316,9 +316,9 @@ func TestARefusedConfirmationRepeatsTheExactInvocation(t *testing.T) {
 		{name: "a trust selection and replacement", action: "trust", object: "lab",
 			args:   []string{"machine", "trust", "--name", "rhel-01", "--replace", "rhel-01", "--output", "json"},
 			remedy: "review the plan, then repeat bootwright machine trust --context lab --name rhel-01 --output json --replace rhel-01 with --yes"},
-		{name: "a controller install", action: "controller install", object: "this host",
-			args:   []string{"controller", "install"},
-			remedy: "review the plan, then repeat bootwright controller install with --yes"},
+		{name: "a install", action: "install", object: "this host",
+			args:   []string{"install"},
+			remedy: "review the plan, then repeat bootwright install with --yes"},
 		{name: "a media download keeps its digest and hides its URL", action: "media replace", object: "rhel.iso",
 			args:   []string{"catalog", "media", "add", "--name", "rhel.iso", "--from-url", "https://mirror.example.test/rhel.iso?token=abc", "--sha256", strings.Repeat("a", 64)},
 			remedy: "review it, then repeat bootwright catalog media add --from-url <from-url> --name rhel.iso --sha256 " + strings.Repeat("a", 64) + " with --yes"},
@@ -371,7 +371,7 @@ func TestACanceledConfirmationKeepsItsCodeAndNamesNoYesRemedy(t *testing.T) {
 // diagnostic carries them.
 func TestARefusedRebindNeverRepeatsTheIdentityItNames(t *testing.T) {
 	machineID, product, root := strings.Repeat("7", 32), "0a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9", "f9e8d7c6-b5a4-9382-7160-5f4e3d2c1b0a"
-	named := []string{"controller", "rebind", "--machine-id", machineID, "--product-uuid", product, "--root-uuid", root, "--recorded-host-retired"}
+	named := []string{"rebind-host", "--machine-id", machineID, "--product-uuid", product, "--root-uuid", root, "--recorded-host-retired"}
 	for _, tc := range []struct {
 		name     string
 		output   []string
@@ -391,7 +391,7 @@ func TestARefusedRebindNeverRepeatsTheIdentityItNames(t *testing.T) {
 				return answer.Read(p)
 			}
 			refusal := NewConfirmation(read, io.Discard, func() (bool, error) { return tc.terminal, nil }).Repeating(args).
-				Confirm(context.Background(), "controller rebind", "machine-id "+strings.Repeat("1", 32))
+				Confirm(context.Background(), "rebind-host", "machine-id "+strings.Repeat("1", 32))
 			record := &dispatchRecord{err: refusal}
 			var out, errOut bytes.Buffer
 			code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), args)

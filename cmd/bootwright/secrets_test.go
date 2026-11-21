@@ -73,7 +73,7 @@ func secretCommandAndBindingJourney(t *testing.T, implementation string) {
 	configuration := contexts.DefaultConfiguration("alpha")
 	configuration.SecretStore.Type = implementation
 	configPath := addSecretInput(t, t.TempDir(), "context.yaml", string(configuration.Canonical()))
-	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--file", configPath, "--input-dir", input)
+	contextRun(t, services, 0, "init", "--name", "alpha", "--file", configPath, "--input-dir", input)
 	status := secretResult(t, services, 0, "secret", "encryption", "status")
 	if string(status["initialized"]) != "true" {
 		t.Fatal(status)
@@ -178,7 +178,7 @@ func secretCommandAndBindingJourney(t *testing.T, implementation string) {
 	// New desired state may orphan/remove names; an exact continuation still
 	// uses the whole versions pinned before replacement.
 	addSecretInput(t, input, "secret.yaml", strings.Join(declarations[1:], "\n---\n"))
-	contextRun(t, services, 0, "context", "update", "--name", "alpha", "--input-dir", input, "--yes")
+	contextRun(t, services, 0, "update", "--name", "alpha", "--input-dir", input, "--yes")
 	contextRun(t, services, 0, "secret", "encryption", "rotate", "--yes")
 	if value, found := readProduced(t, services, "alpha", "cluster-install-alpha", "kubeconfig"); !found || value != produced {
 		t.Fatal("rotation lost the produced material")
@@ -272,17 +272,17 @@ func TestSecretContextReplacementAndProtectedDeletion(t *testing.T) {
 	services, repository, input, root := contextFixture(t)
 	declaration := secretDocument("token", "token", "  source: {generated: {bytes: 32}}\n")
 	addSecretInput(t, input, "secret.yaml", declaration)
-	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
 	contextRun(t, services, 0, "secret", "encryption", "init")
 	contextRun(t, services, 0, "secret", "generate")
 	initial, _ := contextRun(t, services, 0, "secret", "show", "--name", "token", "--part", "value")
-	contextRun(t, services, 0, "context", "update", "--name", "alpha", "--input-dir", input, "--yes")
+	contextRun(t, services, 0, "update", "--name", "alpha", "--input-dir", input, "--yes")
 	same, _ := contextRun(t, services, 0, "secret", "show", "--name", "token", "--part", "value")
 	if same != initial {
 		t.Fatal("unchanged declaration lost material")
 	}
 	contextRun(t, services, 0, "context", "delete", "--name", "alpha", "--purge", "--yes")
-	contextRun(t, services, 0, "context", "init", "--name", "renamed", "--input-dir", input)
+	contextRun(t, services, 0, "init", "--name", "renamed", "--input-dir", input)
 	contextRun(t, services, 1, "secret", "show", "--name", "token", "--part", "value")
 	contextRun(t, services, 0, "secret", "generate")
 	same, _ = contextRun(t, services, 0, "secret", "show", "--name", "token", "--part", "value")
@@ -290,7 +290,7 @@ func TestSecretContextReplacementAndProtectedDeletion(t *testing.T) {
 		t.Fatal("new context reused deleted secret material")
 	}
 	addSecretInput(t, input, "secret.yaml", strings.ReplaceAll(declaration, "bytes: 32", "bytes: 48"))
-	contextRun(t, services, 0, "context", "update", "--name", "renamed", "--input-dir", input, "--yes")
+	contextRun(t, services, 0, "update", "--name", "renamed", "--input-dir", input, "--yes")
 	contextRun(t, services, 1, "secret", "show", "--name", "token", "--part", "value")
 	check := secretResult(t, services, 1, "secret", "check")
 	if !bytes.Contains(check["secrets"], []byte(`"stale"`)) {
@@ -312,7 +312,7 @@ func TestSecretContextReplacementAndProtectedDeletion(t *testing.T) {
 	contextRun(t, services, 0, "secret", "show", "--name", "token", "--part", "value")
 	contextRun(t, services, 0, "secret", "encryption", "rotate", "--yes")
 	before := stateFingerprint(t, root)
-	contextRun(t, services, 1, "context", "update", "--name", "renamed", "--input-dir", input, "--yes")
+	contextRun(t, services, 1, "update", "--name", "renamed", "--input-dir", input, "--yes")
 	contextRun(t, services, 1, "context", "delete", "--name", "renamed", "--purge", "--yes")
 	if !sameFingerprints(before, stateFingerprint(t, root)) {
 		t.Fatal("protected context refusal changed state")
@@ -324,7 +324,7 @@ func TestSecretNameReuseCannotExposeAnotherContextIdentity(t *testing.T) {
 	services, repository, input, _ := contextFixture(t)
 	declaration := secretDocument("token", "token", "  source: {generated: {}}\n")
 	addSecretInput(t, input, "secret.yaml", declaration)
-	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
 	contextRun(t, services, 0, "secret", "encryption", "init")
 	contextRun(t, services, 0, "secret", "generate")
 	before, err := repository.View(context.Background())
@@ -336,7 +336,7 @@ func TestSecretNameReuseCannotExposeAnotherContextIdentity(t *testing.T) {
 	addSecretInput(t, newInput, "environment.yaml", syntheticEnvironment)
 	addSecretInput(t, newInput, "controller.yaml", serviceHost)
 	addSecretInput(t, newInput, "secret.yaml", declaration)
-	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", newInput)
+	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", newInput)
 	after, err := repository.View(context.Background())
 	if err != nil || len(after.Contexts) != 1 || before.Contexts[0].Revision == after.Contexts[0].Revision {
 		t.Fatal("context name reuse did not establish new durable state", err)
@@ -359,7 +359,7 @@ func TestConfirmationPromptsNameTheSecretAndTheContext(t *testing.T) {
 	t.Parallel()
 	services, repository, input, root := contextFixture(t)
 	addSecretInput(t, input, "secret.yaml", secretDocument("payload", "opaque", ""))
-	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
 	contextRun(t, services, 0, "secret", "encryption", "init")
 	value := addSecretInput(t, t.TempDir(), "value", "synthetic-prompt-canary")
 	contextRun(t, services, 0, "secret", "set", "--name", "payload", "--value-file", value)

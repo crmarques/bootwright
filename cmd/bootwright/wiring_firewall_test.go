@@ -53,7 +53,13 @@ func TestControllerFirewallPlanPreflightAndDependentAdmission(t *testing.T) {
 			}
 		}
 		preview, err := firewallPlanInspection(probe)(context.Background(), "lab", catalog, full, []reconciliation.Block{consumer})
-		if err != nil || len(preview) != len(rows) || preview[0].Status != status {
+		var expected int
+		for _, candidate := range sockets {
+			if candidate.Block == listener.ID {
+				expected++
+			}
+		}
+		if (err == nil) != (status == "open") || len(preview) != expected || preview[0].Status != status {
 			t.Fatal(preview, err)
 		}
 		err = firewallApplyAdmission(probe)(context.Background(), "lab", catalog, full, []reconciliation.Block{consumer})

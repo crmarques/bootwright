@@ -15,7 +15,6 @@ import (
 	containeraccess "github.com/crmarques/bootwright/internal/containercluster/access"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	environmentaccess "github.com/crmarques/bootwright/internal/environment/access"
-	environmentpreflight "github.com/crmarques/bootwright/internal/environment/preflight"
 	"github.com/crmarques/bootwright/internal/machine"
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 )
@@ -29,11 +28,11 @@ func runRecorded(args []string) (int, string, string, *dispatchRecord) {
 
 func TestRunnerDispatchesEveryApplicationCommand(t *testing.T) {
 	cases := []string{
-		"context init --name demo -f input", "context update --name demo -f input", "context use --name demo", "context list", "context current", "context delete --name demo --purge",
+		"init --name demo -f input", "update --name demo -f input", "context use --name demo", "context list", "context current", "context delete --name demo --purge",
 		"catalog add-ons list", "catalog add-ons info --name demo",
 		"secret set --name demo --value-file secret.bin", "secret generate", "secret check", "secret list", "secret show --name demo --part value", "secret delete --name demo", "secret encryption init", "secret encryption status", "secret encryption rotate",
-		"catalog media add --name demo.iso --from-file image.iso", "catalog media list", "catalog media delete --name demo.iso", "check input", "check controller", "check environment", "check environment --stage clusters --clusters demo", "plan apply", "plan destroy", "status", "render effective --output-dir artifacts --sensitive", "render effective", "render installer", "render storage", "apply", "destroy",
-		"machine list", "machine rsh --name demo", "machine exec --name demo echo", "machine trust", "controller install", "cluster list", "cluster info", "cluster rsh --name demo", "cluster exec --name demo echo", "cluster oc --name demo get", "cluster kubectl --name demo get", "cluster kubeconfig --name demo", "cluster keyring --name demo --client vm-disks",
+		"catalog media add --name demo.iso --from-file image.iso", "catalog media list", "catalog media delete --name demo.iso", "validate", "install --dry-run", "apply --dry-run", "apply --dry-run --stage clusters", "destroy --dry-run", "status", "render effective --output-dir artifacts --sensitive", "render effective", "render installer", "render storage", "apply", "destroy",
+		"machine list", "machine rsh --name demo", "machine exec --name demo echo", "machine trust", "install", "cluster list", "cluster info", "cluster rsh --name demo", "cluster exec --name demo echo", "cluster oc --name demo get", "cluster kubectl --name demo get", "cluster kubeconfig --name demo", "cluster keyring --name demo --client vm-disks",
 	}
 	for _, invocation := range cases {
 		t.Run(invocation, func(t *testing.T) {
@@ -45,10 +44,11 @@ func TestRunnerDispatchesEveryApplicationCommand(t *testing.T) {
 				want = 255
 			}
 			remedy := "run bootwright help <command> to see which forms this build runs"
-			if cut := strings.LastIndex(record.path, " "); cut > 0 {
-				remedy = "run bootwright help " + record.path[:cut] + " to see which commands this build runs"
+			path, _ := strings.CutSuffix(record.path, " --dry-run")
+			if cut := strings.LastIndex(path, " "); cut > 0 {
+				remedy = "run bootwright help " + path[:cut] + " to see which commands this build runs"
 			}
-			if code != want || out != "" || record.calls != 1 || errOut != "  error  cli.not-implemented\n    bootwright "+record.path+" is not implemented\n    Next: "+remedy+"\n" {
+			if code != want || out != "" || record.calls != 1 || errOut != "  error  cli.not-implemented\n    bootwright "+path+" is not implemented\n    Next: "+remedy+"\n" {
 				t.Fatalf("code=%d out=%q err=%q calls=%d", code, out, errOut, record.calls)
 			}
 		})
@@ -60,8 +60,8 @@ func TestHelpPrecedenceAndClosedSyntax(t *testing.T) {
 		args string
 		code int
 	}{
-		{"", 0}, {"help", 0}, {"completion", 0}, {"context", 0}, {"secret encryption", 0}, {"context --help", 0}, {"--help context init", 0}, {"help context init", 0},
-		{"context init --name= --help", 0}, {"context init -f a -f b --help", 0}, {"secret show --part invalid --help", 0}, {"status --output invalid --help", 0}, {"machine list --short --output json --help", 0}, {"machine list --help --output invalid", 0},
+		{"", 0}, {"help", 0}, {"completion", 0}, {"context", 0}, {"secret encryption", 0}, {"context --help", 0}, {"--help init", 0}, {"help init", 0},
+		{"init --name= --help", 0}, {"init -f a -f b --help", 0}, {"secret show --part invalid --help", 0}, {"status --output invalid --help", 0}, {"machine list --short --output json --help", 0}, {"machine list --help --output invalid", 0},
 		{"render --output json", 0}, {"render --sensitive --output json", 2}, {"render --output invalid", 2}, {"render effective --input-dir= --help", 0},
 		{"version --help=false", 0}, {"version --help=invalid", 2}, {"render effective --input-dir input", 2},
 		{"example --help", 2}, {"help example", 2}, {"container-cluster --help", 2}, {"help container-cluster", 2}, {"clu list", 2}, {"VERSION", 2}, {"--version", 2}, {"version --format json", 2}, {"__complete", 2}, {"__completeNoDesc", 2}, {"help __bootwright_complete", 2},
@@ -89,7 +89,7 @@ func TestResolutionFailuresExplainOnlyTrustedReasons(t *testing.T) {
 	}{
 		{"separator", []string{"version", "--", privateArgument}, "separator is not accepted"},
 		{"unknown-flag", []string{"version", "--unknown=" + privateArgument}, `unknown flag: "--unknown"`},
-		{"missing-value", []string{"context", "init", "--name"}, "flag value is missing"},
+		{"missing-value", []string{"init", "--name"}, "flag value is missing"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -133,7 +133,7 @@ func TestWithdrawnFlagsAreUsageErrors(t *testing.T) {
 	for _, args := range [][]string{
 		{"status", "--watch"}, {"status", "--watch=false"}, {"status", "--watch-interval", "5s"}, {"status", "--watch", "--help"},
 		{"apply", "--verbose"}, {"apply", "-v"}, {"apply", "--yes", "--verbose=false"}, {"destroy", "--verbose"}, {"destroy", "-v", "--help"},
-		{"check", "environment", "--verbose"}, {"check", "environment", "-v"}, {"check", "controller", "--verbose"},
+		{"apply", "--dry-run", "--verbose"}, {"apply", "--dry-run", "-v"}, {"install", "--dry-run", "--verbose"},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			code, out, errOut, record := runRecorded(args)
@@ -156,32 +156,12 @@ func TestWithdrawnFlagsAreUsageErrors(t *testing.T) {
 
 func TestTheRetiredTrustOnFirstUseSpellingIsAnUnknownFlag(t *testing.T) {
 	for _, args := range [][]string{
-		{"check", "environment", "--trust-on-first-use"}, {"check", "environment", "--trust-on-first-use=false"}, {"check", "environment", "--stage", "clusters", "--trust-on-first-use=true"},
+		{"apply", "--dry-run", "--trust-on-first-use"}, {"apply", "--dry-run", "--trust-on-first-use=false"}, {"apply", "--dry-run", "--stage", "clusters", "--trust-on-first-use=true"},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			code, out, errOut, record := runRecorded(args)
-			if code != 2 || out != "" || record.calls != 0 || errOut != "  error  cli.usage\n    unknown flag: \"--trust-on-first-use\"\nUsage: bootwright check environment [flags]\nRun 'bootwright help' for available commands.\n" {
+			if code != 2 || out != "" || record.calls != 0 || errOut != "  error  cli.usage\n    unknown flag: \"--trust-on-first-use\"\nUsage: bootwright apply [flags]\nRun 'bootwright help' for available commands.\n" {
 				t.Fatalf("code=%d out=%q stderr=%q calls=%d", code, out, errOut, record.calls)
-			}
-		})
-	}
-}
-
-func TestPreflightPassesHostKeyObservationAndNeverRefusesIt(t *testing.T) {
-	for _, test := range []struct {
-		args []string
-		want bool
-	}{
-		{[]string{"check", "environment"}, true},
-		{[]string{"check", "environment", "--stage", "controller", "--observe-host-keys"}, true},
-		{[]string{"check", "environment", "--stage", "controller", "--observe-host-keys=false"}, false},
-		{[]string{"check", "environment", "--stage", "clusters", "--observe-host-keys=true"}, true},
-	} {
-		t.Run(strings.Join(test.args, " "), func(t *testing.T) {
-			code, _, _, record := runRecorded(test.args)
-			request, ok := record.request.(environmentpreflight.PreflightRequest)
-			if code != 1 || record.calls != 1 || !ok || request.ObserveHostKeys != test.want {
-				t.Fatalf("code=%d calls=%d request=%#v", code, record.calls, record.request)
 			}
 		})
 	}

@@ -20,7 +20,6 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/logview"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 	"github.com/crmarques/bootwright/internal/secrets/encryption"
-	storagepreflight "github.com/crmarques/bootwright/internal/storage/preflight"
 	"github.com/crmarques/bootwright/internal/trust/enrollment"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 	"github.com/spf13/pflag"
@@ -46,7 +45,6 @@ type commandResult struct {
 	controller        *prerequisites.Report
 	rebind            *prerequisites.RebindResult
 	uninstall         *prerequisites.UninstallResult
-	storagePreflight  *storagepreflight.Report
 
 	lifecyclePlan      *lifecycle.PlanResult
 	lifecycleStatus    *lifecycle.StatusResult

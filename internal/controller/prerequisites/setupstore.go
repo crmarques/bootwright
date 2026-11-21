@@ -10,7 +10,7 @@ const SetupStateFormat = "bootwright.setup-state-v1"
 
 const PresentBeforeBootwright = "present before bootwright"
 
-const setupStateRemedy = "run bootwright controller install"
+const setupStateRemedy = "run bootwright install"
 
 var ErrUnsafeSetupRun = errors.New("unsafe setup run state")
 
@@ -93,7 +93,7 @@ func interruptedSetupRemedy(receipt *HostReceipt) string {
 	if receipt == nil || receipt.Lock == "" {
 		return remedy
 	}
-	return remedy + ", or run the controller install of the Bootwright build whose lock the receipt names (" + receipt.Lock + ") to keep its runtime"
+	return remedy + ", or run the install of the Bootwright build whose lock the receipt names (" + receipt.Lock + ") to keep its runtime"
 }
 
 func DiscardForeignSetupAction(format string) string {

@@ -13,16 +13,16 @@ import (
 func TestFailureRepresentations(t *testing.T) {
 	for _, jsonMode := range []bool{false, true} {
 		var out, errOut bytes.Buffer
-		err := writeFailure(&out, &errOut, "check input", "cli.not-implemented", "bootwright check input is not implemented", 1, jsonMode, nil)
+		err := writeFailure(&out, &errOut, "validate", "cli.not-implemented", "bootwright validate is not implemented", 1, jsonMode, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if jsonMode {
-			want := "{\"schemaVersion\":\"v1alpha1\",\"command\":\"check input\",\"ok\":false,\"exitCode\":1,\"result\":null,\"diagnostics\":[{\"severity\":\"error\",\"code\":\"cli.not-implemented\",\"message\":\"bootwright check input is not implemented\",\"remediation\":\"run bootwright help <command> to see which forms this build runs\"}],\"logs\":[]}\n"
+			want := "{\"schemaVersion\":\"v1alpha1\",\"command\":\"validate\",\"ok\":false,\"exitCode\":1,\"result\":null,\"diagnostics\":[{\"severity\":\"error\",\"code\":\"cli.not-implemented\",\"message\":\"bootwright validate is not implemented\",\"remediation\":\"run bootwright help <command> to see which forms this build runs\"}],\"logs\":[]}\n"
 			if out.String() != want || errOut.Len() != 0 {
 				t.Fatalf("JSON output = %q, stderr = %q", out.String(), errOut.String())
 			}
-		} else if out.Len() != 0 || errOut.String() != "  error  cli.not-implemented\n    bootwright check input is not implemented\n    Next: run bootwright help <command> to see which forms this build runs\n" {
+		} else if out.Len() != 0 || errOut.String() != "  error  cli.not-implemented\n    bootwright validate is not implemented\n    Next: run bootwright help <command> to see which forms this build runs\n" {
 			t.Fatalf("human output = %q, stderr = %q", out.String(), errOut.String())
 		}
 	}
@@ -49,11 +49,11 @@ func TestDiagnosticRemediationRepresentations(t *testing.T) {
 	}}
 	for _, jsonMode := range []bool{false, true} {
 		var out, errOut bytes.Buffer
-		if err := writeDiagnostics(&out, &errOut, "check input", diagnostics, 1, jsonMode, nil); err != nil {
+		if err := writeDiagnostics(&out, &errOut, "validate", diagnostics, 1, jsonMode, nil); err != nil {
 			t.Fatal(err)
 		}
 		if jsonMode {
-			want := "{\"schemaVersion\":\"v1alpha1\",\"command\":\"check input\",\"ok\":false,\"exitCode\":1,\"result\":null,\"diagnostics\":[{\"severity\":\"error\",\"code\":\"api.required\",\"message\":\"metadata.name is required\",\"source\":{\"path\":\"input.yaml\",\"document\":1,\"line\":4,\"column\":3},\"object\":{\"apiVersion\":\"bootwright.io/v1alpha1\",\"kind\":\"NetworkConfig\",\"name\":\"management\"},\"field\":\"$.metadata.name\",\"remediation\":\"set metadata.name to a unique DNS label\"}],\"logs\":[]}\n"
+			want := "{\"schemaVersion\":\"v1alpha1\",\"command\":\"validate\",\"ok\":false,\"exitCode\":1,\"result\":null,\"diagnostics\":[{\"severity\":\"error\",\"code\":\"api.required\",\"message\":\"metadata.name is required\",\"source\":{\"path\":\"input.yaml\",\"document\":1,\"line\":4,\"column\":3},\"object\":{\"apiVersion\":\"bootwright.io/v1alpha1\",\"kind\":\"NetworkConfig\",\"name\":\"management\"},\"field\":\"$.metadata.name\",\"remediation\":\"set metadata.name to a unique DNS label\"}],\"logs\":[]}\n"
 			if out.String() != want || errOut.Len() != 0 {
 				t.Fatalf("JSON output = %q, stderr = %q", out.String(), errOut.String())
 			}
@@ -73,7 +73,7 @@ func TestSafeDisplay(t *testing.T) {
 		t.Fatalf("escaped = %q, want %q", got, want)
 	}
 	var out, errOut bytes.Buffer
-	if err := writeFailure(&out, &errOut, "check input", "cli.usage", "<value>\n\x1b", 2, true, nil); err != nil {
+	if err := writeFailure(&out, &errOut, "validate", "cli.usage", "<value>\n\x1b", 2, true, nil); err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(out.String(), `\u003c`) || !strings.Contains(out.String(), `<value>\\n\\u001b`) || errOut.Len() != 0 {
@@ -95,7 +95,7 @@ func TestFailureWriterDoesNotFallback(t *testing.T) {
 	want := errors.New("writer unavailable")
 	out := &failedOutput{err: want}
 	var errOut bytes.Buffer
-	if err := writeFailure(out, &errOut, "check input", "cli.usage", "invalid invocation", 2, true, nil); !errors.Is(err, want) {
+	if err := writeFailure(out, &errOut, "validate", "cli.usage", "invalid invocation", 2, true, nil); !errors.Is(err, want) {
 		t.Fatalf("error = %v, want writer error", err)
 	}
 	if out.calls != 1 || errOut.Len() != 0 {

@@ -50,7 +50,7 @@ func authorize(contextName string, verb reconciliation.Verb, selection reconcili
 	}
 	authFlags = append(authFlags, relaxationFlags(frozenRelaxations(plan))...)
 	passing := contextCommand(contextName, string(verb), invocationFlags(selection, authFlags, unregistered)...)
-	preview := contextCommand(contextName, "plan "+string(verb), invocationFlags(selection, relaxationFlags(frozenRelaxations(plan)), nil)...)
+	preview := contextCommand(contextName, string(verb)+" --dry-run", invocationFlags(selection, relaxationFlags(frozenRelaxations(plan)), nil)...)
 	supplied := slices.Compact(slices.Sorted(slices.Values(authorizations)))
 	for _, token := range supplied {
 		if !slices.Contains(required, token) {

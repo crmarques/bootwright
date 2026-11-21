@@ -545,6 +545,41 @@ func TestInitCompilesBeforeTransactionAndPublishesOriginalAcquisition(t *testing
 	}
 }
 
+func TestAdmissionChecksUseOnlyInspection(t *testing.T) {
+	for _, mode := range []contexts.Mode{"", contexts.Ready, contexts.Initializing, contexts.Deleting} {
+		t.Run(string(mode), func(t *testing.T) {
+			r := newRepository(t)
+			if mode == contexts.Ready {
+				r = existingRepository(t)
+			} else if mode != "" {
+				r.registry.Contexts = []contexts.Record{{Name: "example", Mode: mode}}
+			}
+			before := cloneRegistry(r.registry)
+			svc := service(t, r, sourceFixture("/synthetic/input"))
+			init, initErr := svc.Init(t.Context(), contexts.InitRequest{Name: "example", InputDirectory: "/synthetic/input", Check: true})
+			if mode == "" {
+				if initErr != nil || init == nil || !init.Checked || !init.InputChanged || init.FilesCopied != 0 {
+					t.Fatalf("unused-name admission = %+v (%v)", init, initErr)
+				}
+			} else if init != nil || initErr == nil {
+				t.Fatalf("existing or reserved name admitted: %+v (%v)", init, initErr)
+			}
+			update, updateErr := svc.Update(t.Context(), contexts.UpdateRequest{Name: "example", InputDirectory: "/synthetic/input", Check: true})
+			if mode == contexts.Ready {
+				if updateErr != nil || update == nil || !update.Checked || !update.InputChanged || update.FilesCopied != 0 {
+					t.Fatalf("update check = %+v (%v)", update, updateErr)
+				}
+			} else if update != nil || updateErr == nil {
+				t.Fatalf("update admitted an unavailable context: %+v (%v)", update, updateErr)
+			}
+			if !reflect.DeepEqual(before, r.registry) || !slices.Contains(r.calls, "inspection") ||
+				slices.Contains(r.calls, "transaction") || slices.Contains(r.calls, "present") || slices.Contains(r.calls, "select") {
+				t.Fatalf("admission affected durable state: %v", r.calls)
+			}
+		})
+	}
+}
+
 func TestInvalidAdmissionAndNamesNeverStartTransaction(t *testing.T) {
 	for _, operation := range []string{"init", "update"} {
 		for _, invalid := range []string{"name", "syntax", "duplicate-environment", "preflight", "read", "compile", "canceled-preflight", "canceled-read", "canceled-compile", "empty-roots"} {

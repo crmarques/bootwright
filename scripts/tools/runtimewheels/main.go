@@ -1,6 +1,6 @@
 // Command runtimewheels places every file the controller runtime lock names
 // into the directory the executable embeds, so a build carries the wheels its
-// controller install builds the runtime from and installation downloads none.
+// install builds the runtime from and installation downloads none.
 // Each file is checked against the lock's size and SHA-256 before it takes its
 // name; a cache directory keeps verified files across builds and worktrees.
 package main

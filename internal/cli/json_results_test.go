@@ -44,7 +44,6 @@ var cliResults = []reflect.Type{
 	reflect.TypeFor[machineDiscoveryPresentation](),
 
 	reflect.TypeFor[validationResult](),
-	reflect.TypeFor[storagePreflightResult](),
 	reflect.TypeFor[effectiveResult](),
 	reflect.TypeFor[renderPresentation](),
 	reflect.TypeFor[statusResult](),

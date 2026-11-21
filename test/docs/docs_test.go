@@ -913,7 +913,7 @@ var askRuleMarkers = []struct{ phrase, flag string }{
 // that needs no ask rule. A row whose Effects cell gains a marker, or loses the
 // phrase, fails until it is classified again.
 var askRuleNoAsk = map[string]string{
-	"context init": "local", "context update": "local", "context use": "local",
+	"init": "local", "update": "local", "context use": "local",
 	"context list": "read local state", "context current": "read local state",
 	"policy permissions":   "read the selected context",
 	"catalog add-ons list": "read executable registry", "catalog add-ons info": "read executable registry",
@@ -921,8 +921,8 @@ var askRuleNoAsk = map[string]string{
 	"secret check": "no values emitted", "secret list": "read confidential-store metadata",
 	"secret info":            "read confidential-store metadata only",
 	"secret encryption init": "idempotent initialization", "secret encryption status": "read confidential metadata",
-	"catalog media list": "read local media", "check input": "no write",
-	"check controller": "bounded local observation", "check environment": "observe unless", "plan apply": "bounded local observation", "plan destroy": "read local state", "status": "read local state", "logs": "read local state",
+	"catalog media list": "read local media", "validate": "no write",
+	"status": "read local state", "logs": "read local state",
 	"diff": "read local state", "render storage": "never execution",
 	"machine list": "read local state", "machine info": "read local inventory",
 	"cluster list": "read local state", "cluster oc": "read context-owned access metadata",

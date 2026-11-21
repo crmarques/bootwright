@@ -112,7 +112,7 @@ func openControllerBundle(ctx context.Context, store *Store, root *directory, re
 		return nil, nil
 	}
 	if stored.bundles[index].DirectoryInode == 0 {
-		return nil, controllerFailure("controller.identity", "required controller bundle is not attributable", "run bootwright controller install")
+		return nil, controllerFailure("controller.identity", "required controller bundle is not attributable", "run bootwright install")
 	}
 	area := &controllerBundleArea{store: store, root: root, registry: registry, reservation: stored.bundles[index], active: active, writeAllowed: writable, guard: guard}
 	owner, err := openControllerDirectory(root, registry)

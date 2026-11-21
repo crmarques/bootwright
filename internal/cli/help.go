@@ -86,10 +86,6 @@ func helpUsage(command *cobra.Command) string {
 	switch command.CommandPath() {
 	case "bootwright":
 		return "bootwright [command] [flags]"
-	case "bootwright check":
-		return "bootwright check <target> [flags]"
-	case "bootwright plan":
-		return "bootwright plan <operation> [flags]"
 	}
 	if command.HasAvailableSubCommands() {
 		return command.CommandPath() + " <command> [flags]"

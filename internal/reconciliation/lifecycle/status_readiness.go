@@ -20,7 +20,7 @@ func (s Service) nameReadiness(ctx context.Context, name string, result *StatusR
 	if s.options.Readiness == nil || result.Lifecycle != nil {
 		return
 	}
-	first := slices.Index(result.NextSteps, contextCommand(name, "plan apply"))
+	first := slices.Index(result.NextSteps, contextCommand(name, "apply --dry-run"))
 	if first < 0 {
 		return
 	}

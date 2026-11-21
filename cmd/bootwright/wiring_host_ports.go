@@ -61,7 +61,7 @@ func hostPortPlanInspection(requirements hostfirewall.HostPortRequirements, next
 	return func(ctx context.Context, name string, catalog api.Catalog, plan reconciliation.Plan, starting []reconciliation.Block) ([]lifecycle.PlanCheck, error) {
 		checks, err := next(ctx, name, catalog, plan, starting)
 		if err != nil {
-			return nil, err
+			return checks, err
 		}
 		rows, err := hostPortChecks(catalog, requirements)
 		if err != nil {

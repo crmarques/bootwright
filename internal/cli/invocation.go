@@ -2,7 +2,6 @@ package cli
 
 import (
 	"io"
-	"slices"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -88,15 +87,13 @@ func unavailableSelection(path string, flags *pflag.FlagSet) string {
 
 // contextFreeAcquisition decides from an admitted invocation's parsed flags
 // whether it acquires, or previews acquisition, before any context exists. One
-// command path can hold both shapes, so the path alone never decides: controller install
+// command path can hold both shapes, so the path alone never decides: install
 // selects no context and always does, a controller preflight does only while
 // its final --context is empty, and a media import only from a URL.
 func contextFreeAcquisition(path string, flags *pflag.FlagSet) bool {
 	ambient := specFor(path).classify.ambient
 	return ambient != nil && ambient(flags)
 }
-
-func always(*pflag.FlagSet) bool { return true }
 
 func hasFiles(flags *pflag.FlagSet) bool { return len(arrayValue(flags, "file")) != 0 }
 
@@ -106,8 +103,10 @@ func hasInputDir(flags *pflag.FlagSet) bool { return stringValue(flags, "input-d
 
 func dryRunSelected(flags *pflag.FlagSet) bool { return boolValue(flags, "dry-run") }
 
+func installAmbient(flags *pflag.FlagSet) bool { return !dryRunSelected(flags) }
+
 func uninstallAmbient(flags *pflag.FlagSet) bool {
-	return !boolValue(flags, "keep-packages") && !boolValue(flags, "discard-unreadable")
+	return !dryRunSelected(flags) && !boolValue(flags, "keep-packages") && !boolValue(flags, "discard-unreadable")
 }
 
 func mediaAmbient(flags *pflag.FlagSet) bool {
@@ -115,13 +114,6 @@ func mediaAmbient(flags *pflag.FlagSet) bool {
 }
 
 func urlFromStdin(flags *pflag.FlagSet) bool { return stringValue(flags, "from-url-file") == "-" }
-
-func preflightUnavailable(flags *pflag.FlagSet) string {
-	if slices.Contains(normalizeNames(stringValue(flags, "stage")), "add-ons") {
-		return "check environment --stage add-ons"
-	}
-	return ""
-}
 
 func secretStdin(flags *pflag.FlagSet) string {
 	if boolValue(flags, "value-stdin") || boolValue(flags, "password-stdin") {

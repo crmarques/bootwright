@@ -10,15 +10,17 @@ import (
 // A ready host names creating a context as its next command, because the name
 // and the input directory are the operator's to choose.
 func TestAReadyControllerCheckNamesContextInit(t *testing.T) {
-	report := controllerReport("ready", false)
+	report := controllerReport("unchanged", false)
+	report.DryRun = true
 	report.Actions = nil
+	report.Next = "bootwright init --name <name> --input-dir <dir>"
 	record := &dispatchRecord{result: commandResult{controller: report}}
 	var out, errOut bytes.Buffer
-	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"check", "controller"})
+	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"install", "--dry-run"})
 	if code != 0 || errOut.Len() != 0 {
 		t.Fatalf("exit %d, stderr %q", code, errOut.String())
 	}
-	if want := "    Outcome  ready\n    Next     bootwright context init --name <name> --input-dir <dir>\n"; !strings.HasSuffix(out.String(), want) {
+	if want := "    Outcome  unchanged (dry run)\n    Next     bootwright init --name <name> --input-dir <dir>\n"; !strings.HasSuffix(out.String(), want) {
 		t.Errorf("controller check ended %q, want the outcome followed by %q", out.String(), want)
 	}
 }
@@ -28,7 +30,7 @@ func TestAReadyControllerCheckNamesContextInit(t *testing.T) {
 func TestControllerCheckRefusesContext(t *testing.T) {
 	record := &dispatchRecord{}
 	var out, errOut bytes.Buffer
-	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"check", "controller", "--context", "lab"})
+	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"install", "--dry-run", "--context", "lab"})
 	if code != 2 || out.Len() != 0 || !strings.Contains(errOut.String(), "cli.usage") || record.calls != 0 {
 		t.Fatalf("exit %d, stdout %q, stderr %q, calls %d", code, out.String(), errOut.String(), record.calls)
 	}

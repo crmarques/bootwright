@@ -500,7 +500,7 @@ var ansibleReservedKeys = []string{"__ansible_type", "__ansible_unsafe", "__ansi
 // Ansible as data; this keeps a value that would be code there, or that no
 // runner could encode, out of a plan at all.
 func RefuseTemplateDelimiters(contextName string, definitions []reconciliation.BlockDefinition) error {
-	return refuseTemplateValues(contextName, contextCommand(contextName, "plan apply"), definitions)
+	return refuseTemplateValues(contextName, contextCommand(contextName, "apply --dry-run"), definitions)
 }
 
 // RefuseBoundedTemplateDelimiters refuses a bounded run's requests as
@@ -533,7 +533,7 @@ func refuseTemplateValues(contextName, retry string, definitions []reconciliatio
 		// A plan reads the context's imported input, so the repaired values are
 		// imported before the context is planned again.
 		remedy := "remove " + strings.Join(removed, " and ") + " from the desired-state values " + object + " is planned from, " +
-			"import them with bootwright context update --name " + contextName + " --input-dir <dir>, then run " + retry
+			"import them with bootwright update --name " + contextName + " --input-dir <dir>, then run " + retry
 		reported := raised(planTemplateValue, message, remedy)
 		reported.Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: definition.Kind, Name: definition.Object}
 		refused = append(refused, reported)

@@ -7,47 +7,6 @@ import (
 	"testing"
 )
 
-// The add-ons stage has no checks yet, so selecting it is refused as an
-// unavailable selection before privilege, a context or any service is reached,
-// whatever else the stage list names and in either output mode.
-func TestPreflightStageAddOnsIsRefusedAsNotImplementedBeforeAnyEffect(t *testing.T) {
-	for _, stage := range []string{"add-ons", "clusters,add-ons", "add-ons,controller"} {
-		args := []string{"check", "environment", "--stage", stage}
-		if class := ClassifyInvocation(args); class.RequiresRoot || class.AmbientRoute {
-			t.Errorf("%v requested privilege or the ambient route: %+v", args, class)
-		}
-		code, out, errOut, record := runRecorded(args)
-		want := "  error  cli.not-implemented\n    bootwright check environment --stage add-ons is not implemented\n    Next: run bootwright check environment without that selection\n"
-		if code != 1 || out != "" || errOut != want || record.calls != 0 {
-			t.Errorf("%v: exit=%d stdout=%q stderr=%q calls=%d", args, code, out, errOut, record.calls)
-		}
-		code, out, errOut, record = runRecorded(append(args, "--output", "json"))
-		if code != 1 || errOut != "" || record.calls != 0 || !strings.Contains(out, `"command":"check environment"`) || !strings.Contains(out, `"code":"cli.not-implemented"`) || !strings.Contains(out, `bootwright check environment --stage add-ons is not implemented`) {
-			t.Errorf("%v json: exit=%d stdout=%q stderr=%q calls=%d", args, code, out, errOut, record.calls)
-		}
-	}
-}
-
-// Cluster names select only the clusters stage, so naming them while an
-// explicit stage list leaves that stage out is a usage error that reaches no
-// service, and the default stage list keeps accepting them.
-func TestPreflightClustersRequireTheClustersStage(t *testing.T) {
-	for _, args := range [][]string{
-		{"check", "environment", "--stage", "controller", "--clusters", "one"},
-		{"check", "environment", "--stage", "substrates,machines", "--clusters=one,two"},
-	} {
-		code, out, errOut, record := runRecorded(args)
-		if code != 2 || out != "" || record.calls != 0 || !strings.HasPrefix(errOut, "  error  cli.usage\n    --clusters requires the clusters stage\n") {
-			t.Errorf("%v: exit=%d stdout=%q stderr=%q calls=%d", args, code, out, errOut, record.calls)
-		}
-	}
-	for _, args := range [][]string{{"check", "environment", "--clusters", "one"}, {"check", "environment", "--stage", "clusters", "--clusters", "one"}} {
-		if code, out, errOut, record := runRecorded(args); code == 2 || record.calls != 1 {
-			t.Errorf("%v: exit=%d stdout=%q stderr=%q calls=%d", args, code, out, errOut, record.calls)
-		}
-	}
-}
-
 // render effective writes only when it is given an output directory, and the
 // flags that make sense only beside or without one are refused before any
 // service runs.
@@ -79,7 +38,7 @@ func TestGroupHelpOffersOnlyTheFlagsItsCommandsAccept(t *testing.T) {
 		group            string
 		context, sshHint bool
 	}{
-		{"controller", false, false},
+		{"context", false, false},
 		{"catalog media", false, false},
 		{"catalog add-ons", false, false},
 		{"completion", false, false},

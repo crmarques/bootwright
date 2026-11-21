@@ -177,7 +177,7 @@ func TestNextStepsCarryTheContextAndTheTokensTheirDecisionNeeds(t *testing.T) {
 		arrange func(*testing.T, *harness)
 		steps   []string
 	}{
-		{name: "an idle context", arrange: func(*testing.T, *harness) {}, steps: []string{"bootwright plan apply --context lab-b", "bootwright apply --context lab-b"}},
+		{name: "an idle context", arrange: func(*testing.T, *harness) {}, steps: []string{"bootwright apply --dry-run --context lab-b", "bootwright apply --context lab-b"}},
 		{name: "a paused apply", arrange: applied(nil, string(reconciliation.StageInfrastructureServices)), steps: []string{continued, "bootwright destroy --context lab-b"}},
 		{name: "a failed apply", arrange: applied(map[string]Result{"charlie": {Outcome: reconciliation.OutcomeFailed}}), steps: []string{continued, "bootwright destroy --context lab-b"}},
 		{name: "an unknown apply", arrange: applied(map[string]Result{"charlie": {Outcome: reconciliation.OutcomeUnknown}}), steps: []string{continued, "bootwright destroy --context lab-b"}},
@@ -371,7 +371,7 @@ func TestStatusOffersSetupWhereSetupGatesTheVerb(t *testing.T) {
 				h.workspace.controller.Exists, h.workspace.controller.Initialized = false, false
 				return h
 			},
-			steps: []string{"bootwright controller install"}, gated: []reconciliation.Verb{reconciliation.Apply},
+			steps: []string{"bootwright install"}, gated: []reconciliation.Verb{reconciliation.Apply},
 		},
 		{
 			name: "a failed receipt and no operation",
@@ -380,7 +380,7 @@ func TestStatusOffersSetupWhereSetupGatesTheVerb(t *testing.T) {
 				failedReceipt(h)
 				return h
 			},
-			steps: []string{"bootwright controller install"}, gated: []reconciliation.Verb{reconciliation.Apply},
+			steps: []string{"bootwright install"}, gated: []reconciliation.Verb{reconciliation.Apply},
 		},
 		{
 			name: "a failed receipt over an unknown apply",
@@ -390,7 +390,7 @@ func TestStatusOffersSetupWhereSetupGatesTheVerb(t *testing.T) {
 				failedReceipt(h)
 				return h
 			},
-			steps: []string{"bootwright controller install"}, gated: []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy},
+			steps: []string{"bootwright install"}, gated: []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy},
 		},
 		{
 			name: "a failed receipt over a lagging apply",
@@ -399,7 +399,7 @@ func TestStatusOffersSetupWhereSetupGatesTheVerb(t *testing.T) {
 				failedReceipt(h)
 				return h
 			},
-			steps: []string{"bootwright apply --context lab", "bootwright controller install"}, gated: []reconciliation.Verb{reconciliation.Destroy},
+			steps: []string{"bootwright apply --context lab", "bootwright install"}, gated: []reconciliation.Verb{reconciliation.Destroy},
 		},
 		{
 			name: "a failed receipt over a failed destroy",
@@ -409,7 +409,7 @@ func TestStatusOffersSetupWhereSetupGatesTheVerb(t *testing.T) {
 				failedReceipt(h)
 				return h
 			},
-			steps: []string{"bootwright controller install"}, gated: []reconciliation.Verb{reconciliation.Destroy},
+			steps: []string{"bootwright install"}, gated: []reconciliation.Verb{reconciliation.Destroy},
 		},
 	} {
 		t.Run(row.name, func(t *testing.T) {
@@ -450,7 +450,7 @@ func requireSetupRefuses(t *testing.T, h *harness, verb reconciliation.Verb) {
 	}
 	reported := diagnostics.Of(err)
 	if len(reported) != 1 || (reported[0].Code != "engine.controller-unprepared" && reported[0].Code != "engine.runtime-unprepared") ||
-		!strings.Contains(reported[0].Remediation, "bootwright controller install") {
+		!strings.Contains(reported[0].Remediation, "bootwright install") {
 		t.Fatalf("the %s status replaces with setup = %+v (%v), want a refusal naming setup", verb, reported, err)
 	}
 	if len(h.capability.applies) != applies || len(h.capability.destroys) != destroys || len(h.capability.observes) != observes {

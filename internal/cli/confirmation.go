@@ -105,15 +105,15 @@ func (c *Confirmation) ConfirmIn(ctx context.Context, action, object, contextNam
 func confirmationOf(action, name string) confirmation {
 	shown := escapeDisplayLine(name)
 	switch action {
-	case "controller install":
+	case "install":
 		return confirmation{code: "controller.install", label: "install", review: "the plan",
-			prompt: "Confirm controller install on " + shown + "? [y/N] "}
-	case "controller rebind":
+			prompt: "Confirm install on " + shown + "? [y/N] "}
+	case "rebind-host":
 		return confirmation{code: "controller.identity", label: "rebind", review: "both identities, affirm --recorded-host-retired and name this host's --machine-id, --product-uuid and --root-uuid",
 			prompt: "Confirm the recorded host no longer runs this store, and rebind the controller record from " + shown + "? [y/N] "}
-	case "controller uninstall":
+	case "uninstall":
 		return confirmation{code: "controller.uninstall", label: "uninstall", review: "the plan",
-			prompt: "Confirm controller uninstall on " + shown + "? [y/N] "}
+			prompt: "Confirm uninstall on " + shown + "? [y/N] "}
 	case "media replace", "media delete":
 		verb := strings.TrimPrefix(action, "media ")
 		return confirmation{code: "media.store", label: "media", review: "it",

@@ -256,7 +256,7 @@ func TestAManagedImageMirrorOnTheControllerIsFilledLocallyAfterTheStage(t *testi
 		}
 	}
 	services, _ := productionSourcesContext(t, name, name, sources)
-	out, _ := contextRun(t, services, 0, "plan", "apply", "--context", name, "--output", "json")
+	out, _ := contextRun(t, services, 1, "apply", "--dry-run", "--context", name, "--output", "json")
 	at := []int{}
 	for _, id := range []string{stage, registry, fill, "dns-lab-dns"} {
 		at = append(at, strings.Index(out, `"`+id+`"`))
@@ -312,7 +312,7 @@ func TestAManagedImageMirrorOnAnInstalledMachinePlansAfterItsInstallation(t *tes
 		t.Fatalf("the controller's resolver and proxy pull %v", pulled)
 	}
 	services, _ := productionSourcesContext(t, name, name, sources)
-	out, _ := contextRun(t, services, 0, "plan", "apply", "--context", name, "--output", "json")
+	out, _ := contextRun(t, services, 1, "apply", "--dry-run", "--context", name, "--output", "json")
 	if install, at := strings.Index(out, `"os-install-mirror"`), strings.Index(out, `"`+fill+`"`); install < 0 || at < install {
 		t.Fatalf("the plan does not preview the installation before the fill:\n%s", out)
 	}
@@ -477,7 +477,7 @@ func TestAReleaseCopyOnAnInstalledMirrorHostPlansAfterItsInstallation(t *testing
 		}
 	}
 	services, _ := productionSourcesContext(t, name, name, sources)
-	out, _ := contextRun(t, services, 0, "plan", "apply", "--context", name, "--output", "json")
+	out, _ := contextRun(t, services, 1, "apply", "--dry-run", "--context", name, "--output", "json")
 	if install, at := strings.Index(out, `"os-install-mirror"`), strings.Index(out, `"`+release+`"`); install < 0 || at < install {
 		t.Fatalf("the plan does not preview the installation before the release copy:\n%s", out)
 	}

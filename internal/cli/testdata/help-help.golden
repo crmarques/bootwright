@@ -6,7 +6,6 @@
 
   Run the lifecycle
   COMMAND   PURPOSE
-  plan      Preview an apply or a destroy without executing it
   apply     Apply the complete selected lifecycle unit
   destroy   Destroy the complete selected lifecycle unit
 
@@ -16,15 +15,22 @@
   logs      Show a context's operation events and retained adapter output
   diff      Compare desired state with what this context realized
   explain   Explain the stop codes apply and destroy report
-  check     Check input, this controller or an environment's prerequisites
 
   Prepare Bootwright and its inputs
-  COMMAND      PURPOSE
-  controller   Install, rebind or remove this host's controller
-  catalog      Browse installer media, built-in add-ons and the desired-state schema
-  context      Create, select, update and delete contexts
-  secret       Set, generate, check and reveal a context's Secrets
-  render       Render effective desired state and external-tool artifacts
+  COMMAND     PURPOSE
+  install     Install context-independent controller prerequisites
+  uninstall   Remove the Bootwright host installation
+  init        Initialize a configured context and select it
+  update      Replace a context’s definition
+  validate    Validate a complete desired-state input universe
+  context     Create, select, update and delete contexts
+  catalog     Browse installer media, built-in add-ons and the desired-state schema
+  secret      Set, generate, check and reveal a context's Secrets
+  render      Render effective desired state and external-tool artifacts
+
+  Recovery
+  COMMAND       PURPOSE
+  rebind-host   Rebind the controller record to this host's changed identity
 
   Work with machines and clusters
   COMMAND   PURPOSE
@@ -53,6 +59,6 @@
     Use --help --detail full to include SSH overrides.
 
   Examples
-    bootwright check input --input-dir ./input
-    bootwright plan apply --context lab
+    bootwright validate --input-dir ./input
+    bootwright apply --dry-run --context lab
     bootwright status --context lab

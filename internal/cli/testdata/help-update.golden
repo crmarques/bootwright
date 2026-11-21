@@ -1,13 +1,16 @@
-  bootwright / context init
-      Initialize a configured context and select it
+  bootwright / update
+      Update Context configuration with --file, replace Environment input with --input-dir, or
+      supply both.
 
   Usage
-    bootwright context init [flags]
+    bootwright update [flags]
 
   Command flags
+      --check      Check admission without publishing anything
       -f, --file   Read one standalone Context YAML file
-      --input-dir  Import an Environment input directory
+      --input-dir  Replace the Environment input directory
       --name       Select the exact object name (required)
+      --yes        Confirm the command's ordinary confirmation
 
   Common flags
       --ascii       Use ASCII status markers
@@ -19,4 +22,4 @@
       --width       Set presentation width (0: automatic) · default 0
 
   Examples
-    bootwright context init --name lab --input-dir ./input
+    bootwright update --name lab --input-dir ./input

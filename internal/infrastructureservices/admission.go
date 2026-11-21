@@ -196,7 +196,7 @@ func validateCertificateCoverage(kind api.Kind, value api.Value, machine api.Obj
 		}
 		issues = api.AppendIssues(issues, issue(fmt.Sprintf("$.spec.endpoints[%d]", index),
 			"endpoint "+endpoint.Get("name").Text()+" serves HTTPS at "+address+", which the generated certificate of Secret/"+name+" does not name",
-			"add "+address+" to spec.source.generated."+field+" of Secret/"+name+", import the change with bootwright context update --name <context> --input-dir <dir>, "+
+			"add "+address+" to spec.source.generated."+field+" of Secret/"+name+", import the change with bootwright update --name <context> --input-dir <dir>, "+
 				"then run bootwright secret generate --name "+name+" --context <context>"))
 	}
 	return issues

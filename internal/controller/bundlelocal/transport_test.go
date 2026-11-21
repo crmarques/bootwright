@@ -55,7 +55,7 @@ func TestUnreachablePublisherNamesItsHostAndCorrectableCondition(t *testing.T) {
 			// Setup reads its route from the environment that invoked it, so
 			// it names those variables and never a Machine it does not read.
 			setup := diagnostic.Remediation
-			if !strings.HasSuffix(setup, ", then rerun bootwright controller install.") || strings.Contains(setup, "Machine") ||
+			if !strings.HasSuffix(setup, ", then rerun bootwright install.") || strings.Contains(setup, "Machine") ||
 				test.routable != strings.Contains(setup, ", or set HTTPS_PROXY to a proxy that reaches it and keep it out of NO_PROXY,") {
 				t.Fatalf("setup's remedy names a route or command setup does not take: %q", setup)
 			}

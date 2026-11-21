@@ -36,7 +36,7 @@ fail before the fix; a defect probe that never failed proves nothing.
 - One role or playbook: `./scripts/ansible-check --suite lint <path>` or
   `--suite syntax <path to a playbook>`.
 - The command itself: `make build`, then the changed command on an example it
-  affects, such as `bin/bootwright check input --input-dir
+  affects, such as `bin/bootwright validate --input-dir
   examples/ceph-clusters/libvirt-3-nodes-ceph`, which needs no context.
 
 ## Focus
@@ -99,7 +99,7 @@ linked page owns the rule.
   the [ux-and-apis](../../ux-and-apis/SKILL.md) skill, and the example goldens
   `TestEveryExampleEffectiveStateMatchesItsGolden` and
   `TestEveryExampleObjectIsClaimedOncePerFamily`.
-- Example: `bin/bootwright check input --input-dir <example>` and the example tests
+- Example: `bin/bootwright validate --input-dir <example>` and the example tests
   above.
 - Knowledge page: the closing paragraphs of the
   [knowledge index](../../../knowledge/index.md).

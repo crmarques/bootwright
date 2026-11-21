@@ -74,7 +74,7 @@
         ]
       }
     ],
-    "next": "bootwright plan apply --context lab"
+    "next": "bootwright apply --dry-run --context lab"
   },
   "diagnostics": [],
   "logs": []

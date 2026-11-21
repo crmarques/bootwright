@@ -177,7 +177,7 @@ func TestTheComposedSecretSetReadsFromTheTerminalBehindStandardInput(t *testing.
 	})
 	deps.SecretTerminal = terminal
 	services := assembleServices(deps)
-	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
 	contextRun(t, services, 0, "secret", "encryption", "init")
 
 	_, stderr := contextRun(t, services, 2, "secret", "set", "--name", "opaque", "--value-stdin")

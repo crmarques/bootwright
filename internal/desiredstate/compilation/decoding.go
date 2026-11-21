@@ -127,7 +127,7 @@ func stringScalar(node *desiredstate.Node) string {
 func unregisteredKind(kind api.Kind) (string, string) {
 	switch kind {
 	case "Context":
-		return "a Context is a standalone context configuration document, not desired state", "keep it outside the input directory and pass it to context init or context update with -f"
+		return "a Context is a standalone context configuration document, not desired state", "keep it outside the input directory and pass it to init or update with -f"
 	}
 	if schemaIdentifier.MatchString(string(kind)) {
 		if nearest, ok := nearestName(string(kind), kindNames()); ok {

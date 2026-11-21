@@ -119,7 +119,7 @@ ignored.
 
 ## Lifetime and naming
 
-On a host that holds no context, `controller uninstall` removes the log root
+On a host that holds no context, `uninstall` removes the log root
 whole, under [the uninstall flow](../controller.md#the-uninstall-flow); no
 other command removes the root itself.
 
@@ -128,7 +128,7 @@ the last filesystem step before it drops the registry entry, and a repeated
 deletion finds it gone. A directory holding a mount, an entry of another owner
 or anything else this store never creates refuses `context.state` naming that
 entry, and links are removed as links
-(`TestDeletionRemovesTheContextLogDirectory`). `context init` removes a
+(`TestDeletionRemovesTheContextLogDirectory`). `init` removes a
 directory an earlier context of the same name left there, under the exclusive
 root lock, before the context is ready
 (`TestInitRemovesALeftoverLogDirectory`). A structured result names a log

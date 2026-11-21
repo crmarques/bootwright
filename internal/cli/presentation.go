@@ -127,10 +127,11 @@ func stateStyleCode(value string) string {
 	if word, _, found := strings.Cut(state, " "); found {
 		state = word
 	}
+	const updating = "update"
 	switch state {
 	case "ok", "done", "ready", "passed", "success", "complete", "completed", "verified", "available", "on", "current", "unchanged", "reused", "trusted", "applied", "changed", "copied", "stored":
 		code = "38;5;35"
-	case "running", "active", "working", "create", "update", "observe", "preview", "planned", "add":
+	case "running", "active", "working", "create", updating, "observe", "preview", "planned", "add":
 		code = "38;5;69"
 	case "warn", "warning", "pending", "queued", "waiting", "deferred", "unknown", "unproved", "unsupported", "data-loss", "unchecked", "off", "paused", "skipped", "not-applied", "stale", "orphaned", "not-applicable", "initializing", "deleting", "replace", "remove":
 		code = "38;5;172"

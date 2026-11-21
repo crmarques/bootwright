@@ -23,7 +23,7 @@ func renderAdmission(update bool) commandRenderer {
 				return nil, nil, false
 			}
 			a := result.admission
-			return contextAdmissionPresentation{Context: contextSummary(a.Context), Counts: displayCounts(a.Counts), FilesCopied: a.FilesCopied, InputChanged: a.InputChanged}, a.Diagnostics, true
+			return contextAdmissionPresentation{Context: contextSummary(a.Context), Counts: displayCounts(a.Counts), FilesCopied: a.FilesCopied, InputChanged: a.InputChanged, Checked: a.Checked}, a.Diagnostics, true
 		}),
 		human: func(r *Runner, c renderCall) (bool, error) {
 			if !validAdmission(c.result.admission) {

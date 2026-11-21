@@ -8,8 +8,8 @@ The tables define the complete public command tree, operands, flags and defaults
 Every command accepts and parses the presentation flags below. `--context`
 and the `--ssh-*` flags are accepted only by the commands whose use case reads
 them; any other command refuses them as flags it does not accept. The
-context-free commands, which refuse `--context`, are `controller` and `catalog` (all subcommands), `check controller`, `context` (all subcommands), `help`, `completion`, `version` and `sbom`; only `apply`, `destroy`,
-`machine rsh`, `machine exec`, `machine cp`, `cluster rsh`, `cluster exec` and `check environment` accept
+context-free commands, which refuse `--context`, are `install`, `uninstall`, `rebind-host`, `init`, `update`, `catalog` and `context` (all subcommands), `help`, `completion`, `version` and `sbom`; only `apply`, `destroy`,
+`machine rsh`, `machine exec`, `machine cp`, `cluster rsh`, `cluster exec` accept
 `--ssh-*`. `machine rsh`, `machine exec`, `cluster rsh` and `cluster exec`
 accept `--ssh-id-file`, `--ssh-user` and `--ssh-ask-password`. `machine cp`
 accepts `--ssh-id-file` and `--ssh-user`. Help and completion list each
@@ -93,8 +93,8 @@ by a related noun, and `--short` is the one flag that prints names only.
 
 | Invocation | Local flags and defaults | Successful result | Effects |
 | --- | --- | --- | --- |
-| `bootwright context init` | required `--name <name>`; optional `-f, --file <context.yaml>` and `--input-dir <dir>` | initialized context and user selection; optional imported-input summary | local context and keyring creation |
-| `bootwright context update` | required `--name <name>`; at least one of `-f, --file <context.yaml>` or `--input-dir <dir>`; `--yes` false | unchanged configuration or imported-input summary | local atomic input replacement; never lifecycle reconciliation |
+| `bootwright init` | `--check` false; required `--name <name>`; optional `-f, --file <context.yaml>` and `--input-dir <dir>` | initialized context and user selection; optional imported-input summary | local context and keyring creation; with `--check`, bounded admission reads |
+| `bootwright update` | `--check` false; required `--name <name>`; at least one of `-f, --file <context.yaml>` or `--input-dir <dir>`; `--yes` false | unchanged configuration or imported-input summary | local atomic input replacement; with `--check`, bounded admission reads |
 | `bootwright context use` | required `--name <name>` | selected-current-context summary | local current-context update |
 | `bootwright policy install` | required `-f, --file <file>` | updated context | atomically replace the context authorization policy |
 | `bootwright policy permissions` | none | the caller's granted commands and targets | read the selected context and resolve subjects through NSS |
@@ -126,19 +126,16 @@ The three `catalog media` commands follow the host-wide
 
 | Invocation | Local flags and defaults | Successful result | Effects |
 | --- | --- | --- | --- |
-| `bootwright check input` | repeatable `--input-dir <file-or-dir>` | validation summary with admission counts, exclusions and advisories | read the supplied input, or the selected context's input when `--input-dir` is omitted; no write |
-| `bootwright check environment` | `--stage <list>` default every stage but `add-ons`; `--clusters <list>` default all; `--dry-run` false; `--observe-host-keys=<bool>` default `true` | [one report](output.md#preflight) of the checks of each selected stage: `controller` the controller host and this context's controller-stage prerequisites, `infrastructure-services` the firewall admission of the controller's managed service sockets, `substrates` the capacity of the hosts that hold its Machines, `machines` none, `clusters` the selected OpenShiftClusters and CephClusters | observe unless `--dry-run`, which is local-only |
-| `bootwright plan apply` | `--stage <list>` default all stages; `--until <cluster>.<package>` | preview the apply decision, including fresh or additive apply, continuation, finalization or a settled result, with the selection, execution order and impact of the planned steps | bounded local observation for applicable host checks; no lifecycle mutation |
-| `bootwright plan destroy` | repeatable `--authorize erase=<machine>:<method>[,erase=<machine>:<method>...]` | preview the removal decision, including continuation, finalization or a settled result, with the steps, stop prerequisites and required authorizations; erase relaxations are marked and bound to the displayed data-loss digest | read local state; no lifecycle mutation |
+| `bootwright validate` | repeatable `--input-dir <file-or-dir>` | validation summary with admission counts, exclusions and advisories | read the supplied input, or the selected context's input when `--input-dir` is omitted; no write |
 | `bootwright status` | `--paths` false | recorded controller and lifecycle state, current block output, missing prerequisites and next steps; `--paths` includes the context roots and their presence | read local state; keyring metadata and media records use shared locks; with `--paths`, inspect each root entry's existence without reading it |
-| `bootwright logs` | `--operation <op-id>` default the current operation; `--block <block-id>`; `--raw` false; `--attempt <N>`; `--follow` false; `--run <run-NNNNNN>`; `--install` the newest controller install, or `--install=<install-NNNNNN>` | an operation's events as lines, one block's newest retained adapter output with `--raw`, a bounded run's or setup's output, or, with `--follow`, those lines streamed until the operation, run or setup ends, as [reading and following logs](output.md#reading-and-following-logs) states | read local state under short shared root locks and the log root through no-follow handles, `--install` under no root lock; never a lease, never a write |
+| `bootwright logs` | `--operation <op-id>` default the current operation; `--block <block-id>`; `--raw` false; `--attempt <N>`; `--follow` false; `--run <run-NNNNNN>`; `--install` the newest install, or `--install=<install-NNNNNN>` | an operation's events as lines, one block's newest retained adapter output with `--raw`, a bounded run's or setup's output, or, with `--follow`, those lines streamed until the operation, run or setup ends, as [reading and following logs](output.md#reading-and-following-logs) states | read local state under short shared root locks and the log root through no-follow handles, `--install` under no root lock; never a lease, never a write |
 | `bootwright diff` | `--observe`, `--exit-code` false; `--output-dir <dir>` or `--tool <program>` | desired files beside what the apply lineage realized, from records or, with `--observe`, read live, as a [comparison](../cli.md#desired-and-realized-state-comparison) | read local state; `--output-dir`, `--tool` write files outside the store; `--observe` reads each block the lineage realized, read-only, on the host it froze, after the [cache-only rebuild](../controller.md#the-controller-runtime) of a missing runtime |
 | `bootwright render effective` | `--origins` false; `--input-dir <file-or-dir>`; `--output-dir <dir>`; `--sensitive` false | normalized effective desired state and object counts; with `--origins`, the [origin of each effective field](../cli.md#effective-field-origins) instead of the YAML; with `--output-dir`, the [effective-state file](../cli.md#validation-preflight-and-rendering) written there and its path | none without `--output-dir`; with it, local artifact writes only |
 | `bootwright render acquisitions` | `--input-dir <file or directory>` | every artifact the selected desired state acquires, its origin, class, digest and Machines ([acquisition list](../cli.md#acquisition-list)) | none |
 | `bootwright render installer` | `--clusters <list>` default all OpenShiftClusters; `--sensitive` false | installer artifact manifest | local placeholder files and optional sensitive files |
 | `bootwright render storage` | `--clusters <list>` default all CephClusters | storage artifact manifest | local native files or scripts only; never execution |
-| `bootwright apply` | repeatable `--authorize <token>[=<digest>][,<token>...]`; `--stage <list>` default all stages; `--until <cluster>.<package>`; `--parallelism <n>` default 8; `--yes` false | completed full apply or additive apply of instances, a pause at the selected stage boundary or after the named add-on instance, exact continued state, or a settled result when the declared state is realized | complete planned mutation, including automatic disk-inventory preparation before separately authorized installation, or none when it settles, beyond completing an operation's interrupted finalization |
-| `bootwright destroy` | repeatable `--authorize <token>[=<digest>][,<token>...]`, which also takes `erase=<machine>:<method>` to relax one Machine's declared removal erase for this destroy; repeatable `--unregistered <machine>[,<machine>...]`; `--parallelism <n>` default 8; `--yes` false | completed full destroy, exact continued state, or a settled result when the context owns nothing | complete planned removal, or none when it settles, beyond the same interrupted finalization or releasing what an interrupted registration left, and the [housekeeping](../state-reconciliation.md#context-mutation-evidence) of the operation claims that hold nothing; over an apply that did not complete, it first proves the outcome of every effect it takes back |
+| `bootwright apply` | `--dry-run` false; repeatable `--authorize <token>[=<digest>][,<token>...]`; `--stage <list>` default all stages; `--until <cluster>.<package>`; `--parallelism <n>` default 8; `--yes` false | completed full apply or additive apply of instances, a pause at the selected stage boundary or after the named add-on instance, exact continued state, or a settled result when the declared state is realized; with `--dry-run`, the plan and prerequisite checks | complete planned mutation, including automatic disk-inventory preparation before separately authorized installation, or none when it settles, beyond completing an operation's interrupted finalization; with `--dry-run`, bounded read-only observation |
+| `bootwright destroy` | `--dry-run` false; repeatable `--authorize <token>[=<digest>][,<token>...]`, which also takes `erase=<machine>:<method>` to relax one Machine's declared removal erase for this destroy; repeatable `--unregistered <machine>[,<machine>...]`; `--parallelism <n>` default 8; `--yes` false | completed full destroy, exact continued state, or a settled result when the context owns nothing; with `--dry-run`, the removal plan and prerequisite checks | complete planned removal, or none when it settles, beyond the same interrupted finalization or releasing what an interrupted registration left, and the [housekeeping](../state-reconciliation.md#context-mutation-evidence) of the operation claims that hold nothing; over an apply that did not complete, it first proves the outcome of every effect it takes back; with `--dry-run`, bounded read-only observation |
 
 Not yet met: `render installer` and `render storage` run no use case
 and answer `cli.not-implemented`; their contracts are intent, tracked as
@@ -147,8 +144,7 @@ and answer `cli.not-implemented`; their contracts are intent, tracked as
 Every other command here is available.
 `TestUnavailableCommandsMatchTheStubWiring` holds this list.
 
-Not yet met: `check environment --stage add-ons` runs no add-on prerequisite check and answers
-`cli.not-implemented`; tracked as [B770](../milestones/backlog.md#b770).
+Not yet met: `apply --dry-run` defers add-on prerequisite checks to execution; tracked as [B770](../milestones/backlog.md#b770).
 
 ### Resource, access, and general commands
 
@@ -162,7 +158,7 @@ Not yet met: `check environment --stage add-ons` runs no add-on prerequisite che
 | `bootwright machine exec` | required `--name <list>` and `<command>...` | the exact argument vector runs on the Machine, or on every listed Machine concurrently, at most the lifecycle bound at a time, with [each line prefixed by its Machine](../cli.md#machine-ssh-sessions); the remote command's exit status is the result, the highest of them for several | same |
 | `bootwright machine cp` | required `--name <list>` and two operands `local:<path> remote:<path>` or the reverse; `--overwrite` false | per-Machine copy outcomes and confirmed file/byte counts; structured output supported | run one pinned SSH client and a fixed file worker; explicit local or remote payload writes under the receiving account; no lifecycle state |
 | `bootwright machine trust` | `--name <list>` default all; `--replace <list>` default none, each member `<machine>` or `<machine>=SHA256:<fingerprint>`; `--expect <machine>=SHA256:<fingerprint>[,...]` default none; `--dry-run` false; `--yes` false | exact host-key trust plan, and the recorded result unless dry-run | bounded SSH host-key observation of the selected Machines; context trust-store write unless dry-run |
-| `bootwright machine discover` | required `--name <list>`; `--dry-run`, `--prepare-prerequisites`, `--yes` false | BMC or authenticated RAM disk inventory in durable operation records; the next installation plan freezes exactly one eligible disk | planned mutation: a BMC drive-inventory read, or a temporary boot and private media, authenticated inventory, power-off and cleanup; with `--prepare-prerequisites`, planned controller and infrastructure setup; `--dry-run` reads only local state |
+| `bootwright machine discover` | required `--name <list>`; `--dry-run`, `--yes` false; optional `--stage controller` | BMC or authenticated RAM disk inventory in durable operation records; the next installation plan freezes exactly one eligible disk | planned mutation: a BMC drive-inventory read, or a temporary boot and private media, authenticated inventory, power-off and cleanup; with `--stage controller`, planned controller and infrastructure setup; `--dry-run` reads only local state |
 | `bootwright machine start` | required `--name <list>` | the power state each Machine's management controller proved once the operation settled | bounded power operation through that management controller, one concurrent [batch](../cli.md#machine-power-operations) for several Machines |
 | `bootwright machine stop` | required `--name <list>`; `--force` false; `--yes` false | same, after the operating system is asked to shut down | same |
 | `bootwright machine restart` | required `--name <list>`; `--force` false; `--yes` false | same, after a proved stop and a proved start | same |
@@ -172,10 +168,9 @@ Not yet met: `check environment --stage add-ons` runs no add-on prerequisite che
 
 | Invocation | Local flags and defaults | Successful result | Effects |
 | --- | --- | --- | --- |
-| `bootwright controller install` | `--dry-run` false; `--yes` false | [context-independent controller prerequisite plan or completed setup](../controller.md#the-setup-flow); with `--dry-run --output json`, the plan and every locked wheel | host packages through the host's own dnf after its verbatim preview, over the [context-free route](../controller.md#the-context-free-acquisition-route), and the controller runtime from the locked wheels the executable carries, with no download; a ready host makes no request and no change; dry-run only lists requirement names |
-| `bootwright check controller` | none | [baseline controller readiness](../controller.md#the-setup-flow), including the acquisition route it resolved, and `context init` as the next step of a ready host | bounded local observation; no state publication |
-| `bootwright controller rebind` | `--yes` false; `--recorded-host-retired` false, required with `--yes`; `--machine-id <id>`, `--product-uuid <uuid>` and `--root-uuid <uuid>` default none, all three this host's and required with `--yes`, and a remedy repeating the command names them by placeholder | the outcome and the counts of the bindings and reservations it kept | [host identity rewrite](../contexts.md#controller-relationship-and-host-binding) of the controller record, once, under the exclusive root lock, after a confirmation naming the recorded and the new identity and affirming that the recorded host no longer runs this store; refuses a store whose directories are not the ones its registry attributed and an unchanged identity, and cannot tell a byte-for-byte clone from the store |
-| `bootwright controller uninstall` | `--keep-packages` false; `--discard-unreadable` false; `--yes` false | what it removed and kept or `Nothing to do.` | host packages, then the store, staging, log and hosted roots and an empty libvirt image prefix, whole, by the [uninstall flow](../controller.md#the-uninstall-flow); a discard removes no package |
+| `bootwright install` | `--dry-run` false; `--yes` false | [context-independent controller prerequisite plan or completed setup](../controller.md#the-setup-flow); with `--dry-run --output json`, the plan and every locked wheel | host packages through the host's own dnf after its verbatim preview, over the [context-free route](../controller.md#the-context-free-acquisition-route), and the controller runtime from the locked wheels the executable carries, with no download; a ready host makes no request and no change; with `--dry-run`, bounded read-only host and private setup inspection without dnf |
+| `bootwright rebind-host` | `--yes` false; `--recorded-host-retired` false, required with `--yes`; `--machine-id <id>`, `--product-uuid <uuid>` and `--root-uuid <uuid>` default none, all three this host's and required with `--yes`, and a remedy repeating the command names them by placeholder | the outcome and the counts of the bindings and reservations it kept | [host identity rewrite](../contexts.md#controller-relationship-and-host-binding) of the controller record, once, under the exclusive root lock, after a confirmation naming the recorded and the new identity and affirming that the recorded host no longer runs this store; refuses a store whose directories are not the ones its registry attributed and an unchanged identity, and cannot tell a byte-for-byte clone from the store |
+| `bootwright uninstall` | `--dry-run` false; `--keep-packages` false; `--discard-unreadable` false; `--yes` false | what it removed and kept or `Nothing to do.`; with `--dry-run`, the planned removals and retained items | host packages, then the store, staging, log and hosted roots and an empty libvirt image prefix, whole, by the [uninstall flow](../controller.md#the-uninstall-flow); a discard removes no package; with `--dry-run`, bounded read-only ownership and package checks |
 | `bootwright cluster list` | none | container and storage cluster names and kinds in canonical order | read local state |
 | `bootwright cluster info` | `--name <list>` default all unless `--secrets` or `--object-user`, which require exactly one cluster; `--secrets` false; `--object-user <name>` none | cluster kinds, endpoints, access-command applicability and availability, artifact availability, for a managed Ceph cluster its release, FSID, frozen image, monitors, administrator command and dashboard access, and optional explicit sensitive values | read local state and optional confidential material |
 | `bootwright cluster update-admin-creds` | required `--name <cluster>`; `--login <list>` default all; `--yes` false | update each selected login with a retained candidate and repeatable recovery | credential update on one managed cluster: its monitoring logins, custody and a bound Grafana Secret's binding |
@@ -234,19 +229,9 @@ values of each enum flag, and the refusal of an enum value lists them. A command
 that is recognized but unavailable says so in its own help, and an unavailable
 cluster command offers no execution example. The root listing marks a command
 group unavailable only when neither it nor any command under it is available, so
-`render` is unmarked while `render effective` works. The root listing groups commands into Run the lifecycle (`plan`, `apply`,
-`destroy`), Inspect and troubleshoot (`status`, `logs`, `diff`, `explain`,
-`check`), Prepare Bootwright and its inputs (`controller`, `catalog`,
-`context`, `secret`, `render`), Work with machines and clusters (`machine`,
-`cluster`) and CLI tools (`version`, `sbom`, `completion`, `help`). A command group's help offers only
-the inherited flags its commands accept: a group whose every command is
-context-free lists no `--context`, and one none of whose commands reads an SSH
-override names none (`TestGroupHelpOffersOnlyTheFlagsItsCommandsAccept`). A usage refusal for a flag
-that belongs to another command names only a descendant's flag. Goldens hold the
-root help and the help of every command (`TestHelpGolden`,
-`TestHelpMarksUnavailableCommands`,
-`TestAGroupWithAnAvailableSubcommandIsNotListedUnavailable`,
-`TestScalarEnumRefusalListsAllowedValues`).
+`render` is unmarked while `render effective` works. The root listing groups commands by the operator's next task. Installation,
+context admission, lifecycle execution, inspection and host recovery each
+have an entry in root help.
 
 ### Access help
 
@@ -301,7 +286,7 @@ stamp (`TestVersionReportsTheStampedVulnerabilityCheck`).
 
 The composition root supplies every value. It obtains the Go runtime, GOOS, and
 GOARCH from the linked Go runtime, the dependency bundle as the digest of the
-automation the executable embeds, the one `controller install` publishes and every
+automation the executable embeds, the one `install` publishes and every
 operation records, and combines them with the link-supplied version, commit and
 source-state values (`TestCompositionSuppliesRuntimeBuildInformation`). For a version,
 commit, or source state the build left empty, it uses the module version,
@@ -408,15 +393,15 @@ flag acknowledges, and when deletion refuses, follow
 abandons objects warns once on standard error with `context.orphaned`.
 
 `--stage` accepts only `controller`, `infrastructure-services`, `substrates`,
-`machines`, `clusters`, and `add-ons`, and only on `plan apply` and `apply`. Its
+`machines`, `clusters`, and `add-ons`, and only on `apply`. Its
 members follow the [comma-list rules](../cli.md#parsing-and-input-conventions);
 a supplied value that resolves to no member and an unrecognized member are both
 usage errors. Omission selects every stage. What a selection gates is owned by
 [state reconciliation](../state-reconciliation.md#stages-and-the-pause-boundary).
 
-`--until` is accepted only on `plan apply` and `apply`. Its value names one add-on
+`--until` is accepted only on `apply`. Its value names one add-on
 instance as `<cluster>.<package>`, two lowercase DNS labels, the `object` that
-`plan apply --output json` reports for the instance; any other form is a usage
+`apply --dry-run --output json` reports for the instance; any other form is a usage
 error. It composes with `--stage`: a block starts only when both admit it.
 What it gates, and its refusals, are owned by
 [state reconciliation](../state-reconciliation.md#stopping-after-an-add-on-instance).
@@ -434,7 +419,7 @@ sixteen independent steps. Higher values can increase controller and target load
 `--authorize` accepts only `data-loss`, `data-loss=<digest>` with the 16
 lowercase hexadecimal digits a plan prints for the steps it authorizes,
 `rebind=<secret>` and `erase=<machine>:<method>`; the first three only on
-`apply` and `destroy`, `erase=` only on `destroy` and `plan destroy`; `--yes`, or input
+`apply` and `destroy`, `erase=` only on `destroy` and `destroy --dry-run`; `--yes`, or input
 that cannot answer a prompt, requires the `data-loss=<digest>` form.
 `erase=<machine>:<method>` relaxes the declared
 [removal erase](../state-reconciliation.md#opt-in-physical-logical-overwrite) of
@@ -444,7 +429,7 @@ Machine's name, a lowercase DNS label, and `<method>` is `metadataClear` or
 contain commas. A `logicalOverwrite` method, an unknown method, a name that is
 not a Machine name, an empty `erase=`, a missing `:` side and a Machine named
 twice are usage errors, and `logicalOverwrite` is refused because a relaxation
-never strengthens or restates the declared method. `plan destroy` refuses any other
+never strengthens or restates the declared method. `destroy --dry-run` refuses any other
 token. Whether a Machine can be relaxed, and what the relaxation changes, is
 owned by [state reconciliation](../state-reconciliation.md#confirmation-and-authorization).
 `rebind=<secret>` names one Secret by its API name and
@@ -505,14 +490,9 @@ and requires `--output-dir`. A non-empty `--context` or
 `render effective --output-dir` requires `--sensitive`, `--sensitive` requires
 `--output-dir`, and `--origins` conflicts with `--output-dir`.
 
-`check environment --stage` takes the stage names of `apply --stage`, follows the same
-list rules and selects the checks the [preflight report](output.md#preflight)
-assigns each stage. A supplied `--clusters` requires the `clusters` stage when
-`--stage` is supplied; otherwise it is a usage error. A selection that includes
-`add-ons` answers `cli.not-implemented` as an
-[unavailable command](../cli.md#recognized-but-unavailable-commands) does,
-naming `check environment --stage add-ons`, before any context, privilege or
-observation.
+A lifecycle preview checks the work selected by the same verb.
+`destroy --dry-run` takes erase relaxations for plan review. The execution
+uses the data-loss and credential rebind authorizations.
 
 `machine list --short=true` emits only sorted names as text and conflicts
 with resolved JSON or YAML output and with `--power-status`, because a reading it

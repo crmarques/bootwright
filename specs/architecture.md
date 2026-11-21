@@ -563,8 +563,8 @@ accesses the user file with that account's credentials, including a bounded
 credential-dropped subprocess when the caller is root. The composition root
 also binds `workspace/invokerfs` to the same lazily verified account for
 operator-named paths: the input directory and every file and directory beneath
-it, a Context file, a secret file and a media source. `check input --input-dir`,
-`context init` and `context update` therefore read one input directory under
+it, a Context file, a secret file and a media source. `validate --input-dir`,
+`init` and `update` therefore read one input directory under
 the same credentials. A process already running as
 that account, direct root included, opens in-process. A root process serving
 another account starts one bounded helper per acquisition: the running binary,

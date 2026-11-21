@@ -52,7 +52,7 @@ func TestAGeneratedBMCCertificateNamesItsBindAddress(t *testing.T) {
 			address := o.Spec().Get("libvirt", "bmcEmulation", "bindAddress").Text()
 			want := api.Issue{Code: "api.invariant", Field: field,
 				Message: "the emulated BMC serves HTTPS at " + address + ", which the generated certificate of Secret/bmc-tls does not name",
-				Remediation: "add " + address + " to spec.source.generated.ipAddresses of Secret/bmc-tls, import the change with bootwright context update --name <context> --input-dir <dir>, " +
+				Remediation: "add " + address + " to spec.source.generated.ipAddresses of Secret/bmc-tls, import the change with bootwright update --name <context> --input-dir <dir>, " +
 					"then run bootwright secret generate --name bmc-tls --context <context>"}
 			if len(issues) != 1 || issues[0] != want {
 				t.Fatalf("issues = %+v, want %+v", issues, want)

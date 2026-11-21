@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	addoncatalog "github.com/crmarques/bootwright/internal/addons/catalog"
@@ -13,7 +14,6 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	environmentaccess "github.com/crmarques/bootwright/internal/environment/access"
 	"github.com/crmarques/bootwright/internal/environment/inspection"
-	environmentpreflight "github.com/crmarques/bootwright/internal/environment/preflight"
 	"github.com/crmarques/bootwright/internal/machine"
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 	"github.com/crmarques/bootwright/internal/machine/inventory"
@@ -36,8 +36,8 @@ func TestDispatchEveryApplicationCommand(t *testing.T) {
 		path string
 		want any
 	}{
-		{"context init", contexts.InitRequest{Name: "demo", ConfigurationFile: "inputs", InputDirectory: "inputs"}},
-		{"context update", contexts.UpdateRequest{Name: "demo", ConfigurationFile: "inputs", InputDirectory: "inputs", SkipConfirmation: true}},
+		{"init", contexts.InitRequest{Check: true, Name: "demo", ConfigurationFile: "inputs", InputDirectory: "inputs"}},
+		{"update", contexts.UpdateRequest{Check: true, Name: "demo", ConfigurationFile: "inputs", InputDirectory: "inputs", SkipConfirmation: true}},
 		{"context use", contexts.UseRequest{Name: "demo"}},
 		{"context list", contexts.ListRequest{}},
 		{"context current", contexts.CurrentRequest{}},
@@ -56,17 +56,15 @@ func TestDispatchEveryApplicationCommand(t *testing.T) {
 		{"catalog media add", media.AddMediaRequest{Name: "demo", SourceFile: "", SourceURL: "https://example.invalid/image.iso", SHA256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", SkipConfirmation: true}},
 		{"catalog media list", media.ListMediaRequest{Checksums: true}},
 		{"catalog media delete", media.DeleteMediaRequest{Name: "demo", SkipConfirmation: true}},
-		{"check input", compilation.ValidateRequest{ContextName: "", Files: []string{"inputs"}}},
-		{"check controller", prerequisites.CheckRequest{}},
-		{"controller install", prerequisites.SetupRequest{DryRun: true, SkipConfirmation: true}},
-		{"check environment", environmentpreflight.PreflightRequest{ContextName: "example", Stages: []string{"infrastructure-services", "substrates"}, Clusters: []string{"first", "second"}, DryRun: true, ObserveHostKeys: true, SSH: ssh}},
+		{"validate", compilation.ValidateRequest{ContextName: "", Files: []string{"inputs"}}},
+		{"install", prerequisites.SetupRequest{DryRun: true, Verify: true, SkipConfirmation: true}},
 		{"cluster update-admin-creds", lifecycle.UpdateAdminCredentialsRequest{ContextName: "example", Name: "demo", Logins: []string{"prometheus", "grafana"}, SkipConfirmation: true}},
 		{"cluster list", inspection.ListClustersRequest{ContextName: "example"}},
 		{"cluster info", inspection.ClusterInfoRequest{ContextName: "example", Names: []string{"demo"}, Secrets: true}},
 		{"cluster rsh", environmentaccess.ClusterRshRequest{ContextName: "example", Name: "demo", Node: "node-a", SSH: account}},
 		{"cluster exec", environmentaccess.ClusterExecRequest{ContextName: "example", Names: []string{"demo"}, Nodes: []string{"node-a"}, SSH: account, Command: []string{"get", "--help", ""}}},
-		{"plan apply", lifecycle.PlanRequest{Verb: "apply", ContextName: "example", Stages: []string{"infrastructure-services", "substrates"}, Until: "compact.gitops"}},
-		{"plan destroy", lifecycle.PlanRequest{Verb: "destroy", ContextName: "example", Relaxations: map[string]string{"srv-01": "retain", "srv-02": "metadataClear"}}},
+		{"apply --dry-run", lifecycle.PlanRequest{Readiness: true, Parallelism: 16, Verb: "apply", ContextName: "example", Stages: []string{"infrastructure-services", "substrates"}, Until: "compact.gitops"}},
+		{"destroy --dry-run", lifecycle.PlanRequest{Readiness: true, Parallelism: 16, Verb: "destroy", ContextName: "example", Relaxations: map[string]string{"srv-01": "retain", "srv-02": "metadataClear"}}},
 		{"status", lifecycle.StatusRequest{ContextName: "example"}},
 		{"diff", lifecycle.DiffRequest{ContextName: "example", Observe: true}},
 		{"apply", lifecycle.ApplyRequest{ContextName: "example", Parallelism: 16, Stages: []string{"infrastructure-services", "substrates"}, Until: "compact.gitops", Authorizations: []string{"data-loss"}, SkipConfirmation: true, Unattended: true, SSH: ssh}},
@@ -89,10 +87,16 @@ func TestDispatchEveryApplicationCommand(t *testing.T) {
 			record := &dispatchRecord{err: failure}
 			ctx := context.WithValue(context.Background(), dispatchContextKey{}, tt.path)
 			flags := dispatchFlags()
-			if tt.path == "check input" {
+			path, preview := strings.CutSuffix(tt.path, " --dry-run")
+			if (path == "apply" || path == "destroy") && !preview {
+				if err := flags.Set("dry-run", "false"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if tt.path == "validate" {
 				flags = validationDispatchFlags(t)
 			}
-			_, err := dispatchSpies(record).invoke(ctx, tt.path, flags, []string{"get", "--help", ""})
+			_, err := dispatchSpies(record).invoke(ctx, path, flags, []string{"get", "--help", ""})
 			if !errors.Is(err, failure) {
 				t.Fatalf("dispatch error = %v, want application error", err)
 			}
@@ -127,13 +131,13 @@ func TestRenderEffectiveWritesAFileOnlyWithAnOutputDirectory(t *testing.T) {
 
 func validationDispatchFlags(t *testing.T) *pflag.FlagSet {
 	t.Helper()
-	return parsedCommand(t, []string{"check", "input", "--context", "example", "--input-dir", "inputs"}).Flags()
+	return parsedCommand(t, []string{"validate", "--context", "example", "--input-dir", "inputs"}).Flags()
 }
 
 func TestDispatchPreservesTypedValidationResult(t *testing.T) {
 	want := &compilation.Report{Counts: compilation.Counts{FilesSeen: 2, ObjectsDecoded: 3}}
 	record := &dispatchRecord{report: want}
-	got, err := dispatchSpies(record).invoke(context.Background(), "check input", validationDispatchFlags(t), nil)
+	got, err := dispatchSpies(record).invoke(context.Background(), "validate", validationDispatchFlags(t), nil)
 	if err != nil || got.validation != want || record.calls != 1 {
 		t.Fatalf("typed result = %#v, %v; calls = %d", got, err, record.calls)
 	}
@@ -145,9 +149,6 @@ func TestEnvironmentCapabilitiesAreIndependent(t *testing.T) {
 		commands []string
 		wire     func(*dispatchRecord) Services
 	}{
-		{"preflight", []string{"check environment"}, func(record *dispatchRecord) Services {
-			return Services{EnvironmentPreflight: environmentSpy{record}}
-		}},
 		{"inspection", []string{"cluster list", "cluster info", "cluster keyring"}, func(record *dispatchRecord) Services {
 			return Services{EnvironmentInspection: environmentSpy{record}}
 		}},
@@ -179,8 +180,8 @@ func TestDispatchFailsClosed(t *testing.T) {
 		path     string
 		flags    *pflag.FlagSet
 	}{
-		{"missing service", Services{}, "plan apply", dispatchFlags()},
-		{"missing flags", dispatchSpies(&dispatchRecord{}), "plan apply", nil},
+		{"missing service", Services{}, "apply", dispatchFlags()},
+		{"missing flags", dispatchSpies(&dispatchRecord{}), "apply", nil},
 		{"unknown command", dispatchSpies(&dispatchRecord{}), "removed", dispatchFlags()},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -190,13 +191,13 @@ func TestDispatchFailsClosed(t *testing.T) {
 		})
 	}
 	record := &dispatchRecord{}
-	_, err := dispatchSpies(record).invoke(context.Background(), "plan apply", pflag.NewFlagSet("incomplete", pflag.ContinueOnError), nil)
+	_, err := dispatchSpies(record).invoke(context.Background(), "apply", pflag.NewFlagSet("incomplete", pflag.ContinueOnError), nil)
 	if err == nil || record.calls != 0 {
 		t.Fatalf("missing required flag: error=%v, calls=%d", err, record.calls)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err = dispatchSpies(record).invoke(ctx, "plan apply", dispatchFlags(), nil)
+	_, err = dispatchSpies(record).invoke(ctx, "apply", dispatchFlags(), nil)
 	if !errors.Is(err, context.Canceled) || record.calls != 0 {
 		t.Fatalf("canceled invocation: error=%v, calls=%d", err, record.calls)
 	}
@@ -220,7 +221,7 @@ func TestDispatchOwnsMutableRequests(t *testing.T) {
 		t.Fatal("caller aliases service request")
 	}
 	validationFlags := validationDispatchFlags(t)
-	if _, err := services.invoke(context.Background(), "check input", validationFlags, nil); err != nil {
+	if _, err := services.invoke(context.Background(), "validate", validationFlags, nil); err != nil {
 		t.Fatal(err)
 	}
 	files := record.request.(compilation.ValidateRequest).Files
@@ -228,6 +229,9 @@ func TestDispatchOwnsMutableRequests(t *testing.T) {
 	original, err := validationFlags.GetStringArray("input-dir")
 	if err != nil || original[0] != "inputs" {
 		t.Fatalf("file request aliases flags: %v, %v", original, err)
+	}
+	if err := flags.Set("dry-run", "false"); err != nil {
+		t.Fatal(err)
 	}
 	if _, err := services.invoke(context.Background(), "apply", flags, nil); err != nil {
 		t.Fatal(err)

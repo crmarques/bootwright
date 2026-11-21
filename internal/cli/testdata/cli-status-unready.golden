@@ -29,7 +29,7 @@
     bootwright secret generate --context lab --name ssh-key
     bootwright secret set --context lab --name token --value-file <path>
     bootwright catalog media add --name rhel-9.iso --from-file <path>
-    bootwright plan apply --context lab
+    bootwright apply --dry-run --context lab
     bootwright apply --context lab
 
   Handoff

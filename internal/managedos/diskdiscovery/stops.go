@@ -21,7 +21,7 @@ var (
 		Meaning: "the Machine already has installation ownership, so booting it for discovery would disturb that installation", Remedy: "retain the existing installation or remove it through its recorded lifecycle first"}
 	discoveryPrerequisitesMissing = diagnostics.Stop{Code: "discovery.prerequisites-missing", Level: diagnostics.LevelContext, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryOtherVerb,
-		Meaning: "the controller and infrastructure setup a discovery boot needs is not applied", Remedy: "repeat bootwright machine discover with --prepare-prerequisites to review and confirm controller and infrastructure setup"}
+		Meaning: "the controller and infrastructure setup a discovery boot needs is not applied", Remedy: "repeat bootwright machine discover with --stage controller to review and confirm controller and infrastructure setup"}
 	discoveryRefinementRefused = diagnostics.Stop{Code: "discovery.refinement-refused", Level: diagnostics.LevelContext, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
 		Meaning: "a change after preparation reaches beyond the disk-selection fields that may follow it", Remedy: "keep prepared ownership unchanged and update only the disk-selection fields"}
@@ -36,7 +36,7 @@ var (
 		Meaning: "more than one owned disk inventory competes for one Machine", Remedy: "retain one inventory and resolve the ownership of the others"}
 	discoveryInventoryMissing = diagnostics.Stop{Code: "discovery.inventory-missing", Level: diagnostics.LevelContext, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryOtherVerb,
-		Meaning: "the Machine has no completed disk discovery for its current policy and media", Remedy: "run bootwright machine discover with --prepare-prerequisites"}
+		Meaning: "the Machine has no completed disk discovery for its current policy and media", Remedy: "run bootwright machine discover with --stage controller"}
 	discoveryRootUnprovable = diagnostics.Stop{Code: "discovery.root-unprovable", Level: diagnostics.LevelContext, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
 		Meaning: "the recorded inventory does not select exactly one root disk under the Machine's discovery policy", Remedy: "refine spec.hardware.rootDisk.discover.match and update the context before planning again"}

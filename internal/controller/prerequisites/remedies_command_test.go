@@ -14,7 +14,7 @@ func TestAnUnscopedFailureNamesItsCommandOrSetup(t *testing.T) {
 		failure *ScopedFailure
 		want    string
 	}{
-		{&ScopedFailure{Message: "m", Correction: "Restore it"}, "Restore it, then rerun bootwright controller install."},
+		{&ScopedFailure{Message: "m", Correction: "Restore it"}, "Restore it, then rerun bootwright install."},
 		{&ScopedFailure{Message: "m", Correction: "Restore it", Command: "repeat this command"}, "Restore it, then repeat this command."},
 	} {
 		reported := diagnostics.Of(test.failure)

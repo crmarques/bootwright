@@ -46,7 +46,7 @@ GO_IMAGE ?=
 CONTAINER_SETTINGS = HTTP_PROXY HTTPS_PROXY NO_PROXY http_proxy https_proxy no_proxy GOPROXY GOSUMDB GOPRIVATE GONOSUMDB GONOPROXY
 comma := ,
 
-# The executable carries the runtime lock's wheels, so controller install
+# The executable carries the runtime lock's wheels, so install
 # downloads none. The tool places them where the build embeds them, checking
 # each against the lock, and keeps them in the shared cache directory, so a
 # warm cache builds offline. Every target that compiles the module depends on

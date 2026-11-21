@@ -242,7 +242,7 @@ and requires the `call_home_agent` module not enabled: bootstrap passes
 `disabled` is the native default. On that build `enabled` refuses
 `call-home-unqualified`. The refusal comes before the cluster is claimed but after the ceph-host blocks ran from the
 frozen input, so a corrected `callHome` is an input change: `bootwright
-destroy` takes back what the apply owns, then `context update` and a fresh
+destroy` takes back what the apply owns, then `update` and a fresh
 apply carry it (D162).
 
 `image.base` names the repository and `image.version` supplies the
@@ -272,7 +272,7 @@ the Ceph image ([frozen release and trust](../ceph.md#frozen-release-and-trust))
 
 `cephadm.clusterSSH.transport` accepts `native` or `verifiedTunnel`
 (D135). Omission selects `verifiedTunnel`, the only transport a build
-realizes; `native` is reserved and `check input` refuses it, and an empty, null or
+realizes; `native` is reserved and `validate` refuses it, and an empty, null or
 unknown value refuses. The frozen core request records the effective transport
 for the cluster and its children. A verified tunnel never qualifies the direct
 native channel, and this field grants no exception to host-key verification.

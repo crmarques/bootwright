@@ -95,7 +95,7 @@ func validate(selection Selection) error {
 	case stream && (selection.Operation != "" || selection.Block != "" || selection.Raw || selection.Attempt != 0):
 		return usage("--run and --install select one whole output and take no --operation, --block, --raw or --attempt")
 	case selection.Install != "" && selection.Context != "":
-		return usage("--install reads the host's controller install output and takes no --context")
+		return usage("--install reads the host's install output and takes no --context")
 	case selection.Raw && selection.Block == "":
 		return usage("--raw needs the --block whose output it reads")
 	case selection.Attempt != 0 && !selection.Raw:
@@ -109,7 +109,7 @@ func validate(selection Selection) error {
 	case selection.Run != "" && !validNumbered(selection.Run, "run-"):
 		return usage("--run names a bounded run as run-NNNNNN")
 	case selection.Install != "" && selection.Install != NewestInstall && !validNumbered(selection.Install, "install-") && !validInstallID(selection.Install):
-		return usage("--install names a controller install as newest or install-NNNNNN")
+		return usage("--install names a install as newest or install-NNNNNN")
 	}
 	return nil
 }

@@ -39,8 +39,8 @@ func decideCandidate(h *harness, verb reconciliation.Verb) candidateVerdict {
 			verdict.exits = append(verdict.exits, deletion+" --allow-orphans")
 		case strings.Contains(reported.Remediation, deletion):
 			verdict.exits = append(verdict.exits, deletion)
-		case strings.Contains(reported.Remediation, "bootwright controller install"):
-			verdict.exits = append(verdict.exits, "bootwright controller install")
+		case strings.Contains(reported.Remediation, "bootwright install"):
+			verdict.exits = append(verdict.exits, "bootwright install")
 		}
 	}
 	return verdict
@@ -174,7 +174,7 @@ func TestStatusStepsAreExactlyWhatTheVerbsDecisionsDerive(t *testing.T) {
 				if verdict.decided {
 					derived = append(derived, "bootwright "+string(verb)+" --context "+testContextName)
 					if idle {
-						derived = append(derived, "bootwright plan apply --context "+testContextName)
+						derived = append(derived, "bootwright apply --dry-run --context "+testContextName)
 					}
 				}
 				derived = append(derived, verdict.exits...)

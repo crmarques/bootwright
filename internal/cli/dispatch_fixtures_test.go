@@ -65,11 +65,11 @@ func (r *dispatchRecord) called(ctx context.Context, path string, request any) e
 type contextsSpy struct{ record *dispatchRecord }
 
 func (s contextsSpy) Init(ctx context.Context, request contexts.InitRequest) (*contexts.AdmissionResult, error) {
-	return s.record.result.admission, s.record.called(ctx, "context init", request)
+	return s.record.result.admission, s.record.called(ctx, "init", request)
 }
 
 func (s contextsSpy) Update(ctx context.Context, request contexts.UpdateRequest) (*contexts.AdmissionResult, error) {
-	return s.record.result.admission, s.record.called(ctx, "context update", request)
+	return s.record.result.admission, s.record.called(ctx, "update", request)
 }
 
 func (s contextsSpy) Use(ctx context.Context, request contexts.UseRequest) (*contexts.UseResult, error) {
@@ -168,7 +168,7 @@ func (s mediaSpy) Delete(ctx context.Context, request media.DeleteMediaRequest) 
 type desiredStateSpy struct{ record *dispatchRecord }
 
 func (s desiredStateSpy) Validate(ctx context.Context, request compilation.ValidateRequest) (*compilation.Report, error) {
-	return s.record.report, s.record.called(ctx, "check input", request)
+	return s.record.report, s.record.called(ctx, "validate", request)
 }
 
 func (s desiredStateSpy) RenderEffective(ctx context.Context, request compilation.EffectiveRequest) (*compilation.EffectiveResult, error) {
@@ -178,25 +178,25 @@ func (s desiredStateSpy) RenderEffective(ctx context.Context, request compilatio
 type controllerSpy struct{ record *dispatchRecord }
 
 func (s controllerSpy) Check(ctx context.Context, request prerequisites.CheckRequest) (*prerequisites.Report, error) {
-	return s.record.result.controller, s.record.called(ctx, "check controller", request)
+	return s.record.result.controller, s.record.called(ctx, "install --dry-run", request)
 }
 
 func (s controllerSpy) Setup(ctx context.Context, request prerequisites.SetupRequest) (*prerequisites.Report, error) {
-	return s.record.result.controller, s.record.called(ctx, "controller install", request)
+	return s.record.result.controller, s.record.called(ctx, "install", request)
 }
 
 func (s controllerSpy) Rebind(ctx context.Context, request prerequisites.RebindRequest) (*prerequisites.RebindResult, error) {
-	return s.record.result.rebind, s.record.called(ctx, "controller rebind", request)
+	return s.record.result.rebind, s.record.called(ctx, "rebind-host", request)
 }
 
 func (s controllerSpy) Uninstall(ctx context.Context, request prerequisites.UninstallRequest) (*prerequisites.UninstallResult, error) {
-	return s.record.result.uninstall, s.record.called(ctx, "controller uninstall", request)
+	return s.record.result.uninstall, s.record.called(ctx, "uninstall", request)
 }
 
 type environmentSpy struct{ record *dispatchRecord }
 
 func (s environmentSpy) Preflight(ctx context.Context, request environmentpreflight.PreflightRequest) (*environmentpreflight.Report, error) {
-	return s.record.result.storagePreflight, s.record.called(ctx, "check environment", request)
+	return nil, s.record.called(ctx, "apply --dry-run", request)
 }
 
 func (s environmentSpy) ListClusters(ctx context.Context, request inspection.ListClustersRequest) (*inspection.ListResult, error) {
@@ -222,7 +222,7 @@ func (s environmentSpy) ClusterExec(ctx context.Context, request environmentacce
 type lifecycleSpy struct{ record *dispatchRecord }
 
 func (s lifecycleSpy) Plan(ctx context.Context, request lifecycle.PlanRequest) (*lifecycle.PlanResult, error) {
-	return s.record.result.lifecyclePlan, s.record.called(ctx, "plan "+string(request.Verb), request)
+	return s.record.result.lifecyclePlan, s.record.called(ctx, string(request.Verb)+" --dry-run", request)
 }
 
 func (s lifecycleSpy) Status(ctx context.Context, request lifecycle.StatusRequest) (*lifecycle.StatusResult, error) {
@@ -386,7 +386,7 @@ func dispatchFlags() *pflag.FlagSet {
 		flags.String(name, value, "")
 	}
 	for _, name := range []string{
-		"yes", "purge", "allow-orphans", "short", "renew", "checksums", "dry-run",
+		"yes", "purge", "allow-orphans", "short", "renew", "checksums", "dry-run", "check",
 		"observe-host-keys", "sensitive", "secrets", "power-status",
 		"ssh-ask-sudo-password", "ssh-user-for-provisioned", "observe", "origins", "overwrite",
 	} {

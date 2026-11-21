@@ -14,8 +14,8 @@ func TestFlagRelationshipsAndFormats(t *testing.T) {
 		args  string
 		valid bool
 	}{
-		{"context init --name demo -f input", true}, {"context init --name demo -f input -f other", false}, {"context init --name Demo -f input", false}, {"context delete --name demo --purge=false", false}, {"context delete --name demo --purge --yes=false", true},
-		{"check input --input-dir=one,two --input-dir=three", true}, {"apply --authorize=data-loss", true}, {"destroy --authorize=all", false}, {"apply --authorize=data-loss,data-loss", false}, {"apply --authorize=data-loss --authorize=data-loss", false}, {"apply --authorize=data-loss,", false},
+		{"init --name demo -f input", true}, {"init --name demo -f input -f other", false}, {"init --name Demo -f input", false}, {"context delete --name demo --purge=false", false}, {"context delete --name demo --purge --yes=false", true},
+		{"validate --input-dir=one,two --input-dir=three", true}, {"apply --authorize=data-loss", true}, {"destroy --authorize=all", false}, {"apply --authorize=data-loss,data-loss", false}, {"apply --authorize=data-loss --authorize=data-loss", false}, {"apply --authorize=data-loss,", false},
 		{"add-ons add", false}, {"add-ons delete", false},
 		{"secret set --name demo", true}, {"secret set --name demo --value-file source", true}, {"secret set --name demo --value-file source --yes=false", true}, {"secret set --name demo --value-file source --password-stdin=false", true}, {"secret set --name demo --value-stdin", true}, {"secret set --name demo --value-file source --value-stdin", false}, {"secret set --name demo --password-file password --username account", true}, {"secret set --name demo --password-stdin --username account", true}, {"secret set --name demo --password-file password --password-stdin --username account", false}, {"secret set --name demo --value-stdin --password-stdin", false}, {"secret set --name demo --password-file password", true}, {"secret set --name demo --username account", true}, {"secret set --name demo --certificate-file cert", true}, {"secret set --name demo --certificate-file cert --private-key-file key", true}, {"secret set --name demo --private-key-file key", true}, {"secret set --name demo --private-key-file key --public-key-file key.pub", true}, {"secret set --name demo --public-key-file key.pub", true}, {"secret set --name demo --value-file source --certificate-file cert", true}, {"secret set --name demo --certificate-file cert --private-key-file key --public-key-file key.pub", true},
 		{"secret show --name demo --part value", true}, {"secret show --name demo --part username", true}, {"secret show --name demo --part password", true}, {"secret show --name demo --part certificate", true}, {"secret show --name demo --part private-key", true}, {"secret show --name demo --part public-key", true}, {"secret show --name demo --part primary", false},
@@ -28,10 +28,10 @@ func TestFlagRelationshipsAndFormats(t *testing.T) {
 		{"machine restart --name demo --output json", false}, {"machine restart --name demo --output json --yes", true},
 		{"machine trust --output json", false}, {"machine trust --output json --dry-run", true}, {"machine trust --output json --yes", true}, {"machine trust --name one,two --replace two", true}, {"machine trust --name one --replace two", false},
 		{"cluster info --secrets", false}, {"cluster info --name demo --secrets", true}, {"cluster info --secrets=false", true},
-		{"check environment --stage clusters --clusters=", true}, {"check environment --stage clusters --clusters=,", false}, {"check environment --clusters one", true}, {"check environment --stage controller --clusters one", false}, {"check environment --stage controller,clusters --clusters one", true}, {"check environment --stage=", false}, {"check environment --stage unknown", false}, {"check environment --stage add-ons", true}, {"render storage --clusters=,", false}, {"machine list --clusters=,", true}, {"machine trust --name=, --replace=,", true}, {"machine trust --name=", true},
+		{"apply --dry-run --stage clusters --clusters=", false}, {"apply --dry-run --stage clusters --clusters=,", false}, {"apply --dry-run --clusters one", false}, {"apply --dry-run --stage controller --clusters one", false}, {"apply --dry-run --stage controller,clusters", true}, {"apply --dry-run --stage=", false}, {"apply --dry-run --stage unknown", false}, {"apply --dry-run --stage add-ons", true}, {"render storage --clusters=,", false}, {"machine list --clusters=,", true}, {"machine trust --name=, --replace=,", true}, {"machine trust --name=", true},
 		{"machine list --power-status", true}, {"machine list --power-status --output json", true}, {"machine list --power-status --short", false}, {"machine list --power-status --short=false", true},
 		{"version --context=", false}, {"version --context=bad.name", false}, {"apply --ssh-user=account", true}, {"apply --ssh-user=Account", false}, {"apply --ssh-user-for-provisioned", false}, {"apply --ssh-user=account --ssh-user-for-provisioned", true}, {"apply --ssh-ask-sudo-password --output=json", false}, {"apply --ssh-ask-sudo-password=false --output=json", true},
-		{"status --output yaml", true}, {"version -oyaml", true}, {"version -o=json", true}, {"controller install --output yaml --yes", true},
+		{"status --output yaml", true}, {"version -oyaml", true}, {"version -o=json", true}, {"install --output yaml --yes", true},
 		{"version --width 0", true}, {"version --width 24", true}, {"version --width 500", true}, {"version --width 23", false}, {"version --width 501", false}, {"version --width invalid", false},
 		{"version --detail full --color always --progress never --ascii", true}, {"version --detail invalid", false}, {"version --color invalid", false}, {"version --progress invalid", false},
 		{"machine list --short --output yaml", false}, {"machine stop --name demo --output yaml", false}, {"machine stop --name demo --output yaml --yes", true}, {"machine trust --output yaml --dry-run", true},
@@ -72,9 +72,9 @@ func parsedCommand(t *testing.T, args []string) *cobra.Command {
 }
 
 func TestResolvedValuesAndDefaults(t *testing.T) {
-	command := parsedCommand(t, []string{"check", "environment", "--stage", "clusters", "--clusters", " one, two,one, ", "--ssh-user", " account "})
-	if stringValue(command.Flags(), "clusters") != "one,two" || stringValue(command.Flags(), "ssh-user") != "account" || !boolValue(command.Flags(), "observe-host-keys") || stringValue(command.Flags(), "output") != "text" {
-		t.Fatal("preflight normalized values or defaults")
+	command := parsedCommand(t, []string{"apply", "--dry-run", "--stage", " clusters,controller,clusters ", "--ssh-user", " account "})
+	if stringValue(command.Flags(), "stage") != "clusters,controller" || stringValue(command.Flags(), "ssh-user") != "account" || !boolValue(command.Flags(), "dry-run") || stringValue(command.Flags(), "output") != "text" {
+		t.Fatal("apply preview normalized values or defaults")
 	}
 	command = parsedCommand(t, []string{"machine", "list", "--clusters", "one", "--clusters", ",,"})
 	if stringValue(command.Flags(), "clusters") != "," {
@@ -88,7 +88,7 @@ func TestResolvedValuesAndDefaults(t *testing.T) {
 	if stringValue(command.Flags(), "sha256") != strings.Repeat("ab", 32) {
 		t.Fatal("digest normalization")
 	}
-	command = parsedCommand(t, []string{"check", "input", "--input-dir=one,two", "--input-dir", "three"})
+	command = parsedCommand(t, []string{"validate", "--input-dir=one,two", "--input-dir", "three"})
 	if got := arrayValue(command.Flags(), "input-dir"); len(got) != 2 || got[0] != "one,two" || got[1] != "three" {
 		t.Fatalf("file arguments %q", got)
 	}
@@ -193,7 +193,7 @@ func TestStageSelectionIsAClosedCommaList(t *testing.T) {
 	if got := stringValue(command.Flags(), "stage"); got != "clusters,infrastructure-services" {
 		t.Fatalf("normalized stages = %q", got)
 	}
-	command = parsedCommand(t, []string{"plan", "apply", "--stage", "machines"})
+	command = parsedCommand(t, []string{"apply", "--dry-run", "--stage", "machines"})
 	if got := stringValue(command.Flags(), "stage"); got != "machines" {
 		t.Fatalf("plan stages = %q", got)
 	}
@@ -201,7 +201,7 @@ func TestStageSelectionIsAClosedCommaList(t *testing.T) {
 		{"apply", "--stage", "storage"},
 		{"apply", "--stage", ",,"},
 		{"apply", "--stage="},
-		{"plan", "apply", "--stage", "Machines"},
+		{"apply", "--dry-run", "--stage", "Machines"},
 		{"destroy", "--stage", "machines"},
 	} {
 		code, _, _, record := runRecorded(args)
@@ -228,8 +228,8 @@ func TestUntilNamesOneAddOnInstance(t *testing.T) {
 	for _, args := range [][]string{
 		{"apply", "--until", "gitops"},
 		{"apply", "--until="},
-		{"plan", "apply", "--until", "Compact.gitops"},
-		{"plan", "apply", "--until", "compact.gitops.extra"},
+		{"apply", "--dry-run", "--until", "Compact.gitops"},
+		{"apply", "--dry-run", "--until", "compact.gitops.extra"},
 		{"destroy", "--until", "compact.gitops"},
 	} {
 		code, _, _, record := runRecorded(args)

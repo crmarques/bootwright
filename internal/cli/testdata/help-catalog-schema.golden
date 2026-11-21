@@ -1,7 +1,7 @@
   bootwright / catalog schema
       Export the advisory schema of every desired-state kind. The export states types, required
-      fields, closed field sets, enum values and numeric bounds; bootwright check input stays
-      the authority on lexical grammars, references and cross-field rules.
+      fields, closed field sets, enum values and numeric bounds; bootwright validate stays the
+      authority on lexical grammars, references and cross-field rules.
 
   Usage
     bootwright catalog schema [flags]

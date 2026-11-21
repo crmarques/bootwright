@@ -210,7 +210,7 @@ func (s Service) closureRefusal(ctx context.Context, view View, operation operat
 	current := located.closure
 	if current != *operation.Closure {
 		frozen := *operation.Closure
-		remediation := "run the controller install of " + registeredWith(operation.Executable) + ", which restores its runtime (Python " + frozen.Python + ", ansible-core " + frozen.Ansible +
+		remediation := "run the install of " + registeredWith(operation.Executable) + ", which restores its runtime (Python " + frozen.Python + ", ansible-core " + frozen.Ansible +
 			") from the wheels it carries, then continue it with that build"
 		if supersedable(operation) {
 			remediation += ", or take back what it owns with " + contextCommand(view.Identity().Name, string(reconciliation.Destroy))
@@ -227,7 +227,7 @@ func (s Service) closureRefusal(ctx context.Context, view View, operation operat
 // and admitUnbound admits that context instead, once the host is proved.
 func verifyHostBinding(view prerequisites.StorageView, identity ContextIdentity, host evidence.InstalledHostIdentity, unbound string, admitUnbound bool) error {
 	if !view.Exists || !view.Prepared {
-		return engineControllerUnprepared.Fail("this host has no completed controller setup", "run bootwright controller install")
+		return engineControllerUnprepared.Fail("this host has no completed controller setup", "run bootwright install")
 	}
 	if !view.Initialized {
 		if admitUnbound {

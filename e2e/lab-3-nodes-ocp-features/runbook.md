@@ -143,8 +143,8 @@ INPUT_DIR="$HOME/bootwright-e2e/lab-3-nodes-ocp-features"
 umask 077
 RUN_DIR=$(mktemp -d)
 printf 'Run records: %s\n' "$RUN_DIR"
-./bin/bootwright check input --input-dir "$INPUT_DIR"
-./bin/bootwright context init --name "$CONTEXT" --input-dir "$INPUT_DIR"
+./bin/bootwright validate --input-dir "$INPUT_DIR"
+./bin/bootwright init --name "$CONTEXT" --input-dir "$INPUT_DIR"
 ./bin/bootwright secret set --context "$CONTEXT" --name openshift-pull-secret --value-file "${PULL_SECRET_FILE:?Set PULL_SECRET_FILE to the private pull-secret JSON file}" --yes
 if [ "$MIRROR_ENABLED" = "true" ]; then
     ./bin/bootwright secret set --context "$CONTEXT" --name mirror-ca --certificate-file "${MIRROR_CA_FILE:?Set MIRROR_CA_FILE to the mirror CA PEM file}" --yes
@@ -152,7 +152,7 @@ if [ "$MIRROR_ENABLED" = "true" ]; then
 fi
 ./bin/bootwright secret generate --context "$CONTEXT"
 ./bin/bootwright secret check --context "$CONTEXT"
-./bin/bootwright plan apply --context "$CONTEXT"
+./bin/bootwright apply --dry-run --context "$CONTEXT"
 ```
 
 ## 3. Prepare the controller and services
@@ -165,7 +165,7 @@ Complete [Prepare listener firewall](../README.md#prepare-listener-firewall)
 in this shell, then require controller preflight to report `ready`:
 
 ```sh
-./bin/bootwright check environment --context "$CONTEXT" --stage controller
+./bin/bootwright apply --dry-run --context "$CONTEXT" --stage controller
 ./bin/bootwright apply --context "$CONTEXT" --stage infrastructure-services --yes
 ```
 
@@ -197,7 +197,7 @@ initial check must succeed so an existing file is never overwritten:
     printf '[Resolve]\nDNS=%s\nDomains=~e2e.example.test\n' "$CONTROLLER_ADDRESS" | sudo tee /etc/systemd/resolved.conf.d/bootwright-e2e.conf
     sudo systemctl restart systemd-resolved
 )
-./bin/bootwright check environment --context "$CONTEXT" --stage clusters
+./bin/bootwright apply --dry-run --context "$CONTEXT" --stage clusters
 ```
 
 Every `resolution.*` and `capacity.*` check must be `passed`; with IPv6 the
@@ -225,7 +225,7 @@ connection evidence must be captured before installation finishes.
 Start the installation in the original terminal:
 
 ```sh
-./bin/bootwright plan apply --context "$CONTEXT"
+./bin/bootwright apply --dry-run --context "$CONTEXT"
 ./bin/bootwright apply --context "$CONTEXT" --yes
 ```
 

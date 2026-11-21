@@ -93,7 +93,7 @@ an agent-install plan; each is inert or refuses at plan, as its row states:
 | `spec.install.endpoints.*.interfaceNetworks` | Refused at plan when authored non-empty; no installer input consumes it. |
 
 Each authored field of this table except `channel` and the four endpoint
-fields refused above makes `check input`, `plan` and `apply` report an
+fields refused above makes `validate`, `plan` and `apply` report an
 `api.deferred` warning at its path, so an operator learns that it changes
 nothing. An authored endpoint `port`, `scheme`, `prefixLength` or
 `interfaceNetworks` that the installer does not use refuses at `plan`, naming
@@ -1149,7 +1149,7 @@ key remain differences.
 
 ## Preflight
 
-The clusters stage of [`bootwright check environment`](cli/output.md#preflight) reports, for each selected
+The clusters stage of [`bootwright apply --dry-run`](cli/output.md#preflight) reports, for each selected
 OpenShiftCluster, the checks an apply of its installation would otherwise meet
 only after its image is built, with no effect on any host. Every check carries
 `id`, `target`, `status`, `reason` and `next`, as storage preflight's do; its

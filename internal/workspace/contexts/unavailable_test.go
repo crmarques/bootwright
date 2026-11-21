@@ -14,8 +14,8 @@ func TestUnavailableService(t *testing.T) {
 		name   string
 		invoke func(context.Context) error
 	}{
-		{"context init", func(ctx context.Context) error { _, err := (Service{}).Init(ctx, InitRequest{}); return err }},
-		{"context update", func(ctx context.Context) error { _, err := (Service{}).Update(ctx, UpdateRequest{}); return err }},
+		{"init", func(ctx context.Context) error { _, err := (Service{}).Init(ctx, InitRequest{}); return err }},
+		{"update", func(ctx context.Context) error { _, err := (Service{}).Update(ctx, UpdateRequest{}); return err }},
 		{"context use", func(ctx context.Context) error { _, err := (Service{}).Use(ctx, UseRequest{}); return err }},
 		{"context list", func(ctx context.Context) error { _, err := (Service{}).List(ctx, ListRequest{}); return err }},
 		{"context current", func(ctx context.Context) error { _, err := (Service{}).Current(ctx, CurrentRequest{}); return err }},

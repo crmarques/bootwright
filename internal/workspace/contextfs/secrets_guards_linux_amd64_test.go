@@ -513,7 +513,7 @@ func TestAContextInitRetryResumesOverATornKeyringStage(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := checkpointInitialize(ctx, store); err != nil {
-		t.Fatal("context init did not resume over the torn keyring stage:", err)
+		t.Fatal("init did not resume over the torn keyring stage:", err)
 	}
 	if err := checkpointSelected(ctx, store, "version: original\n", 1); err != nil {
 		t.Fatal(err)

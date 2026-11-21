@@ -67,7 +67,7 @@ func TestInterruptDuringRealConfirmationPreservesSelection(t *testing.T) {
 	}
 	repository := testRepository(root)
 	services := testServices(t, repository, root)
-	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
 	addSecretInput(t, input, "environment.yaml", strings.ReplaceAll(syntheticEnvironment, "example.test", "changed.test"))
 	before, err := repository.View(context.Background())
 	if err != nil {
@@ -136,7 +136,7 @@ func TestInterruptDuringRealConfirmationPreservesSelection(t *testing.T) {
 	if err != nil || selectedAfter != selectedBefore {
 		t.Fatal("interrupted confirmation changed user selection", err)
 	}
-	contextRun(t, services, 0, "context", "update", "--name", "alpha", "--input-dir", input, "--yes")
+	contextRun(t, services, 0, "update", "--name", "alpha", "--input-dir", input, "--yes")
 }
 
 func TestInteractiveInterruptHelper(t *testing.T) {
@@ -151,7 +151,7 @@ func TestInteractiveInterruptHelper(t *testing.T) {
 	deps.Confirmer, deps.SecretInput = confirmer, secretInputFunc(readStdin)
 	deps.Streams.Out, deps.Streams.Err = os.Stdout, os.Stderr
 	services := assembleServices(deps)
-	os.Exit(runServices(context.Background(), []string{"context", "update", "--name", "alpha", "--input-dir", os.Getenv("BOOTWRIGHT_INTERRUPT_INPUT")}, os.Stdout, os.Stderr, services, invocationHooks{begin: beginSignalOperation}))
+	os.Exit(runServices(context.Background(), []string{"update", "--name", "alpha", "--input-dir", os.Getenv("BOOTWRIGHT_INTERRUPT_INPUT")}, os.Stdout, os.Stderr, services, invocationHooks{begin: beginSignalOperation}))
 }
 
 func TestTerminalFlagsAreRestoredAfterReadyAndEmptyReads(t *testing.T) {

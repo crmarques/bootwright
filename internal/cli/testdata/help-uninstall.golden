@@ -1,8 +1,8 @@
-  bootwright / controller uninstall
-      Remove, on a host that holds no context and no installer media, the host packages
-      controller install recorded as its own, through the host's own dnf, then every root
-      Bootwright keeps on this host, whole: the store /var/lib/bootwright, the staging
-      directory /var/lib/bootwright-staging, the log root /var/log/bootwright, the hosted root
+  bootwright / uninstall
+      Remove, on a host that holds no context and no installer media, the host packages install
+      recorded as its own, through the host's own dnf, then every root Bootwright keeps on this
+      host, whole: the store /var/lib/bootwright, the staging directory
+      /var/lib/bootwright-staging, the log root /var/log/bootwright, the hosted root
       /var/lib/bootwright-hosted with any physical-erase receipts, and the libvirt image prefix
       /var/lib/libvirt/images/bootwright when it is empty. It never removes a package present
       before Bootwright, a package a controller stage installed, this executable, or what a
@@ -15,17 +15,19 @@
       --discard-unreadable is the exit for a store this build cannot read, such as one an
       earlier build wrote, and for guest disks no removal took back: after the same proof that
       no owned object remains, it removes every root and the libvirt image prefix whole, and
-      never a package. The plan shows dnf's own removal preview and what stays before
-      confirmation. A host with nothing to remove prints Nothing to do. Review the plan before
-      confirming; --yes skips ordinary confirmation.
+      never a package. --dry-run checks ownership and package dependencies and lists what would
+      be removed and kept. Execution shows dnf's own removal preview before confirmation. A
+      host with nothing to remove prints Nothing to do. Review the plan before confirming;
+      --yes skips ordinary confirmation.
 
   Usage
-    bootwright controller uninstall [flags]
+    bootwright uninstall [flags]
 
   Command flags
       --discard-unreadable  Discard what this build cannot read or attribute: a store another
                             build wrote, or guest disks no removal took back; never removes
                             packages
+      --dry-run             Limit work to the command's dry-run boundary
       --keep-packages       Leave every host package installed and remove only Bootwright's
                             state
       --yes                 Confirm the command's ordinary confirmation
@@ -40,4 +42,4 @@
       --width       Set presentation width (0: automatic) · default 0
 
   Examples
-    bootwright controller uninstall
+    bootwright uninstall

@@ -16,7 +16,7 @@ func (s Services) invokeMachineDiscovery(ctx context.Context, values *requestVal
 	if s.MachineDiscovery == nil {
 		return commandResult{}, errMissingService
 	}
-	r := diskdiscovery.DiscoverRequest{ContextName: values.text("context"), Names: values.names("name"), PreparePrerequisites: values.boolean("prepare-prerequisites"), SkipConfirmation: values.boolean("yes")}
+	r := diskdiscovery.DiscoverRequest{ContextName: values.text("context"), Names: values.names("name"), PreparePrerequisites: values.text("stage") == "controller", SkipConfirmation: values.boolean("yes")}
 	if values.boolean("dry-run") {
 		result, err := invokeResult(ctx, values, r, s.MachineDiscovery.PlanDiscovery)
 		return commandResult{lifecyclePlan: result}, err

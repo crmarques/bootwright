@@ -17,14 +17,18 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
-func TestComposedBaselineDryRunReadsNoSetupState(t *testing.T) {
+func TestComposedBaselineDryRunReadsSetupWithoutChangingIt(t *testing.T) {
 	t.Parallel()
-	ports, stores := &setupPorts{}, &controllerPorts{}
+	host, err := (testLifecycleHost{}).Identity(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ports, stores := &setupPorts{identity: host}, &controllerPorts{}
 	services := assembleServices(serviceDependencies{Controller: ports.setupDependencies(stores, stores)})
 	var out, errOut bytes.Buffer
-	code := runServices(context.Background(), []string{"controller", "install", "--dry-run"}, &out, &errOut, services)
-	if code != 0 || errOut.Len() != 0 || ports.reads == 0 || ports.effects != 0 || stores.effects != 0 || !strings.Contains(out.String(), "Scope     baseline") ||
-		!strings.Contains(out.String(), "Outcome  planned") || !strings.Contains(out.String(), "  openssh-clients\n") {
+	code := runServices(context.Background(), []string{"install", "--dry-run"}, &out, &errOut, services)
+	if code != 0 || errOut.Len() != 0 || ports.reads == 0 || stores.reads != 1 || ports.effects != 0 || stores.effects != 0 || !strings.Contains(out.String(), "Scope     baseline") ||
+		!strings.Contains(out.String(), "Outcome  planned") || !strings.Contains(out.String(), "Controller runtime") {
 		t.Fatal(code, out.String(), errOut.String(), ports, stores)
 	}
 }
@@ -35,11 +39,15 @@ func TestTheDryRunJSONListsEveryLockedFileOfTheEmbeddedLock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ports, stores := &setupPorts{}, &controllerPorts{}
+	host, err := (testLifecycleHost{}).Identity(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ports, stores := &setupPorts{identity: host}, &controllerPorts{}
 	deps := ports.setupDependencies(stores, stores)
 	deps.Lock = runtimeLock(lock)
 	var out, errOut bytes.Buffer
-	if code := runServices(context.Background(), []string{"controller", "install", "--dry-run", "--output", "json"}, &out, &errOut, assembleServices(serviceDependencies{Controller: deps})); code != 0 || errOut.Len() != 0 {
+	if code := runServices(context.Background(), []string{"install", "--dry-run", "--output", "json"}, &out, &errOut, assembleServices(serviceDependencies{Controller: deps})); code != 0 || errOut.Len() != 0 {
 		t.Fatal(code, out.String(), errOut.String())
 	}
 	var envelope struct {
@@ -76,17 +84,15 @@ func TestTheDryRunJSONListsEveryLockedFileOfTheEmbeddedLock(t *testing.T) {
 	}
 }
 
-// controllerPorts is the store as a dry run must never reach it: every call
-// is an effect.
-type controllerPorts struct{ effects int }
+type controllerPorts struct{ effects, reads int }
 
 func (p *controllerPorts) ReadController(context.Context, string, func(prerequisites.StorageView) error) error {
 	p.effects++
 	return errors.New("unexpected controller read")
 }
 func (p *controllerPorts) ReadSetup(context.Context) (prerequisites.SetupView, error) {
-	p.effects++
-	return prerequisites.SetupView{}, errors.New("unexpected setup read")
+	p.reads++
+	return prerequisites.SetupView{}, nil
 }
 func (p *controllerPorts) MutateSetup(context.Context, func(prerequisites.SetupTransaction) error) error {
 	p.effects++
@@ -130,7 +136,7 @@ func TestComposedControllerSuppliesEveryPort(t *testing.T) {
 func TestUnsuppliedControllerPortsRemainUnavailable(t *testing.T) {
 	t.Parallel()
 	services := assembleServices(serviceDependencies{})
-	for _, args := range [][]string{{"controller", "install"}, {"controller", "install", "--dry-run"}, {"check", "controller"}} {
+	for _, args := range [][]string{{"install"}, {"install", "--dry-run"}, {"install", "--dry-run"}} {
 		var out, errOut bytes.Buffer
 		code := runServices(context.Background(), args, &out, &errOut, services)
 		if code != 1 || out.Len() != 0 || !strings.HasPrefix(errOut.String(), "  error  cli.not-implemented\n    bootwright ") {

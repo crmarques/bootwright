@@ -12,7 +12,7 @@ import (
 const LinuxInstalledIdentityV1 = "linux-installed-v1"
 
 // InstalledHostIdentity contains confidential evidence for private binding and
-// comparison; only the controller rebind prompt shows it, never a result. The
+// comparison; only the rebind-host prompt shows it, never a result. The
 // zero value is invalid; construct values with NewInstalledHostIdentity.
 //
 // This evidence detects changed identifiers. A complete clone retaining every
@@ -116,6 +116,6 @@ func HostMismatchRemedy(name string) string {
 		name = "<name>"
 	}
 	return "run on the host this controller state belongs to, or restore that host's machine-id, DMI product UUID and root filesystem UUID on this one; " +
-		"if this host keeps the same state store under the changed values, rebind its record with bootwright controller rebind; " +
+		"if this host keeps the same state store under the changed values, rebind its record with bootwright rebind-host; " +
 		"otherwise bootwright context delete --name " + name + " --purge --allow-orphans, which abandons every object the context realized"
 }

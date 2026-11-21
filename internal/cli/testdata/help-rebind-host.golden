@@ -1,4 +1,4 @@
-  bootwright / controller rebind
+  bootwright / rebind-host
       Rewrite the host identity the controller record holds to this host's, once, when this
       host keeps the same state store under a changed machine-id, DMI product UUID or root
       filesystem UUID. It refuses a store whose directories are not the ones its registry
@@ -10,7 +10,7 @@
       no output repeats.
 
   Usage
-    bootwright controller rebind [flags]
+    bootwright rebind-host [flags]
 
   Command flags
       --machine-id             Name this host's machine-id; required with --yes
@@ -30,4 +30,4 @@
       --width       Set presentation width (0: automatic) · default 0
 
   Examples
-    bootwright controller rebind
+    bootwright rebind-host

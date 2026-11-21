@@ -47,14 +47,14 @@ func TestUpdateAndDeletePresentWhatTheyChangeBeforeThePrompt(t *testing.T) {
 	deps.Streams.Out, deps.Streams.Err = &out, &errOut
 	deps.Confirmer = confirmer
 	services := assembleServices(deps)
-	if code := runServices(t.Context(), []string{"context", "init", "--name", "alpha", "--input-dir", input}, &out, &errOut, services); code != 0 || confirmer.asked != 0 {
+	if code := runServices(t.Context(), []string{"init", "--name", "alpha", "--input-dir", input}, &out, &errOut, services); code != 0 || confirmer.asked != 0 {
 		t.Fatalf("init = %d, asked %d times\n%s%s", code, confirmer.asked, out.String(), errOut.String())
 	}
 	addSecretInput(t, input, "environment.yaml", strings.ReplaceAll(syntheticEnvironment, "example.test", "changed.test"))
 	out.Reset()
 	errOut.Reset()
 	before := stateFingerprint(t, root)
-	if code := runServices(t.Context(), []string{"context", "update", "--name", "alpha", "--input-dir", input}, &out, &errOut, services); code != 1 || confirmer.asked != 1 {
+	if code := runServices(t.Context(), []string{"update", "--name", "alpha", "--input-dir", input}, &out, &errOut, services); code != 1 || confirmer.asked != 1 {
 		t.Fatalf("the declined update = %d, asked %d times\n%s%s", code, confirmer.asked, out.String(), errOut.String())
 	}
 	for _, line := range []string{"Context update plan\n", "  Name             alpha\n", "  Input directory  " + input + "\n", "  Files to copy    3\n", "  Files seen       3\n", "  Objects decoded  "} {

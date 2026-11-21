@@ -48,7 +48,7 @@ func TestEveryAdapterRefusalClassMaps(t *testing.T) {
 				t.Fatalf("AdapterRefusal(%q, %q) = %+v %v, want %q routable %v", check.reason, check.host, scoped, mapped, check.message, check.routable)
 			}
 			found := diagnostics.Of(err)
-			if len(found) != 1 || !strings.HasSuffix(found[0].Remediation, ", then rerun bootwright controller install.") {
+			if len(found) != 1 || !strings.HasSuffix(found[0].Remediation, ", then rerun bootwright install.") {
 				t.Fatalf("the refusal renders %+v", found)
 			}
 			err, mapped = AdapterRefusal(check.reason, check.host, area, true)

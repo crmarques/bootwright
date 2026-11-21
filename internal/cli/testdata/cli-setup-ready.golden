@@ -11,4 +11,4 @@
     Nothing to do.
 
     Outcome  unchanged
-    Next     bootwright check controller
+    Next     bootwright init --name <name> --input-dir <dir>

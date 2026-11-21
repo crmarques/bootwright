@@ -219,16 +219,16 @@ var (
 		Meaning: "the adapter that updates a cluster administrator credential ended without proving the update", Remedy: RepeatAdminCredentialUpdate}
 	engineControllerUnprepared = diagnostics.Stop{Code: "engine.controller-unprepared", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseEnvironment, Recovery: diagnostics.RecoveryFixThenRepeat,
-		Meaning: "this host has no completed controller setup, so nothing ran", Remedy: "run bootwright controller install"}
+		Meaning: "this host has no completed controller setup, so nothing ran", Remedy: "run bootwright install"}
 	engineControllerUnbound = diagnostics.Stop{Code: "engine.controller-unbound", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryFixThenRepeat,
-		Meaning: "the context is not bound to the controller host it runs on, so nothing ran", Remedy: "run bootwright controller install to record the controller binding and host evidence"}
+		Meaning: "the context is not bound to the controller host it runs on, so nothing ran", Remedy: "run bootwright install to record the controller binding and host evidence"}
 	engineControllerOtherHost = diagnostics.Stop{Code: "engine.controller-other-host", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
 		Meaning: "this host is not the controller host the context is bound to, or the recorded binding does not match it, so nothing ran", Remedy: "run the command on the host the context is bound to"}
 	engineRuntimeUnprepared = diagnostics.Stop{Code: "engine.runtime-unprepared", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseEnvironment, Recovery: diagnostics.RecoveryFixThenRepeat,
-		Meaning: "the controller runtime for this build is not prepared on this host and could not be rebuilt, so nothing ran", Remedy: "run bootwright controller install"}
+		Meaning: "the controller runtime for this build is not prepared on this host and could not be rebuilt, so nothing ran", Remedy: "run bootwright install"}
 	engineClientNotInstalled = diagnostics.Stop{Code: "engine.client-not-installed", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
 		Meaning: "a controller client the work needs is not installed by the context's controller stage, so nothing ran", Remedy: "apply the context's controller stage, then repeat the command"}

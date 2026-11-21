@@ -9,7 +9,7 @@ gate and which build it must match.
 
 ## Prepare a host
 
-`controller install` prepares what every context on the host shares: the host package
+`install` prepares what every context on the host shares: the host package
 `openssh-clients` and the controller runtime that runs Ansible. A context's
 controller stage adds what its graph places on this host, such as `podman` for a
 managed service or the hypervisor for a hosted libvirt provider.
@@ -34,9 +34,9 @@ Prepare the host once, from the repository root:
 ```sh
 make build
 ./bin/bootwright version
-./bin/bootwright controller install --dry-run
-./bin/bootwright controller install
-./bin/bootwright check controller
+./bin/bootwright install --dry-run
+./bin/bootwright install
+./bin/bootwright install --dry-run
 ```
 
 `make build` stamps `bin/bootwright` with the commit and source state of the
@@ -48,19 +48,18 @@ embeds its automation, to the controller, for example to /usr/local/bin;
 `bin/bootwright.cdx.json` beside it: the executable's bill of materials,
 which `bootwright sbom --format cyclonedx-json` prints again, names every
 component it carries and every client and image it pins, for the host's
-security tooling. `controller install`
+security tooling. `install`
 prepares the foundation every context on the host shares and reads no desired
-state; the dry run previews it, and `check controller` reports what it
-proved. Each context's first `apply` then binds the context to this host
+state. The dry run inspects the host baseline and previews any missing setup. Each context's first `apply` then binds the context to this host
 ([binding](../specs/contexts.md#controller-relationship-and-host-binding)), and
 its `controller` stage installs the clients its graph selects
 ([controller](../specs/controller.md#the-controller-stage)). Media images live
-in one host-wide store that every context shares, so `controller install` runs before the
+in one host-wide store that every context shares, so `install` runs before the
 first `catalog media add`.
 
 ### What setup admits and installs
 
-`controller install` admits a host by family and floors, never by release name, and refuses
+`install` admits a host by family and floors, never by release name, and refuses
 anything else with `controller.unsupported` and its remedy before it changes
 anything: Fedora or RHEL, or a derivative whose `/etc/os-release` `ID_LIKE`
 names one, such as CentOS Stream, Rocky or Alma; amd64; a root-owned `rpm`
@@ -75,7 +74,7 @@ setup checks its floors and continues", which changes neither the result nor
 the exit status. A non-empty /etc/ld.so.preload is reported the same way, as
 `controller.loader-preload`.
 
-`controller install` installs only what is missing, and from two places:
+`install` installs only what is missing, and from two places:
 
 - **Host packages,** `openssh-clients`, plus the `python3.X`
   package when no Python the lock serves is installed, come from the
@@ -97,7 +96,7 @@ the exit status. A non-empty /etc/ld.so.preload is reported the same way, as
   ([the controller runtime](../specs/controller.md#the-controller-runtime)).
   Nothing is installed into the host's own Python.
 
-Before it asks for confirmation, `controller install` runs `dnf install --assumeno` as root
+Before it asks for confirmation, `install` runs `dnf install --assumeno` as root
 for the missing packages and shows dnf's output verbatim in its plan, beside
 how many wheels the runtime copies from the executable and how many its cache
 already holds. The preview
@@ -112,7 +111,7 @@ the install's output and the versions setup records are the truth.
 A ready host is reported in under a second with the receipt table, which
 names the host, the runtime and where each package came from, and
 `Nothing to do.`, with no network request, confirmation or write;
-`check controller` prints the same table
+`install --dry-run` prints the same table
 ([results](../specs/controller.md#results-and-qualification)). A new
 Bootwright build with the same lock, and an operating-system upgrade that keeps
 the interpreter, need no setup at all; a build whose lock changed needs one
@@ -126,7 +125,7 @@ result names the run; a failure that run explains names its output in its
 remedy. `bootwright logs --install` prints the newest, and `--follow` shows
 a running install's as it grows. A setup that was interrupted blocks every command that runs
 Ansible with `controller.state`, "a controller setup (`install-000042`) was
-interrupted before it finished"; run `bootwright controller install` again, which
+interrupted before it finished"; run `bootwright install` again, which
 re-inspects the host, names the interrupted run in its plan and continues
 after confirmation.
 
@@ -136,16 +135,16 @@ the host's own dnf in the same way, on RHEL as on Fedora: register a RHEL
 controller, or enable the repositories that carry them, before that context's
 first apply.
 
-A host with no route to the Internet prepares the same way: `controller install`
+A host with no route to the Internet prepares the same way: `install`
 reaches only the repositories the host's dnf is configured to read, a local
 `file://` repository, a DVD or a Satellite mirror included, because the
 executable carries every Python wheel the runtime needs.
-`bootwright controller install --dry-run --output json` lists each carried
+`bootwright install --dry-run --output json` lists each carried
 file's SHA-256.
 
 ### On a proxied network
 
-`controller install`, `check controller` and `catalog media add --from-url`
+`install` and `catalog media add --from-url`
 run before any Environment exists, so they take their route from the invoking
 environment. Export `HTTPS_PROXY`, and `NO_PROXY` when internal hosts must be
 reached directly, before running them; the
@@ -153,7 +152,7 @@ reached directly, before running them; the
 says which values refuse. Everything a context drives uses that context's
 declared proxy instead, and exporting a variable does not change it.
 
-When the admitted route is a proxy, `controller install` and the controller stage also hand
+When the admitted route is a proxy, `install` and the controller stage also hand
 it to the host's dnf as `https_proxy` and `no_proxy`; a `proxy=` in the
 host's dnf configuration wins over it. Nothing else from the environment
 reaches dnf, and a proxy that needs credentials stays unsupported
@@ -162,10 +161,8 @@ reaches dnf, and a proxy that needs credentials stays unsupported
 `sudo` clears the environment, so an unprivileged invocation forwards the
 variables to its elevated child on the sudo command line; a sudoers rule that
 grants neither `ALL` nor `SETENV` refuses that, and running as root avoids it.
-`bootwright controller install --dry-run` never elevates, so the route it prints under
-`Route` in its scope block shows only how the values parse.
-`bootwright check controller` elevates and prints the same `Route` field,
-which confirms that the variables crossed sudo.
+`bootwright install --dry-run` can elevate to inspect private setup and
+runtime records. It runs no acquisition and reads no proxy variables.
 
 #### Destinations to allow
 
@@ -175,7 +172,7 @@ admit those: their mirrors, metalink or Satellite, whatever `dnf repolist -v`
 names. Bootwright names no repository host of its own. A proxy that admits
 only listed destinations must also admit HTTPS, on port 443, to these hosts,
 which a context's controller stage contacts, directly or through a redirect
-the download follows; `controller install` contacts none of them, and
+the download follows; `install` contacts none of them, and
 `catalog media add --from-url` contacts the URL it is given. A proxy that inspects TLS re-signs every certificate, so its certificate
 authority must be in the host's system trust store, which every acquisition
 verifies against.
@@ -237,7 +234,7 @@ each is read from `<url>/<kind>/v<release>/<publisher file name>` by its pinned
 checksum, so the controller reaches no client publisher, GitHub included. Fill it
 with the files the `client` rows of `bootwright render acquisitions` name,
 from a machine that reaches the publishers, then run
-`bootwright check environment --context <name> --stage controller`: it reads each
+`bootwright apply --dry-run --context <name> --stage controller`: it reads each
 file's size from the mirror, without downloading it, and names every file the
 mirror lacks or serves at another size, with the publisher file to copy
 there. When your own certificate authority issued the mirror's certificate,
@@ -482,10 +479,10 @@ the host's crypto policy, and the runtime carries no OpenSSL of its own;
 Bootwright's own executable stays outside the host's FIPS-validated modules,
 so running it on a FIPS-mode controller claims no FIPS compliance
 ([security](../specs/security.md#the-controller-hosts-attacker-model)).
-`check controller`, like `controller install`, reports the kernel's FIPS mode as its
+`install --dry-run`, like `install`, reports the kernel's FIPS mode as its
 `FIPS mode` check with that statement; the check never changes readiness,
-except that a FIPS flag that cannot be read as 0 or 1 refuses `controller install` and
-`check controller` with `controller.unsupported`.
+except that a FIPS flag that cannot be read as 0 or 1 refuses `install` and
+`install --dry-run` with `controller.unsupported`.
 
 Under the FIPS crypto policy (`update-crypto-policies --show` prints `FIPS`),
 OpenSSH accepts no Ed25519 key. Declare `remoteMachinesAccessKey` and every SSH
@@ -510,7 +507,7 @@ recreated VM with the same disk does, rebind the record once from your own
 account; it asks for authorization as other commands do:
 
 ```sh
-bootwright controller rebind
+bootwright rebind-host
 ```
 
 It names the recorded and the new identity before it asks, keeps every
@@ -527,11 +524,12 @@ names the other exits.
 ### Uninstalling Bootwright from this host
 
 Once every environment is destroyed, every context deleted and every image
-removed with `bootwright catalog media delete`, remove what `controller install` added,
+removed with `bootwright catalog media delete`, remove what `install` added,
 from your own account; it asks for authorization as other commands do:
 
 ```sh
-bootwright controller uninstall
+bootwright uninstall --dry-run
+bootwright uninstall
 ```
 
 It refuses, naming the command that clears each, while a context or an image
@@ -547,7 +545,7 @@ the executable and what a context realized on an SSH placement host stay.
 `--keep-packages` removes only the state; it is also the way out when the
 install record was interrupted or written by another build. A store this
 build cannot read, such as one an earlier build left, and guest disks no
-removal took back are removed by `bootwright controller uninstall
+removal took back are removed by `bootwright uninstall
 --discard-unreadable`, which removes no package. An interrupted uninstall is
 finished by the next one
 ([uninstall flow](../specs/controller.md#the-uninstall-flow)).
@@ -560,18 +558,18 @@ which of these roots it holds on this host.
 
 | Root | Contents | Created by | Host roles |
 | --- | --- | --- | --- |
-| `/var/lib/bootwright` | The store: contexts, registry, secrets, media; `controller/install` (runtimes, wheel cache, receipt) and `controller/record` | `controller install` and `context init` | Control only |
+| `/var/lib/bootwright` | The store: contexts, registry, secrets, media; `controller/install` (runtimes, wheel cache, receipt) and `controller/record` | `install` and `init` | Control only |
 | `/var/lib/bootwright-staging` | The embedded automation unpacked for each run | The first command that runs Ansible | Control only |
 | `/var/log/bootwright` | `controller/install-NNNNNN.output`; per context under `contexts/<context>/`, `operations/<op>/`, `runs/run-NNNNNN.output` and `current` | The first command that writes a log | Control only |
 | `/var/lib/bootwright-hosted/<context>/services/<kind>/<service>` | A hosted service's content root, configuration and certificate | `apply` of an artifact server or managed service | Hosting services |
 | `/var/lib/bootwright-hosted/<context>/machines/<machine>/install`, `.../erase/<operation>` and `clusters/<cluster>` | An installation image built before it is served; a physical erase's custody; a cluster installer's work area | `apply` of the installation, the erase or the cluster | Serving installations |
 | `/var/lib/bootwright-hosted/<context>/machines/<machine>/bmc` and `/var/lib/libvirt/images/bootwright/<context>` | The emulated BMC's state; guest disks and the virtual-media pool | `apply` of the libvirt provider and its Machines | Libvirt provider host |
-| `/var/lib/bootwright-hosted/<context>/...` on the placement host | The same hosted content, on the host the graph names | The same `apply`, over SSH | SSH placement host: not read by `status`, and left in place by `controller uninstall` |
+| `/var/lib/bootwright-hosted/<context>/...` on the placement host | The same hosted content, on the host the graph names | The same `apply`, over SSH | SSH placement host: not read by `status`, and left in place by `uninstall` |
 
 Logs are troubleshooting output only: no decision reads them, and
 [`bootwright logs`](#following-an-apply-or-destroy) is what presents them. The hosted and
 image roots hold what an `apply` realized; `destroy` removes each emptied
-directory but never a root, and `controller uninstall` refuses while a context
+directory but never a root, and `uninstall` refuses while a context
 remains ([the contexts spec](../specs/contexts.md#roots-beside-the-store)).
 
 ### Following an apply or destroy
@@ -579,7 +577,7 @@ remains ([the contexts spec](../specs/contexts.md#roots-beside-the-store)).
 Start the operation in one terminal and follow it from a second. The log root
 is private to root, so `logs` asks for authorization as other commands do.
 Every `Logs` line an `apply`, `destroy`, `status`, machine power command or
-`controller install` prints is followed by a `Follow` line holding the exact
+`install` prints is followed by a `Follow` line holding the exact
 command that reads it: the `--follow` form while it runs, and afterwards one
 pinned to that operation, run or setup:
 
@@ -596,7 +594,7 @@ pinned to that operation, run or setup:
 - `bootwright logs --context <name> --run run-NNNNNN` shows a bounded
   run, such as a machine power command, and `--follow` follows one still
   running.
-- `bootwright logs --install` shows the newest `controller install` output,
+- `bootwright logs --install` shows the newest `install` output,
   `--install=install-NNNNNN` a named one (write the `=`), and `--follow` follows
   one still running.
 - `--operation <id>` reads an earlier operation than the current one.
@@ -610,7 +608,7 @@ quietly once a newer operation becomes current. A follow
 holds no lease, so it does not keep the operation it watches from finishing or
 the next one from starting; a command that writes the store waits out its
 short read instead of failing. In the instant a `--install --follow` probes whether
-the install still runs, a `controller install` that starts can be refused as
+the install still runs, a `install` that starts can be refused as
 busy; repeat it. The full contract is
 [reading and following logs](../specs/cli/output.md#reading-and-following-logs).
 
@@ -900,7 +898,7 @@ section routes the journey; each linked section owns its rules.
 - Share a channel and CSV across bindings with Environment kind defaults: a
   default fills only the packages a binding declares and never selects one
   ([the rule](../specs/api/environment.md#kind-defaults)).
-- Run it: `check input`, `plan` and `apply` as for any journey. `apply --until
+- Run it: `validate`, `plan` and `apply` as for any journey. `apply --until
   <cluster>.<package>` pauses after one instance
   ([stopping after an add-on instance](../specs/state-reconciliation.md#stopping-after-an-add-on-instance)),
   and an instance is done when its [readiness](../specs/add-ons.md#readiness)
@@ -919,10 +917,10 @@ section routes the journey; each linked section owns its rules.
 The automation is embedded in the executable and is no part of any setup
 identity: every command that runs Ansible unpacks the automation of the build
 in hand. A build that changes only `ansible/` or Go code therefore needs no
-`controller install`, and neither does any build with the same runtime lock. A build whose
-lock changed needs one `controller install`, which builds its runtime; until then `apply`
+`install`, and neither does any build with the same runtime lock. A build whose
+lock changed needs one `install`, which builds its runtime; until then `apply`
 refuses with `controller.state`, "the controller runtime for this build (<identity>) is not
-prepared", and the remedy `run bootwright controller install`
+prepared", and the remedy `run bootwright install`
 ([the controller runtime](../specs/controller.md#the-controller-runtime)).
 
 Before installing a new build, take stock of every context:
@@ -967,7 +965,7 @@ words a step is presented in may differ. An incomplete destroy continues when
 the removal derived again from its own frozen plan consumes the same
 authorizations and every step's capability reads its frozen request. A fix that
 changes only automation, or only Go code that moves no version or pin, therefore
-continues the failed or unknown step with no `controller install` between, as long as its
+continues the failed or unknown step with no `install` between, as long as its
 runtime lock and Python ABI are the operation's; a build with another lock
 refuses the continuation and names the build that registered it, whose
 runtime this host keeps.
@@ -1003,7 +1001,7 @@ Review the relaxed plan first, then destroy with the same tokens and the digest
 the plan printed:
 
 ```sh
-bootwright plan destroy --context <name> --authorize erase=<machine>:metadataClear
+bootwright destroy --dry-run --context <name> --authorize erase=<machine>:metadataClear
 bootwright destroy --context <name> --authorize data-loss=<digest> --authorize erase=<machine>:metadataClear
 ```
 

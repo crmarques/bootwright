@@ -81,6 +81,6 @@ their logic moves behind a tested launcher
 ([B967](../../../../specs/milestones/backlog.md#b967)), and the runtime hook
 `scripts/hooks/stop-check` stays a short POSIX `sh` guard. A launcher uses only
 the standard library, runs on the host's CPython 3.12 or newer, and runs every
-check it dispatches through a pinned wrapper or the Ansible check environment.
+check it dispatches through a pinned wrapper or the Ansible apply --dry-run.
 A launcher's tests sit beside it as `*_test.py`; one that needs a locked
 library runs in that environment.

@@ -63,10 +63,10 @@ func additiveStatus() *lifecycle.StatusResult {
 
 func additiveGoldens() []cliGolden {
 	return []cliGolden{
-		{golden: "cli-plan-adds", args: "plan apply", record: func(r *dispatchRecord) { r.result.lifecyclePlan = additivePlanFixture() }},
-		{golden: "cli-plan-adds-json", args: "plan apply --output json", record: func(r *dispatchRecord) { r.result.lifecyclePlan = additivePlanFixture() }},
-		{golden: "cli-plan-lineage-destroy", args: "plan destroy", record: func(r *dispatchRecord) { r.result.lifecyclePlan = lineagePlanFixture() }},
-		{golden: "cli-plan-lineage-destroy-json", args: "plan destroy --output json", record: func(r *dispatchRecord) { r.result.lifecyclePlan = lineagePlanFixture() }},
+		{golden: "cli-plan-adds", args: "apply --dry-run", record: func(r *dispatchRecord) { r.result.lifecyclePlan = additivePlanFixture() }},
+		{golden: "cli-plan-adds-json", args: "apply --dry-run --output json", record: func(r *dispatchRecord) { r.result.lifecyclePlan = additivePlanFixture() }},
+		{golden: "cli-plan-lineage-destroy", args: "destroy --dry-run", record: func(r *dispatchRecord) { r.result.lifecyclePlan = lineagePlanFixture() }},
+		{golden: "cli-plan-lineage-destroy-json", args: "destroy --dry-run --output json", record: func(r *dispatchRecord) { r.result.lifecyclePlan = lineagePlanFixture() }},
 		{golden: "cli-diff-adds", args: "diff", record: func(r *dispatchRecord) { r.result.lifecycleDiff = additiveDiff() }},
 		{golden: "cli-diff-adds-json", args: "diff --output json", record: func(r *dispatchRecord) { r.result.lifecycleDiff = additiveDiff() }},
 		{golden: "cli-status-lineage", args: "status", record: func(r *dispatchRecord) { r.result.lifecycleStatus = additiveStatus() }},

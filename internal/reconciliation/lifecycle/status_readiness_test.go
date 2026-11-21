@@ -40,7 +40,7 @@ func readinessStatus(t *testing.T, h *harness, probe *readinessProbe) *StatusRes
 
 func TestStatusNamesWhatPlanAndApplyWouldStopOnAheadOfThem(t *testing.T) {
 	t.Parallel()
-	plan, apply := contextCommand(testContextName, "plan apply"), contextCommand(testContextName, "apply")
+	plan, apply := contextCommand(testContextName, "apply --dry-run"), contextCommand(testContextName, "apply")
 	for name, gaps := range map[string][]ReadinessGap{
 		"a missing Secret": {missingSecret},
 		"a stale Secret":   {staleSecret},
@@ -68,7 +68,7 @@ func TestStatusNamesWhatPlanAndApplyWouldStopOnAheadOfThem(t *testing.T) {
 
 func TestStatusAddsNothingWhenNothingIsMissingOrTheReadFails(t *testing.T) {
 	t.Parallel()
-	plan, apply := contextCommand(testContextName, "plan apply"), contextCommand(testContextName, "apply")
+	plan, apply := contextCommand(testContextName, "apply --dry-run"), contextCommand(testContextName, "apply")
 	for name, probe := range map[string]*readinessProbe{
 		"none missing":      {},
 		"a read that fails": {gaps: []ReadinessGap{missingSecret}, err: errors.New("keyring unavailable")},

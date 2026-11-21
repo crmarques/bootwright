@@ -2,13 +2,18 @@ package prerequisites
 
 import "github.com/crmarques/bootwright/internal/diagnostics"
 
-type CheckRequest struct{ ContextName string }
+type CheckRequest struct {
+	ContextName   string
+	SkipListeners bool
+	Quiet         bool
+}
 
 // SetupRequest carries no context. Setup prepares the prerequisites every
 // context on this host shares; the prerequisites a context adds are installed
 // by the controller stage of its own apply.
 type SetupRequest struct {
 	DryRun           bool
+	Verify           bool
 	SkipConfirmation bool
 }
 

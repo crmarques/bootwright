@@ -42,7 +42,7 @@
     },
     "readiness": [],
     "nextSteps": [
-      "bootwright controller install"
+      "bootwright install"
     ],
     "lifecycle": null,
     "handoff": {

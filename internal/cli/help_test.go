@@ -98,7 +98,7 @@ func TestAGroupWithAnAvailableSubcommandIsNotListedUnavailable(t *testing.T) {
 }
 
 func TestScalarEnumRefusalListsAllowedValues(t *testing.T) {
-	code, out, errOut, record := runRecorded([]string{"check", "input", "--output", "unsupported"})
+	code, out, errOut, record := runRecorded([]string{"validate", "--output", "unsupported"})
 	if code != 2 || out != "" || record.calls != 0 || !strings.Contains(errOut, "--output must be one of: text, json, yaml") {
 		t.Fatalf("%d %q %q", code, out, errOut)
 	}
@@ -134,8 +134,8 @@ func TestIncompleteInvocationShowsHelp(t *testing.T) {
 		{path: "catalog media"},
 		{path: "catalog schema"},
 		{path: "sbom"},
-		{path: "context init"},
-		{path: "context update", args: "--name demo"},
+		{path: "init"},
+		{path: "update", args: "--name demo"},
 		{path: "context delete", args: "--name demo"},
 		{path: "secret show", args: "--name demo"},
 		{path: "policy install", args: "--file sessions.yaml"},
@@ -167,8 +167,8 @@ func TestIncompleteInvocationShowsHelp(t *testing.T) {
 
 func TestInvalidInputTakesPrecedenceOverIncompleteHelp(t *testing.T) {
 	for _, command := range []string{
-		"context missing", "context init --unknown", "context init --name",
-		"context init --name=", "context init --name Invalid -f one -f two",
+		"context missing", "init --unknown", "init --name",
+		"init --name=", "init --name Invalid -f one -f two",
 		"secret show --part invalid", "secret show --width 1",
 		"policy install --file first --file second",
 		"context delete --purge=false",

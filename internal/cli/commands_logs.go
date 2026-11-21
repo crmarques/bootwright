@@ -18,14 +18,14 @@ func logsCommandSpec() commandSpec {
 			stringFlag("block", "Keep one block's events, or name the block whose output --raw prints"),
 			boolFlag("raw", "Print the block's newest retained adapter output instead of events"),
 			stringFlag("attempt", "Print attempt N's output with --raw (default: the newest)"),
-			boolFlag("follow", "Stream new events and running blocks' output until the operation, run or controller install ends"),
+			boolFlag("follow", "Stream new events and running blocks' output until the operation, run or install ends"),
 			stringFlag("run", "Print a bounded run's output, named run-NNNNNN"),
-			optionalValueFlag("install", logview.NewestInstall, "Print the newest controller install's output, or one named as --install=install-NNNNNN"),
+			optionalValueFlag("install", logview.NewestInstall, "Print the newest install's output, or one named as --install=install-NNNNNN"),
 		},
 		long: "Render the events of a context's current operation, or of --operation, as lines oldest first: the operation log merged with every attempt log." +
 			" --block keeps one block's events; --raw prints that block's newest retained adapter output instead, or attempt N's with --attempt." +
 			" --follow prints what is written so far, then streams new events and each running block's output, prefixed by its block, until the operation leaves running." +
-			" --run prints a bounded run's output and --install the host's newest controller install output, or one named as --install=install-NNNNNN; either follows with --follow." +
+			" --run prints a bounded run's output and --install the host's newest install output, or one named as --install=install-NNNNNN; either follows with --follow." +
 			" Text output escapes every line for the terminal; JSON and YAML carry the exact output bytes. --detail full prints each event's full UTC timestamp. It reads under short shared locks and never holds a lease an apply waits on."})
 }
 

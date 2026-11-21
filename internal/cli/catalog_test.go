@@ -32,15 +32,15 @@ func TestOnlyTheTrustStoreCommandNamesAFlagForTrust(t *testing.T) {
 
 func TestPublicCatalog(t *testing.T) {
 	expected := map[string]string{
-		"context init": "file input-dir name", "context update": "file input-dir name yes", "context use": "name", "context list": "", "context current": "short", "context delete": "allow-orphans name purge yes",
+		"init": "check file input-dir name", "update": "check file input-dir name yes", "context use": "name", "context list": "", "context current": "short", "context delete": "allow-orphans name purge yes",
 		"catalog add-ons list": "", "catalog add-ons info": "name",
 		"secret set": "certificate-file name password-file password-stdin private-key-file public-key-file username value-file value-stdin yes", "secret generate": "name renew yes", "secret check": "", "secret list": "", "secret info": "name", "secret show": "name part", "secret delete": "name yes",
 		"secret encryption init": "", "secret encryption status": "", "secret encryption rotate": "yes",
 		"catalog media add": "from-file from-url from-url-file name sha256 yes", "catalog media list": "checksums", "catalog media delete": "name yes",
-		"check input": "input-dir", "check environment": "clusters dry-run observe-host-keys stage",
-		"plan apply": "stage until", "plan destroy": "authorize", "status": "paths", "logs": "attempt block follow install operation raw run", "diff": "exit-code observe output-dir tool", "render effective": "input-dir origins output-dir sensitive", "render acquisitions": "input-dir", "render installer": "clusters sensitive", "render storage": "clusters", "apply": "authorize parallelism stage until yes", "destroy": "authorize parallelism unregistered yes",
+		"validate": "input-dir",
+		"status":   "paths", "logs": "attempt block follow install operation raw run", "diff": "exit-code observe output-dir tool", "render effective": "input-dir origins output-dir sensitive", "render acquisitions": "input-dir", "render installer": "clusters sensitive", "render storage": "clusters", "apply": "authorize dry-run parallelism stage until yes", "destroy": "authorize dry-run parallelism unregistered yes",
 		"machine list": "clusters power-status short", "machine info": "name", "machine rsh": "name", "machine cp": "name overwrite",
-		"machine exec": "name", "machine discover": "dry-run name prepare-prerequisites yes", "machine start": "name", "machine stop": "force name yes", "machine restart": "force name yes", "machine eject-media": "name yes", "machine trust": "dry-run expect name replace yes", "controller install": "dry-run yes", "check controller": "", "controller rebind": "machine-id product-uuid recorded-host-retired root-uuid yes", "controller uninstall": "discard-unreadable keep-packages yes",
+		"machine exec": "name", "machine discover": "dry-run name stage yes", "machine start": "name", "machine stop": "force name yes", "machine restart": "force name yes", "machine eject-media": "name yes", "machine trust": "dry-run expect name replace yes", "install": "dry-run yes", "rebind-host": "machine-id product-uuid recorded-host-retired root-uuid yes", "uninstall": "discard-unreadable dry-run keep-packages yes",
 		"cluster update-admin-creds": "login name yes", "cluster list": "", "cluster info": "name object-user secrets", "cluster rsh": "name node", "cluster exec": "name node", "cluster oc": "name", "cluster kubectl": "name", "cluster kubeconfig": "name", "cluster keyring": "client name",
 		"policy install": "file", "policy permissions": "",
 		"version": "", "catalog schema": "format", "sbom": "format", "explain": "code", "help": "", "completion bash": "no-descriptions", "completion zsh": "no-descriptions", "completion fish": "no-descriptions", "completion powershell": "no-descriptions",

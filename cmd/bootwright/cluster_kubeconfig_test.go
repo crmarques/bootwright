@@ -114,7 +114,7 @@ func snoContext(t *testing.T) (cli.Services, *contextfs.Store, string) {
 		t.Fatal(err)
 	}
 	addSecretInput(t, filepath.Join(input, "storage"), "ceph.yaml", "apiVersion: bootwright.io/v1alpha1\nkind: CephCluster\nmetadata:\n  name: ceph\nspec:\n  management: external\n")
-	contextRun(t, services, 0, "context", "init", "--name", "lab-sno", "--input-dir", input)
+	contextRun(t, services, 0, "init", "--name", "lab-sno", "--input-dir", input)
 	return services, repository, root
 }
 

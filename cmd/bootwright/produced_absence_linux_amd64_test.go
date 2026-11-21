@@ -63,7 +63,7 @@ func productionSourcesContext(t *testing.T, name, example string, sources desire
 		}
 		addSecretInput(t, filepath.Join(input, filepath.Dir(relative)), filepath.Base(relative), string(file.Bytes()))
 	}
-	contextRun(t, services, 0, "context", "init", "--name", name, "--input-dir", input)
+	contextRun(t, services, 0, "init", "--name", name, "--input-dir", input)
 	return services, repository
 }
 
@@ -106,8 +106,8 @@ func TestNoProducedMaterialInOrdinaryOutput(t *testing.T) {
 		{0, []string{"status", "--context", "lab-ceph"}},
 		{0, []string{"status", "--context", "lab-ceph", "--output", "json"}},
 		{0, []string{"status", "--context", "lab-ceph", "--output", "yaml"}},
-		{0, []string{"plan", "apply", "--context", "lab-ceph"}},
-		{0, []string{"plan", "apply", "--context", "lab-ceph", "--output", "json"}},
+		{1, []string{"apply", "--dry-run", "--context", "lab-ceph"}},
+		{1, []string{"apply", "--dry-run", "--context", "lab-ceph", "--output", "json"}},
 		{0, []string{"diff", "--context", "lab-ceph"}},
 		{0, []string{"diff", "--context", "lab-ceph", "--output", "json"}},
 		{0, []string{"cluster", "list", "--context", "lab-ceph"}},

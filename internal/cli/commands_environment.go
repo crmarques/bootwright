@@ -10,21 +10,6 @@ import (
 	"github.com/crmarques/bootwright/internal/machine"
 )
 
-func preflightCommand() commandSpec {
-	stage := stringFlag("stage", "Select comma-separated stages to check (default: every stage but add-ons)")
-	stage.enum, stage.enumList, stage.nameList = stageFlag().enum, true, true
-	return available(commandSpec{path: "check environment", results: []jsonResult{storagePreflightResult{}}, render: renderPreflight(), validate: validatePreflight, classify: classifyRules{unavailable: preflightUnavailable}, example: "--context lab --stage controller,substrates", sshFlags: allSSHFlags, invoke: Services.invokePreflight, short: "Check the selected context's readiness for apply, stage by stage", flags: []flagSpec{stage, clustersFlag(), dryRunFlag(), observeHostKeysFlag()},
-		long: "Check, without changing anything, whether the selected context is ready for the stages apply runs, in one report." +
-			" controller checks the controller host's prerequisites, the target tools this context's controller stage selects and its host binding;" +
-			" infrastructure-services checks the firewall admission of the controller's managed service sockets;" +
-			" substrates checks the capacity of the hosts that hold the context's Machines;" +
-			" machines has no checks; clusters checks the OpenShiftClusters and CephClusters that --clusters selects, or all of them." +
-			" add-ons has no checks yet and is refused." +
-			" It reports only what it observes: external services, a Registry or LoadBalancer and managed services on other Machines are not checked, and apply checks them itself." +
-			" The SSH and observe-host-keys options apply to the CephCluster checks. --dry-run runs no process and reports every check pending." +
-			" For the controller host alone, before any context exists, run check controller."})
-}
-
 func environmentClusterCommands() []commandSpec {
 	return []commandSpec{
 		available(commandSpec{path: "cluster list", results: []jsonResult{clusterListPresentation{}}, render: renderClusterList(), example: "--context lab", invoke: Services.invokeClusterList, short: "List container and storage clusters", long: "List container and storage clusters in canonical name order. Applicable to all selected OpenShiftClusters and CephClusters, including external storage clusters."}),
@@ -76,21 +61,6 @@ type EnvironmentInspectionService interface {
 type EnvironmentAccessService interface {
 	ClusterRsh(context.Context, environmentaccess.ClusterRshRequest) (*machine.SessionResult, error)
 	ClusterExec(context.Context, environmentaccess.ClusterExecRequest) (*machine.SessionResult, error)
-}
-
-func (s Services) invokePreflight(ctx context.Context, values *requestValues, _ []string) (commandResult, error) {
-	if s.EnvironmentPreflight == nil {
-		return commandResult{}, errMissingService
-	}
-	result, err := invokeResult(ctx, values, environmentpreflight.PreflightRequest{
-		ContextName:     values.text("context"),
-		Stages:          values.names("stage"),
-		Clusters:        values.names("clusters"),
-		DryRun:          values.boolean("dry-run"),
-		ObserveHostKeys: values.boolean("observe-host-keys"),
-		SSH:             values.ssh(),
-	}, s.EnvironmentPreflight.Preflight)
-	return commandResult{storagePreflight: result}, err
 }
 
 func (s Services) invokeClusterList(ctx context.Context, values *requestValues, _ []string) (commandResult, error) {

@@ -443,7 +443,7 @@ func (s *Store) openOwnedTree(parent *directory, name string, uid, gid uint32, h
 	path := filepath.Join(parent.Path, name)
 	foreign := diagnostics.NewFailureWithRemediation("controller.uninstall",
 		path+" is not a directory Bootwright owns, so uninstall leaves it", "",
-		"inspect "+path+" and remove it yourself if nothing uses it, then run bootwright controller uninstall again")
+		"inspect "+path+" and remove it yourself if nothing uses it, then run bootwright uninstall again")
 	if err != nil {
 		return nil, foreign
 	}
@@ -486,7 +486,7 @@ func (t *uninstallTransaction) guardParents(uid uint32) error {
 		if parent.Identity.Uid != uid || mode&0022 != 0 && mode&syscall.S_ISVTX == 0 {
 			return diagnostics.NewFailureWithRemediation("controller.uninstall",
 				parent.Path+" may be written by a user other than root, so uninstall cannot rename or remove a tree within it safely", "",
-				"make "+parent.Path+" owned by root and writable by no group or other user, or set its sticky bit, then run bootwright controller uninstall again")
+				"make "+parent.Path+" owned by root and writable by no group or other user, or set its sticky bit, then run bootwright uninstall again")
 		}
 	}
 	return nil
@@ -527,7 +527,7 @@ func holdTree(file *os.File, path string) error {
 func mountedAside(path string) error {
 	return diagnostics.NewFailureWithRemediation("controller.uninstall",
 		path+" is a mount point, which uninstall cannot rename aside", "",
-		"unmount "+path+" and remove its mount entry, keeping the directory beneath it, then run bootwright controller uninstall again")
+		"unmount "+path+" and remove its mount entry, keeping the directory beneath it, then run bootwright uninstall again")
 }
 
 func (s *Store) leftovers(parent *directory, bases []string, uid, gid uint32, held *[]*os.File) ([]string, error) {

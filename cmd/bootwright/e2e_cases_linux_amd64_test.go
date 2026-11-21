@@ -219,7 +219,7 @@ func TestEveryE2ECaseRendersToValidInput(t *testing.T) {
 			t.Run(name+"/"+render.name, func(t *testing.T) {
 				for _, directory := range renderE2ECase(t, script, name, render) {
 					var out, errOut bytes.Buffer
-					code := run(context.Background(), []string{"check", "input", "--input-dir", directory, "--output", "json"}, &out, &errOut)
+					code := run(context.Background(), []string{"validate", "--input-dir", directory, "--output", "json"}, &out, &errOut)
 					if code != 0 {
 						var envelope struct {
 							Diagnostics []struct {

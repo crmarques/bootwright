@@ -104,7 +104,7 @@ func TestSupervisorRefreshUsesSameExecutorAndOriginalArgumentVector(t *testing.T
 		}
 	})
 	supervisor := NewSupervisor(SudoOptions{Executable: "/opt/bootwright", Sudo: "/usr/bin/sudo", Executor: executor, Delay: delay, NonInteractive: true, Input: strings.NewReader("stdin-payload\n"), Output: &out, Error: &stderr})
-	args := []string{"context", "init", "--name", "test"}
+	args := []string{"init", "--name", "test"}
 	code, err := supervisor.Run(context.Background(), args)
 	if err != nil || code != 17 {
 		t.Fatalf("result %d %v", code, err)
@@ -117,7 +117,7 @@ func TestSupervisorRefreshUsesSameExecutorAndOriginalArgumentVector(t *testing.T
 	if len(calls) != 3 {
 		t.Fatalf("calls %v", calls)
 	}
-	want := []string{"-u", "#0", "-n", "--", "/opt/bootwright", "context", "init", "--name", "test"}
+	want := []string{"-u", "#0", "-n", "--", "/opt/bootwright", "init", "--name", "test"}
 	if !reflect.DeepEqual(calls[1].Arguments, want) {
 		t.Fatalf("args %v", calls[1].Arguments)
 	}
@@ -266,10 +266,10 @@ func TestSupervisorPlacesRouteAssignmentsBeforeTheOptionTerminator(t *testing.T)
 		Executable: "/opt/bootwright", Sudo: "/usr/bin/sudo", Executor: executor, Delay: delay,
 		Assignments: []string{"HTTPS_PROXY=http://proxy.example:3128", "NO_PROXY=.internal.example,10.0.0.0/8"},
 	}
-	if _, err := NewSupervisor(options).Run(context.Background(), []string{"controller", "install"}); err != nil {
+	if _, err := NewSupervisor(options).Run(context.Background(), []string{"install"}); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"-u", "#0", "HTTPS_PROXY=http://proxy.example:3128", "NO_PROXY=.internal.example,10.0.0.0/8", "--", "/opt/bootwright", "controller", "install"}
+	want := []string{"-u", "#0", "HTTPS_PROXY=http://proxy.example:3128", "NO_PROXY=.internal.example,10.0.0.0/8", "--", "/opt/bootwright", "install"}
 	if !reflect.DeepEqual(child.Arguments, want) {
 		t.Fatalf("arguments = %v", child.Arguments)
 	}
@@ -304,7 +304,7 @@ func TestSupervisorRefusesAnAssignmentOutsideTheRouteVocabulary(t *testing.T) {
 			Executable: "/opt/bootwright", Sudo: "/usr/bin/sudo", Executor: executor, Delay: delay,
 			Assignments: []string{assignment},
 		}
-		if _, err := NewSupervisor(options).Run(context.Background(), []string{"controller", "install"}); err == nil {
+		if _, err := NewSupervisor(options).Run(context.Background(), []string{"install"}); err == nil {
 			t.Fatalf("accepted %q", assignment)
 		}
 	}
@@ -324,10 +324,10 @@ func TestSupervisorLeavesADirectInvocationUnchanged(t *testing.T) {
 		return ctx.Err()
 	})
 	options := SudoOptions{Executable: "/opt/bootwright", Sudo: "/usr/bin/sudo", Executor: executor, Delay: delay}
-	if _, err := NewSupervisor(options).Run(context.Background(), []string{"controller", "install"}); err != nil {
+	if _, err := NewSupervisor(options).Run(context.Background(), []string{"install"}); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(child.Arguments, []string{"-u", "#0", "--", "/opt/bootwright", "controller", "install"}) {
+	if !reflect.DeepEqual(child.Arguments, []string{"-u", "#0", "--", "/opt/bootwright", "install"}) {
 		t.Fatalf("arguments = %v", child.Arguments)
 	}
 }

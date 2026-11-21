@@ -135,7 +135,7 @@ The last column names the item that owns the implementation and its evidence.
 
 | Family | Required coverage and qualification boundary | Work |
 | --- | --- | --- |
-| Hosts and native bootstrap | Managed RHEL, entitled package/registry access, time and DNS, non-root orchestration SSH login with qualified privilege escalation, public/replication networks (`check input` refuses a declared replication network unless every OSD host's Machine declares an address inside it; a host no OSD service places (a MON-only host, for example) needs none, [complete-graph invariants](api/ceph.md#complete-graph-invariants)), stable FSID, MON quorum and active/standby MGR, explicit IBM call-home choice, qualified config and manager modules | [B490](milestones/m2.md#b490), [B80](milestones/m2.md#b80) |
+| Hosts and native bootstrap | Managed RHEL, entitled package/registry access, time and DNS, non-root orchestration SSH login with qualified privilege escalation, public/replication networks (`validate` refuses a declared replication network unless every OSD host's Machine declares an address inside it; a host no OSD service places (a MON-only host, for example) needs none, [complete-graph invariants](api/ceph.md#complete-graph-invariants)), stable FSID, MON quorum and active/standby MGR, explicit IBM call-home choice, qualified config and manager modules | [B490](milestones/m2.md#b490), [B80](milestones/m2.md#b80) |
 | Devices and OSDs | Explicit devices and bounded selectors, drive groups, BlueStore data/DB/WAL separation, device class, slots and allocation, encrypted OSDs and supported TPM2 variants; prove every destructive target and owned cleanup | [B475](milestones/m2.md#b475) |
 | CRUSH and pools | Host/site failure domains, replicated and erasure profiles, application tags, autoscaling/PG bounds, quotas, compression, device classes where supported, RBD initialization and data-pool selection | [B81](milestones/m2.md#b81) |
 | CephFS | Replicated metadata, replicated or supported EC data, multiple data pools and explicit default/layout, MDS placement and standby/replay, subvolume groups, subvolumes and service-consumer references | [B492](milestones/m2.md#b492) |
@@ -408,7 +408,7 @@ ingress also its internal port 29443 that Prometheus service discovery dials,
 as a [host requirement](managed-os.md#host-firewall-requirements) that the
 managed OS realizes on a Machine it installs with the firewall enabled;
 otherwise it refuses `ingress-firewall` before effects when an ingress host's
-active firewalld would drop any of them, and `check environment --stage clusters`
+active firewalld would drop any of them, and `apply --dry-run --stage clusters`
 reports the same verdict live
 ([ingress host firewall](ceph.md#ingress-host-firewall)).
 Readiness then proves each virtual IP has exactly one holder, since dropped

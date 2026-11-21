@@ -228,7 +228,7 @@ func (s Service) Init(ctx context.Context, request InitRequest) (*AdmissionResul
 	if err := validName(request.Name); err != nil {
 		return nil, err
 	}
-	if s.options.Selection == nil || s.options.InitializeSecrets == nil {
+	if !request.Check && (s.options.Selection == nil || s.options.InitializeSecrets == nil) {
 		return nil, StateError("context selection or secret initialization is not configured")
 	}
 	config, err := s.configuration(ctx, request.Name, request.ConfigurationFile)
@@ -243,6 +243,25 @@ func (s Service) Init(ctx context.Context, request InitRequest) (*AdmissionResul
 		if err != nil {
 			return nil, err
 		}
+	}
+	if request.Check {
+		err := s.repository.Inspect(ctx, "", func(tx Transaction) error {
+			reg := tx.Registry()
+			if index := findRecord(reg, request.Name); index >= 0 {
+				record := reg.Contexts[index]
+				if record.Mode != Ready {
+					return NotReady(record)
+				}
+				return AlreadyExists(record)
+			}
+			return nil
+		})
+		if err != nil && !errors.Is(err, ErrNoContexts) {
+			return nil, err
+		}
+		result := admissionResult(Record{Name: request.Name}, Selection{}, sources, report)
+		result.Checked, result.FilesCopied = true, 0
+		return result, nil
 	}
 	var result *AdmissionResult
 	err = s.repository.Transact(ctx, true, slices.Clone(sources.Roots), func(tx Transaction) error {
@@ -319,11 +338,15 @@ func (s Service) Update(ctx context.Context, request UpdateRequest) (*AdmissionR
 		return nil, err
 	}
 	if request.ConfigurationFile == "" && request.InputDirectory == "" {
-		return nil, ConfigurationError("context update requires --file or --input-dir")
+		return nil, ConfigurationError("update requires --file or --input-dir")
 	}
-	selected, err := s.selection(ctx)
-	if err != nil {
-		return nil, err
+	var selected Selection
+	if !request.Check {
+		var err error
+		selected, err = s.selection(ctx)
+		if err != nil {
+			return nil, err
+		}
 	}
 	admitted, err := s.admitUpdate(ctx, request)
 	if err != nil {
@@ -331,6 +354,19 @@ func (s Service) Update(ctx context.Context, request UpdateRequest) (*AdmissionR
 	}
 	if request.InputDirectory != "" && s.options.AddsTo != nil {
 		admitted.addsTo = s.options.AddsTo(ctx, request.Name, admitted.sources)
+	}
+	if request.Check {
+		decision, err := s.inspectUpdate(ctx, request, admitted)
+		if err != nil {
+			return nil, absentWhenEmpty(err, request.Name)
+		}
+		result := admissionResult(decision.record, Selection{}, admitted.sources, admitted.report)
+		result.Checked, result.FilesCopied = true, 0
+		result.InputChanged = admitted.report != nil && !decision.unchanged
+		if result.InputChanged {
+			result.Diagnostics = decision.warnings
+		}
+		return result, nil
 	}
 	var presented *updateDecision
 	if !request.SkipConfirmation && request.InputDirectory != "" {
@@ -348,7 +384,7 @@ func (s Service) Update(ctx context.Context, request UpdateRequest) (*AdmissionR
 		return nil, absentWhenEmpty(err, request.Name)
 	}
 	if result == nil {
-		return nil, StateError("context update returned no result")
+		return nil, StateError("update returned no result")
 	}
 	return result, nil
 }
@@ -360,13 +396,18 @@ type updateDecision struct {
 	plan      UpdatePlan
 }
 
-func (s Service) confirmUpdate(ctx context.Context, request UpdateRequest, admitted admittedUpdate) (*updateDecision, error) {
+func (s Service) inspectUpdate(ctx context.Context, request UpdateRequest, admitted admittedUpdate) (updateDecision, error) {
 	var decided updateDecision
 	err := s.repository.Inspect(ctx, "", func(tx Transaction) error {
 		var err error
 		decided, err = s.decideUnder(ctx, tx, request, admitted)
 		return err
 	})
+	return decided, err
+}
+
+func (s Service) confirmUpdate(ctx context.Context, request UpdateRequest, admitted admittedUpdate) (*updateDecision, error) {
+	decided, err := s.inspectUpdate(ctx, request, admitted)
 	if err != nil {
 		return nil, err
 	}

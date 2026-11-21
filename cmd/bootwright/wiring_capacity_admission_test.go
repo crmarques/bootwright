@@ -34,7 +34,7 @@ func TestComposedApplyRefusesAtTheLibvirtCapacityGateBeforeRegistration(t *testi
 	services := assembleServices(deps)
 	input := filepath.Join(t.TempDir(), "lab-sno")
 	copySources(t, exampleDirectory(t, "lab-sno"), input)
-	contextRun(t, services, 0, "context", "init", "--name", "lab-sno", "--input-dir", input)
+	contextRun(t, services, 0, "init", "--name", "lab-sno", "--input-dir", input)
 	before := stateFingerprint(t, root)
 	_, stderr := contextRun(t, services, 1, "apply", "--context", "lab-sno", "--yes")
 	if asked != 1 || !strings.Contains(stderr, "declared guests exceed available memory") {

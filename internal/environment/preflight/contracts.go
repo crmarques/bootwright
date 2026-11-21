@@ -14,6 +14,7 @@ type Report = clusterpreflight.Report
 
 type PreflightRequest struct {
 	ContextName     string
+	ApplyPreview    bool
 	Stages          []string
 	Clusters        []string
 	DryRun          bool

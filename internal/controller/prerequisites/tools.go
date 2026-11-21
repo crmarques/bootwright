@@ -57,9 +57,9 @@ func UnreleasedClient(tool ToolDefinition) error {
 // stage selects, so a consumer runs the exact file that stage installed for
 // the release its own graph selected, and never one another closure holds.
 func LocateInstalledTool(ctx context.Context, view StorageView, tools []ToolDefinition, tool evidence.InstalledTool) (string, error) {
-	unavailable, missing := "run bootwright controller install, then apply --stage controller", "run bootwright apply --stage controller"
+	unavailable, missing := "run bootwright install, then apply --stage controller", "run bootwright apply --stage controller"
 	if view.Context.Name != "" {
-		unavailable, missing = "run bootwright controller install, then "+stageInvocation(view.Context.Name), stageCommand(view.Context.Name)
+		unavailable, missing = "run bootwright install, then "+stageInvocation(view.Context.Name), stageCommand(view.Context.Name)
 	}
 	if view.OpenBundle == nil {
 		return "", failure("controller.state", "the retained controller areas are unavailable", unavailable)

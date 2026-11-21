@@ -67,7 +67,7 @@ type Repository interface {
 	View(context.Context) (Registry, error)
 	// Transact holds the root lock throughout the callback and commit. Roots
 	// exclude the state directory from every admitted input directory. Create is
-	// reserved for context init and permits exact initial-registry recovery.
+	// reserved for init and permits exact initial-registry recovery.
 	Transact(context.Context, bool, []string, func(Transaction) error) error
 	// TransactDeletion is the registry transaction of deleting one named
 	// context. It verifies every other context as Transact does and leaves

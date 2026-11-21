@@ -62,7 +62,7 @@ func TestComposedSecretStdinIsLazyAndExact(t *testing.T) {
 		return readInputFD(ctx, int(reader.Fd()), buffer)
 	})
 	services := assembleServices(deps)
-	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
 	contextRun(t, services, 0, "secret", "encryption", "init")
 	stdout, stderr := contextRun(t, services, 0, "secret", "set", "--name", "opaque", "--value-stdin")
 	if reads == 0 || strings.Contains(stdout+stderr, "synthetic-stdin-canary") {
@@ -86,7 +86,7 @@ func TestAWaitingSecretStdinLeavesOtherCommandsUsable(t *testing.T) {
 	t.Parallel()
 	services, repository, input, root := contextFixture(t)
 	addSecretInput(t, input, "secret.yaml", secretDocument("opaque", "opaque", ""))
-	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
 	contextRun(t, services, 0, "secret", "encryption", "init")
 	entered, release := make(chan struct{}), make(chan struct{})
 	served := false

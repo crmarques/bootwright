@@ -113,15 +113,15 @@ e2e/render.sh lab-5-nodes-ceph-networks "${RENDER_ARGS[@]}"
 CONTEXT="lab-5-nodes-ceph-networks"; INPUT_DIR="$HOME/bootwright-e2e/lab-5-nodes-ceph-networks"
 CONTROLLER_ADDRESS=$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p'); printf 'Controller address: %s\n' "$CONTROLLER_ADDRESS"
 grep -h -A1 'name: ip$' "$INPUT_DIR/infra/machines/controller.yaml"   # must show CONTROLLER_ADDRESS
-./bin/bootwright check input --input-dir "$INPUT_DIR"
-./bin/bootwright context init --name "$CONTEXT" --input-dir "$INPUT_DIR"
+./bin/bootwright validate --input-dir "$INPUT_DIR"
+./bin/bootwright init --name "$CONTEXT" --input-dir "$INPUT_DIR"
 ./bin/bootwright secret generate --context "$CONTEXT"
 install -m 0600 /dev/null "$RUN_DIR/ibm-password"
 cut -d: -f2- "${IBM_REGISTRY_FILE:?Set IBM_REGISTRY_FILE to the IBM entitlement key file}" > "$RUN_DIR/ibm-password"
 ./bin/bootwright secret set --context "$CONTEXT" --name ibm-registry --username cp --password-file "$RUN_DIR/ibm-password" --yes
 rm -f -- "$RUN_DIR/ibm-password"
 ./bin/bootwright secret check --context "$CONTEXT"
-./bin/bootwright plan apply --context "$CONTEXT"
+./bin/bootwright apply --dry-run --context "$CONTEXT"
 ```
 
 The controller address is a DHCP lease on most laptops: keep it for the whole
@@ -135,7 +135,7 @@ Complete [Prepare listener firewall](../README.md#prepare-listener-firewall),
 then require `ready` before starting services:
 
 ```sh
-./bin/bootwright check environment --context "$CONTEXT" --stage controller
+./bin/bootwright apply --dry-run --context "$CONTEXT" --stage controller
 ./bin/bootwright apply --context "$CONTEXT" --stage infrastructure-services,substrates --yes
 sudo virsh --connect qemu:///system net-list --all
 for n in ceph-public app-users; do sudo virsh --connect qemu:///system net-dumpxml "bootwright-$CONTEXT-$n"; done
@@ -153,8 +153,8 @@ Networks. Then the guests and the cluster:
 ./bin/bootwright machine list --context "$CONTEXT" --power-status
 ./bin/bootwright machine exec --context "$CONTEXT" --name ceph-01,ceph-02,ceph-03,app-01,client-01 -- ip -4 -br address
 ./bin/bootwright machine exec --context "$CONTEXT" --name ceph-01,ceph-02,ceph-03,app-01,client-01 -- getent hosts cp.icr.io public.dhe.ibm.com
-./bin/bootwright check environment --context "$CONTEXT" --stage clusters
-./bin/bootwright plan apply --context "$CONTEXT" --stage clusters
+./bin/bootwright apply --dry-run --context "$CONTEXT" --stage clusters
+./bin/bootwright apply --dry-run --context "$CONTEXT" --stage clusters
 ./bin/bootwright apply --context "$CONTEXT" --stage clusters --yes
 ./bin/bootwright status --context "$CONTEXT"
 ```
@@ -438,7 +438,7 @@ registered destroy continues that removal.
 
 ```sh
 ./bin/bootwright machine exec --context "$CONTEXT" --name app-01 -- sudo -n bash e2e-sample/app-teardown.sh
-./bin/bootwright plan destroy --context "$CONTEXT"
+./bin/bootwright destroy --dry-run --context "$CONTEXT"
 ./bin/bootwright machine stop --context "$CONTEXT" --name ceph-01,ceph-02,ceph-03,app-01,client-01 --yes
 ./bin/bootwright destroy --context "$CONTEXT" --authorize data-loss
 ./bin/bootwright status --context "$CONTEXT"

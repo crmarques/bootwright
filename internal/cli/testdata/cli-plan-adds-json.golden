@@ -1,9 +1,17 @@
 {
   "schemaVersion": "v1alpha1",
-  "command": "plan apply",
+  "command": "apply",
   "ok": true,
   "exitCode": 0,
   "result": {
+    "checks": [
+      {
+        "id": "add-ons",
+        "status": "deferred",
+        "summary": "Prerequisites are proved during add-ons execution",
+        "remedy": ""
+      }
+    ],
     "context": {
       "name": "lab",
       "mode": ""

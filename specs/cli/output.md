@@ -219,8 +219,8 @@ without ambient terminal or clock dependencies.
 
 ### Context identity
 
-Context identity is presented by the commands that own it. `context init`,
-`context update`, `context use`, `context current`, `context list`, and
+Context identity is presented by the commands that own it. `init`,
+`update`, `context use`, `context current`, `context list`, and
 `context delete` present the selected context's name, and its mode where
 [their results](../contexts.md#command-results-and-confirmation) show one.
 `status` reports on one context, so it opens with that context as its headline,
@@ -257,7 +257,7 @@ realize says so and may name its backlog item.
 `TestRefusalsNameNoVendorRelease` check the Go sources and the collection's
 plugins.
 A context-backed next action carries `--context <name>` for the context the
-invocation resolved. The context-free commands (`controller install`, `media`, `version`, `catalog schema` and the
+invocation resolved. The context-free commands (`install`, `media`, `version`, `catalog schema` and the
 others [listed with the global flags](commands.md#global-flags)) take none and
 refuse `--context`. No diagnostic carries confidential material.
 
@@ -292,15 +292,12 @@ and their output goldens:
 
 | Command | Result fields |
 | --- | --- |
-| `apply`, `destroy` | `context`, `verb`, `steps`, `blocks`, `settled`, `recovered`, `next`, `receipt` |
+| `apply`, `destroy` | `context`, `verb`, `steps`, optional `blocks`, optional `settled`, optional `recovered`, optional `next`, `receipt`, optional `checks`, optional `stages`, optional `until`, optional `waves`, optional `widest`, optional `bound`, optional `startable`, optional `deferred`, optional `continuation`, optional `finalizes`, optional `addsTo`, optional `takesBack`, optional `anotherBuild`, optional `stops`, optional `stopsAfterOnline`, optional `authorizations` |
 | `catalog add-ons info` | `package` |
 | `catalog add-ons list` | `addOns` |
 | `catalog media add`, `catalog media delete` | `name`, `outcome`, `size`, optional `sha256` |
 | `catalog media list` | `media` |
 | `catalog schema` | `format`, `schema` |
-| `check controller` | optional `context`, optional `machine`, optional `route`, `dryRun`, `outcome`, `platform`, `checks`, `actions`, `requirements`, `files`, optional `preview`, `progress`, optional `receipt`, `next` |
-| `check environment` | `context`, `target`, `checks`, `summary` |
-| `check input` | `counts`, `excludedContainerClusters`, `excludedStorageClusters`, `advisories` |
 | `cluster info` | `context`, `clusters`, `storage` |
 | `cluster keyring`, `cluster kubeconfig`, `completion bash`, `completion fish`, `completion powershell`, `completion zsh`, `secret show` | `export` |
 | `cluster kubectl`, `cluster oc` | `context`, `cluster`, `client`, `arguments`, `kubeconfigCommand`, `instructions` |
@@ -308,22 +305,20 @@ and their output goldens:
 | `cluster update-admin-creds` | `context`, `cluster`, `logins` |
 | `context current`, `context use`, `policy install` | `context` |
 | `context delete` | `name`, `outcome`, `currentCleared`, `orphansAbandoned`, `releasedReservations` |
-| `context init`, `context update` | `context`, `counts`, `filesCopied`, `inputChanged` |
 | `context list` | `contexts` |
-| `controller install` | optional `context`, optional `machine`, optional `route`, `dryRun`, `outcome`, `platform`, `checks`, `actions`, `requirements`, `files`, optional `preview`, optional `progress`, optional `receipt`, optional `next` |
-| `controller rebind` | `outcome`, `bindings`, `reservations` |
-| `controller uninstall` | `outcome`, `packages`, `paths`, `kept` |
 | `diff` | `context`, `operation`, `input`, optional `adds`, `plan`, `observed`, `blocks`, `objects`, `files`, `summary`, optional `outdatedClients` |
 | `explain` | `stops` |
 | `help` | `command`, `usage`, `description`, `commands`, `flags` |
+| `init`, `update` | `context`, `counts`, `filesCopied`, `inputChanged`, optional `checked` |
+| `install` | optional `context`, optional `machine`, optional `route`, `dryRun`, `outcome`, `platform`, `checks`, `actions`, `requirements`, `files`, optional `preview`, optional `progress`, optional `receipt`, optional `next` |
 | `logs` | optional `context`, optional `operation`, optional `verb`, optional `state`, optional `events`, optional `source`, optional `path`, optional `bytes`, optional `truncated`, optional `output` |
 | `machine cp` | `context`, `source`, `machines` |
 | `machine discover` | optional `checks`, optional `context`, optional `verb`, optional `steps`, optional `stages`, optional `until`, optional `waves`, optional `widest`, optional `bound`, optional `startable`, optional `deferred`, optional `continuation`, optional `settled`, optional `finalizes`, optional `addsTo`, optional `takesBack`, optional `anotherBuild`, optional `stops`, optional `stopsAfterOnline`, optional `authorizations`, optional `receipt`, optional `operation`, optional `inventories`, optional `next` |
 | `machine eject-media`, `machine restart`, `machine start`, `machine stop` | `context`, `verb`, `machines` |
 | `machine info`, `machine list` | `context`, `machines`, `powerRead` |
 | `machine trust` | `context`, `dryRun`, `pending`, `recorded`, `hosts` |
-| `plan apply`, `plan destroy` | optional `checks`, `context`, `verb`, `steps`, `stages`, optional `until`, `waves`, `widest`, `bound`, `startable`, `deferred`, `continuation`, optional `settled`, `finalizes`, optional `addsTo`, optional `takesBack`, optional `anotherBuild`, `stops`, `stopsAfterOnline`, optional `authorizations`, `receipt` |
 | `policy permissions` | `context`, `grants` |
+| `rebind-host` | `outcome`, `bindings`, `reservations` |
 | `render acquisitions` | `acquisitions` |
 | `render effective` | optional `counts`, optional `effectiveState`, optional `origins`, optional `inputDir`, optional `outputDir`, optional `effectiveStatePath`, optional `objects` |
 | `sbom` | `format`, `bom` |
@@ -332,6 +327,8 @@ and their output goldens:
 | `secret encryption init`, `secret encryption rotate` | `context`, `implementation`, `activeKey`, `changed`, `retiredKeys`, `reencryptedVersions`, `reencryptedParts` |
 | `secret encryption status` | `initialized`, `implementation`, `activeKey`, `keys`, `items` |
 | `status` | `context`, `setupChecks`, `desired`, `clusters`, `storageClusters`, `shared`, `secrets`, `readiness`, `nextSteps`, `lifecycle`, `handoff`, `contradictions`, optional `outdatedClients`, optional `paths` |
+| `uninstall` | `outcome`, `packages`, `paths`, `kept`, optional `actions` |
+| `validate` | `counts`, `excludedContainerClusters`, `excludedStorageClusters`, `advisories` |
 | `version` | `version`, `commit`, `source`, `go`, `target`, `dependencyBundle`, `vulnerabilityCheck` |
 
 A `contexts` entry of `context list` whose context holds an operation that has
@@ -344,7 +341,7 @@ directory is lost, its evidence is unreadable or its lock is busy, carries
 `operationsUnreadable: true` and no `unfinished`; the member is omitted
 otherwise, and such a read never fails the listing. The listing says nothing
 of whether another build can continue the operation, which only that build's
-`plan` reports in its `Build` field. Human output adds an "Unfinished
+the lifecycle preview reports in its `Build` field. Human output adds an "Unfinished
 operations" table after the contexts, naming each such context, verb, state,
 build (`unrecorded` when the record names none) and operation, and each
 unreadable context with state `unreadable` and `unknown` elsewhere
@@ -352,7 +349,7 @@ unreadable context with state `unreadable` and `unknown` elsewhere
 `TestContextListMarksAnUnreadableOperationAndListsTheRest`).
 
 A step is one frozen block as a preview or result presents it, numbered by its
-place in plan order. In a `plan`, `apply` or `destroy` result, `steps` lists the
+place in plan order. In an `apply` or `destroy` result, `steps` lists the
 frozen blocks in plan order, each with `id`, `description`, `kind`, `object`,
 `stage`, `impacts`, `state`, `selection`, `waitsOn`, `after` (the places of the
 steps it waits for), `wave` (the earliest round it can start in, counted from
@@ -402,7 +399,7 @@ and host port requirements. Each row has `id`, `status`, `summary` and `remedy`;
 for an open socket; `host-port` status is `realized` or `manual`, and `remedy` is
 empty for a realized one ([host firewall requirements](../managed-os.md#host-firewall-requirements)).
 Text output lists each kind under its own heading. These observations
-never change the frozen plan or register an operation. A `plan` of an apply
+never change the frozen plan or register an operation. An apply preview
 also reports one `plan.consumer-outlives-destroy` warning for each consumer and
 effect a destroy of the context would refuse over
 ([quiescence before removal](../state-reconciliation.md#quiescence-before-removal)),
@@ -425,12 +422,12 @@ context does not trust reports its `host.trust` check `unknown` with the
 observed fingerprint and the `machine trust` request that enrolls it, and
 with `--observe-host-keys=false` the check names no fingerprint.
 
-A `controller install --dry-run --output json` that the host or the state root refuses
+A `install --dry-run --output json` that the host or the state root refuses
 writes the same fields with `ok` `false` and the refusal in `diagnostics`,
 including the `state-root` check, and nothing else on standard output: the
 human plan is not written beside it.
 
-The `check input` result orders its fields as listed above and has this exact
+The `validate` result orders its fields as listed above and has this exact
 shape:
 
 ```json
@@ -446,7 +443,7 @@ extend.
 `advisories` contains the ordered `api.deferred` and `api.unrealized` warning
 subset using the diagnostic shape below. Those warnings also remain in envelope `diagnostics`;
 human output presents each diagnostic only once. All four arrays are always
-present, including when empty. Every failed `check input` invocation returns
+present, including when empty. Every failed `validate` invocation returns
 `result: null`; partial loader counts remain internal.
 
 Each `secret check` entry carries both `version`, the durable identifier or
@@ -464,7 +461,7 @@ ordered array of complete effective objects, and with `--origins` also
 the final LF, with empty stderr, or with `--origins` the origin listing. Context commands also support their tagged
 structured result presentations.
 
-A successful human `check input` writes exactly one summary line to standard
+A successful human `validate` writes exactly one summary line to standard
 output, substituting the decimal counts:
 
 ```text
@@ -645,97 +642,23 @@ record could be read, the size and digest that record stated.
 
 ## Preflight
 
-`check environment` reports, as one storage-preflight report, the checks of each stage
-`--stage` selects, by default every stage but `add-ons`. `target` is the
-selected stages in canonical order, joined by commas. Human output uses the
-[shared layout](#shared-human-layout): an `Environment checks for <context>` headline marked
-`✓` when at least one check ran and every check passed, `!` when any failed or is unknown and `○` when
-the rest are pending; a `Stages` field; a `Checks` section with one resource
-heading per check, its `id` as identity and its status as state, over grey
-`Target`, `Reason`, `Capacity` and `Next` details, the last two only when the
-check has them; and a closing `Summary` field
-(`TestPreflightHumanOutputStylesStatusIdentityAndStateThroughTheSharedRenderer`).
-Each stage holds these checks:
+`apply --dry-run` and `destroy --dry-run` use the lifecycle plan result.
+Each available prerequisite check has an identity, status, summary and
+optional remedy. The result stays available when a check refuses the
+operation. Successful checks describe observed conditions. Pending and
+deferred checks identify conditions established by earlier planned work or
+proved at execution. A failed or unknown prerequisite blocks the preview
+with a diagnostic and a next action.
 
-- `controller`: every check the controller's readiness reports for the
-  selected context, the host prerequisites of
-  [`check controller`](../controller.md#the-setup-flow) and the target tools,
-  native closures and host binding its controller stage selects, except the
-  `listener-firewall` rows, as `controller.<check>` with target `controller`:
-  `ready` is `passed`, `not-ready` is `failed` and any other status is
-  `unknown`, and a failed or unknown one carries the command that settles it
-  in `next`; and, when the Environment declares an
-  [artifact mirror](../api/environment.md#artifact-mirror), one
-  `controller.artifact-mirror` check for each file the stage reads from it,
-  with the file's URL as its target: `passed` when the mirror names the size
-  the build pins, `failed` when it answers 404 or 410 or names another size,
-  with `next` naming the publisher file to copy to that URL, and `unknown`
-  when no answer, another status or no size came, except that a managed
-  artifact mirror's file it answers 404 or 410 for is `pending`, with `next`
-  naming the apply that fills it;
-- `infrastructure-services`: the context's `listener-firewall` rows, the
-  runtime firewall admission of each non-loopback socket of a managed Proxy,
-  DNSServer, NTPServer or ArtifactServer the controller hosts, and of each
-  local emulated management-controller socket, each with the typed target
-  `<Kind>/<name> <address>:<port>/<protocol>` so two sockets of one object stay
-  two checks;
-- `substrates`: the `capacity.*` checks of the host capacity budget for every
-  Machine the context's substrates project, the same checks the clusters stage
-  reports for the hosts of their nodes;
-- `machines`: none, so a selection of it alone succeeds with “No checks available for the selected stages.”;
-- `clusters`: the OpenShiftCluster checks of
-  [openshift-clusters](../openshift-clusters.md#preflight) and the CephCluster
-  checks of [ceph](../ceph.md#plan-and-prerequisites). `--clusters` names
-  clusters of either kind; each name goes to the checks of its kind, those of a
-  kind no name selects do not run, and a name of neither kind is the
-  `access.target` refusal before any check;
-- `add-ons`: not implemented
-  ([flag relationships](commands.md#flag-relationships-and-safeguards)).
-
-The controller and infrastructure-services stages read the controller's
-readiness once. It reports only what it observes. Observed: the controller's
-checks, including the sockets of the managed Proxy, DNSServer, NTPServer,
-Registry and ArtifactServer the controller hosts and of local emulated management
-controllers, the artifact mirror's files, the capacity of the hosts that hold
-Machines, and the cluster checks. Not observed, and so neither passed nor listed: an external service, a
-LoadBalancer, and a managed service placed on a Machine other than the
-controller. `apply` checks those at its own effect boundary, as it does
-whether a service's port is free and what an artifact server's host holds; no
-preflight check probes them. With `--dry-run` no process runs: the controller
-checks collapse into one pending `controller.readiness` check, the artifact
-mirror's into one pending `controller.artifact-mirror` check, the listener
-checks into one pending `controller.listener-firewall` check, and every
-capacity and cluster check is pending.
-
-The checks of every selected stage merge into one list in target and check
-order. Two checks are the same when their `target` and `id` both match; the
-same check from two sets, such as the capacity of a host that holds nodes of
-both cluster kinds and Machines, appears once at its worse status, ordered
-passed, pending, unknown, failed, and the one found first is kept at equal
-severity, the controller and capacity checks before the cluster checks and the
-OpenShiftCluster checks before the CephCluster checks. The summary counts the
-merged list, and one diagnostic stands for the whole report:
-`preflight.failed` when any check failed, otherwise `preflight.unknown` when
-any is unknown or pending, whose remediation repeats
-`bootwright check environment --context <context>` with the invocation's own
-`--stage` and `--clusters`. Errors come in this order, each the command's
-only output: the stage selection, the selected context, its effective graph
-and the SSH rule below, all before any check runs; then an error that stops a
-set of checks before it reports, which stops the other sets, and when several
-stop, the first in the order controller checks, capacity checks, cluster
-checks, and within the cluster checks the OpenShiftCluster checks', is the one
-reported; a controller check that is not ready is its rows, and one that
-errors with every row ready is the error. `--observe-host-keys` defaults to
-`true`; either explicit value is accepted for every stage and cluster
-selection. It permits anonymous unknown-key observation only in CephCluster
-checks; other checks take no observation option, and dry-run observes no key.
-SSH overrides reach the CephCluster checks alone. They are a `cli.usage`
-refusal before any check runs unless the clusters stage selects a CephCluster
-(`TestTheControllerAndSubstrateStagesReportTheControllerAndCapacityChecksAndNothingTheyDoNotObserve`,
-`TestTheListenerRowsAreTheInfrastructureServicesStageAndTheOthersTheControllerStage`,
-`TestPreflightRefusesSSHOverridesNoCephClusterReachesBeforeAnyCheckRuns`,
-`TestEveryStageMergesInfrastructureAndClusterChecks`,
-`TestClustersRunsBothChecksAndReportsTheirUnion`).
+Apply checks the controller setup only when the selection includes its
+controller stage. Capacity checks use planned substrate work. Firewall checks
+follow the selected blocks and the listeners they use. Cluster checks follow
+the selected clusters when their prerequisite blocks are complete.
+Machines and add-ons have no separate stage preflight, so the preview
+identifies those checks as deferred. A new lifecycle operation can observe
+Machine power when the approved runtime is available. Destroy selects its
+checks from recorded ownership. The execution re-proves required evidence at
+the effect boundary.
 
 ## Cluster client handoffs
 
@@ -951,7 +874,7 @@ The `oc` and `kubectl` commands follow the
 
 ## Lifecycle and status results
 
-The human result of `plan`, `apply` and `destroy` composes the
+The human result of `apply` and `destroy` composes the
 [shared layout](#shared-human-layout): an optional headline, a `Plan` section
 whose steps are the frozen blocks in plan order, each naming its stage and
 carrying its own impacts as indented lines, a `Checks` section for what the
@@ -1032,8 +955,8 @@ probe. Its result orders these fields:
 | `storageClusters` | Ordered `{name, kind, status, resources}` rows for selected CephClusters. `resources` holds one `{kind, name, status}` row for each selected storage child object (a kind whose `clusterRef` names a CephCluster) whose `clusterRef` names this cluster, ordered by API kind order then name, `status` in the realization vocabulary below; it is `[]` for an external CephCluster and for one with no such object. |
 | `shared` | Ordered `{kind, name, machine, status}` rows for selected managed shared services, `status` in the realization vocabulary below. |
 | `secrets` | `declared`, the Secret objects the selected input declares, and `bindings`, the Secret bindings the current operation's record holds: one per operation however many Secrets it covers, and 0 beside no operation and once a completed removal finalized, which its pristine evidence proves without reading the keyring. |
-| `readiness` | Ordered `{kind, name, state, remedy}` rows for what the next `plan` and `apply` read from the selected input and the host does not hold: each declared Secret whose material is `missing` or `stale` as [`secret check`](../secrets.md) reports it (`kind` `secret`, ordered by name), then each installer image a MachineImage's `bootMedia` or a MachineInstallProfile's `hostedTree.fromMedia` names that [`catalog media list`](../managed-os.md) does not show (`kind` `media`, `state` `missing`, ordered by name). `remedy` is the command that supplies it: `bootwright secret set --context <name> --name <secret> ...` or `bootwright secret generate ...` as `secret check` names it, and `bootwright catalog media add --name <image> --from-file <path>`, with `<path>` left for the operator. The rows come from the keyring's metadata and the media store's records alone, never from Secret material or image bytes, under the shared reads those commands take, and run no effect. `[]` beside an operation, where the frozen plan and its Secret binding decide, while a deletion or `bootwright controller install` is the only step, when nothing is missing, and when a read fails (`secret check` and `catalog media list` report the failure); a failed read leaves only its own rows out. Human output has a Recorded prerequisites section listing each row's state and `Kind/name`, omitted when empty. |
-| `nextSteps` | Ordered command strings whose decision would pass over the records `status` read, as the [lifecycle receipt](../cli.md#lifecycle-receipt) states; empty when none would. Each `readiness` remedy, in row order, precedes the `plan apply` step. |
+| `readiness` | Ordered `{kind, name, state, remedy}` rows for what the next `apply --dry-run` and `apply` read from the selected input and the host does not hold: each declared Secret whose material is `missing` or `stale` as [`secret check`](../secrets.md) reports it (`kind` `secret`, ordered by name), then each installer image a MachineImage's `bootMedia` or a MachineInstallProfile's `hostedTree.fromMedia` names that [`catalog media list`](../managed-os.md) does not show (`kind` `media`, `state` `missing`, ordered by name). `remedy` is the command that supplies it: `bootwright secret set --context <name> --name <secret> ...` or `bootwright secret generate ...` as `secret check` names it, and `bootwright catalog media add --name <image> --from-file <path>`, with `<path>` left for the operator. The rows come from the keyring's metadata and the media store's records alone, never from Secret material or image bytes, under the shared reads those commands take, and run no effect. `[]` beside an operation, where the frozen plan and its Secret binding decide, while a deletion or `bootwright install` is the only step, when nothing is missing, and when a read fails (`secret check` and `catalog media list` report the failure); a failed read leaves only its own rows out. Human output has a Recorded prerequisites section listing each row's state and `Kind/name`, omitted when empty. |
+| `nextSteps` | Ordered command strings whose decision would pass over the records `status` read, as the [lifecycle receipt](../cli.md#lifecycle-receipt) states; empty when none would. Each `readiness` remedy, in row order, precedes the `apply --dry-run` step. |
 | `lifecycle` | `null` when no operation exists, else `operation`, `verb`, `state`, `next` (the receipt's action token, which the human Lifecycle `Next` row prints as the receipt does; the command it maps to is in `nextSteps`), `anotherBuild` (boolean: the build in hand is not the one that registered the operation, by the rule of [another build](../state-reconciliation.md#dependency-safety-during-recovery)), `lineage` (present only when the operation is an [additive apply](../state-reconciliation.md#additive-apply): the applies it adds to, root first and itself last, each `{operation, verb, state}`), ordered `blocks` of `{id, description, stage, state, outcome, attempts}` with the `failure` a result block carries, `logs` of safe paths relative to the log root, in the order and form the envelope's [`logs`](#private-operation-logs) list them, and `live`, each block the records hold `running` in plan order as `{block, attempt, resolution, output, present, bytes}`, its newest output relative to the log root, `present` false and `bytes` 0 while that file is not yet written, `[]` when none runs. A block that is `unknown` or `running` adds `unresolved`, `{reason, remedy}`: why its outcome is unproved and what the operator does, which for a block no resolution observed is the exact command, with `--context` and the frozen plan's `--authorize` tokens, that observes it, as its [resolution](../state-reconciliation.md#attempts-and-unknown-outcomes) names them; every other block omits it. |
 | `handoff` | `{ready, reasons}` derived from the [handoff predicate](../state-reconciliation.md#bootstrap-completion-and-gitops-readiness), with a boolean `ready` and ordered reason strings; `reasons` is `[]` when ready. Human output has a Handoff section with `ready`, or `not ready` followed by each reason. A completed apply with a latched log fault over unchanged input offers the settled apply in `nextSteps` as the invocation that [restores](../state-reconciliation.md#converging-an-effect) that boundary. |
 | `contradictions` | Ordered strings naming what the context's durable records contradict, each worded as the [refusal](../state-reconciliation.md#continuation-and-removal) over those records names it, and last an operation whose continuation or removal reopens a frozen Secret binding the context's keyring no longer lists, or whose keyring listing fails reporting the material corrupt or undecryptable; empty when nothing does. |
@@ -1201,7 +1124,7 @@ it to a variable.
 | `api.invariant` | A cross-field or cross-object rule is violated. |
 | `api.selection` | Environment selection excludes an otherwise discovered authored object. |
 | `api.deferred` | Valid authored state declares inactive operational semantics. |
-| `api.unrealized` | A warning: valid authored state declares something this build admits but no capability realizes, so `plan` refuses it with `plan.object-unsupported`; it names the path and the tracking item ([admitted but unrealized](../api.md#admitted-but-unrealized)). |
+| `api.unrealized` | A warning: valid authored state declares something this build admits but no capability realizes, so lifecycle planning refuses it with `plan.object-unsupported`; it names the path and the tracking item ([admitted but unrealized](../api.md#admitted-but-unrealized)). |
 | `api.unverified` | A warning: an admitted name only the node confirms, an agent-path `ethernet` one that must be its [kernel name](../openshift-clusters.md#node-networking). |
 | `cli.usage` | Arguments or flags do not match this contract. |
 | `cli.not-implemented` | The command is defined but its application use case is not available. |
@@ -1214,7 +1137,7 @@ it to a variable.
 | `runtime.privilege` | Invoking identity, sudo authorization, or the elevated process boundary could not be verified. |
 | `runtime.internal` | An unexpected failure escaped a typed boundary. Interactive and helper entry points catch a panic and return exit 1 with a fixed safe summary and a random `reference` in the message; the panic value and stack are discarded. Structured output keeps one diagnostic document. |
 | `context.configuration` | Context setup is invalid or attempts an unsupported backend change. |
-| `context.input` | The context has no desired-state revision; import one with context update. |
+| `context.input` | The context has no desired-state revision; import one with update. |
 | `context.state` | Context state does not permit the requested local transition. |
 | `context.unsafe-delete` | Required ownership or recovery evidence prevents deletion. |
 | `context.orphaned` | A completed deletion abandoned objects the context owned, which are no longer managed. |
@@ -1283,7 +1206,7 @@ duplicates only when every present or absent member is equal.
 
 ## Private operation logs
 
-Help, completion, `version`, `catalog schema`, `sbom`, every `check input`, `render effective`, `plan`, and
+Help, completion, `version`, `catalog schema`, `sbom`, every `validate`, `render effective`, lifecycle previews, and
 local list/current/status reads create no cache, temporary file, state record,
 output path, or log. Other render commands create only their declared
 artifacts. Preflight, local setup, sensitive export, and access handoff allocate
@@ -1439,7 +1362,7 @@ it created, even once interrupted.
 
 ### Setup run output
 
-Local `controller install` registers no lifecycle operation and selects no context, so the
+Local `install` registers no lifecycle operation and selects no context, so the
 dnf it runs has neither an attempt log nor a context's run area to sit beside.
 A confirmed setup first creates an output of its own in the log root's `controller/`
 directory and keeps exactly one file there:
@@ -1518,7 +1441,7 @@ install starting at the instant a setup is probed is refused as
 **Busy polls.** Each read, initial or a poll, takes the shared root lock
 without waiting, opens its files under it and reads their bytes after releasing
 it, so a command that needs the exclusive root lock waits for that short hold
-and a follow never makes another command fail, except `controller uninstall`,
+and a follow never makes another command fail, except `uninstall`,
 which refuses at once while anything holds the store, and the setup probe's
 instant above ([locking](../contexts.md#storage-locking-and-publication)). An initial read
 that finds the lock busy refuses `context.busy`; a busy poll is skipped, and

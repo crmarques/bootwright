@@ -9,8 +9,9 @@
       leaves inventory pending. After inventory preparation, --until <cluster>.<package> starts
       only that add-on instance and the blocks it requires, then pauses; a later apply
       continues the rest. --parallelism limits running steps (default 8); dependencies,
-      exclusive resources and group throttles still apply. Review the plan before confirming;
-      --yes skips ordinary confirmation.
+      exclusive resources and group throttles still apply. Use --dry-run to preview the
+      selected work and check prerequisites without making changes. --yes skips ordinary
+      confirmation during execution.
 
   Usage
     bootwright apply [flags]
@@ -20,6 +21,7 @@
                      the plan shows, required with --yes or without a terminal), or present a
                      rotated access credential at its current version (rebind=<secret>)
                      (values: data-loss)
+      --dry-run      Limit work to the command's dry-run boundary
       --parallelism  Set the maximum number of running steps (positive integer) · default 8
       --stage        Select comma-separated stages to start (default: all) (values: controller,
                      infrastructure-services, substrates, machines, clusters, add-ons)

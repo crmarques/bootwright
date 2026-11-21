@@ -157,7 +157,7 @@ func (p *Packages) Remove(ctx context.Context, names []string, output prerequisi
 		return ctx.Err()
 	}
 	if err != nil || exit != 0 {
-		return removalFailure("dnf did not complete the removal: "+lastError(stream.tail.String(), ""), "review the host's dnf configuration, then run bootwright controller uninstall again")
+		return removalFailure("dnf did not complete the removal: "+lastError(stream.tail.String(), ""), "review the host's dnf configuration, then run bootwright uninstall again")
 	}
 	return nil
 }

@@ -9,7 +9,7 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
-// ContextPlanPresenter writes what a context update or deletion changes before
+// ContextPlanPresenter writes what a update or deletion changes before
 // its confirmation: the plan on standard output and an update's warnings on
 // standard error, ahead of the prompt there.
 type ContextPlanPresenter struct{ out, errOut io.Writer }
@@ -70,7 +70,7 @@ func (p *ContextPlanPresenter) PresentDeletion(ctx context.Context, plan context
 		fields = append(fields,
 			field{Label: "Work areas", Value: areas},
 			field{Label: "Freed keys", Value: freed + "; another context may then claim a resource an abandoned object still uses, such as the management controller of a powered-off Machine"},
-			field{Label: "Same name", Value: "remove the abandoned objects by hand before bootwright context init --name " + plan.Context +
+			field{Label: "Same name", Value: "remove the abandoned objects by hand before bootwright init --name " + plan.Context +
 				" again, because that name reads them as its own, and never reuse " + plan.Context + " on another controller that shares a provider host"},
 		)
 	}

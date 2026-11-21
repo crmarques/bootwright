@@ -2,19 +2,18 @@
       Record the disk identities of the selected powered-off physical machines: from the BMC
       drive inventory when it is complete, otherwise by booting inventory-only RHEL media and
       powering off. --name takes a comma-separated list. --dry-run previews without effects.
-      --prepare-prerequisites also plans controller and infrastructure setup; review the
-      complete plan before confirmation. Discovery never installs an OS or creates RAID
-      volumes.
+      --stage controller also plans controller and infrastructure setup; review the complete
+      plan before confirmation. Discovery never installs an OS or creates RAID volumes.
 
   Usage
     bootwright machine discover [flags]
 
   Command flags
-      --dry-run                Preview the discovery plan without booting a machine
-      --name                   Select comma-separated machine names (required)
-      --prepare-prerequisites  Also plan and confirm controller and infrastructure
-                               prerequisites
-      --yes                    Confirm the command's ordinary confirmation
+      --dry-run  Preview the discovery plan without booting a machine
+      --name     Select comma-separated machine names (required)
+      --stage    Select controller and infrastructure prerequisites for discovery (values:
+                 controller)
+      --yes      Confirm the command's ordinary confirmation
 
   Common flags
       --ascii       Use ASCII status markers
@@ -27,4 +26,4 @@
       --width       Set presentation width (0: automatic) · default 0
 
   Examples
-    bootwright machine discover --context lab --name node --prepare-prerequisites --dry-run
+    bootwright machine discover --context lab --name node --stage controller --dry-run

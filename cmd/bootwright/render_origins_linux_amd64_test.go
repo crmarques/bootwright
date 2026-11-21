@@ -26,7 +26,7 @@ func TestRenderEffectiveOriginsMarkEachLeaf(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "init", "--name", "alpha", "--input-dir", input)
 	text, stderr := contextRun(t, services, 0, "render", "effective", "--origins")
 	if stderr != "" {
 		t.Fatal(stderr)

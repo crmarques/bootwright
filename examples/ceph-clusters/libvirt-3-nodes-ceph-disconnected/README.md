@@ -31,7 +31,7 @@ validation and planning only; no live acceptance is claimed.
 - Call Home stays `enabled` (the selected 20.2.x build); with public egress
   blocked expect a connectivity warning. Offline reporting is not claimed.
 - Controller side: the executable carries every Python wheel, and
-  `controller install` on the isolated host reads only its configured dnf
+  `install` on the isolated host reads only its configured dnf
   repositories ([Prepare a host](../../../docs/operator-guide.md#prepare-a-host)).
   The ingress is HTTP; add a qualified TLS binding before sensitive object data.
 - Required inputs: `mirror-ca` and the `ibm-registry` account for the mirror

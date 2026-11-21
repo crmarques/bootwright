@@ -144,9 +144,50 @@ func firewallPreflight(inspector firewall.Inspector) prerequisites.ListenerCheck
 	}
 }
 
+func plannedControllerSockets(catalog api.Catalog, name string, plan reconciliation.Plan, starting []reconciliation.Block) ([]firewall.Socket, map[string]bool, error) {
+	required := map[string]bool{}
+	byID := map[string]reconciliation.Block{}
+	for _, block := range plan.Blocks {
+		byID[block.ID] = block
+	}
+	var visit func(string)
+	visit = func(id string) {
+		if required[id] {
+			return
+		}
+		required[id] = true
+		for _, dependency := range byID[id].Dependencies {
+			visit(dependency)
+		}
+	}
+	for _, block := range starting {
+		visit(block.ID)
+	}
+	sockets, err := controllerSockets(catalog, name)
+	if err != nil {
+		return nil, nil, err
+	}
+	startingIDs := map[string]bool{}
+	for _, block := range starting {
+		startingIDs[block.ID] = true
+	}
+	sockets = slices.DeleteFunc(sockets, func(socket firewall.Socket) bool {
+		if !required[socket.Block] {
+			return true
+		}
+		request, managed := frozenHostFirewall(plan, socket.Block)
+		return managed && startingIDs[request.Identity.Block]
+	})
+	return sockets, required, nil
+}
+
 func firewallPlanInspection(inspector firewall.Inspector) lifecycle.PlanInspection {
-	return func(ctx context.Context, name string, catalog api.Catalog, _ reconciliation.Plan, _ []reconciliation.Block) ([]lifecycle.PlanCheck, error) {
-		checks, err := inspectControllerSockets(ctx, inspector, catalog, name)
+	return func(ctx context.Context, name string, catalog api.Catalog, plan reconciliation.Plan, starting []reconciliation.Block) ([]lifecycle.PlanCheck, error) {
+		sockets, required, err := plannedControllerSockets(catalog, name, plan, starting)
+		if err != nil {
+			return nil, err
+		}
+		checks, err := firewall.CheckSockets(ctx, inspector, sockets)
 		if err != nil {
 			return nil, err
 		}
@@ -158,45 +199,16 @@ func firewallPlanInspection(inspector firewall.Inspector) lifecycle.PlanInspecti
 			}
 			rows = append(rows, lifecycle.PlanCheck{ID: "listener-firewall", Status: check.Observation.Status, Summary: check.Summary(), Remedy: remedy})
 		}
-		return rows, nil
+		return rows, firewall.AdmitRequired(checks, required)
 	}
 }
 
 func firewallApplyAdmission(inspector firewall.Inspector) lifecycle.ListenerAdmission {
 	return func(ctx context.Context, name string, catalog api.Catalog, plan reconciliation.Plan, starting []reconciliation.Block) error {
-		required := map[string]bool{}
-		byID := map[string]reconciliation.Block{}
-		for _, block := range plan.Blocks {
-			byID[block.ID] = block
-		}
-		var visit func(string)
-		visit = func(id string) {
-			if required[id] {
-				return
-			}
-			required[id] = true
-			for _, dependency := range byID[id].Dependencies {
-				visit(dependency)
-			}
-		}
-		for _, block := range starting {
-			visit(block.ID)
-		}
-		sockets, err := controllerSockets(catalog, name)
+		sockets, required, err := plannedControllerSockets(catalog, name, plan, starting)
 		if err != nil {
 			return err
 		}
-		startingIDs := map[string]bool{}
-		for _, block := range starting {
-			startingIDs[block.ID] = true
-		}
-		sockets = slices.DeleteFunc(sockets, func(socket firewall.Socket) bool {
-			if !required[socket.Block] {
-				return true
-			}
-			request, managed := frozenHostFirewall(plan, socket.Block)
-			return managed && startingIDs[request.Identity.Block]
-		})
 		checks, err := firewall.CheckSockets(ctx, inspector, sockets)
 		if err != nil {
 			return err

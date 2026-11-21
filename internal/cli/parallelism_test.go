@@ -8,7 +8,7 @@ import (
 )
 
 func TestLifecycleParallelismDispatch(t *testing.T) {
-	for _, verb := range []string{"apply", "destroy"} {
+	for _, verb := range []string{"apply", "destroy", "apply --dry-run", "destroy --dry-run"} {
 		for _, test := range []struct {
 			args []string
 			want int
@@ -17,10 +17,12 @@ func TestLifecycleParallelismDispatch(t *testing.T) {
 			{[]string{"--parallelism=16"}, 16},
 			{[]string{"--parallelism", "2", "--parallelism", "12"}, 12},
 		} {
-			args := append([]string{verb}, test.args...)
+			args := append(strings.Fields(verb), test.args...)
 			code, _, stderr, record := runRecorded(args)
 			var got int
 			switch request := record.request.(type) {
+			case lifecycle.PlanRequest:
+				got = request.Parallelism
 			case lifecycle.ApplyRequest:
 				got = request.Parallelism
 			case lifecycle.DestroyRequest:
@@ -52,8 +54,8 @@ func TestInvalidParallelismRefusesBeforeDispatchAndElevation(t *testing.T) {
 	}
 }
 
-func TestOnlyLifecycleMutationsAcceptParallelism(t *testing.T) {
-	for _, verb := range []string{"plan apply", "plan destroy", "status", "diff"} {
+func TestOnlyLifecycleVerbsAcceptParallelism(t *testing.T) {
+	for _, verb := range []string{"status", "diff"} {
 		code, _, _, record := runRecorded(append(strings.Fields(verb), "--parallelism=16"))
 		if code != 2 || record.calls != 0 {
 			t.Fatalf("%s accepted parallelism: code=%d calls=%d", verb, code, record.calls)

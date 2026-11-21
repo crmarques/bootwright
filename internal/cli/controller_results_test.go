@@ -24,11 +24,11 @@ func controllerReport(outcome string, dryRun bool) *prerequisites.Report {
 		Checks: []prerequisites.Check{{ID: "python-runtime", Required: "qualified Python and Ansible", Observed: observed, Status: status}}, Actions: []string{"Prepare the qualified controller runtime"}, Dependencies: []string{"qualified-source.tar.gz"}}
 }
 
-// Neither controller install nor controller check consumes a context: they
+// Neither install nor controller check consumes a context: they
 // prepare and inspect what every context shares, so each refuses an explicit
 // --context.
 func TestControllerReportsAndExplicitContextDispatch(t *testing.T) {
-	for _, command := range [][]string{{"controller", "install", "--dry-run"}, {"check", "controller"}} {
+	for _, command := range [][]string{{"install"}, {"install", "--dry-run"}} {
 		for _, flag := range []string{"--context=", "--context=example"} {
 			args := append(append([]string{}, command...), flag)
 			_, out, errOut, record := runRecorded(args)
@@ -36,24 +36,22 @@ func TestControllerReportsAndExplicitContextDispatch(t *testing.T) {
 				t.Fatal(args, out, errOut)
 			}
 		}
-		dryRun := command[1] == "install"
-		outcome := "ready"
+		dryRun := len(command) == 2
+		outcome := "unchanged"
 		if dryRun {
 			outcome = "planned"
 		}
-		record := &dispatchRecord{result: commandResult{controller: controllerReport(outcome, dryRun)}}
+		report := controllerReport(outcome, false)
+		report.DryRun = dryRun
+		record := &dispatchRecord{result: commandResult{controller: report}}
 		var out, errOut bytes.Buffer
 		code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), command)
 		if code != 0 || errOut.Len() != 0 || !strings.Contains(out.String(), "Outcome  "+outcome) {
 			t.Fatal(command, code, out.String(), errOut.String())
 		}
 		switch request := record.request.(type) {
-		case prerequisites.CheckRequest:
-			if request.ContextName != "" {
-				t.Fatal(request)
-			}
 		case prerequisites.SetupRequest:
-			if !request.DryRun {
+			if request.DryRun != dryRun || !request.Verify {
 				t.Fatal(request)
 			}
 		default:
@@ -65,7 +63,7 @@ func TestControllerReportsAndExplicitContextDispatch(t *testing.T) {
 func TestControllerNegativeReportPreservesStreamsAndSafeDiagnostics(t *testing.T) {
 	record := &dispatchRecord{result: commandResult{controller: controllerReport("not-ready", false)}, err: diagnostics.NewFailure("controller.prerequisites", "required prerequisites are missing", "")}
 	var out, errOut bytes.Buffer
-	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"check", "controller"})
+	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"install", "--dry-run"})
 	if code != 1 || !strings.Contains(out.String(), "Outcome  not-ready") || !strings.Contains(errOut.String(), "controller.prerequisites") {
 		t.Fatal(code, out.String(), errOut.String())
 	}
@@ -79,7 +77,7 @@ func TestControllerSetupReportsItsWarningsOnStandardError(t *testing.T) {
 	run := func(report *prerequisites.Report, err error) (int, string, string) {
 		var out, errOut bytes.Buffer
 		record := &dispatchRecord{result: commandResult{controller: report}, err: err}
-		code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"controller", "install"})
+		code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"install"})
 		return code, out.String(), errOut.String()
 	}
 	completed := controllerReport("changed", false)
@@ -89,7 +87,7 @@ func TestControllerSetupReportsItsWarningsOnStandardError(t *testing.T) {
 	}
 	declined := controllerReport("planned", false)
 	declined.Warnings = []diagnostics.Diagnostic{warning}
-	if code, out, errOut := run(declined, diagnostics.NewFailure("controller.install", "setup was declined", "")); code != 1 || errOut != want+"  error  controller.install\n    setup was declined\n    Next: resolve the failed action the message names and repeat controller install\n" || !strings.Contains(out, "Outcome  planned") {
+	if code, out, errOut := run(declined, diagnostics.NewFailure("controller.install", "setup was declined", "")); code != 1 || errOut != want+"  error  controller.install\n    setup was declined\n    Next: resolve the failed action the message names and repeat install\n" || !strings.Contains(out, "Outcome  planned") {
 		t.Fatal(code, out, errOut)
 	}
 	misfiled := controllerReport("changed", false)
@@ -105,7 +103,7 @@ func TestControllerPlanFailureStopsOutputWithoutFallback(t *testing.T) {
 	err := presenter.PresentControllerPlan(context.Background(), *controllerReport("planned", true))
 	record := &dispatchRecord{result: commandResult{controller: controllerReport("incomplete", false)}, err: err}
 	var out bytes.Buffer
-	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"controller", "install"})
+	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"install"})
 	if code != 1 || out.Len() != 0 || errOut.Len() != 0 {
 		t.Fatal(code, out.String(), errOut.String())
 	}
@@ -114,7 +112,7 @@ func TestControllerPlanFailureStopsOutputWithoutFallback(t *testing.T) {
 func TestControllerConfirmationUsesSetupScope(t *testing.T) {
 	var out bytes.Buffer
 	confirmation := NewConfirmation(func(context.Context, []byte) (int, error) { return 0, errors.New("unexpected input") }, &out, func() (bool, error) { return false, nil })
-	err := confirmation.Confirm(context.Background(), "controller install", "this host")
+	err := confirmation.Confirm(context.Background(), "install", "this host")
 	diagnostics := diagnostics.Of(err)
 	if len(diagnostics) != 1 || diagnostics[0].Code != "controller.install" || !strings.Contains(diagnostics[0].Remediation, "--yes") || out.Len() != 0 {
 		t.Fatal(diagnostics, out.String())
@@ -122,20 +120,13 @@ func TestControllerConfirmationUsesSetupScope(t *testing.T) {
 }
 
 func TestControllerInvocationPrivilegeAndHelp(t *testing.T) {
-	// Setup selects no context, so every dry run stays below the privilege
-	// boundary.
-	for _, args := range [][]string{{"controller", "install", "--dry-run"}} {
-		if ClassifyInvocation(args).RequiresRoot {
-			t.Fatal("setup dry-run requested privilege", args)
-		}
-	}
-	for _, args := range [][]string{{"controller", "install"}, {"check", "controller"}, {"check", "environment"}, {"check", "environment", "--stage", "controller"}} {
+	for _, args := range [][]string{{"install"}, {"install", "--dry-run"}, {"apply", "--dry-run"}, {"apply", "--dry-run", "--stage", "controller"}} {
 		if !ClassifyInvocation(args).RequiresRoot {
 			t.Fatal("effectful invocation omitted privilege", args)
 		}
 	}
 	var out bytes.Buffer
-	if code := New(Config{Out: &out}).Run(context.Background(), []string{"check", "controller", "--help"}); code != 0 || strings.Contains(out.String(), "--context") {
+	if code := New(Config{Out: &out}).Run(context.Background(), []string{"install", "--dry-run", "--help"}); code != 0 || strings.Contains(out.String(), "--context") {
 		t.Fatal(code, out.String())
 	}
 }
@@ -161,10 +152,10 @@ func TestControllerSetupConfirmationJourneys(t *testing.T) {
 				buffer[0], remaining = remaining[0], remaining[1:]
 				return 1, nil
 			}, &out, func() (bool, error) { return true, nil })
-			err := confirmation.Confirm(context.Background(), "controller install", "this host")
+			err := confirmation.Confirm(context.Background(), "install", "this host")
 			// The plan is presented before the prompt, so the prompt names the
 			// controller scope rather than a context transition.
-			if !strings.Contains(out.String(), "Confirm controller install on this host? [y/N] ") {
+			if !strings.Contains(out.String(), "Confirm install on this host? [y/N] ") {
 				t.Fatalf("prompt = %q", out.String())
 			}
 			if testCase.accepted {
@@ -189,7 +180,7 @@ func TestControllerSetupConfirmationStopsOnCancellation(t *testing.T) {
 	cancel()
 	var out bytes.Buffer
 	confirmation := NewConfirmation(func(context.Context, []byte) (int, error) { return 0, errors.New("unexpected input") }, &out, func() (bool, error) { return true, nil })
-	diagnostics := diagnostics.Of(confirmation.Confirm(ctx, "controller install", "this host"))
+	diagnostics := diagnostics.Of(confirmation.Confirm(ctx, "install", "this host"))
 	if len(diagnostics) != 1 || diagnostics[0].Code != "controller.install" || out.Len() != 0 {
 		t.Fatal(diagnostics, out.String())
 	}
@@ -200,8 +191,8 @@ func TestControllerSetupForwardsConfirmationSuppressionAndNoOp(t *testing.T) {
 		args []string
 		skip bool
 	}{
-		{args: []string{"controller", "install"}},
-		{args: []string{"controller", "install", "--yes"}, skip: true},
+		{args: []string{"install"}},
+		{args: []string{"install", "--yes"}, skip: true},
 	} {
 		// A verified no-op reports "unchanged"; "ready" is the preflight outcome.
 		report := controllerReport("unchanged", false)
@@ -252,7 +243,7 @@ func TestControllerIncompleteSetupReportsPerActionProgress(t *testing.T) {
 	}
 	record := &dispatchRecord{result: commandResult{controller: report}, err: diagnostics.NewFailure("controller.unknown", "a setup action has an unresolved effect outcome", "")}
 	var out, errOut bytes.Buffer
-	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"controller", "install"})
+	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"install"})
 	if code != 1 {
 		t.Fatalf("exit = %d", code)
 	}
@@ -273,7 +264,7 @@ func TestControllerCompletedSetupReportsReadinessOnly(t *testing.T) {
 	report.Progress = []prerequisites.ActionProgress{{ID: "python-runtime", Phase: "observed", Outcome: "changed"}}
 	record := &dispatchRecord{result: commandResult{controller: report}}
 	var out, errOut bytes.Buffer
-	if code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"controller", "install"}); code != 0 || errOut.Len() != 0 {
+	if code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"install"}); code != 0 || errOut.Len() != 0 {
 		t.Fatal(code, errOut.String())
 	}
 	if strings.Contains(out.String(), "Progress\n") || !strings.Contains(out.String(), "Readiness  all required prerequisites verified") {
@@ -372,8 +363,8 @@ func TestRunnerFinishesProgressBeforeTheReadyResult(t *testing.T) {
 	record := &dispatchRecord{result: commandResult{controller: report}}
 	var out bytes.Buffer
 	config := Config{Out: &out, Services: dispatchSpies(record), FinishProgress: func() { out.WriteString("<finished>") }}
-	code := New(config).Run(context.Background(), []string{"controller", "install"})
-	want := "<finished>\n  Planned changes\n    none\n\n    Outcome  unchanged\n    Next     bootwright check controller\n"
+	code := New(config).Run(context.Background(), []string{"install"})
+	want := "<finished>\n  Planned changes\n    none\n\n    Outcome  unchanged\n    Next     bootwright init --name <name> --input-dir <dir>\n"
 	if code != 0 || out.String() != want {
 		t.Fatalf("code=%d result=%q, want %q", code, out.String(), want)
 	}
@@ -384,14 +375,14 @@ func TestRunnerFinishesProgressBeforeTheReadyResult(t *testing.T) {
 // next command its service took from the remediation, none when it named none.
 func TestControllerResolutionFailureReportsOutcomeOnly(t *testing.T) {
 	for next, want := range map[string]string{
-		"":                              "\n    Outcome  planned\n",
-		"bootwright controller install": "\n    Outcome  planned\n    Next     bootwright controller install\n",
+		"":                   "\n    Outcome  planned\n",
+		"bootwright install": "\n    Outcome  planned\n    Next     bootwright install\n",
 	} {
 		report := controllerReport("planned", false)
 		report.ProgressPresented, report.Next = true, next
 		record := &dispatchRecord{result: commandResult{controller: report}, err: diagnostics.NewFailure("controller.install", "publisher metadata is unavailable", "")}
 		var out, errOut bytes.Buffer
-		code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"controller", "install"})
+		code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"install"})
 		if code != 1 || out.String() != want || !strings.Contains(errOut.String(), "controller.install") {
 			t.Fatalf("next %q: code=%d out=%q err=%q", next, code, out.String(), errOut.String())
 		}
@@ -446,7 +437,7 @@ func TestTheSetupPlanCarriesItsResolutionWarningsBeforeThePrompt(t *testing.T) {
 	run := func(report *prerequisites.Report, err error) string {
 		var out, errOut bytes.Buffer
 		record := &dispatchRecord{result: commandResult{controller: report}, err: err}
-		New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"controller", "install"})
+		New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"install"})
 		return errOut.String()
 	}
 	presented := controllerReport("changed", false)
@@ -462,7 +453,7 @@ func TestTheSetupPlanCarriesItsResolutionWarningsBeforeThePrompt(t *testing.T) {
 	}
 	stopped := controllerReport("planned", false)
 	stopped.ProgressPresented, stopped.Warnings = true, []diagnostics.Diagnostic{warning}
-	if errOut := run(stopped, diagnostics.NewFailure("controller.install", "publisher metadata is unavailable", "")); errOut != printed+"  error  controller.install\n    publisher metadata is unavailable\n    Next: resolve the failed action the message names and repeat controller install\n" {
+	if errOut := run(stopped, diagnostics.NewFailure("controller.install", "publisher metadata is unavailable", "")); errOut != printed+"  error  controller.install\n    publisher metadata is unavailable\n    Next: resolve the failed action the message names and repeat install\n" {
 		t.Fatalf("a setup that stopped before its plan printed %q", errOut)
 	}
 }
@@ -546,7 +537,7 @@ func TestControllerSetupShowsThePreviewAndNamesItsRunGolden(t *testing.T) {
 		Progress:    []prerequisites.ActionProgress{{ID: "native-packages", Phase: "observed", Outcome: "changed"}, {ID: "receipt", Phase: "observed", Outcome: "changed"}},
 		LogLocation: location, SetupRun: "install-000003",
 	}
-	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record), FinishProgress: presenter.Finish}).Run(ctx, []string{"controller", "install", "--yes"})
+	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record), FinishProgress: presenter.Finish}).Run(ctx, []string{"install", "--yes"})
 	if code != 0 || errOut.Len() != 0 {
 		t.Fatalf("setup exited %d with %q", code, errOut.String())
 	}
@@ -575,7 +566,7 @@ func TestControllerSuppressedProgressStillPresentsChecks(t *testing.T) {
 	}
 	out.Reset()
 	report.ProgressPresented = true
-	if err := writeControllerReport(stream, io.Discard, "check controller", report); err != nil {
+	if err := writeControllerReport(stream, io.Discard, "install --dry-run", report); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "Checks") || !strings.Contains(out.String(), "Controller runtime") {

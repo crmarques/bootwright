@@ -157,7 +157,7 @@ func TestAControllerPlacedMirrorPlansThroughTheLifecycleService(t *testing.T) {
 	t.Parallel()
 	const name = "lab-sno-mirror-host"
 	services, _ := productionSourcesContext(t, name, name, controllerPlacedMirror(t))
-	out, _ := contextRun(t, services, 0, "plan", "apply", "--context", name, "--output", "json")
+	out, _ := contextRun(t, services, 1, "apply", "--dry-run", "--context", name, "--output", "json")
 	packages, server := strings.Index(out, `"controller-prerequisites"`), strings.Index(out, `"artifact-server-mirror-artifacts"`)
 	fill, clients := strings.Index(out, `"mirror-files-lab-sno-mirror-host"`), strings.Index(out, `"controller-mirrored-clients"`)
 	if packages < 0 || server < 0 || fill < 0 || clients < 0 || !(packages < server && server < fill && fill < clients) {
@@ -172,7 +172,7 @@ func TestAManagedArtifactMirrorExamplePlansThroughTheLifecycleService(t *testing
 	t.Parallel()
 	const name = "lab-sno-mirror-host"
 	services, _ := productionExampleContext(t, name, name)
-	out, _ := contextRun(t, services, 0, "plan", "apply", "--context", name, "--output", "json")
+	out, _ := contextRun(t, services, 1, "apply", "--dry-run", "--context", name, "--output", "json")
 	packages, server := strings.Index(out, `"controller-prerequisites"`), strings.Index(out, `"artifact-server-mirror-artifacts"`)
 	fill, clients := strings.Index(out, `"mirror-files-lab-sno-mirror-host"`), strings.Index(out, `"controller-mirrored-clients"`)
 	if packages < 0 || server < 0 || fill < 0 || clients < 0 || !(packages < server && server < fill && fill < clients) {
@@ -258,7 +258,7 @@ func TestAManagedImageMirrorExamplePlansThroughTheLifecycleService(t *testing.T)
 	t.Parallel()
 	const name = "lab-rhel-mirror-host"
 	services, _ := productionExampleContext(t, name, name)
-	out, _ := contextRun(t, services, 0, "plan", "apply", "--context", name, "--output", "json")
+	out, _ := contextRun(t, services, 1, "apply", "--dry-run", "--context", name, "--output", "json")
 	stage, registry, fill, consumer := strings.Index(out, `"controller-prerequisites"`), strings.Index(out, `"registry-mirror-registry"`),
 		strings.Index(out, `"mirror-images-lab-rhel-mirror-host"`), strings.Index(out, `"dns-lab-dns"`)
 	if stage < 0 || registry < 0 || fill < 0 || consumer < 0 || !(stage < registry && registry < fill && fill < consumer) {
@@ -335,7 +335,7 @@ func TestAnInstalledMirrorHostPlansThroughTheLifecycleService(t *testing.T) {
 	t.Parallel()
 	const name = "lab-sno-installed-mirror-host"
 	services, _ := productionExampleContext(t, name, name)
-	out, _ := contextRun(t, services, 0, "plan", "apply", "--context", name, "--output", "json")
+	out, _ := contextRun(t, services, 1, "apply", "--dry-run", "--context", name, "--output", "json")
 	var at []int
 	for _, id := range []string{"controller-prerequisites", "os-install-mirror", "artifact-server-mirror-artifacts", "mirror-files-" + name, "controller-mirrored-clients"} {
 		at = append(at, strings.Index(out, `"`+id+`"`))
@@ -380,7 +380,7 @@ func TestAReleaseMirrorExamplePlansThroughTheLifecycleService(t *testing.T) {
 	t.Parallel()
 	const name = "lab-sno-release-mirror"
 	services, _ := productionExampleContext(t, name, name)
-	out, _ := contextRun(t, services, 0, "plan", "apply", "--context", name, "--output", "json")
+	out, _ := contextRun(t, services, 1, "apply", "--dry-run", "--context", name, "--output", "json")
 	registry, release, media := strings.Index(out, `"registry-mirror-registry"`), strings.Index(out, `"mirror-release-sno"`), strings.Index(out, `"cluster-media-sno"`)
 	if registry < 0 || release < 0 || media < 0 || !(registry < release && release < media) {
 		t.Fatalf("the plan does not preview the Registry, the release copy and the cluster's image build in that order:\n%s", out)

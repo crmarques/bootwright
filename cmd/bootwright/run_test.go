@@ -28,8 +28,8 @@ func proxyEnvironment(t *testing.T, values map[string]string) {
 var (
 	routeFromURL      = []string{"catalog", "media", "add", "--name", "image.iso", "--from-url", "https://images.example/image.iso", "--sha256", strings.Repeat("a1", 32)}
 	routeFromFile     = []string{"catalog", "media", "add", "--name", "image.iso", "--from-file", "/images/image.iso"}
-	routeHostPreview  = []string{"check", "controller"}
-	routeContextCheck = []string{"check", "environment", "--context", "lab", "--stage", "controller"}
+	routeHostPreview  = []string{"install", "--dry-run"}
+	routeContextCheck = []string{"apply", "--dry-run", "--context", "lab", "--stage", "controller"}
 )
 
 // A local import or a context-backed preflight takes nothing from the invoking
@@ -42,7 +42,7 @@ func TestOnlyContextFreeAcquisitionForwardsTheInvokingRoute(t *testing.T) {
 		want []string
 	}{
 		{routeFromURL, []string{"HTTPS_PROXY=http://proxy.example:3128", "NO_PROXY=images.internal"}},
-		{routeHostPreview, []string{"HTTPS_PROXY=http://proxy.example:3128", "NO_PROXY=images.internal"}},
+		{routeHostPreview, nil},
 		{routeFromFile, nil},
 		{routeContextCheck, nil},
 	} {
@@ -65,7 +65,7 @@ func TestAnUnqualifiedRouteRefusesOnlyContextFreeAcquisition(t *testing.T) {
 		refuses bool
 	}{
 		{routeFromURL, true},
-		{routeHostPreview, true},
+		{routeHostPreview, false},
 		{routeFromFile, false},
 		{routeContextCheck, false},
 	} {

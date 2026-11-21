@@ -32,13 +32,13 @@ type ScopedFailure struct {
 func (f *ScopedFailure) Error() string { return "failed with diagnostics" }
 
 func (f *ScopedFailure) Unwrap() error {
-	return f.remedied("set HTTPS_PROXY to a proxy that reaches it and keep it out of NO_PROXY", cmp.Or(f.Command, "rerun bootwright controller install"))
+	return f.remedied("set HTTPS_PROXY to a proxy that reaches it and keep it out of NO_PROXY", cmp.Or(f.Command, "rerun bootwright install"))
 }
 
 // InStage renders a scoped failure as the named context's controller stage
 // meets it: that stage settles it, by the correction alone. The stage acquires
 // over the proxy choice its block froze, and the failed apply holding that
-// block continues only over its exact input, which no context update may
+// block continues only over its exact input, which no update may
 // change meanwhile, so another route is no remedy its command can settle. Any
 // other error is returned unchanged.
 func InStage(err error, name string) error {

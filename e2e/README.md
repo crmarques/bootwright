@@ -192,10 +192,10 @@ git branch --show-current
 git rev-parse HEAD
 make build
 ./bin/bootwright version
-./bin/bootwright controller install --yes
+./bin/bootwright install --yes
 ```
 
-`controller install` installs Bootwright's runtime and baseline execution
+`install` installs Bootwright's runtime and baseline execution
 packages. The case's later `apply --stage controller` installs its selected
 libvirt, QEMU, TPM and installer tools and binds the context to this host. No
 manual installation of those packages is needed.
@@ -359,7 +359,7 @@ installation, build tools, firewalld and cached media remain available for
 later cases.
 
 [Removing Bootwright from the host](../docs/operator-guide.md#uninstalling-bootwright-from-this-host)
-uses `./bin/bootwright controller uninstall` after every environment is
+uses `./bin/bootwright uninstall` after every environment is
 destroyed, every context deleted and all imported media removed. That command
 removes the shared controller state and install-owned packages; it belongs
 to host removal after testing, beyond an individual case's cleanup.

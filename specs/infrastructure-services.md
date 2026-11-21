@@ -75,7 +75,7 @@ The controller arm requires this context's verified
 [host binding](contexts.md#controller-relationship-and-host-binding) and the
 controller runtime of the running build's lock, which a completed setup
 publishes. A missing, contradictory or stale binding refuses before effects
-and names `controller install`.
+and names `install`.
 
 The SSH arm binds the [lifecycle login](api/machines.md#addresses-and-access)
 and the private key and host-pin Secret versions in the plan. For a declared
@@ -418,7 +418,7 @@ serving certificate exactly when an effective listener uses HTTPS. A
 declaration lists, so admission refuses, as `api.invariant` at
 `$.spec.endpoints[i]`, an HTTPS endpoint whose address it does not name,
 naming the Secret and the missing address, with the remedy to add that address,
-import the change with `context update --name <context>` and then run
+import the change with `update --name <context>` and then run
 `secret generate` with `--context`, since generation reads the context's stored
 revision rather than the edited input: an IP address must be one of
 `spec.source.generated.ipAddresses`, compared as hostname verification compares
