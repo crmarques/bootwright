@@ -530,6 +530,13 @@ func cliGoldens() []cliGolden {
 	powered := func(verb power.Verb, now, previous string, changed bool) *power.Results {
 		return &power.Results{Context: "lab", Verb: verb, Machines: []power.Result{powerRow("rhel-01", verb, now, previous, changed)}}
 	}
+	mediaStatus := func(r *dispatchRecord) {
+		r.result.mediaStatus = &power.MediaStatusResult{Context: "lab", Machines: []power.MediaStatusRow{
+			{Machine: "rhel-01", Media: power.MediaPresent},
+			{Machine: "rhel-02", Media: power.MediaNone},
+			{Machine: "rhel-03", Media: power.MediaUnknown},
+		}}
+	}
 	ejectedMedia := func(names ...string) *power.Results {
 		results := &power.Results{Context: "lab", Verb: power.EjectMedia}
 		for index, name := range names {
@@ -1127,9 +1134,11 @@ func cliGoldens() []cliGolden {
 		{golden: "cli-machine-stop-json", args: "machine stop --name rhel-01 --yes --output json", record: func(r *dispatchRecord) { r.result.power = powered("stop", "off", "off", false) }},
 		{golden: "cli-machine-restart", args: "machine restart --name rhel-01 --force --yes", record: func(r *dispatchRecord) { r.result.power = powered("restart", "on", "on", true) }},
 		{golden: "cli-machine-restart-json", args: "machine restart --name rhel-01 --force --yes --output json", record: func(r *dispatchRecord) { r.result.power = powered("restart", "on", "on", true) }},
-		{golden: "cli-machine-eject-media", args: "machine eject-media --name rhel-01 --yes", record: func(r *dispatchRecord) { r.result.power = ejectedMedia("rhel-01") }},
-		{golden: "cli-machine-eject-media-json", args: "machine eject-media --name rhel-01 --yes --output json", record: func(r *dispatchRecord) { r.result.power = ejectedMedia("rhel-01") }},
-		{golden: "cli-machine-eject-media-several", args: "machine eject-media --name rhel-02,rhel-01 --yes", record: func(r *dispatchRecord) { r.result.power = ejectedMedia("rhel-01", "rhel-02") }},
+		{golden: "cli-machine-media-status", args: "machine media status --name rhel-03,rhel-01,rhel-02", record: mediaStatus},
+		{golden: "cli-machine-media-status-json", args: "machine media status --name rhel-03,rhel-01,rhel-02 --output json", record: mediaStatus},
+		{golden: "cli-machine-media-eject", args: "machine media eject --name rhel-01 --yes", record: func(r *dispatchRecord) { r.result.power = ejectedMedia("rhel-01") }},
+		{golden: "cli-machine-media-eject-json", args: "machine media eject --name rhel-01 --yes --output json", record: func(r *dispatchRecord) { r.result.power = ejectedMedia("rhel-01") }},
+		{golden: "cli-machine-media-eject-several", args: "machine media eject --name rhel-02,rhel-01 --yes", record: func(r *dispatchRecord) { r.result.power = ejectedMedia("rhel-01", "rhel-02") }},
 		// A refused run: text named the run's directory while it ran, so it
 		// adds only the diagnostic; JSON reported no progress, so its failure
 		// envelope names the retained file.
@@ -1359,7 +1368,7 @@ func TestEveryAvailableCommandHasAGolden(t *testing.T) {
 		"catalog add-ons list", "catalog add-ons info",
 		"validate", "preflight", "render effective", "render acquisitions", "status", "logs", "diff",
 		"secret check", "secret list", "secret info", "secret encryption status", "machine trust", "install",
-		"machine cp", "machine list", "machine info", "machine start", "machine stop", "machine restart", "machine eject-media", "catalog media list", "cluster list", "cluster info",
+		"machine cp", "machine list", "machine info", "machine start", "machine stop", "machine restart", "machine media eject", "machine media status", "catalog media list", "cluster list", "cluster info",
 	}
 	implemented := map[string]bool{}
 	for _, spec := range commandCatalog() {

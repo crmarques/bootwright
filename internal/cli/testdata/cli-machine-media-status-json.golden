@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "machine media status",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": "lab",
+    "machines": [
+      {
+        "machine": "rhel-01",
+        "media": "present"
+      },
+      {
+        "machine": "rhel-02",
+        "media": "none"
+      },
+      {
+        "machine": "rhel-03",
+        "media": "unknown"
+      }
+    ]
+  },
+  "diagnostics": [],
+  "logs": []
+}

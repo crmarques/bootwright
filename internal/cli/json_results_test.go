@@ -57,6 +57,7 @@ var cliResults = []reflect.Type{
 	reflect.TypeFor[installCheckResult](),
 	reflect.TypeFor[machineListPresentation](),
 	reflect.TypeFor[machinePowerPresentation](),
+	reflect.TypeFor[machineMediaStatusPresentation](),
 	reflect.TypeFor[machineCopyPresentation](),
 	reflect.TypeFor[policyInstallation](),
 	reflect.TypeFor[policyPermissions](),

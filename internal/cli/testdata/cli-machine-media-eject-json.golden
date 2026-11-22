@@ -1,6 +1,6 @@
 {
   "schemaVersion": "v1alpha1",
-  "command": "machine eject-media",
+  "command": "machine media eject",
   "ok": true,
   "exitCode": 0,
   "result": {

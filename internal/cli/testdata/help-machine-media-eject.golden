@@ -1,4 +1,4 @@
-  bootwright / machine eject-media
+  bootwright / machine media eject
       Eject whatever image the virtual-media device Bootwright inserts through presents on each
       machine, whichever image it is and whoever attached it, and leave its power as it is.
       --name takes a comma-separated list, and the command applies to every listed machine at
@@ -7,7 +7,7 @@
       machines before confirming; --yes skips ordinary confirmation.
 
   Usage
-    bootwright machine eject-media [flags]
+    bootwright machine media eject [flags]
 
   Command flags
       --name  Select comma-separated machine names (required)
@@ -24,4 +24,4 @@
       --width       Set presentation width (0: automatic) · default 0
 
   Examples
-    bootwright machine eject-media --context lab --name node --yes
+    bootwright machine media eject --context lab --name node --yes

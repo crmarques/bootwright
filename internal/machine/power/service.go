@@ -89,30 +89,64 @@ func (s Service) EjectMedia(ctx context.Context, request PowerRequest) (*Results
 // resolves no reachable controller for is absent from the result rather than
 // reported in a state nothing proved.
 func (s Service) Read(ctx context.Context, contextName string, names []string) (map[string]string, error) {
-	if err := ctx.Err(); err != nil {
+	_, readings, err := s.read(ctx, contextName, names, false)
+	return readings, err
+}
+
+// MediaStatus reports a live reading for each exact Machine in canonical order.
+func (s Service) MediaStatus(ctx context.Context, request MediaStatusRequest) (*MediaStatusResult, error) {
+	names, err := normalized(request.Names)
+	if err != nil {
 		return nil, err
 	}
+	name, readings, err := s.read(ctx, request.ContextName, names, true)
+	if err != nil {
+		return nil, err
+	}
+	result := &MediaStatusResult{Context: name, Machines: make([]MediaStatusRow, 0, len(names))}
+	for _, machine := range names {
+		state, answered := readings[machine]
+		if !answered {
+			state = MediaUnknown
+		}
+		result.Machines = append(result.Machines, MediaStatusRow{Machine: machine, Media: state})
+	}
+	return result, nil
+}
+
+func (s Service) read(ctx context.Context, contextName string, names []string, media bool) (string, map[string]string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", nil, err
+	}
 	if s.state == nil || s.realization == nil || s.runtime == nil || s.runner == nil {
-		return nil, availability.ErrNotImplemented
+		return "", nil, availability.ErrNotImplemented
 	}
 	name, err := machine.SelectedContext(ctx, s.selection, contextName)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 	effective, err := s.state.RenderEffective(ctx, compilation.EffectiveRequest{ContextName: name})
 	if err != nil {
-		return nil, err
+		return "", nil, err
+	}
+	if media {
+		if err := undeclared(effective.Effective, name, names); err != nil {
+			return "", nil, err
+		}
 	}
 	surveys, err := readSurveysFor(effective.Effective, name, names, s.realized(ctx, name), s.pinned(ctx, name))
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
-	if err := refuseSurveyTemplateValues(name, surveys); err != nil {
-		return nil, err
+	for index := range surveys {
+		surveys[index].Media = media
+	}
+	if err := refuseSurveyTemplateValues(name, readCommand(name, media, names), surveys); err != nil {
+		return "", nil, err
 	}
 	readings := map[string]string{}
 	if len(surveys) == 0 {
-		return readings, nil
+		return name, readings, nil
 	}
 	var references []string
 	for _, survey := range surveys {
@@ -157,9 +191,9 @@ func (s Service) Read(ctx context.Context, contextName string, names []string) (
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
-	return readings, nil
+	return name, readings, nil
 }
 
 func (s Service) pinned(ctx context.Context, contextName string) func(string) (machine.HardwareIdentity, error) {
@@ -274,7 +308,7 @@ func refuseTemplateValues(contextName, command string, frozen Request) error {
 // refuseSurveyTemplateValues refuses a reading the same way, naming the
 // Machine whose controller or placement host holds the value, so a field path
 // reads relative to that Machine.
-func refuseSurveyTemplateValues(contextName string, surveys []ReadSurvey) error {
+func refuseSurveyTemplateValues(contextName, command string, surveys []ReadSurvey) error {
 	var definitions []reconciliation.BlockDefinition
 	for _, survey := range surveys {
 		for _, target := range survey.Targets {
@@ -290,7 +324,7 @@ func refuseSurveyTemplateValues(contextName string, surveys []ReadSurvey) error 
 		}
 		definitions = append(definitions, reconciliation.BlockDefinition{Kind: string(api.Machine), Object: survey.Placement.Machine, Request: encoded})
 	}
-	return lifecycle.RefuseBoundedTemplateDelimiters(contextName, "bootwright machine list --context "+contextName+" --power-status", definitions)
+	return lifecycle.RefuseBoundedTemplateDelimiters(contextName, command, definitions)
 }
 
 // powerCommand is the command that repeats one power request in its context.
@@ -300,7 +334,11 @@ func powerCommand(contextName string, frozen Request) string {
 
 // batchCommand is the command that repeats a power request for every Machine.
 func batchCommand(contextName string, verb Verb, names []string, force bool) string {
-	command := "bootwright machine " + string(verb) + " --context " + contextName + " --name " + strings.Join(names, ",")
+	path := string(verb)
+	if verb == EjectMedia {
+		path = "media eject"
+	}
+	command := "bootwright machine " + path + " --context " + contextName + " --name " + strings.Join(names, ",")
 	if force {
 		command += " --force"
 	}
@@ -404,9 +442,13 @@ func (s Service) readGroups(step lifecycle.ProgressEvent) func(context.Context, 
 // effect and registers no operation, so it is a check, numbered among the
 // hosts the inspection reads through.
 func readStep(survey ReadSurvey, position, total int) lifecycle.ProgressEvent {
+	block, state := "power-read", "power state"
+	if survey.Media {
+		block, state = "media-status", "virtual media state"
+	}
 	return lifecycle.ProgressEvent{
-		Phase: lifecycle.CheckPhase, Block: "power-read",
-		Description: "Read the power state through " + string(api.Machine) + "/" + survey.Placement.Machine,
+		Phase: lifecycle.CheckPhase, Block: block,
+		Description: "Read the " + state + " through " + string(api.Machine) + "/" + survey.Placement.Machine,
 		Position:    position, Total: total,
 	}
 }
@@ -487,9 +529,15 @@ func (s Service) report(ctx context.Context, event lifecycle.ProgressEvent) {
 
 func readInvocation(runtime lifecycle.Runtime, frozen ReadSurvey, canonical []byte, digest string,
 	progress func(context.Context, string, string, lifecycle.ByteProgress)) lifecycle.RunRequest {
+	var names []string
+	if frozen.Media {
+		for _, target := range frozen.Targets {
+			names = append(names, target.Object)
+		}
+	}
 	return lifecycle.RunRequest{
 		Context:        runtime.Context.Name,
-		Repeat:         "bootwright machine list --context " + runtime.Context.Name + " --power-status",
+		Repeat:         readCommand(runtime.Context.Name, frozen.Media, names),
 		Description:    readStep(frozen, 1, 1).Description,
 		Implementation: ReadImplementation,
 		Operation:      ReadOperation,

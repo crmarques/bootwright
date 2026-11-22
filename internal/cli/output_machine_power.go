@@ -183,3 +183,38 @@ func (r *Runner) writeFailedPowerBatch(command *cobra.Command, path string, resu
 	}
 	return true, writeMachinePowerFailure(r.config.Out, r.config.ErrOut, path, result.power, requested, diagnostics, selectedJSON(command))
 }
+
+type machineMediaStatusPresentation struct {
+	Context  string                              `json:"context"`
+	Machines []machineMediaStatusRowPresentation `json:"machines"`
+}
+
+type machineMediaStatusRowPresentation struct {
+	Machine string `json:"machine"`
+	Media   string `json:"media"`
+}
+
+func (machineMediaStatusPresentation) documentedResult() {}
+
+func writeMachineMediaStatus(out io.Writer, command string, result *power.MediaStatusResult, jsonMode bool) error {
+	if jsonMode {
+		rows := make([]machineMediaStatusRowPresentation, 0, len(result.Machines))
+		for _, row := range result.Machines {
+			rows = append(rows, machineMediaStatusRowPresentation{
+				Machine: escapeDisplayLine(row.Machine), Media: escapeDisplayLine(row.Media),
+			})
+		}
+		return writeEnvelope(out, commandEnvelope{
+			SchemaVersion: "v1alpha1", Command: escapeDisplayLine(command), OK: true, ExitCode: 0,
+			Result:      machineMediaStatusPresentation{Context: escapeDisplayLine(result.Context), Machines: rows},
+			Diagnostics: []diagnostic{}, Logs: []string{},
+		})
+	}
+	var text display
+	rows := make([][]string, 0, len(result.Machines))
+	for _, row := range result.Machines {
+		rows = append(rows, []string{row.Machine, row.Media})
+	}
+	text.resourceTable([]string{"MACHINE", "MEDIA"}, rows, tableStyle{Kind: "machine", Identity: 0, States: []int{1}})
+	return text.writeTo(out)
+}

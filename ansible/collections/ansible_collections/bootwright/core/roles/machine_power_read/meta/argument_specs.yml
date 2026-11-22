@@ -9,6 +9,9 @@ argument_specs:
           context:
             type: str
             required: true
+          media:
+            type: bool
+            required: false
           placement:
             type: dict
             required: true

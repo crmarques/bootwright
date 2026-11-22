@@ -314,9 +314,10 @@ and their output goldens:
 | `logs` | optional `context`, optional `operation`, optional `verb`, optional `state`, optional `events`, optional `source`, optional `path`, optional `bytes`, optional `truncated`, optional `output` |
 | `machine cp` | `context`, `source`, `machines` |
 | `machine discover` | optional `checks`, optional `context`, optional `verb`, optional `steps`, optional `stages`, optional `until`, optional `waves`, optional `widest`, optional `bound`, optional `startable`, optional `deferred`, optional `continuation`, optional `settled`, optional `finalizes`, optional `addsTo`, optional `takesBack`, optional `anotherBuild`, optional `stops`, optional `stopsAfterOnline`, optional `authorizations`, optional `receipt`, optional `operation`, optional `inventories`, optional `next` |
-| `machine eject-media`, `machine restart`, `machine start`, `machine stop` | `context`, `verb`, `machines` |
 | `machine info`, `machine list` | `context`, `machines`, `powerRead` |
 | `machine inventory` | `inventories` |
+| `machine media eject`, `machine restart`, `machine start`, `machine stop` | `context`, `verb`, `machines` |
+| `machine media status` | `context`, `machines` |
 | `machine trust` | `context`, `dryRun`, `pending`, `recorded`, `hosts` |
 | `policy permissions` | `context`, `grants` |
 | `rebind-host` | `outcome`, `bindings`, `reservations` |
@@ -566,13 +567,13 @@ When the width holds them, the human table shows the same columns, `NAME`,
 a reading was taken, `POWER`, with `-` for an absent value; otherwise it shows
 stacked records with the same facts.
 
-`machine start`, `machine stop`, `machine restart` and `machine eject-media`
+`machine start`, `machine stop`, `machine restart` and `machine media eject`
 report `context`, `verb` and `machines`, whatever the number of Machines `--name` lists. `machines` holds
 one row for each Machine whose run was admitted, in ascending bytewise Machine
 name order, each with `machine`, its name; `power`, the `on` or `off` state the
 management controller proved after the verb, omitted for a Machine whose run
 did not settle; `previous`, the state it reported before the verb, omitted when
-it reported none; for `machine eject-media` alone, `media`, `none` once the
+it reported none; for `machine media eject` alone, `media`, `none` once the
 device was read back presenting nothing, and `previousMedia`, `present`, `none`
 or `unknown` as read before the eject, both omitted for a row that did not
 settle; `changed`, whether the verb changed it, `false` for a row
@@ -588,13 +589,18 @@ diagnostics alone, with `result` `null`. The human result of several Machines is
 a headline, `✓` when any changed and `○` when none changed, and a
 table with the columns `MACHINE`, `POWER`, `PREVIOUS` and `LOGS`, where `LOGS`
 is the run's directory and `-` stands for an absent value; for
-`machine eject-media` the headline says the machines were ejected and the
+`machine media eject` the headline says the machines were ejected and the
 columns are `MACHINE`, `MEDIA`, `PREVIOUS`, `POWER` and `LOGS`, `PREVIOUS`
 being the media before the eject. When any Machine did
 not settle the headline is `!`, the table is still written to standard
 output and the diagnostics go to standard error. One Machine's human result is
 unchanged; one Machine's eject is headed `Machine presents no media`, with its
 media, the media before it and its power.
+
+`machine media status` reports `context` and `machines`. Each row holds
+`machine`, its name, and `media`, one of `present`, `none` or `unknown`.
+The human output is a table with the columns `MACHINE` and `MEDIA`. Both
+forms follow the same [ordering and observation rules](../cli.md#machine-media-status).
 
 ## Media results
 

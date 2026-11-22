@@ -7,9 +7,16 @@
     bootwright_machine_arm: '{{ machine_power_read_target.arm }}'
     bootwright_machine_port: >-
       {{ machine_power_read_target.machinePort | bootwright.core.machine_port_access(bootwright_machine_power_read_material)
-         | combine({'media': false}) }}
+         | combine({'media': bootwright_machine_power_read_request.media | default(false)}) }}
 - name: Retain the reading in survey order
   ansible.builtin.set_fact:
     machine_power_read_readings: >-
-      {{ machine_power_read_readings + [substrate_machine_port_result | combine({'item': machine_power_read_target})] }}
+      {{ machine_power_read_readings + [{
+        'item': {'object': machine_power_read_target.object},
+        'power': substrate_machine_port_result.power | default(''),
+        'media_state': substrate_machine_port_result.media_state | default('unknown'),
+        'failed': (substrate_machine_port_result.failed | default(false))
+          or substrate_machine_port_result.msg is defined,
+        'unreachable': substrate_machine_port_result.unreachable | default(false)
+      }] }}
   no_log: true

@@ -283,7 +283,7 @@ func TestThePowerRolesAdmitTheRequestsThisBuildSends(t *testing.T) {
 		goldens                                      []string
 	}{
 		{power.Implementation, "power", power.Variable, power.RequestVersion, []string{"request-power", "request-power-bundle"}},
-		{power.ReadImplementation, "read", power.ReadVariable, power.ReadRequestVersion, []string{"survey-read", "survey-read-bundles"}},
+		{power.ReadImplementation, "read", power.ReadVariable, power.ReadRequestVersion, []string{"survey-read", "survey-read-bundles", "survey-media-status"}},
 	} {
 		for _, name := range bound.goldens {
 			golden, err := os.ReadFile(filepath.Join("..", "..", "internal", "machine", "power", "testdata", name+".golden"))

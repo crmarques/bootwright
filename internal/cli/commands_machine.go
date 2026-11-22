@@ -45,12 +45,19 @@ func machineCommands() []commandSpec {
 		available(powerCommand("machine stop", "Shut machines down through their management controllers", true, Services.invokeMachineStop)),
 		available(powerCommand("machine restart", "Restart machines through their management controllers", true, Services.invokeMachineRestart)),
 		available(ejectMediaCommand()),
+		available(commandSpec{
+			path: "machine media status", short: "Read the virtual media status of machines", example: "--context lab --name node",
+			flags: []flagSpec{machineNamesFlag()}, invoke: Services.invokeMachineMediaStatus, validate: validateMachineNames,
+			render: renderMachineMediaStatus(), results: []jsonResult{machineMediaStatusPresentation{}},
+			long: "Read the virtual-media device Bootwright uses on each named machine. --name takes a comma-separated list. " +
+				"Each machine reports present, none, or unknown. The command reads live state without changing it.",
+		}),
 	}
 }
 
 func ejectMediaCommand() commandSpec {
 	return commandSpec{
-		path: "machine eject-media", short: "Eject whatever virtual media machines present", example: "--context lab --name node --yes",
+		path: "machine media eject", short: "Eject whatever virtual media machines present", example: "--context lab --name node --yes",
 		flags: []flagSpec{machineNamesFlag(), confirmationFlag()}, invoke: Services.invokeMachineEjectMedia,
 		validate: firstRefusal(validateMachineNames, validateEjectConfirmation), render: renderMachinePower(), results: []jsonResult{machinePowerPresentation{}},
 		long: "Eject whatever image the virtual-media device Bootwright inserts through presents on each machine, whichever image it is and whoever attached it, " +
@@ -101,6 +108,7 @@ type MachinePowerService interface {
 	Stop(context.Context, power.PowerRequest) (*power.Results, error)
 	Restart(context.Context, power.PowerRequest) (*power.Results, error)
 	EjectMedia(context.Context, power.PowerRequest) (*power.Results, error)
+	MediaStatus(context.Context, power.MediaStatusRequest) (*power.MediaStatusResult, error)
 }
 
 func (s Services) invokeMachineList(ctx context.Context, values *requestValues, _ []string) (commandResult, error) {
@@ -187,4 +195,13 @@ func (s Services) invokeMachineEjectMedia(ctx context.Context, values *requestVa
 	}
 	result, err := invokeResult(ctx, values, s.powerRequest(values), s.MachinePower.EjectMedia)
 	return commandResult{power: result}, err
+}
+
+func (s Services) invokeMachineMediaStatus(ctx context.Context, values *requestValues, _ []string) (commandResult, error) {
+	if s.MachinePower == nil {
+		return commandResult{}, errMissingService
+	}
+	request := power.MediaStatusRequest{ContextName: values.text("context"), Names: values.names("name")}
+	result, err := invokeResult(ctx, values, request, s.MachinePower.MediaStatus)
+	return commandResult{mediaStatus: result}, err
 }

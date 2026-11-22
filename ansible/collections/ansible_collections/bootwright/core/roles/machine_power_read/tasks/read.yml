@@ -7,6 +7,7 @@
   ansible.builtin.assert:
     that:
       - bootwright_machine_power_read_request.version == 'machine-power-read-v1'
+      - bootwright_machine_power_read_request.media | default(false) is boolean
       - bootwright_machine_power_read_request.targets | length > 0
       - bootwright_machine_power_read_digest is match('^[0-9a-f]{64}$(?!\n)')
     quiet: true
@@ -17,10 +18,10 @@
     phase: loaded
   no_log: true
 
-- name: Report the power states being read
+- name: Report the states being read
   bootwright.core.machine_power_protocol:
     phase: group
-    group: read-state
+    group: "{{ 'read-media' if bootwright_machine_power_read_request.media | default(false) else 'read-state' }}"
     status: running
   no_log: true
 
@@ -42,7 +43,7 @@
 - name: Publish the states that were read
   bootwright.core.machine_power_protocol:
     phase: group
-    group: read-state
+    group: "{{ 'read-media' if bootwright_machine_power_read_request.media | default(false) else 'read-state' }}"
     status: ok
   no_log: true
 
@@ -52,4 +53,5 @@
     outcome: unchanged
     digest: '{{ bootwright_machine_power_read_digest }}'
     readings: '{{ machine_power_read_readings }}'
+    read_media: '{{ bootwright_machine_power_read_request.media | default(false) }}'
   no_log: true

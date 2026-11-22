@@ -16,6 +16,22 @@ type PowerRequest struct {
 	SkipConfirmation bool
 }
 
+// MediaStatusRequest selects the Machines whose virtual media to read.
+type MediaStatusRequest struct {
+	ContextName string
+	Names       []string
+}
+
+type MediaStatusResult struct {
+	Context  string
+	Machines []MediaStatusRow
+}
+
+type MediaStatusRow struct {
+	Machine string
+	Media   string
+}
+
 // Identity names the context and Machine one request acts on.
 type Identity struct {
 	Context api.ContextName `json:"context"`

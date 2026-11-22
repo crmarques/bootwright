@@ -1,0 +1,26 @@
+{
+  "context": "lab",
+  "media": true,
+  "placement": {
+    "connection": "local",
+    "machine": "controller"
+  },
+  "targets": [
+    {
+      "arm": "baremetal",
+      "controller": {
+        "credentialsRef": "metal-bmc",
+        "endpoint": "https://bmc.example.test/redfish/v1/Systems/1",
+        "tlsVerify": true
+      },
+      "machinePort": {
+        "endpoint": "https://bmc.example.test/redfish/v1/Systems/1",
+        "passwordVariable": "controllerPassword0",
+        "userVariable": "controllerUser0",
+        "verify": true
+      },
+      "object": "metal"
+    }
+  ],
+  "version": "machine-power-read-v1"
+}

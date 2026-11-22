@@ -74,9 +74,9 @@ prefix_rule(
 )
 
 prefix_rule(
-    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "machine", "eject-media"],
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "machine", "media", "eject"],
     decision = "prompt",
-    justification = "bootwright machine eject-media acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+    justification = "bootwright machine media eject acts beyond a read of local state; the owner asks for it (AGENTS.md)",
 )
 
 prefix_rule(

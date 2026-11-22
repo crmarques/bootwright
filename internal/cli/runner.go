@@ -84,7 +84,7 @@ func newCommandTree(r *Runner) (*cobra.Command, error) {
 		for _, part := range parts {
 			child := exactChild(parent, part)
 			if child == nil {
-				child = &cobra.Command{Use: part, Short: groupShort(part), DisableSuggestions: true, SilenceUsage: true, SilenceErrors: true}
+				child = &cobra.Command{Use: part, Short: groupShort(parent.Name(), part), DisableSuggestions: true, SilenceUsage: true, SilenceErrors: true}
 				parent.AddCommand(child)
 			}
 			parent = child

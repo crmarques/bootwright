@@ -840,7 +840,7 @@ func TestAnEjectFreezesItsVerbAndReportsTheMediaItProved(t *testing.T) {
 	if frozen.Verb != EjectMedia || frozen.Force {
 		t.Fatalf("frozen verb = %q, force = %t", frozen.Verb, frozen.Force)
 	}
-	if runner.seen.Repeat != "bootwright machine eject-media --context lab --name guest" {
+	if runner.seen.Repeat != "bootwright machine media eject --context lab --name guest" {
 		t.Fatalf("repeat = %q", runner.seen.Repeat)
 	}
 	row := result.Machines[0]

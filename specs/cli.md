@@ -168,7 +168,7 @@ resolved scalar value under the last-occurrence-wins rule.
 
 `--clusters`, `--replace`, and `--stage` are comma-separated
 lists, and so are the optional `--name` of `machine trust`, the required `--name` of `machine start`, `machine stop`,
-`machine restart`, `machine eject-media` and `machine exec`, the required `--name` and the `--node` of
+`machine restart`, `machine media eject`, `machine media status` and `machine exec`, the required `--name` and the `--node` of
 `cluster exec`, and the optional `--name` of `cluster info`, `machine info` and `secret info`.
 Whitespace around a member is ignored, empty members are ignored, and duplicate
 members collapse to their first occurrence. Omission selects all eligible
@@ -187,7 +187,7 @@ preserve these command-specific compatibility rules:
 - a supplied `--stage` must resolve to at least one member, so a comma-only
   value is a usage error, and every member must be a declared stage name; and
 - a supplied `--name` of `machine start`, `machine stop`, `machine restart`,
-  `machine eject-media` and `machine exec` must likewise resolve to at least one member, so a
+  `machine media eject`, `machine media status` and `machine exec` must likewise resolve to at least one member, so a
   comma-only value is a usage error. `machine rsh` opens one interactive
   session and keeps a single `--name`: a value containing a comma is a usage
   error;
@@ -1598,7 +1598,7 @@ that lists the fingerprints and the `--expect` that records them (D183, Q97).
 ### Machine power operations
 
 `machine start`, `machine stop` and `machine restart` converge one exact
-Machine to a power state, and `machine eject-media` converges its virtual-media
+Machine to a power state, and `machine media eject` converges its virtual-media
 device to presenting nothing. They are bounded operations, not desired state: they
 register no lifecycle operation, freeze no plan and change no ownership,
 continuation or plan, so a machine an operator stopped is still a
@@ -1722,9 +1722,23 @@ observes rather than converges, an unreachable management controller leaves its
 own Machine `unknown` instead of refusing, and a Machine no management
 controller resolves for is omitted from the reading instead of failing `access.unavailable`.
 
+### Machine media status
+
+`machine media status` reads the same virtual-media device that
+[`machine media eject`](#machine-media-eject) targets. It requires `--name`
+and resolves each exact Machine before contacting any controller. It follows
+the live observation path of `machine list --power-status` and reports one
+row per named Machine in ascending bytewise name order. A device that
+presents an image reports `present` and an empty device reports `none`.
+A Machine with no resolved controller or whose probe gives no usable answer
+reports `unknown`.
+A reported `unknown` is a successful observation result. Image identities and
+addresses stay private. The command asks for no confirmation and changes no
+machine or lifecycle state.
+
 ### Machine media eject
 
-`machine eject-media` releases whatever image the virtual-media device that
+`machine media eject` releases whatever image the virtual-media device that
 Bootwright inserts through presents, whichever operation, context or operator
 attached it, so an insert that refused a device presenting other media can run
 again; another device of the same management controller is neither read nor

@@ -1,0 +1,4 @@
+  MACHINE   MEDIA
+  rhel-01   present
+  rhel-02   none
+  rhel-03   unknown

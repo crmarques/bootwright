@@ -272,6 +272,15 @@ func renderMachinePower() commandRenderer {
 	}
 }
 
+func renderMachineMediaStatus() commandRenderer {
+	return commandRenderer{human: func(r *Runner, c renderCall) (bool, error) {
+		if c.result.mediaStatus == nil {
+			return false, nil
+		}
+		return true, writeMachineMediaStatus(r.config.Out, c.path, c.result.mediaStatus, selectedJSON(c.command))
+	}}
+}
+
 func renderMachineCopy() commandRenderer {
 	return commandRenderer{outcome: func(r *Runner, c renderCall, err error) (bool, int) {
 		return r.writeCopyOutcome(c.ctx, c.command, c.path, c.result, err)

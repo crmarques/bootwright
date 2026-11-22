@@ -787,15 +787,20 @@ spec:
       privilege: sudo
 ```
 
-When an insert refuses because a BMC still presents other media, such as an
-image an operator attached by hand or one an interrupted run left, `machine
-eject-media` releases whatever each listed Machine presents and reads the
-device back empty, leaving its power as it was
-([eject](../specs/cli.md#machine-media-eject)); then repeat the refused
-command:
+When an insert refuses because a BMC still presents other media, check the
+device with [`machine media status`](../specs/cli.md#machine-media-status). It
+reports `present`, `none`, or `unknown` for each named Machine.
 
 ```sh
-bootwright machine eject-media --context lab-rhel --name rhel-01,rhel-02 --yes
+bootwright machine media status --context lab-rhel --name rhel-01,rhel-02
+```
+
+[`machine media eject`](../specs/cli.md#machine-media-eject) releases the
+presented media and reads the device back empty. After the eject settles, repeat
+the command that failed to insert media.
+
+```sh
+bootwright machine media eject --context lab-rhel --name rhel-01,rhel-02 --yes
 ```
 
 `cluster exec` does the same across clusters and nodes: `--name` and `--node`

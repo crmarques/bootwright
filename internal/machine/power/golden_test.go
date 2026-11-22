@@ -196,15 +196,18 @@ func TestPowerRequestsMatchTheirGoldens(t *testing.T) {
 	for name, test := range map[string]struct {
 		catalog api.Catalog
 		names   []string
+		media   bool
 	}{
-		"survey-read":         {goldenCatalog(nil), []string{"metal", "rack"}},
-		"survey-read-bundles": {goldenCatalog(bundled), []string{"metal", "rack", "zero"}},
+		"survey-read":         {goldenCatalog(nil), []string{"metal", "rack"}, false},
+		"survey-read-bundles": {goldenCatalog(bundled), []string{"metal", "rack", "zero"}, false},
+		"survey-media-status": {goldenCatalog(nil), []string{"metal"}, true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			surveys, err := readSurveysFor(test.catalog, "lab", test.names, nil, nil)
 			if err != nil || len(surveys) != 1 || len(surveys[0].Targets) != len(test.names) {
 				t.Fatalf("surveys = %+v (%v), want one host reading %d controllers", surveys, err, len(test.names))
 			}
+			surveys[0].Media = test.media
 			canonical, err := surveys[0].Canonical()
 			if err != nil {
 				t.Fatal(err)

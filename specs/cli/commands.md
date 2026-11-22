@@ -163,7 +163,8 @@ Not yet met: `apply --dry-run` defers add-on prerequisite checks to execution; t
 | `bootwright machine start` | required `--name <list>` | the power state each Machine's management controller proved once the operation settled | bounded power operation through that management controller, one concurrent [batch](../cli.md#machine-power-operations) for several Machines |
 | `bootwright machine stop` | required `--name <list>`; `--force` false; `--yes` false | same, after the operating system is asked to shut down | same |
 | `bootwright machine restart` | required `--name <list>`; `--force` false; `--yes` false | same, after a proved stop and a proved start | same |
-| `bootwright machine eject-media` | required `--name <list>`; `--yes` false | the media state each Machine's management controller was read back at once the eject settled, `none`, with what it presented before and its unchanged power | bounded power operation through that management controller that [ejects](../cli.md#machine-media-eject) whatever virtual media it presents, one concurrent [batch](../cli.md#machine-power-operations) for several Machines |
+| `bootwright machine media eject` | required `--name <list>`; `--yes` false | the media state each Machine's management controller was read back at once the eject settled, `none`, with what it presented before and its unchanged power | bounded power operation through that management controller that [ejects](../cli.md#machine-media-eject) whatever virtual media it presents, one concurrent [batch](../cli.md#machine-power-operations) for several Machines |
+| `bootwright machine media status` | required `--name <list>` | the [virtual-media state](../cli.md#machine-media-status) for every named Machine, `present`, `none` or `unknown` | bounded read of the virtual-media state through each Machine's management controller |
 
 #### Controller and cluster commands
 
@@ -256,8 +257,9 @@ once; that of `cluster info` states that `--name` takes a list and that
 `--secrets` requires exactly one cluster.
 
 The detailed help of `machine start`, `machine stop`, `machine restart`,
-`machine eject-media` and `machine exec` states that `--name` takes a comma-separated list and that the
-command applies to every listed Machine at once.
+`machine media eject` and `machine exec` states that `--name` takes a
+comma-separated list and that the command applies to every listed Machine
+at once. `machine media status` also describes its comma-separated list.
 
 Help and completion use the static catalog; they never load a selected cluster
 to hide or enable commands. Target-aware discovery belongs to `cluster info`.
@@ -513,10 +515,11 @@ and is accepted only by `stop` and `restart`, which interrupt a running system;
 those two also take the ordinary confirmation, while `start` interrupts nothing
 and takes neither. A `stop` or `restart` with resolved JSON or YAML output
 requires `--yes`; without it the invocation is `cli.usage` with exit `2` and
-acts on nothing. `machine eject-media` resolves its list the same way, takes the
+acts on nothing. `machine media eject` resolves its list the same way, takes the
 ordinary confirmation and no `--force`, because a Machine still running from the
 image it ejects may fail, and with resolved JSON or YAML output it likewise
-requires `--yes`.
+requires `--yes`. `machine media status` resolves the same list and has no
+confirmation or force flag.
 
 A `machine trust` invocation selecting JSON or YAML with pending trust-store writes
 requires `--yes`; without it the invocation must use `--dry-run` or fails

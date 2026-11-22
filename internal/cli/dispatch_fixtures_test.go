@@ -283,6 +283,10 @@ func (s machineAccessSpy) Copy(ctx context.Context, request machineaccess.CopyRe
 	return s.record.result.copy, s.record.called(ctx, "machine cp", request)
 }
 
+func (s machinePowerSpy) MediaStatus(ctx context.Context, request power.MediaStatusRequest) (*power.MediaStatusResult, error) {
+	return s.record.result.mediaStatus, s.record.called(ctx, "machine media status", request)
+}
+
 type machinePowerSpy struct{ record *dispatchRecord }
 
 func (s machinePowerSpy) Start(ctx context.Context, request power.PowerRequest) (*power.Results, error) {
@@ -298,7 +302,7 @@ func (s machinePowerSpy) Restart(ctx context.Context, request power.PowerRequest
 }
 
 func (s machinePowerSpy) EjectMedia(ctx context.Context, request power.PowerRequest) (*power.Results, error) {
-	return s.record.result.power, s.record.called(ctx, "machine eject-media", request)
+	return s.record.result.power, s.record.called(ctx, "machine media eject", request)
 }
 
 type machineTrustSpy struct{ record *dispatchRecord }

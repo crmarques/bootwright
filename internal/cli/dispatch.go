@@ -59,11 +59,12 @@ type commandResult struct {
 	mediaMutation *media.MutationResult
 	mediaList     *media.ListResult
 
-	machines *inventory.ListResult
-	session  *machine.SessionResult
-	copy     *machineaccess.CopyResult
-	trust    *enrollment.Report
-	power    *power.Results
+	machines    *inventory.ListResult
+	session     *machine.SessionResult
+	copy        *machineaccess.CopyResult
+	trust       *enrollment.Report
+	power       *power.Results
+	mediaStatus *power.MediaStatusResult
 
 	secretMutation     *custody.MutationResult
 	secretCheck        *custody.CheckResult

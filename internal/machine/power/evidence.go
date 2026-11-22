@@ -95,12 +95,11 @@ func decode(data []byte) (Evidence, error) {
 	return reconciliation.DecodeEvidence[Evidence](data, maxEvidenceBytes, "power")
 }
 
-// Reading is one Machine's power exactly as its controller answered. A
-// controller that did not answer leaves an unknown reading rather than an
-// empty value, so an absent answer is never read as a state.
+// Reading is one Machine's power or media state as its controller answered.
 type Reading struct {
 	Machine string `json:"machine"`
-	Power   string `json:"power"`
+	Power   string `json:"power,omitempty"`
+	Media   string `json:"media,omitempty"`
 }
 
 // ReadEvidence is the only result shape the reading adapter may return. It
@@ -124,13 +123,19 @@ func validateReading(data []byte, survey ReadSurvey, digest string) (map[string]
 	}
 	readings := make(map[string]string, len(survey.Targets))
 	for _, reading := range evidence.Machines {
-		if !slices.Contains([]string{machine.PowerOn, machine.PowerOff, machine.PowerUnknown}, reading.Power) {
-			return nil, powerEvidenceMismatch.Fail("the power reading reports a state this command cannot name", "")
+		state, valid := reading.Power, reading.Media == "" &&
+			slices.Contains([]string{machine.PowerOn, machine.PowerOff, machine.PowerUnknown}, reading.Power)
+		if survey.Media {
+			state, valid = reading.Media, reading.Power == "" &&
+				slices.Contains([]string{MediaNone, MediaPresent, MediaUnknown}, reading.Media)
+		}
+		if !valid {
+			return nil, powerEvidenceMismatch.Fail("the controller reading reports an invalid state for the survey", "")
 		}
 		if _, repeated := readings[reading.Machine]; repeated {
 			return nil, powerEvidenceMismatch.Fail("the power reading answers for one Machine twice", "")
 		}
-		readings[reading.Machine] = reading.Power
+		readings[reading.Machine] = state
 	}
 	for _, target := range survey.Targets {
 		if _, answered := readings[target.Object]; !answered {

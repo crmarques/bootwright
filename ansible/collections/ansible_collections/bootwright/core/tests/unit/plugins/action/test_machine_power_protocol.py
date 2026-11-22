@@ -132,6 +132,24 @@ def test_a_reading_answers_for_every_machine_its_survey_named():
     assert evidence["request"] == DIGEST
 
 
+def test_a_media_read_publishes_only_normalized_device_state():
+    survey = reads(
+        read("node-a", media_state="foreign", media="https://media.test/image.iso?token=hidden"),
+        read("node-b", media_state="none"),
+        read("node-c", media_state="none", failed=True),
+        read("node-d", media_state="unknown"),
+        read("node-e"),
+    )
+    evidence = machine_power_protocol.reading_evidence_for(dict(survey, read_media=True))
+    assert evidence == {"request": DIGEST, "machines": [
+        {"machine": "node-a", "media": "present"},
+        {"machine": "node-b", "media": "none"},
+        {"machine": "node-c", "media": "unknown"},
+        {"machine": "node-d", "media": "unknown"},
+        {"machine": "node-e", "media": "unknown"},
+    ]}
+
+
 # One controller that refused, timed out or answered with something this build
 # cannot name leaves its own machine unknown. It never denies the answers the
 # same run already has, and its silence is never published as a state. The

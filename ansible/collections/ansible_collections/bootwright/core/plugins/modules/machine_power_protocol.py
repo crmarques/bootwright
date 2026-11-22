@@ -65,6 +65,10 @@ options:
     description: Whether the reported state differs from the state before it.
     type: bool
     required: false
+  read_media:
+    description: Publish the media state for each reading.
+    type: bool
+    default: false
   readings:
     description:
       - The registered per-machine controller reads a bounded reading publishes,

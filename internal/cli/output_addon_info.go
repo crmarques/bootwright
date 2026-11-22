@@ -84,7 +84,10 @@ func writeAddOnInfo(out io.Writer, command string, result *catalog.DescribeResul
 	return err
 }
 
-func groupShort(part string) string {
+func groupShort(parent, part string) string {
+	if parent == "machine" && part == "media" {
+		return "Inspect and eject machine virtual media"
+	}
 	return map[string]string{
 		"add-ons":    "Inspect add-on packages supported by this build",
 		"cluster":    "Inspect and reach a context's clusters",

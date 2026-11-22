@@ -65,7 +65,7 @@ def evidence_for(arguments):
     return evidence
 
 
-def observed(result):
+def observed(result, read_media):
     """One controller's answer, or unknown when it did not give one.
 
     A controller that refused, timed out or answered with something this build
@@ -82,6 +82,9 @@ def observed(result):
         raise ValueError("reading")
     if result.get("failed") or result.get("unreachable"):
         return "unknown"
+    if read_media:
+        value = result.get("media_state")
+        return MEDIA.get(value, "unknown") if isinstance(value, str) else "unknown"
     return READINGS.get(result.get("power"), "unknown")
 
 
@@ -90,16 +93,20 @@ def reading_evidence_for(arguments):
     readings = arguments.get("readings")
     if not isinstance(readings, list) or not readings:
         raise ValueError("readings")
+    read_media = arguments.get("read_media", False)
+    if not isinstance(read_media, bool):
+        raise ValueError("reading type")
+    field = "media" if read_media else "power"
     machines = []
     for result in readings:
-        power = observed(result)
+        state = observed(result, read_media)
         target = result.get("item")
         if not isinstance(target, dict):
             raise ValueError("reading target")
         machine = str(target.get("object") or "")
         if not machine:
             raise ValueError("machine")
-        machines.append({"machine": machine, "power": power})
+        machines.append({"machine": machine, field: state})
     return {"machines": machines, "request": adapter_protocol.request_digest(arguments.get("digest"))}
 
 

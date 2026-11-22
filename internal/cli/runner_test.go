@@ -155,6 +155,13 @@ func TestWithdrawnFlagsAreUsageErrors(t *testing.T) {
 	}
 }
 
+func TestTheRetiredMachineEjectMediaPathIsRejected(t *testing.T) {
+	code, out, errOut, record := runRecorded([]string{"machine", "eject-media", "--name", "node", "--yes"})
+	if code != 2 || out != "" || record.calls != 0 || !strings.Contains(errOut, "cli.usage") {
+		t.Fatalf("old path: code=%d out=%q stderr=%q calls=%d", code, out, errOut, record.calls)
+	}
+}
+
 func TestTheRetiredTrustOnFirstUseSpellingIsAnUnknownFlag(t *testing.T) {
 	for _, args := range [][]string{
 		{"apply", "--dry-run", "--trust-on-first-use"}, {"apply", "--dry-run", "--trust-on-first-use=false"}, {"apply", "--dry-run", "--stage", "clusters", "--trust-on-first-use=true"},

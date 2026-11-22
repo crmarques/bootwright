@@ -38,6 +38,7 @@ type ReadTarget struct {
 // no secret value and asks for no effect, so repeating it changes nothing.
 type ReadSurvey struct {
 	Context   api.ContextName   `json:"context"`
+	Media     bool              `json:"media,omitempty"`
 	Placement machine.Placement `json:"placement"`
 	Targets   []ReadTarget      `json:"targets"`
 	// Version is the survey shape the adapter validates before it reads, so
@@ -165,11 +166,22 @@ func readValues(survey ReadSurvey) map[string]string {
 }
 
 func unanswered(survey ReadSurvey) map[string]string {
+	state := machine.PowerUnknown
+	if survey.Media {
+		state = MediaUnknown
+	}
 	readings := make(map[string]string, len(survey.Targets))
 	for _, target := range survey.Targets {
-		readings[target.Object] = machine.PowerUnknown
+		readings[target.Object] = state
 	}
 	return readings
+}
+
+func readCommand(contextName string, media bool, names []string) string {
+	if media {
+		return "bootwright machine media status --context " + contextName + " --name " + strings.Join(names, ",")
+	}
+	return "bootwright machine list --context " + contextName + " --power-status"
 }
 
 // readReferences names every declaration one survey needs bound: each

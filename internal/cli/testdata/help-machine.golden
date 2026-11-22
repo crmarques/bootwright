@@ -11,9 +11,6 @@
   ○ Command | discover
       PURPOSE  Inventory physical root disks through a temporary RAM boot
 
-  ○ Command | eject-media
-      PURPOSE  Eject whatever virtual media machines present
-
   ○ Command | exec
       PURPOSE  Run a command over SSH as the Machine's resolved identity; confirm or refuse an
                unproved host key and return the client's exit status
@@ -26,6 +23,9 @@
 
   ○ Command | list
       PURPOSE  List machines and the lifecycle position each has reached
+
+  ○ Command | media
+      PURPOSE  Inspect and eject machine virtual media
 
   ○ Command | restart
       PURPOSE  Restart machines through their management controllers

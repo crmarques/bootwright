@@ -29,13 +29,16 @@ def encoded(value):
     return base64.b64encode(value.encode()).decode()
 
 
-def port(target, material):
+def port(target, material, media=False):
     """The port arguments read_one.yml renders for one target."""
     loaded = LOADER.load_from_file(str(ROLES / "machine_power_read" / "tasks" / "read_one.yml"), trusted_as_template=True)
     arguments = loaded[0]["vars"]["bootwright_machine_port"]
-    variables = {"machine_power_read_target": target, "bootwright_machine_power_read_material": material}
+    variables = {"machine_power_read_target": target, "bootwright_machine_power_read_material": material,
+                 "bootwright_machine_power_read_request": {"media": media}}
     rendering = Templar(loader=LOADER, variables=variables)
-    return {key: rendering.template(arguments)[key] for key in ("user", "pinned_uuid_base64", "pinned_serial_base64")}
+    rendered = rendering.template(arguments)
+    assert rendered["media"] is media
+    return {key: rendered[key] for key in ("user", "pinned_uuid_base64", "pinned_serial_base64")}
 
 
 def target(index, pinned=True):
@@ -63,6 +66,10 @@ def test_each_target_reads_with_its_own_pin():
     assert second["pinned_serial_base64"] == encoded("another-vm-uid") and second["user"] == "/run/lent-1"
     for value in (first["pinned_uuid_base64"], first["pinned_serial_base64"]):
         assert base64.b64decode(value, validate=True)
+
+
+def test_a_media_read_keeps_the_target_pin():
+    assert port(target(0), MATERIAL, media=True)["pinned_serial_base64"] == encoded(VM)
 
 
 def test_a_target_with_no_recorded_pin_reads_with_none():

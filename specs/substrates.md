@@ -2056,7 +2056,7 @@ releases the media.
 Machine power commands, admitted operator utilities
 ([project](project.md#design-priorities-and-non-goals)), consume exactly these
 operations. `machine start`, `machine stop`, `machine restart` and
-`machine eject-media` freeze one request naming the Machine's arm, its management endpoint and the declaration
+`machine media eject` freeze one request naming the Machine's arm, its management endpoint and the declaration
 whose credential answers it, then cross the same adapter boundary a lifecycle block does, under
 the context's shared lock. They register no operation and publish no ownership, because a power
 state is not desired state. On the libvirt and bare-metal arms, where the
@@ -2075,9 +2075,12 @@ its apply completed, since a replacement keeps only what is not proved gone: `ma
 removal, with the remedy to finish the destroy and apply again; and the
 reading omits it ([D234](milestones/backlog.md#d234) (1)). On the KubeVirt and vSphere arms a power command goes through the
 arm's `power` and `state_read` [entry points](#adapter-boundary), never a BMC.
-`machine eject-media` crosses `state_read` with media discovery and
+`machine media eject` crosses `state_read` with media discovery and
 `media_eject` instead of `power`, on every arm, and holds a Machine to its pin
 and refuses as a power command does before its first media read.
+[`machine media status`](cli.md#machine-media-status) uses the observation
+path of `machine list --power-status` with media discovery enabled in
+`state_read`.
 A Machine on a bare-metal provider is held to its
 [pin](#physical-machine-realization) first: the operation reads the identity
 its BMC reports and refuses, before it sends any power request, a `UUID`

@@ -328,7 +328,7 @@ Alias cell.
 | [B1545](#b1545) | new, 2026-11-17 (X566 review) | product | Managed OS | An erase policy whose install network the erase image cannot carry is refused at admission or plan, not first at destroy | Found by X566's safety review; the owner's bond is carried, and the destroy-time refusal names its release |
 | [B1551](#b1551) | new, 2026-11-17 (X571 review) | defect | Storage | A Ceph package decision resolved from a subscription names its cause and recovery when the host's repositories later select other URLs | Found by X571's safety review, unconfirmed; it fails closed with the generic packages refusal |
 | [B1552](#b1552) | new, 2026-11-17 (X572) | defect | Storage | A hosted-DVD Ceph host updated within its release from the CDN or a configured repository prepares without a downgrade refusal | No such update source can be read back as a package source yet; no owner run has met it |
-| [B1555](#b1555) | new, 2026-11-17 (X573 review) | product | Substrate, with CLI | `machine eject-media` releases every virtual-media device a management controller exposes, not only the one Bootwright inserts through | Bootwright inserts through one device, so only that one has refused an insert; no owner run has met another |
+| [B1555](#b1555) | new, 2026-11-17 (X573 review) | product | Substrate, with CLI | `machine media eject` releases every virtual-media device a management controller exposes, not only the one Bootwright inserts through | Bootwright inserts through one device, so only that one has refused an insert; no owner run has met another |
 | [B1557](#b1557) | new, 2026-11-17 (X576) | enabling | Verification tooling, with each owning context | The role families that call fixed executables, fixed host roots or remote endpoints run their entry points through ansible-core in the gate | Each needs an executable, root or endpoint override in the role, a custody change the owner has not asked for |
 | [B1588](#b1588) | new, 2026-11-18 (X597 review) | safety | Substrate | A libvirt guest listing reads each domain by its UUID, so no domain name is read as another domain's ID | Low confidence that libvirt admits an all-digit domain name; the fix touches every guest-listing fixture |
 | [B1612](#b1612) | new, 2026-11-18 (D277) | product | Storage, with Add-ons | An omitted CephConsumer key type defaults to one the cluster's MONs allow | An explicit `aes256k` already works; the default needs an owner decision |
@@ -3664,7 +3664,7 @@ holding a newer `podman` than its DVD. Parked because no owner run has met it.
 ### B1555
 
 **Owner:** Substrate, with CLI. **Kind:** product. **Requires:** B1553.
-**Definition:** Candidate. **Outcome:** [`machine eject-media`](../cli.md#machine-media-eject)
+**Definition:** Candidate. **Outcome:** [`machine media eject`](../cli.md#machine-media-eject)
 also reads and ejects a second optical, USB or removable-disk virtual-media
 device of a Redfish management controller, and a running KubeVirt instance's
 media, instead of the one device Bootwright inserts through and the

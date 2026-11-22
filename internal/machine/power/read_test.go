@@ -12,6 +12,7 @@ import (
 	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/machine/inventory"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -39,7 +40,13 @@ func (s *surveyor) Run(_ context.Context, request lifecycle.RunRequest) (lifecyc
 		if !ok {
 			reported = machine.PowerUnknown
 		}
-		evidence.Machines = append(evidence.Machines, Reading{Machine: target.Object, Power: reported})
+		reading := Reading{Machine: target.Object}
+		if survey.Media {
+			reading.Media = reported
+		} else {
+			reading.Power = reported
+		}
+		evidence.Machines = append(evidence.Machines, reading)
 	}
 	if s.corrupt != nil {
 		s.corrupt(&evidence)
@@ -298,6 +305,60 @@ func TestAReadingCrossesTheAdapterOncePerHostInsideOneRuntime(t *testing.T) {
 	for _, want := range []string{"bmc", "metal-bmc", "host-identity", "host-key"} {
 		if !slices.Contains(runtime.requested, want) {
 			t.Fatalf("Secret %q was not bound for the reading: %+v", want, runtime.requested)
+		}
+	}
+}
+
+func TestMediaStatusReadsOnlyNamedMachinesAndLeavesUnansweredMachinesUnknown(t *testing.T) {
+	runtime := &boundary{}
+	runner := &surveyor{reports: map[string]string{"guest": MediaPresent, "metal": MediaNone}}
+	confirmer := &answer{}
+	result, err := service(runtime, runner, confirmer).MediaStatus(context.Background(),
+		MediaStatusRequest{ContextName: "lab", Names: []string{" metal ", "guest", "guest", "host"}})
+	want := []MediaStatusRow{{Machine: "guest", Media: MediaPresent}, {Machine: "host", Media: MediaUnknown}, {Machine: "metal", Media: MediaNone}}
+	if err != nil || result == nil || result.Context != "lab" || !slices.Equal(result.Machines, want) {
+		t.Fatalf("media status = %+v (%v), want %+v", result, err, want)
+	}
+	if runtime.entered != 1 || len(runtime.drives[0]) != 0 || runtime.retaining[0] || len(confirmer.asked) != 0 {
+		t.Fatalf("status must read only: runtime %+v, confirmations %v", runtime, confirmer.asked)
+	}
+	if len(runner.runs) != 2 {
+		t.Fatalf("runs = %+v, want one per placement", runner.runs)
+	}
+	for i, name := range []string{"metal", "guest"} {
+		run := runner.runs[i]
+		var survey ReadSurvey
+		if err := json.Unmarshal(run.Canonical, &survey); err != nil {
+			t.Fatal(err)
+		}
+		if run.Implementation != ReadImplementation || run.Operation != ReadOperation || !survey.Media ||
+			len(survey.Targets) != 1 || survey.Targets[0].Object != name || run.Repeat != "bootwright machine media status --context lab --name "+name {
+			t.Fatalf("unexpected run for %s: %+v, survey %+v", name, run, survey)
+		}
+	}
+}
+
+func TestMediaStatusRefusesUnknownNamesBeforeOpeningRuntime(t *testing.T) {
+	runtime, runner := &boundary{}, &surveyor{}
+	_, err := service(runtime, runner, nil).MediaStatus(context.Background(),
+		MediaStatusRequest{ContextName: "lab", Names: []string{"guest", "missing"}})
+	var failure *diagnostics.Failure
+	if !errors.As(err, &failure) || len(failure.Diagnostics) != 1 || failure.Diagnostics[0].Code != "access.target" ||
+		!strings.Contains(failure.Diagnostics[0].Message, "missing") || runtime.entered != 0 || len(runner.runs) != 0 {
+		t.Fatalf("unknown machine: %v, runtime calls %d, adapter calls %d", err, runtime.entered, len(runner.runs))
+	}
+}
+
+func TestMediaReadingRefusesPowerEvidenceAndUnrecognizedMedia(t *testing.T) {
+	survey := ReadSurvey{Media: true, Targets: []ReadTarget{{Object: "guest"}}}
+	for _, reading := range []Reading{
+		{Machine: "guest", Power: machine.PowerOff},
+		{Machine: "guest", Power: machine.PowerOff, Media: MediaNone},
+		{Machine: "guest", Media: "private image address"},
+	} {
+		evidence := encodeReading(t, ReadEvidence{Request: "digest", Machines: []Reading{reading}})
+		if _, err := validateReading(evidence, survey, "digest"); err == nil {
+			t.Fatalf("accepted invalid media evidence: %+v", reading)
 		}
 	}
 }
