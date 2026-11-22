@@ -510,11 +510,25 @@ func TestTheRemovalReleasesTheClaimAndProvesItsAbsence(t *testing.T) {
 	if err != nil || !proved.Absent || !proved.Postcondition || proved.Request != block.RequestDigest || len(proved.Addresses) != 0 {
 		t.Fatalf("removal evidence = %+v (%v)", proved, err)
 	}
-	execution := lifecycle.Execution{Block: block, Context: "lab", Attempt: 1}
+	request, err := DecodeRequest(block.Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	execution := lifecycle.Execution{Block: block, Context: "lab", Attempt: 1, Material: map[string]secrets.Material{
+		request.Placement.KnownHostsRef: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("malformed")}),
+		request.Placement.PrivateKeyRef: secrets.NewMaterial(map[secrets.Part][]byte{secrets.PrivateKeyPart: []byte("test key")}),
+	}}
 	runner := &scripted{result: lifecycle.RunResult{Outcome: "changed", Evidence: observed.Evidence}}
 	result, err := New(runner).Destroy(context.Background(), execution)
 	if err != nil || result.Outcome != reconciliation.OutcomeChanged || runner.seen.Operation != "destroy" {
 		t.Fatalf("destroy = %+v (%v), ran %+v", result, err, runner.seen)
+	}
+	if runner.seen.Placement != (machine.Placement{Connection: machine.ConnectionLocal, Machine: block.Object}) ||
+		len(runner.seen.Materials) != 0 || len(runner.seen.Material) != 0 {
+		t.Fatalf("destroy used placement %+v and materials %+v", runner.seen.Placement, runner.seen.Materials)
+	}
+	if runner.seen.Digest != block.RequestDigest || !slices.Equal(runner.seen.Canonical, block.Request) {
+		t.Fatal("destroy changed the frozen request or its digest")
 	}
 	for name, evidence := range map[string][]byte{
 		"a read of the host": evidenceOf(t, block.RequestDigest, "52:54:00:9a:1b:01"),

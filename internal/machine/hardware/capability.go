@@ -172,8 +172,12 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 	if err != nil {
 		return lifecycle.RunResult{}, request, err
 	}
+	placement := request.Placement
+	if operation == "destroy" {
+		placement = machineref.Placement{Connection: machineref.ConnectionLocal, Machine: request.Identity.Object}
+	}
 	result, err := c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
-		Implementation: Implementation, Operation: operation, Variable: variable, Canonical: canonical, Placement: request.Placement,
+		Implementation: Implementation, Operation: operation, Variable: variable, Canonical: canonical, Placement: placement,
 	}))
 	return result, request, err
 }

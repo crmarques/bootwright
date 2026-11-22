@@ -1352,7 +1352,8 @@ its BMC address or of a declared MAC
 (`TestAnSSHReachedServerAndItsBMCDriverConflictInEitherOrder`). A guest
 reached over SSH claims the addresses of its virtual NICs too, so it meets a
 context that drives the same guest through an emulated BMC as a physical
-Machine. Its release reads nothing and retains the server.
+Machine. Its release runs on the controller without SSH material and retains
+the server (`TestTheRemovalReleasesTheClaimAndProvesItsAbsence`).
 
 **Reservations.** `bmc:<host>:<port>/<system>` and, once proved,
 `bmc-system:<UUID>` when its proof records one, and each `bmc-mac:<mac>`. A physical block owns no path, unit, socket or hypervisor
