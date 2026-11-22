@@ -293,3 +293,20 @@ func TestARemovalRowNamesTheKeyItRemovesAndWhy(t *testing.T) {
 		t.Fatalf("JSON = %s", out.String())
 	}
 }
+
+func TestReferencedTrustReportIdentifiesTheSecretAndVersion(t *testing.T) {
+	report := &enrollment.Report{Context: "lab", Pending: 1, Recorded: 1,
+		Hosts: []enrollment.HostReport{{Machine: "node-a", Address: "192.0.2.10", Port: 22,
+			Action: enrollment.ActionReplace, Fingerprint: "SHA256:current", Reason: "the previous pin was invalid", Secret: "node-pin", Version: "ver-result"}},
+	}
+	for _, presented := range []bool{false, true} {
+		var out bytes.Buffer
+		report.Presented = presented
+		if err := writeTrustReport(&out, "machine trust", report, false); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(out.String(), "Secret/node-pin (ver-result)") {
+			t.Fatalf("report = %q", out.String())
+		}
+	}
+}

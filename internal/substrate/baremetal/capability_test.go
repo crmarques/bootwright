@@ -438,6 +438,13 @@ func TestAMachineReadsOnlyItsControllerCredentialsAsAccessCredentials(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
+	ctx := context.Background()
+	if err := NewMachine(nil).ProveBinding(ctx, "lab", reconciliation.Block{BlockDefinition: definition}, nil); err != nil {
+		t.Fatalf("controller-local placement needs no SSH pin: %v", err)
+	}
+	if err := NewMachine(nil).ProveBinding(ctx, "lab", reconciliation.Block{}, nil); err == nil {
+		t.Fatal("invalid machine request admitted")
+	}
 	classes, err := NewMachine(nil).SecretClasses(reconciliation.Block{BlockDefinition: definition})
 	access := slices.DeleteFunc(classes.Named(secrets.AccessCredential), func(name string) bool { return name == request.Placement.PrivateKeyRef })
 	if err != nil || !slices.Equal(access, []string{request.Controller.CredentialsRef}) || request.Controller.CredentialsRef == "" {

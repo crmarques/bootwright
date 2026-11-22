@@ -1,9 +1,19 @@
 package libvirt
 
 import (
+	"context"
+
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
+
+func (HostCapability) ProveBinding(_ context.Context, contextName string, block reconciliation.Block, material map[string]secrets.Material) error {
+	request, err := DecodeHostRequest(block.Request)
+	if err != nil {
+		return err
+	}
+	return request.Placement.ProveHostPin(contextName, material)
+}
 
 func (HostCapability) SecretReferences(block reconciliation.Block) ([]string, error) {
 	request, err := DecodeHostRequest(block.Request)
@@ -19,6 +29,14 @@ func (HostCapability) SecretClasses(block reconciliation.Block) (secrets.Classes
 		return nil, err
 	}
 	return request.Placement.SecretClasses(), nil
+}
+
+func (MachineCapability) ProveBinding(_ context.Context, contextName string, block reconciliation.Block, material map[string]secrets.Material) error {
+	request, err := DecodeMachineRequest(block.Request)
+	if err != nil {
+		return err
+	}
+	return request.Placement.ProveHostPin(contextName, material)
 }
 
 func (MachineCapability) SecretReferences(block reconciliation.Block) ([]string, error) {

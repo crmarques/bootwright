@@ -14,29 +14,12 @@ import (
 )
 
 func (s Service) resolve(ctx context.Context, name string) (secretstore.Context, []secrets.Declaration, error) {
-	if err := ctx.Err(); err != nil {
-		return secretstore.Context{}, nil, err
-	}
-	if s.access == nil || s.compiler == nil || s.material == nil {
-		return secretstore.Context{}, nil, secretstore.Failure("store.implementation", "secret service is not configured")
-	}
-	snapshot, err := s.access.Context(ctx, name)
+	selected, catalog, err := s.resolveCatalog(ctx, name)
 	if err != nil {
-		return secretstore.Context{}, nil, err
-	}
-	if snapshot.Context.Revision == "" {
-		return secretstore.Context{}, nil, diagnostics.NewFailureWithRemediation("context.input", "context "+snapshot.Context.Name+" has no desired state", "",
-			"import it with bootwright context update --name "+snapshot.Context.Name+" --input-dir <dir>")
-	}
-	state, _, err := s.compiler.Compile(ctx, snapshot.Inputs)
-	if err != nil {
-		return secretstore.Context{}, nil, err
-	}
-	if state == nil {
-		return secretstore.Context{}, nil, secretstore.Failure("declaration", "secret declarations could not be compiled")
+		return selected, nil, err
 	}
 	declarations := []secrets.Declaration{}
-	for _, object := range state.Effective().Objects() {
+	for _, object := range catalog.Objects() {
 		if object.Kind() != api.Secret {
 			continue
 		}
@@ -51,7 +34,32 @@ func (s Service) resolve(ctx context.Context, name string) (secretstore.Context,
 		}
 		return 0
 	})
-	return snapshot.Context, declarations, nil
+	return selected, declarations, nil
+}
+
+func (s Service) resolveCatalog(ctx context.Context, name string) (secretstore.Context, api.Catalog, error) {
+	if err := ctx.Err(); err != nil {
+		return secretstore.Context{}, api.Catalog{}, err
+	}
+	if s.access == nil || s.compiler == nil || s.material == nil {
+		return secretstore.Context{}, api.Catalog{}, secretstore.Failure("store.implementation", "secret service is not configured")
+	}
+	snapshot, err := s.access.Context(ctx, name)
+	if err != nil {
+		return secretstore.Context{}, api.Catalog{}, err
+	}
+	if snapshot.Context.Revision == "" {
+		return secretstore.Context{}, api.Catalog{}, diagnostics.NewFailureWithRemediation("context.input", "context "+snapshot.Context.Name+" has no desired state", "",
+			"import it with bootwright context update --name "+snapshot.Context.Name+" --input-dir <dir>")
+	}
+	state, _, err := s.compiler.Compile(ctx, snapshot.Inputs)
+	if err != nil {
+		return secretstore.Context{}, api.Catalog{}, err
+	}
+	if state == nil {
+		return secretstore.Context{}, api.Catalog{}, secretstore.Failure("declaration", "secret declarations could not be compiled")
+	}
+	return snapshot.Context, state.Effective(), nil
 }
 
 func declarationOf(object api.Object) secrets.Declaration {

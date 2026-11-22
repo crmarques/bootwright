@@ -2,6 +2,7 @@ package material
 
 import (
 	"bytes"
+	"context"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -20,4 +21,10 @@ func AuthorizedKey(material secrets.Material, reference string) (string, error) 
 		return "", secrets.Refusal("part", "the selected public key must contain exactly one authorized-key line without options", "", reference, "set Secret/"+reference+" to an sshKeyPair public key or an opaque authorized-key line")
 	}
 	return strings.TrimSpace(string(line)), nil
+}
+
+// ReadHostPublicKey opens a public-key file through the operator file boundary.
+func (s *Service) ReadHostPublicKey(ctx context.Context, path string) ([]byte, error) {
+	parts, err := s.readFileParts(ctx, []fileRequest{{Part: secrets.PublicKeyPart, Path: path}})
+	return parts[secrets.PublicKeyPart], err
 }

@@ -38,6 +38,9 @@ func writeTrustReport(out io.Writer, command string, report *enrollment.Report, 
 	if !report.Presented {
 		text.section("")
 		writeTrustTable(&text, report.Hosts)
+	} else if len(report.Hosts) == 1 && report.Hosts[0].Version != "" {
+		host := report.Hosts[0]
+		text.section("Stored Secret/" + host.Secret + " (" + host.Version + ")")
 	}
 	return text.writeTo(out)
 }
@@ -83,6 +86,16 @@ func writeTrustTable(text *display, hosts []enrollment.HostReport) {
 		})
 	}
 	text.resourceTable([]string{"MACHINE", "ADDRESS", "ACTION", "KEY", "FINGERPRINT"}, rows, tableStyle{Kind: "machine", Identity: 0, States: []int{2}})
+	for _, host := range hosts {
+		if host.Secret == "" {
+			continue
+		}
+		destination := "Destination: Secret/" + host.Secret
+		if host.Version != "" {
+			destination += " (" + host.Version + ")"
+		}
+		text.section(destination)
+	}
 }
 
 // trustHeadline reports what was recorded rather than what was examined, so a
@@ -141,6 +154,9 @@ func trustDetail(host enrollment.HostReport) string {
 	case changed:
 		return host.Fingerprint + " (was " + host.PreviousFingerprint + ")"
 	}
+	if host.Reason != "" {
+		return host.Fingerprint + " (" + host.Reason + ")"
+	}
 	return host.Fingerprint
 }
 
@@ -167,6 +183,8 @@ type trustHost struct {
 	PreviousAddress     string `json:"previousAddress,omitempty"`
 	PreviousPort        int    `json:"previousPort,omitempty"`
 	Reason              string `json:"reason,omitempty"`
+	Secret              string `json:"secret,omitempty"`
+	Version             string `json:"version,omitempty"`
 }
 
 func displayTrustReport(report *enrollment.Report) trustResult {
@@ -180,6 +198,7 @@ func displayTrustReport(report *enrollment.Report) trustResult {
 			PreviousAddress:     escapeDisplayLine(host.PreviousAddress),
 			PreviousPort:        host.PreviousPort,
 			Reason:              escapeDisplayLine(host.Reason),
+			Secret:              escapeDisplayLine(host.Secret), Version: escapeDisplayLine(host.Version),
 		})
 	}
 	return trustResult{

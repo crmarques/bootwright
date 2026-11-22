@@ -54,9 +54,10 @@ mutable global registry or generic option maps are permitted.
 
 Commands resolve one coherent context identity/revision/mode, frozen input and
 compiled declaration snapshot. Mutators revalidate this token under the root
-lock and context lease. `set` is the only command that opens an operator path:
-bind, `check`, `show` and the bounded machine commands read only keyring
-versions.
+lock and context lease. `set` opens paths for supplied Secret material.
+[Referenced host-key enrollment](cli.md#host-key-trust) may open an operator's
+public-key path under the same public-key file rules and publish a verified
+pin. Bind, `check` and `show` read only keyring versions.
 
 `set --name` accepts only a declared contextStore Secret and these exact flags,
 and stores the parts each type holds; the Generated column says whether the

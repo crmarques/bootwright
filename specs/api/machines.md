@@ -613,6 +613,9 @@ Without `access.lifecycle`, a provided lifecycle placement uses
 `sudoPasswordRef`. Bootwright-installed service hosts use their installation's
 derived login. See [placement credentials](../infrastructure-services.md#placement-arms-and-credentials).
 
+Both `knownHostsRef` fields can share a trust anchor Secret for
+[enrollment](../cli.md#enrollment-into-a-host-key-secret).
+
 The `knownHostsRef` Secret, a trust anchor, is ASCII split at spaces
 and tabs only. Blank and `#` lines are ignored; exactly one data line remains,
 `<host> <type> <key>` optionally followed by a comment. Its host token is the effective SSH address for port `22`, or

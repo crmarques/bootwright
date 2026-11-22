@@ -690,3 +690,28 @@ func TestTheInteractiveSessionStaysInTheTerminalsForeground(t *testing.T) {
 		t.Fatalf("interactive command = %+v, want the terminal's foreground, SIGTERM and the termination grace", command)
 	}
 }
+
+func TestHostKeyFileObservationUsesTheAdmittedAlgorithm(t *testing.T) {
+	key := session(machine.IdentityOperator).HostKey
+	for _, test := range []struct {
+		name, evaluated string
+		allowed         bool
+	}{
+		{"qualified", "printf '%s\\n' 'hostkeyalgorithms ssh-ed25519,rsa-sha2-512'", true},
+		{"excluded", "printf '%s\\n' 'hostkeyalgorithms rsa-sha2-512'", false},
+		{"evaluation failed", "exit 255", false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			client := stubClient(t, `for a in "$@"; do
+case "$a" in -G) `+test.evaluated+`; exit;; HostKeyAlgorithms=*) algorithms="$a";; UserKnownHostsFile=*) f="${a#UserKnownHostsFile=}";; esac
+done
+test "$algorithms" = HostKeyAlgorithms=ssh-ed25519 || exit 254
+printf '%s' '`+key.Line("198.51.100.11", 2222)+`' > "$f"
+exit 255`)
+			got, err := launcher(t, client).ObserveKey(context.Background(), "relay", "198.51.100.11", 2222, key)
+			if (err == nil) != test.allowed || test.allowed && got != key {
+				t.Fatalf("observation = %+v, %v", got, err)
+			}
+		})
+	}
+}

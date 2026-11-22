@@ -105,6 +105,13 @@ func TestTheFirewallBlockWaitsForTheInstallationAndFreezesOneServicePerPublisher
 	if want := []reconciliation.ObjectRef{{Kind: installation.Kind, Object: firewallMachine, Family: installation.InstallFamily}}; !slices.Equal(definition.Requires, want) {
 		t.Fatalf("requires = %v", definition.Requires)
 	}
+	ctx := context.Background()
+	if err := New(nil).ProveBinding(ctx, testContext, reconciliation.Block{BlockDefinition: definition}, nil); err != nil {
+		t.Fatalf("installed firewall host must rely on its installation: %v", err)
+	}
+	if err := New(nil).ProveBinding(ctx, testContext, reconciliation.Block{}, nil); err == nil {
+		t.Fatal("invalid firewall request admitted")
+	}
 	request, err := DecodeFirewallRequest(definition.Request)
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))

@@ -1,11 +1,21 @@
 package installation
 
 import (
+	"context"
+
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
+
+func (Capability) ProveBinding(_ context.Context, contextName string, block reconciliation.Block, material map[string]secrets.Material) error {
+	request, err := DecodeRequest(block.Request)
+	if err != nil {
+		return err
+	}
+	return request.Placement.ProveHostPin(contextName, material)
+}
 
 func (Capability) SecretReferences(block reconciliation.Block) ([]string, error) {
 	request, err := DecodeRequest(block.Request)
@@ -57,6 +67,14 @@ func controllerCredentialClass(target substrate.Arm) secrets.Class {
 		return secrets.AccessCredential
 	}
 	return secrets.EffectMaterial
+}
+
+func (TreeCapability) ProveBinding(_ context.Context, contextName string, block reconciliation.Block, material map[string]secrets.Material) error {
+	request, err := DecodeTreeRequest(block.Request)
+	if err != nil {
+		return err
+	}
+	return request.Placement.ProveHostPin(contextName, material)
 }
 
 func (TreeCapability) SecretReferences(block reconciliation.Block) ([]string, error) {

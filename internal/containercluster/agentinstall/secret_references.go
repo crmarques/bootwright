@@ -1,10 +1,20 @@
 package agentinstall
 
 import (
+	"context"
+
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
+
+func (MediaCapability) ProveBinding(_ context.Context, contextName string, block reconciliation.Block, material map[string]secrets.Material) error {
+	request, err := DecodeMediaRequest(block.Request)
+	if err != nil {
+		return err
+	}
+	return request.Placement.ProveHostPin(contextName, material)
+}
 
 func (MediaCapability) SecretReferences(block reconciliation.Block) ([]string, error) {
 	request, err := DecodeMediaRequest(block.Request)
@@ -30,6 +40,14 @@ func (MediaCapability) SecretClasses(block reconciliation.Block) (secrets.Classe
 		classes.Add(secrets.EffectMaterial, request.RegistryMirror.CredentialsRef)
 	}
 	return classes, nil
+}
+
+func (InstallCapability) ProveBinding(_ context.Context, contextName string, block reconciliation.Block, material map[string]secrets.Material) error {
+	request, err := DecodeInstallRequest(block.Request)
+	if err != nil {
+		return err
+	}
+	return request.Placement.ProveHostPin(contextName, material)
 }
 
 func (InstallCapability) SecretReferences(block reconciliation.Block) ([]string, error) {

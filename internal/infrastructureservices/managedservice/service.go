@@ -347,6 +347,9 @@ func (s Service[R, E]) ProveBinding(ctx context.Context, contextName string, blo
 		return err
 	}
 	frame := request.Frame()
+	if err := frame.Placement.ProveHostPin(contextName, material); err != nil {
+		return err
+	}
 	if frame.CredentialsRef != "" {
 		if err := ProveCredential(material, frame.CredentialsRef, contextName, false); err != nil {
 			return err

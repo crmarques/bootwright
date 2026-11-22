@@ -53,6 +53,8 @@ type machineDependencies struct {
 	Files       operatorFiles
 	Stager      prerequisites.AutomationStager
 	Custody     hostCustody
+	Pins        enrollment.ReadPin
+	PublicKey   func(context.Context, string) ([]byte, error)
 	Admit       func(context.Context) (func(), error)
 	Authorize   func(context.Context, string, api.Catalog, []machine.SessionTarget, []string) error
 }
@@ -161,7 +163,7 @@ func (f sshFiles) Begin(ctx context.Context) (sshlocal.FileSession, error) {
 // the prompt on standard error. A process with no output binds no presenter,
 // so enrollment refuses to ask rather than ask blind.
 func trustOptions(deps machineDependencies, observer enrollment.Observer) enrollment.Options {
-	options := enrollment.Options{Observer: observer, Confirmer: deps.Confirmer, Clock: time.Now}
+	options := enrollment.Options{Observer: observer, Pins: deps.Pins, PublicKey: deps.PublicKey, Confirmer: deps.Confirmer, Clock: time.Now}
 	if deps.Streams.Out != nil {
 		options.Presenter = cli.NewTrustPlanPresenter(deps.Streams.Out)
 	}

@@ -66,6 +66,12 @@ func TestTreeRequestAndEvidenceGoldens(t *testing.T) {
 	if _, err := DecodeTreeRequest(execution.Block.Request); err != nil {
 		t.Fatal(err)
 	}
+	if err := (TreeCapability{}).ProveBinding(context.Background(), execution.Context, execution.Block, nil); err != nil {
+		t.Fatalf("controller tree publication needs no SSH pin: %v", err)
+	}
+	if err := (TreeCapability{}).ProveBinding(context.Background(), execution.Context, reconciliation.Block{}, nil); err == nil {
+		t.Fatal("invalid tree request admitted")
+	}
 	for name, evidence := range map[string]TreeEvidence{
 		"complete": {Content: true, Tree: true, Identity: request.Media.SHA256, Postcondition: true},
 		"partial":  {Staging: true}, "removal-partial": {Content: true}, "removed": {Absent: true, Postcondition: true},

@@ -3,6 +3,7 @@ package enrollment
 import (
 	"context"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/trust"
@@ -29,6 +30,19 @@ type HostKeyStore interface {
 // records it.
 type Observer interface {
 	Observe(ctx context.Context, address string, port int) (trust.HostKey, error)
+}
+
+type PinSnapshot struct {
+	Value      []byte
+	Version    string
+	CheckWrite func(context.Context) error
+	Publish    func(context.Context, string) (string, error)
+}
+
+type ReadPin func(context.Context, string, func(api.Catalog) (string, error)) (PinSnapshot, error)
+
+type KeyObserver interface {
+	ObserveKey(ctx context.Context, machine, address string, port int, key trust.HostKey) (trust.HostKey, error)
 }
 
 type Confirmer interface {

@@ -165,6 +165,14 @@ func (Capability) Removal(ctx context.Context, block reconciliation.Block) (life
 	return lifecycle.Removal{Description: firewallDescription(reconciliation.Destroy, request), Impacts: firewallImpacts(reconciliation.Destroy, request)}, nil
 }
 
+func (Capability) ProveBinding(_ context.Context, contextName string, block reconciliation.Block, material map[string]secrets.Material) error {
+	request, err := DecodeFirewallRequest(block.Request)
+	if err != nil {
+		return err
+	}
+	return request.Placement.ProveHostPin(contextName, material)
+}
+
 func (Capability) SecretReferences(block reconciliation.Block) ([]string, error) {
 	request, err := DecodeFirewallRequest(block.Request)
 	if err != nil {

@@ -31,6 +31,7 @@ type fillSurface interface {
 	Unresolved(reconciliation.Verb, reconciliation.Block, json.RawMessage) (lifecycle.Unresolved, bool)
 	SecretReferences(reconciliation.Block) ([]string, error)
 	SecretClasses(reconciliation.Block) (secrets.Classes, error)
+	ProveBinding(context.Context, string, reconciliation.Block, map[string]secrets.Material) error
 	Claimed(api.Catalog) []string
 }
 
@@ -231,6 +232,17 @@ func pinnedTranscript(t *testing.T, kind pinnedKind) []byte {
 	broken.Request = json.RawMessage(`{`)
 	_, err = surface.Removal(ctx, broken)
 	line("removal of a broken request: %s", failureText(err))
+	material := map[string]secrets.Material{
+		"mirror-known-hosts": secrets.NewMaterial(map[secrets.Part][]byte{
+			secrets.ValuePart: []byte("203.0.113.20 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINdamAGCsQq31Uv+08lkBzoO4XLz2qYjJa8CGmj3B1Ea\n"),
+		}),
+	}
+	if err := surface.ProveBinding(ctx, "lab", block, material); err != nil {
+		t.Fatalf("mirror placement pin: %v", diagnostics.Of(err))
+	}
+	if err := surface.ProveBinding(ctx, "lab", broken, kind.material); err == nil {
+		t.Fatal("invalid mirror request admitted")
+	}
 	references, err := surface.SecretReferences(block)
 	line("references: %v err=%s", references, failureText(err))
 	_, err = surface.SecretReferences(broken)

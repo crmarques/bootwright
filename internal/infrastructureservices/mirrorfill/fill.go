@@ -25,6 +25,7 @@ type fillCapability interface {
 	Unresolved(reconciliation.Verb, reconciliation.Block, json.RawMessage) (lifecycle.Unresolved, bool)
 	SecretReferences(reconciliation.Block) ([]string, error)
 	SecretClasses(reconciliation.Block) (secrets.Classes, error)
+	ProveBinding(context.Context, string, reconciliation.Block, map[string]secrets.Material) error
 	Claimed(api.Catalog) []string
 	withHostKeys(lifecycle.InstalledHostKey) fillCapability
 }
@@ -221,6 +222,14 @@ func (c fill[R, E]) Unresolved(verb reconciliation.Verb, block reconciliation.Bl
 		return lifecycle.Unresolved{}, false
 	}
 	return lifecycle.Drifted(verb, c.subject(request), lifecycle.PlacedOn(c.placement(request)), c.drift(evidence, request))
+}
+
+func (c fill[R, E]) ProveBinding(_ context.Context, contextName string, block reconciliation.Block, material map[string]secrets.Material) error {
+	request, err := c.decode(block.Request)
+	if err != nil {
+		return err
+	}
+	return c.placement(request).ProveHostPin(contextName, material)
 }
 
 func (c fill[R, E]) SecretReferences(block reconciliation.Block) ([]string, error) {

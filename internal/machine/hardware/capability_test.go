@@ -256,6 +256,19 @@ func (s *scripted) Run(_ context.Context, request lifecycle.RunRequest) (lifecyc
 	return s.result, s.err
 }
 
+func TestHardwareClaimAdmissionRequiresItsBoundHostPin(t *testing.T) {
+	ctx := context.Background()
+	block := servicesBlock(t)
+	capability := New(nil)
+	if err := capability.ProveBinding(ctx, "lab", block, nil); err == nil || codeOf(t, err) != "trust.identity" {
+		t.Fatalf("missing pin = %v", err)
+	}
+	block.Request = nil
+	if err := capability.ProveBinding(ctx, "lab", block, nil); err == nil {
+		t.Fatal("invalid frozen request admitted")
+	}
+}
+
 func TestMachineHardwareRequestAndEvidenceGolden(t *testing.T) {
 	block := servicesBlock(t)
 	matchesGolden(t, "machine-hardware-request", block.Request, false)

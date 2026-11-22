@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
@@ -10,6 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets/localkeyring"
 	"github.com/crmarques/bootwright/internal/secrets/material"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
+	"github.com/crmarques/bootwright/internal/trust/enrollment"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -44,6 +46,7 @@ type secretServices struct {
 	custody    cli.SecretService
 	encryption cli.EncryptionService
 	binder     *custody.Service
+	publicKey  func(context.Context, string) ([]byte, error)
 	hooks      contextSecretHooks
 }
 
@@ -59,6 +62,7 @@ func wireSecrets(deps serviceDependencies, compiler compilation.Compiler) secret
 	return secretServices{
 		custody:    secrets,
 		binder:     secrets,
+		publicKey:  acquisition.ReadHostPublicKey,
 		encryption: encryption.New(access, deps.Confirmer),
 		hooks: contextSecretHooks{
 			Validate: func(ctx context.Context, configuration contexts.Configuration) error {
@@ -73,5 +77,20 @@ func wireSecrets(deps serviceDependencies, compiler compilation.Compiler) secret
 				return access.InitializeArea(ctx, selected, record.SecretStoreType, area)
 			},
 		},
+	}
+}
+
+func referencedHostPins(store *custody.Service) enrollment.ReadPin {
+	return func(ctx context.Context, name string, resolve func(api.Catalog) (string, error)) (enrollment.PinSnapshot, error) {
+		pin, err := store.ReadHostPin(ctx, name, resolve)
+		return enrollment.PinSnapshot{
+			Value: pin.Value, Version: pin.Version,
+			CheckWrite: func(ctx context.Context) error {
+				return store.CheckHostPinWrite(ctx, pin)
+			},
+			Publish: func(ctx context.Context, entry string) (string, error) {
+				return store.StoreHostPin(ctx, pin, entry)
+			},
+		}, err
 	}
 }

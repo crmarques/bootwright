@@ -18172,3 +18172,22 @@ observations retain the behavior that informed the implementation.
 
 **Exit evidence:** network argument and receipt tests, progress golden tests,
 and the tracked tree audit. The delivering commit records the check results.
+
+## X652 — Shared SSH host-key enrollment for provided Machines
+
+**Item:** B1662. **Kind:** safety. **Owner:** Machine access, Secrets and
+Reconciliation. **Authorization:** owner request to implement the reviewed
+host-trust design.
+
+**Outcome:** [Referenced host-key enrollment](../cli.md#host-key-trust) serves
+session access, dedicated lifecycle placements and provided Ceph
+tiebreakers through custody. [Placement admission](../infrastructure-services.md#placement-arms-and-credentials)
+proves bound pin material before fresh apply registration.
+
+**Guard tests:** `TestReferencedEnrollmentWritesOneCanonicalHostPin`,
+`TestReferencedEnrollmentRefusesAnOpaqueSecretUsedByAnotherConsumer`,
+`TestHostPinPublicationRechecksCurrentVersionAndEffectHolds`,
+`TestLifecyclePlacementProvesTheCompleteSSHKeyForItsOwnEndpoint`,
+`TestCephAdmissionChecksTheProvidedTiebreakerPinAndItsFIPSPolicy` and
+the lifecycle binding-proof tests. Gate commands and results are recorded in
+the delivering commit.

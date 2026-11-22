@@ -127,7 +127,7 @@ func TestTheRealClientReadsObservationPolicyThroughALauncherDescriptor(t *testin
 	}
 	defer config.Close()
 	recorded := directory + "/known_hosts"
-	args := observation("198.51.100.11", 2222, int(config.Fd()), recorded, 10)
+	args := observation("198.51.100.11", 2222, int(config.Fd()), recorded, 10, "")
 	resolved, stderr, err := resolvedConfiguration(t, client, args)
 	if err != nil {
 		t.Fatalf("ssh -G = %v\n%s", err, stderr)

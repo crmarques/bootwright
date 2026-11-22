@@ -347,3 +347,24 @@ func TestAClusterBlockReadsAProvidedHostsFIPSModeFromItsHostBlock(t *testing.T) 
 		}
 	}
 }
+
+func TestCephAdmissionChecksTheProvidedTiebreakerPinAndItsFIPSPolicy(t *testing.T) {
+	host := Host{Machine: "tie", Address: tieAddress, Port: 22, KnownHostsRef: "tie-known-hosts", Provided: true}
+	scope := ClusterScope{Hosts: []Host{host}, Security: &Security{FIPS: true}}
+	ed25519 := trust.HostKey{Type: "ssh-ed25519", PublicKey: wire([]byte("ssh-ed25519"), bytes.Repeat([]byte{1}, 32))}
+	for _, test := range []struct {
+		name, line string
+		valid      bool
+	}{
+		{"rsa", rsaKey(2048).Line(tieAddress, 22), true},
+		{"fips excludes ed25519", ed25519.Line(tieAddress, 22), false},
+		{"wrong endpoint", rsaKey(2048).Line("198.51.100.11", 22), false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			material := map[string]secrets.Material{"tie-known-hosts": secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(test.line)})}
+			if err := scope.proveProvidedPins("demo", material); (err == nil) != test.valid {
+				t.Fatalf("pin proof = %v, want successful %v", err, test.valid)
+			}
+		})
+	}
+}

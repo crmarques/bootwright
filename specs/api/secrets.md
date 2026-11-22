@@ -48,8 +48,9 @@ remains explicit.
 | `contextStore: {}` | Material lives only in confidential per-context storage. This is the semantic default and is legal for every type. |
 | `generated` | Material is minted from type-scoped parameters; legal only for `token`, `usernamePassword`, `tlsCertificate`, `caBundle`, and `sshKeyPair`. |
 
-Each Secret owns its source. Supplied material enters Bootwright storage only
-through `contextStore` and an explicit `secret set`. Changing a declaration
+Each Secret owns its source. Supplied material enters Bootwright storage through
+`contextStore` and an explicit `secret set`. The [referenced host-key enrollment](../cli.md#host-key-trust)
+command may also publish a verified public host pin. Changing a declaration
 neither imports nor generates bytes.
 
 For `contextStore`, `metadata.name` identifies the entry within the selected

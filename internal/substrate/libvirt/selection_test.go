@@ -1,6 +1,7 @@
 package libvirt
 
 import (
+	"context"
 	"slices"
 	"strings"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -413,6 +415,19 @@ func TestFrozenRequestsRoundTripExactly(t *testing.T) {
 	}
 	if decoded, err := DecodeMachineRequest(machineData); err != nil || decoded.UUID != machines[0].UUID {
 		t.Fatalf("machine round trip: %+v (%v)", decoded, err)
+	}
+	ctx := context.Background()
+	host, guest := HostCapability{}, MachineCapability{}
+	if err := host.ProveBinding(ctx, testContext, reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{Request: hostData}}, nil); err != nil {
+		t.Fatalf("controller-local libvirt host needs no SSH pin: %v", err)
+	}
+	if err := guest.ProveBinding(ctx, testContext, reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{Request: machineData}}, nil); err != nil {
+		t.Fatalf("controller-local libvirt machine block needs no SSH pin: %v", err)
+	}
+	for _, prove := range []func(context.Context, string, reconciliation.Block, map[string]secrets.Material) error{host.ProveBinding, guest.ProveBinding} {
+		if err := prove(ctx, testContext, reconciliation.Block{}, nil); err == nil {
+			t.Fatal("invalid libvirt request admitted")
+		}
 	}
 	for name, data := range map[string][]byte{
 		"trailing data":  append(slices.Clone(machineData), '{', '}'),

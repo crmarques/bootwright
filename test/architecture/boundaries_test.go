@@ -890,6 +890,8 @@ func TestSecretImplementationsRemainBehindPorts(t *testing.T) {
 				qualified = true
 			} else if source.owner == "internal/secrets/material" && imported.path == "golang.org/x/crypto/bcrypt" {
 				hashed = true
+			} else if source.owner == "internal/trust" && imported.path == "golang.org/x/crypto/ssh" {
+				// Trust uses the qualified SSH decoder to validate complete host public keys.
 			} else if strings.HasPrefix(imported.path, "golang.org/x/crypto/") {
 				t.Errorf("%s imports an unqualified cryptographic dependency %s", source.path, imported.path)
 			}

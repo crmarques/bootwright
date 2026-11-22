@@ -36,6 +36,14 @@ func TestPhysicalEraseFrozenRequestAndReceiptGoldens(t *testing.T) {
 	if _, err := DecodeEraseRequest(canonical); err != nil {
 		t.Fatal(err)
 	}
+	ctx := context.Background()
+	block := reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{Request: canonical}}
+	if err := New(nil).ProveBinding(ctx, "lab", block, nil); err != nil {
+		t.Fatalf("controller-local placement needs no SSH pin: %v", err)
+	}
+	if err := New(nil).ProveBinding(ctx, "lab", reconciliation.Block{}, nil); err == nil {
+		t.Fatal("invalid erase request admitted")
+	}
 	receipt := eraseFixtureReceipt(request)
 	proof, _ := json.Marshal(EraseEvidence{Version: EraseImplementation, Request: receipt.Request, Prepared: true, Removed: true, Receipt: &receipt})
 	matchesGolden(t, "evidence-physical-erase", proof, false)

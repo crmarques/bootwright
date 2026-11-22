@@ -139,15 +139,18 @@ func (c Capability) ProveBinding(ctx context.Context, contextName string, block 
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	r, err := DecodeRequest(block.Request)
+	if err != nil {
+		return err
+	}
+	if err := scopeOf(r).proveProvidedPins(contextName, material); err != nil {
+		return err
+	}
 	if c.kind == api.CephCluster {
 		return proveGatewayUnit(contextName, block, material)
 	}
 	if c.kind != api.CephObjectGateway {
 		return nil
-	}
-	r, err := DecodeRequest(block.Request)
-	if err != nil {
-		return err
 	}
 	secret := gatewayTLSSecret(r.Gateway)
 	if secret == "" {

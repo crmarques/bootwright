@@ -178,6 +178,14 @@ func (l Launcher) evaluate(ctx context.Context, client string, policy []byte, se
 // deliberately ignored: the key is recorded during the handshake that precedes
 // it, and the recorded file is the only source of truth.
 func (l Launcher) Observe(ctx context.Context, address string, port int) (trust.HostKey, error) {
+	return l.observe(ctx, address, port, machine.Session{})
+}
+
+func (l Launcher) ObserveKey(ctx context.Context, name, address string, port int, key trust.HostKey) (trust.HostKey, error) {
+	return l.observe(ctx, address, port, machine.Session{Machine: name, HostKey: key})
+}
+
+func (l Launcher) observe(ctx context.Context, address string, port int, expected machine.Session) (trust.HostKey, error) {
 	client, err := l.executable()
 	if err != nil {
 		return trust.HostKey{}, err
@@ -203,10 +211,21 @@ func (l Launcher) Observe(ctx context.Context, address string, port int) (trust.
 		return trust.HostKey{}, err
 	}
 	defer config.Close()
+	pinned := ""
+	if expected.HostKey.Present() {
+		admitted, err := l.evaluate(ctx, client, policy, expected)
+		if err != nil {
+			return trust.HostKey{}, err
+		}
+		pinned, err = admittedAlgorithms(expected, admitted, l.PolicyPath)
+		if err != nil {
+			return trust.HostKey{}, err
+		}
+	}
 	observe, cancel := context.WithTimeout(ctx, observationTimeout)
 	defer cancel()
 	_ = nativeexec.Run(observe, nativeexec.Command{
-		Path: client, Args: observation(address, port, int(config.Fd()), recorded, int(observationTimeout/time.Second)),
+		Path: client, Args: observation(address, port, int(config.Fd()), recorded, int(observationTimeout/time.Second), pinned),
 		Env: l.environment(), WaitDelay: terminationGrace,
 	})
 	if err := ctx.Err(); err != nil {

@@ -43,6 +43,10 @@ func (Launcher) Run(context.Context, machine.Session, io.Reader, io.Writer, io.W
 	return 0, availability.ErrNotImplemented
 }
 
+func (l Launcher) ObserveKey(ctx context.Context, _, address string, port int, _ trust.HostKey) (trust.HostKey, error) {
+	return l.Observe(ctx, address, port)
+}
+
 func (Launcher) Observe(context.Context, string, int) (trust.HostKey, error) {
 	return trust.HostKey{}, availability.ErrNotImplemented
 }

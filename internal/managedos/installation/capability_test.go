@@ -191,6 +191,14 @@ func TestAnInstallationWithoutATreeNamesNoExclusiveResource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	ctx := context.Background()
+	block := reconciliation.Block{BlockDefinition: plan.Definitions[0]}
+	if err := New(nil).ProveBinding(ctx, "lab", block, nil); err != nil {
+		t.Fatalf("controller-local installation needs no SSH pin: %v", err)
+	}
+	if err := New(nil).ProveBinding(ctx, "lab", reconciliation.Block{}, nil); err == nil {
+		t.Fatal("invalid installation request admitted")
+	}
 	request, err := DecodeRequest(plan.Definitions[0].Request)
 	if err != nil {
 		t.Fatal(err)

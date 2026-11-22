@@ -84,21 +84,16 @@ with the same inventory and noninteractive become policy as the effect. It
 requires the effective UID to be zero before it starts the operation's
 playbook. A refusal names the host and account. The account and sudo rule
 remain under the operator's management. Borrowed-SSH flags refuse before
-lifecycle planning. The bound `knownHostsRef` material is parsed before
-connection under [the Machine host-key rules](api/machines.md#addresses-and-access);
-a changed, missing, corrupt or unparseable entry refuses before the connection,
-and an observed key mismatch refuses before any remote command. The adapter
-runner checks every SSH-placed run, of any operation, before it writes the
-job: material that is not exactly one valid entry for the placement's address
-and port, such as several entries, a hashed, listed, patterned or marked host,
-another host or port, or no decodable key of an accepted type, refuses
-`trust.identity` naming the Secret and the Machine, and a run whose pinned
-known-hosts file is not its placement's own `knownHostsRef` refuses
-`runner.host-key-unbound`; no ssh reads either
-(`TestAnSSHPlacementRefusesKnownHostsNotOneEntryForItsHostBeforeItConnects`).
-The rule holds for every run, a continuation and a removal included: an
-operation whose frozen Secret holds more than one entry refuses until its
-Secret is corrected and bound again. The host token
+lifecycle planning. Fresh apply validates the version it just bound for
+every provided SSH placement before it registers. It parses the one entry for
+the exact endpoint and decodes the complete qualified public key. The runner
+checks each SSH placement before writing its job, including on continuation
+and removal. An invalid entry there refuses `runner.host-key-invalid`. A run
+whose known-hosts file names other material refuses `runner.host-key-unbound`.
+Strict verification refuses a live key mismatch before any remote command.
+A fresh Secret version cannot repair an operation whose binding already froze
+an invalid entry. Its removal uses the original binding and the applicable
+[ownership proofs](state-reconciliation.md#continuation-and-removal). The host token
 compares as OpenSSH compares it, a name without case and an IP in its
 canonical form (`TestAKnownHostsHostMatchesAsOpenSSHReadsIt`), and ssh is
 handed only the validated entry, rewritten as one line for the placement's

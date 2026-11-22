@@ -1,12 +1,14 @@
 package enrollment
 
 type EnrollRequest struct {
-	ContextName      string
-	Machines         []string
-	Replace          []string
-	Expect           map[string]string
-	DryRun           bool
-	SkipConfirmation bool
+	ContextName       string
+	ReferencedSecret  bool
+	HostPublicKeyFile string
+	Machines          []string
+	Replace           []string
+	Expect            map[string]string
+	DryRun            bool
+	SkipConfirmation  bool
 }
 
 // The actions one enrollment reports. Add, Replace and Remove change
@@ -49,4 +51,6 @@ type HostReport struct {
 	PreviousAddress     string `json:"previousAddress,omitempty"`
 	PreviousPort        int    `json:"previousPort,omitempty"`
 	Reason              string `json:"reason,omitempty"`
+	Secret              string `json:"secret,omitempty"`
+	Version             string `json:"version,omitempty"`
 }

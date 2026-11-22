@@ -1525,7 +1525,7 @@ until the destroy that completes the context's removal withdraws it, and
 
 ### Host-key trust
 
-`machine trust` records in the
+By default, `machine trust` records in the
 [context trust store](contexts.md#storage-locking-and-publication) the host key
 each selected Machine that uses context trust presents: one reached over SSH
 that declares no `access.ssh.knownHostsRef` and that Bootwright did not install.
@@ -1590,6 +1590,9 @@ any observation. Under `--yes`, and so in either structured format, no person
 compares the plan, so an `add` or `replace` whose fingerprint is not named fails
 `trust.identity` naming those Machines, records nothing, and names the dry run
 that lists the fingerprints and the `--expect` that records them (D183, Q97).
+
+[Enrollment into a host-key Secret](#enrollment-into-a-host-key-secret)
+serves Machines that declare a pin.
 
 ### Machine power operations
 
@@ -1753,3 +1756,39 @@ VirtualMachine and deletes this context's upload DataVolume; it refuses a
 DataVolume of that name another owner holds, touching nothing. Its read back is
 of the VirtualMachine, so a running instance still presents the image until it
 next stops, while `none` is already reported.
+
+## Enrollment into a host-key Secret
+
+With `--referenced-secret`, `machine trust` takes exactly one `--name` of
+a provided Machine reached over SSH. Its `access.ssh.knownHostsRef` names a
+declared opaque contextStore Secret. Any dedicated lifecycle login names
+the same Secret. The Secret must belong exclusively to this Machine's SSH
+endpoint and may also serve that Machine's provided Ceph tiebreaker role.
+Enrollment refuses a missing or ambiguous reference, a reference shared with
+another Machine or unrelated consumer, or another Machine named by an
+expectation or replacement before contacting the endpoint.
+
+Bootwright observes that address and port without offering a login credential
+or issuing a remote command. An operator compares the displayed fingerprint
+with a trusted source before confirming. Unattended additions and replacements
+require either an independently verified `--expect` fingerprint or an ordinary
+server host public key in `--host-public-key-file`, which selects a permitted
+host-key algorithm for the observation. When both are supplied they must
+agree. The observed fingerprint must match the expectation. The file follows
+the [public-key acquisition rules](secrets.md#acquisition-and-commands).
+The client pins the verified key for subsequent authenticated connections.
+
+Bootwright renders the canonical endpoint entry and publishes it through
+[Secret custody](secrets.md#acquisition-and-commands). An equal valid key for
+the same endpoint reuses the observed custody snapshot. Replacing a different
+key, an old endpoint or invalid material requires `--replace` and the same
+verification as initial enrollment. A write checks the context revision,
+current version and live effect holds before confirmation and at publication.
+The report names the destination Secret and, on publication or reuse, the
+version. A dry run writes nothing. The operation's existing bindings and
+effect-owned copies keep their original versions.
+
+```sh
+bootwright machine trust --context demo --name relay --referenced-secret \
+  --host-public-key-file ./relay-ssh_host_ed25519_key.pub --yes
+```

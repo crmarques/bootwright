@@ -183,6 +183,14 @@ func (c Capability) Claimed(catalog api.Catalog) []string {
 	}
 	return names
 }
+func (Capability) ProveBinding(_ context.Context, contextName string, block reconciliation.Block, material map[string]secrets.Material) error {
+	request, err := DecodeDiscoveryRequest(block.Request)
+	if err != nil {
+		return err
+	}
+	return request.Placement.ProveHostPin(contextName, material)
+}
+
 func (Capability) SecretReferences(block reconciliation.Block) ([]string, error) {
 	r, err := DecodeDiscoveryRequest(block.Request)
 	return r.SecretReferences(), err

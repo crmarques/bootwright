@@ -645,7 +645,9 @@ topology; this section owns what the plan derives and realizes (D196).
   first fleet call proves it again: a `transport` failure there names the
   Machine, the fleet key Secret, the user and the pinned host key beside the
   retained evidence to inspect. A tiebreaker without that user or pin, or with no fleet
-  key declared, refuses at plan. It holds no device and no erase claim, needs
+  key declared, refuses at plan. Fresh apply proves the bound pin for its
+  exact endpoint, including the full public key and applicable FIPS key
+  constraints, before registration. It holds no device and no erase claim, needs
   no Machine block, and takes its OS dependency packages from the source
   its bootstrap host's install profile selects, as
   [selection and request](ceph-subscription-dependencies.md#selection-and-request)

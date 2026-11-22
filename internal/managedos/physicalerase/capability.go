@@ -459,6 +459,14 @@ func (Capability) Claimed(catalog api.Catalog) []string {
 	return claimed
 }
 
+func (Capability) ProveBinding(_ context.Context, contextName string, block reconciliation.Block, material map[string]secrets.Material) error {
+	request, err := DecodeEraseRequest(block.Request)
+	if err != nil {
+		return err
+	}
+	return request.Install.Placement.ProveHostPin(contextName, material)
+}
+
 func (Capability) SecretReferences(block reconciliation.Block) ([]string, error) {
 	request, err := DecodeEraseRequest(block.Request)
 	if err != nil {

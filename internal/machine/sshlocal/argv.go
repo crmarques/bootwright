@@ -128,9 +128,9 @@ func keyAuthentication() []string {
 // observation builds the vector that reads a server's host key without
 // offering any credential. Authentication is expected to fail: the key is
 // recorded during the handshake that precedes it.
-func observation(address string, port, config int, knownHosts string, seconds int) []string {
+func observation(address string, port, config int, knownHosts string, seconds int, pinned string) []string {
 	args := []string{
-		"-F", descriptorPath(config),
+		"-F", descriptorPath(config), "-N",
 		"-o", "StrictHostKeyChecking=accept-new",
 		"-o", "UserKnownHostsFile=" + knownHosts,
 		"-o", "BatchMode=yes",
@@ -146,7 +146,10 @@ func observation(address string, port, config int, knownHosts string, seconds in
 	if port != 0 && port != 22 {
 		args = append(args, "-p", strconv.Itoa(port))
 	}
-	return append(args, address, "true")
+	if pinned != "" {
+		args = append(args, "-o", "HostKeyAlgorithms="+pinned)
+	}
+	return append(args, address)
 }
 
 // quoteWord quotes one argument for the remote shell. The client joins the

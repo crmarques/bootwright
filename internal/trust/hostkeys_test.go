@@ -244,3 +244,20 @@ func TestAFingerprintIdentifiesTheKeyAnOperatorConfirms(t *testing.T) {
 		t.Fatal("an absent key presented a fingerprint or an entry")
 	}
 }
+
+func TestACompleteHostKeyMustMatchItsCanonicalWireEncoding(t *testing.T) {
+	valid := key(t, 1)
+	if err := valid.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, invalid := range []HostKey{
+		{},
+		{Type: valid.Type, PublicKey: blob([]byte(valid.Type))},
+		{Type: "ssh-rsa", PublicKey: valid.PublicKey},
+		{Type: valid.Type, PublicKey: blob([]byte(valid.Type), bytes.Repeat([]byte{1}, 32), []byte("extra"))},
+	} {
+		if err := invalid.Validate(); err == nil {
+			t.Fatal("invalid host key decoded")
+		}
+	}
+}

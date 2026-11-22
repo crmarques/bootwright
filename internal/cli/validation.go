@@ -168,6 +168,13 @@ func validateMachineTrust(command *cobra.Command, flags *pflag.FlagSet) string {
 		return structuredLabel(command) + " trust changes require --yes or --dry-run"
 	}
 	machines := normalizeNames(stringValue(flags, "name"))
+	referenced := boolValue(flags, "referenced-secret")
+	if referenced && len(machines) != 1 {
+		return "--referenced-secret requires exactly one --name"
+	}
+	if flags.Changed("host-public-key-file") && (!referenced || stringValue(flags, "host-public-key-file") == "") {
+		return "--host-public-key-file requires a path and --referenced-secret"
+	}
 	expected := map[string]string{}
 	for _, flag := range []string{"replace", "expect"} {
 		for _, member := range normalizeNames(stringValue(flags, flag)) {
@@ -177,6 +184,8 @@ func validateMachineTrust(command *cobra.Command, flags *pflag.FlagSet) string {
 				return "--" + flag + " names a fingerprint as <machine>=SHA256:<fingerprint>"
 			case named && expected[name] != "" && expected[name] != fingerprint:
 				return "--expect and --replace name two fingerprints for " + name
+			case referenced && !contains(machines, name):
+				return "--" + flag + " must name the Machine selected by --name"
 			case flag == "replace" && len(machines) != 0 && !contains(machines, name):
 				return "every --replace name must belong to --name"
 			}

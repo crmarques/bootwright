@@ -213,6 +213,14 @@ func claim(contextName string, request Request, data []byte) (infrastructureserv
 	return infrastructureservices.HostReservation{Context: contextName, Kind: ClaimKind, Service: request.Identity.Object, Keys: slices.Compact(keys)}, nil
 }
 
+func (Capability) ProveBinding(_ context.Context, contextName string, block reconciliation.Block, material map[string]secrets.Material) error {
+	request, err := DecodeRequest(block.Request)
+	if err != nil {
+		return err
+	}
+	return request.Placement.ProveHostPin(contextName, material)
+}
+
 func (Capability) SecretReferences(block reconciliation.Block) ([]string, error) {
 	request, err := DecodeRequest(block.Request)
 	if err != nil {

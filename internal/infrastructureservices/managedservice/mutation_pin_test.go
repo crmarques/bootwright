@@ -261,3 +261,16 @@ func TestAnUnprovedCertificateRefusesOnlyAnApplyBeforeTheAdapter(t *testing.T) {
 		t.Fatalf("observe = %+v (%v) after %d runs", observation, err, len(runner.requests))
 	}
 }
+
+func TestManagedServiceBindingChecksControllerLocalPlacement(t *testing.T) {
+	ctx := context.Background()
+	definition := testDefinition()
+	call, _ := pinnedExecution(t, definition, service(api.Proxy, "lab-proxy"))
+	capability := NewCapability(definition, nil)
+	if err := capability.ProveBinding(ctx, call.Context, call.Block, nil); err != nil {
+		t.Fatalf("controller-local service needs no SSH pin: %v", diagnostics.Of(err))
+	}
+	if err := capability.ProveBinding(ctx, call.Context, reconciliation.Block{}, nil); err == nil {
+		t.Fatal("invalid service request admitted")
+	}
+}

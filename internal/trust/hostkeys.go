@@ -1,6 +1,7 @@
 package trust
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
@@ -10,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"golang.org/x/crypto/ssh"
 )
 
 const (
@@ -19,8 +21,7 @@ const (
 )
 
 // algorithms is the qualified set of host-key types a session pins. It names
-// key types as a known_hosts entry records them, so the RSA signature
-// algorithms a server may negotiate with an `ssh-rsa` key are not members.
+// key types as known_hosts records them, separate from RSA signature algorithms.
 var algorithms = []string{
 	"ssh-ed25519",
 	"ecdsa-sha2-nistp256",
@@ -48,6 +49,19 @@ func (k HostKey) Fingerprint() string {
 	}
 	digest := sha256.Sum256(blob)
 	return "SHA256:" + base64.RawStdEncoding.EncodeToString(digest[:])
+}
+
+// Validate checks the full SSH wire key, including its canonical encoding.
+func (k HostKey) Validate() error {
+	blob, err := k.blob()
+	if err != nil {
+		return err
+	}
+	key, err := ssh.ParsePublicKey(blob)
+	if err != nil || !known(k.Type) || key.Type() != k.Type || !bytes.Equal(key.Marshal(), blob) {
+		return failure("the SSH host key is not a complete, canonical key of its declared type", "")
+	}
+	return nil
 }
 
 // Algorithms names what a session accepts for this key. An `ssh-rsa` key is

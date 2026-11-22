@@ -190,7 +190,7 @@ func TestACommandReachesTheRemoteShellAsTheExactWordsGiven(t *testing.T) {
 // An observation proves a key and nothing else: it must offer no credential,
 // because a key that has not been trusted yet cannot authorize one.
 func TestAnObservationOffersNoCredential(t *testing.T) {
-	got := strings.Join(observation("198.51.100.11", 2222, 3, "/tmp/scratch/known_hosts", 10), " ")
+	got := strings.Join(observation("198.51.100.11", 2222, 3, "/tmp/scratch/known_hosts", 10, "ssh-ed25519"), " ")
 	for _, required := range []string{
 		"-F /proc/" + strconv.Itoa(os.Getpid()) + "/fd/3",
 		"-o StrictHostKeyChecking=accept-new",
@@ -200,7 +200,7 @@ func TestAnObservationOffersNoCredential(t *testing.T) {
 		"-o PasswordAuthentication=no",
 		"-o IdentityAgent=none",
 		"-o ConnectTimeout=10",
-		"-p 2222",
+		"-p 2222", "-N", "-o HostKeyAlgorithms=ssh-ed25519",
 	} {
 		if !strings.Contains(got, required) {
 			t.Fatalf("observation missing %q: %s", required, got)
@@ -209,7 +209,7 @@ func TestAnObservationOffersNoCredential(t *testing.T) {
 	if strings.Contains(got, "-i ") || strings.Contains(got, "StrictHostKeyChecking=yes") {
 		t.Fatalf("observation = %s", got)
 	}
-	if !strings.HasSuffix(got, "198.51.100.11 true") {
+	if !strings.HasSuffix(got, "198.51.100.11") {
 		t.Fatalf("observation = %s", got)
 	}
 }

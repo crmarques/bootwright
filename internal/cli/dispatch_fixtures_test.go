@@ -377,7 +377,7 @@ func dispatchFlags() *pflag.FlagSet {
 	for name, value := range map[string]string{
 		"context": "example", "name": "demo", "client": "vm-disks", "ssh-id-file": "key.pem",
 		"ssh-user": "operator", "clusters": "first,second", "machines": "",
-		"replace": "node-b", "expect": "", "object-user": "", "node": "node-a", "version": "", "part": "private-key",
+		"replace": "node-b", "expect": "", "host-public-key-file": "", "object-user": "", "node": "node-a", "version": "", "part": "private-key",
 		"from-file": "", "from-url": "https://example.invalid/image.iso", "from-url-file": "",
 		"sha256":     "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 		"value-file": "secret.bin", "password-file": "", "certificate-file": "",
@@ -399,6 +399,7 @@ func dispatchFlags() *pflag.FlagSet {
 	flags.Bool("password-stdin", false, "")
 	flags.Bool("ssh-ask-password", false, "")
 	flags.Bool("raw", false, "")
+	flags.Bool("referenced-secret", false, "")
 	flags.Bool("follow", false, "")
 	flags.Bool("value-stdin", false, "")
 	flags.StringArray("file", []string{"inputs"}, "")

@@ -22,6 +22,8 @@ const observers = 8
 
 type Options struct {
 	Observer  Observer
+	Pins      ReadPin
+	PublicKey func(context.Context, string) ([]byte, error)
 	Confirmer Confirmer
 	Presenter PlanPresenter
 	Clock     func() time.Time
@@ -44,6 +46,9 @@ func New(state EffectiveState, store HostKeyStore, selection CurrentSelection, o
 func (s Service) Enroll(ctx context.Context, request EnrollRequest) (*Report, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+	if request.ReferencedSecret {
+		return s.enrollReferenced(ctx, request)
 	}
 	if s.state == nil || s.trust == nil || s.options.Observer == nil {
 		return nil, availability.ErrNotImplemented

@@ -8,11 +8,11 @@ import (
 )
 
 func machineTrustCommand() commandSpec {
-	spec := commandSpec{path: "machine trust", results: []jsonResult{trustResult{}}, render: renderMachineTrust(), validate: validateMachineTrustCommand, example: "--context lab --dry-run", invoke: Services.invokeMachineTrust, short: "Inspect and maintain exact host-key trust", flags: []flagSpec{listFlag("name", "Select comma-separated machine names (default: all)"), listFlag("replace", "Select comma-separated replacements, each optionally <machine>=SHA256:<fingerprint> (default: none)"), stringFlag("expect", "Name comma-separated verified fingerprints as <machine>=SHA256:<fingerprint>"), dryRunFlag(), confirmationFlag()}}
+	spec := commandSpec{path: "machine trust", results: []jsonResult{trustResult{}}, render: renderMachineTrust(), validate: validateMachineTrustCommand, example: "--context lab --dry-run", invoke: Services.invokeMachineTrust, short: "Inspect and maintain exact host-key trust", flags: []flagSpec{listFlag("name", "Select comma-separated machine names (default: all)"), listFlag("replace", "Select comma-separated replacements, each optionally <machine>=SHA256:<fingerprint> (default: none)"), stringFlag("expect", "Name comma-separated verified fingerprints as <machine>=SHA256:<fingerprint>"), boolFlag("referenced-secret", "Enroll the one host-key Secret referenced by the selected Machine"), fileFlag("host-public-key-file", "Verify against this server host public-key file"), dryRunFlag(), confirmationFlag()}}
 	spec.long = spec.short + ". It observes exactly the endpoints this context declares and records what" +
 		" they present. A Machine that proves its host key another way is reported and left alone;" +
 		" a changed key is superseded only by naming it in --replace. A key whose fingerprint --expect or --replace names" +
-		" must match it, and --yes records only keys whose fingerprints are named, after you verify them out of band."
+		" must match it. --referenced-secret enrolls one Machine's referenced host key. Under --yes, additions or replacements require an independently verified fingerprint or server host public-key file."
 	return available(spec)
 }
 
@@ -51,12 +51,14 @@ func (s Services) invokeMachineTrust(ctx context.Context, values *requestValues,
 	}
 	replace, expect := trustExpectations(values.names("replace"), values.names("expect"))
 	result, err := invokeResult(ctx, values, enrollment.EnrollRequest{
-		ContextName:      values.text("context"),
-		Machines:         values.names("name"),
-		Replace:          replace,
-		Expect:           expect,
-		DryRun:           values.boolean("dry-run"),
-		SkipConfirmation: values.boolean("yes"),
+		ContextName:       values.text("context"),
+		ReferencedSecret:  values.boolean("referenced-secret"),
+		HostPublicKeyFile: values.text("host-public-key-file"),
+		Machines:          values.names("name"),
+		Replace:           replace,
+		Expect:            expect,
+		DryRun:            values.boolean("dry-run"),
+		SkipConfirmation:  values.boolean("yes"),
 	}, s.MachineTrust.Enroll)
 	return commandResult{trust: result}, err
 }

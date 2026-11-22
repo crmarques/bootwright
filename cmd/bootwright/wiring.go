@@ -169,7 +169,8 @@ func assembleServices(deps serviceDependencies) cli.Services {
 	}
 	reconciler = wireLifecycle(deps.Lifecycle, deps.Controller, compiler, secrets.binder)
 	services.Lifecycle = reconciler
-	services.Secrets = secrets.binder.WithHolds(reconciler)
+	custodian := secrets.binder.WithHolds(reconciler)
+	services.Secrets = custodian
 	services.Logs = wireLogs(deps.Lifecycle)
 	policy := policyCommands{
 		service: sessionpolicy.Service{Store: deps.PolicyStore, Members: policyRoster(), Lookup: deps.LookupSubject},
@@ -184,7 +185,7 @@ func assembleServices(deps serviceDependencies) cli.Services {
 		Confirmer: deps.Confirmer, Session: deps.SessionConfirmer, Reporter: deps.Reporter,
 		Selection: deps.Selection, Streams: deps.Streams, Terminal: deps.Terminal,
 		CopyAccount: deps.CopyAccount, Home: deps.Home, Owner: deps.Owner, Files: deps.Files, Stager: deps.Controller.Stager,
-		Custody: secrets.binder,
+		Custody: secrets.binder, Pins: referencedHostPins(custodian), PublicKey: secrets.publicKey,
 	}
 	if deps.Delegated {
 		machineDeps.Authorize = policy.authorize

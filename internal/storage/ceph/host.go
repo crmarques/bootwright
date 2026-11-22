@@ -70,6 +70,14 @@ type HostRequest struct {
 
 func (r HostRequest) canonical() ([]byte, error) { return reconciliation.Freeze(r, "Ceph host") }
 
+func (HostCapability) ProveBinding(_ context.Context, contextName string, block reconciliation.Block, material map[string]secrets.Material) error {
+	request, err := DecodeHostRequest(block.Request)
+	if err != nil {
+		return err
+	}
+	return request.Cluster.proveProvidedPins(contextName, material)
+}
+
 func (r HostRequest) SecretReferences() []string { return r.Cluster.secretReferences() }
 
 func (s ClusterScope) secretReferences() []string {

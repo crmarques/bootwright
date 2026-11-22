@@ -61,6 +61,24 @@ func bindProvidedHost(r *Request, c api.Catalog, m api.Object, node api.Value, t
 	return nil
 }
 
+func (s ClusterScope) proveProvidedPins(contextName string, material map[string]secrets.Material) error {
+	for _, host := range s.Hosts {
+		if !host.Provided {
+			continue
+		}
+		key, err := machine.BoundHostKey(contextName, host.Machine, host.Address, host.Port, host.KnownHostsRef, material)
+		if err != nil {
+			return err
+		}
+		if s.Security != nil && s.Security.FIPS {
+			if err := fipsHostKey(host, key); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func providedTransport(h Host) error {
 	return cephTiebreakerUnproved.Fail("the Ceph host preparation could not prove its transport boundary with the provided tiebreaker Machine/"+h.Machine+" at "+machine.SSHHost(h.Address, h.Port),
 		"inspect the retained operation evidence; when the SSH session itself was refused, authorize the public half of the fleet key Secret "+h.SSHKeyRef+" (bootwright secret show --name "+h.SSHKeyRef+" --part public-key) for user "+h.User+" on Machine/"+h.Machine+

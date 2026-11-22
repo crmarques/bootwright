@@ -69,6 +69,11 @@ func TestMachineTrustFingerprintsAreNamedPerMachine(t *testing.T) {
 	fingerprint := "SHA256:" + strings.Repeat("A", 43)
 	other := "SHA256:" + strings.Repeat("B", 43)
 	for _, args := range [][]string{
+		{"machine", "trust", "--referenced-secret"},
+		{"machine", "trust", "--referenced-secret", "--name", "node-a,node-b"},
+		{"machine", "trust", "--host-public-key-file", "server.pub"},
+		{"machine", "trust", "--referenced-secret", "--name", "node-a", "--host-public-key-file", ""},
+		{"machine", "trust", "--referenced-secret", "--name", "node-a", "--expect", "node-b=" + fingerprint},
 		{"machine", "trust", "--expect", "node-a"},
 		{"machine", "trust", "--expect", "node-a=MD5:aa"},
 		{"machine", "trust", "--replace", "node-a=" + fingerprint, "--expect", "node-a=" + other},
