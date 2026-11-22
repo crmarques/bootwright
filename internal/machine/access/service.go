@@ -17,15 +17,16 @@ import (
 // A nil capability is not a silent fallback: the resolution that needs it
 // refuses rather than reaching the Machine with less proof than it requires.
 type Options struct {
-	Copier    Copier
-	Lender    MaterialLender
-	Ownership Ownership
-	Evidence  Evidence
-	Trust     HostKeyStore
-	Observer  Observer
-	Confirmer Confirmer
-	Launcher  Launcher
-	Streams   Streams
+	InvokingUser func(context.Context) (string, error)
+	Copier       Copier
+	Lender       MaterialLender
+	Ownership    Ownership
+	Evidence     Evidence
+	Trust        HostKeyStore
+	Observer     Observer
+	Confirmer    Confirmer
+	Launcher     Launcher
+	Streams      Streams
 	// Terminal reports whether the operator can answer a host-key
 	// confirmation. Without one there is no first use.
 	Terminal      func() (bool, error)

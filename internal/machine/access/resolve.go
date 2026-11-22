@@ -72,6 +72,16 @@ func (s Service) identity(ctx context.Context, catalog api.Catalog, selected tar
 	if s.options.Authorize != nil {
 		return identityFor(selected, options, "")
 	}
+	if selected.ssh.OperatorIdentity && selected.ssh.User == "" && !options.AskPassword && s.options.InvokingUser != nil {
+		user, err := s.options.InvokingUser(ctx)
+		if err != nil || !api.ValidLexical(api.LexicalPOSIXUser, user) {
+			return machine.Identity{}, "", failure("access.unavailable", "the invoking account could not be resolved as a remote SSH user", "set --ssh-user and supply its credential")
+		}
+		selected.ssh.User = user
+	}
+	if selected.ssh.OperatorIdentity && selected.ssh.User == "" && options.User == "" && options.IdentityFile != "" {
+		return machine.Identity{}, "", failure("access.unavailable", "an explicit SSH key needs a resolved remote username", "set --ssh-user")
+	}
 	return resolveIdentity(ctx, selected, options, s.options.Launcher)
 }
 

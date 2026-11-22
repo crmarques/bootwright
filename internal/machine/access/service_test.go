@@ -705,3 +705,22 @@ func TestEveryHostKeyRemedyNamesTheContext(t *testing.T) {
 		}
 	})
 }
+
+func TestExplicitKeyPreservesTheResolvedInvokingUsername(t *testing.T) {
+	h := newHarness(t, func(options *Options) {
+		options.InvokingUser = func(context.Context) (string, error) { return "caller", nil }
+	})
+	host, _ := catalog().Find(api.Machine, "host")
+	access := host.Spec().Get("access", "ssh").Without("user")
+	host = host.WithSpec(host.Spec().WithPath(access, "access", "ssh"))
+	h.service = h.service.WithCatalog(api.NewCatalog([]api.Object{host}))
+	for _, options := range []machine.SSHOptions{{IdentityFile: "/keys/caller"}, {User: "caller"}} {
+		if _, err := exec(t, h, "host", options, "id"); err != nil {
+			t.Fatal(err)
+		}
+		got := h.client.sessions[len(h.client.sessions)-1].User
+		if got != "caller" {
+			t.Fatalf("remote user = %q, want caller", got)
+		}
+	}
+}

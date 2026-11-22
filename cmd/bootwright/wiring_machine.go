@@ -74,8 +74,9 @@ func wireMachine(deps machineDependencies) cli.Services {
 		WithHostAccess(hostedAccess{lender: kubevirt.NewLender(runner), custody: deps.Custody})
 	accessState := nodeAccessState{state: deps.State}
 	sessions := machineaccess.New(accessState, selection, machineaccess.Options{
-		Copier: sshlocal.Copier{SSH: client, Account: deps.CopyAccount},
-		Lender: deps.Lifecycle, Ownership: evidence, Evidence: machineHostKeys{reconciler: deps.Lifecycle},
+		InvokingUser: invokingSSHUser(deps.CopyAccount),
+		Copier:       sshlocal.Copier{SSH: client, Account: deps.CopyAccount},
+		Lender:       deps.Lifecycle, Ownership: evidence, Evidence: machineHostKeys{reconciler: deps.Lifecycle},
 		Trust: deps.Trust, Observer: client, Confirmer: deps.Session, Launcher: client,
 		Streams: deps.Streams, Terminal: deps.Terminal, Authorize: deps.Authorize, Prepared: sessionPrepared,
 	})
@@ -101,6 +102,16 @@ func wireMachine(deps machineDependencies) cli.Services {
 		EnvironmentAccess: cluster,
 		MachinePower:      powered,
 		MachineTrust:      enrollment.New(accessState, deps.Trust, selection, trustOptions(deps, client)),
+	}
+}
+
+func invokingSSHUser(resolve func(context.Context) (machineaccess.CopyAccount, error)) func(context.Context) (string, error) {
+	if resolve == nil {
+		return nil
+	}
+	return func(ctx context.Context) (string, error) {
+		account, err := resolve(ctx)
+		return account.Name, err
 	}
 }
 
