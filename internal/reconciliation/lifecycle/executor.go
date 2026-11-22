@@ -206,9 +206,13 @@ func (s Service) run(ctx context.Context, tx Transaction, decided operationPlan,
 	if err != nil {
 		return result, err
 	}
-	boundary, warned, cause := s.converge(work, invocation{stopGroups: stopGroups, tx: tx, store: store, approved: located, boundary: logging, operation: operation, plan: plan, material: material}, decided.phases, states, decided.selection)
+	var effects map[string]bool
+	if operation.Verb == reconciliation.Apply {
+		effects, _ = reachableEffects(decided.plan, decided.states, decided.selection)
+	}
+	boundary, warned, cause := s.converge(work, invocation{effects: effects, stopGroups: stopGroups, tx: tx, store: store, approved: located, boundary: logging, operation: operation, plan: plan, material: material}, decided.phases, states, decided.selection)
 	result.Warnings = warned
 	logging.close(ctx, log)
-	final, terminal := s.finish(recordingContext(ctx), tx, store, operation, plan, states, boundary, logging.faulted(), result)
+	final, terminal := s.finish(recordingContext(ctx), tx, store, operation, plan, states, decided.selection, boundary, logging.faulted(), result)
 	return final, withCause(logging.err(), withCause(cause, terminal))
 }

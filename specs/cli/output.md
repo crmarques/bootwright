@@ -292,7 +292,7 @@ and their output goldens:
 
 | Command | Result fields |
 | --- | --- |
-| `apply`, `destroy` | `context`, `verb`, `steps`, optional `blocks`, optional `settled`, optional `recovered`, optional `next`, `receipt`, optional `checks`, optional `stages`, optional `until`, optional `waves`, optional `widest`, optional `bound`, optional `startable`, optional `deferred`, optional `continuation`, optional `finalizes`, optional `addsTo`, optional `takesBack`, optional `anotherBuild`, optional `stops`, optional `stopsAfterOnline`, optional `authorizations` |
+| `apply`, `destroy` | `context`, `verb`, `steps`, optional `blocks`, optional `settled`, optional `recovered`, optional `next`, `receipt`, optional `checks`, optional `stages`, optional `clusters`, optional `machines`, optional `until`, optional `waves`, optional `widest`, optional `bound`, optional `startable`, optional `later`, optional `blocked`, optional `excluded`, optional `deferred`, optional `continuation`, optional `finalizes`, optional `addsTo`, optional `takesBack`, optional `anotherBuild`, optional `stops`, optional `stopsAfterOnline`, optional `authorizationSteps`, optional `authorizations` |
 | `catalog add-ons info` | `package` |
 | `catalog add-ons list` | `addOns` |
 | `catalog media add`, `catalog media delete` | `name`, `outcome`, `size`, optional `sha256` |
@@ -313,7 +313,7 @@ and their output goldens:
 | `install` | optional `context`, optional `machine`, optional `route`, optional `dryRun`, `outcome`, `platform`, optional `checks`, optional `actions`, optional `requirements`, optional `files`, optional `preview`, optional `progress`, optional `receipt`, optional `next` |
 | `logs` | optional `context`, optional `operation`, optional `verb`, optional `state`, optional `events`, optional `source`, optional `path`, optional `bytes`, optional `truncated`, optional `output` |
 | `machine cp` | `context`, `source`, `machines` |
-| `machine discover` | optional `checks`, optional `context`, optional `verb`, optional `steps`, optional `stages`, optional `until`, optional `waves`, optional `widest`, optional `bound`, optional `startable`, optional `deferred`, optional `continuation`, optional `settled`, optional `finalizes`, optional `addsTo`, optional `takesBack`, optional `anotherBuild`, optional `stops`, optional `stopsAfterOnline`, optional `authorizations`, optional `receipt`, optional `operation`, optional `inventories`, optional `next` |
+| `machine discover` | optional `checks`, optional `context`, optional `verb`, optional `steps`, optional `stages`, optional `clusters`, optional `machines`, optional `until`, optional `waves`, optional `widest`, optional `bound`, optional `startable`, optional `later`, optional `blocked`, optional `excluded`, optional `deferred`, optional `continuation`, optional `settled`, optional `finalizes`, optional `addsTo`, optional `takesBack`, optional `anotherBuild`, optional `stops`, optional `stopsAfterOnline`, optional `authorizationSteps`, optional `authorizations`, optional `receipt`, optional `operation`, optional `inventories`, optional `next` |
 | `machine info`, `machine list` | `context`, `machines`, `powerRead` |
 | `machine inventory` | `inventories` |
 | `machine media eject`, `machine restart`, `machine start`, `machine stop` | `context`, `verb`, `machines` |
@@ -369,8 +369,10 @@ their rows.
 For these results and `status`, `outcome` is the latest attempt or resolution
 outcome: `unknown` while unfinished, or the block state when never attempted.
 `stages` names the stages the plan holds; `until` is the `--until` add-on
-instance, as `<cluster>.<package>`, when one was given; `waves`, `widest`, `bound`, `startable`
-and `deferred` are the counts of the `Concurrency` and selection fields below;
+instance, as `<cluster>.<package>`, when one was given. `clusters` or
+`machines` is the canonical target selection. `waves`, `widest`, `bound`,
+`startable`, `later`, `blocked` and `excluded` give the concurrency
+and selection counts. `deferred` is the sum of the latter three categories;
 `continuation` and `finalizes` say whether a preview continues an operation or
 only completes its finalization; `addsTo` names the apply an
 [additive apply](../state-reconciliation.md#additive-apply) adds to, and
@@ -932,21 +934,23 @@ one, and `another build registered this operation` first when no executable is
 recorded. Steps that are done or not selected are left out, and a fresh plan, a
 finalization, a continuation under the registering build and a continuation
 with no step left to run under this build carry no such field. A new apply or destroy plan adds a `Stop first` field naming the managed Machines checked on entry,
-as `Stop first  rhel-01, rhel-02`, because that gate follows the prompt; a
-continuation is not gated again and carries none. An additive apply's plan
+as `Stop first  rhel-01, rhel-02`. A scoped apply labels it `Stop first (fleet)`.
+The gate follows the prompt. A continuation is not gated again and carries none. An additive apply's plan
 opens with `adds to operation <id>; runs none of its blocks`, and a `destroy`
 of a lineage closes with `Takes back  <id>, then <id>` beside `takesBack`. Every
 presentation of a plan that consumes an authorization closes with a `Requires`
-field naming each token the whole frozen plan requires, bound to the digest of
+field naming each token the invocation requires, bound to the digest of
 the steps that consume it, and those steps, as
 `--authorize data-loss=3f2a9c01b7e4d6a8 (step 3, 5)`; a finalization's preview
 carries none, because the `apply` or `destroy` that completes it runs no block
-and requires no authorization. With a stage selection or `--until`,
+and requires no authorization. `authorizationSteps` gives the consuming plan
+positions in structured output. With an apply selection,
 each pending step also says whether this invocation would start it, that it is
-not selected, or which block it waits on; closing `Stages` and `Until` fields
-name the selection, as `Until  lab.gitops`, and a closing `Starts` field
-reports how many blocks would start and how many are deferred, as
-`1 of 2 blocks, 1 deferred`. While a block is unproved, the
+outside scope, or which block it waits on. A blocked step has an unfinished
+prerequisite outside scope. Closing fields name the selector and report
+ready, later, blocked and outside-scope counts. The concurrency summary
+measures reachable attempts for a selected invocation. Row wave numbers
+still describe the frozen DAG. While a block is unproved, the
 blocks the next `apply` resolves are marked `resolve` and counted as started,
 and every other ready step reads deferred, waiting on the first of them; that
 `apply` then admits the rest by what the resolutions prove, retrying a block

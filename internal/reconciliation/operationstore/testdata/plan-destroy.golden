@@ -6,6 +6,9 @@
       "description": "install the operating system on node-01",
       "stage": "machines",
       "dependencies": [],
+      "clusterOwners": [
+        "storage"
+      ],
       "exclusive": [
         "path:/srv/lab/rhel"
       ],

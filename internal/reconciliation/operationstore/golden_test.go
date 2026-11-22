@@ -144,11 +144,12 @@ func goldenPlan(t *testing.T) reconciliation.Plan {
 	plan, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{
 		{
 			ID: "install-node-01", Description: "install the operating system on node-01",
-			Stage:     reconciliation.StageMachines,
-			Requires:  []reconciliation.ObjectRef{{Kind: "ArtifactServer", Object: "lab"}},
-			Exclusive: []string{"path:/srv/lab/rhel"},
-			Impacts:   []string{"install-operating-system node-01", "power-on node-01", "publish-content /srv/lab/rhel"},
-			Consumes:  []string{reconciliation.AuthorizationDataLoss},
+			Stage:         reconciliation.StageMachines,
+			ClusterOwners: []string{"storage"},
+			Requires:      []reconciliation.ObjectRef{{Kind: "ArtifactServer", Object: "lab"}},
+			Exclusive:     []string{"path:/srv/lab/rhel"},
+			Impacts:       []string{"install-operating-system node-01", "power-on node-01", "publish-content /srv/lab/rhel"},
+			Consumes:      []string{reconciliation.AuthorizationDataLoss},
 			Groups: []reconciliation.Group{
 				{ID: "publish-tree", Description: "publish the package tree the installer fetches", Machines: []string{"controller"}},
 				{ID: "install", Description: "install the operating system", Machines: []string{"node-01", "node-02"}},

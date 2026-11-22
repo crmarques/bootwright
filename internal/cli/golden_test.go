@@ -719,12 +719,12 @@ func cliGoldens() []cliGolden {
 				Context: lifecycle.ContextIdentity{Name: "lab", Revision: revision}, Verb: "apply",
 				Steps: []lifecycle.PlanStep{
 					{ID: "artifact-server-lab-artifacts", Description: "serve artifacts for lab-artifacts on controller", Stage: "infrastructure-services", Impacts: []string{"create-container-unit", "open-listener 192.0.2.1:8443"}, State: "pending", Selection: lifecycle.StepStart, Wave: 1},
-					{ID: "substrate-host-lab-libvirt", Description: "realize the libvirt host of lab-libvirt on controller", Stage: "substrates", Impacts: []string{"create-libvirt-pool lab-libvirt", "create-libvirt-network lab"}, State: "pending", Selection: lifecycle.StepStart, After: []int{1}, Wave: 2},
+					{ID: "substrate-host-lab-libvirt", Description: "realize the libvirt host of lab-libvirt on controller", Stage: "substrates", Impacts: []string{"create-libvirt-pool lab-libvirt", "create-libvirt-network lab"}, State: "pending", Selection: lifecycle.StepWaiting, WaitsOn: "artifact-server-lab-artifacts", After: []int{1}, Wave: 2},
 					{ID: "os-install-metal-01", Description: "install the operating system of metal-01", Stage: "machines", Impacts: []string{"install-operating-system metal-01", "power-on metal-01"}, State: "pending", Selection: lifecycle.StepNotSelected, After: []int{1}, Wave: 2, Consumes: []string{"data-loss"}},
 					{ID: "machine-rhel-01", Description: "realize the virtual machine rhel-01 and its emulated BMC", Stage: "machines", Impacts: []string{"create-libvirt-domain rhel-01"}, State: "pending", Selection: lifecycle.StepNotSelected, After: []int{2}, Wave: 3},
-					{ID: "os-install-rhel-01", Description: "install the operating system of rhel-01", Stage: "machines", Impacts: []string{"power-on rhel-01"}, State: "pending", Selection: lifecycle.StepWaiting, WaitsOn: "machine-rhel-01", After: []int{4}, Wave: 4},
+					{ID: "os-install-rhel-01", Description: "install the operating system of rhel-01", Stage: "machines", Impacts: []string{"power-on rhel-01"}, State: "pending", Selection: lifecycle.StepNotSelected, After: []int{4}, Wave: 4},
 				},
-				Stages: []string{"infrastructure-services", "substrates"}, Waves: 4, Widest: 2, Bound: 1, Startable: 2, Deferred: 3,
+				Stages: []string{"infrastructure-services", "substrates"}, Waves: 2, Widest: 1, Bound: 1, Startable: 1, Later: 1, Excluded: 3, Deferred: 4,
 				Receipt: lifecycle.Receipt{Operation: "none", Verb: "plan", State: "preview", Next: "apply"},
 			}
 		}},
@@ -1479,7 +1479,7 @@ func untilPlanFixture(revision string) *lifecycle.PlanResult {
 			{ID: "addon-gitops-lab", Description: "install add-on gitops on lab", Kind: "ClusterAddonBinding", Object: "lab.gitops", Stage: "add-ons", Impacts: []string{"install-addon gitops lab"}, State: "pending", Selection: lifecycle.StepStart, Wave: 1},
 			{ID: "addon-logging-lab", Description: "install add-on logging on lab", Kind: "ClusterAddonBinding", Object: "lab.logging", Stage: "add-ons", Impacts: []string{"install-addon logging lab"}, State: "pending", Selection: lifecycle.StepNotSelected, After: []int{1}, Wave: 2},
 		},
-		Until: "lab.gitops", Waves: 2, Widest: 1, Bound: 1, Startable: 1, Deferred: 1,
+		Until: "lab.gitops", Waves: 1, Widest: 1, Bound: 1, Startable: 1, Excluded: 1, Deferred: 1,
 		Receipt: lifecycle.Receipt{Operation: "none", Verb: "plan", State: "preview", Next: "apply"},
 	}
 }

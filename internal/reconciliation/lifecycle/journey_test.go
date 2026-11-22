@@ -3935,7 +3935,7 @@ func TestStagedApplyDefersBlocksBehindUnselectedStages(t *testing.T) {
 	if marks["provider-metal"] != StepStart || marks["artifacts"] != StepNotSelected {
 		t.Fatalf("selection markers = %v", marks)
 	}
-	if marks["provider-kubevirt"] != StepWaiting || waits["provider-kubevirt"] != "host-virtualization" {
+	if marks["provider-kubevirt"] != StepBlocked || waits["provider-kubevirt"] != "host-virtualization" {
 		t.Fatalf("the nested substrate is not deferred behind its add-on: %v %v", marks, waits)
 	}
 	if presented.Startable != 1 || presented.Deferred != len(nestedDefinitions())-1 {
@@ -4578,9 +4578,8 @@ func TestFailedBlockOutsideTheSelectionRefusesRetry(t *testing.T) {
 }
 
 // A stage refusal names the exact apply that unblocks work. That apply is
-// authorized against the whole plan, so it carries every token the plan
-// consumes: run exactly as named, fresh, as a continuation or as the retry of
-// a failed block, it starts the work instead of refusing for an authorization.
+// authorized against its reachable work, so it carries the token that permits
+// the widened invocation to start.
 func TestAStageRefusalNamesAnApplyThatPassesAuthorization(t *testing.T) {
 	t.Parallel()
 	install := stagedDefinition("install", reconciliation.StageMachines, "artifacts")
@@ -4594,7 +4593,7 @@ func TestAStageRefusalNamesAnApplyThatPassesAuthorization(t *testing.T) {
 		t.Fatalf("fresh refusal = %+v, want the remedy %q", reported, want)
 	}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{
-		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infrastructure-services"}, Authorizations: authorized,
+		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infrastructure-services"},
 	}); err != nil {
 		t.Fatal(err)
 	}

@@ -35,6 +35,9 @@
       "dependencies": [
         "server-lab"
       ],
+      "clusterOwners": [
+        "storage"
+      ],
       "exclusive": [
         "path:/srv/lab/rhel"
       ],

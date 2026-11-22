@@ -36,7 +36,7 @@ func planCommand(contextName string, plan reconciliation.Plan, flags ...string) 
 // proved gone once the whole run settles, which one block's resolution cannot
 // know while others run, so it defers to the result's last diagnostic, which
 // names that destroy exactly.
-func resolutionRemedy(contextName string, verb reconciliation.Verb, frozen reconciliation.Plan, partial bool) string {
+func resolutionRemedy(contextName string, verb reconciliation.Verb, frozen reconciliation.Plan, selection reconciliation.Selection, partial bool) string {
 	if verb != reconciliation.Apply {
 		if partial {
 			return "run the destroy this result's last diagnostic names, which converges it"
@@ -44,6 +44,13 @@ func resolutionRemedy(contextName string, verb reconciliation.Verb, frozen recon
 		return "run the destroy this result's last diagnostic names, which performs it"
 	}
 	continuation := planCommand(contextName, frozen, authorizing(frozen)...)
+	if !selection.Empty() {
+		continuation = contextCommand(contextName, "apply --dry-run", invocationFlags(selection, nil, nil)...)
+		if partial {
+			return "review the continuation with " + continuation + ", or take back what it owns with " + contextCommand(contextName, string(reconciliation.Destroy))
+		}
+		return "review the continuation with " + continuation
+	}
 	if partial {
 		return "repeat " + continuation + " to converge it, or take back what it owns with " + contextCommand(contextName, string(reconciliation.Destroy))
 	}
@@ -108,8 +115,8 @@ func requiredTokens(plan reconciliation.Plan) []string {
 // operation's records call for, with every token that command's decision
 // requires. A replacement is a fresh removal of the blocks the failed one has
 // not proved gone, so it needs theirs. A continuation and a resolution repeat
-// the operation's own verb and are authorized against the whole frozen plan,
-// except a finalization, which runs no block and consumes nothing.
+// the operation's own verb. An unfiltered apply continuation reviews its
+// reachable attempts. Finalization consumes nothing.
 func continuationCommand(contextName string, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) string {
 	switch action := nextAction(operation, frozen, states); action {
 	case "none":
@@ -120,5 +127,5 @@ func continuationCommand(contextName string, operation operationstore.Operation,
 	if !pendingRemains(frozen, states) {
 		return planCommand(contextName, frozen)
 	}
-	return planCommand(contextName, frozen, authorizing(frozen)...)
+	return planCommand(contextName, frozen, authorizing(authorizationPlan(frozen, states, reconciliation.Selection{}))...)
 }

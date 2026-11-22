@@ -105,9 +105,10 @@ func (b basis) describe() string {
 
 func (p operationPlan) starting() []reconciliation.Block {
 	var starting []reconciliation.Block
+	effects, _ := reachableEffects(p.plan, p.states, p.selection)
 	for _, block := range p.plan.Blocks {
 		current := p.states[block.ID]
-		if current != reconciliation.BlockDone && (unproved(current) || p.selection.Admits(block)) {
+		if unproved(current) || effects[block.ID] {
 			starting = append(starting, block)
 		}
 	}

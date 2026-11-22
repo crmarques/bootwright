@@ -137,7 +137,15 @@ func (d decider) decideOver(ctx context.Context, view View, store decisionRecord
 	if err != nil {
 		return decided, err
 	}
-	return withLineagePlan(ctx, store, decided, operation, frozen, states)
+	decided, err = withLineagePlan(ctx, store, decided, operation, frozen, states)
+	if err == nil && decided.noop && verb == reconciliation.Apply && selection.Targeted() {
+		plan := frozen
+		if len(decided.lineagePlan.Blocks) != 0 {
+			plan = decided.lineagePlan
+		}
+		err = checkTargets(view.Identity().Name, plan, selection)
+	}
+	return decided, err
 }
 
 type additiveVerdict struct {
@@ -388,8 +396,7 @@ func (d decider) namedChange(ctx context.Context, view View, operation operation
 // stages admit no work, as admission's first choice decides it. It names the
 // exact apply that would unblock the operation, the selection widened by the
 // stage it needs, so a selection mistake is corrected rather than silently
-// doing nothing. That apply is authorized against the whole plan, so it
-// carries every token the plan consumes and passes authorization as named.
+// doing nothing. A stage expansion binds authorization to the work it admits.
 // While any block is failed, the work is the retries the scheduler would
 // start, so a selection that admits none of the failed blocks refuses whichever
 // one comes first.
@@ -398,7 +405,7 @@ func refuseStageBoundary(contextName string, plan reconciliation.Plan, states ma
 		for _, block := range plan.Blocks {
 			if block.Stage == reconciliation.StageController && unproved(states[block.ID]) {
 				return applyStageEmpty.Fail("the controller stage has an unproved effect",
-					"resolve it with "+contextCommand(contextName, string(reconciliation.Apply), append([]string{"--stage", "controller"}, authorizing(plan)...)...))
+					"resolve it with "+contextCommand(contextName, string(reconciliation.Apply), "--dry-run", "--stage", "controller"))
 			}
 		}
 	}
@@ -406,7 +413,10 @@ func refuseStageBoundary(contextName string, plan reconciliation.Plan, states ma
 	if len(admitted) != 0 {
 		return nil
 	}
-	tokens := authorizing(plan)
+	if selection.Targeted() {
+		return targetedBoundary(contextName, plan, states, selection, kind)
+	}
+	tokens := authorizing(authorizationPlan(plan, states, reconciliation.Selection{}))
 	if selection.Until != "" {
 		flags := tokens
 		if len(selection.Stages) != 0 {
@@ -417,14 +427,14 @@ func refuseStageBoundary(contextName string, plan reconciliation.Plan, states ma
 		if kind == StepStart {
 			if ready := reconciliation.Startable(plan, states, unstaged); len(ready) != 0 {
 				return applyStageEmpty.Fail("the selected stages have nothing to start",
-					"repeat "+widenedApply(contextName, selection, ready[0].Stage, append([]string{"--until", selection.Until}, tokens...)))
+					"repeat "+widenedApply(contextName, plan, states, selection, ready[0].Stage))
 			}
 		}
 		if kind == StepRetry {
 			for _, block := range plan.Blocks {
 				if states[block.ID] == reconciliation.BlockFailed && unstaged.Admits(block) {
 					return applyStageExcludesRetry.Fail("the block this operation must retry is outside the selected stages",
-						"repeat "+widenedApply(contextName, selection, block.Stage, append([]string{"--until", selection.Until}, tokens...)))
+						"repeat "+widenedApply(contextName, plan, states, selection, block.Stage))
 				}
 			}
 		}
@@ -436,7 +446,7 @@ func refuseStageBoundary(contextName string, plan reconciliation.Plan, states ma
 		failed, _ := plan.Block(heldBehind(plan, states, nil))
 		return applyStageExcludesRetry.Fail(
 			"the block this operation must retry is outside the selected stages",
-			"repeat "+widenedApply(contextName, selection, failed.Stage, tokens))
+			"repeat "+widenedApply(contextName, plan, states, selection, failed.Stage))
 	}
 	ready := reconciliation.Ready(plan, states)
 	if len(ready) == 0 {
@@ -445,13 +455,63 @@ func refuseStageBoundary(contextName string, plan reconciliation.Plan, states ma
 	}
 	return applyStageEmpty.Fail(
 		"the selected stages have nothing to start",
-		"repeat "+widenedApply(contextName, selection, ready[0].Stage, tokens))
+		"repeat "+widenedApply(contextName, plan, states, selection, ready[0].Stage))
+}
+
+func targetedBoundary(name string, plan reconciliation.Plan, states map[string]reconciliation.BlockState, selection reconciliation.Selection, kind string) error {
+	unstaged := selection
+	unstaged.Stages = nil
+	unstaged, _ = unstaged.Bind(plan)
+	ready := reconciliation.Ready(plan, states)
+	for _, block := range plan.Blocks {
+		if !unstaged.Admits(block) {
+			continue
+		}
+		if kind == StepRetry && states[block.ID] == reconciliation.BlockFailed ||
+			kind == StepStart && slices.ContainsFunc(ready, func(ready reconciliation.Block) bool { return ready.ID == block.ID }) {
+			wider := selection
+			wider.Stages = append(slices.Clone(selection.Stages), block.Stage)
+			wider.Stages, _ = reconciliation.ParseStages(wider.Stages.Names())
+			return applyStageEmpty.Fail("the selected stages leave prerequisite "+block.ID+" outside this invocation",
+				"review "+contextCommand(name, "apply --dry-run", invocationFlags(wider, nil, nil)...))
+		}
+	}
+	if kind == StepRetry {
+		failed := heldBehind(plan, states, nil)
+		return applyStageExcludesRetry.Fail("the selected targets cannot retry "+failed,
+			"review the failed block and explicitly select its target with bootwright apply --dry-run")
+	}
+	return applyStageEmpty.Fail("the selected targets have no work that can start",
+		"review the recorded status and select a target with pending work or its required shared targets")
+}
+
+func checkTargets(contextName string, plan reconciliation.Plan, selection reconciliation.Selection) error {
+	if len(selection.Clusters) != 0 {
+		for _, block := range plan.Blocks {
+			if len(block.ClusterOwners) == 0 && clusterChild(block.BlockDefinition) {
+				return applyStageEmpty.Fail("the frozen plan lacks cluster ownership for "+block.ID,
+					"continue the recorded apply by stage, or destroy it and review a fresh apply with --clusters")
+			}
+		}
+	}
+	if missing := selection.MissingTargets(plan); len(missing) != 0 {
+		return applyStageEmpty.Fail("the plan has no blocks for selected targets: "+strings.Join(missing, ", "),
+			"inspect this context with "+contextCommand(contextName, "status")+" and select a target with planned work")
+	}
+	return nil
 }
 
 func bindSelection(contextName string, plan reconciliation.Plan, selection reconciliation.Selection) (reconciliation.Selection, error) {
+	if err := checkTargets(contextName, plan, selection); err != nil {
+		return selection, err
+	}
 	bound, ok := selection.Bind(plan)
 	if ok {
 		return bound, nil
+	}
+	if selection.Targeted() {
+		return selection, applyUntilUnknown.Fail("the add-on named by --until is outside the selected targets or absent from the plan",
+			"select its cluster and name a planned add-on instance")
 	}
 	candidates := reconciliation.UntilCandidates(plan)
 	if len(candidates) == 0 {
@@ -467,15 +527,11 @@ func bindSelection(contextName string, plan reconciliation.Plan, selection recon
 
 // widenedApply is the apply whose selection adds the stage a refusal needs, in
 // the canonical order --stage lists them, with the plan's authorizations.
-func widenedApply(contextName string, selection reconciliation.Selection, needed reconciliation.Stage, tokens []string) string {
-	stages := slices.Clone(selection.Stages)
-	if !slices.Contains(stages, needed) {
-		stages = append(stages, needed)
-	}
-	slices.SortStableFunc(stages, func(x, y reconciliation.Stage) int {
-		return slices.Index(reconciliation.Stages(), x) - slices.Index(reconciliation.Stages(), y)
-	})
-	return contextCommand(contextName, string(reconciliation.Apply), append([]string{"--stage", strings.Join(stages.Names(), ",")}, tokens...)...)
+func widenedApply(name string, plan reconciliation.Plan, states map[string]reconciliation.BlockState, selection reconciliation.Selection, needed reconciliation.Stage) string {
+	stages := append(slices.Clone(selection.Stages), needed)
+	selection.Stages, _ = reconciliation.ParseStages(stages.Names())
+	bound, _ := selection.Bind(plan)
+	return contextCommand(name, "apply", invocationFlags(bound, authorizing(authorizationPlan(plan, states, bound)), nil)...)
 }
 
 // freshApply is the one fresh-plan decision: apply registers the transition it

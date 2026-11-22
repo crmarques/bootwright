@@ -139,6 +139,9 @@ func (s Service) planWithin(ctx context.Context, request PlanRequest, scope *rec
 		return nil, err
 	}
 	selection, err := reconciliation.ParseSelection(request.Stages, request.Until)
+	if err == nil {
+		selection, err = selection.WithTargets(request.Clusters, request.Machines)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -250,6 +253,9 @@ func (s Service) preview(ctx context.Context, decision decider, view View, previ
 	}
 	if verb == reconciliation.Destroy && !selection.Empty() {
 		given := []string{}
+		if selection.Targeted() {
+			given = append(given, "--clusters or --machines")
+		}
 		if len(selection.Stages) != 0 {
 			given = append(given, "--stage")
 		}
@@ -344,14 +350,26 @@ func planPreview(plan reconciliation.Plan, states map[string]reconciliation.Bloc
 	schedule := reconciliation.ScheduleOf(plan, throttle)
 	result := PlanResult{
 		Steps: steps(plan, states), Stages: selection.Stages.Names(), Until: selection.Until,
+		Clusters: slices.Clone(selection.Clusters), Machines: slices.Clone(selection.Machines),
 		Waves: schedule.Count, Widest: schedule.Widest,
 	}
-	for _, token := range requiredTokens(plan) {
-		result.Authorizations = append(result.Authorizations, token+"="+AuthorizationDigest(plan, token))
+	authorized := authorizationPlan(plan, states, selection)
+	for index, block := range plan.Blocks {
+		if len(block.Consumes) != 0 {
+			if _, included := authorized.Block(block.ID); included {
+				result.AuthorizationSteps = append(result.AuthorizationSteps, index+1)
+			}
+		}
+	}
+	for _, token := range requiredTokens(authorized) {
+		result.Authorizations = append(result.Authorizations, token+"="+AuthorizationDigest(authorized, token))
 	}
 	if selection.Empty() {
 		return result
 	}
+	effects, blockers := reachableEffects(plan, states, selection)
+	schedule = reconciliation.ScheduleOf(effectSchedule(plan, effects), throttle)
+	result.Waves, result.Widest = schedule.Count, schedule.Widest
 	kind, admitted := firstAdmission(plan, states, selection, nil, nil, nil)
 	holding := ""
 	if kind != StepStart {
@@ -359,13 +377,11 @@ func planPreview(plan reconciliation.Plan, states map[string]reconciliation.Bloc
 	}
 	deferrals := reconciliation.Deferrals(plan, states, selection)
 	for index, step := range result.Steps {
-		if step.Stage == string(reconciliation.StageController) && !selection.Stages.Selects(reconciliation.StageController) && step.State != string(reconciliation.BlockDone) {
-			result.Steps[index].Selection = StepNotSelected
-			result.Steps[index].Impacts = nil
-			result.Deferred++
+		block := plan.Blocks[index]
+		if step.State == string(reconciliation.BlockDone) {
 			continue
 		}
-		if slices.Contains(admitted, index) {
+		if slices.Contains(admitted, index) && !(block.Stage == reconciliation.StageController && !selection.Stages.Selects(block.Stage)) {
 			result.Steps[index].Selection = kind
 			if kind == StepRetry && step.State != string(reconciliation.BlockFailed) {
 				result.Steps[index].Selection = StepStart
@@ -373,20 +389,22 @@ func planPreview(plan reconciliation.Plan, states map[string]reconciliation.Bloc
 			result.Startable++
 			continue
 		}
-		if step.State != string(reconciliation.BlockPending) {
-			continue
-		}
-		deferral, waiting := deferrals[step.ID]
+		deferral := deferrals[step.ID]
+		result.Deferred++
 		switch {
-		case waiting && deferral.Reason == reconciliation.DeferredNotSelected:
+		case !selection.Admits(block):
 			result.Steps[index].Selection = StepNotSelected
-			result.Deferred++
-		case waiting:
-			result.Steps[index].Selection, result.Steps[index].WaitsOn = StepWaiting, deferral.Block
-			result.Deferred++
-		case holding != "":
-			result.Steps[index].Selection, result.Steps[index].WaitsOn = StepWaiting, holding
-			result.Deferred++
+			result.Excluded++
+		case !effects[step.ID]:
+			result.Steps[index].Selection, result.Steps[index].WaitsOn = StepBlocked, blockers[step.ID]
+			result.Blocked++
+		default:
+			result.Steps[index].Selection = StepWaiting
+			result.Steps[index].WaitsOn = deferral.Block
+			if deferral.Block == "" {
+				result.Steps[index].WaitsOn = holding
+			}
+			result.Later++
 		}
 	}
 	return result

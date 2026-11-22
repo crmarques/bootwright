@@ -171,7 +171,7 @@ func TestNextStepsCarryTheContextAndTheTokensTheirDecisionNeeds(t *testing.T) {
 			}
 		}
 	}
-	continued := "bootwright apply --context lab-b --authorize @shown@"
+	continued := "bootwright apply --context lab-b"
 	for _, row := range []struct {
 		name    string
 		arrange func(*testing.T, *harness)
@@ -217,8 +217,11 @@ func TestNextStepsCarryTheContextAndTheTokensTheirDecisionNeeds(t *testing.T) {
 				return
 			}
 			verb := reconciliation.Verb(strings.Fields(status.NextSteps[0])[1])
-			tokens := reviewed(authorizeTokens(status.NextSteps[0]), shownBinding(t, h, "lab-b"))
-			requireAuthorizedAs(t, h, verb, nil, "authorize.")
+			tokens := authorizeTokens(status.NextSteps[0])
+			if len(tokens) != 0 {
+				tokens = reviewed(tokens, shownBinding(t, h, "lab-b"))
+				requireAuthorizedAs(t, h, verb, nil, "authorize.")
+			}
 			requireAuthorizedAs(t, h, verb, tokens, "")
 		})
 	}

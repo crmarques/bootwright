@@ -39,7 +39,7 @@ func TestPrivilegeClassificationHasNoInformationOrInvalidEffects(t *testing.T) {
 		{[]string{"install", "--dry-run", "--context", "lab"}, false},
 		{[]string{"apply", "--dry-run"}, true},
 		{[]string{"apply", "--dry-run", "--stage", "add-ons"}, true},
-		{[]string{"apply", "--dry-run", "--stage", "controller", "--clusters", "one"}, false},
+		{[]string{"apply", "--dry-run", "--stage", "controller", "--clusters", "one"}, true},
 		{[]string{"apply"}, true},
 		{[]string{"apply", "--help"}, false},
 		{[]string{"apply", "--dry-run"}, true},

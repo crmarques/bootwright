@@ -79,6 +79,8 @@ type scheduler struct {
 
 // invocation is what each attempt and resolution runs under; once boundary latches a fault, nothing further is admitted.
 type invocation struct {
+	effects       map[string]bool
+	selection     reconciliation.Selection
 	stopGroups    []*removalMachineGroup
 	clusterStarts *sync.Map
 	tx            Transaction
@@ -108,6 +110,7 @@ func (s Service) converge(ctx context.Context, work invocation, phases removalPh
 	if work.operation.Verb == reconciliation.Apply && work.operation.Predecessor != "" {
 		work.clusterStarts = &sync.Map{}
 	}
+	work.selection = selection
 	run := s.newScheduler(work, states, selection, phases, removalPhases{})
 	boundary, err := run.converge(ctx)
 	slices.SortStableFunc(run.warned, func(first, second positionedWarning) int { return first.position - second.position })
@@ -394,6 +397,9 @@ func (c *scheduler) observingCommand() string {
 	name := c.tx.Identity().Name
 	if c.removal != nil {
 		return contextCommand(name, string(reconciliation.Destroy), authorizingUnfixed(*c.removal)...)
+	}
+	if c.operation.Verb == reconciliation.Apply && !c.selection.Empty() {
+		return contextCommand(name, "apply --dry-run", invocationFlags(c.selection, nil, nil)...)
 	}
 	if command := continuationCommand(name, c.operation, c.plan, c.states); command != "" {
 		return command

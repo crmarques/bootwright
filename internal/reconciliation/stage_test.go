@@ -267,3 +267,59 @@ func TestTheControllerStageSelectionAdmitsTheBlocksItWaitsFor(t *testing.T) {
 		t.Fatalf("no selection admits %v", got)
 	}
 }
+
+func TestTargetSelectionFollowsNestedPrerequisitesAndRequiresBothReplicationOwners(t *testing.T) {
+	t.Parallel()
+	makeBlock := func(id, kind, object string, stage Stage, dependencies ...string) BlockDefinition {
+		return BlockDefinition{ID: id, Description: id, Kind: kind, Object: object, Stage: stage,
+			Implementation: "fixture", ContentDigest: strings.Repeat("a", 64), Request: json.RawMessage("{}"),
+			Dependencies: dependencies}
+	}
+	replication := makeBlock("replication", "CephReplication", "copy", StageClusters, "storage", "peer")
+	replication.ClusterOwners = []string{"peer", "storage"}
+	virt := makeBlock("virtualization", "ClusterAddonBinding", "host.virtualization", StageAddOns, "host")
+	virt.ClusterOwners = []string{"host"}
+	plan, err := NewPlan(Apply, []BlockDefinition{
+		makeBlock("metal", "Machine", "metal", StageMachines),
+		makeBlock("host", "OpenShiftCluster", "host", StageClusters, "metal"),
+		virt,
+		makeBlock("provider", "InfraProvider", "provider", StageSubstrates, "virtualization"),
+		makeBlock("guest-vm", "Machine", "guest-vm", StageMachines, "provider"),
+		makeBlock("guest", "OpenShiftCluster", "guest", StageClusters, "guest-vm"),
+		makeBlock("storage", "CephCluster", "storage", StageClusters),
+		makeBlock("peer", "CephCluster", "peer", StageClusters),
+		replication,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		clusters, machines, stages, want []string
+	}{
+		{clusters: []string{"guest"}, want: []string{"guest", "guest-vm", "host", "metal", "provider", "virtualization"}},
+		{machines: []string{"guest-vm"}, want: []string{"guest-vm", "host", "metal", "provider", "virtualization"}},
+		{clusters: []string{"storage"}, want: []string{"storage"}},
+		{clusters: []string{"peer", "storage"}, want: []string{"peer", "replication", "storage"}},
+		{clusters: []string{"guest"}, stages: []string{"clusters"}, want: []string{"guest", "host"}},
+	} {
+		selection, _ := ParseSelection(tc.stages, "")
+		selection, err = selection.WithTargets(tc.clusters, tc.machines)
+		if err != nil {
+			t.Fatal(err)
+		}
+		selection, ok := selection.Bind(plan)
+		if !ok || len(selection.MissingTargets(plan)) != 0 {
+			t.Fatalf("selection failed for %+v", tc)
+		}
+		var ids []string
+		for _, block := range plan.Blocks {
+			if selection.Admits(block) {
+				ids = append(ids, block.ID)
+			}
+		}
+		slices.Sort(ids)
+		if !slices.Equal(ids, tc.want) {
+			t.Fatalf("%+v admitted %v", tc, ids)
+		}
+	}
+}

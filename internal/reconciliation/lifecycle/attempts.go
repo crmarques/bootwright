@@ -36,6 +36,9 @@ func recordingContext(ctx context.Context) context.Context { return context.With
 // pending block stays pending and a failed one it would have retried stays
 // failed, exactly as their records still say.
 func (s Service) attempt(ctx context.Context, run invocation, block reconciliation.Block, retired map[string]bool, position, total int, warn func([]operationstore.Warning)) (reconciliation.BlockState, error) {
+	if run.effects != nil && !run.effects[block.ID] {
+		return "", engineRequestDefect.Fail("block "+block.ID+" is outside the reviewed apply effects", "review the current apply preview and repeat")
+	}
 	tx, store, boundary, operation, plan := run.tx, run.store, run.boundary, run.operation, run.plan
 	capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
 	if !ok {
@@ -310,9 +313,9 @@ func (s Service) resolveUnknown(ctx context.Context, run invocation, block recon
 	case resolvedEffect == reconciliation.EffectNoEffect:
 		return state, engineResolvedUnperformed.Fail(
 			"the frozen effect was never performed",
-			resolutionRemedy(tx.Identity().Name, operation.Verb, plan, false))
+			resolutionRemedy(tx.Identity().Name, operation.Verb, plan, run.selection, false))
 	case resolvedEffect == reconciliation.EffectPartial || resolvedEffect == reconciliation.EffectInconclusive:
-		return state, engineResolvedUnperformed.Fail(retriedEffect[resolvedEffect], resolutionRemedy(tx.Identity().Name, operation.Verb, plan, true))
+		return state, engineResolvedUnperformed.Fail(retriedEffect[resolvedEffect], resolutionRemedy(tx.Identity().Name, operation.Verb, plan, run.selection, true))
 	}
 	explanation := s.explainIn(ctx, store, operation, verb, observed, observation.Evidence)
 	_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "unresolved", Block: block.ID, Detail: explanation.Reason})
@@ -517,7 +520,11 @@ func (s Service) invoke(ctx context.Context, run invocation, block reconciliatio
 		continuation := ""
 		var prepare func(context.Context, json.RawMessage) error
 		if operation.Verb == reconciliation.Apply && resolution == 0 {
-			continuation = contextCommand(tx.Identity().Name, string(reconciliation.Apply), authorizing(plan)...)
+			if run.selection.Empty() {
+				continuation = contextCommand(tx.Identity().Name, string(reconciliation.Apply), authorizing(plan)...)
+			} else {
+				continuation = contextCommand(tx.Identity().Name, "apply --dry-run", invocationFlags(run.selection, nil, nil)...)
+			}
 		}
 		if operation.Verb == reconciliation.Apply && resolution == 0 && attempt > 0 {
 			prepare = func(inner context.Context, preparation json.RawMessage) error {
@@ -725,7 +732,7 @@ func (s Service) project(ctx context.Context, tx Transaction, verb reconciliatio
 // Secret bindings, outside this transaction, so evidence that is not yet
 // pristine marks a removal whose finalization did not complete. An operation
 // that did not complete also names the exact command its records call for.
-func (s Service) finish(ctx context.Context, tx Transaction, store OperationStore, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, boundary, faulted bool, result *OperationResult) (*OperationResult, error) {
+func (s Service) finish(ctx context.Context, tx Transaction, store OperationStore, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, selection reconciliation.Selection, boundary, faulted bool, result *OperationResult) (*OperationResult, error) {
 	next, err := reconciliation.NextOperationState(orderedStates(plan, states), boundary)
 	if err != nil {
 		return result, err
@@ -748,7 +755,16 @@ func (s Service) finish(ctx context.Context, tx Transaction, store OperationStor
 	} else if err := s.project(ctx, tx, operation.Verb, next); err != nil {
 		return result, err
 	}
-	result.Blocks, err = s.recordedBlockResults(ctx, store, current, plan, states, continuationCommand(tx.Identity().Name, current, plan, states))
+	name := tx.Identity().Name
+	command := continuationCommand(name, current, plan, states)
+	if next != reconciliation.OperationDone && !selection.Empty() {
+		if next == reconciliation.OperationPaused {
+			command = contextCommand(name, "apply --dry-run")
+		} else {
+			command = contextCommand(name, "apply --dry-run", invocationFlags(selection, nil, nil)...)
+		}
+	}
+	result.Blocks, err = s.recordedBlockResults(ctx, store, current, plan, states, command)
 	if err != nil {
 		return result, err
 	}
@@ -760,11 +776,11 @@ func (s Service) finish(ctx context.Context, tx Transaction, store OperationStor
 	if next == reconciliation.OperationDone {
 		return result, nil
 	}
-	result.NextCommand = continuationCommand(tx.Identity().Name, current, plan, states)
+	result.NextCommand = command
 	if next == reconciliation.OperationPaused {
 		return result, nil
 	}
-	return result, terminalFailure(tx.Identity().Name, current, plan, states)
+	return result, terminalFailure(name, current, plan, states, command, !selection.Empty())
 }
 
 // terminalFailure reports what an operation that did not complete asks for, as
@@ -772,10 +788,12 @@ func (s Service) finish(ctx context.Context, tx Transaction, store OperationStor
 // beside the resolution, because the removal proves the same effects itself
 // and is the road out when the repair is to the automation the operation
 // froze. A failed removal is replaced rather than continued, and says so.
-func terminalFailure(contextName string, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState) error {
-	command := continuationCommand(contextName, operation, plan, states)
+func terminalFailure(contextName string, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, command string, preview bool) error {
 	switch {
 	case operation.State == reconciliation.OperationUnknown && operation.Verb == reconciliation.Apply:
+		if preview {
+			return applyUnresolved.Fail("an effect has an unresolved outcome", "review the continuation with "+command)
+		}
 		return applyUnresolved.Fail("an effect has an unresolved outcome",
 			"resolve it with "+command+", which observes that effect before anything else starts, or take back what it started with "+
 				contextCommand(contextName, string(reconciliation.Destroy)))
@@ -788,7 +806,10 @@ func terminalFailure(contextName string, operation operationstore.Operation, pla
 	if operation.Verb == reconciliation.Destroy {
 		return destroyIncomplete.Fail("the destroy did not complete", "continue it with "+command)
 	}
-	return applyIncomplete.Fail("the "+string(operation.Verb)+" did not complete", "continue it with "+command)
+	if preview {
+		return applyIncomplete.Fail("the apply did not complete", "review the continuation with "+command)
+	}
+	return applyIncomplete.Fail("the apply did not complete", "continue it with "+command)
 }
 
 // nextAction names what an operation's own records call for, which is nothing

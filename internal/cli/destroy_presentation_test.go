@@ -19,6 +19,7 @@ func TestADestroyPlanTextNamesTheMachinesToStopFirst(t *testing.T) {
 		{ID: "machine-rhel-02", Description: "remove the machine rhel-02", Stage: "machines", State: "pending"},
 	}
 	result.Stops = []string{"rhel-01", "rhel-02"}
+	result.AuthorizationSteps = []int{1}
 	var out bytes.Buffer
 	if err := writeLifecyclePlan(&out, result); err != nil {
 		t.Fatal(err)

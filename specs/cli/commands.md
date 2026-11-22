@@ -134,7 +134,7 @@ The three `catalog media` commands follow the host-wide
 | `bootwright render acquisitions` | `--input-dir <file or directory>` | every artifact the selected desired state acquires, its origin, class, digest and Machines ([acquisition list](../cli.md#acquisition-list)) | none |
 | `bootwright render installer` | `--clusters <list>` default all OpenShiftClusters; `--sensitive` false | installer artifact manifest | local placeholder files and optional sensitive files |
 | `bootwright render storage` | `--clusters <list>` default all CephClusters | storage artifact manifest | local native files or scripts only; never execution |
-| `bootwright apply` | `--dry-run` false; repeatable `--authorize <token>[=<digest>][,<token>...]`; `--stage <list>` default all stages; `--until <cluster>.<package>`; `--parallelism <n>` default 8; `--yes` false | completed full apply or additive apply of instances, a pause at the selected stage boundary or after the named add-on instance, exact continued state, or a settled result when the declared state is realized; with `--dry-run`, the plan and prerequisite checks | complete planned mutation, including automatic disk-inventory preparation before separately authorized installation, or none when it settles, beyond completing an operation's interrupted finalization; with `--dry-run`, bounded read-only observation |
+| `bootwright apply` | `--dry-run` false; repeatable `--authorize <token>[=<digest>][,<token>...]`; `--stage <list>` default all stages; `--clusters <list>` or `--machines <list>`; `--until <cluster>.<package>`; `--parallelism <n>` default 8; `--yes` false | completed full apply or additive apply of instances, a pause at the selected stage boundary or after the named add-on instance, exact continued state, or a settled result when the declared state is realized; with `--dry-run`, the plan and prerequisite checks | complete planned mutation, including automatic disk-inventory preparation before separately authorized installation, or none when it settles, beyond completing an operation's interrupted finalization; with `--dry-run`, bounded read-only observation |
 | `bootwright destroy` | `--dry-run` false; repeatable `--authorize <token>[=<digest>][,<token>...]`, which also takes `erase=<machine>:<method>` to relax one Machine's declared removal erase for this destroy; repeatable `--unregistered <machine>[,<machine>...]`; `--parallelism <n>` default 8; `--yes` false | completed full destroy, exact continued state, or a settled result when the context owns nothing; with `--dry-run`, the removal plan and prerequisite checks | complete planned removal, or none when it settles, beyond the same interrupted finalization or releasing what an interrupted registration left, and the [housekeeping](../state-reconciliation.md#context-mutation-evidence) of the operation claims that hold nothing; over an apply that did not complete, it first proves the outcome of every effect it takes back; with `--dry-run`, bounded read-only observation |
 
 Not yet met: `render installer` and `render storage` run no use case
@@ -401,6 +401,14 @@ members follow the [comma-list rules](../cli.md#parsing-and-input-conventions);
 a supplied value that resolves to no member and an unrecognized member are both
 usage errors. Omission selects every stage. What a selection gates is owned by
 [state reconciliation](../state-reconciliation.md#stages-and-the-pause-boundary).
+
+On apply, `--clusters` and `--machines` accept comma-separated lowercase
+DNS labels. Supply one flag family per invocation. Omission leaves all target
+work eligible. An explicitly supplied empty, whitespace-only or comma-only
+list is a usage error. Scalar occurrence and duplicate-member handling follow
+the [comma-list rules](../cli.md#parsing-and-input-conventions). Target
+selection composes with `--stage` and `--until` under the
+[apply selection contract](../state-reconciliation.md#selecting-apply-targets).
 
 `--until` is accepted only on `apply`. Its value names one add-on
 instance as `<cluster>.<package>`, two lowercase DNS labels, the `object` that

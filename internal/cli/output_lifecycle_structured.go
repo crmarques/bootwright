@@ -55,27 +55,33 @@ type planCheckPresentation struct {
 }
 
 type planPresentation struct {
-	Checks           []planCheckPresentation `json:"checks,omitempty"`
-	Context          resultContext           `json:"context"`
-	Verb             string                  `json:"verb"`
-	Steps            []planStepPresentation  `json:"steps"`
-	Stages           []string                `json:"stages"`
-	Until            string                  `json:"until,omitempty"`
-	Waves            int                     `json:"waves"`
-	Widest           int                     `json:"widest"`
-	Bound            int                     `json:"bound"`
-	Startable        int                     `json:"startable"`
-	Deferred         int                     `json:"deferred"`
-	Continuation     bool                    `json:"continuation"`
-	Settled          bool                    `json:"settled,omitempty"`
-	Finalizes        bool                    `json:"finalizes"`
-	AddsTo           string                  `json:"addsTo,omitempty"`
-	TakesBack        []string                `json:"takesBack,omitempty"`
-	AnotherBuild     *planBuildPresentation  `json:"anotherBuild,omitempty"`
-	Stops            []string                `json:"stops"`
-	StopsAfterOnline []string                `json:"stopsAfterOnline"`
-	Authorizations   []string                `json:"authorizations,omitempty"`
-	Receipt          receiptPresentation     `json:"receipt"`
+	Checks             []planCheckPresentation `json:"checks,omitempty"`
+	Context            resultContext           `json:"context"`
+	Verb               string                  `json:"verb"`
+	Steps              []planStepPresentation  `json:"steps"`
+	Stages             []string                `json:"stages"`
+	Clusters           []string                `json:"clusters,omitempty"`
+	Machines           []string                `json:"machines,omitempty"`
+	Until              string                  `json:"until,omitempty"`
+	Waves              int                     `json:"waves"`
+	Widest             int                     `json:"widest"`
+	Bound              int                     `json:"bound"`
+	Startable          int                     `json:"startable"`
+	Later              int                     `json:"later,omitempty"`
+	Blocked            int                     `json:"blocked,omitempty"`
+	Excluded           int                     `json:"excluded,omitempty"`
+	Deferred           int                     `json:"deferred"`
+	Continuation       bool                    `json:"continuation"`
+	Settled            bool                    `json:"settled,omitempty"`
+	Finalizes          bool                    `json:"finalizes"`
+	AddsTo             string                  `json:"addsTo,omitempty"`
+	TakesBack          []string                `json:"takesBack,omitempty"`
+	AnotherBuild       *planBuildPresentation  `json:"anotherBuild,omitempty"`
+	Stops              []string                `json:"stops"`
+	StopsAfterOnline   []string                `json:"stopsAfterOnline"`
+	AuthorizationSteps []int                   `json:"authorizationSteps,omitempty"`
+	Authorizations     []string                `json:"authorizations,omitempty"`
+	Receipt            receiptPresentation     `json:"receipt"`
 }
 
 func (planPresentation) documentedResult() {}
@@ -85,6 +91,9 @@ func displayPlan(result *lifecycle.PlanResult) planPresentation {
 	for _, check := range result.Checks {
 		shown.Checks = append(shown.Checks, planCheckPresentation{ID: escapeDisplayLine(check.ID), Status: escapeDisplayLine(check.Status), Summary: escapeDisplayLine(check.Summary), Remedy: escapeDisplayLine(check.Remedy)})
 	}
+	shown.Clusters, shown.Machines = displayLines(result.Clusters), displayLines(result.Machines)
+	shown.Later, shown.Blocked, shown.Excluded = result.Later, result.Blocked, result.Excluded
+	shown.AuthorizationSteps = slices.Clone(result.AuthorizationSteps)
 	shown.AddsTo, shown.TakesBack = escapeDisplayLine(result.AddsTo), displayLines(result.TakesBack)
 	if b := result.AnotherBuild; b != nil {
 		shown.AnotherBuild = &planBuildPresentation{RegisteredBy: escapeDisplayLine(b.RegisteredBy), Steps: append([]int{}, b.Steps...)}

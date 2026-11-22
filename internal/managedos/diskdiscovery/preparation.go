@@ -51,7 +51,7 @@ func (c Capability) AutomaticPreparation(ctx context.Context, input lifecycle.Pl
 			pending = append(pending, r.Identity.Object)
 		}
 	}
-	if len(pending) == 0 && !selection.Stages.Selects(reconciliation.StageMachines) {
+	if len(pending) == 0 && !selection.Targeted() && !selection.Stages.Selects(reconciliation.StageMachines) {
 		return targets, nil
 	}
 	return pending, nil

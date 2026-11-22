@@ -3,6 +3,7 @@ package lifecycle
 import (
 	"context"
 	"slices"
+	"strings"
 
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
@@ -16,6 +17,7 @@ func (s Service) automaticPreparation(ctx context.Context, name string, selectio
 		return nil, false, nil
 	}
 	var scope *reconciliation.PreparationScope
+	var outside []string
 	err := s.workspace.ReadLifecycle(ctx, name, func(view View) error {
 		store := s.store(view)
 		index, err := store.Index(ctx)
@@ -47,6 +49,7 @@ func (s Service) automaticPreparation(ctx context.Context, name string, selectio
 			return err
 		}
 		input := s.planInput(view, state, controller, nil)
+		members := clusterMachineOwners(state.Effective())
 		for _, definition := range s.options.Preparations {
 			if definition.Automatic == nil {
 				continue
@@ -64,11 +67,24 @@ func (s Service) automaticPreparation(ctx context.Context, name string, selectio
 			targets = slices.Clone(targets)
 			slices.Sort(targets)
 			scope = &reconciliation.PreparationScope{Kind: definition.Kind, Command: string(reconciliation.Apply), Targets: slices.Compact(targets), PreparePrerequisites: true}
+			if selection.Targeted() {
+				for _, target := range scope.Targets {
+					selected := slices.Contains(selection.Machines, target) || slices.Contains(selection.Clusters, members[target])
+					if !selected {
+						outside = append(outside, target)
+					}
+				}
+			}
 		}
 		return nil
 	})
 	if err != nil || scope == nil {
 		return nil, false, err
+	}
+	if len(outside) != 0 {
+		return nil, false, applyTargetBeforePreparation.Fail(
+			"missing inventory for Machines outside the selected targets: "+strings.Join(outside, ", "),
+			"complete inventory for those Machines with "+contextCommand(name, "machine discover", "--name", strings.Join(outside, ","), "--stage", "controller")+" and review the scoped apply again")
 	}
 	if selection.Until != "" {
 		return nil, false, applyUntilBeforePreparation.Fail("the add-on boundary cannot be planned before preparation completes", "run "+contextCommand(name, "apply")+" to complete preparation and review the resolved installation plan before selecting --until")

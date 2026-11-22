@@ -7,6 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
@@ -18,10 +21,13 @@ type automaticResolver struct {
 
 func (r automaticResolver) Resolve(kind, implementation string) (Capability, bool) {
 	_, found := r.CapabilityResolver.Resolve(kind, implementation)
-	return r.owner, found
+	return r.owner, found || kind == string(api.CephCluster) && implementation == "artifact-server-nginx-v1"
 }
 
-type automaticCapability struct{ *testCapability }
+type automaticCapability struct {
+	*testCapability
+	inventory reconciliation.ObjectRef
+}
 
 func (c automaticCapability) Plan(ctx context.Context, input PlanInput) (CapabilityPlan, error) {
 	p, err := c.testCapability.Plan(ctx, input)
@@ -29,9 +35,9 @@ func (c automaticCapability) Plan(ctx context.Context, input PlanInput) (Capabil
 		return p, err
 	}
 	if input.Preparation != nil {
-		p.Definitions = slices.DeleteFunc(slices.Clone(p.Definitions), func(d reconciliation.BlockDefinition) bool { return d.ID == "installation" })
+		p.Definitions = slices.DeleteFunc(slices.Clone(p.Definitions), func(d reconciliation.BlockDefinition) bool { return d.ID == "installation" || d.ID == "storage-core" })
 	} else {
-		records, err := input.AppliedEvidence(ctx, "ArtifactServer", "inventory")
+		records, err := input.AppliedEvidence(ctx, c.inventory.Kind, c.inventory.Object)
 		if err != nil {
 			return p, err
 		}
@@ -42,6 +48,10 @@ func (c automaticCapability) Plan(ctx context.Context, input PlanInput) (Capabil
 	return p, nil
 }
 func automaticHarness(t *testing.T) *harness {
+	return automaticHarnessFor(t, reconciliation.ObjectRef{Kind: "ArtifactServer", Object: "inventory"})
+}
+
+func automaticHarnessFor(t *testing.T, inventory reconciliation.ObjectRef) *harness {
 	h := newHarness(t, "setup", "inventory", "installation")
 	h.capability.definitions[0].Stage = reconciliation.StageController
 	h.capability.definitions[1].Stage = reconciliation.StageMachines
@@ -49,11 +59,16 @@ func automaticHarness(t *testing.T) *harness {
 	h.capability.definitions[2].Stage = reconciliation.StageMachines
 	h.capability.definitions[2].Dependencies = []string{"inventory"}
 	h.capability.definitions[2].Consumes = []string{"data-loss"}
-	h.service.capabilities = automaticResolver{h.service.capabilities, automaticCapability{h.capability}}
+	for i := range h.capability.definitions {
+		h.capability.definitions[i].Kind = inventory.Kind
+	}
+	h.capability.definitions[1].Object, h.capability.definitions[2].Object = inventory.Object, inventory.Object
+	resolver := testResolver{capability: h.capability, bindings: []CapabilityBinding{{Kind: inventory.Kind, Implementation: "artifact-server-nginx-v1"}}}
+	h.service.capabilities = automaticResolver{resolver, automaticCapability{h.capability, inventory}}
 	h.service.options.Preparations = []PreparationDefinition{{Kind: "example-inventory", Command: "machine discover", Bindings: h.service.capabilities.Bindings(), Bearing: h.service.options.EffectBearing,
 		Validate: func(context.Context, PlanInput, reconciliation.PreparationScope) error { return nil }, Advance: func(context.Context, PreparationAdvance) error { return nil },
 		Automatic: func(ctx context.Context, input PlanInput, _ reconciliation.Selection) ([]string, error) {
-			records, err := input.AppliedEvidence(ctx, "ArtifactServer", "inventory")
+			records, err := input.AppliedEvidence(ctx, inventory.Kind, inventory.Object)
 			if err != nil {
 				return nil, err
 			}
@@ -155,5 +170,43 @@ func TestAutomaticPreparationRequiresConfirmationAndResumesFrozenScope(t *testin
 	}
 	if len(h.capability.applies) != 3 || h.capability.applies[2] != "inventory" {
 		t.Fatal(h.capability.applies)
+	}
+}
+
+func TestScopedPreparationPreservesClusterMachineOwnershipAcrossPhases(t *testing.T) {
+	t.Parallel()
+	h := automaticHarnessFor(t, reconciliation.ObjectRef{Kind: string(api.Machine), Object: "example-node"})
+	controller := api.MapValue(api.FieldValue{Name: "machineRef", Value: api.StringValue("controller")})
+	spec := api.MapValue(api.FieldValue{Name: "topology", Value: api.MapValue(api.FieldValue{
+		Name: "nodes", Value: api.ListValue(api.MapValue(api.FieldValue{Name: "machineRef", Value: api.StringValue("example-node")})),
+	})})
+	catalog := api.NewCatalog([]api.Object{
+		api.NewObject(api.Environment, "lab", api.Value{}, api.MapValue(api.FieldValue{Name: "controller", Value: controller})),
+		api.NewObject(api.CephCluster, "storage", api.Value{}, spec),
+	})
+	h.service.compiler = testCompiler{state: compilation.NewState(catalog, catalog, nil)}
+	core := stagedDefinition("storage-core", reconciliation.StageClusters, "installation")
+	core.Kind, core.Object = string(api.CephCluster), "storage"
+	h.capability.definitions = append(h.capability.definitions, core)
+	h.service.options.EffectBearing = func(api.Object) (Bearing, bool) { return Bearing{}, false }
+	h.service.options.Preparations[0].Bearing = h.service.options.EffectBearing
+	request := ApplyRequest{ContextName: testContextName, Clusters: []string{"another"}, SkipConfirmation: true, Unattended: true}
+	ctx := context.Background()
+	if _, err := h.service.Apply(ctx, request); firstCode(err) != "apply.target-before-preparation" || len(h.capability.applies) != 0 {
+		t.Fatalf("unrelated discovery ran or reported another failure: %v (%+v), %v", err, diagnostics.Of(err), h.capability.applies)
+	}
+	request.Clusters = []string{"storage"}
+	_, err := h.service.Apply(ctx, request)
+	if firstCode(err) != "authorize.missing" || !slices.Equal(h.capability.applies, []string{"setup", "inventory"}) {
+		t.Fatalf("preparation failed to reach separate installation authorization: %v, %v", diagnostics.Of(err), h.capability.applies)
+	}
+	plan, err := h.service.Plan(ctx, PlanRequest{ContextName: testContextName, Clusters: request.Clusters})
+	if err != nil || len(plan.Authorizations) != 1 {
+		t.Fatalf("scoped install preview = %+v, %v", plan, diagnostics.Of(err))
+	}
+	request.Authorizations = plan.Authorizations
+	result, err := h.service.Apply(ctx, request)
+	if err != nil || result.Receipt.State != "done" || !slices.Equal(h.capability.applies, []string{"setup", "inventory", "installation", "storage-core"}) {
+		t.Fatalf("scoped install = %+v, %v, effects = %v", result, diagnostics.Of(err), h.capability.applies)
 	}
 }

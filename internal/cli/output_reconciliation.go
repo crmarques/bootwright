@@ -175,10 +175,17 @@ func writeLifecycleSteps(text *display, result lifecycle.PlanResult) {
 	if len(result.Stages) != 0 {
 		closing = append(closing, field{Label: "Stages", Value: strings.Join(result.Stages, ", ")})
 	}
+	if len(result.Clusters) != 0 {
+		closing = append(closing, field{Label: "Clusters", Value: strings.Join(result.Clusters, ", ")})
+	}
+	if len(result.Machines) != 0 {
+		closing = append(closing, field{Label: "Machines", Value: strings.Join(result.Machines, ", ")})
+	}
 	if result.Until != "" {
 		closing = append(closing, field{Label: "Until", Value: result.Until})
 	}
-	if len(result.Stages) != 0 || result.Until != "" {
+	selected := len(result.Stages) != 0 || result.Until != "" || len(result.Clusters) != 0 || len(result.Machines) != 0
+	if selected {
 		closing = append(closing, field{Label: "Starts", Value: startSummary(result)})
 	}
 	if summary := concurrencySummary(result); summary != "" {
@@ -193,14 +200,18 @@ func writeLifecycleSteps(text *display, result lifecycle.PlanResult) {
 		closing = append(closing, field{Label: "Takes back", Value: strings.Join(result.TakesBack, ", then ")})
 	}
 	if len(result.Stops) != 0 {
-		closing = append(closing, field{Label: "Stop first", Value: strings.Join(result.Stops, ", ")})
+		label := "Stop first"
+		if selected {
+			label = "Stop first (fleet)"
+		}
+		closing = append(closing, field{Label: label, Value: strings.Join(result.Stops, ", ")})
 	}
 	if len(result.StopsAfterOnline) != 0 {
 		closing = append(closing, field{Label: "Stop after online cleanup", Value: strings.Join(result.StopsAfterOnline, ", ")})
 	}
 	// A finalization runs no block, so the apply that completes it consumes,
 	// and requires, no authorization.
-	if required := requiredAuthorizations(result.Steps, result.Authorizations); required != "" && !result.Finalizes {
+	if required := requiredAuthorizations(result.Steps, result.Authorizations, result.AuthorizationSteps); required != "" && !result.Finalizes {
 		closing = append(closing, field{Label: "Requires", Value: required})
 	}
 	if len(closing) != 0 {
@@ -244,15 +255,18 @@ func waitMarker(planned lifecycle.PlanStep) string {
 // digest of its steps where the plan carries one, and the steps that consume
 // it, by their place in the plan, so the closing field says what the
 // invocation must acknowledge and for which steps.
-func requiredAuthorizations(steps []lifecycle.PlanStep, bound []string) string {
+func requiredAuthorizations(steps []lifecycle.PlanStep, bound []string, positions []int) string {
 	var tokens []string
 	consumers := map[string][]string{}
-	for index, planned := range steps {
-		for _, token := range planned.Consumes {
+	for _, position := range positions {
+		if position < 1 || position > len(steps) {
+			continue
+		}
+		for _, token := range steps[position-1].Consumes {
 			if _, seen := consumers[token]; !seen {
 				tokens = append(tokens, token)
 			}
-			consumers[token] = append(consumers[token], strconv.Itoa(index+1))
+			consumers[token] = append(consumers[token], strconv.Itoa(position))
 		}
 	}
 	required := make([]string, 0, len(tokens))
@@ -303,6 +317,8 @@ func selectionMarker(planned lifecycle.PlanStep) string {
 		return "retry"
 	case lifecycle.StepNotSelected:
 		return "not selected"
+	case lifecycle.StepBlocked:
+		return "blocked: prerequisite " + planned.WaitsOn
 	case lifecycle.StepWaiting:
 		return "deferred: waits on " + planned.WaitsOn
 	}
@@ -310,7 +326,7 @@ func selectionMarker(planned lifecycle.PlanStep) string {
 }
 
 func startSummary(result lifecycle.PlanResult) string {
-	return fmt.Sprintf("%d of %d blocks, %d deferred", result.Startable, len(result.Steps), result.Deferred)
+	return fmt.Sprintf("%d ready, %d later, %d blocked, %d outside scope", result.Startable, result.Later, result.Blocked, result.Excluded)
 }
 
 func writeLifecyclePlan(out io.Writer, result *lifecycle.PlanResult) error {

@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"strings"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/managedos/media"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/spf13/cobra"
@@ -53,6 +54,24 @@ func validateUninstall(command *cobra.Command) string {
 }
 
 func validateLifecycleFlags(command *cobra.Command) string {
+	flags := command.Flags()
+	if flags.Changed("clusters") && flags.Changed("machines") {
+		return "--clusters and --machines are mutually exclusive"
+	}
+	for _, flag := range []string{"clusters", "machines"} {
+		if !flags.Changed(flag) {
+			continue
+		}
+		names := normalizeNames(stringValue(flags, flag))
+		if len(names) == 0 {
+			return "--" + flag + " must name at least one target"
+		}
+		for _, name := range names {
+			if !api.ValidLexical(api.LexicalName, name) {
+				return "--" + flag + " names must be lowercase DNS labels"
+			}
+		}
+	}
 	if dryRunSelected(command.Flags()) && len(arrayValue(command.Flags(), "authorize")) != 0 {
 		return "--authorize is used when executing apply"
 	}

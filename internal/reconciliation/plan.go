@@ -63,6 +63,7 @@ type BlockDefinition struct {
 	Requires      []ObjectRef `json:"-"`
 	Dependencies  []string    `json:"dependencies"`
 	Prerequisites []string    `json:"prerequisites,omitempty"`
+	ClusterOwners []string    `json:"clusterOwners,omitempty"`
 	Family        string      `json:"-"`
 	// Exclusive names host resources this block does not share while it runs.
 	// Two blocks that name one key never run at the same time, even when the
@@ -319,6 +320,9 @@ func checkPrerequisites(verb Verb, definitions []BlockDefinition) error {
 func order(definitions []BlockDefinition) ([]BlockDefinition, error) {
 	known := make(map[string]BlockDefinition, len(definitions))
 	for _, definition := range definitions {
+		if !validClusterOwners(definition.ClusterOwners) {
+			return nil, planError("lifecycle block cluster owners are invalid")
+		}
 		if err := validateDefinition(definition); err != nil {
 			return nil, err
 		}
@@ -454,6 +458,10 @@ func ScheduleOf(plan Plan, throttle int) Schedule {
 		schedule.Widest = max(schedule.Widest, population[wave])
 	}
 	return schedule
+}
+
+func validClusterOwners(owners []string) bool {
+	return len(owners) <= 2 && uniqueSorted(owners) && !slices.ContainsFunc(owners, func(name string) bool { return !ValidSegment(name) })
 }
 
 func validateDefinition(definition BlockDefinition) error {
@@ -614,6 +622,7 @@ func clone(definition BlockDefinition) BlockDefinition {
 	definition.Exclusive = slices.Clone(definition.Exclusive)
 	definition.Impacts = slices.Clone(definition.Impacts)
 	definition.Consumes = slices.Clone(definition.Consumes)
+	definition.ClusterOwners = slices.Clone(definition.ClusterOwners)
 	definition.Groups = slices.Clone(definition.Groups)
 	for index := range definition.Groups {
 		definition.Groups[index].Machines = slices.Clone(definition.Groups[index].Machines)

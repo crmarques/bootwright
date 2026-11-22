@@ -125,7 +125,6 @@ Alias cell.
 | [B464](#b464) | new, 2026-10-08 (X46) | enabling | Each spec's and test's owner | Wording, tests and dead code X46 left | Found in X46; parked under D48 (D116) |
 | [B495](#b495) | new, 2026-10-12 (X48 review) | enabling | State reconciliation, with Managed OS, Substrate and Infrastructure services | The three-node lifecycle composition runs end to end with the real runner and controlled adapters | Found in X48's review; parked under D48 (D116): D125's operator gate already proves overlap on a host, and X48's tests qualify each part |
 | [B510](#b510) | new, 2026-10-12 (the owner's M2b fixture run) | defect | Workspace | Every on-demand directory creation is durable for each writer that proceeds | Found reviewing B506's fix; no milestone depends on it: each window is microseconds wide and the winner's failed sync fails its own operation |
-| [B521](#b521) | new, 2026-10-13 (the owner's M2b Ceph run) | product | CLI and Lifecycle | A stage-selection plan says how many blocks the invocation will run and how wide that selection is | Found in the M2b Ceph run; no milestone depends on it: the step markers are correct, only the closing summary misleads |
 | [B522](#b522) | new, 2026-10-13 (the owner's M2b Ceph run) | product | Machine inventory, with CLI | A provided Machine whose blocks are done does not read as untouched in `machine list` | Found in the M2b Ceph run; no milestone depends on it: the column follows the spec, which ties the position to a Machine block that a provided Machine never has |
 | [B526](#b526) | new, 2026-10-13 (X74) | defect | State reconciliation, with CLI | `plan` refuses where `apply` refuses on recorded facts | Found in X74; no milestone depends on it: X74's `Build` field is shown only for a continuation `apply` would admit, and `apply` still refuses before any effect |
 | [B533](#b533) | new, 2026-10-13 (the X76 review) | defect | Storage | The Ceph observation and manager waits hold their contract at every transient edge | Found by the X76 review; no milestone depends on it: each case is transient, leaves no effect unproved and is recovered by a later apply |
@@ -1114,22 +1113,6 @@ found while reviewing [B506](delivered.md#x83--operation-directories-created-con
 **Exit evidence:** each writer that proceeds on a created directory has either
 synced its parent or observed the creator's completed sync, with a test for
 each path, or the owner accepts the window.
-
-### B521
-
-A stage-selection plan closes with `Starts N of M blocks, K deferred` and
-`Concurrency`, as the [plan presentation](../cli/output.md#lifecycle-and-status-results)
-requires. The deferred count does not separate two things: selected blocks that
-wait on a block this invocation starts, which run in the same invocation, and
-blocks outside the selection, which do not. `Concurrency` reports the width of
-the whole plan, not the selection. In the owner's M2b Ceph run (628b35f58),
-`apply --stage infra-components,substrates` previewed `Starts 1 of 20 blocks,
-18 deferred` and then ran 5 blocks. `apply --stage machines` previewed `Starts 4
-of 20 blocks, 10 deferred` and ran 7. Every selection previewed `9 waves, widest
-7 steps`. **Exit evidence:** an updated contract and a golden for a stage
-selection whose closing fields count blocks that start now, blocks that start
-later in this invocation, and blocks not selected, and that report the
-selection's own width, or the owner keeps the current fields.
 
 ### B522
 
@@ -9505,3 +9488,10 @@ authorized.
 media in the catalog. Authorizes X643, B1651. This revisits the command naming
 in [D243](#d243) and makes the operation explicit in the
 [lifecycle preview](../cli.md#lifecycle-behavior).
+
+
+### D281
+
+**owner** (2026-11-22): authorized implementation of the scoped apply and
+invocation authorization proposal and integration into local main.
+This opens X651 and [B1661](m1.md#b1661).

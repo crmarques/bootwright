@@ -59,7 +59,7 @@ func (s Service) presentation(decided operationPlan) PlanResult {
 func anotherBuildOf(operation operationstore.Operation, steps []PlanStep) *AnotherBuild {
 	var running []int
 	for index, step := range steps {
-		if step.State != string(reconciliation.BlockDone) && step.Selection != StepNotSelected {
+		if step.State != string(reconciliation.BlockDone) && step.Selection != StepNotSelected && step.Selection != StepBlocked {
 			running = append(running, index+1)
 		}
 	}

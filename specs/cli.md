@@ -804,21 +804,17 @@ admits the binding, `apply --dry-run` previews the `add-ons` stage, `apply` inst
 reports its readiness and `destroy` [retires](add-ons.md#retirement) it. The
 [operator guide](../docs/operator-guide.md#add-ons) routes it.
 
-### Stage selection
+### Apply selection
 
-`apply` accepts the [`--stage` flag](cli/commands.md#flag-relationships-and-safeguards);
-what a selection gates, pauses and refuses is owned by the
-[stage contract](state-reconciliation.md#stages-and-the-pause-boundary).
-`apply --dry-run --stage` previews which blocks the next `apply` would resolve, retry or
-start and which it would defer, as the
-[stage contract](state-reconciliation.md#stages-and-the-pause-boundary) admits
-them, with the markers of the
-[output contract](cli/output.md#lifecycle-and-status-results). Previewing a
-fresh or continued `apply`, it fails `lifecycle.stage` exactly where that `apply` would,
-naming the exact `apply` whose `--stage` adds the stage that would unblock
-work, with `--authorize <token>` for each token the plan consumes, since that
-`apply` is authorized against the whole plan; previewing a `destroy`, which accepts no selection, it fails
-`lifecycle.stage` for any selection.
+`apply` and `apply --dry-run` accept [target, stage and add-on selectors](cli/commands.md#flag-relationships-and-safeguards).
+For example, `bootwright apply --dry-run --clusters guest` previews the guest's
+work and the prerequisites it needs. `bootwright apply --machines node-a
+--stage machines` admits Machine work once its external prerequisites are
+done. The [selection contract](state-reconciliation.md#stages-and-the-pause-boundary)
+defines admission, pauses and refusals. The preview identifies immediately
+ready work, work that can follow it, blocked work and work outside the
+selection. An apply's [authorization](state-reconciliation.md#confirmation-and-authorization)
+covers the destructive effects that invocation could execute.
 
 ### Lifecycle receipt
 

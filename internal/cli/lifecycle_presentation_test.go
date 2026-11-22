@@ -105,7 +105,7 @@ func TestLifecycleNarrowPlanKeepsAuthorizationAndImpact(t *testing.T) {
 	for _, width := range []int{24, 48} {
 		var out bytes.Buffer
 		opts := PresentationOptions{Width: width, Color: "always", Detail: "compact"}
-		result := lifecycle.PlanResult{Verb: "destroy", Steps: []lifecycle.PlanStep{{ID: "remove", Description: "Remove selected machine disks", Object: "example-machine", Stage: "machines", Consumes: []string{"data-loss"}, Impacts: []string{"Permanently removes every selected data volume"}}}}
+		result := lifecycle.PlanResult{Verb: "destroy", AuthorizationSteps: []int{1}, Steps: []lifecycle.PlanStep{{ID: "remove", Description: "Remove selected machine disks", Object: "example-machine", Stage: "machines", Consumes: []string{"data-loss"}, Impacts: []string{"Permanently removes every selected data volume"}}}}
 		if err := NewLifecyclePlanPresenter(WithPresentation(&out, opts)).PresentLifecyclePlan(context.Background(), result); err != nil {
 			t.Fatal(err)
 		}

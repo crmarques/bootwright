@@ -145,9 +145,9 @@ func TestANextStepIsACommandAnOperatorCanRun(t *testing.T) {
 	}{
 		{reconciliation.Apply, reconciliation.OperationDone, reconciliation.BlockDone, reconciliation.BlockDone, ""},
 		{reconciliation.Apply, reconciliation.OperationFailed, reconciliation.BlockDone, reconciliation.BlockFailed,
-			both(reconciliation.Apply)},
+			"bootwright apply --context lab-b --authorize network-outage=" + AuthorizationDigest(frozen(reconciliation.Apply), "network-outage")},
 		{reconciliation.Apply, reconciliation.OperationPaused, reconciliation.BlockDone, reconciliation.BlockPending,
-			both(reconciliation.Apply)},
+			"bootwright apply --context lab-b --authorize network-outage=" + AuthorizationDigest(frozen(reconciliation.Apply), "network-outage")},
 		{reconciliation.Apply, reconciliation.OperationFailed, reconciliation.BlockDone, reconciliation.BlockDone, "bootwright apply --context lab-b"},
 		{reconciliation.Destroy, reconciliation.OperationRunning, reconciliation.BlockDone, reconciliation.BlockRunning,
 			both(reconciliation.Destroy)},

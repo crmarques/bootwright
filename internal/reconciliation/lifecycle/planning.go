@@ -196,6 +196,7 @@ func (s Service) planFromEvidence(ctx context.Context, view View, state *compila
 	var placed []SSHReservation
 	binding := capabilityBinding{controller: controller}
 	var claimed claims
+	members := clusterMachineOwners(state.Effective())
 	for _, bound := range bindings {
 		capability, ok := s.capabilities.Resolve(bound.Kind, bound.Implementation)
 		if !ok {
@@ -217,6 +218,10 @@ func (s Service) planFromEvidence(ctx context.Context, view View, state *compila
 				return reconciliation.Plan{}, capabilityBinding{}, planCapabilityDefect.Fail("the "+bound.Implementation+" capability planned a block of another family", "")
 			}
 			definition.Family = bound.family()
+			definition.ClusterOwners = clusterOwners(state.Effective(), definition)
+			if owner := members[definition.Object]; definition.Kind == string(api.Machine) && owner != "" {
+				definition.ClusterOwners = []string{owner}
+			}
 			definitions = append(definitions, definition)
 		}
 		binding.reservations = append(binding.reservations, contribution.Reservations...)
@@ -257,26 +262,30 @@ func (s Service) planFromEvidence(ctx context.Context, view View, state *compila
 	if _, err := canonicalReservations(binding.reservations); err != nil {
 		return reconciliation.Plan{}, capabilityBinding{}, err
 	}
-	definitions, err = s.dependOnStageTails(definitions)
+	plan, err := s.freezeApplyGraph(definitions, scope)
+	return plan, binding, err
+}
+
+func (s Service) freezeApplyGraph(definitions []reconciliation.BlockDefinition, scope *reconciliation.PreparationScope) (reconciliation.Plan, error) {
+	definitions, err := s.dependOnStageTails(definitions)
 	if err != nil {
-		return reconciliation.Plan{}, capabilityBinding{}, err
+		return reconciliation.Plan{}, err
 	}
 	definitions, err = s.dependOnProducedInputs(definitions)
 	if err != nil {
-		return reconciliation.Plan{}, capabilityBinding{}, err
+		return reconciliation.Plan{}, err
 	}
 	if definitions, err = reconciliation.ResolveRequirements(definitions); err != nil {
-		return reconciliation.Plan{}, capabilityBinding{}, err
+		return reconciliation.Plan{}, err
 	}
 	if definitions, err = s.dependOnController(definitions); err != nil {
-		return reconciliation.Plan{}, capabilityBinding{}, err
+		return reconciliation.Plan{}, err
 	}
 	plan, err := reconciliation.NewPlan(reconciliation.Apply, definitions)
 	if err != nil {
-		return reconciliation.Plan{}, capabilityBinding{}, err
+		return reconciliation.Plan{}, err
 	}
-	plan, err = s.freezeExecutionPlan(plan, scope)
-	return plan, binding, err
+	return s.freezeExecutionPlan(plan, scope)
 }
 
 func (s Service) planInput(view View, state *compilation.State, controller string, scope *reconciliation.PreparationScope) PlanInput {

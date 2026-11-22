@@ -16,6 +16,9 @@ func (s Service) applyWithin(ctx context.Context, request ApplyRequest, scope *r
 		return nil, err
 	}
 	selection, err := reconciliation.ParseSelection(request.Stages, request.Until)
+	if err == nil {
+		selection, err = selection.WithTargets(request.Clusters, request.Machines)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -118,8 +121,8 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 	if !skipConfirmation {
 		if s.options.Confirmer == nil {
 			remedy := "review the plan and repeat with --yes"
-			if len(requiredTokens(decided.plan)) != 0 {
-				remedy = "review the plan, then repeat " + contextCommand(name, string(verb), invocationFlags(decided.selection, authorizing(decided.plan), unregistered)...) + " with --yes"
+			if len(requiredTokens(decided.authorizationPlan())) != 0 {
+				remedy = "review the plan, then repeat " + contextCommand(name, string(verb), invocationFlags(decided.selection, authorizing(decided.authorizationPlan()), unregistered)...) + " with --yes"
 			}
 			return nil, engineConfirmationRequired.Fail("this operation requires confirmation", remedy)
 		}

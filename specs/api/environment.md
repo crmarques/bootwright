@@ -187,7 +187,8 @@ class. Objects outside the selected cluster-owned graph are absent from
 effective state, while fleet-global objects and shared services remain
 available. Each excluded cluster
 root produces a deterministic `validate` warning. These fields are selection
-lists, not `Ref` fields, and no CLI flag can further narrow them.
+lists that define the effective Environment. [Apply target selectors](../state-reconciliation.md#selecting-apply-targets)
+gate work inside that Environment.
 
 The cluster-selection closure is authoritative and independent of file layout:
 

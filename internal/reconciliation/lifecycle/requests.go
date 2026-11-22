@@ -14,6 +14,8 @@ type PlanRequest struct {
 	Parallelism int
 	ContextName string
 	Stages      []string
+	Clusters    []string
+	Machines    []string
 	Until       string
 	Relaxations map[string]string
 }
@@ -89,6 +91,8 @@ type ApplyRequest struct {
 	Parallelism      int
 	ContextName      string
 	Stages           []string
+	Clusters         []string
+	Machines         []string
 	Until            string
 	Authorizations   []string
 	SkipConfirmation bool
@@ -140,7 +144,7 @@ type PlanStep struct {
 	// Wave is the earliest round this step can start in, counted from one.
 	Wave int
 	// Consumes names the authorizations this step's consequence needs, which
-	// the invocation must supply for the whole plan before it registers.
+	// the invocation acknowledges if it can attempt that effect.
 	Consumes []string
 }
 
@@ -153,6 +157,7 @@ const (
 	StepRetry       = "retry"
 	StepWaiting     = "waiting"
 	StepNotSelected = "not-selected"
+	StepBlocked     = "blocked"
 )
 
 // AnotherBuild names the build that registered a continuation and the plan positions this build runs.
@@ -166,12 +171,14 @@ type PlanCheck struct{ ID, Status, Summary, Remedy string }
 // PlanResult previews the next legal operation or the exact continuation point
 // of an incomplete one. It allocates no identity and creates no log.
 type PlanResult struct {
-	Checks  []PlanCheck
-	Context ContextIdentity
-	Verb    string
-	Steps   []PlanStep
-	Stages  []string
-	Until   string
+	Checks   []PlanCheck
+	Context  ContextIdentity
+	Verb     string
+	Steps    []PlanStep
+	Stages   []string
+	Clusters []string
+	Machines []string
+	Until    string
 	// Waves is how many rounds the plan's own shape needs, and Widest is how
 	// many steps of the fullest one its claims and throttles start together:
 	// how much of the work the plan lets run at once, which an operator reads
@@ -183,6 +190,9 @@ type PlanResult struct {
 	Bound        int
 	Startable    int
 	Deferred     int
+	Later        int
+	Blocked      int
+	Excluded     int
 	Continuation bool
 	Settled      bool
 	AddsTo       string
@@ -198,10 +208,11 @@ type PlanResult struct {
 	Stops []string
 	// StopsAfterOnline names Machines whose stop proof follows durable online cleanup:
 	// online service removal or a pre-stop inverse. They must remain reachable until then.
-	StopsAfterOnline []string
-	Authorizations   []string
-	Warnings         []diagnostics.Diagnostic
-	Receipt          Receipt
+	StopsAfterOnline   []string
+	Authorizations     []string
+	AuthorizationSteps []int
+	Warnings           []diagnostics.Diagnostic
+	Receipt            Receipt
 }
 
 type MachineOutcome struct {

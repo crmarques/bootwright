@@ -22,7 +22,7 @@ func lifecycleInspectionCommands() []commandSpec {
 
 func lifecycleMutationCommands() []commandSpec {
 	return []commandSpec{
-		available(commandSpec{path: "apply", results: []jsonResult{operationPresentation{}, planPresentation{}}, render: renderLifecycle(), operation: true, validate: validateLifecycleFlags, example: "--context lab --stage machines", sshFlags: allSSHFlags, invoke: Services.invokeApply, short: "Apply the complete selected lifecycle unit", flags: []flagSpec{dryRunFlag(), authorizationFlag(), stageFlag(), untilFlag(), parallelismFlag(), confirmationFlag()}, long: "Before starting a new apply, stop every managed Machine that already exists. Bootwright checks their power before changing state. An unfinished apply continues from its recorded work. Realize the complete selected Environment, or continue the exact operation an interruption left behind. Missing disk inventory is prepared automatically before installation is planned; the resolved installation needs separate data-loss authorization. Each phase has a complete plan; --stage only gates which blocks this invocation starts, and the operation pauses at that boundary. Controller-only apply leaves inventory pending. After inventory preparation, --until <cluster>.<package> starts only that add-on instance and the blocks it requires, then pauses; a later apply continues the rest. --parallelism limits running steps (default 8); dependencies, exclusive resources and group throttles still apply. Use --dry-run to preview the selected work and check prerequisites without making changes. --yes skips ordinary confirmation during execution."}),
+		available(commandSpec{path: "apply", results: []jsonResult{operationPresentation{}, planPresentation{}}, render: renderLifecycle(), operation: true, validate: validateLifecycleFlags, example: "--context lab --stage machines", sshFlags: allSSHFlags, invoke: Services.invokeApply, short: "Apply the complete selected lifecycle unit", flags: []flagSpec{dryRunFlag(), authorizationFlag(), stageFlag(), applyTargetsFlag("clusters"), applyTargetsFlag("machines"), untilFlag(), parallelismFlag(), confirmationFlag()}, long: "Before starting a new apply, stop every managed Machine that already exists. Bootwright checks their power before changing state. An unfinished apply continues from its recorded work. Realize the complete selected Environment, or continue the exact operation an interruption left behind. Missing disk inventory is prepared automatically before installation is planned; the resolved installation needs separate data-loss authorization. Each phase has a complete plan; --stage only gates which blocks this invocation starts, and the operation pauses at that boundary. Controller-only apply leaves inventory pending. --clusters and --machines select named targets and their prerequisites for this invocation. After inventory preparation, --until <cluster>.<package> starts only that add-on instance and the blocks it requires, then pauses; a later apply continues the rest. --parallelism limits running steps (default 8); dependencies, exclusive resources and group throttles still apply. Use --dry-run to preview the selected work and check prerequisites without making changes. --yes skips ordinary confirmation during execution."}),
 		available(commandSpec{path: "destroy", results: []jsonResult{operationPresentation{}, planPresentation{}}, render: renderLifecycle(), operation: true, validate: validateDestroyFlags, example: "--context lab", sshFlags: allSSHFlags, invoke: Services.invokeDestroy, short: "Destroy the complete selected lifecycle unit", flags: []flagSpec{dryRunFlag(), destroyAuthorizationFlag(), unregisteredFlag(), parallelismFlag(), confirmationFlag()}, long: "Remove what this context's apply owns, whether that apply completed or not, proving each removal before it registers; a failed destroy is replaced by a fresh removal. Stop all managed Machines with bootwright machine stop before starting destroy. A new destroy requires every target off or absent. Once registered, destroy starts Machines for required guest cleanup and stops them again. Stop after online cleanup lists the Machines whose power is checked again. Repeating an unfinished destroy continues its work. A plan that deletes disks needs --authorize data-loss; with --yes or without a terminal it must be --authorize data-loss=<digest>, the digest bootwright destroy --dry-run prints for those steps. A rotated management controller or registry login credential is presented at its current version only with --authorize rebind=<secret>, which records a new binding version. A Machine whose declared removal erase you know to be more than you need is relaxed for this destroy only with --authorize erase=<machine>:metadataClear, which clears only metadata, or --authorize erase=<machine>:retain, which erases nothing and leaves its data and installed system in place; each Machine is named once, and the plan and its digest show the relaxation. A Machine whose subscription registration cannot be read and that you unregistered with the subscription service's own tools is named with --unregistered. --parallelism limits running steps (default 8); dependencies, exclusive resources and group throttles still apply. Use --dry-run to preview the selected work and check prerequisites without making changes. --yes skips ordinary confirmation during execution."}),
 	}
 }
@@ -39,6 +39,7 @@ func (s Services) invokePlanApply(ctx context.Context, values *requestValues, _ 
 	result, err := s.invokePlan(ctx, values, lifecycle.PlanRequest{
 		Verb: "apply", ContextName: values.text("context"),
 		Stages: values.names("stage"), Until: values.text("until"),
+		Clusters: values.names("clusters"), Machines: values.names("machines"),
 		Readiness: true, Parallelism: values.parallelism(),
 	})
 	plan := result.lifecyclePlan
@@ -52,7 +53,7 @@ func (s Services) checkApplyPreview(ctx context.Context, values *requestValues, 
 	var stages []string
 	var clusters, deferredClusters []string
 	for _, step := range plan.Steps {
-		if step.State == "done" || step.Selection == lifecycle.StepNotSelected || (len(plan.Stages) != 0 || plan.Until != "") && step.Selection == "" {
+		if step.State == "done" || (step.Selection == lifecycle.StepNotSelected || step.Selection == lifecycle.StepBlocked) || (len(plan.Stages) != 0 || plan.Until != "" || len(plan.Clusters) != 0 || len(plan.Machines) != 0) && step.Selection == "" {
 			continue
 		}
 		stage := step.Stage
@@ -175,6 +176,8 @@ func (s Services) invokeApply(ctx context.Context, values *requestValues, args [
 		ContextName:      values.text("context"),
 		Parallelism:      values.parallelism(),
 		Stages:           values.names("stage"),
+		Clusters:         values.names("clusters"),
+		Machines:         values.names("machines"),
 		Until:            values.text("until"),
 		Authorizations:   values.authorizations(),
 		SkipConfirmation: values.boolean("yes"),
@@ -202,6 +205,12 @@ func (s Services) invokeDestroy(ctx context.Context, values *requestValues, args
 		SSH:              values.ssh(),
 	}, s.Lifecycle.Destroy)
 	return commandResult{lifecycleOperation: result}, err
+}
+
+func applyTargetsFlag(name string) flagSpec {
+	flag := stringFlag(name, "Select comma-separated "+name+" and their prerequisites")
+	flag.nameList = true
+	return flag
 }
 
 func parallelismFlag() flagSpec {

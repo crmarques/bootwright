@@ -3,6 +3,8 @@ package reconciliation
 import (
 	"slices"
 	"strings"
+
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
 
 // Stage groups blocks by the kind of platform work they perform. A block's
@@ -58,6 +60,10 @@ func (s StageSelection) Selects(stage Stage) bool {
 type Selection struct {
 	Stages     StageSelection
 	Until      string
+	Clusters   []string
+	Machines   []string
+	targets    map[string]bool
+	joint      map[string]bool
 	within     map[string]bool
 	precursors map[string]bool
 }
@@ -70,63 +76,123 @@ func ParseSelection(stages []string, until string) (Selection, error) {
 	return Selection{Stages: parsed, Until: until}, nil
 }
 
-func (s Selection) Empty() bool { return len(s.Stages) == 0 && s.Until == "" }
+func (s Selection) WithTargets(clusters, machines []string) (Selection, error) {
+	if len(clusters) != 0 && len(machines) != 0 {
+		return Selection{}, stateError("--clusters and --machines are mutually exclusive")
+	}
+	for _, names := range [][]string{clusters, machines} {
+		for _, name := range names {
+			if !api.ValidLexical(api.LexicalName, name) {
+				return Selection{}, stateError("apply target names must be lowercase DNS labels")
+			}
+		}
+	}
+	s.Clusters = slices.Compact(slices.Sorted(slices.Values(clusters)))
+	s.Machines = slices.Compact(slices.Sorted(slices.Values(machines)))
+	return s, nil
+}
+
+func (s Selection) Targeted() bool { return len(s.Clusters) != 0 || len(s.Machines) != 0 }
+
+func (s Selection) Empty() bool { return len(s.Stages) == 0 && s.Until == "" && !s.Targeted() }
+
+func clusterOwners(plan Plan, block Block) []string {
+	if plan.Preparation == nil && block.Kind == string(api.Machine) {
+		return nil
+	}
+	if api.IsClusterKind(api.Kind(block.Kind)) && len(block.ClusterOwners) == 0 {
+		return []string{block.Object}
+	}
+	return block.ClusterOwners
+}
+
+func (s Selection) MissingTargets(plan Plan) []string {
+	found := map[string]bool{}
+	for _, block := range plan.Blocks {
+		if len(s.Clusters) != 0 {
+			for _, name := range clusterOwners(plan, block) {
+				found[name] = true
+			}
+		}
+		if len(s.Machines) != 0 && block.Kind == string(api.Machine) {
+			found[block.Object] = true
+		}
+	}
+	var missing []string
+	for _, name := range append(slices.Clone(s.Clusters), s.Machines...) {
+		if !found[name] {
+			missing = append(missing, name)
+		}
+	}
+	return missing
+}
 
 func (s Selection) Bind(plan Plan) (Selection, bool) {
-	s.within, s.precursors = nil, nil
-	if len(s.Stages) != 0 && s.Stages.Selects(StageController) {
-		s.precursors = controllerPrecursors(plan)
-	}
-	if s.Until == "" {
-		return s, true
-	}
-	target := ""
-	for _, block := range plan.Blocks {
-		if untilTarget(block) && block.Object == s.Until {
-			if target != "" {
-				return s, false
+	s.within, s.precursors, s.targets, s.joint = nil, nil, nil, nil
+	var roots []string
+	if s.Targeted() {
+		s.joint = map[string]bool{}
+		for _, block := range plan.Blocks {
+			owners := clusterOwners(plan, block)
+			if len(owners) > 1 && slices.ContainsFunc(owners, func(name string) bool { return !slices.Contains(s.Clusters, name) }) {
+				s.joint[block.ID] = true
 			}
-			target = block.ID
+			if block.Kind == string(api.Machine) && slices.Contains(s.Machines, block.Object) ||
+				len(owners) != 0 && !slices.ContainsFunc(owners, func(name string) bool { return !slices.Contains(s.Clusters, name) }) {
+				roots = append(roots, block.ID)
+			}
 		}
+		s.targets = dependencyClosure(plan, roots)
 	}
-	if target == "" {
-		return s, false
+	if s.Until != "" {
+		var target string
+		for _, block := range plan.Blocks {
+			if untilTarget(block) && block.Object == s.Until {
+				if target != "" || s.Targeted() && !s.targets[block.ID] {
+					return s, false
+				}
+				target = block.ID
+			}
+		}
+		if target == "" {
+			return s, false
+		}
+		s.within = dependencyClosure(plan, []string{target})
 	}
-	s.within = map[string]bool{}
-	for queue := []string{target}; len(queue) > 0; queue = queue[1:] {
-		if s.within[queue[0]] {
-			continue
+	if len(s.Stages) != 0 && s.Stages.Selects(StageController) {
+		var controller []string
+		for _, block := range plan.Blocks {
+			if block.Stage == StageController && s.inScope(block) {
+				controller = append(controller, block.Dependencies...)
+			}
 		}
-		s.within[queue[0]] = true
-		if block, ok := plan.Block(queue[0]); ok {
-			queue = append(queue, block.Dependencies...)
-		}
+		s.precursors = dependencyClosure(plan, controller)
 	}
 	return s, true
 }
 
-func (s Selection) Admits(block Block) bool {
-	return (s.Stages.Selects(block.Stage) || s.precursors[block.ID]) && (s.Until == "" || s.within[block.ID])
+func dependencyClosure(plan Plan, queue []string) map[string]bool {
+	blocks := make(map[string][]string, len(plan.Blocks))
+	for _, block := range plan.Blocks {
+		blocks[block.ID] = block.Dependencies
+	}
+	within := map[string]bool{}
+	for i := 0; i < len(queue); i++ {
+		id := queue[i]
+		if !within[id] {
+			within[id] = true
+			queue = append(queue, blocks[id]...)
+		}
+	}
+	return within
 }
 
-func controllerPrecursors(plan Plan) map[string]bool {
-	precursors := map[string]bool{}
-	var queue []string
-	for _, block := range plan.Blocks {
-		if block.Stage == StageController {
-			queue = append(queue, block.Dependencies...)
-		}
-	}
-	for ; len(queue) > 0; queue = queue[1:] {
-		if precursors[queue[0]] {
-			continue
-		}
-		precursors[queue[0]] = true
-		if block, ok := plan.Block(queue[0]); ok {
-			queue = append(queue, block.Dependencies...)
-		}
-	}
-	return precursors
+func (s Selection) inScope(block Block) bool {
+	return !s.joint[block.ID] && (!s.Targeted() || s.targets[block.ID]) && (s.Until == "" || s.within[block.ID])
+}
+
+func (s Selection) Admits(block Block) bool {
+	return s.inScope(block) && (s.Stages.Selects(block.Stage) || s.precursors[block.ID])
 }
 
 func untilTarget(block Block) bool {

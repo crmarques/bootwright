@@ -7,17 +7,13 @@ and presentation.
 
 One complete validated Environment selection rooted in one environment
 directory is one lifecycle unit. [API selection](api.md#environment-directory-and-selected-state)
-owns graph membership. Operations cover the entire unit; a public request
-cannot narrow it to kinds, clusters, machines, or ranges. A
-[stage selection](#stages-and-the-pause-boundary), with its
-[stop after an add-on instance](#stopping-after-an-add-on-instance), is the one
-exception, and it narrows nothing: the plan stays complete and frozen, and the
-selection only gates which of its blocks this invocation may start.
+owns graph membership. The complete plan stays frozen for each operation.
+[Apply selection](#stages-and-the-pause-boundary) gates which blocks an
+invocation may start. It allocates no new ownership unit or partial plan.
 
 Supported operation modes are:
 
-- a fresh full-context `apply`, optionally stopping at a stage boundary or
-  after a named add-on instance;
+- a fresh full-context `apply`, optionally selecting targets, stages or a named add-on instance;
 - an [additive apply](#additive-apply) of add-on instances to a cluster a
   completed apply installed, a second operation beside the completed one;
 - continuation of a paused, interrupted or failed `apply`, or of an
@@ -1219,8 +1215,7 @@ Before any effect, an apply refuses with `lifecycle.stage`:
 | A failed block the instance requires lies outside the selected stages | `the block this operation must retry is outside the selected stages` | the apply with `--stage` widened by the first such block's stage, keeping `--until` and the plan's authorizations |
 | The instance and every block it requires are done, or every block to retry lies outside them | `the add-on instance --until names and the blocks it requires have nothing to start under this selection` | `repeat bootwright apply --context <context> [--stage <list>] [--authorize <tokens>] without --until` |
 
-A destroy accepts neither selection, so its preview refuses `lifecycle.stage`
-for either.
+Destroy accepts no apply selection.
 
 Selection never weakens a safety rule. An unproved effect is resolved before anything else. When an explicit
 selection excludes controller and a controller block has an unproved effect,
@@ -1991,6 +1986,36 @@ The removal reopens one Secret binding: its own if an
 the first binding of the root apply, never the head's. A rebind may name only
 Secrets that binding holds. Its completion releases the bindings of every
 apply of the lineage.
+
+## Selecting apply targets
+
+`--clusters` selects a cluster's realizing blocks and its cluster-owned
+resources, networks and add-ons. `--machines` selects the named Machines'
+realizing blocks. A name must resolve to planned work in the current phase.
+The planner freezes generated and child blocks' cluster ownership alongside
+their typed object identity. A cluster selector refuses a frozen plan whose
+child blocks lack that ownership. The operator can continue it by stage. A block with two cluster owners, such as Ceph
+replication, requires both names when a target selection is supplied.
+
+The selected goals bring the transitive closure of their frozen dependencies,
+including shared services and the required blocks of another cluster. A
+prerequisite brings only its own dependencies. An agent installation that
+writes several physical OpenShift nodes remains one cluster block. A Machine
+selection can require sibling hardware claims through a common retirement
+policy. A shared block executes its full frozen request.
+
+The stage gate and any add-on boundary intersect the target closure.
+A completed block satisfies its edges. An unfinished excluded dependency
+blocks its consumers. A selector leaves full-context validation, registration,
+Secret binding, reservations and fleet power admission in force. The
+operation can continue with a different selection. Destroy takes back the
+effects the operation started.
+
+During automatic disk preparation, a scoped apply can freeze discovery for
+explicitly named Machines or direct members of explicitly named clusters.
+When a fresh preparation needs inventory outside that selection, apply
+refuses before effects and names the missing Machines. Review and authorize
+the resolved install in its own phase.
 
 ## Ready-work priority
 
@@ -2940,16 +2965,23 @@ power, probe, or digest checks.
 is the [access-credential rebind](#access-credential-rebind), which no block
 consumes and which refuses when it does not apply, and `erase=<machine>:<method>`
 is the [erase relaxation](#erase-relaxation), which no block consumes either. `all`, unknown, duplicate,
-empty, and inapplicable values are errors. A plan requires exactly the tokens its
-blocks [consume](#plan-and-execution). A token the frozen plan does not require
+empty, and inapplicable values are errors. An apply requires exactly the tokens [consumed](#plan-and-execution) by
+unfinished blocks that could reach an attempt in this invocation. This
+includes later waves and retries under the selected stages and targets.
+The engine computes this set from the frozen DAG and durable states, assuming
+admitted prerequisites succeed and unproved predecessors can resolve.
+An observation outside the selection adds no data-loss authorization. The
+engine re-proves the decision under the exclusive lease and checks dispatch
+against the reviewed set. Each continuation computes its own set. Destroy
+requires the tokens its frozen removal plan consumes. A token the invocation does not require
 is inapplicable and refuses with `authorize.unneeded` before registration,
 so a habitual authorization cannot pre-authorize a future destructive plan; a
 required token that is not supplied refuses `authorize.missing`, naming the blocks
 that consume it. A `data-loss` token may carry the digest of the steps that
 consume it, `data-loss=<digest>`: the first 16 lowercase hexadecimal digits of
 a SHA-256 over those steps' identity, kind, object, implementation, content
-digest and request digest in frozen order, which every presentation of the
-plan prints beside the token. A digest the frozen plan does not give refuses
+digest and request digest in frozen order. The apply digest includes its verb. The plan
+prints the digest and the consuming steps beside the token. A digest the frozen plan does not give refuses
 `authorize.stale` before registration, naming the steps the plan holds
 now and the verb with `--dry-run` to review them. An invocation no reviewed prompt
 precedes, under `--yes` or with input that cannot answer one, must carry it, and

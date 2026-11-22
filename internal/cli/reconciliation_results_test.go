@@ -349,7 +349,7 @@ func TestPlanResultMarksWhatAStageSelectionWouldStart(t *testing.T) {
 	result.Steps = append(result.Steps,
 		lifecycle.PlanStep{ID: "provider-metal", Description: "realize metal", Stage: "substrates", State: "pending", Selection: lifecycle.StepStart},
 		lifecycle.PlanStep{ID: "provider-kubevirt", Description: "realize kubevirt", Stage: "substrates", State: "pending", Selection: lifecycle.StepWaiting, WaitsOn: "host-virtualization"})
-	result.Startable, result.Deferred = 1, 2
+	result.Startable, result.Deferred, result.Later, result.Excluded = 1, 2, 1, 1
 	var out bytes.Buffer
 	if err := writeLifecyclePlan(&out, result); err != nil {
 		t.Fatal(err)
@@ -360,7 +360,7 @@ func TestPlanResultMarksWhatAStageSelectionWouldStart(t *testing.T) {
 		"2. realize metal · pending · start",
 		"3. realize kubevirt · pending · deferred: waits on host-virtualization",
 		"Stages  substrates",
-		"Starts  1 of 3 blocks, 2 deferred",
+		"Starts  1 ready, 1 later, 0 blocked, 1 outside scope",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("plan text = %q, missing %q", rendered, want)
@@ -377,7 +377,7 @@ func TestPlanResultMarksTheBlockTheNextApplyResolvesFirst(t *testing.T) {
 		{ID: "os-install-rhel-01", Description: "install rhel-01", Stage: "machines", State: "unknown", Selection: lifecycle.StepResolve},
 		{ID: "os-install-rhel-02", Description: "install rhel-02", Stage: "machines", State: "pending", Selection: lifecycle.StepWaiting, WaitsOn: "os-install-rhel-01"},
 	}
-	result.Startable, result.Deferred = 1, 1
+	result.Startable, result.Deferred, result.Later = 1, 1, 1
 	var out bytes.Buffer
 	if err := writeLifecyclePlan(&out, result); err != nil {
 		t.Fatal(err)
@@ -385,7 +385,7 @@ func TestPlanResultMarksTheBlockTheNextApplyResolvesFirst(t *testing.T) {
 	for _, want := range []string{
 		"    ○ 1. install rhel-01 · unknown · resolve\n",
 		"    ○ 2. install rhel-02 · pending · deferred: waits on os-install-rhel-01\n",
-		"  Starts  1 of 2 blocks, 1 deferred\n",
+		"  Starts  1 ready, 1 later, 0 blocked, 0 outside scope\n",
 	} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("plan text = %q, missing %q", out.String(), want)
@@ -406,7 +406,7 @@ func TestPlanResultMarksEveryBlockTheNextApplyRetries(t *testing.T) {
 		{ID: "ceph-registry", Description: "trust the Ceph registry", Stage: "clusters", State: "pending", Selection: lifecycle.StepStart},
 		{ID: "ceph-bootstrap", Description: "bootstrap Ceph", Stage: "clusters", State: "pending", Selection: lifecycle.StepWaiting, WaitsOn: "ceph-host-rhel-01"},
 	}
-	result.Startable, result.Deferred = 4, 1
+	result.Startable, result.Deferred, result.Later = 4, 1, 1
 	var out bytes.Buffer
 	if err := writeLifecyclePlan(&out, result); err != nil {
 		t.Fatal(err)
@@ -417,7 +417,7 @@ func TestPlanResultMarksEveryBlockTheNextApplyRetries(t *testing.T) {
 		"    ○ 3. prepare Ceph host rhel-03 · failed · retry\n",
 		"    ○ 4. trust the Ceph registry · pending · start\n",
 		"    ○ 5. bootstrap Ceph · pending · deferred: waits on ceph-host-rhel-01\n",
-		"  Starts  4 of 5 blocks, 1 deferred\n",
+		"  Starts  4 ready, 1 later, 0 blocked, 0 outside scope\n",
 	} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("plan text = %q, missing %q", out.String(), want)
@@ -953,11 +953,13 @@ func TestPlanMarksTheStepsAnAuthorizationAcknowledges(t *testing.T) {
 		"    ○ 1. realize the machine rhel-01 · done · data-loss\n",
 		"    ○ 2. serve artifacts for lab · pending · start\n",
 		"    ○ 3. install metal-01 · pending · not selected · data-loss · [after 2]\n",
-		"\n    Requires  --authorize data-loss (step 1, 3)\noperation: ",
 	} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("plan text = %q, missing %q", out.String(), want)
 		}
+	}
+	if strings.Contains(out.String(), "Requires") {
+		t.Fatal("completed and excluded steps requested authorization")
 	}
 	out.Reset()
 	if err := writeLifecyclePlan(&out, previewResult()); err != nil {
@@ -975,6 +977,7 @@ func TestPlanMarksTheStepsAnAuthorizationAcknowledges(t *testing.T) {
 func TestLifecyclePlanPresenterWritesBeforeConfirmationAndStopsOnFailure(t *testing.T) {
 	result := previewResult()
 	result.Steps[0].Consumes = []string{"data-loss"}
+	result.AuthorizationSteps = []int{1}
 	result.Waves, result.Widest, result.Bound = 1, 1, 1
 	var out bytes.Buffer
 	if err := NewLifecyclePlanPresenter(&out).PresentLifecyclePlan(context.Background(), *result); err != nil {
