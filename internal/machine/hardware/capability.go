@@ -173,6 +173,7 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 		return lifecycle.RunResult{}, request, err
 	}
 	placement := request.Placement
+	placement.Privilege = ""
 	if operation == "destroy" {
 		placement = machineref.Placement{Connection: machineref.ConnectionLocal, Machine: request.Identity.Object}
 	}
