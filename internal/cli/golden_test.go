@@ -256,6 +256,19 @@ func cliGoldens() []cliGolden {
 		}
 		return result
 	}
+	discoveryInventory := diskdiscovery.DiscoveryInventory{
+		Machine: "rhel-01", Operation: operationID, Source: diskselection.SourceLinux,
+		Disks: []diskselection.Disk{{
+			DiskIdentity: diskselection.DiskIdentity{WWN: "0x5000000000000001", SerialNumber: "EXAMPLE-OS", SizeBytes: 1073741824},
+			Model:        "EXAMPLE SSD", ControllerPCIAddress: "0000:01:00.0", Transport: "scsi", Fixed: true, Writable: true, Whole: true,
+		}},
+	}
+	discoveryOutput := func(r *dispatchRecord) {
+		r.result.machineDiscovery = &diskdiscovery.DiscoverResult{Operation: operation("done"), Inventories: []diskdiscovery.DiscoveryInventory{discoveryInventory}}
+	}
+	inventoryOutput := func(r *dispatchRecord) {
+		r.result.diskInventories = &diskdiscovery.InventoryResult{Inventories: []diskdiscovery.DiscoveryInventory{discoveryInventory, {Machine: "rhel-02"}}}
+	}
 	status := func() *lifecycle.StatusResult {
 		// Each block reports the attempts its record counts: the failed
 		// machine was retried once, and the pending one never started. The
@@ -718,12 +731,10 @@ func cliGoldens() []cliGolden {
 				Receipt:      lifecycle.Receipt{Operation: operationID, Verb: "plan", State: "preview", Next: "continue-apply"},
 			}
 		}},
-		{golden: "cli-machine-discover", args: "machine discover --name rhel-01 --yes", record: func(r *dispatchRecord) {
-			r.result.machineDiscovery = &diskdiscovery.DiscoverResult{Operation: operation("done"), Inventories: []diskdiscovery.DiscoveryInventory{{Machine: "rhel-01", Disks: []diskselection.Disk{{DiskIdentity: diskselection.DiskIdentity{WWN: "0x5000000000000001", SerialNumber: "EXAMPLE-OS", SizeBytes: 1073741824}, Model: "EXAMPLE SSD", ControllerPCIAddress: "0000:01:00.0", Transport: "scsi", Fixed: true, Writable: true, Whole: true}}}}}
-		}},
-		{golden: "cli-machine-discover-json", args: "machine discover --name rhel-01 --yes --output json", record: func(r *dispatchRecord) {
-			r.result.machineDiscovery = &diskdiscovery.DiscoverResult{Operation: operation("done"), Inventories: []diskdiscovery.DiscoveryInventory{{Machine: "rhel-01", Disks: []diskselection.Disk{{DiskIdentity: diskselection.DiskIdentity{WWN: "0x5000000000000001", SerialNumber: "EXAMPLE-OS", SizeBytes: 1073741824}, Model: "EXAMPLE SSD", ControllerPCIAddress: "0000:01:00.0", Transport: "scsi", Fixed: true, Writable: true, Whole: true}}}}}
-		}},
+		{golden: "cli-machine-discover", args: "machine discover --name rhel-01 --yes", record: discoveryOutput},
+		{golden: "cli-machine-discover-json", args: "machine discover --name rhel-01 --yes --output json", record: discoveryOutput},
+		{golden: "cli-machine-inventory", args: "machine inventory --name rhel-01,rhel-02", record: inventoryOutput},
+		{golden: "cli-machine-inventory-json", args: "machine inventory --name rhel-01,rhel-02 --output json", record: inventoryOutput},
 		{golden: "cli-apply-prepared-authorization-json", args: "apply --yes --output json", code: 1, record: func(r *dispatchRecord) {
 			r.result.lifecycleOperation = operation("done")
 			r.result.lifecycleOperation.Steps = []lifecycle.PlanStep{{ID: "inventory", Kind: "Machine", Object: "metal-01", Description: "inventory Linux-visible disks of metal-01 in RAM, then power off", Stage: "machines", State: "done"}}

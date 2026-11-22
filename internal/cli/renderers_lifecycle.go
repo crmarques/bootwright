@@ -229,6 +229,15 @@ func renderMachineList() commandRenderer {
 	}}
 }
 
+func renderDiskInventory() commandRenderer {
+	return commandRenderer{human: func(r *Runner, c renderCall) (bool, error) {
+		if c.result.diskInventories == nil {
+			return false, nil
+		}
+		return true, writeDiskInventory(r.config.Out, c.path, c.result.diskInventories.Inventories, selectedStructured(c.command))
+	}}
+}
+
 func renderMachineInfo() commandRenderer {
 	return commandRenderer{human: func(r *Runner, c renderCall) (bool, error) {
 		if !validMachineList(c.result.machines) {

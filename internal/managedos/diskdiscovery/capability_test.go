@@ -112,6 +112,30 @@ func TestDiscoveryInventoryBecomesAnExactInstallerTarget(t *testing.T) {
 	input.AppliedEvidence = func(context.Context, string, string) ([]lifecycle.BlockEvidence, error) {
 		return []lifecycle.BlockEvidence{{Operation: op, Block: block, Kind: installation.Kind, Object: block.Object, Implementation: DiscoveryImplementation, Verb: reconciliation.Apply, State: reconciliation.BlockDone, Evidence: runner.evidence}}, nil
 	}
+	t.Run("inspection reads the same report later used by planning", func(t *testing.T) {
+		records, _ := input.AppliedEvidence(ctx, installation.Kind, block.Object)
+		operations := &preparedOperations{records: records}
+		result, err := NewDiscoveryService(operations).Inventory(ctx, InventoryRequest{ContextName: testContext, Names: []string{block.Object}})
+		if err != nil || result == nil || len(result.Inventories) != 1 {
+			t.Fatalf("inspect: %+v %v", result, err)
+		}
+		inventory := result.Inventories[0]
+		if inventory.Source != diskselection.SourceLinux || inventory.Operation != op || !slices.Equal(inventory.Disks, []diskselection.Disk{root, data}) || runner.calls != 1 || len(operations.prepared) != 0 {
+			t.Fatalf("inspection changed inventory or made an effect: %+v", inventory)
+		}
+	})
+	t.Run("a protected capacity mismatch points to the Ceph and Machine inputs", func(t *testing.T) {
+		bad := owner.WithProtections(func(api.Catalog, api.Object) ([]diskselection.DiskIdentity, error) {
+			return []diskselection.DiskIdentity{{SerialNumber: data.SerialNumber, SizeBytes: 4096}}, nil
+		})
+		_, err := bad.Roots(ctx, input)
+		reports := diagnostics.Of(err)
+		if len(reports) != 1 || reports[0].Code != discoveryRootUnprovable.Code ||
+			!strings.Contains(reports[0].Message, data.SerialNumber) || !strings.Contains(reports[0].Message, "4096 bytes") ||
+			!strings.Contains(reports[0].Remediation, "spec.hardware.dataDisks") || strings.Contains(reports[0].Remediation, "discover.match") {
+			t.Fatalf("wrong refusal for a protected claim: %+v", reports)
+		}
+	})
 	t.Run("inventory cannot cross a media verification policy change", func(t *testing.T) {
 		request, err := DecodeDiscoveryRequest(block.Request)
 		if err != nil {
@@ -119,7 +143,8 @@ func TestDiscoveryInventoryBecomesAnExactInstallerTarget(t *testing.T) {
 		}
 		request.Controller.VirtualMedia.Trust = "disableVerification"
 		request.Controller.VirtualMedia.EnableVerification = false
-		if _, found, err := owner.completedInventory(ctx, input, request); err != nil || found {
+		_, found, err := owner.completedInventory(ctx, input, request)
+		if reports := diagnostics.Of(err); found || len(reports) != 1 || reports[0].Code != discoveryInventoryStale.Code {
 			t.Fatalf("inventory crossed verification policy: found=%v err=%v", found, err)
 		}
 	})

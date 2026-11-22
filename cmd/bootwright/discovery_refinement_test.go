@@ -63,6 +63,15 @@ func TestDiscoveryRefinesRenderedDiskPoliciesBeforeInstallation(t *testing.T) {
 	reader := func(_ context.Context, kind, name string) ([]lifecycle.BlockEvidence, error) {
 		return slices.DeleteFunc(slices.Clone(records), func(record lifecycle.BlockEvidence) bool { return record.Kind != kind || record.Object != name }), nil
 	}
+	input.AppliedEvidence = reader
+	if pending, err := owner.AutomaticPreparation(ctx, input, reconciliation.Selection{}); err != nil || len(pending) != 0 {
+		t.Fatalf("a saved report with stale selectors requested another boot: %v %v", pending, err)
+	}
+	if _, err := owner.Roots(ctx, input); err == nil {
+		t.Fatal("stale storage claims admitted installation")
+	} else if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "discovery.root-unprovable" || !strings.Contains(found[0].Remediation, "spec.hardware.dataDisks") {
+		t.Fatalf("stale storage claims: %+v", found)
+	}
 	input.State, input.AppliedEvidence = state(after), reader
 	installs, err := installation.New(nil).WithMedia(exampleMediaRecords{}).WithDiscoveredRoots(owner.Roots).Plan(ctx, input)
 	if err != nil {

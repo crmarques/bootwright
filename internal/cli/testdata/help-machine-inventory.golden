@@ -1,0 +1,22 @@
+  bootwright / machine inventory
+      Show recorded disk identities, exact capacities, and the source and operation that
+      collected them. The command reads the context's current apply lineage from local records.
+
+  Usage
+    bootwright machine inventory [flags]
+
+  Command flags
+      --name  Select comma-separated machine names (required)
+
+  Common flags
+      --ascii       Use ASCII status markers
+      --color       Select terminal colors (values: auto, always, never) · default auto
+      --context     Select a context (default: current context)
+      --detail      Select human detail (values: compact, full) · default compact
+      -h, --help    Show help for this command
+      -o, --output  Select output mode (values: text, json, yaml) · default text
+      --progress    Select progress animation (values: auto, always, never) · default auto
+      --width       Set presentation width (0: automatic) · default 0
+
+  Examples
+    bootwright machine inventory --context lab --name node

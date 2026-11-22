@@ -13,8 +13,19 @@ import (
 )
 
 type DiscoveryInventory struct {
-	Machine string
-	Disks   []diskselection.Disk
+	Machine   string
+	Operation string
+	Source    string
+	Disks     []diskselection.Disk
+}
+
+type InventoryRequest struct {
+	ContextName string
+	Names       []string
+}
+
+type InventoryResult struct {
+	Inventories []DiscoveryInventory
 }
 
 type DiscoverResult struct {
@@ -44,6 +55,7 @@ func RecordedInventory(name string, records []lifecycle.BlockEvidence) (Discover
 			return out, false, discoveryRecordsConflict.Fail("multiple owned disk inventories compete for one Machine", "")
 		}
 		out.Disks = slices.Clone(report.Disks)
+		out.Operation, out.Source = record.Operation, report.Source
 		found = true
 	}
 	return out, found, nil

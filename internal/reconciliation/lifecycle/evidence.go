@@ -24,12 +24,36 @@ type BlockEvidence struct {
 	Evidence       json.RawMessage
 }
 
-// Evidence reads current-operation facts, AppliedEvidence the apply lineage a current removal
-// takes back, without probing or writing. A missing record never proves nothing was realized.
+// Evidence reads current-operation facts without probing or writing. A missing
+// record cannot prove what was realized.
 func (s Service) Evidence(ctx context.Context, contextName, kind, object string) ([]BlockEvidence, error) {
 	return s.objectEvidence(ctx, contextName, kind, object, evidenceOwners)
 }
 
+// EvidenceForObjects resolves the current lineage once for the named objects,
+// without reading Secret material or observing live effects.
+func (s Service) EvidenceForObjects(ctx context.Context, contextName, kind string, objects []string) (map[string][]BlockEvidence, error) {
+	if err := s.available(ctx); err != nil {
+		return nil, err
+	}
+	name, err := s.resolve(ctx, contextName)
+	if err != nil {
+		return nil, err
+	}
+	records := make(map[string][]BlockEvidence, len(objects))
+	for _, object := range objects {
+		records[object] = nil
+	}
+	err = s.workspace.ReadLifecycle(ctx, name, func(view View) error {
+		return s.evidenceAt(ctx, view, kind, records, evidenceOwners)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return records, nil
+}
+
+// AppliedEvidence reads the original apply lineage while a removal is current.
 func (s Service) AppliedEvidence(ctx context.Context, contextName, kind, object string) ([]BlockEvidence, error) {
 	return s.objectEvidence(ctx, contextName, kind, object, appliedOwners)
 }
@@ -60,47 +84,52 @@ func (s Service) objectEvidence(ctx context.Context, contextName, kind, object s
 }
 
 func (s Service) objectEvidenceAt(ctx context.Context, view View, kind, object string, owners ownersOf) ([]BlockEvidence, error) {
-	if kind == "" || object == "" {
-		return nil, engineRequestDefect.Fail("an evidence read names no object", "")
+	found := map[string][]BlockEvidence{object: nil}
+	if err := s.evidenceAt(ctx, view, kind, found, owners); err != nil {
+		return nil, err
 	}
-	var found []BlockEvidence
-	err := func() error {
-		store := s.store(view)
-		index, err := store.Index(ctx)
-		if err != nil || index.Current == "" {
-			return err
-		}
-		operation, err := store.ReadOperation(ctx, index.Current)
-		if err != nil {
-			return err
-		}
-		plan, err := store.ReadPlan(ctx, operation.ID)
-		if err != nil {
-			return err
-		}
-		held, err := owners(ctx, store, lineageMember{operation: operation, plan: plan})
-		if err != nil {
-			return err
-		}
-		for _, owner := range held {
-			for _, block := range owner.plan.Blocks {
-				if block.Kind != kind || block.Object != object {
-					continue
-				}
-				if err := s.proveContracts(reconciliation.Plan{Blocks: []reconciliation.Block{block}}, owner.operation.Contracts); err != nil {
-					return err
-				}
-				evidence, err := blockEvidence(ctx, store, owner.operation.ID, block, owner.operation.Verb)
-				if err != nil {
-					return err
-				}
-				evidence.Block = block
-				found = append(found, evidence)
+	return found[object], nil
+}
+
+func (s Service) evidenceAt(ctx context.Context, view View, kind string, found map[string][]BlockEvidence, owners ownersOf) error {
+	if _, emptyObject := found[""]; kind == "" || emptyObject {
+		return engineRequestDefect.Fail("an evidence read names no object", "")
+	}
+	store := s.store(view)
+	index, err := store.Index(ctx)
+	if err != nil || index.Current == "" {
+		return err
+	}
+	operation, err := store.ReadOperation(ctx, index.Current)
+	if err != nil {
+		return err
+	}
+	plan, err := store.ReadPlan(ctx, operation.ID)
+	if err != nil {
+		return err
+	}
+	held, err := owners(ctx, store, lineageMember{operation: operation, plan: plan})
+	if err != nil {
+		return err
+	}
+	for _, owner := range held {
+		for _, block := range owner.plan.Blocks {
+			records, selected := found[block.Object]
+			if block.Kind != kind || !selected {
+				continue
 			}
+			if err := s.proveContracts(reconciliation.Plan{Blocks: []reconciliation.Block{block}}, owner.operation.Contracts); err != nil {
+				return err
+			}
+			evidence, err := blockEvidence(ctx, store, owner.operation.ID, block, owner.operation.Verb)
+			if err != nil {
+				return err
+			}
+			evidence.Block = block
+			found[block.Object] = append(records, evidence)
 		}
-		return nil
-	}()
-	return found, err
+	}
+	return nil
 }
 
 func evidenceOwners(ctx context.Context, store recordReader, current lineageMember) ([]lineageMember, error) {

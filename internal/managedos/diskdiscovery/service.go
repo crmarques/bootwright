@@ -2,6 +2,7 @@ package diskdiscovery
 
 import (
 	"context"
+	"slices"
 
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -23,22 +24,30 @@ func (s DiscoveryService) Discover(ctx context.Context, r DiscoverRequest) (*Dis
 	if err != nil || operation.Receipt.State != string(reconciliation.OperationDone) {
 		return result, err
 	}
-	for _, name := range r.Names {
-		records, readErr := s.operations.AppliedEvidence(ctx, operation.Context.Name, installation.Kind, name)
-		if readErr != nil {
-			return result, readErr
-		}
-		inventory, found, readErr := RecordedInventory(name, records)
-		if readErr != nil {
-			return result, readErr
-		}
-		if found {
-			result.Inventories = append(result.Inventories, inventory)
-		}
+	recorded, err := s.Inventory(ctx, InventoryRequest{ContextName: operation.Context.Name, Names: r.Names})
+	if err != nil {
+		return result, err
 	}
+	result.Inventories = slices.DeleteFunc(recorded.Inventories, func(inventory DiscoveryInventory) bool { return inventory.Source == "" })
 	return result, nil
 }
 
 func (s DiscoveryService) PlanDiscovery(ctx context.Context, r DiscoverRequest) (*lifecycle.PlanResult, error) {
 	return s.operations.PlanPreparation(ctx, lifecycle.PrepareRequest{ContextName: r.ContextName, Kind: DiscoveryPreparation, Targets: r.Names, PreparePrerequisites: r.PreparePrerequisites})
+}
+
+func (s DiscoveryService) Inventory(ctx context.Context, r InventoryRequest) (*InventoryResult, error) {
+	records, err := s.operations.EvidenceForObjects(ctx, r.ContextName, installation.Kind, r.Names)
+	if err != nil {
+		return nil, err
+	}
+	result := &InventoryResult{Inventories: make([]DiscoveryInventory, 0, len(r.Names))}
+	for _, name := range r.Names {
+		inventory, _, err := RecordedInventory(name, records[name])
+		if err != nil {
+			return nil, err
+		}
+		result.Inventories = append(result.Inventories, inventory)
+	}
+	return result, nil
 }

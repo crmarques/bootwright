@@ -1,0 +1,12 @@
+  Disk inventory · rhel-01
+    Source     linux
+    Operation  op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a
+  ○ disk | wwn:0x5000000000000001 serial:EXAMPLE-OS
+      SIZE        1 GiB
+      BYTES       1073741824
+      MODEL       EXAMPLE SSD
+      CONTROLLER  0000:01:00.0
+      TRANSPORT   scsi
+
+  Disk inventory · rhel-02
+    No completed disk inventory in the current apply lineage

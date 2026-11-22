@@ -411,6 +411,9 @@ func (s machineDiscoverySpy) Discover(ctx context.Context, r diskdiscovery.Disco
 func (s machineDiscoverySpy) PlanDiscovery(ctx context.Context, r diskdiscovery.DiscoverRequest) (*lifecycle.PlanResult, error) {
 	return s.record.result.lifecyclePlan, s.record.called(ctx, "machine discover", r)
 }
+func (s machineDiscoverySpy) Inventory(ctx context.Context, r diskdiscovery.InventoryRequest) (*diskdiscovery.InventoryResult, error) {
+	return s.record.result.diskInventories, s.record.called(ctx, "machine inventory", r)
+}
 
 func (s environmentSpy) UpdateAdminCredentials(ctx context.Context, request lifecycle.UpdateAdminCredentialsRequest) (*lifecycle.UpdateAdminCredentialsResult, error) {
 	return s.record.result.adminCredentials, s.record.called(ctx, "cluster update-admin-creds", request)

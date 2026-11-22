@@ -51,6 +51,7 @@ type commandResult struct {
 	lifecycleDiff      *lifecycle.DiffResult
 	lifecycleOperation *lifecycle.OperationResult
 	machineDiscovery   *diskdiscovery.DiscoverResult
+	diskInventories    *diskdiscovery.InventoryResult
 
 	logs       *logview.Result
 	logsFollow *logview.Summary

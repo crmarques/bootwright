@@ -36,6 +36,30 @@ type DiskIdentity struct {
 	WWN          string `json:"wwn,omitempty"`
 }
 
+type ProtectedDiskUnresolved struct {
+	Claim             DiskIdentity
+	Matches           int
+	ObservedSizeBytes int64
+}
+
+func (e *ProtectedDiskUnresolved) Error() string {
+	var identity []string
+	if e.Claim.WWN != "" {
+		identity = append(identity, "WWN "+e.Claim.WWN)
+	}
+	if e.Claim.SerialNumber != "" {
+		identity = append(identity, "serial "+e.Claim.SerialNumber)
+	}
+	if e.Claim.SizeBytes != 0 {
+		identity = append(identity, fmt.Sprintf("%d bytes", e.Claim.SizeBytes))
+	}
+	message := fmt.Sprintf("protected disk (%s) has %d exact matches in the recorded inventory", strings.Join(identity, ", "), e.Matches)
+	if e.ObservedSizeBytes != 0 {
+		message += fmt.Sprintf(" (recorded capacity for this identity is %d bytes)", e.ObservedSizeBytes)
+	}
+	return message
+}
+
 type Policy struct {
 	Exclude []DiskIdentity `json:"exclude,omitempty"`
 	Match   Match          `json:"match,omitempty"`
@@ -147,17 +171,27 @@ func Select(p Policy, disks []Disk, protected []DiskIdentity) (DiskIdentity, err
 		}
 	}
 	for _, selected := range protected {
-		count := 0
+		var exactMatches, identityMatches int
+		var observedSize int64
 		for _, disk := range disks {
 			if !disk.Whole || disk.Hidden {
 				continue
 			}
-			if (selected.SizeBytes == 0 || disk.SizeBytes == selected.SizeBytes) && (selected.WWN == "" || selected.WWN == disk.WWN) && (selected.SerialNumber == "" || selected.SerialNumber == disk.SerialNumber) {
-				count++
+			if (selected.WWN != "" && selected.WWN != disk.WWN) || (selected.SerialNumber != "" && selected.SerialNumber != disk.SerialNumber) {
+				continue
+			}
+			identityMatches++
+			observedSize = disk.SizeBytes
+			if selected.SizeBytes == 0 || disk.SizeBytes == selected.SizeBytes {
+				exactMatches++
 			}
 		}
-		if count != 1 {
-			return DiskIdentity{}, fmt.Errorf("protected disk cannot be resolved uniquely in the complete inventory")
+		if exactMatches != 1 {
+			unresolved := &ProtectedDiskUnresolved{Claim: selected, Matches: exactMatches}
+			if identityMatches == 1 {
+				unresolved.ObservedSizeBytes = observedSize
+			}
+			return DiskIdentity{}, unresolved
 		}
 	}
 	var candidates []DiskIdentity

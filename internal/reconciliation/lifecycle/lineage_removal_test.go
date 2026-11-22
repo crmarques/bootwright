@@ -337,6 +337,36 @@ func TestEvidenceUnderAnAdditiveHeadIsReadFromEachBlocksOwner(t *testing.T) {
 // each object is what the apply of that lineage that holds its block proved,
 // carrying that apply's frozen block, while the current-operation evidence
 // stays the removal's own.
+func TestEvidenceForObjectsReadsOneCurrentLineageBeforeAndAfterRemoval(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h := automaticHarness(t)
+	prepared, err := h.service.Prepare(ctx, PrepareRequest{ContextName: testContextName, Kind: "example-inventory", Targets: []string{"example-node"}, SkipConfirmation: true})
+	if err != nil || prepared.Receipt.State != string(reconciliation.OperationDone) {
+		t.Fatalf("prepare: %v %+v", err, prepared)
+	}
+	check := func(verb reconciliation.Verb, operation string) {
+		t.Helper()
+		objects := []string{"setup", "inventory", "installation"}
+		batch, err := h.service.EvidenceForObjects(ctx, testContextName, "ArtifactServer", objects)
+		if err != nil || len(batch) != len(objects) || len(batch["installation"]) != 0 {
+			t.Fatalf("inventory lookup = %+v, err = %v", batch, err)
+		}
+		for _, name := range objects[:2] {
+			records := batch[name]
+			if len(records) != 1 || records[0].Verb != verb || records[0].Operation != operation || records[0].Object != name || records[0].State != reconciliation.BlockDone {
+				t.Fatalf("evidence for %s = %+v", name, records)
+			}
+		}
+	}
+	check(reconciliation.Apply, prepared.Receipt.Operation)
+	destroyed, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
+	if err != nil || destroyed.Receipt.State != string(reconciliation.OperationDone) {
+		t.Fatalf("destroy: %v %+v", err, destroyed)
+	}
+	check(reconciliation.Destroy, destroyed.Receipt.Operation)
+}
+
 func TestAppliedEvidenceUnderACurrentLineageRemovalIsEachBlocksApply(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

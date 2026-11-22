@@ -21,6 +21,9 @@
   ○ Command | info
       PURPOSE  Inspect machine placement, access, and recorded evidence
 
+  ○ Command | inventory
+      PURPOSE  Inspect recorded disk inventory
+
   ○ Command | list
       PURPOSE  List machines and the lifecycle position each has reached
 

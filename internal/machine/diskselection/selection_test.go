@@ -1,9 +1,43 @@
 package diskselection
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 )
+
+func TestSelectReportsTheUnresolvedProtectedClaimBeforeRootMatching(t *testing.T) {
+	root, data := disk("EXAMPLE-OS", 8192), disk("EXAMPLE-DATA", 16384)
+	policy := Policy{Match: Match{MaxSizeBytes: root.SizeBytes}}
+	for _, test := range []struct {
+		name  string
+		claim DiskIdentity
+		disks []Disk
+		count int
+		size  int64
+	}{
+		{"missing identity", DiskIdentity{SerialNumber: "PLACEHOLDER", SizeBytes: 4096}, []Disk{root, data}, 0, 0},
+		{"wrong capacity", DiskIdentity{SerialNumber: data.SerialNumber, SizeBytes: 4096}, []Disk{root, data}, 0, data.SizeBytes},
+		{"ambiguous identity", data.DiskIdentity, []Disk{root, data, data}, 2, 0},
+		{"missing WWN", DiskIdentity{WWN: "0x5000000000000001"}, []Disk{root, data}, 0, 0},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := Select(policy, test.disks, []DiskIdentity{test.claim})
+			var unresolved *ProtectedDiskUnresolved
+			if !errors.As(err, &unresolved) || unresolved.Claim != test.claim || unresolved.Matches != test.count || unresolved.ObservedSizeBytes != test.size {
+				t.Fatalf("selection error = %v, want claim %+v with %d matches", err, test.claim, test.count)
+			}
+			message := err.Error()
+			if !strings.Contains(message, test.claim.WWN+test.claim.SerialNumber) || !strings.Contains(message, fmt.Sprintf("%d exact matches", test.count)) {
+				t.Fatalf("selection error hides the claim or match count: %s", message)
+			}
+			if test.size != 0 && !strings.Contains(message, fmt.Sprintf("recorded capacity for this identity is %d bytes", test.size)) {
+				t.Fatalf("selection error hides the capacity mismatch: %s", message)
+			}
+		})
+	}
+}
 
 func disk(serial string, size int64) Disk {
 	return Disk{DiskIdentity: DiskIdentity{SerialNumber: serial, SizeBytes: size}, Model: "EXAMPLE BOOT", ControllerPCIAddress: "0000:01:00.0", Transport: "scsi", Fixed: true, Writable: true, Whole: true}

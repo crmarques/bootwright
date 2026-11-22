@@ -1698,7 +1698,14 @@ insertion, boot selection or power-on and a bounded trust, privilege or fetch
 cause without exposing firmware text or private URLs.
 
 Selection and installation planning validate protected-disk constraints as well
-as the policy fingerprint. Policy and unowned OSD-device selectors may be refined
+as the policy fingerprint. Inspect the completed report with
+[`machine inventory`](cli/commands.md#command-and-flag-catalog).
+If a protected storage claim cannot be resolved, the refusal identifies its
+stable identifier, any declared exact capacity and the number of exact matches.
+For one matching identity at a different capacity it also reports the
+observed size. Correct the Ceph data, DB or WAL path and its corresponding
+Machine data-disk declaration from the report before refining the root match.
+Policy and unowned OSD-device selectors may be refined
 against the same immutable inventory before any installation or erasure is owned.
 Corresponding target arrays in existing Machine erase-on-removal and install-time
 clear policies may change only with their placed Ceph selectors. Policy methods,
@@ -1723,6 +1730,13 @@ consumers. `--until` requires completed preparation before its add-on boundary
 can be planned. An ambiguous selection retains the inventory and refuses
 installation without another boot. Plan and validation never boot a host or
 obtain live hardware credentials.
+
+To replace a report after a hardware or discovery-request change, review the
+context's full removal with `bootwright destroy --dry-run`. After a completed
+destroy, the historical report remains in the original operation. Inspection
+and a fresh apply use only the current apply lineage. The next discovery
+collects a new report. Temporary-boot cleanup is part of discovery completion,
+and removal of an interrupted discovery uses the ownership checks above.
 
 ## Root-disk encryption
 

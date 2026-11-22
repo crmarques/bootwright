@@ -12,6 +12,6 @@ type Runner interface {
 
 type DiscoveryOperations interface {
 	Prepare(context.Context, lifecycle.PrepareRequest) (*lifecycle.OperationResult, error)
-	AppliedEvidence(ctx context.Context, contextName, kind, object string) ([]lifecycle.BlockEvidence, error)
+	EvidenceForObjects(ctx context.Context, contextName, kind string, objects []string) (map[string][]lifecycle.BlockEvidence, error)
 	PlanPreparation(context.Context, lifecycle.PrepareRequest) (*lifecycle.PlanResult, error)
 }

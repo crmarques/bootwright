@@ -18,6 +18,12 @@ func machineCommands() []commandSpec {
 	return []commandSpec{
 		available(commandSpec{path: "machine discover", results: []jsonResult{planPresentation{}, machineDiscoveryPresentation{}}, render: renderMachineDiscovery(), operation: true, example: "--context lab --name node --stage controller --dry-run", invoke: Services.invokeMachineDiscovery, short: "Inventory physical root disks through a temporary RAM boot", long: "Record the disk identities of the selected powered-off physical machines: from the BMC drive inventory when it is complete, otherwise by booting inventory-only RHEL media and powering off. --name takes a comma-separated list. --dry-run previews without effects. --stage controller also plans controller and infrastructure setup; review the complete plan before confirmation. Discovery never installs an OS or creates RAID volumes.", flags: []flagSpec{machineNamesFlag(), boolFlag("dry-run", "Preview the discovery plan without booting a machine"), discoveryStage, confirmationFlag()}}),
 		available(commandSpec{
+			path: "machine inventory", results: []jsonResult{diskInventoriesPresentation{}}, render: renderDiskInventory(),
+			invoke: Services.invokeDiskInventory, validate: validateMachineNames, flags: []flagSpec{machineNamesFlag()},
+			short: "Inspect recorded disk inventory", example: "--context lab --name node",
+			long: "Show recorded disk identities, exact capacities, and the source and operation that collected them. The command reads the context's current apply lineage from local records.",
+		}),
+		available(commandSpec{
 			path: "machine list", results: []jsonResult{machineListPresentation{}}, render: renderMachineList(), validate: validateMachineList, example: "--context lab --power-status", invoke: Services.invokeMachineList, short: "List machines and the lifecycle position each has reached",
 			long: "List machines and the lifecycle position each has reached, as this context's own durable " +
 				"evidence proves it. Add --power-status to also read each machine's power state from its management " +

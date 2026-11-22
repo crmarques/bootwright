@@ -316,6 +316,7 @@ and their output goldens:
 | `machine discover` | optional `checks`, optional `context`, optional `verb`, optional `steps`, optional `stages`, optional `until`, optional `waves`, optional `widest`, optional `bound`, optional `startable`, optional `deferred`, optional `continuation`, optional `settled`, optional `finalizes`, optional `addsTo`, optional `takesBack`, optional `anotherBuild`, optional `stops`, optional `stopsAfterOnline`, optional `authorizations`, optional `receipt`, optional `operation`, optional `inventories`, optional `next` |
 | `machine eject-media`, `machine restart`, `machine start`, `machine stop` | `context`, `verb`, `machines` |
 | `machine info`, `machine list` | `context`, `machines`, `powerRead` |
+| `machine inventory` | `inventories` |
 | `machine trust` | `context`, `dryRun`, `pending`, `recorded`, `hosts` |
 | `policy permissions` | `context`, `grants` |
 | `rebind-host` | `outcome`, `bindings`, `reservations` |
@@ -525,6 +526,14 @@ the serializer escapes its representation, while decoding the declared UTF-8
 or base64 content recovers exactly the requested bytes.
 
 ## Machine results
+
+`machine discover` and `machine inventory` show the source (`linux` or
+`bmc`) and collecting operation with each completed inventory. The human
+table includes exact bytes and both stable identifiers when present. In
+structured output, each entry includes `machine` and `disks`. The
+`operation` and `source` fields are present for a completed report. A name
+requested with `machine inventory` that has no completed report in the
+current apply lineage has an empty `disks` array and omits both fields.
 
 `machine info` extends the inventory row with optional `session` and
 `lifecyclePlacement` records. Each reports its applicable `user`,

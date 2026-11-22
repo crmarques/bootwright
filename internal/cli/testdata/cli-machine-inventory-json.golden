@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "machine inventory",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "inventories": [
+      {
+        "machine": "rhel-01",
+        "operation": "op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a",
+        "source": "linux",
+        "disks": [
+          {
+            "wwn": "0x5000000000000001",
+            "serialNumber": "EXAMPLE-OS",
+            "sizeBytes": 1073741824,
+            "model": "EXAMPLE SSD",
+            "controllerPCIAddress": "0000:01:00.0",
+            "transport": "scsi",
+            "fixed": true,
+            "writable": true,
+            "whole": true,
+            "hidden": false
+          }
+        ]
+      },
+      {
+        "machine": "rhel-02",
+        "disks": []
+      }
+    ]
+  },
+  "diagnostics": [],
+  "logs": []
+}

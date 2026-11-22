@@ -2,6 +2,8 @@ package cli
 
 import (
 	"io"
+	"strconv"
+	"strings"
 
 	"github.com/crmarques/bootwright/internal/managedos/diskdiscovery"
 )
@@ -12,9 +14,15 @@ type machineDiscoveryPresentation struct {
 	Next        string                           `json:"next,omitempty"`
 }
 
+type diskInventoriesPresentation struct {
+	Inventories []discoveryInventoryPresentation `json:"inventories"`
+}
+
 type discoveryInventoryPresentation struct {
-	Machine string                      `json:"machine"`
-	Disks   []discoveryDiskPresentation `json:"disks"`
+	Machine   string                      `json:"machine"`
+	Operation string                      `json:"operation,omitempty"`
+	Source    string                      `json:"source,omitempty"`
+	Disks     []discoveryDiskPresentation `json:"disks"`
 }
 
 type discoveryDiskPresentation struct {
@@ -31,20 +39,39 @@ type discoveryDiskPresentation struct {
 }
 
 func (machineDiscoveryPresentation) documentedResult() {}
+func (diskInventoriesPresentation) documentedResult()  {}
 
 func displayMachineDiscovery(result *diskdiscovery.DiscoverResult) machineDiscoveryPresentation {
-	out := machineDiscoveryPresentation{Operation: displayOperation(result.Operation), Inventories: []discoveryInventoryPresentation{}}
-	for _, inventory := range result.Inventories {
-		row := discoveryInventoryPresentation{Machine: escapeDisplayLine(inventory.Machine), Disks: []discoveryDiskPresentation{}}
-		for _, d := range inventory.Disks {
-			row.Disks = append(row.Disks, discoveryDiskPresentation{WWN: escapeDisplayLine(d.WWN), SerialNumber: escapeDisplayLine(d.SerialNumber), SizeBytes: d.SizeBytes, Model: escapeDisplayLine(d.Model), ControllerPCIAddress: escapeDisplayLine(d.ControllerPCIAddress), Transport: escapeDisplayLine(d.Transport), Fixed: d.Fixed, Writable: d.Writable, Whole: d.Whole, Hidden: d.Hidden})
-		}
-		out.Inventories = append(out.Inventories, row)
-	}
+	out := machineDiscoveryPresentation{Operation: displayOperation(result.Operation), Inventories: displayDiskInventories(result.Inventories)}
 	if result.Operation.Receipt.State == "done" {
 		out.Next = "bootwright apply --dry-run --context " + escapeDisplayLine(result.Operation.Context.Name)
 	}
 	return out
+}
+
+func displayDiskInventories(inventories []diskdiscovery.DiscoveryInventory) []discoveryInventoryPresentation {
+	shown := make([]discoveryInventoryPresentation, 0, len(inventories))
+	for _, inventory := range inventories {
+		row := discoveryInventoryPresentation{
+			Machine: escapeDisplayLine(inventory.Machine), Operation: escapeDisplayLine(inventory.Operation), Source: escapeDisplayLine(inventory.Source),
+			Disks: make([]discoveryDiskPresentation, 0, len(inventory.Disks)),
+		}
+		for _, d := range inventory.Disks {
+			row.Disks = append(row.Disks, discoveryDiskPresentation{WWN: escapeDisplayLine(d.WWN), SerialNumber: escapeDisplayLine(d.SerialNumber), SizeBytes: d.SizeBytes, Model: escapeDisplayLine(d.Model), ControllerPCIAddress: escapeDisplayLine(d.ControllerPCIAddress), Transport: escapeDisplayLine(d.Transport), Fixed: d.Fixed, Writable: d.Writable, Whole: d.Whole, Hidden: d.Hidden})
+		}
+		shown = append(shown, row)
+	}
+	return shown
+}
+
+func writeDiskInventory(out io.Writer, path string, inventories []diskdiscovery.DiscoveryInventory, structured bool) error {
+	shown := displayDiskInventories(inventories)
+	if structured {
+		return writeStructuredResult(out, path, diskInventoriesPresentation{Inventories: shown}, nil, nil, 0)
+	}
+	var text display
+	appendDiskInventories(&text, shown)
+	return text.writeTo(out)
 }
 
 func writeMachineDiscovery(out io.Writer, path string, result *diskdiscovery.DiscoverResult, structured bool) error {
@@ -56,18 +83,7 @@ func writeMachineDiscovery(out io.Writer, path string, result *diskdiscovery.Dis
 		return err
 	}
 	var text display
-	for _, inventory := range result.Inventories {
-		text.section("Disk inventory · " + inventory.Machine)
-		rows := make([][]string, 0, len(inventory.Disks))
-		for _, d := range inventory.Disks {
-			identity := "wwn:" + d.WWN
-			if d.WWN == "" {
-				identity = "serial:" + d.SerialNumber
-			}
-			rows = append(rows, []string{identity, humanBytes(d.SizeBytes), displayValue(d.Model), displayValue(d.ControllerPCIAddress), displayValue(d.Transport)})
-		}
-		text.resourceTable([]string{"DISK", "SIZE", "MODEL", "CONTROLLER", "TRANSPORT"}, rows, tableStyle{Kind: "disk", Identity: 0})
-	}
+	appendDiskInventories(&text, shown.Inventories)
 	if result.Operation.Receipt.State == "done" {
 		text.section("")
 		text.verbatimFields(field{Label: "Next", Value: "bootwright apply --dry-run --context " + result.Operation.Context.Name, Tone: "command"})
@@ -78,4 +94,27 @@ func writeMachineDiscovery(out io.Writer, path string, result *diskdiscovery.Dis
 		}
 	}
 	return text.writeTo(out)
+}
+
+func appendDiskInventories(text *display, inventories []discoveryInventoryPresentation) {
+	for _, inventory := range inventories {
+		text.section("Disk inventory · " + inventory.Machine)
+		if inventory.Source == "" {
+			text.lines([]string{"No completed disk inventory in the current apply lineage"})
+			continue
+		}
+		text.verbatimFields(field{Label: "Source", Value: inventory.Source}, field{Label: "Operation", Value: inventory.Operation})
+		rows := make([][]string, 0, len(inventory.Disks))
+		for _, d := range inventory.Disks {
+			var identities []string
+			if d.WWN != "" {
+				identities = append(identities, "wwn:"+d.WWN)
+			}
+			if d.SerialNumber != "" {
+				identities = append(identities, "serial:"+d.SerialNumber)
+			}
+			rows = append(rows, []string{displayValue(strings.Join(identities, " ")), humanBytes(d.SizeBytes), strconv.FormatInt(d.SizeBytes, 10), displayValue(d.Model), displayValue(d.ControllerPCIAddress), displayValue(d.Transport)})
+		}
+		text.resourceTable([]string{"DISK", "SIZE", "BYTES", "MODEL", "CONTROLLER", "TRANSPORT"}, rows, tableStyle{Kind: "disk", Identity: 0})
+	}
 }

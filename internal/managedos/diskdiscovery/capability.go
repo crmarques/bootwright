@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"slices"
@@ -107,6 +108,11 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	}
 	var media []string
 	for index, r := range requests {
+		if input.Preparation != nil {
+			if _, _, err := c.completedInventory(ctx, input, r); err != nil {
+				return plan, err
+			}
+		}
 		wire, err := r.Canonical()
 		if err != nil {
 			return plan, err
@@ -208,7 +214,16 @@ func (c Capability) Roots(ctx context.Context, input lifecycle.PlanInput) (map[s
 		}
 		proof, err := diskselection.Prove(report, report.Binding, policy, protected)
 		if err != nil {
-			return nil, discoveryRootUnprovable.Fail("Machine/"+r.Identity.Object+": "+err.Error(), "inspect the recorded inventory, refine spec.hardware.rootDisk.discover.match, or set spec.hardware.rootDisk.discover.inventory to boot when the BMC inventory cannot answer it, and update the context before planning again")
+			inspect := "bootwright machine inventory --context " + input.Context.Name + " --name " + r.Identity.Object
+			remedy := "run " + inspect + ", refine spec.hardware.rootDisk.discover.match and update the context before planning again"
+			var unresolved *diskselection.ProtectedDiskUnresolved
+			if errors.As(err, &unresolved) {
+				remedy = "run " + inspect + " and correct the Ceph data, DB or WAL device path and any corresponding spec.hardware.dataDisks identity and exact size, then update the context before planning again"
+			}
+			if report.Source == diskselection.SourceBMC {
+				remedy += ". If the BMC report omits needed facts, set spec.hardware.rootDisk.discover.inventory to boot after removing the current lifecycle ownership with destroy"
+			}
+			return nil, discoveryRootUnprovable.Fail("Machine/"+r.Identity.Object+": "+err.Error(), remedy)
 		}
 		proofs[r.Identity.Object] = proof
 	}
@@ -232,9 +247,13 @@ func (c Capability) completedInventory(ctx context.Context, input lifecycle.Plan
 	if err != nil {
 		return inventory, false, err
 	}
-	found := false
+	var found, stale bool
 	for _, record := range owned {
-		if record.Implementation != DiscoveryImplementation || record.Block.RequestDigest != digest || record.Verb != reconciliation.Apply || record.State != reconciliation.BlockDone {
+		if record.Implementation != DiscoveryImplementation || record.Verb != reconciliation.Apply || record.State != reconciliation.BlockDone {
+			continue
+		}
+		if record.Block.RequestDigest != digest {
+			stale = true
 			continue
 		}
 		e, report, err := discoveryEvidence(record.Evidence, digest)
@@ -267,6 +286,9 @@ func (c Capability) completedInventory(ctx context.Context, input lifecycle.Plan
 			return inventory, false, discoveryRecordsConflict.Fail("disk discovery has multiple owned proofs", "")
 		}
 		inventory, found = report, true
+	}
+	if stale && !found {
+		return inventory, false, discoveryInventoryStale.Fail("Machine/"+r.Identity.Object+" has a completed inventory from a different discovery request", "restore the recorded discovery settings, or review bootwright destroy --dry-run --context "+input.Context.Name+" and remove the context's current lifecycle ownership before discovering again")
 	}
 	return inventory, found, nil
 }

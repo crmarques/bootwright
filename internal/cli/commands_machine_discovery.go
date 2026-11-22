@@ -10,6 +10,7 @@ import (
 type MachineDiscoveryService interface {
 	Discover(context.Context, diskdiscovery.DiscoverRequest) (*diskdiscovery.DiscoverResult, error)
 	PlanDiscovery(context.Context, diskdiscovery.DiscoverRequest) (*lifecycle.PlanResult, error)
+	Inventory(context.Context, diskdiscovery.InventoryRequest) (*diskdiscovery.InventoryResult, error)
 }
 
 func (s Services) invokeMachineDiscovery(ctx context.Context, values *requestValues, _ []string) (commandResult, error) {
@@ -26,4 +27,13 @@ func (s Services) invokeMachineDiscovery(ctx context.Context, values *requestVal
 		return commandResult{}, err
 	}
 	return commandResult{machineDiscovery: result, lifecycleOperation: result.Operation}, err
+}
+
+func (s Services) invokeDiskInventory(ctx context.Context, values *requestValues, _ []string) (commandResult, error) {
+	if s.MachineDiscovery == nil {
+		return commandResult{}, errMissingService
+	}
+	r := diskdiscovery.InventoryRequest{ContextName: values.text("context"), Names: values.names("name")}
+	result, err := invokeResult(ctx, values, r, s.MachineDiscovery.Inventory)
+	return commandResult{diskInventories: result}, err
 }
