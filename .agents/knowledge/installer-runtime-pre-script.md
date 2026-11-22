@@ -3,8 +3,8 @@
 ## Observation
 
 The first real-hardware boot of the physical erase image (RHEL 9.8 boot ISO,
-Anaconda 34.25.7.14, `fips=1`, four NICs in an active-backup bond with the
-install address on VLAN 771) never answered the controller, which refused
+Anaconda 34.25.7.14, `fips=1`, an active-backup bond with the
+install address on a VLAN) never answered the controller, which refused
 `worker-unreachable` after its 20-minute bound. The console showed
 `Running pre-installation scripts` and, on the TTY2 shell:
 

@@ -18160,3 +18160,15 @@ The [command catalog](../cli/commands.md#command-and-flag-catalog) names the
 explicit input flag for validation. Runner and completion tests exercise
 its path handling, and current examples use the public spelling. The
 delivering commit records verification.
+
+## X648 — Synthetic erase examples and fixtures
+
+**Owner:** Managed OS and CLI. **Item:** B1657 (defect). **Authority:** explicit
+owner request to integrate the discovery firewall fix.
+
+Erase network fixtures use addresses reserved for documentation and
+synthetic hardware labels. The [erase image](../state-reconciliation.md#erase-image)
+observations retain the behavior that informed the implementation.
+
+**Exit evidence:** network argument and receipt tests, progress golden tests,
+and the tracked tree audit. The delivering commit records the check results.

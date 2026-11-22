@@ -2,12 +2,10 @@
 
 ## Observation
 
-With [B1541 and B1542](../../specs/milestones/m1.md#b1541) fixed, the owner's
-erase boot of srv4203 (RHEL 9.8 boot ISO, `fips=1`, active-backup bond, VLAN
-771) raised `10.7.7.1/25` on `bond0.771`, reached its gateway and started its
-receipt server, yet `bootwright-erase.service` failed 943 ms after it started
-and the KVM stayed empty. The disks identified and held no device-mapper
-stack; `lsblk` listed an 8 GiB `zram0`.
+With [B1541 and B1542](../../specs/milestones/m1.md#b1541) fixed, the erase
+image booted on a bonded VLAN, reached its gateway and started its receipt
+server. The erase service failed within a second and the console stayed
+empty. Disk identification succeeded and `lsblk` showed active zram swap.
 
 - `inst.zram=0` stops only Anaconda's own zram swap. The installer runtime also
   ships the [systemd zram generator](https://github.com/systemd/zram-generator/blob/main/man/zram-generator.md),

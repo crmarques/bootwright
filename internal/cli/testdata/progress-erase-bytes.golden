@@ -1,14 +1,14 @@
 
   Progress
-  [RUNNING]  [1/1] Erase Machine/srv4203
-  [RUNNING]  [1/1] Erase Machine/srv4203: zero and read back sda  0% (0 B of 8.0 GiB)
-  [RUNNING]  [1/1] Erase Machine/srv4203: zero and read back sda  still running, 10s
-  [RUNNING]  [1/1] Erase Machine/srv4203: zero and read back sda  still running, 20s
-  [RUNNING]  [1/1] Erase Machine/srv4203: zero and read back sda  still running, 30s
-  [RUNNING]  [1/1] Erase Machine/srv4203: zero and read back sda  12% (1.0 GiB of 8.0 GiB), 34.1 MiB/s, about 4m left at the observed rate
-  [RUNNING]  [1/1] Erase Machine/srv4203: zero and read back sda  still running, 40s
-  [RUNNING]  [1/1] Erase Machine/srv4203: zero and read back sda  still running, 50s
-  [RUNNING]  [1/1] Erase Machine/srv4203: zero and read back sda  still running, 1m0s
-  [RUNNING]  [1/1] Erase Machine/srv4203: zero and read back sda  37% (3.0 GiB of 8.0 GiB), 51.2 MiB/s, about 2m left at the observed rate
-  [RUNNING]  [1/1] Erase Machine/srv4203: power off
-  [DONE]     [1/1] Erase Machine/srv4203: 3 of 3 disks erased  1m0s
+  [RUNNING]  [1/1] Erase Machine/metal-1
+  [RUNNING]  [1/1] Erase Machine/metal-1: zero and read back sda  0% (0 B of 8.0 GiB)
+  [RUNNING]  [1/1] Erase Machine/metal-1: zero and read back sda  still running, 10s
+  [RUNNING]  [1/1] Erase Machine/metal-1: zero and read back sda  still running, 20s
+  [RUNNING]  [1/1] Erase Machine/metal-1: zero and read back sda  still running, 30s
+  [RUNNING]  [1/1] Erase Machine/metal-1: zero and read back sda  12% (1.0 GiB of 8.0 GiB), 34.1 MiB/s, about 4m left at the observed rate
+  [RUNNING]  [1/1] Erase Machine/metal-1: zero and read back sda  still running, 40s
+  [RUNNING]  [1/1] Erase Machine/metal-1: zero and read back sda  still running, 50s
+  [RUNNING]  [1/1] Erase Machine/metal-1: zero and read back sda  still running, 1m0s
+  [RUNNING]  [1/1] Erase Machine/metal-1: zero and read back sda  37% (3.0 GiB of 8.0 GiB), 51.2 MiB/s, about 2m left at the observed rate
+  [RUNNING]  [1/1] Erase Machine/metal-1: power off
+  [DONE]     [1/1] Erase Machine/metal-1: 3 of 3 disks erased  1m0s

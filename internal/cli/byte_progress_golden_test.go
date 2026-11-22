@@ -13,7 +13,7 @@ import (
 const progressGiB = int64(1) << 30
 
 func byteEvent(group, status string, completed int64) lifecycle.ProgressEvent {
-	return lifecycle.ProgressEvent{Block: "erase", Description: "Erase Machine/srv4203", Group: group, Detail: group,
+	return lifecycle.ProgressEvent{Block: "erase", Description: "Erase Machine/metal-1", Group: group, Detail: group,
 		Status: status, Position: 1, Total: 1, Bytes: lifecycle.ByteProgress{Completed: completed, Total: 8 * progressGiB}}
 }
 
@@ -25,15 +25,15 @@ func TestByteProgressRowsGolden(t *testing.T) {
 	var out bytes.Buffer
 	presenter := &LifecycleProgressPresenter{progress: progressPresenter{out: &out, clock: clock.clock()}}
 	ctx := context.Background()
-	presenter.ReportProgress(ctx, lifecycle.ProgressEvent{Block: "erase", Description: "Erase Machine/srv4203", Status: "running", Position: 1, Total: 1})
+	presenter.ReportProgress(ctx, lifecycle.ProgressEvent{Block: "erase", Description: "Erase Machine/metal-1", Status: "running", Position: 1, Total: 1})
 	presenter.ReportProgress(ctx, byteEvent("zero and read back sda", "running", 0))
 	clock.advance(30 * time.Second)
 	presenter.ReportProgress(ctx, byteEvent("zero and read back sda", "running", progressGiB))
 	clock.advance(30 * time.Second)
 	presenter.ReportProgress(ctx, byteEvent("zero and read back sda", "running", 3*progressGiB))
-	presenter.ReportProgress(ctx, lifecycle.ProgressEvent{Block: "erase", Description: "Erase Machine/srv4203", Group: "power off", Detail: "power off", Status: "running", Position: 1, Total: 1})
+	presenter.ReportProgress(ctx, lifecycle.ProgressEvent{Block: "erase", Description: "Erase Machine/metal-1", Group: "power off", Detail: "power off", Status: "running", Position: 1, Total: 1})
 	presenter.ReportProgress(ctx, byteEvent("zero and read back sda", "ok", 8*progressGiB))
-	presenter.ReportProgress(ctx, lifecycle.ProgressEvent{Block: "erase", Description: "Erase Machine/srv4203", Detail: "3 of 3 disks erased", Status: "done", Position: 1, Total: 1})
+	presenter.ReportProgress(ctx, lifecycle.ProgressEvent{Block: "erase", Description: "Erase Machine/metal-1", Detail: "3 of 3 disks erased", Status: "done", Position: 1, Total: 1})
 	presenter.Finish()
 	text := out.String()
 	for _, want := range []string{
@@ -58,7 +58,7 @@ func TestByteProgressReplacesTheHeartbeatNoteOnATerminalAndFitsIt(t *testing.T) 
 		var out bytes.Buffer
 		presenter := &LifecycleProgressPresenter{progress: progressPresenter{out: &out, clock: clock.clock(), columns: fixedColumns(width)}}
 		ctx := context.Background()
-		presenter.ReportProgress(ctx, lifecycle.ProgressEvent{Block: "erase", Description: "Erase Machine/srv4203", Status: "running", Position: 1, Total: 1})
+		presenter.ReportProgress(ctx, lifecycle.ProgressEvent{Block: "erase", Description: "Erase Machine/metal-1", Status: "running", Position: 1, Total: 1})
 		presenter.ReportProgress(ctx, byteEvent("zero and read back sda", "running", 0))
 		clock.advance(30 * time.Second)
 		presenter.ReportProgress(ctx, byteEvent("zero and read back sda", "running", progressGiB))

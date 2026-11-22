@@ -11033,7 +11033,7 @@ Low · test gap · both · verified: combined narrowed
 `internal/cli/testdata/progress-erase-bytes.golden`,
 `internal/reconciliation/lifecycle/attempts.go:135`
 
-**What:** The erase golden ends with '[DONE] ... Erase Machine/srv4203: 3 of 3
+**What:** The erase golden ends with '[DONE] ... Erase Machine/metal-1: 3 of 3
 disks erased 1m0s'. The test builds that event by hand with a Detail field.
 The real settle event at internal/reconciliation/lifecycle/attempts.go:135
 never carries Detail. Nothing else in the lifecycle package attaches Detail to

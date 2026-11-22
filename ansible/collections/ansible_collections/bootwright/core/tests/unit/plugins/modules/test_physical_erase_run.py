@@ -118,8 +118,8 @@ def test_each_phase_drives_the_controller_and_the_controller_is_closed_after_eve
 
 
 def test_the_receipt_keeps_its_lineage_while_every_other_material_value_stays_masked(controller, run_module, monkeypatch):
-    attempt = "op-5eaa54ad5cf69a109c2d2774f7550e1e/physical-erase-srv4203/1"
-    apply_operation = "op-3acb1098908f820acb5e3e3079516d38"
+    attempt = "op-11111111111111111111111111111111/physical-erase-metal-1/1"
+    apply_operation = "op-22222222222222222222222222222222"
     secret = "/run/bootwright/material/fleet-id"
     receipt = {"state": "complete", "originalAttempt": attempt, "work": "/var/lib/bootwright-hosted/lab/" + apply_operation, "leak": secret}
     monkeypatch.setattr(custody.Controller, "poll", lambda self: {"answer": "complete", "receipt": receipt})

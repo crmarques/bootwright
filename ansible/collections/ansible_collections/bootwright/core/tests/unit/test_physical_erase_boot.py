@@ -21,9 +21,9 @@ INSTALLER_RUNTIME = {
     "/usr/sbin/chpasswd", "/usr/bin/anaconda", "/usr/sbin/anaconda",
 }
 PRE_COMMANDS = {"umask", "fail_closed()", "trap", "set", "test", "mkdir", "cat", "systemctl", "fail_closed", "/usr/bin/python3"}
-BOND_VLAN = ("network --bootproto=static --device=bond0 --bondslaves=ens65f0,ens65f1 --bondopts=mode=active-backup,miimon=100 "
-             "--vlanid=771 --interfacename=bond0.771 --ip=10.7.7.2 --netmask=255.255.255.0 --hostname=srv4204.example.test "
-             "--onboot=on --activate --gateway=10.7.7.254 --nameserver=192.0.2.1,192.0.2.2")
+BOND_VLAN = ("network --bootproto=static --device=bond0 --bondslaves=enp1s0,enp2s0 --bondopts=mode=active-backup,miimon=100 "
+             "--vlanid=120 --interfacename=bond0.120 --ip=198.51.100.20 --netmask=255.255.255.0 --hostname=metal-1.example.test "
+             "--onboot=on --activate --gateway=198.51.100.1 --nameserver=192.0.2.1,192.0.2.2")
 
 
 def pre_script(rendered):
@@ -77,9 +77,9 @@ class InstallerRuntimeTests(unittest.TestCase):
 class NetworkArgumentTests(unittest.TestCase):
     def test_a_vlan_over_a_bond_is_raised_by_dracut_arguments(self):
         self.assertEqual(boot.network_arguments(BOND_VLAN), [
-            "bond=bond0:ens65f0,ens65f1:mode=active-backup,miimon=100",
-            "vlan=bond0.771:bond0",
-            "ip=10.7.7.2::10.7.7.254:255.255.255.0:srv4204.example.test:bond0.771:none",
+            "bond=bond0:enp1s0,enp2s0:mode=active-backup,miimon=100",
+            "vlan=bond0.120:bond0",
+            "ip=198.51.100.20::198.51.100.1:255.255.255.0:metal-1.example.test:bond0.120:none",
             "rd.neednet=1",
         ])
 
@@ -101,10 +101,10 @@ class NetworkArgumentTests(unittest.TestCase):
     def test_the_vlan_is_named_by_its_id_because_the_initramfs_reads_the_id_from_the_name(self):
         base = "network --bootproto=static --ip=192.0.2.10 --netmask=255.255.255.0 --hostname=metal-01 "
         for line, vlan, interface in (
-            (base + "--device=bond0 --bondslaves=eno1 --bondopts=mode=active-backup --vlanid=771 --interfacename=mgmt",
-             "vlan=bond0.771:bond0", "bond0.771"),
-            (base + "--device=eno1 --vlanid=771 --interfacename=net2", "vlan=eno1.771:eno1", "eno1.771"),
-            (base + "--device=enp175s0f1np1 --vlanid=4094 --interfacename=enp175s0f1np1.4", "vlan=vlan4094:enp175s0f1np1", "vlan4094"),
+            (base + "--device=bond0 --bondslaves=eno1 --bondopts=mode=active-backup --vlanid=120 --interfacename=mgmt",
+             "vlan=bond0.120:bond0", "bond0.120"),
+            (base + "--device=eno1 --vlanid=120 --interfacename=net2", "vlan=eno1.120:eno1", "eno1.120"),
+            (base + "--device=enp200s0f0np0 --vlanid=4094 --interfacename=enp200s0f0np0.4", "vlan=vlan4094:enp200s0f0np0", "vlan4094"),
         ):
             with self.subTest(line=line):
                 arguments = boot.network_arguments(line)
