@@ -26,6 +26,15 @@ type controllerPresentation struct {
 
 func (controllerPresentation) documentedResult() {}
 
+type installCheckResult struct {
+	Outcome  string                        `json:"outcome"`
+	Platform string                        `json:"platform"`
+	Checks   []controllerCheckPresentation `json:"checks"`
+	Next     string                        `json:"next"`
+}
+
+func (installCheckResult) documentedResult() {}
+
 type controllerCheckPresentation struct {
 	ID       string `json:"id"`
 	Required string `json:"required"`
@@ -54,10 +63,7 @@ type controllerReceiptPresentation struct {
 
 func displayController(report *prerequisites.Report) controllerPresentation {
 	plan := displaySetupPlan(report)
-	shown := controllerPresentation{Context: escapeDisplayLine(report.ContextName), Machine: escapeDisplayLine(report.Machine), Route: escapeDisplayLine(report.Route), DryRun: plan.DryRun, Outcome: plan.Outcome, Platform: plan.Platform, Checks: []controllerCheckPresentation{}, Actions: plan.Actions, Requirements: plan.Requirements, Files: plan.Files, Progress: []controllerActionPresentation{}, Next: escapeDisplayLine(report.Next)}
-	for _, c := range report.Checks {
-		shown.Checks = append(shown.Checks, controllerCheckPresentation{ID: escapeDisplayLine(c.ID), Required: escapeDisplayLine(c.Required), Observed: escapeDisplayLine(c.Observed), Status: escapeDisplayLine(c.Status), Scope: escapeDisplayLine(c.Scope)})
-	}
+	shown := controllerPresentation{Context: escapeDisplayLine(report.ContextName), Machine: escapeDisplayLine(report.Machine), Route: escapeDisplayLine(report.Route), DryRun: plan.DryRun, Outcome: plan.Outcome, Platform: plan.Platform, Checks: displayControllerChecks(report), Actions: plan.Actions, Requirements: plan.Requirements, Files: plan.Files, Progress: []controllerActionPresentation{}, Next: escapeDisplayLine(report.Next)}
 	for _, p := range report.Progress {
 		shown.Progress = append(shown.Progress, controllerActionPresentation{ID: escapeDisplayLine(p.ID), Phase: escapeDisplayLine(p.Phase), Outcome: escapeDisplayLine(p.Outcome)})
 	}
@@ -70,6 +76,23 @@ func displayController(report *prerequisites.Report) controllerPresentation {
 	return shown
 }
 
-func writeStructuredController(out io.Writer, path string, report *prerequisites.Report, reported []diagnostic, code int) error {
-	return writeStructuredResult(out, path, displayController(report), append(slices.Clone(report.Warnings), reported...), nil, code)
+func displayControllerChecks(report *prerequisites.Report) []controllerCheckPresentation {
+	shown := make([]controllerCheckPresentation, 0, len(report.Checks))
+	for _, c := range report.Checks {
+		shown = append(shown, controllerCheckPresentation{ID: escapeDisplayLine(c.ID), Required: escapeDisplayLine(c.Required), Observed: escapeDisplayLine(c.Observed), Status: escapeDisplayLine(c.Status), Scope: escapeDisplayLine(c.Scope)})
+	}
+	return shown
+}
+
+func writeStructuredController(out io.Writer, path string, report *prerequisites.Report, check bool, reported []diagnostic, code int) error {
+	var result jsonResult
+	switch {
+	case check:
+		result = installCheckResult{Outcome: escapeDisplayLine(report.Outcome), Platform: controllerPlatform(report), Checks: displayControllerChecks(report), Next: escapeDisplayLine(report.Next)}
+	case report.DryRun:
+		result = displaySetupPlan(report)
+	default:
+		result = displayController(report)
+	}
+	return writeStructuredResult(out, path, result, append(slices.Clone(report.Warnings), reported...), nil, code)
 }

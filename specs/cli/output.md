@@ -310,7 +310,7 @@ and their output goldens:
 | `diff` | `context`, `operation`, `input`, optional `adds`, `plan`, `observed`, `blocks`, `objects`, `files`, `summary`, optional `outdatedClients` |
 | `explain` | `stops` |
 | `help` | `command`, `usage`, `description`, `commands`, `flags` |
-| `install` | optional `context`, optional `machine`, optional `route`, `dryRun`, `outcome`, `platform`, `checks`, `actions`, `requirements`, `files`, optional `preview`, optional `progress`, optional `receipt`, optional `next` |
+| `install` | optional `context`, optional `machine`, optional `route`, optional `dryRun`, `outcome`, `platform`, optional `checks`, optional `actions`, optional `requirements`, optional `files`, optional `preview`, optional `progress`, optional `receipt`, optional `next` |
 | `logs` | optional `context`, optional `operation`, optional `verb`, optional `state`, optional `events`, optional `source`, optional `path`, optional `bytes`, optional `truncated`, optional `output` |
 | `machine cp` | `context`, `source`, `machines` |
 | `machine discover` | optional `checks`, optional `context`, optional `verb`, optional `steps`, optional `stages`, optional `until`, optional `waves`, optional `widest`, optional `bound`, optional `startable`, optional `deferred`, optional `continuation`, optional `settled`, optional `finalizes`, optional `addsTo`, optional `takesBack`, optional `anotherBuild`, optional `stops`, optional `stopsAfterOnline`, optional `authorizations`, optional `receipt`, optional `operation`, optional `inventories`, optional `next` |
@@ -423,10 +423,15 @@ context does not trust reports its `host.trust` check `unknown` with the
 observed fingerprint and the `machine trust` request that enrolls it, and
 with `--observe-host-keys=false` the check names no fingerprint.
 
-A `install --dry-run --output json` that the host or the state root refuses
-writes the same fields with `ok` `false` and the refusal in `diagnostics`,
-including the `state-root` check, and nothing else on standard output: the
-human plan is not written beside it.
+Both read-only install modes use the envelope's `command` value `install`.
+When setup inspection yields a result, the preview reports `planned` when
+actions remain, `unchanged` when no work is needed, or `not-ready` when
+admission refuses. The check reports `ready` or `not-ready` and lists each
+check as `{id, required, observed, status, scope}`. A status is `ready`,
+`not-ready` or `unverified`. The `next` string names a Bootwright remedy
+when available. A refusal sets `ok` to `false`, includes the reason in
+`diagnostics`, and retains the plan or findings when inspection reached
+them.
 
 The `validate` result orders its fields as listed above and has this exact
 shape:

@@ -1,9 +1,10 @@
 # Controller prerequisites and setup
 
 Controller owns inspection and preparation of the local host on which
-Bootwright runs. This contract defines `install`, `uninstall`,
-`install --dry-run`, the controller checks of `apply --dry-run` and the controller stage. Setup never provisions an operating system or executes a
-managed service's lifecycle.
+Bootwright runs. This contract defines `install` and its read-only modes,
+`uninstall`, the controller checks of `apply --dry-run`, and the controller
+stage. Setup never provisions an operating system or executes a managed
+service's lifecycle.
 
 Prerequisites divide by what selects them. **Host prerequisites** are
 context-independent: every context on this host needs exactly the same ones, so
@@ -76,10 +77,10 @@ Bootwright's own executable uses Go's cryptography, which stays outside the
 host's FIPS-validated modules, while the runtime's Python TLS follows the
 host's OpenSSL and crypto-policy and the runtime carries no OpenSSL of its own
 ([W4](security.md#the-controller-hosts-attacker-model)). Setup,
-`install --dry-run` and the controller checks of `apply --dry-run` report the kernel's FIPS mode as the informational
-`fips-mode` check, with that statement when it is enabled; the check never
-changes readiness, the plan or the next command while the kernel's flag reads
-0 or 1 or is absent; a flag that cannot be read as 0 or 1 refuses with
+`install --check` and the controller checks of `apply --dry-run` report the
+kernel's FIPS mode as the informational `fips-mode` check, with that statement
+when it is enabled. Values of 0 and 1 and an absent flag leave readiness,
+the plan and the next command unchanged. An unreadable or invalid flag refuses with
 `controller.unsupported`, which [B414](milestones/backlog.md#b414) would report
 as not verified instead. Bootwright claims no FIPS compliance; a
 FIPS-qualified runtime is parked as [B331](milestones/backlog.md#b331).
@@ -358,8 +359,8 @@ profile selects inputs. Its acquisition route is the
 [invoking environment's](#the-context-free-acquisition-route), and direct
 access when that environment names none.
 
-The install preview selects no context and refuses `--context`, so it
-reports the host baseline alone. A context's controller readiness is the
+The install preview and readiness check cover the host baseline alone.
+A context's controller readiness is the
 [controller stage of `apply --dry-run`](cli/output.md#preflight), which reads the
 selected context, the current one unless `--context` names another; that
 context must be ready and have an admitted input revision, and an empty one
@@ -377,14 +378,16 @@ SSH flags remain unconsumed by these checks.
 
 | Invocation | Required behavior |
 | --- | --- |
-| `bootwright install --dry-run` | Verify the host baseline, interpreter, runtime, private setup record, state root and package presence. Plan missing setup work and list locked wheels in structured output. Elevation permits reads of private setup state. Run no dnf or network acquisition. |
+| `bootwright install --dry-run` | Inspect the host and its private setup state to plan missing work. Report the ordered actions, RPM requirements by name, and the locked wheel inventory in structured output. A feasible plan exits 0 even when prerequisites are missing or setup was interrupted. Admission refusals exit 1 and retain any plan already computed. |
+| `bootwright install --check` | Verify supported host and tool admission, installed-host identity, the locked interpreter and published runtime, baseline RPM presence, a complete receipt for the current runtime, and state-root admission. Report each observed finding and any remedy. Exit 0 when ready and 1 when a prerequisite is missing, unverified or refused. |
 | `bootwright install` | Elevate, then inspect read-only: admission, the installed host, FIPS mode, the untested release and loader preload (informational), the setup state, the interpreter and its runtime and the baseline package presence. A ready host prints the receipt table and `Nothing to do.`, with no network request, confirmation or write. Otherwise run the preview and present the plan, confirm, take `controller/install/lock`, inspect again and refuse a host that moved, record the pending intent, install with dnf, copy the carried wheels, build, verify and publish the runtime, and write the receipt, which clears the pending intent. Publish no binding and touch no controller record. |
 | `bootwright apply --dry-run --stage controller --context <name>` | Additionally report that context's own target tools, its container runtime, libvirt client, hypervisor, installer-media, image-mirror, `nmstate` and `iputils` requirements by `rpm` presence, and its host binding, as context-scoped checks. Contact no publisher and read no repository metadata for them. |
 
-No command here contacts a managed endpoint, creates or repairs shared state
-on behalf of another's scope, or publishes a binding. A check publishes
-nothing at all, and neither a check nor a dry run runs dnf, downloads a
-wheel or refreshes repository metadata.
+Both install read-only modes can elevate to read private setup state. They
+use the local RPM database, perform no dnf call or repository resolution,
+read no ambient proxy route, and publish nothing. The preview can name the
+first missing locked Python ABI as an RPM requirement. Execution resolves
+available candidates against dnf's repositories.
 
 The plan names each action setup takes, in order:
 
@@ -948,9 +951,10 @@ the executable's [carried wheels](#the-runtime-lock), so pypi.org,
 
 ### Locked files and the dnf route
 
-**`install --dry-run --output json`** lists every locked file the
+**`install --dry-run` with JSON or YAML output** lists every locked file the
 executable carries under `files`: its Python ABI (absent for the pip wheel),
-filename, the URL a build fetches it from, and SHA-256. The fields are the `install` row of the [result fields](cli/output.md#json-output).
+filename, the URL a build fetches it from, and SHA-256.
+See the [preview result fields](cli/output.md#json-output).
 
 **The dnf route.** When the admitted route is a proxy, dnf receives it as
 `https_proxy` and `no_proxy`, and a `proxy=` in the host's dnf configuration
@@ -1275,8 +1279,7 @@ admission unless one of its own dependencies serves a listener. The native queri
 [firewall-cmd](https://firewalld.org/documentation/man-pages/firewall-cmd.html)
 and [zone targets](https://firewalld.org/documentation/man-pages/firewalld.zone.html).
 
-Setup's ready path and `install --dry-run` render the same short receipt
-table, for example:
+Setup's ready path renders a short receipt table:
 
 ```text
 Host      Fedora Linux 44 (amd64), glibc 2.43 — tested
@@ -1291,12 +1294,12 @@ list. `Runtime` names the interpreter, its path and the ansible-core version,
 then `ready` or `not prepared`. `Packages` names each receipt package as its
 provider's name and version with the repository it came from, or `present
 before bootwright` for one setup did not install, and names what is missing
-instead when a package is. `install --dry-run` renders the table in every
-result that reached it, ready or not, in place of the host's ready check
-rows; a host check that is not ready, such as an interrupted setup, remains. Both end a ready result with `Nothing to
-do.`. Setup renders the table only on its ready path, and never in its dry run,
-which reads no setup record.
-`install --dry-run` stays read-only and runs no dnf preview.
+instead when a package is. The ready path ends with `Nothing to do.`.
+The dry run prints planned changes or reports that none are needed. The check
+prints the readiness rows with their observed values and overall outcome. Its
+state-root row reports whether the store location is usable, while the setup
+state row requires the current receipt even on a host where setup can create
+the root.
 
 Host fingerprints, credentials, environment dumps and raw native-tool output
 are not public results. The one private path setup names is the directory of

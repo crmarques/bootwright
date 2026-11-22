@@ -288,9 +288,8 @@ func (r *Runner) execute(ctx context.Context, command *cobra.Command, path strin
 	if err == nil && result.session != nil {
 		return result.session.ExitCode
 	}
-	setupJSON := spec.controllerReport && selectedJSON(command)
-	if err != nil && !setupJSON && spec.controllerReport && validControllerReport(result.controller) {
-		if presentErr := writeControllerReport(r.config.Out, r.config.ErrOut, path, result.controller); presentErr != nil {
+	if err != nil && spec.controllerReport && !selectedStructured(command) && validControllerReport(result.controller) {
+		if presentErr := writeInstallText(r.config.Out, r.config.ErrOut, path, result.controller, boolValue(command.Flags(), "check")); presentErr != nil {
 			return 1
 		}
 	}
@@ -351,10 +350,7 @@ func (r *Runner) writeServiceDiagnostics(command *cobra.Command, path string, re
 		exitCode = 2
 	}
 	if spec.controllerReport && selectedStructured(command) && validControllerReport(result.controller) {
-		if result.controller.DryRun {
-			return r.setupPlanFailure(path, result.controller, reported, exitCode)
-		}
-		if writeStructuredController(r.config.Out, path, result.controller, reported, exitCode) != nil {
+		if writeStructuredController(r.config.Out, path, result.controller, boolValue(command.Flags(), "check"), reported, exitCode) != nil {
 			return 1
 		}
 		return exitCode

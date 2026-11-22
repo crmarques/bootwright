@@ -31,7 +31,7 @@ func TestRunnerDispatchesEveryApplicationCommand(t *testing.T) {
 		"context init --name demo -f input", "context update --name demo -f input", "context use --name demo", "context list", "context current", "context delete --name demo --purge",
 		"catalog add-ons list", "catalog add-ons info --name demo",
 		"secret set --name demo --value-file secret.bin", "secret generate", "secret check", "secret list", "secret show --name demo --part value", "secret delete --name demo", "secret encryption init", "secret encryption status", "secret encryption rotate",
-		"catalog media add --name demo.iso --from-file image.iso", "catalog media list", "catalog media delete --name demo.iso", "validate", "install --dry-run", "apply --dry-run", "apply --dry-run --stage clusters", "destroy --dry-run", "status", "render effective --output-dir artifacts --sensitive", "render effective", "render installer", "render storage", "apply", "destroy",
+		"catalog media add --name demo.iso --from-file image.iso", "catalog media list", "catalog media delete --name demo.iso", "validate", "install --dry-run", "install --check", "apply --dry-run", "apply --dry-run --stage clusters", "destroy --dry-run", "status", "render effective --output-dir artifacts --sensitive", "render effective", "render installer", "render storage", "apply", "destroy",
 		"machine list", "machine rsh --name demo", "machine exec --name demo echo", "machine trust", "install", "cluster list", "cluster info", "cluster rsh --name demo", "cluster exec --name demo echo", "cluster oc --name demo get", "cluster kubectl --name demo get", "cluster kubeconfig --name demo", "cluster keyring --name demo --client vm-disks",
 	}
 	for _, invocation := range cases {
@@ -44,7 +44,7 @@ func TestRunnerDispatchesEveryApplicationCommand(t *testing.T) {
 				want = 255
 			}
 			remedy := "run bootwright help <command> to see which forms this build runs"
-			path, _ := strings.CutSuffix(record.path, " --dry-run")
+			path := strings.TrimSuffix(strings.TrimSuffix(record.path, " --dry-run"), " --check")
 			if cut := strings.LastIndex(path, " "); cut > 0 {
 				remedy = "run bootwright help " + path[:cut] + " to see which commands this build runs"
 			}

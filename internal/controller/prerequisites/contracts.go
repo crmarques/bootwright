@@ -123,9 +123,8 @@ type Storage interface {
 }
 
 // StateRootInspector is how a Storage that keeps its state beneath one root
-// lets a setup dry run, which reads no record and stays unprivileged, report
-// whether this build can use that root. A Storage without it leaves the dry
-// run's report as it was.
+// lets the install preview and readiness check report whether this build can
+// use that root, without creating it.
 type StateRootInspector interface {
 	InspectStateRoot(context.Context) (StateRootInspection, error)
 }

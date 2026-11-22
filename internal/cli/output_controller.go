@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"io"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -168,8 +167,14 @@ func validControllerReport(report *prerequisites.Report) bool {
 	return !report.DryRun || report.Outcome == "planned" || report.Outcome == "not-ready" || report.Outcome == "unchanged"
 }
 
-func successfulControllerReport(command string, report *prerequisites.Report) bool {
-	return report.DryRun && (report.Outcome == "planned" || report.Outcome == "unchanged") || !report.DryRun && (report.Outcome == "unchanged" || report.Outcome == "changed")
+func successfulControllerReport(report *prerequisites.Report, check bool) bool {
+	if check {
+		return !report.DryRun && report.Outcome == "ready"
+	}
+	if report.DryRun {
+		return report.Outcome == "planned" || report.Outcome == "unchanged"
+	}
+	return report.Outcome == "unchanged" || report.Outcome == "changed"
 }
 
 // controllerHeadline names what the reader is looking at. Readiness inspection
@@ -259,7 +264,13 @@ func writeControllerReport(out, errOut io.Writer, command string, report *prereq
 	}
 	// A setup that failed before its plan settled has nothing to plan; every
 	// other unpresented plan still names what would change.
-	if !report.PlanPresented && !(report.ProgressPresented && report.Outcome == "planned") {
+	if report.DryRun {
+		if report.Outcome == "not-ready" && len(report.Actions) == 0 {
+			controllerScopeText(&text, report)
+		} else {
+			controllerPlanText(&text, report, true, false, false)
+		}
+	} else if !report.PlanPresented && !(report.ProgressPresented && report.Outcome == "planned") {
 		controllerPlanText(&text, report, !presented, !presented || presentationFor(out).Progress == "never", showReceiptTable(command, report))
 	} else if !report.PlanPresented && presentationFor(out).Progress == "never" {
 		controllerChecksText(&text, report, false)
@@ -379,7 +390,7 @@ func controllerScopeText(text *display, report *prerequisites.Report) {
 }
 
 func showReceiptTable(command string, report *prerequisites.Report) bool {
-	return report.Table != nil && (report.DryRun || report.Outcome == "unchanged")
+	return report.Table != nil && report.Outcome == "unchanged"
 }
 
 // controllerPlanText writes the plan body. The scope and checks are skipped
@@ -444,11 +455,24 @@ func (d *display) verbatim(lines []string) {
 	}
 }
 
-func writeControllerResult(out, errOut io.Writer, command string, report *prerequisites.Report, json bool) error {
-	if json {
-		return writeSetupPlanJSON(out, command, report)
+func writeInstallText(out, errOut io.Writer, path string, report *prerequisites.Report, check bool) error {
+	if check {
+		return writeInstallCheck(out, errOut, report)
 	}
-	return writeControllerReport(out, errOut, command, report)
+	return writeControllerReport(out, errOut, path, report)
+}
+
+func writeInstallCheck(out, errOut io.Writer, report *prerequisites.Report) error {
+	if err := writeHumanDiagnostics(errOut, displayDiagnostics(report.Warnings)); err != nil {
+		return err
+	}
+	var text display
+	text.headline("", "Controller readiness")
+	controllerScopeText(&text, report)
+	controllerChecksText(&text, report, false)
+	text.section("")
+	text.fields(controllerOutcomeFields("install", report)...)
+	return text.writeTo(out)
 }
 
 // setupPlanResult is setup's dry-run plan as machine output.
@@ -456,17 +480,9 @@ type setupPlanResult struct {
 	DryRun       bool               `json:"dryRun"`
 	Outcome      string             `json:"outcome"`
 	Platform     string             `json:"platform"`
-	Checks       []setupPlanCheck   `json:"checks"`
 	Actions      []string           `json:"actions"`
 	Requirements []string           `json:"requirements"`
 	Files        []setupLockedWheel `json:"files"`
-}
-
-type setupPlanCheck struct {
-	ID       string `json:"id"`
-	Required string `json:"required"`
-	Observed string `json:"observed"`
-	Status   string `json:"status"`
 }
 
 type setupLockedWheel struct {
@@ -478,28 +494,15 @@ type setupLockedWheel struct {
 
 func (setupPlanResult) documentedResult() {}
 
-func writeSetupPlanJSON(out io.Writer, command string, report *prerequisites.Report) error {
-	return writeEnvelope(out, commandEnvelope{
-		SchemaVersion: "v1alpha1", Command: escapeDisplayLine(command), OK: true, ExitCode: 0,
-		Result: displaySetupPlan(report), Diagnostics: displayDiagnostics(report.Warnings), Logs: []string{},
-	})
-}
-
-func writeSetupPlanFailure(out io.Writer, command string, report *prerequisites.Report, refusal []diagnostic, exitCode int) error {
-	return writeEnvelope(out, commandEnvelope{
-		SchemaVersion: "v1alpha1", Command: escapeDisplayLine(command), ExitCode: exitCode,
-		Result: displaySetupPlan(report), Diagnostics: displayDiagnostics(append(slices.Clone(report.Warnings), refusal...)), Logs: []string{},
-	})
+func controllerPlatform(report *prerequisites.Report) string {
+	return escapeDisplayLine(report.Platform.OS + " " + report.Platform.Release + "/" + report.Platform.Architecture)
 }
 
 func displaySetupPlan(report *prerequisites.Report) setupPlanResult {
 	result := setupPlanResult{
 		DryRun: report.DryRun, Outcome: escapeDisplayLine(report.Outcome),
-		Platform: escapeDisplayLine(report.Platform.OS + " " + report.Platform.Release + "/" + report.Platform.Architecture),
-		Checks:   []setupPlanCheck{}, Actions: []string{}, Requirements: []string{}, Files: []setupLockedWheel{},
-	}
-	for _, check := range report.Checks {
-		result.Checks = append(result.Checks, setupPlanCheck{ID: escapeDisplayLine(check.ID), Required: escapeDisplayLine(check.Required), Observed: escapeDisplayLine(check.Observed), Status: escapeDisplayLine(check.Status)})
+		Platform: controllerPlatform(report),
+		Actions:  []string{}, Requirements: []string{}, Files: []setupLockedWheel{},
 	}
 	for _, action := range report.Actions {
 		result.Actions = append(result.Actions, escapeDisplayLine(action))
@@ -511,13 +514,6 @@ func displaySetupPlan(report *prerequisites.Report) setupPlanResult {
 		result.Files = append(result.Files, setupLockedWheel{ABI: escapeDisplayLine(file.ABI), Filename: escapeDisplayLine(file.Filename), URL: escapeDisplayLine(file.URL), SHA256: escapeDisplayLine(file.SHA256)})
 	}
 	return result
-}
-
-func (r *Runner) setupPlanFailure(path string, report *prerequisites.Report, refusal []diagnostic, exitCode int) int {
-	if writeSetupPlanFailure(r.config.Out, path, report, refusal, exitCode) != nil {
-		return 1
-	}
-	return exitCode
 }
 
 func controllerChecksText(text *display, report *prerequisites.Report, table bool) {

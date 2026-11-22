@@ -161,7 +161,8 @@ func assembleServices(deps serviceDependencies) cli.Services {
 	services.Contexts = wireContexts(deps, compiler, secrets.hooks, &reconciler)
 	services.Secrets, services.Encryption = secrets.custody, secrets.encryption
 	services.DesiredState = wireDesiredState(deps, compiler)
-	services.Controller = wireController(deps.Controller, compiler, deps.Confirmer, deps.AmbientRoute)
+	controllerSetup := wireController(deps.Controller, compiler, deps.Confirmer, deps.AmbientRoute)
+	services.Controller = controllerSetup
 	services.Media = wireMedia(deps.Media)
 	if deps.Lifecycle.Capacity == nil {
 		deps.Lifecycle.Capacity = remoteCapacity(services.DesiredState, &reconciler, deps)
@@ -206,7 +207,7 @@ func assembleServices(deps serviceDependencies) cli.Services {
 	}
 	services.Artifacts = artifactrendering.Service{Compiler: services.DesiredState, Encode: encoding.YAML, Files: comparison}
 	services.Comparison = comparison
-	services.EnvironmentPreflight = environmentpreflight.Service{Graph: effectiveGraph{state: services.DesiredState}, Selection: currentSelection(deps.Selection), Controller: services.Controller, Capacity: storagePreflight, Clusters: clusters, Mirror: mirrorProbe{material: reconciler, read: readMirror}}
+	services.EnvironmentPreflight = environmentpreflight.Service{Graph: effectiveGraph{state: services.DesiredState}, Selection: currentSelection(deps.Selection), Controller: controllerSetup, Capacity: storagePreflight, Clusters: clusters, Mirror: mirrorProbe{material: reconciler, read: readMirror}}
 	return services
 }
 

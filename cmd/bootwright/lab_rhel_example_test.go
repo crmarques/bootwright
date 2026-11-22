@@ -525,12 +525,12 @@ func TestLabRHELExampleContextAndControllerPreparationJourney(t *testing.T) {
 	// is selected, so its dry run names the baseline and neither the example's
 	// target tools nor its host binding.
 	plan, _ := contextRun(t, services, 0, "install", "--dry-run")
-	for _, expected := range []string{"Scope     baseline", "[FAIL]   Controller runtime", "Outcome  planned", "Next     bootwright install"} {
+	for _, expected := range []string{"Scope     baseline", "Prepare the controller runtime", "Outcome  planned", "Next     bootwright install"} {
 		if !strings.Contains(plan, expected) {
 			t.Fatalf("baseline dry-run lacks %q:\n%s", expected, plan)
 		}
 	}
-	for _, refused := range []string{"Target tools", "Controller binding", "context lab-rhel"} {
+	for _, refused := range []string{"Checks", "Target tools", "Controller binding", "context lab-rhel"} {
 		if strings.Contains(plan, refused) {
 			t.Fatalf("context-free setup planned %q:\n%s", refused, plan)
 		}
@@ -548,8 +548,10 @@ func TestLabRHELExampleContextAndControllerPreparationJourney(t *testing.T) {
 	if !strings.Contains(diagnostics, "engine.controller-unprepared") {
 		t.Fatalf("preflight before setup must fail:\nstdout=%s\nstderr=%s", report, diagnostics)
 	}
-	baseline, baselineDiagnostics := contextRun(t, services, 0, "install", "--dry-run")
-	if !strings.Contains(baseline, "Scope     baseline") || !strings.Contains(baseline, "bootwright install") {
+	baseline, baselineDiagnostics := contextRun(t, services, 1, "install", "--check")
+	if !strings.Contains(baseline, "Scope     baseline") || !strings.Contains(baseline, "[FAIL]   Controller runtime") ||
+		!strings.Contains(baseline, "Next     bootwright install") || strings.Contains(baseline, "Planned changes") ||
+		!strings.Contains(baselineDiagnostics, "preflight.failed") {
 		t.Fatalf("controller check before setup must name setup:\nstdout=%s\nstderr=%s", baseline, baselineDiagnostics)
 	}
 	_, diagnostics = contextRun(t, services, 1, "apply", "--dry-run", "--context", "missing", "--stage", "controller")

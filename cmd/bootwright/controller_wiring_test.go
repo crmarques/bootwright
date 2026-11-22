@@ -28,7 +28,7 @@ func TestComposedBaselineDryRunReadsSetupWithoutChangingIt(t *testing.T) {
 	var out, errOut bytes.Buffer
 	code := runServices(context.Background(), []string{"install", "--dry-run"}, &out, &errOut, services)
 	if code != 0 || errOut.Len() != 0 || ports.reads == 0 || stores.reads != 1 || ports.effects != 0 || stores.effects != 0 || !strings.Contains(out.String(), "Scope     baseline") ||
-		!strings.Contains(out.String(), "Outcome  planned") || !strings.Contains(out.String(), "Controller runtime") {
+		!strings.Contains(out.String(), "Outcome  planned") || !strings.Contains(out.String(), "Prepare the controller runtime") || strings.Contains(out.String(), "Checks") {
 		t.Fatal(code, out.String(), errOut.String(), ports, stores)
 	}
 }
@@ -119,6 +119,9 @@ func TestComposedControllerSuppliesEveryPort(t *testing.T) {
 	if fields.NumField() != 14 {
 		t.Fatalf("controller port count = %d; update this gate with the port it covers", fields.NumField())
 	}
+	if _, reports := composed.Storage.(prerequisites.StateRootInspector); !reports {
+		t.Fatal("the composed storage reports no state-root inspection")
+	}
 	if _, reports := composed.Host.(prerequisites.FIPSInspector); !reports {
 		t.Fatal("the composed host inspector reports no FIPS mode")
 	}
@@ -136,7 +139,7 @@ func TestComposedControllerSuppliesEveryPort(t *testing.T) {
 func TestUnsuppliedControllerPortsRemainUnavailable(t *testing.T) {
 	t.Parallel()
 	services := assembleServices(serviceDependencies{})
-	for _, args := range [][]string{{"install"}, {"install", "--dry-run"}, {"install", "--dry-run"}} {
+	for _, args := range [][]string{{"install"}, {"install", "--dry-run"}, {"install", "--check"}} {
 		var out, errOut bytes.Buffer
 		code := runServices(context.Background(), args, &out, &errOut, services)
 		if code != 1 || out.Len() != 0 || !strings.HasPrefix(errOut.String(), "  error  cli.not-implemented\n    bootwright ") {

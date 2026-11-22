@@ -1,19 +1,18 @@
   bootwright / install
-      Prepare this host's context-independent controller prerequisites: the baseline host
-      packages, installed through the host's own dnf, and the controller runtime, a venv on the
-      OS Python holding exactly the wheels this build locks and carries, so it downloads no
-      wheel. This command selects no context; the prerequisites a context adds are installed by
-      the controller stage of apply. A ready host makes no request and no change. Otherwise the
-      plan shows dnf's own preview before confirmation. --dry-run verifies host readiness and
-      lists planned changes without calling dnf, and --dry-run --output json or --output yaml
-      also lists every locked wheel's file, URL and SHA-256. Review the plan before confirming;
-      --yes skips ordinary confirmation.
+      Prepare this host's baseline packages and controller Python runtime from the locked
+      wheels carried by this build. This command selects no context. Use --dry-run to show the
+      planned changes, with the locked wheel inventory in JSON or YAML. Use --check to verify
+      host readiness, including the packages, runtime, setup receipt and state root. Both flags
+      use local reads only. A ready host needs no setup. When installation is needed, install
+      shows dnf's own preview before confirmation. --yes skips ordinary confirmation during
+      execution.
 
   Usage
     bootwright install [flags]
 
   Command flags
-      --dry-run  Limit work to the command's dry-run boundary
+      --check    Verify the existing installation and exit 1 if it is not ready
+      --dry-run  Show what install would change without running dnf
       --yes      Confirm the command's ordinary confirmation
 
   Common flags

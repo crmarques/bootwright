@@ -72,7 +72,7 @@ func (s Service) Check(ctx context.Context, request CheckRequest) (*Report, erro
 		if request.Quiet {
 			phase = ""
 		}
-		current, err := s.inspect(ctx, view, stored, phase, false)
+		current, err := s.inspect(ctx, view, stored, phase, true)
 		if err != nil {
 			if len(current.report.Checks) != 0 {
 				current.report.Outcome = "not-ready"
@@ -118,6 +118,34 @@ func (s Service) Check(ctx context.Context, request CheckRequest) (*Report, erro
 	return result, err
 }
 
+// CheckHost verifies the installed baseline without selecting a context or
+// collecting wheel requirements for a setup plan.
+func (s Service) CheckHost(ctx context.Context) (*Report, error) {
+	if err := s.available(ctx); err != nil {
+		return nil, err
+	}
+	view, err := s.ports.Setup.ReadSetup(ctx)
+	if err != nil {
+		return nil, err
+	}
+	current, err := s.inspect(ctx, view, StorageView{}, "", false)
+	current.report.Route = ""
+	if err == nil {
+		err = s.stateRoot(ctx, &current.report)
+	}
+	current.report.Outcome = "not-ready"
+	if err != nil {
+		current.report.Next = remedyInvocation(err)
+		return &current.report, err
+	}
+	if current.ready() && PendingScope(current.report) == "" {
+		current.report.Outcome = "ready"
+		return &current.report, nil
+	}
+	current.report.Next = setupInvocation
+	return &current.report, failure("preflight.failed", "required host prerequisites are not ready", "run "+setupInvocation)
+}
+
 func (s Service) Setup(ctx context.Context, request SetupRequest) (*Report, error) {
 	report, err := s.setup(ctx, request)
 	if report != nil && err != nil {
@@ -142,18 +170,18 @@ func (s Service) setup(ctx context.Context, request SetupRequest) (*Report, erro
 	if err := s.available(ctx); err != nil {
 		return nil, err
 	}
-	if request.DryRun && !request.Verify {
-		return s.dryRun(ctx)
-	}
 	view, err := s.ports.Setup.ReadSetup(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if request.DryRun {
-		current, err := s.inspect(ctx, view, StorageView{}, "", false)
+		current, err := s.inspect(ctx, view, StorageView{}, "", true)
 		current.report.DryRun = true
-		current.report.Files = s.lockedFiles()
+		current.report.Route = ""
+		current.report.Table = nil
+		current.report.Files = slices.Clone(s.ports.Lock.Files)
 		if err != nil {
+			current.report.Outcome = "not-ready"
 			return &current.report, err
 		}
 		if current.ready() {
@@ -163,9 +191,13 @@ func (s Service) setup(ctx context.Context, request SetupRequest) (*Report, erro
 			current.plan()
 			current.report.Next = setupInvocation
 		}
-		return &current.report, s.stateRoot(ctx, &current.report)
+		err = s.stateRoot(ctx, &current.report)
+		if err != nil {
+			current.report.Outcome = "not-ready"
+		}
+		return &current.report, err
 	}
-	current, err := s.inspect(ctx, view, StorageView{}, InspectionPhase, false)
+	current, err := s.inspect(ctx, view, StorageView{}, InspectionPhase, true)
 	if err != nil {
 		return nil, err
 	}
@@ -199,29 +231,16 @@ func (s Service) setup(ctx context.Context, request SetupRequest) (*Report, erro
 	return s.execute(ctx, current)
 }
 
-// dryRun never elevates: it reads no setup record, previews nothing with dnf
-// and names what setup would install by requirement.
-func (s Service) dryRun(ctx context.Context) (*Report, error) {
-	current, err := s.inspect(ctx, SetupView{}, StorageView{}, "", true)
-	if err != nil {
-		return nil, err
-	}
-	current.plan()
-	current.report.Outcome, current.report.Next = "planned", setupInvocation
-	current.report.Files = s.lockedFiles()
-	return &current.report, s.stateRoot(ctx, &current.report)
-}
-
-func (s Service) lockedFiles() []LockedFile {
-	return slices.Clone(s.ports.Lock.Files)
-}
-
-// stateRoot reports in a dry run whether this build can use the store's
-// state root, and returns the store's refusal of one it cannot use.
+// stateRoot reports whether this build can use the store's state root and
+// returns the store's refusal of one it cannot use.
 func (s Service) stateRoot(ctx context.Context, report *Report) error {
 	inspector, ok := s.storage.(StateRootInspector)
 	if !ok {
-		return nil
+		if report.DryRun {
+			return nil
+		}
+		report.setCheck(unverified("state-root", "a qualified private state root", HostScope))
+		return failure("preflight.unknown", "state-root inspection is unavailable", "use a build that supports state-root inspection on this host")
 	}
 	inspection, err := inspector.InspectStateRoot(ctx)
 	if err != nil {

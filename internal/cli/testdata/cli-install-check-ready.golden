@@ -1,0 +1,14 @@
+  Controller readiness
+
+    Scope     baseline
+    Platform  fedora 43/amd64
+
+  Checks
+  [OK]   Host                 fedora 43/amd64
+  [OK]   FIPS mode            disabled
+  [OK]   Host packages        openssh-clients
+  [OK]   Controller runtime   Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5
+  [OK]   State root           root:root 0700
+  [OK]   Setup state          complete
+
+    Outcome  ready

@@ -13,7 +13,6 @@ type CheckRequest struct {
 // by the controller stage of its own apply.
 type SetupRequest struct {
 	DryRun           bool
-	Verify           bool
 	SkipConfirmation bool
 }
 

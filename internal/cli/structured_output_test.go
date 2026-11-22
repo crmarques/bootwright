@@ -309,35 +309,50 @@ func TestYAMLKeepsRawDocumentStringsAndKeysExact(t *testing.T) {
 
 func TestStructuredControllerRetainsNextAndExecutionEvidence(t *testing.T) {
 	for _, format := range []string{"json", "yaml"} {
-		for _, path := range []string{"install", "install --dry-run"} {
-			for _, failed := range []bool{false, true} {
-				report := controllerReport("ready", false)
-				if path == "install" {
-					report.Outcome = "unchanged"
-				}
-				report.Route, report.Next = "direct", "bootwright install"
-				if path == "install" {
-					report.ContextName, report.Machine = "demo", "controller"
-				}
-				report.Progress = []prerequisites.ActionProgress{{ID: "python-runtime", Phase: "observed", Outcome: "unchanged"}}
-				report.LogLocation = "/private/operator/setup-log"
-				record := &dispatchRecord{result: commandResult{controller: report}}
-				want := 0
-				if failed {
-					report.Outcome = "not-ready"
-					record.err = diagnostics.NewFailure("controller.prerequisites", "missing prerequisites", "")
-					want = 1
-				}
-				args := append([]string{"--output", format}, strings.Fields(path)...)
-				code, out, errOut := runSecretResult(args, record)
-				if code != want || errOut != "" || strings.Contains(out, report.LogLocation) {
-					t.Fatalf("%v: %d %s %q", args, code, out, errOut)
-				}
-				shown := structuredDocument(t, out)["result"].(map[string]any)
-				if shown["next"] != report.Next || shown["context"] != report.ContextName && !(report.ContextName == "" && shown["context"] == nil) || len(shown["progress"].([]any)) != 1 {
-					t.Fatal(shown)
-				}
+		for _, failed := range []bool{false, true} {
+			report := controllerReport("unchanged", false)
+			report.Route, report.Next, report.ContextName, report.Machine = "direct", "bootwright install", "demo", "controller"
+			report.Progress = []prerequisites.ActionProgress{{ID: "python-runtime", Phase: "observed", Outcome: "unchanged"}}
+			report.LogLocation = "/private/operator/setup-log"
+			record := &dispatchRecord{result: commandResult{controller: report}}
+			want := 0
+			if failed {
+				report.Outcome = "not-ready"
+				record.err = diagnostics.NewFailure("controller.prerequisites", "missing prerequisites", "")
+				want = 1
 			}
+			code, out, errOut := runSecretResult([]string{"--output", format, "install"}, record)
+			if code != want || errOut != "" || strings.Contains(out, report.LogLocation) {
+				t.Fatalf("%s: %d %s %q", format, code, out, errOut)
+			}
+			shown := structuredDocument(t, out)["result"].(map[string]any)
+			if shown["next"] != report.Next || shown["context"] != report.ContextName || len(shown["progress"].([]any)) != 1 {
+				t.Fatal(shown)
+			}
+		}
+	}
+}
+
+func TestStructuredInstallModesHaveDistinctResults(t *testing.T) {
+	for _, format := range []string{"json", "yaml"} {
+		plan := setupDryRun(prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"})
+		code, out, errOut := runSecretResult([]string{"install", "--dry-run", "--output", format}, &dispatchRecord{result: commandResult{controller: plan}})
+		if code != 0 || errOut != "" {
+			t.Fatalf("%s dry run: %d %s %q", format, code, out, errOut)
+		}
+		shown := structuredDocument(t, out)["result"].(map[string]any)
+		if shown["outcome"] != "planned" || shown["checks"] != nil || len(shown["actions"].([]any)) != len(plan.Actions) || len(shown["files"].([]any)) != len(plan.Files) {
+			t.Fatal(shown)
+		}
+
+		check := controllerReport("ready", false)
+		code, out, errOut = runSecretResult([]string{"install", "--check", "--output", format}, &dispatchRecord{result: commandResult{controller: check}})
+		if code != 0 || errOut != "" {
+			t.Fatalf("%s check: %d %s %q", format, code, out, errOut)
+		}
+		shown = structuredDocument(t, out)["result"].(map[string]any)
+		if shown["outcome"] != "ready" || shown["actions"] != nil || shown["files"] != nil || len(shown["checks"].([]any)) != len(check.Checks) {
+			t.Fatal(shown)
 		}
 	}
 }

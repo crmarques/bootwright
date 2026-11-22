@@ -15,17 +15,19 @@ func renderController() commandRenderer {
 	return commandRenderer{
 		structured: func(r *Runner, c renderCall) (bool, error) {
 			report := c.result.controller
-			if report == nil || report.DryRun || !validControllerReport(report) {
+			check := boolValue(c.command.Flags(), "check")
+			if !validControllerReport(report) || !successfulControllerReport(report, check) {
 				return false, nil
 			}
-			return true, writeStructuredController(r.config.Out, c.path, report, nil, 0)
+			return true, writeStructuredController(r.config.Out, c.path, report, check, nil, 0)
 		},
 		human: func(r *Runner, c renderCall) (bool, error) {
 			report := c.result.controller
-			if !validControllerReport(report) || !successfulControllerReport(c.path, report) {
+			check := boolValue(c.command.Flags(), "check")
+			if !validControllerReport(report) || !successfulControllerReport(report, check) {
 				return false, nil
 			}
-			return true, writeControllerResult(r.config.Out, r.config.ErrOut, c.path, report, selectedJSON(c.command))
+			return true, writeInstallText(r.config.Out, r.config.ErrOut, c.path, report, check)
 		},
 	}
 }

@@ -57,7 +57,7 @@ func TestDispatchEveryApplicationCommand(t *testing.T) {
 		{"catalog media list", media.ListMediaRequest{Checksums: true}},
 		{"catalog media delete", media.DeleteMediaRequest{Name: "demo", SkipConfirmation: true}},
 		{"validate", compilation.ValidateRequest{ContextName: "", Files: []string{"inputs"}}},
-		{"install", prerequisites.SetupRequest{DryRun: true, Verify: true, SkipConfirmation: true}},
+		{"install", prerequisites.SetupRequest{DryRun: true, SkipConfirmation: true}},
 		{"cluster update-admin-creds", lifecycle.UpdateAdminCredentialsRequest{ContextName: "example", Name: "demo", Logins: []string{"prometheus", "grafana"}, SkipConfirmation: true}},
 		{"cluster list", inspection.ListClustersRequest{ContextName: "example"}},
 		{"cluster info", inspection.ClusterInfoRequest{ContextName: "example", Names: []string{"demo"}, Secrets: true}},
@@ -87,6 +87,11 @@ func TestDispatchEveryApplicationCommand(t *testing.T) {
 			record := &dispatchRecord{err: failure}
 			ctx := context.WithValue(context.Background(), dispatchContextKey{}, tt.path)
 			flags := dispatchFlags()
+			if tt.path == "install" {
+				if err := flags.Set("check", "false"); err != nil {
+					t.Fatal(err)
+				}
+			}
 			path, preview := strings.CutSuffix(tt.path, " --dry-run")
 			if (path == "apply" || path == "destroy") && !preview {
 				if err := flags.Set("dry-run", "false"); err != nil {

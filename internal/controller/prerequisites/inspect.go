@@ -22,7 +22,6 @@ type inspection struct {
 	release   HostRelease
 	platform  Platform
 	host      evidence.InstalledHostIdentity
-	dryRun    bool
 
 	ansibleCore  string
 	interpreter  PythonInterpreter
@@ -52,8 +51,8 @@ const (
 // inspect verifies the host read-only. A non-empty phase streams the scope and
 // each check as it settles; the inspection repeated under the setup lock
 // passes none, so every check is shown once.
-func (s Service) inspect(ctx context.Context, view SetupView, stored StorageView, phase string, dryRun bool) (inspection, error) {
-	current := inspection{view: view, stored: stored, dryRun: dryRun, ansibleCore: s.ports.Lock.AnsibleCore,
+func (s Service) inspect(ctx context.Context, view SetupView, stored StorageView, phase string, planWheels bool) (inspection, error) {
+	current := inspection{view: view, stored: stored, ansibleCore: s.ports.Lock.AnsibleCore,
 		selection: controller.Baseline().WithAmbientRoute(s.options.AmbientRoute)}
 	if err := s.selectContext(ctx, &current); err != nil {
 		return current, err
@@ -65,8 +64,8 @@ func (s Service) inspect(ctx context.Context, view SetupView, stored StorageView
 	current.release = release
 	current.platform = Platform{OS: release.ID, Release: release.VersionID, Architecture: release.Architecture}
 	current.report = Report{ContextName: stored.Context.Name, Machine: current.selection.MachineName(), Platform: current.platform,
-		DryRun: dryRun, Outcome: "planned", Route: current.routeSummary(), Checks: []Check{}, Actions: []string{}}
-	stream := phase != "" && !dryRun
+		Outcome: "planned", Route: current.routeSummary(), Checks: []Check{}, Actions: []string{}}
+	stream := phase != ""
 	if stream && s.options.Presenter != nil {
 		if err := s.options.Presenter.PresentControllerScope(ctx, phase, cloneReport(current.report)); err != nil {
 			return current, err
@@ -91,31 +90,27 @@ func (s Service) inspect(ctx context.Context, view SetupView, stored StorageView
 	if err := s.noteLoaderPreload(ctx, &current); err != nil {
 		return current, err
 	}
-	if !dryRun {
-		if err := s.settleHost(ctx, &current, settle, start); err != nil {
-			return current, err
-		}
+	if err := s.settleHost(ctx, &current, settle, start); err != nil {
+		return current, err
 	}
-	if err := s.settleRuntime(ctx, &current, settle, start); err != nil {
+	if err := s.settleRuntime(ctx, &current, settle, start, planWheels); err != nil {
 		return current, err
 	}
 	if err := s.settlePackages(ctx, &current, settle, start); err != nil {
 		return current, err
 	}
-	if !dryRun {
-		current.settleSetupState(s.ports.Lock, settle)
-		current.report.Table = current.table(s.ports.Lock)
-	}
+	current.settleSetupState(s.ports.Lock, settle)
+	current.report.Table = current.table(s.ports.Lock)
 	return current, s.settleContext(ctx, &current, settle, start)
 }
 
 func (i *inspection) declare(host HostInspector, lock RuntimeLock) {
-	checks := []Check{{"host", familyRequirement, "unverified", "unverified", HostScope, ""}}
-	if !i.dryRun {
-		checks = append(checks, Check{"installed-host", "verified local identity", "unverified", "unverified", HostScope, ""})
-		if _, reports := host.(FIPSInspector); reports {
-			checks = append(checks, Check{"fips-mode", "the host's FIPS mode", "unverified", "unverified", HostScope, ""})
-		}
+	checks := []Check{
+		unverified("host", familyRequirement, HostScope),
+		unverified("installed-host", "verified local identity", HostScope),
+	}
+	if _, reports := host.(FIPSInspector); reports {
+		checks = append(checks, unverified("fips-mode", "the host's FIPS mode", HostScope))
 	}
 	baseline, _ := BaselineHostRequirements("")
 	checks = append(checks,
@@ -341,7 +336,7 @@ func (s Service) settleHost(ctx context.Context, current *inspection, settle fun
 // fipsEnabled is informational (D108 as D152.3 amends it).
 const fipsEnabled = "enabled; the controller runtime's TLS follows the host's crypto policy, while Bootwright itself stays outside this host's FIPS-validated modules"
 
-func (s Service) settleRuntime(ctx context.Context, current *inspection, settle func(Check), start func(string, string)) error {
+func (s Service) settleRuntime(ctx context.Context, current *inspection, settle func(Check), start func(string, string), planWheels bool) error {
 	start("python-runtime", "selecting the Python interpreter")
 	lock, required := s.ports.Lock, runtimeRequirement(s.ports.Lock)
 	preferred := ""
@@ -379,14 +374,14 @@ func (s Service) settleRuntime(ctx context.Context, current *inspection, settle 
 		settle(unverified("python-runtime", required, HostScope))
 		return err
 	}
-	if current.interpreter.Path != "" && !current.dryRun && current.view.Foreign == "" {
+	if current.interpreter.Path != "" && current.view.Foreign == "" {
 		runtime, ready, err := s.ports.Python.Inspect(ctx, current.interpreter)
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 		current.runtime, current.runtimeReady = runtime, ready && err == nil
 	}
-	if !current.runtimeReady {
+	if planWheels && !current.runtimeReady {
 		if err = s.settleWheels(ctx, current); err != nil {
 			settle(unverified("python-runtime", required, HostScope))
 			return err
@@ -416,8 +411,6 @@ func (i *inspection) runtimeCheck(required string) Check {
 	switch {
 	case interpreter.Path == "":
 		check.Observed = "no locked interpreter installed; setup installs " + i.python
-	case i.dryRun:
-		check.Observed, check.Status = "Python "+interpreter.Version+" ("+interpreter.Path+"); runtime not verified without privilege", "unverified"
 	case i.runtimeReady:
 		check.Observed, check.Status = "Python "+interpreter.Version+" ("+interpreter.Path+"), ansible-core "+i.runtime.AnsibleCore, "ready"
 	default:

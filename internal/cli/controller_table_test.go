@@ -41,21 +41,18 @@ func TestAReadySetupStreamedItsChecksAndEndsWithTheTable(t *testing.T) {
 	}
 }
 
-// A not-ready controller check shows the table with what is missing, keeps the host
-// check that is not ready and plans nothing.
-func TestANotReadyControllerCheckShowsTheTableAndNoPlan(t *testing.T) {
+func TestANotReadyControllerCheckShowsFindingsWithoutAPlan(t *testing.T) {
 	report := tableReport("not-ready")
-	report.DryRun = true
 	report.Table.Packages = "missing podman"
 	report.Table.Runtime = "Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5 — not prepared"
 	report.Next = "bootwright install"
-	got := runControllerResult(t, report, diagnostics.NewFailureWithRemediation("preflight.failed", "required controller prerequisites are not ready", "", "run bootwright install"), "install", "--dry-run")
-	for _, want := range []string{"    Packages  missing podman\n", "    Outcome  not-ready (dry run)\n", "[FAIL]   Controller runtime"} {
+	got := runControllerResult(t, report, diagnostics.NewFailureWithRemediation("preflight.failed", "required controller prerequisites are not ready", "", "run bootwright install"), "install", "--check")
+	for _, want := range []string{"Controller readiness", "    Outcome  not-ready\n", "[FAIL]   Controller runtime", "Next     bootwright install"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("result %q lacks %q", got, want)
 		}
 	}
-	for _, unwanted := range []string{"Planned changes", "Nothing to do.", "[OK]"} {
+	for _, unwanted := range []string{"Planned changes", "Nothing to do.", "missing podman"} {
 		if strings.Contains(got, unwanted) {
 			t.Fatalf("result %q holds %q", got, unwanted)
 		}

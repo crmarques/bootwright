@@ -28,7 +28,7 @@ func controllerReport(outcome string, dryRun bool) *prerequisites.Report {
 // prepare and inspect what every context shares, so each refuses an explicit
 // --context.
 func TestControllerReportsAndExplicitContextDispatch(t *testing.T) {
-	for _, command := range [][]string{{"install"}, {"install", "--dry-run"}} {
+	for _, command := range [][]string{{"install"}, {"install", "--dry-run"}, {"install", "--check"}} {
 		for _, flag := range []string{"--context=", "--context=example"} {
 			args := append(append([]string{}, command...), flag)
 			_, out, errOut, record := runRecorded(args)
@@ -36,10 +36,13 @@ func TestControllerReportsAndExplicitContextDispatch(t *testing.T) {
 				t.Fatal(args, out, errOut)
 			}
 		}
-		dryRun := len(command) == 2
+		dryRun := len(command) == 2 && command[1] == "--dry-run"
+		check := len(command) == 2 && command[1] == "--check"
 		outcome := "unchanged"
 		if dryRun {
 			outcome = "planned"
+		} else if check {
+			outcome = "ready"
 		}
 		report := controllerReport(outcome, false)
 		report.DryRun = dryRun
@@ -51,8 +54,12 @@ func TestControllerReportsAndExplicitContextDispatch(t *testing.T) {
 		}
 		switch request := record.request.(type) {
 		case prerequisites.SetupRequest:
-			if request.DryRun != dryRun || !request.Verify {
+			if check || request.DryRun != dryRun {
 				t.Fatal(request)
+			}
+		case nil:
+			if !check || record.path != "install --check" {
+				t.Fatal("unexpected dispatch", record)
 			}
 		default:
 			t.Fatal("unexpected request", record.request)
@@ -63,7 +70,7 @@ func TestControllerReportsAndExplicitContextDispatch(t *testing.T) {
 func TestControllerNegativeReportPreservesStreamsAndSafeDiagnostics(t *testing.T) {
 	record := &dispatchRecord{result: commandResult{controller: controllerReport("not-ready", false)}, err: diagnostics.NewFailure("controller.prerequisites", "required prerequisites are missing", "")}
 	var out, errOut bytes.Buffer
-	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"install", "--dry-run"})
+	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"install", "--check"})
 	if code != 1 || !strings.Contains(out.String(), "Outcome  not-ready") || !strings.Contains(errOut.String(), "controller.prerequisites") {
 		t.Fatal(code, out.String(), errOut.String())
 	}
@@ -571,5 +578,12 @@ func TestControllerSuppressedProgressStillPresentsChecks(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "Checks") || !strings.Contains(out.String(), "Controller runtime") {
 		t.Fatalf("suppressed final checks = %q", out.String())
+	}
+}
+
+func TestInstallRejectsBothReadOnlyModesBeforeDispatch(t *testing.T) {
+	code, out, errOut, record := runRecorded([]string{"install", "--dry-run", "--check"})
+	if code != 2 || out != "" || !strings.Contains(errOut, "--dry-run conflicts with --check") || record.calls != 0 {
+		t.Fatal(code, out, errOut, record.calls)
 	}
 }

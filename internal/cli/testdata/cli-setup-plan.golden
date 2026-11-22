@@ -2,23 +2,14 @@
 
     Scope     baseline
     Platform  fedora 43/amd64
-    Route     direct
-
-  Checks
-  [OK]        Host                 fedora 43/amd64
-  [UNKNOWN]   Controller runtime   required Python 3.14, 3.13, 3.12 with ansible-core 2.21.5;
-                                   observed Python 3.14.8 (/usr/bin/python3.14); runtime not
-                                   verified without privilege
-  [FAIL]      Host packages        required openssh-clients, podman; observed missing podman
-  [UNKNOWN]   Setup state          required complete; observed unverified
 
   Host package requirements
-    podman
+    openssh-clients
 
   Planned changes
-    ○ Install host packages with dnf: podman
-    ○ Verify or prepare the controller runtime: Python 3.14 at /usr/bin/python3.14,
-      ansible-core 2.21.5: 1 of 2 wheels to copy from this executable (2.4 MB), 1 cached
+    ○ Install host packages with dnf: openssh-clients
+    ○ Prepare the controller runtime: Python 3.14 at /usr/bin/python3.14, ansible-core 2.21.5:
+      1 of 2 wheels to copy from this executable (2.4 MB), 1 cached
 
     Outcome  planned (dry run)
     Next     bootwright install

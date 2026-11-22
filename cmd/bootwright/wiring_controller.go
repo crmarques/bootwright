@@ -1,7 +1,6 @@
 package main
 
 import (
-	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/ansiblelocal"
 	"github.com/crmarques/bootwright/internal/controller/bundlelocal"
@@ -95,7 +94,7 @@ func runtimeLock(lock runtimelock.Lock) *prerequisites.RuntimeLock {
 	return &value
 }
 
-func wireController(deps controllerDependencies, compiler prerequisites.Compiler, confirmer prerequisites.Confirmer, route controller.Route) cli.ControllerService {
+func wireController(deps controllerDependencies, compiler prerequisites.Compiler, confirmer prerequisites.Confirmer, route controller.Route) prerequisites.Service {
 	ports := prerequisites.Ports{Setup: deps.Setup, Python: deps.Python, Owned: deps.Owned}
 	if deps.Lock != nil {
 		ports.Lock = *deps.Lock

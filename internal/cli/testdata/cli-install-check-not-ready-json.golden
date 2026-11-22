@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "install",
+  "ok": false,
+  "exitCode": 1,
+  "result": {
+    "outcome": "not-ready",
+    "platform": "fedora 43/amd64",
+    "checks": [
+      {
+        "id": "host",
+        "required": "qualified host",
+        "observed": "fedora 43/amd64",
+        "status": "ready",
+        "scope": ""
+      },
+      {
+        "id": "host-packages",
+        "required": "openssh-clients",
+        "observed": "missing openssh-clients",
+        "status": "not-ready",
+        "scope": "host"
+      },
+      {
+        "id": "setup-state",
+        "required": "complete",
+        "observed": "missing",
+        "status": "not-ready",
+        "scope": "host"
+      }
+    ],
+    "next": "bootwright install"
+  },
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "preflight.failed",
+      "message": "required host prerequisites are not ready",
+      "remediation": "run bootwright install"
+    }
+  ],
+  "logs": []
+}

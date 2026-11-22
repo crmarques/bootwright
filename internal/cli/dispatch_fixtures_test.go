@@ -177,8 +177,8 @@ func (s desiredStateSpy) RenderEffective(ctx context.Context, request compilatio
 
 type controllerSpy struct{ record *dispatchRecord }
 
-func (s controllerSpy) Check(ctx context.Context, request prerequisites.CheckRequest) (*prerequisites.Report, error) {
-	return s.record.result.controller, s.record.called(ctx, "install --dry-run", request)
+func (s controllerSpy) CheckHost(ctx context.Context) (*prerequisites.Report, error) {
+	return s.record.result.controller, s.record.called(ctx, "install --check", nil)
 }
 
 func (s controllerSpy) Setup(ctx context.Context, request prerequisites.SetupRequest) (*prerequisites.Report, error) {

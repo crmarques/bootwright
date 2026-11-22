@@ -21,7 +21,7 @@ func TestANotReadyControllerCheckOffersTheCommandItsServiceDecided(t *testing.T)
 		report.Checks[0].Status, report.Checks[0].Observed, report.Checks[0].Scope = "ready", "qualified", prerequisites.HostScope
 		record := &dispatchRecord{result: commandResult{controller: report}, err: diagnostics.NewFailureWithRemediation("preflight.failed", "required controller prerequisites are not ready", "", "run "+next)}
 		var out, errOut bytes.Buffer
-		code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"install", "--dry-run"})
+		code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"install", "--check"})
 		if code != 1 || !strings.Contains(out.String(), "    Outcome  not-ready\n    Next     "+next+"\n") {
 			t.Errorf("next %q: exit %d, out %q", next, code, out.String())
 		}

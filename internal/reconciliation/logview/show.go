@@ -161,7 +161,7 @@ func (s Service) openStream(ctx context.Context, selection Selection) (Stream, s
 		}
 		stream, found, err := s.workspace.OpenSetup(ctx, setup)
 		if err == nil && !found {
-			err = notFound("this host retains no install output"+named(setup), "the log root keeps the newest 8 controller installs' output; run bootwright install --dry-run to see the host's install")
+			err = notFound("this host retains no install output"+named(setup), "the log root keeps the newest 8 controller installs' output; run bootwright install --check to verify the host's installation")
 		}
 		return stream, "", err
 	}

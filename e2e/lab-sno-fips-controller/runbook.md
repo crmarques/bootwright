@@ -329,7 +329,7 @@ hash -r
 declare -p CTX_FIPS RUN_DIR PROFILE MANIFESTS BOOTWRIGHT_BIN PATH > "$RUN_DIR/controller-env.sh"
 bootwright version
 bootwright install --yes
-bootwright install --dry-run                     # the FIPS mode check reports 1
+bootwright install --check                       # the FIPS mode check reports 1
 bootwright validate --input-dir ~/fips
 bootwright context init --name "$CTX_FIPS" --input-dir ~/fips
 bootwright secret set --context "$CTX_FIPS" --name openshift-pull-secret --value-file ~/openshift-pull-secret --yes
@@ -995,7 +995,7 @@ read -r -p 'Private host run directory: ' RUN_DIR
 source "$RUN_DIR/host-env.sh"
 sudo -v
 sha256sum -c "$RUN_DIR/bootwright.sha256"
-bootwright install --dry-run
+bootwright install --check
 ip -4 route get 1.1.1.1
 bootwright machine list --context "$CTX_BOOT" --power-status
 ```

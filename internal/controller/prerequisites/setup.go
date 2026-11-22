@@ -116,12 +116,8 @@ func (i inspection) runtimeAction() string {
 			size += wheel.Size
 		}
 	}
-	verb := "Prepare"
-	if i.dryRun {
-		verb = "Verify or prepare"
-	}
-	return fmt.Sprintf("%s the controller runtime: %s, ansible-core %s: %d of %d wheels to copy from this executable (%.1f MB), %d cached",
-		verb, interpreter, i.ansibleCore, download, len(i.wheels), float64(size)/1e6, cached)
+	return fmt.Sprintf("Prepare the controller runtime: %s, ansible-core %s: %d of %d wheels to copy from this executable (%.1f MB), %d cached",
+		interpreter, i.ansibleCore, download, len(i.wheels), float64(size)/1e6, cached)
 }
 
 func (i inspection) steps() []string {
@@ -145,7 +141,7 @@ func (i inspection) planDigest(lock RuntimeLock) string {
 func (s Service) execute(ctx context.Context, approved inspection) (*Report, error) {
 	current := approved
 	err := s.ports.Setup.MutateSetup(ctx, func(tx SetupTransaction) error {
-		fresh, err := s.inspect(ctx, tx.View(), StorageView{}, "", false)
+		fresh, err := s.inspect(ctx, tx.View(), StorageView{}, "", true)
 		if err != nil {
 			return err
 		}

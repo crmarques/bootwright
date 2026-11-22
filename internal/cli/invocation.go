@@ -88,8 +88,7 @@ func unavailableSelection(path string, flags *pflag.FlagSet) string {
 // contextFreeAcquisition decides from an admitted invocation's parsed flags
 // whether it acquires, or previews acquisition, before any context exists. One
 // command path can hold both shapes, so the path alone never decides: install
-// selects no context and always does, a controller preflight does only while
-// its final --context is empty, and a media import only from a URL.
+// acquires only during execution, and a media import only from a URL.
 func contextFreeAcquisition(path string, flags *pflag.FlagSet) bool {
 	ambient := specFor(path).classify.ambient
 	return ambient != nil && ambient(flags)
@@ -103,7 +102,9 @@ func hasInputDir(flags *pflag.FlagSet) bool { return stringValue(flags, "input-d
 
 func dryRunSelected(flags *pflag.FlagSet) bool { return boolValue(flags, "dry-run") }
 
-func installAmbient(flags *pflag.FlagSet) bool { return !dryRunSelected(flags) }
+func installAmbient(flags *pflag.FlagSet) bool {
+	return !dryRunSelected(flags) && !boolValue(flags, "check")
+}
 
 func uninstallAmbient(flags *pflag.FlagSet) bool {
 	return !dryRunSelected(flags) && !boolValue(flags, "keep-packages") && !boolValue(flags, "discard-unreadable")

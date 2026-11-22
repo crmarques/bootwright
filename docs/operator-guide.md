@@ -36,7 +36,7 @@ make build
 ./bin/bootwright version
 ./bin/bootwright install --dry-run
 ./bin/bootwright install
-./bin/bootwright install --dry-run
+./bin/bootwright install --check
 ```
 
 `make build` stamps `bin/bootwright` with the commit and source state of the
@@ -108,14 +108,15 @@ package install. Declining the prompt changes nothing. dnf may resolve
 differently between the preview and the install when its metadata refreshes;
 the install's output and the versions setup records are the truth.
 
-A ready host is reported in under a second with the receipt table, which
-names the host, the runtime and where each package came from, and
-`Nothing to do.`, with no network request, confirmation or write;
-`install --dry-run` prints the same table
-([results](../specs/controller.md#results-and-qualification)). A new
-Bootwright build with the same lock, and an operating-system upgrade that keeps
-the interpreter, need no setup at all; a build whose lock changed needs one
-setup, which copies from the executable only the wheels its cache lacks.
+Use `bootwright install --dry-run` to see the steps before installing.
+Use `bootwright install --check` to verify the installation. It lists the
+host checks and exits 1 when any required prerequisite is missing or could
+not be verified. On a ready host, `bootwright install` prints the receipt
+table and `Nothing to do.` without a network request, confirmation or write.
+See [controller setup results](../specs/controller.md#results-and-qualification).
+A new Bootwright build with the same lock and an operating-system upgrade
+that keeps the interpreter need no setup. A build whose lock changed needs
+one setup, which copies from the executable only the wheels its cache lacks.
 
 A setup that installs host packages keeps what dnf printed in a
 [setup run](../specs/cli/output.md#setup-run-output),
@@ -161,8 +162,9 @@ reaches dnf, and a proxy that needs credentials stays unsupported
 `sudo` clears the environment, so an unprivileged invocation forwards the
 variables to its elevated child on the sudo command line; a sudoers rule that
 grants neither `ALL` nor `SETENV` refuses that, and running as root avoids it.
-`bootwright install --dry-run` can elevate to inspect private setup and
-runtime records. It runs no acquisition and reads no proxy variables.
+Both `bootwright install --dry-run` and `bootwright install --check` can
+elevate to inspect private setup and runtime records. They use local reads
+and ignore proxy variables.
 
 #### Destinations to allow
 
@@ -479,10 +481,10 @@ the host's crypto policy, and the runtime carries no OpenSSL of its own;
 Bootwright's own executable stays outside the host's FIPS-validated modules,
 so running it on a FIPS-mode controller claims no FIPS compliance
 ([security](../specs/security.md#the-controller-hosts-attacker-model)).
-`install --dry-run`, like `install`, reports the kernel's FIPS mode as its
+`install --check`, like `install`, reports the kernel's FIPS mode as its
 `FIPS mode` check with that statement; the check never changes readiness,
 except that a FIPS flag that cannot be read as 0 or 1 refuses `install` and
-`install --dry-run` with `controller.unsupported`.
+`install --check` with `controller.unsupported`.
 
 Under the FIPS crypto policy (`update-crypto-policies --show` prints `FIPS`),
 OpenSSH accepts no Ed25519 key. Declare `remoteMachinesAccessKey` and every SSH

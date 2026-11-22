@@ -4,10 +4,30 @@ import (
 	"context"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/spf13/cobra"
 )
 
 func controllerSetupCommand() commandSpec {
-	return available(commandSpec{path: "install", results: []jsonResult{controllerPresentation{}, setupPlanResult{}}, render: renderController(), controllerReport: true, classify: classifyRules{ambient: installAmbient}, example: "--dry-run", contextFree: true, invoke: Services.invokeControllerInstall, short: "Install context-independent controller prerequisites", flags: []flagSpec{dryRunFlag(), confirmationFlag()}, long: "Prepare this host's context-independent controller prerequisites: the baseline host packages, installed through the host's own dnf, and the controller runtime, a venv on the OS Python holding exactly the wheels this build locks and carries, so it downloads no wheel. This command selects no context; the prerequisites a context adds are installed by the controller stage of apply. A ready host makes no request and no change. Otherwise the plan shows dnf's own preview before confirmation. --dry-run verifies host readiness and lists planned changes without calling dnf, and --dry-run --output json or --output yaml also lists every locked wheel's file, URL and SHA-256. Review the plan before confirming; --yes skips ordinary confirmation."})
+	return available(commandSpec{
+		path: "install", results: []jsonResult{controllerPresentation{}, setupPlanResult{}, installCheckResult{}},
+		render: renderController(), controllerReport: true, validate: validateInstall, classify: classifyRules{ambient: installAmbient},
+		example: "--dry-run", contextFree: true, invoke: Services.invokeControllerInstall,
+		short: "Install context-independent controller prerequisites",
+		flags: []flagSpec{
+			boolFlag("dry-run", "Show what install would change without running dnf"),
+			boolFlag("check", "Verify the existing installation and exit 1 if it is not ready"),
+			confirmationFlag(),
+		},
+		long: "Prepare this host's baseline packages and controller Python runtime from the locked wheels carried by this build. This command selects no context. Use --dry-run to show the planned changes, with the locked wheel inventory in JSON or YAML. Use --check to verify host readiness, including the packages, runtime, setup receipt and state root. Both flags use local reads only. A ready host needs no setup. When installation is needed, install shows dnf's own preview before confirmation. --yes skips ordinary confirmation during execution.",
+	})
+}
+
+func validateInstall(command *cobra.Command) string {
+	flags := command.Flags()
+	if dryRunSelected(flags) && boolValue(flags, "check") {
+		return "--dry-run conflicts with --check"
+	}
+	return ""
 }
 
 func controllerRebindCommand() commandSpec {
@@ -30,7 +50,7 @@ func controllerUninstallCommand() commandSpec {
 }
 
 type ControllerService interface {
-	Check(context.Context, prerequisites.CheckRequest) (*prerequisites.Report, error)
+	CheckHost(context.Context) (*prerequisites.Report, error)
 	Setup(context.Context, prerequisites.SetupRequest) (*prerequisites.Report, error)
 	Rebind(context.Context, prerequisites.RebindRequest) (*prerequisites.RebindResult, error)
 	Uninstall(context.Context, prerequisites.UninstallRequest) (*prerequisites.UninstallResult, error)
@@ -40,9 +60,12 @@ func (s Services) invokeControllerInstall(ctx context.Context, values *requestVa
 	if s.Controller == nil {
 		return commandResult{}, errMissingService
 	}
+	if values.boolean("check") {
+		result, err := s.Controller.CheckHost(ctx)
+		return commandResult{controller: result}, err
+	}
 	result, err := invokeResult(ctx, values, prerequisites.SetupRequest{
 		DryRun:           values.boolean("dry-run"),
-		Verify:           true,
 		SkipConfirmation: values.boolean("yes"),
 	}, s.Controller.Setup)
 	return commandResult{controller: result}, err

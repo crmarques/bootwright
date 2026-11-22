@@ -601,7 +601,7 @@ func TestNoLockedInterpreterAddsThePythonABIRequirement(t *testing.T) {
 	if err != nil || !slices.Equal(dry.Dependencies, []string{"python3.14"}) || len(dry.Files) != len(testLock.Files) {
 		t.Fatalf("dry run = %+v, %v", dry, err)
 	}
-	if effects := f.effects(); len(effects) != 0 || f.count("read") != 0 {
+	if effects := f.effects(); len(effects) != 0 || f.count("read") != 1 {
 		t.Fatalf("a dry run ran %v", f.events)
 	}
 	f.events = nil
@@ -703,7 +703,7 @@ func TestVerifiedInstallPreviewChecksTheReceiptWithoutEffects(t *testing.T) {
 			want = "unchanged"
 			f.prepared()
 		}
-		report, err := f.service.Setup(t.Context(), SetupRequest{DryRun: true, Verify: true})
+		report, err := f.service.Setup(t.Context(), SetupRequest{DryRun: true})
 		if err != nil || report.Outcome != want || !report.DryRun || len(report.Files) != len(testLock.Files) {
 			t.Fatalf("verified install preview = %+v (%v)", report, err)
 		}
@@ -713,5 +713,69 @@ func TestVerifiedInstallPreviewChecksTheReceiptWithoutEffects(t *testing.T) {
 		if prepared != (len(report.Actions) == 0) {
 			t.Fatalf("install preview planned the wrong actions: %v", report.Actions)
 		}
+	}
+}
+
+type setupRootInspection struct {
+	noController
+	result StateRootInspection
+}
+
+func (i setupRootInspection) InspectStateRoot(context.Context) (StateRootInspection, error) {
+	return i.result, nil
+}
+
+func TestInstallCheckReportsReadinessWithoutPlanningOrEffects(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		change func(*setupFixture)
+		check  string
+		code   string
+	}{
+		{name: "ready"},
+		{name: "missing package", change: func(f *setupFixture) { delete(f.packages.present, "openssh-clients") }, check: "host-packages", code: "preflight.failed"},
+		{name: "missing interpreter", change: func(f *setupFixture) { f.python.installed = false }, check: "python-runtime", code: "preflight.failed"},
+		{name: "unready runtime", change: func(f *setupFixture) { f.python.ready = false }, check: "python-runtime", code: "preflight.failed"},
+		{name: "missing receipt", change: func(f *setupFixture) { f.store.view = SetupView{} }, check: "setup-state", code: "preflight.failed"},
+		{name: "old receipt", change: func(f *setupFixture) { f.store.view.State.Receipt.Lock = strings.Repeat("2", 64) }, check: "setup-state", code: "preflight.failed"},
+		{name: "interrupted setup", change: func(f *setupFixture) { f.store.view.State.Pending = &PendingSetup{ID: "install-000042"} }, check: "setup-state", code: "preflight.failed"},
+		{name: "unusable root", change: func(f *setupFixture) {
+			f.service.storage = setupRootInspection{result: StateRootInspection{
+				Required: "private state root", Observed: "wrong permissions", Status: "not-ready",
+				Refusal: failure("context.state", "the state root has the wrong permissions", ""),
+			}}
+		}, check: "state-root", code: "context.state"},
+		{name: "unsupported host", change: func(f *setupFixture) { f.host.release.ID = "debian" }, check: "host", code: "controller.unsupported"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			f := newSetupFixture(t)
+			f.prepared()
+			f.service.storage = setupRootInspection{result: StateRootInspection{
+				Required: "private state root", Observed: "qualified", Status: "ready",
+			}}
+			if test.change != nil {
+				test.change(f)
+			}
+			report, err := f.service.CheckHost(t.Context())
+			if codeOf(err) != test.code || report == nil {
+				t.Fatalf("check: %+v, %v", report, err)
+			}
+			if test.check == "" {
+				if err != nil || report.Outcome != "ready" || report.Next != "" || PendingScope(*report) != "" {
+					t.Fatalf("ready check: %+v, %v", report, err)
+				}
+			} else if report.Outcome != "not-ready" || !slices.ContainsFunc(report.Checks, func(c Check) bool {
+				return c.ID == test.check && c.Status == "not-ready"
+			}) {
+				t.Fatalf("expected failing check %s: %+v", test.check, report)
+			}
+			if test.code == "preflight.failed" && report.Next != setupInvocation {
+				t.Fatalf("remedy: %q", report.Next)
+			}
+			if report.DryRun || len(report.Actions) != 0 || len(report.Dependencies) != 0 || len(report.Files) != 0 || report.Preview != nil ||
+				len(f.effects()) != 0 || f.count("plan") != 0 || f.count("confirm") != 0 || f.count("wheels") != 0 {
+				t.Fatalf("check planned setup: %+v with calls %v", report, f.events)
+			}
+		})
 	}
 }

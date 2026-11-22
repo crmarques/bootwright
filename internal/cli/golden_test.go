@@ -592,7 +592,7 @@ func cliGoldens() []cliGolden {
 	noInput := diagnostics.NewFailureWithRemediation("context.input", "context lab has no desired state", "", "import input with bootwright context update --name lab --input-dir <dir>")
 	stateRootRefused := func(r *dispatchRecord) {
 		r.result.controller = setupDryRun(platform)
-		r.result.controller.Route = "direct (no HTTPS_PROXY)"
+		r.result.controller.Outcome = "not-ready"
 		r.result.controller.Next = ""
 		r.result.controller.Checks = append(r.result.controller.Checks, prerequisites.Check{ID: "state-root", Required: "a root:root 0700 directory on a local filesystem", Observed: "a directory owned by root:root with mode 0755", Status: "not-ready", Scope: prerequisites.HostScope})
 		r.err = diagnostics.NewFailureWithRemediation("context.state", "the state root is a directory owned by root:root with mode 0755, but it must be a directory owned by root:root with mode 0700", "",
@@ -625,6 +625,28 @@ func cliGoldens() []cliGolden {
 			r.result.controller = setupDryRun(platform)
 			r.result.controller.Warnings = []diagnostics.Diagnostic{{Severity: "warning", Code: "controller.untested-release", Message: "Fedora 45 is newer than the releases this build was tested on (43, 44); setup checks its floors and continues"}}
 		}},
+		{golden: "cli-install-check-ready", args: "install --check", record: func(r *dispatchRecord) {
+			r.result.controller = &prerequisites.Report{
+				Platform: platform, Outcome: "ready", Checks: []prerequisites.Check{
+					ready("host", "fedora 43/amd64"),
+					ready("fips-mode", "disabled"),
+					ready("host-packages", "openssh-clients"),
+					ready("python-runtime", "Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5"),
+					ready("state-root", "root:root 0700"),
+					ready("setup-state", "complete"),
+				},
+			}
+		}},
+		{golden: "cli-install-check-not-ready-json", args: "install --check --output json", code: 1, record: func(r *dispatchRecord) {
+			r.result.controller = &prerequisites.Report{
+				Platform: platform, Outcome: "not-ready", Next: "bootwright install", Checks: []prerequisites.Check{
+					ready("host", "fedora 43/amd64"),
+					{ID: "host-packages", Required: "openssh-clients", Observed: "missing openssh-clients", Status: "not-ready", Scope: prerequisites.HostScope},
+					{ID: "setup-state", Required: "complete", Observed: "missing", Status: "not-ready", Scope: prerequisites.HostScope},
+				},
+			}
+			r.err = diagnostics.NewFailureWithRemediation("preflight.failed", "required host prerequisites are not ready", "", "run bootwright install")
+		}},
 		{golden: "cli-setup-changed", args: "install --yes", record: func(r *dispatchRecord) {
 			r.result.controller = &prerequisites.Report{
 				Platform: platform, Route: "direct", Outcome: "changed", PlanPresented: true,
@@ -647,8 +669,8 @@ func cliGoldens() []cliGolden {
 				}
 				r.err = diagnostics.NewFailureWithRemediation("controller.install", "install confirmation requires an interactive terminal", "", "review the plan, then repeat bootwright install with --yes")
 			}},
-		// A dry run over a state root this build cannot use reports the row
-		// and the store's refusal of it
+		// A dry run over a state root this build cannot use reports the
+		// refusal along with the plan it could compute
 		// (internal/workspace/contextfs/root_inspection_linux_amd64.go).
 		{golden: "cli-setup-plan-state-root", args: "install --dry-run", code: 1,
 			stderr: "  error  context.state\n" +
@@ -1371,22 +1393,21 @@ func TestEveryAvailableCommandHasAGolden(t *testing.T) {
 	}
 }
 
-// setupDryRun is what setup --dry-run reports on a host missing podman whose
-// interpreter it found but whose runtime and setup record it cannot read.
+// setupDryRun is the plan for a host missing its baseline package and runtime.
 func setupDryRun(platform prerequisites.Platform) *prerequisites.Report {
 	return &prerequisites.Report{
-		Platform: platform, Route: "direct", DryRun: true, Outcome: "planned", Next: "bootwright install",
+		Platform: platform, DryRun: true, Outcome: "planned", Next: "bootwright install",
 		Checks: []prerequisites.Check{
 			{ID: "host", Required: "the Fedora or RHEL family on amd64", Observed: "fedora 43/amd64", Status: "ready", Scope: prerequisites.HostScope},
-			{ID: "python-runtime", Required: "Python 3.14, 3.13, 3.12 with ansible-core 2.21.5", Observed: "Python 3.14.8 (/usr/bin/python3.14); runtime not verified without privilege", Status: "unverified", Scope: prerequisites.HostScope},
-			{ID: "host-packages", Required: "openssh-clients, podman", Observed: "missing podman", Status: "not-ready", Scope: prerequisites.HostScope},
-			{ID: "setup-state", Required: "complete", Observed: "unverified", Status: "unverified", Scope: prerequisites.HostScope},
+			{ID: "python-runtime", Required: "Python 3.14, 3.13, 3.12 with ansible-core 2.21.5", Observed: "Python 3.14.8 (/usr/bin/python3.14); runtime not prepared", Status: "not-ready", Scope: prerequisites.HostScope},
+			{ID: "host-packages", Required: "openssh-clients", Observed: "missing openssh-clients", Status: "not-ready", Scope: prerequisites.HostScope},
+			{ID: "setup-state", Required: "complete", Observed: "missing", Status: "not-ready", Scope: prerequisites.HostScope},
 		},
 		Actions: []string{
-			"Install host packages with dnf: podman",
-			"Verify or prepare the controller runtime: Python 3.14 at /usr/bin/python3.14, ansible-core 2.21.5: 1 of 2 wheels to copy from this executable (2.4 MB), 1 cached",
+			"Install host packages with dnf: openssh-clients",
+			"Prepare the controller runtime: Python 3.14 at /usr/bin/python3.14, ansible-core 2.21.5: 1 of 2 wheels to copy from this executable (2.4 MB), 1 cached",
 		},
-		Dependencies: []string{"podman"},
+		Dependencies: []string{"openssh-clients"},
 		Files: []prerequisites.LockedFile{
 			{ABI: "3.14", Filename: "ansible_core-2.21.5-py3-none-any.whl", URL: "https://files.pythonhosted.org/packages/ansible_core-2.21.5-py3-none-any.whl", SHA256: strings.Repeat("a", 64)},
 			{Filename: "pip-26.0.1-py3-none-any.whl", URL: "https://files.pythonhosted.org/packages/pip-26.0.1-py3-none-any.whl", SHA256: strings.Repeat("b", 64)},

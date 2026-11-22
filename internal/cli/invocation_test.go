@@ -32,6 +32,10 @@ func TestPrivilegeClassificationHasNoInformationOrInvalidEffects(t *testing.T) {
 		{[]string{"render", "effective", "--input-dir", "inputs", "--output-dir", "artifacts"}, false},
 		{[]string{"render", "effective", "--context", "synthetic", "--output-dir", "artifacts", "--sensitive"}, true},
 		{[]string{"install", "--dry-run"}, true},
+		{[]string{"install", "--check"}, true},
+		{[]string{"install", "--check", "--dry-run"}, false},
+		{[]string{"install", "--check", "--yes"}, true},
+		{[]string{"install", "--dry-run", "--yes"}, true},
 		{[]string{"install", "--dry-run", "--context", "lab"}, false},
 		{[]string{"apply", "--dry-run"}, true},
 		{[]string{"apply", "--dry-run", "--stage", "add-ons"}, true},
@@ -106,10 +110,10 @@ func TestOnlyContextFreeAcquisitionConsumesTheInvokingEnvironment(t *testing.T) 
 		flags []string
 		want  routeOutcome
 	}{
-		// Setup selects no context: it acquires, and its dry run previews the
-		// route setup would take.
+		// Install selects no context. Only execution reads the acquisition route.
 		{"install", nil, readsRoute},
 		{"install", []string{"--dry-run"}, ignoresRoute},
+		{"install", []string{"--check"}, ignoresRoute},
 		{"install", []string{"--yes"}, readsRoute},
 		{"install", []string{"--dry-run", "--output", "json"}, ignoresRoute},
 		// The media store is host-wide, so only the source decides: a URL is
