@@ -223,3 +223,31 @@ func TestElevationRefusesAnUnprovenInputLoggingPolicy(t *testing.T) {
 		})
 	}
 }
+
+func TestEnrollmentPasswordsRequireAProvedLocalSudoInputPolicy(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		options     string
+		interactive bool
+		verified    bool
+	}{
+		{"safe", "env_reset", true, true},
+		{"tty input logged", "log_ttyin", true, false},
+		{"input logged", "log_input", true, false},
+		{"unattended", "env_reset", false, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			script := &policyScript{list: func(int) (int, []byte) {
+				return 0, listing(test.options, "", "")
+			}}
+			options := stdinOptions(script, test.interactive, unreadableInput{t})
+			options.SecretStdin = ""
+			options.EnrollmentInput = true
+			code, err := NewSupervisor(options).Run(context.Background(), []string{"machine", "enroll", "--name", "node"})
+			if code != 0 || err != nil || script.child == nil ||
+				slices.Contains(script.child.Arguments, VerifiedEnrollmentInput) != test.verified {
+				t.Fatalf("code=%d verified=%t err=%v", code, test.verified, err)
+			}
+		})
+	}
+}

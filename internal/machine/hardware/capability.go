@@ -14,9 +14,19 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
-type Capability struct{ runner Runner }
+type BootstrapReader func(context.Context, string, machineref.Placement, machineref.Bootstrap, map[string]secrets.Material) ([]string, error)
+
+type Capability struct {
+	runner        Runner
+	readBootstrap BootstrapReader
+}
 
 func New(runner Runner) Capability { return Capability{runner: runner} }
+
+func (c Capability) WithBootstrap(reader BootstrapReader) Capability {
+	c.readBootstrap = reader
+	return c
+}
 
 func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecycle.CapabilityPlan, error) {
 	plan := lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{}}
@@ -31,6 +41,9 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		return plan, err
 	}
 	for _, request := range requests {
+		if input.Preparation != nil && input.Preparation.Kind == machineref.EnrollmentFamily && !slices.Contains(input.Preparation.Targets, request.Identity.Object) {
+			continue
+		}
 		canonical, err := request.Canonical()
 		if err != nil {
 			return plan, err
@@ -154,6 +167,11 @@ func (Capability) Quiescent(context.Context, lifecycle.Probe) (lifecycle.Quiesce
 
 func (Capability) PrecedesController(reconciliation.BlockDefinition) bool { return true }
 
+func (Capability) IndependentOfController(definition reconciliation.BlockDefinition) bool {
+	request, err := DecodeRequest(definition.Request)
+	return err == nil && request.Bootstrap != nil
+}
+
 func (c Capability) run(ctx context.Context, execution lifecycle.Execution, operation string) (lifecycle.RunResult, Request, error) {
 	if err := ctx.Err(); err != nil {
 		return lifecycle.RunResult{}, Request{}, err
@@ -164,6 +182,9 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 	}
 	if execution.Block.Kind != Kind || execution.Block.Object != request.Identity.Object {
 		return lifecycle.RunResult{}, request, hardwareRequestMismatch.Fail("the machine hardware request does not match its frozen block identity", "")
+	}
+	if request.Bootstrap != nil && (operation == "apply" || execution.Resolution != 0 && operation == "observe") {
+		return c.readWithBootstrap(ctx, execution, request)
 	}
 	if c.runner == nil {
 		return lifecycle.RunResult{}, request, hardwareUnconfigured.Fail("the machine hardware adapter is not configured", "")
@@ -181,6 +202,18 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 		Implementation: Implementation, Operation: operation, Variable: variable, Canonical: canonical, Placement: placement,
 	}))
 	return result, request, err
+}
+
+func (c Capability) readWithBootstrap(ctx context.Context, e lifecycle.Execution, request Request) (lifecycle.RunResult, Request, error) {
+	if c.readBootstrap == nil {
+		return lifecycle.RunResult{}, request, hardwareUnconfigured.Fail("the bootstrap hardware reader is not configured", "")
+	}
+	addresses, err := c.readBootstrap(ctx, e.Context, request.Placement, *request.Bootstrap, e.Material)
+	if err != nil {
+		return lifecycle.RunResult{}, request, err
+	}
+	data, err := json.Marshal(Evidence{Addresses: addresses, Postcondition: true, Request: e.Block.RequestDigest, Version: EvidenceVersion})
+	return lifecycle.RunResult{Outcome: reconciliation.OutcomeUnchanged, Evidence: data}, request, err
 }
 
 func (Capability) ProvedClaim(contextName string, block reconciliation.Block, evidence json.RawMessage) (infrastructureservices.HostReservation, bool, error) {

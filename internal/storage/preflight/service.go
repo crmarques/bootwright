@@ -228,9 +228,14 @@ func (s Service) guestChecks(ctx context.Context, selected string, catalog api.C
 	check := Check{ID: "host.prerequisites", Target: name, Status: capacity.Unknown, Next: "prove this Machine's installed OS and prerequisites before Ceph enrollment"}
 	state, recorded := owned["Machine/"+name]
 	provided := api.MachineProvided(host)
+	_, enrollment := machine.BootstrapOf(host)
 	switch {
 	case !found:
 		check.Reason = "the declared Machine is missing"
+	case enrollment && s.Ownership != nil && (!recorded || !state.Realized()):
+		check.Status = capacity.Pending
+		check.Reason = "the Machine's lifecycle login has not been proved"
+		check.Next = "run bootwright machine enroll --context " + selected + " --name " + name
 	case !provided && s.Ownership != nil && (!recorded || state.Verb == machine.VerbApply && state.State == machine.BlockPending):
 		check.Status = capacity.Pending
 		check.Reason = "the Machine has not been installed"

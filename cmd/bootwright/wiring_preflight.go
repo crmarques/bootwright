@@ -5,12 +5,15 @@ import (
 	"context"
 	"errors"
 	"io"
+	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	containerpreflight "github.com/crmarques/bootwright/internal/containercluster/preflight"
 	containerpreflightlocal "github.com/crmarques/bootwright/internal/containercluster/preflightlocal"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/machine"
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
+	"github.com/crmarques/bootwright/internal/machine/account"
 	"github.com/crmarques/bootwright/internal/machine/inventory"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/nativeexec"
@@ -18,6 +21,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/storage/preflight"
 	"github.com/crmarques/bootwright/internal/storage/preflightlocal"
+	"github.com/crmarques/bootwright/internal/substrate"
 	"github.com/crmarques/bootwright/internal/substrate/capacity"
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
 	"github.com/crmarques/bootwright/internal/trust"
@@ -32,8 +36,30 @@ func libvirtCapacityAdmission(checker capacity.CapacityChecker) lifecycle.ApplyA
 		checker = capacity.Budget{Observer: preflightlocal.Observer{}}
 	}
 	return func(ctx context.Context, contextName string, catalog api.Catalog, owned map[string]lifecycle.ObjectOwnership, starting []reconciliation.Block) error {
+		if err := requireCapacityLogin(contextName, catalog, starting); err != nil {
+			return err
+		}
 		return libvirt.AdmitCapacity(ctx, contextName, catalog, owned, starting, checker, installation.CapacityWrites(installation.FrozenSizes(starting)))
 	}
+}
+
+func requireCapacityLogin(contextName string, catalog api.Catalog, starting []reconciliation.Block) error {
+	for _, block := range starting {
+		if block.Implementation != libvirt.MachineImplementation {
+			continue
+		}
+		guest, _ := catalog.Find(api.Machine, block.Object)
+		provider, _ := catalog.Find(api.InfraProvider, api.MachineProviderRef(guest))
+		host := substrate.HostMachine(provider)
+		if slices.ContainsFunc(starting, func(step reconciliation.Block) bool {
+			return step.Implementation == account.Implementation && step.Object == host
+		}) {
+			return machine.EnrollmentRefused(
+				"Machine/"+host+" needs its managed login before the provider capacity check",
+				"run bootwright machine enroll --context "+contextName+" --name "+host+" before allocating its guests")
+		}
+	}
+	return nil
 }
 
 func preflightWrites(deps serviceDependencies) capacity.WriteProjector {
@@ -72,7 +98,7 @@ func (r remoteCommands) Run(ctx context.Context, contextName, machine string, ar
 	capture := nativeexec.Refusing(cmp.Or(max(bound, 0), preflightlocal.MaxOutput))
 	client := sessionClient(r.deps.Home, r.deps.Owner, r.deps.Files, r.deps.CopyAccount)
 	sessions := machineaccess.New(lifecycleAccessState{effective: effective}, currentSelection(r.deps.Selection), machineaccess.Options{
-		Lender: *r.reconciler, Ownership: machineOwnership{reconciler: *r.reconciler}, Evidence: machineHostKeys{reconciler: *r.reconciler}, Trust: r.deps.Trust, Launcher: client,
+		InvokingUser: invokingSSHUser(r.deps.CopyAccount), Lender: *r.reconciler, Ownership: machineOwnership{reconciler: *r.reconciler}, Evidence: machineHostKeys{reconciler: *r.reconciler}, Trust: r.deps.Trust, Launcher: client,
 		Streams: machineaccess.Streams{Out: capture, Err: io.Discard},
 	})
 	result, err := sessions.Exec(ctx, machineaccess.ExecRequest{ContextName: contextName, Names: []string{machine}, Command: argv})
@@ -94,7 +120,7 @@ func (r remoteCommands) Run(ctx context.Context, contextName, machine string, ar
 }
 
 func preflightCommands(state inventory.EffectiveState, reconciler lifecycle.Service, deps serviceDependencies) preflight.Commands {
-	base := machineaccess.Options{Lender: reconciler, Ownership: machineOwnership{reconciler: reconciler}, Evidence: machineHostKeys{reconciler: reconciler}, Trust: deps.Trust}
+	base := machineaccess.Options{InvokingUser: invokingSSHUser(deps.CopyAccount), Lender: reconciler, Ownership: machineOwnership{reconciler: reconciler}, Evidence: machineHostKeys{reconciler: reconciler}, Trust: deps.Trust}
 	return preflightReads(state, currentSelection(deps.Selection), base, func() preflightClient {
 		return sessionClient(deps.Home, deps.Owner, deps.Files, deps.CopyAccount)
 	})

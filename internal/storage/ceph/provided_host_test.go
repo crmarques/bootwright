@@ -368,3 +368,30 @@ func TestCephAdmissionChecksTheProvidedTiebreakerPinAndItsFIPSPolicy(t *testing.
 		})
 	}
 }
+
+func TestManagedTiebreakerUsesTheLifecycleUserAndSeparateClusterKey(t *testing.T) {
+	configure := func(shared bool) func(api.Value, api.Value) (api.Value, api.Value) {
+		return func(host, cluster api.Value) (api.Value, api.Value) {
+			key := "arbiter-admin"
+			if shared {
+				key = cluster.Get("cephadm", "clusterSSH", "keyRef").Text()
+			}
+			login := requestMap("user", "operator", "privateKeyRef", key, "bootstrap", api.MapValue())
+			return host.WithPath(api.StringValue("human"), "access", "ssh", "user").WithPath(login, "access", "lifecycle"), cluster
+		}
+	}
+	catalog, cluster := tiebreakerCatalog(configure(false))
+	r, err := boundTiebreaker(catalog, cluster)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tie := tieHost(t, r)
+	if tie.User != "operator" || tie.SSHKeyRef != "fleet-key" || EnrollmentClusterKey(catalog, "tie") != r.ClusterKeyRef ||
+		EnrollmentClusterKey(catalog, "another-machine") != "" {
+		t.Fatalf("provided tiebreaker fleet access is incorrect: %+v", tie)
+	}
+	catalog, cluster = tiebreakerCatalog(configure(true))
+	if _, err := boundTiebreaker(catalog, cluster); err == nil {
+		t.Fatal("the cluster key was admitted as a root-equivalent lifecycle key")
+	}
+}

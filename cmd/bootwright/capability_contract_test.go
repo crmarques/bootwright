@@ -44,6 +44,7 @@ import (
 	"github.com/crmarques/bootwright/internal/infrastructureservices/ntpserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/proxy"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/registry"
+	"github.com/crmarques/bootwright/internal/machine/account"
 	"github.com/crmarques/bootwright/internal/machine/hardware"
 	"github.com/crmarques/bootwright/internal/managedos/diskdiscovery"
 	"github.com/crmarques/bootwright/internal/managedos/hostfirewall"
@@ -241,6 +242,7 @@ func contractRows() []contractRow {
 		{kind: mirrorfill.Kind, implementation: mirrorfill.FilesImplementation, example: "lab-sno-mirror-host", presence: contractMirrorFilesPresence,
 			noEffect: map[string]any{"version": mirrorfill.FilesEvidenceVersion}, absence: map[string]any{"version": mirrorfill.FilesEvidenceVersion},
 			drift: map[string]any{"files": []any{map[string]any{"path": "foreign/v1/file", "verified": true}}}},
+		{kind: account.Kind, implementation: account.Implementation, example: "lab-rhel+enrollment"},
 		{kind: hardware.Kind, implementation: hardware.Implementation, example: "lab-rhel-mirror-host", presence: contractHardwarePresence,
 			retains: true, indivisible: true, absence: map[string]any{"addresses": []any{}, "version": hardware.EvidenceVersion},
 			noEffectUnreported:     "specs/substrates.md, Physical machine realization: the hardware read changes nothing, so its evidence never reports an effect it had",
@@ -268,6 +270,7 @@ var contractOverlays = map[string][2]string{
 	"lab-baremetal+discovery":            {"lab-baremetal", filepath.Join("testdata", "capability-overlays", "disk-discovery")},
 	"lab-baremetal+erase":                {"lab-baremetal", filepath.Join("testdata", "capability-overlays", "physical-erase")},
 	"lab-rhel+firewall":                  {"lab-rhel", filepath.Join("testdata", "capability-overlays", "host-firewall")},
+	"lab-rhel+enrollment":                {"lab-rhel", filepath.Join("testdata", "capability-overlays", "machine-enrollment")},
 	"lab-rhel+registry":                  {"lab-rhel", filepath.Join("testdata", "capability-overlays", "managed-registry")},
 	"libvirt-3-nodes-ceph+smb":           {"libvirt-3-nodes-ceph", filepath.Join("testdata", "capability-overlays", "ceph-smb")},
 	"libvirt-3-nodes-ceph-object+user":   {"libvirt-3-nodes-ceph-object", filepath.Join("testdata", "capability-overlays", "ceph-object-user")},
@@ -345,7 +348,7 @@ var contractFailedUnit = map[string]any{"unit": "failed"}
 // TestBoundPlaybooksCoverExactlyTheOfferedCapabilities exempts it, so there is
 // no runner request of its to hold to the contract.
 func contractPlanningOnly(row contractRow) bool {
-	return row.kind == clients.Kind && row.implementation == clients.Implementation
+	return row.implementation == clients.Implementation || row.implementation == account.Implementation
 }
 
 // contractKnownDeviations names every contract property a binding fails today,

@@ -37,7 +37,15 @@ func bindProvidedHost(r *Request, c api.Catalog, m api.Object, node api.Value, t
 			"set Environment spec.remoteMachinesAccessKey.keyRef to an sshKeyPair Secret and authorize its public half for user "+r.ClusterSSHUser+" on Machine/"+m.Name())
 	}
 	ssh, ok := machine.SSH(m)
-	if !ok || ssh.User != r.ClusterSSHUser || ssh.KnownHostsRef == "" || ssh.PrivateKeyRef == fleet || ssh.PrivateKeyRef == r.ClusterKeyRef {
+	user := ssh.User
+	if _, enrolled := machine.BootstrapOf(m); enrolled {
+		login := m.Spec().Get("access", "lifecycle")
+		user = login.Get("user").Text()
+		if login.Get("privateKeyRef").Text() == r.ClusterKeyRef {
+			return cephUnsupportedTopology.Fail("the managed tiebreaker login cannot use the native Ceph cluster SSH key", "declare a dedicated lifecycle key on Machine/"+m.Name())
+		}
+	}
+	if !ok || user != r.ClusterSSHUser || ssh.KnownHostsRef == "" || ssh.PrivateKeyRef == fleet || ssh.PrivateKeyRef == r.ClusterKeyRef {
 		return cephUnsupportedTopology.Fail("the provided tiebreaker Machine/"+m.Name()+" needs SSH access as the cluster SSH user with a pinned host key, and Ceph dials it with the fleet key, which the Machine never names",
 			"declare access.ssh on Machine/"+m.Name()+" with user "+r.ClusterSSHUser+" and knownHostsRef pinning its host key, keep its auth for operator sessions only (operatorIdentity or a key of its own), and authorize the public half of Secret "+fleet+" (bootwright secret show --name "+fleet+" --part public-key) for user "+r.ClusterSSHUser+" on that host")
 	}
@@ -56,7 +64,7 @@ func bindProvidedHost(r *Request, c api.Catalog, m api.Object, node api.Value, t
 			return cephUnsupportedTopology.Fail("spec.cephadm.addressRef resolves separately from provided Machine "+m.Name()+" fleet SSH", "select an addressRef resolving to the Machine access.ssh.addressRef address; separate orchestration addresses are not implemented")
 		}
 	}
-	r.Hosts = append(r.Hosts, Host{Name: name, Machine: m.Name(), Address: ssh.Address, User: ssh.User, Port: ssh.Port, Devices: []Device{}, Labels: node.Get("labels").Strings(),
+	r.Hosts = append(r.Hosts, Host{Name: name, Machine: m.Name(), Address: ssh.Address, User: user, Port: ssh.Port, Devices: []Device{}, Labels: node.Get("labels").Strings(),
 		Location: map[string]string{}, SSHKeyRef: fleet, KnownHostsRef: ssh.KnownHostsRef, Provided: true})
 	return nil
 }
@@ -148,4 +156,17 @@ func fipsNotEnabled(machineName string) error {
 	}
 	return failure("api.value", host+" does not report FIPS mode: /proc/sys/crypto/fips_enabled must read exactly "+FIPSKernelEnabled+" and /etc/crypto-policies/state/current exactly "+FIPSPolicy,
 		"enable FIPS mode on "+host+" (fips-mode-setup --enable at installation, then reboot), then apply again; Bootwright never switches a host's FIPS mode")
+}
+
+func EnrollmentClusterKey(catalog api.Catalog, machineName string) string {
+	for _, cluster := range catalog.OfKind(api.CephCluster) {
+		topology := cluster.Spec().Get("topology")
+		tiebreaker := topology.Get("stretch", "tiebreaker", "node").Text()
+		for _, node := range topology.Get("nodes").Items() {
+			if tiebreaker != "" && node.Get("name").Text() == tiebreaker && node.Get("machineRef").Text() == machineName {
+				return cluster.Spec().Get("cephadm", "clusterSSH", "keyRef").Text()
+			}
+		}
+	}
+	return ""
 }

@@ -28,6 +28,8 @@ func ExitCode(_ context.Context, fallback int) int { return fallback }
 
 func SupervisedChild() bool { return false }
 
+func DirectRootInput() bool { return false }
+
 func ConfirmElevatedChild([]string) *diagnostics.Diagnostic { return nil }
 
 func ConfirmSudoEnvironment() *diagnostics.Diagnostic { return nil }

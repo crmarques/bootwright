@@ -55,6 +55,11 @@ func delegatedCommand(classification cli.InvocationClass) bool {
 }
 
 func (b privilegeBoundary) run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	verifiedInput := len(args) > 0 && args[0] == privilege.VerifiedEnrollmentInput &&
+		b.euid() == 0 && privilege.SupervisedChild()
+	if verifiedInput {
+		args = args[1:]
+	}
 	delegated := len(args) > 0 && args[0] == delegatedSessionEntry
 	if delegated {
 		args = args[1:]
@@ -106,6 +111,10 @@ func (b privilegeBoundary) run(ctx context.Context, args []string, stdout, stder
 	}
 	process, hooks := interactiveProcess(classification, args, stdout, stderr, route)
 	process.Delegated = delegated
+	sudoCommand, _ := b.lookupEnv("SUDO_COMMAND")
+	if !delegated && classification.EnrollmentInput && (verifiedInput || sudoCommand == "" && privilege.DirectRootInput()) {
+		process.EnrollmentTerminal = process.SecretTerminal
+	}
 	services, release := wireServices(process)
 	defer release()
 	return runServices(ctx, args, stdout, stderr, services, hooks)
@@ -131,7 +140,7 @@ func elevationInvocation(classification cli.InvocationClass, args []string, rout
 	invocation := privilege.Invocation{
 		JSON: classification.JSON, Arguments: cli.CarryPresentation(args, cli.PresentationOptions{NoColor: noColor, Color: "auto"}), Route: route, Terminal: os.Getenv("TERM"),
 		Input: os.Stdin, Output: stdout, Error: stderr, InputTerminal: err == nil && terminal,
-		Session: sessionCommand(classification), SecretStdin: classification.SecretStdin,
+		Session: sessionCommand(classification), SecretStdin: classification.SecretStdin, EnrollmentInput: classification.EnrollmentInput,
 	}
 	if classification.URLStdin {
 		invocation.SecretStdin = privilege.MediaURLInput

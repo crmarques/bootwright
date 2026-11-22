@@ -16,6 +16,9 @@ func main() {
 }
 
 func processMain() int {
+	if handled, code := sshlocal.ServePassword(os.Args[1:]); handled {
+		return code
+	}
 	if handled, code := sshlocal.ServeOperator(os.Args[1:]); handled {
 		return code
 	}

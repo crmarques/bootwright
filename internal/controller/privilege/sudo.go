@@ -41,6 +41,8 @@ func (Timer) Wait(ctx context.Context, duration time.Duration) error {
 	}
 }
 
+const VerifiedEnrollmentInput = "__bootwright_verified_enrollment_input"
+
 type SudoOptions struct {
 	Executable, Sudo string
 	Executor         Executor
@@ -60,9 +62,10 @@ type SudoOptions struct {
 	Assignments []string
 	// SecretStdin names the Secret whose value the elevated command reads
 	// from standard input, which sudo's I/O log would record.
-	SecretStdin   string
-	Input         io.Reader
-	Output, Error io.Writer
+	SecretStdin     string
+	EnrollmentInput bool
+	Input           io.Reader
+	Output, Error   io.Writer
 }
 
 // InputLogged refuses a standard-input Secret before sudo starts the child,
@@ -128,7 +131,7 @@ func (s *Supervisor) Run(ctx context.Context, args []string) (int, error) {
 		return 1, err
 	}
 	validated := false
-	if !readable && options.SecretStdin != "" && !options.NonInteractive {
+	if !readable && (options.SecretStdin != "" || options.EnrollmentInput) && !options.NonInteractive {
 		code, err := options.Executor.Run(ctx, Command{Executable: options.Sudo, Arguments: []string{"-u", "#0", "-v"}, Environment: append([]string(nil), environment...), Output: io.Discard, Error: options.Error})
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return 1, ctxErr
@@ -162,6 +165,9 @@ func (s *Supervisor) Run(ctx context.Context, args []string) (int, error) {
 		childArgs = append(childArgs, assignment)
 	}
 	childArgs = append(childArgs, "--", options.Executable)
+	if options.EnrollmentInput && !options.NonInteractive && readable && inputLogging(policy.data) == "" {
+		childArgs = append(childArgs, VerifiedEnrollmentInput)
+	}
 	childArgs = append(childArgs, args...)
 	refreshCtx, stopRefresh := context.WithCancel(ctx)
 	finished := make(chan struct{})

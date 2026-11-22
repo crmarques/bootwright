@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/ansible"
+	"github.com/crmarques/bootwright/internal/machine/account"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/reconciliation/ansiblerunner"
 	"github.com/crmarques/bootwright/internal/storage/ceph"
@@ -49,7 +50,7 @@ func TestBoundPlaybooksCoverExactlyTheOfferedCapabilities(t *testing.T) {
 	for _, offered := range buildCapabilities(systemClock{}, controllerDependencies{}, nil).Bindings() {
 		// The controller stage runs no playbook of its own: it crosses the
 		// installer the Controller context owns.
-		if offered.Implementation == "controller-prerequisites" || offered.Implementation == ceph.PhysicalRetirementImplementation {
+		if offered.Implementation == "controller-prerequisites" || offered.Implementation == ceph.PhysicalRetirementImplementation || offered.Implementation == account.Implementation {
 			continue
 		}
 		if !implementations[offered.Implementation] {

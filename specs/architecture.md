@@ -173,7 +173,11 @@ Each is deliberate and bounded; another like it is a defect.
   client an explicit session and a host-key observation cross, is a Go-owned
   remote access path outside the
   [Go and Ansible boundary](#go-and-ansible-responsibility-boundary), bound only
-  to `machine/access` and `trust/enrollment`. Explicit file copying uses its
+  to `machine/access`, `trust/enrollment`, and `machine/account`. Account
+  enrollment uses the pinned client for the initial hardware claim and the
+  fixed Linux worker it invokes as the verified bootstrap administrator. The
+  worker reports a bounded account state. The capability owns the successor
+  proof and reconciliation owns the receipt. Explicit file copying uses its
   fixed descriptor-relative Python worker through that same pinned session,
   and a credential-dropped local instance for invoking-account file I/O.
   [Direct SSH sessions](security.md#direct-ssh-sessions) owns its security rules.

@@ -46,6 +46,7 @@ type commandSpec struct {
 }
 
 type classifyRules struct {
+	enrollmentInput                         bool
 	localInput, rootless, ambient, urlStdin func(*pflag.FlagSet) bool
 	unavailable, secretStdin                func(*pflag.FlagSet) string
 }

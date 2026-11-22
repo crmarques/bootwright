@@ -83,7 +83,8 @@ and the private key and host-pin Secret versions in the plan. For a declared
 with the same inventory and noninteractive become policy as the effect. It
 requires the effective UID to be zero before it starts the operation's
 playbook. A refusal names the host and account. The account and sudo rule
-remain under the operator's management. Borrowed-SSH flags refuse before
+remain under the operator's management unless the Machine selects
+[enrollment](api/machines.md#managed-lifecycle-enrollment). Borrowed-SSH flags refuse before
 lifecycle planning. Fresh apply validates the version it just bound for
 every provided SSH placement before it registers. It parses the one entry for
 the exact endpoint and decodes the complete qualified public key. The runner

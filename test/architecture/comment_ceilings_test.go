@@ -31,7 +31,7 @@ func commentLineCeilings() map[string]int {
 		"internal/infrastructureservices/dnsserver": 4, "internal/infrastructureservices/managedservice": 192,
 		"internal/infrastructureservices/mirrorfill": 0, "internal/infrastructureservices/ntpserver": 3, "internal/infrastructureservices/proxy": 8,
 		"internal/infrastructureservices/registry": 6,
-		"internal/machine":                         153, "internal/machine/access": 84, "internal/machine/sessionpolicy": 0, "internal/machine/hardware": 0, "internal/machine/inventory": 48, "internal/network": 0,
+		"internal/machine":                         153, "internal/machine/access": 84, "internal/machine/sessionpolicy": 0, "internal/machine/hardware": 0, "internal/machine/account": 0, "internal/machine/inventory": 48, "internal/network": 0,
 		"internal/machine/diskselection": 28, "internal/machine/power": 203, "internal/machine/sshlocal": 94, "internal/managedos": 53,
 		"internal/managedos/installation": 597, "internal/managedos/media": 198,
 		"internal/managedos/diskdiscovery": 5, "internal/managedos/hostfirewall": 2, "internal/managedos/physicalerase": 4,

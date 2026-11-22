@@ -14,6 +14,13 @@ request-identity:
   identity.block
   placement.machine
 request-schema:
+  bootstrap *struct machine.Bootstrap omitempty
+  bootstrap.auth string
+  bootstrap.authRef string omitempty
+  bootstrap.sudo bool omitempty
+  bootstrap.sudoPrompt bool omitempty
+  bootstrap.sudoRef string omitempty
+  bootstrap.user string omitempty
   identity struct hardware.Identity
   identity.block string
   identity.context string

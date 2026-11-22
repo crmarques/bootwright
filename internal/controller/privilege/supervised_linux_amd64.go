@@ -6,7 +6,9 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 const (
@@ -141,4 +143,34 @@ func processStat(proc string, pid int) ([][]byte, bool) {
 		return nil, false
 	}
 	return bytes.Fields(data[end+1:]), true
+}
+
+func DirectRootInput() bool {
+	sudo, _ := QualifiedSudo()
+	return directRootInput("/proc", os.Getppid(), sudo)
+}
+
+func directRootInput(proc string, pid int, sudo string) bool {
+	qualified, _ := os.Stat(sudo)
+	for range 64 {
+		if pid == 1 {
+			return true
+		}
+		executable := proc + "/" + strconv.Itoa(pid) + "/exe"
+		path, err := os.Readlink(executable)
+		if err != nil {
+			return false
+		}
+		info, err := os.Stat(executable)
+		if err != nil || qualified != nil && os.SameFile(info, qualified) ||
+			filepath.Base(strings.TrimSuffix(path, " (deleted)")) == "sudo" {
+			return false
+		}
+		parent, ok := parentProcess(proc, pid)
+		if !ok || parent == pid {
+			return false
+		}
+		pid = parent
+	}
+	return false
 }

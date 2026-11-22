@@ -88,6 +88,10 @@ func clientArguments(session machine.Session, held paths, pinned string, descrip
 func authentication(session machine.Session) []string {
 	switch session.Kind {
 	case machine.IdentityPassword:
+		if len(session.Password) != 0 {
+			return []string{"-o", "IdentityAgent=none", "-o", "PubkeyAuthentication=no", "-o", "PreferredAuthentications=password",
+				"-o", "KbdInteractiveAuthentication=no", "-o", "NumberOfPasswordPrompts=1"}
+		}
 		if session.IdentityFile != "" && !session.Batch {
 			return []string{
 				"-o", "IdentitiesOnly=yes",
@@ -103,7 +107,7 @@ func authentication(session machine.Session) []string {
 			"-o", "PubkeyAuthentication=no",
 			"-o", "PreferredAuthentications=password,keyboard-interactive",
 		}
-	case machine.IdentityKey:
+	case machine.IdentityKey, machine.IdentityOfferedKey:
 		return keyAuthentication()
 	default:
 		return []string{

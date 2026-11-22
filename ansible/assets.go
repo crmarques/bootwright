@@ -13,6 +13,11 @@ import (
 //go:embed ansible.cfg collections
 var embedded embed.FS
 
+func MachineHardwareSource() string {
+	data, _ := embedded.ReadFile("collections/ansible_collections/bootwright/core/plugins/module_utils/machine_hardware.py")
+	return string(data)
+}
+
 func Assets() map[string][]byte {
 	files := map[string][]byte{}
 	_ = fs.WalkDir(embedded, ".", func(name string, entry fs.DirEntry, err error) error {

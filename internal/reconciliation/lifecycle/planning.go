@@ -121,6 +121,10 @@ func DependOnController(capabilities CapabilityResolver, definitions []reconcili
 			if definition.ID == identity || ancestors[definition.ID] || slices.Contains(definition.Dependencies, identity) {
 				continue
 			}
+			capability, _ := capabilities.Resolve(definition.Kind, definition.Implementation)
+			if independent, ok := capability.(ControllerIndependent); ok && independent.IndependentOfController(definition) {
+				continue
+			}
 			dependencies := append(slices.Clone(definition.Dependencies), identity)
 			slices.Sort(dependencies)
 			definitions[index].Dependencies = dependencies
@@ -267,6 +271,7 @@ func (s Service) planFromEvidence(ctx context.Context, view View, state *compila
 }
 
 func (s Service) freezeApplyGraph(definitions []reconciliation.BlockDefinition, scope *reconciliation.PreparationScope) (reconciliation.Plan, error) {
+	definitions = dependOnEnrollment(definitions)
 	definitions, err := s.dependOnStageTails(definitions)
 	if err != nil {
 		return reconciliation.Plan{}, err
@@ -714,4 +719,28 @@ func ControllerMachine(catalog api.Catalog) (string, error) {
 		return "", planEnvironmentInvalid.Fail("the Environment declares no controller Machine", "set spec.controller.machineRef")
 	}
 	return name, nil
+}
+
+func dependOnEnrollment(definitions []reconciliation.BlockDefinition) []reconciliation.BlockDefinition {
+	managed := map[string]bool{}
+	for _, definition := range definitions {
+		if definition.Family == machine.EnrollmentFamily {
+			managed[definition.Object] = true
+		}
+	}
+	for index := range definitions {
+		d := &definitions[index]
+		if d.Family == machine.EnrollmentFamily {
+			continue
+		}
+		for _, reference := range d.Requires {
+			if reference.Kind == string(api.Machine) && reference.Family == machine.HardwareFamily && managed[reference.Object] {
+				d.Requires = append(d.Requires, reconciliation.ObjectRef{Kind: string(api.Machine), Object: reference.Object, Family: machine.EnrollmentFamily})
+			}
+		}
+		if d.Family == machine.FirewallFamily && managed[d.Object] {
+			d.Requires = append(d.Requires, reconciliation.ObjectRef{Kind: string(api.Machine), Object: d.Object, Family: machine.EnrollmentFamily})
+		}
+	}
+	return definitions
 }

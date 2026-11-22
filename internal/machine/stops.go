@@ -27,7 +27,14 @@ var (
 		Meaning: "a Machine Bootwright installs declares SSH access other than its installation's own, so no work was placed on it", Remedy: "remove spec.access.ssh from the Machine so its access is the installation's own"}
 )
 
-var stops = []diagnostics.Stop{machinePlacementNoAccess, machinePlacementAuthUnsupported, machinePlacementKeyMissing, machinePlacementHostKeyMissing,
+var enrollment = diagnostics.Stop{Code: "machine.enrollment", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+	Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryRepeat,
+	Meaning: "a provided Machine's enrollment could not verify a credential, account, or grant",
+	Remedy:  "inspect the named Machine's first-access declaration and retry with its authorized administrator"}
+
+func EnrollmentRefused(reason, remedy string) error { return enrollment.Fail(reason, remedy) }
+
+var stops = []diagnostics.Stop{enrollment, machinePlacementNoAccess, machinePlacementAuthUnsupported, machinePlacementKeyMissing, machinePlacementHostKeyMissing,
 	machinePlacementEscalates, machineInstalledAccessMismatch}
 
 func Stops() []diagnostics.Stop { return slices.Clone(stops) }

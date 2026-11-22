@@ -559,7 +559,7 @@ it uses this Machine-owned egress choice. The controller is identified only
 by [Environment selection](environment.md#controller-machine), not by its proxy,
 Machine name or local access.
 
-### Addresses and access
+## Addresses and access
 
 Address names and references in this section belong to
 `Machine.spec.network.addresses`. Normalization appends an absent `fqdn`
@@ -596,14 +596,14 @@ identity supplied by the managed storage-cluster relationship; it is invalid
 on a Bootwright-installed machine or a machine without that successor login.
 
 A remote provided Machine that hosts managed infrastructure, a provider, or
-its own managed firewall may declare `access.lifecycle`. The entire record is
-atomic and requires all four fields. It shares the effective `ssh.addressRef`
+its own managed firewall may declare `access.lifecycle`. The record is atomic and requires the four fields below. An optional
+[bootstrap](#managed-lifecycle-enrollment) record enrolls the lifecycle login. It shares the effective `ssh.addressRef`
 and `ssh.port`. Sessions continue to use the account and credential in
 `access.ssh`.
 
 | Field | Type | Rule |
 | --- | --- | --- |
-| `user` | string | Existing POSIX account. |
+| `user` | string | POSIX account. It already exists when no bootstrap is declared. |
 | `privateKeyRef` | string | `sshKeyPair` Secret for the lifecycle account. Access credential. |
 | `knownHostsRef` | string | `opaque` Secret pinning the lifecycle SSH endpoint. Trust anchor. |
 | `privilege` | enum | `direct` requires user `root`. `sudo` requires a non-root user with noninteractive sudo to root for the operation. |
@@ -643,6 +643,43 @@ host key is the one its
 delivered or captured, so it consults no trust store, and a session dialing
 any other address refuses `trust.identity` naming the address the installation
 proved.
+
+### Managed lifecycle enrollment
+
+A remote Machine with `os.provided: {}` opts into account creation by adding
+`access.lifecycle.bootstrap`. The lifecycle login is non-root with
+`privilege: sudo`. Its host pin matches `access.ssh.knownHostsRef`. The account
+and sudo rule are the context's owned effects. Session authentication comes
+from `access.ssh`.
+
+Bootstrap chooses one `auth` arm. `operatorIdentity: {}` uses the invoking
+operator's SSH key files. `askPassword: {}` prompts for the SSH password.
+Both default the remote user to the verified invoking username. `privateKeyRef`
+and `passwordRef` reference bound SSH or username/password access credentials
+and require the explicit bootstrap `user`. The bootstrap user differs from the
+managed account. Choose `privilege.direct: {}` for an explicit root login
+or `privilege.sudo` for a non-root login. `sudo: {}` uses passwordless sudo.
+The `sudo.askPassword` and `sudo.passwordRef` arms independently select the
+remote sudo credential. The username in each password Secret matches its
+bootstrap principal.
+
+Apply reads the hardware through the pinned bootstrap login without sudo
+and holds the host claim before creating the account. Bootwright authorizes
+the public key, configures noninteractive sudo and verifies a fresh connection
+as the new account. The managed login grants root-equivalent access. Its key
+pair is effect material. [Ceph's provided stretch tiebreaker](../ceph.md#stretch-topology)
+also receives the fleet public key when it opts into enrollment.
+
+For a new remote libvirt provider, enroll its provided host before an apply
+that allocates guests there so the capacity check has a verified login. An
+explicit bootstrap key file is scoped to enrollment. Withdrawal uses the
+declared bootstrap authentication and its own current credential.
+
+Destroy removes the managed login after its dependents through the bootstrap
+administrator, verifies withdrawal, and moves any home data behind a
+root-only directory before releasing the UID. A conflicting
+account or grant refuses. Unknown attempts inspect the owned effect before
+retrying. See [machine enroll](../cli.md#managed-machine-enrollment).
 
 ## Bare-metal hardware
 

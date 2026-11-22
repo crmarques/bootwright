@@ -86,6 +86,12 @@ prefix_rule(
 )
 
 prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "machine", "enroll"],
+    decision = "prompt",
+    justification = "bootwright machine enroll acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+)
+
+prefix_rule(
     pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "machine", "rsh"],
     decision = "prompt",
     justification = "bootwright machine rsh acts beyond a read of local state; the owner asks for it (AGENTS.md)",

@@ -795,6 +795,10 @@ type StageTailConsumer interface {
 	StageTail(reconciliation.BlockDefinition) (reconciliation.ObjectRef, bool, error)
 }
 
+type ControllerIndependent interface {
+	IndependentOfController(reconciliation.BlockDefinition) bool
+}
+
 type ControllerPrecursor interface {
 	PrecedesController(reconciliation.BlockDefinition) bool
 }

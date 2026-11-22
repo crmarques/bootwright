@@ -42,6 +42,7 @@ type processDependencies struct {
 	Terminal           func() (bool, error)
 	SecretInput        material.InputReader
 	SecretTerminal     material.TerminalInput
+	EnrollmentTerminal material.TerminalInput
 	Progress           prerequisites.ProgressReporter
 	Presenter          prerequisites.PlanPresenter
 	LifecycleProgress  lifecycle.ProgressReporter
@@ -71,34 +72,35 @@ type operatorFileSession interface {
 // services consume. Each field is a consumer-owned contract, so a test binds
 // the same graph through its own implementations.
 type serviceDependencies struct {
-	PolicyStore      sessionpolicy.Store
-	HoldPolicy       func(context.Context) (func(), error)
-	PublishPolicy    func(context.Context, contexts.Record, []byte) error
-	PolicyAccount    accountResolver
-	LookupSubject    func(context.Context, bool, string) (uint32, error)
-	Delegated        bool
-	Repository       contexts.Repository
-	Workspace        secretstore.Workspace
-	Selection        contexts.SelectionStore
-	Operator         material.Operator
-	Confirmer        contexts.Confirmer
-	SessionConfirmer machineaccess.Confirmer
-	Streams          machineaccess.Streams
-	Terminal         func() (bool, error)
-	CopyAccount      func(context.Context) (machineaccess.CopyAccount, error)
-	Home             func() (string, error)
-	Owner            func() (int, error)
-	Files            operatorFiles
-	Trust            trustStore
-	SecretInput      material.InputReader
-	SecretTerminal   material.TerminalInput
-	Resolver         secretstore.ImplementationResolver
-	SessionMaterial  secretstore.SessionMaterialSource
-	Controller       controllerDependencies
-	Lifecycle        lifecycleDependencies
-	Media            mediaDependencies
-	Comparison       comparisonDependencies
-	Reporter         power.Reporter
+	PolicyStore        sessionpolicy.Store
+	HoldPolicy         func(context.Context) (func(), error)
+	PublishPolicy      func(context.Context, contexts.Record, []byte) error
+	PolicyAccount      accountResolver
+	LookupSubject      func(context.Context, bool, string) (uint32, error)
+	Delegated          bool
+	Repository         contexts.Repository
+	Workspace          secretstore.Workspace
+	Selection          contexts.SelectionStore
+	Operator           material.Operator
+	Confirmer          contexts.Confirmer
+	SessionConfirmer   machineaccess.Confirmer
+	Streams            machineaccess.Streams
+	Terminal           func() (bool, error)
+	CopyAccount        func(context.Context) (machineaccess.CopyAccount, error)
+	Home               func() (string, error)
+	Owner              func() (int, error)
+	Files              operatorFiles
+	Trust              trustStore
+	SecretInput        material.InputReader
+	SecretTerminal     material.TerminalInput
+	EnrollmentTerminal material.TerminalInput
+	Resolver           secretstore.ImplementationResolver
+	SessionMaterial    secretstore.SessionMaterialSource
+	Controller         controllerDependencies
+	Lifecycle          lifecycleDependencies
+	Media              mediaDependencies
+	Comparison         comparisonDependencies
+	Reporter           power.Reporter
 	// AmbientRoute is the acquisition route the invoking environment selected
 	// for a context-free command, and is nothing for every other entry point.
 	AmbientRoute controller.Route
@@ -121,25 +123,26 @@ func localServiceDependencies(process processDependencies) (serviceDependencies,
 	return serviceDependencies{
 		Repository:  repository,
 		PolicyStore: repository, PolicyAccount: account.resolver, LookupSubject: privilege.Resolver{}.LookupSubject, Delegated: process.Delegated, HoldPolicy: repository.HoldSessionAdmission, PublishPolicy: repository.ReplaceSessionPolicy,
-		Workspace:        repository,
-		Trust:            repository,
-		SessionConfirmer: process.SessionConfirmer,
-		Streams:          process.Streams,
-		Terminal:         process.Terminal,
-		CopyAccount:      account.copyAccount,
-		Home:             account.home,
-		Owner:            account.uid,
-		Files:            files,
-		Selection:        account,
-		Operator:         account,
-		Confirmer:        process.Confirmer,
-		SecretInput:      process.SecretInput,
-		SecretTerminal:   process.SecretTerminal,
-		Reporter:         process.LifecycleProgress,
-		Controller:       controllerPorts,
-		AmbientRoute:     process.AmbientRoute,
-		Comparison:       comparisonDependencies{Account: account.comparison, Terminal: os.Getenv("TERM"), Language: os.Getenv("LANG")},
-		Media:            localMediaDependencies(repository, process.Confirmer, process.LifecycleProgress, process.MediaPresenter, process.AmbientRoute, files),
+		Workspace:          repository,
+		Trust:              repository,
+		SessionConfirmer:   process.SessionConfirmer,
+		Streams:            process.Streams,
+		Terminal:           process.Terminal,
+		CopyAccount:        account.copyAccount,
+		Home:               account.home,
+		Owner:              account.uid,
+		Files:              files,
+		Selection:          account,
+		Operator:           account,
+		Confirmer:          process.Confirmer,
+		SecretInput:        process.SecretInput,
+		SecretTerminal:     process.SecretTerminal,
+		EnrollmentTerminal: process.EnrollmentTerminal,
+		Reporter:           process.LifecycleProgress,
+		Controller:         controllerPorts,
+		AmbientRoute:       process.AmbientRoute,
+		Comparison:         comparisonDependencies{Account: account.comparison, Terminal: os.Getenv("TERM"), Language: os.Getenv("LANG")},
+		Media:              localMediaDependencies(repository, process.Confirmer, process.LifecycleProgress, process.MediaPresenter, process.AmbientRoute, files),
 		Lifecycle: lifecycleDependencies{
 			Workspace: repository,
 			Host:      hostlinux.New(), HostKeys: hostlinux.New(), Guard: runtimeGuard(controllerPorts.Python), Setup: controllerPorts.Setup, Selection: account,
@@ -167,6 +170,7 @@ func assembleServices(deps serviceDependencies) cli.Services {
 	if deps.Lifecycle.Capacity == nil {
 		deps.Lifecycle.Capacity = remoteCapacity(services.DesiredState, &reconciler, deps)
 	}
+	deps.Lifecycle.Enrollment = enrollmentRemote(deps)
 	reconciler = wireLifecycle(deps.Lifecycle, deps.Controller, compiler, secrets.binder)
 	services.Lifecycle = reconciler
 	custodian := secrets.binder.WithHolds(reconciler)
@@ -194,6 +198,7 @@ func assembleServices(deps serviceDependencies) cli.Services {
 	machine := wireMachine(machineDeps)
 	services.MachineInventory, services.MachineAccess = machine.MachineInventory, machine.MachineAccess
 	services.MachineCopy = machine.MachineCopy
+	services.MachineEnrollment = reconciler
 	services.MachineDiscovery = diskdiscovery.NewDiscoveryService(reconciler)
 	services.EnvironmentAccess = machine.EnvironmentAccess
 	services.MachinePower, services.MachineTrust = machine.MachinePower, machine.MachineTrust

@@ -98,6 +98,13 @@ func TestDispatchEveryApplicationCommand(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+			if preview && (path == "apply" || path == "destroy") {
+				for flag, value := range map[string]string{"ssh-user": "", "ssh-id-file": "", "ssh-ask-sudo-password": "false", "ssh-user-for-provisioned": "false"} {
+					if err := flags.Set(flag, value); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
 			if tt.path == "validate" {
 				flags = validationDispatchFlags(t)
 			}

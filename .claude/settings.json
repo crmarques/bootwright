@@ -42,6 +42,7 @@
       "Bash(*bootwright *machine restart*)",
       "Bash(*bootwright *machine media eject*)",
       "Bash(*bootwright *machine trust*)",
+      "Bash(*bootwright *machine enroll*)",
       "Bash(*bootwright *policy install*)",
       "Bash(*bootwright *machine rsh*)",
       "Bash(*bootwright *machine exec*)",

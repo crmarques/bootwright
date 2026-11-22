@@ -113,3 +113,16 @@ func TestTheChildEscalatesOnlyInTheForegroundOfAPseudoTerminalOfItsOwn(t *testin
 		})
 	}
 }
+
+func TestDirectRootInputRejectsSudoAncestryWithoutEnvironment(t *testing.T) {
+	proc, sudo, _ := procTree(t, process(30, "bash", 20), process(20, "sudo", 12), process(12, "bash", 1))
+	if directRootInput(proc, 30, sudo) {
+		t.Fatal("a shell under sudo was admitted without verified input policy")
+	}
+	if !directRootInput(proc, 12, sudo) {
+		t.Fatal("a root terminal outside sudo was refused")
+	}
+	if directRootInput(proc, 31, sudo) {
+		t.Fatal("unreadable ancestry was admitted")
+	}
+}

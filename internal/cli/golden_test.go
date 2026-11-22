@@ -760,6 +760,13 @@ func cliGoldens() []cliGolden {
 				Receipt:      lifecycle.Receipt{Operation: operationID, Verb: "plan", State: "preview", Next: "continue-apply"},
 			}
 		}},
+		{golden: "cli-machine-enroll-json", args: "machine enroll --name rhel-01 --yes --output json", record: func(r *dispatchRecord) {
+			r.result.lifecycleOperation = &lifecycle.OperationResult{
+				Verb: "apply", Context: lifecycle.ContextIdentity{Name: "lab", Revision: revision},
+				Receipt: lifecycle.Receipt{Operation: operationID, Verb: "apply", State: "done"},
+				Blocks:  []lifecycle.BlockResult{{ID: "machine-enrollment-rhel-01", Description: "establish the managed SSH login", Stage: "infrastructure-services", State: "done", Outcome: "changed", Attempts: 1}},
+			}
+		}},
 		{golden: "cli-machine-discover", args: "machine discover --name rhel-01 --yes", record: discoveryOutput},
 		{golden: "cli-machine-discover-json", args: "machine discover --name rhel-01 --yes --output json", record: discoveryOutput},
 		{golden: "cli-machine-inventory", args: "machine inventory --name rhel-01,rhel-02", record: inventoryOutput},

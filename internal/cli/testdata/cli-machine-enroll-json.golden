@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "machine enroll",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": {
+      "name": "lab",
+      "mode": ""
+    },
+    "verb": "apply",
+    "steps": [],
+    "blocks": [
+      {
+        "id": "machine-enrollment-rhel-01",
+        "description": "establish the managed SSH login",
+        "stage": "infrastructure-services",
+        "state": "done",
+        "outcome": "changed",
+        "attempts": 1
+      }
+    ],
+    "settled": false,
+    "recovered": "",
+    "next": "",
+    "receipt": {
+      "operation": "op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a",
+      "verb": "apply",
+      "state": "done",
+      "next": ""
+    }
+  },
+  "diagnostics": [],
+  "logs": []
+}

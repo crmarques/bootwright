@@ -25,6 +25,8 @@ import (
 	"github.com/crmarques/bootwright/internal/infrastructureservices/ntpserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/proxy"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/registry"
+	"github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/machine/account"
 	"github.com/crmarques/bootwright/internal/machine/hardware"
 	"github.com/crmarques/bootwright/internal/machine/power"
 	"github.com/crmarques/bootwright/internal/managedos/diskdiscovery"
@@ -67,10 +69,11 @@ type lifecycleDependencies struct {
 	// Production leaves it empty and uses this build's own capabilities.
 	Capabilities lifecycle.CapabilityResolver
 	// Media is the host media store a plan freezes installation media from.
-	Media    media.Store
-	Capacity capacity.CapacityChecker
-	Paths    lifecycle.ContextPaths
-	Logs     logview.Workspace
+	Media      media.Store
+	Capacity   capacity.CapacityChecker
+	Enrollment account.Remote
+	Paths      lifecycle.ContextPaths
+	Logs       logview.Workspace
 }
 
 // storeMediaRecords reads the host media store's records for the installation
@@ -275,7 +278,11 @@ type capabilityRunner interface {
 // buildCapabilitiesWith binds every capability over one runner. Production
 // passes the Ansible runner; the capability contract suite passes its own.
 // records is the reader the installation capability freezes its images from.
-func buildCapabilitiesWith(clock systemClock, controller controllerDependencies, runner capabilityRunner, records installation.MediaRecords) capabilityResolver {
+func buildCapabilitiesWith(clock systemClock, controller controllerDependencies, runner capabilityRunner, records installation.MediaRecords, enrollment ...account.Remote) capabilityResolver {
+	var remote account.Remote
+	if len(enrollment) != 0 {
+		remote = enrollment[0]
+	}
 	resolver := capabilityResolver{{
 		kind: networking.Kind, implementation: networking.Implementation, family: "cluster-network", capability: networking.New(runner, packages.Builtin()),
 	}, {
@@ -340,7 +347,7 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 		capability: mirrorfill.NewFiles(runner, acquisitionTools().MirrorFiles).WithInstalledHostKeys(installation.ProvedHostKey),
 	})
 	resolver = append(resolver, boundCapability{
-		kind: hardware.Kind, implementation: hardware.Implementation, family: hardware.Family, capability: hardware.New(runner),
+		kind: hardware.Kind, implementation: hardware.Implementation, family: hardware.Family, capability: hardware.New(runner).WithBootstrap(remote.HardwareAddresses),
 	})
 	resolver = append(resolver, boundCapability{
 		kind: mirrorfill.ImagesKind, implementation: mirrorfill.ImagesImplementation, family: mirrorfill.Family,
@@ -350,6 +357,8 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 		kind: mirrorfill.ReleaseKind, implementation: mirrorfill.ReleaseImplementation, family: mirrorfill.Family,
 		capability: mirrorfill.NewReleases(runner, acquisitionTools().MirrorReleases, material.RegistryAuth).WithInstalledHostKeys(installation.ProvedHostKey),
 	})
+	resolver = append(resolver, boundCapability{kind: account.Kind, implementation: account.Implementation,
+		family: machine.EnrollmentFamily, capability: account.Capability{Remote: remote, ClusterKey: ceph.EnrollmentClusterKey}})
 	return bindInstallations(resolver, runner, records)
 }
 
@@ -391,12 +400,12 @@ func wireLifecycle(deps lifecycleDependencies, controller controllerDependencies
 	}
 	clock := systemClock{}
 	runner := ansiblerunner.New(operationPlaybook(), controller.Stager).AdmitReadOnly(readOnlyOperations()...)
-	var capabilities lifecycle.CapabilityResolver = buildCapabilitiesWith(clock, controller, runner, lifecycleMedia(deps))
+	var capabilities lifecycle.CapabilityResolver = buildCapabilitiesWith(clock, controller, runner, lifecycleMedia(deps), deps.Enrollment)
 	if deps.Capabilities != nil {
 		capabilities = deps.Capabilities
 	}
 	options := lifecycleOptions(deps, clock, runner)
-	options.Preparations = discoveryPreparations(capabilities)
+	options.Preparations = append(discoveryPreparations(capabilities), enrollmentPreparations(capabilities)...)
 	options.ApplyAdmission = fipsApplyAdmission(controller.Host, libvirtCapacityAdmission(deps.Capacity))
 	options.ListenerAdmission = firewallApplyAdmission(controller.Firewall)
 	options.BlockAdmission = firewallBlockAdmission(controller.Firewall)
@@ -430,7 +439,7 @@ func lifecycleOptions(deps lifecycleDependencies, clock systemClock, runner ansi
 		DriveMachine:    registeredMachineDriver(runner),
 		Confirmer:       deps.Confirmer, Presenter: deps.Presenter, Progress: deps.Progress,
 		Clock: clock, Entropy: rand.Read, Selection: currentSelection(deps.Selection),
-		BeginInvocation: runner.BeginInvocation, EffectBearing: effectBearing,
+		BeginInvocation: withEnrollmentInvocation(runner.BeginInvocation), EffectBearing: effectBearing,
 		Executable: deps.Executable,
 		Operations: operationStores(clock, deps.Executable),
 		Setup:      deps.Setup,

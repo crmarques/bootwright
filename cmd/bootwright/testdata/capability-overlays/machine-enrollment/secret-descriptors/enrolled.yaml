@@ -1,0 +1,20 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: enrolled-host-key
+
+spec:
+  type: opaque
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: enrolled-admin
+
+spec:
+  type: sshKeyPair
+
+  source:
+    generated:
+      keyType: rsa

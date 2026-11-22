@@ -35,6 +35,7 @@ internal/infrastructureservices/mirrorfill/
 internal/infrastructureservices/ntpserver/
 internal/infrastructureservices/proxy/
 internal/infrastructureservices/registry/
+internal/machine/account/
 internal/machine/hardware/
 internal/machine/power/
 internal/managedos/diskdiscovery/

@@ -58,3 +58,5 @@ func (Launcher) HostKeyAlgorithms(context.Context, machine.Session) (string, err
 func (Launcher) IdentityFile(context.Context, string) (string, error) {
 	return "", availability.ErrNotImplemented
 }
+
+func ServePassword([]string) (bool, int) { return false, 0 }

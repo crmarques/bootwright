@@ -639,7 +639,9 @@ topology; this section owns what the plan derives and realizes (D196).
   cluster SSH user and a `knownHostsRef` pinning the one host key every Ceph
   connection verifies; its `auth` arm serves operator sessions only. The
   operator authorizes the fleet key's public half (`bootwright secret show
-  --part public-key`) for that user on the host. Storage preflight reads its
+  --part public-key`) for that user on the host. With [managed enrollment](api/machines.md#managed-lifecycle-enrollment),
+  `access.lifecycle.user` supplies the required cluster SSH user and enrollment
+  authorizes the fleet public key before the Ceph host block. Storage preflight reads its
   prerequisites over the same fleet connection
   ([plan and prerequisites](#plan-and-prerequisites)), and the host block's
   first fleet call proves it again: a `transport` failure there names the

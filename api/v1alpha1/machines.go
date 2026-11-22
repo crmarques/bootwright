@@ -62,11 +62,19 @@ func machineSchema() *Shape {
 	ssh := record(field("addressRef", nestedIn(Scope{Noun: "address", Entries: []string{"network", "addresses"}})), field("port", port()), field("user", lexical(LexicalPOSIXUser)), required("auth", atomic(choice(field("operatorIdentity", record()), field("privateKeyRef", secret("sshKeyPair")), field("passwordRef", secret("usernamePassword"))))), field("sudoPasswordRef", secret("usernamePassword")), field("knownHostsRef", secret("opaque")))
 	access := choice(field("local", record()), field("ssh", ssh))
 	access.AllowEmpty = true
+	sudo := choice(field("askPassword", record()), field("passwordRef", secret("usernamePassword")))
+	sudo.AllowEmpty = true
 	lifecycle := atomic(record(
 		required("user", lexical(LexicalPOSIXUser)),
 		required("privateKeyRef", secret("sshKeyPair")),
 		required("knownHostsRef", secret("opaque")),
 		required("privilege", enumeration("direct", "sudo")),
+		field("bootstrap", atomic(record(
+			field("user", lexical(LexicalPOSIXUser)),
+			required("auth", choice(field("operatorIdentity", record()), field("privateKeyRef", secret("sshKeyPair")),
+				field("askPassword", record()), field("passwordRef", secret("usernamePassword")))),
+			required("privilege", choice(field("direct", record()), field("sudo", sudo))),
+		))),
 	))
 	access.Fields = append(access.Fields, field("rootLogin", enumeration("keep", "revoke")), field("lifecycle", lifecycle))
 	network := choice(field("configRef", ref(NetworkConfig)), field("inline", machineNetworkSchema()))

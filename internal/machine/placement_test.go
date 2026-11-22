@@ -191,3 +191,23 @@ func TestAServiceOnAnInstalledMachineTakesTheInstalledArm(t *testing.T) {
 		t.Fatalf("an OS-ready Machine was placed %+v (%v)", placement, err)
 	}
 }
+
+func TestBootstrapUsesOneExplicitPrivilegeAndCredentialForItsOwnUser(t *testing.T) {
+	for _, test := range []struct {
+		bootstrap Bootstrap
+		want      bool
+	}{
+		{Bootstrap{Auth: "operatorIdentity", Sudo: true}, true},
+		{Bootstrap{User: "operator", Auth: "passwordRef", AuthRef: "login", Sudo: true, SudoRef: "sudo"}, true},
+		{Bootstrap{User: "root", Auth: "privateKeyRef", AuthRef: "root-key"}, true},
+		{Bootstrap{User: "root", Auth: "askPassword", Sudo: true, SudoPrompt: true}, false},
+		{Bootstrap{User: "automation", Auth: "askPassword", Sudo: true}, false},
+		{Bootstrap{Auth: "passwordRef", AuthRef: "login", Sudo: true}, false},
+		{Bootstrap{User: "operator", Auth: "askPassword", Sudo: true, SudoPrompt: true, SudoRef: "sudo"}, false},
+		{Bootstrap{User: "operator", Auth: "other", Sudo: true}, false},
+	} {
+		if got := test.bootstrap.Valid("automation"); got != test.want {
+			t.Errorf("%+v qualified = %t, want %t", test.bootstrap, got, test.want)
+		}
+	}
+}

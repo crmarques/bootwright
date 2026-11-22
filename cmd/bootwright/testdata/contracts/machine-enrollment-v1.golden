@@ -1,0 +1,35 @@
+implementation: machine-enrollment-v1
+content-digest: fb205afd05760bdab8af8e93cf2f4d58fe4716cad32afdb764744fd491ac71d5
+request-version: machine-enrollment-v1
+automation-formats: none
+mark-formats: none
+proof-ids: none
+fixed-places: none
+effect-pins:
+  ba5a34cd8e53eaecad27b8e574e79171b76611017c054eb1e3cb4bd3110c9eda
+request-identity:
+  placement.machine
+  placement.user
+request-schema:
+  bootstrap struct machine.Bootstrap
+  bootstrap.auth string
+  bootstrap.authRef string omitempty
+  bootstrap.sudo bool omitempty
+  bootstrap.sudoPrompt bool omitempty
+  bootstrap.sudoRef string omitempty
+  bootstrap.user string omitempty
+  clusterKeyRef string omitempty
+  fleetKeyRef string omitempty
+  placement struct machine.Placement
+  placement.address string omitempty
+  placement.connection string
+  placement.knownHostsRef string omitempty
+  placement.machine string
+  placement.port int omitempty
+  placement.privateKeyRef string omitempty
+  placement.privilege string omitempty
+  placement.user string omitempty
+  version string
+evidence-schema:
+  request string
+  state string

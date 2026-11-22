@@ -263,7 +263,7 @@ quick: fmt-check vet
 # file lock; test/architecture refuses one missing here. cmd/bootwright takes
 # about nine minutes under -race, so the timeout is raised from the 10-minute
 # default to leave room for a loaded host (B1339, B1457).
-RACE_PACKAGES = ./internal/reconciliation/... ./internal/controller/privilege/... ./internal/trust/... ./cmd/bootwright/... \
+RACE_PACKAGES = ./internal/machine/account/... ./internal/reconciliation/... ./internal/controller/privilege/... ./internal/trust/... ./cmd/bootwright/... \
 	./ansible \
 	./api/v1alpha1 \
 	./internal/adapterprotocol \

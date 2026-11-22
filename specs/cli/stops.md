@@ -499,6 +499,7 @@ The Machine placement and access checks' stops (`internal/machine`).
 
 | Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| `machine.enrollment` | operation | none | input | - | repeat | a provided Machine's enrollment could not verify a credential, account, or grant | inspect the named Machine's first-access declaration and retry with its authorized administrator |
 | `machine.placement-no-access` | operation | none | input | - | change-input | a Machine that hosts lifecycle work is neither the controller nor declares SSH access, so no work was placed on it | place the work on the controller Machine, or author access.ssh on the Machine |
 | `machine.placement-auth-unsupported` | operation | none | input | - | change-input | a Machine that hosts lifecycle work authenticates with an operator identity or a password, which a placement does not support | author access.ssh.auth.privateKeyRef on the Machine |
 | `machine.placement-key-missing` | operation | none | input | - | change-input | a Machine that hosts lifecycle work declares no SSH private key reference | author access.ssh.auth.privateKeyRef on the Machine |

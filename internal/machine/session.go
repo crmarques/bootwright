@@ -9,7 +9,8 @@ type IdentityKind string
 
 const (
 	// IdentityKey authenticates with a private key this context holds.
-	IdentityKey IdentityKind = "key"
+	IdentityKey        IdentityKind = "key"
+	IdentityOfferedKey IdentityKind = "offered-key"
 	// IdentityOperator authenticates as whoever runs the client, with that
 	// account's own default identities and no material from this context.
 	IdentityOperator IdentityKind = "operator"
@@ -37,9 +38,10 @@ type Session struct {
 	Address   string
 	Port      int
 	Identity
-	HostKey trust.HostKey
-	Command []string
-	Batch   bool
+	HostKey  trust.HostKey
+	Password []byte
+	Command  []string
+	Batch    bool
 }
 
 // SessionResult is what an access command reports once the client has exited.

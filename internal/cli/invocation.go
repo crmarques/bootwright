@@ -11,7 +11,8 @@ import (
 // InvocationClass contains only syntactic decisions, made without acquiring
 // account, filesystem, stdin, signal or process capabilities.
 type InvocationClass struct {
-	RequiresRoot bool
+	EnrollmentInput bool
+	RequiresRoot    bool
 	// JSON marks either structured format for the privilege supervisor.
 	JSON         bool
 	Format       string
@@ -72,6 +73,7 @@ func ClassifyInvocation(args []string) InvocationClass {
 	}
 	classification.URLStdin = rules.urlStdin != nil && rules.urlStdin(flags)
 	classification.SSHPassword = boolValue(flags, "ssh-ask-password")
+	classification.EnrollmentInput = rules.enrollmentInput && !classification.JSON && !dryRunSelected(flags)
 	return classification
 }
 

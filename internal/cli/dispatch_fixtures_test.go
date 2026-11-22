@@ -366,6 +366,7 @@ func dispatchSpies(record *dispatchRecord) Services {
 		MachineCopy:           machineAccessSpy{record},
 		MachinePower:          machinePowerSpy{record},
 		MachineDiscovery:      machineDiscoverySpy{record},
+		MachineEnrollment:     lifecycleSpy{record},
 		MachineTrust:          machineTrustSpy{record},
 		ClusterAccess:         clusterAccessSpy{record},
 		Logs:                  logsSpy{record},
@@ -435,4 +436,12 @@ func (p policySpy) Permissions(ctx context.Context, name string) (string, []sess
 		{Name: "diagnostics", ClusterRefs: []string{"apps"}, MachineRefs: []string{"gateway"}, Machines: []string{"gateway", "worker"}, RemoteUser: "core", Commands: [][]string{{"/usr/bin/uptime"}}},
 		{Name: "support", Machines: []string{"worker"}, RemoteUser: "core", Shell: true},
 	}, p.record.called(ctx, "policy permissions", name)
+}
+
+func (s lifecycleSpy) Prepare(ctx context.Context, request lifecycle.PrepareRequest) (*lifecycle.OperationResult, error) {
+	return s.record.result.lifecycleOperation, s.record.called(ctx, "machine enroll", request)
+}
+
+func (s lifecycleSpy) PlanPreparation(ctx context.Context, request lifecycle.PrepareRequest) (*lifecycle.PlanResult, error) {
+	return s.record.result.lifecyclePlan, s.record.called(ctx, "machine enroll", request)
 }

@@ -35,9 +35,13 @@
     "contentDigest": "6e57381a45700b2ebe2c119278761057eea0347af980ff6f84c5b759b3e43ed8",
     "fingerprint": "ab3e2f0e4c36cd43142c0244fbeb602d622e6a33a86a4f2c40e10725b0219ae4"
   },
+  "machine-enrollment-v1": {
+    "contentDigest": "fb205afd05760bdab8af8e93cf2f4d58fe4716cad32afdb764744fd491ac71d5",
+    "fingerprint": "dd4494b191ad6b2a9959b05f5a67488990288d3827627250ed7e88556a83e98d"
+  },
   "machine-hardware-v1": {
     "contentDigest": "c4e732ece12ed8edb121aa943d55d7d72b1fae18b451fe8fc34eddef652454f1",
-    "fingerprint": "33b0ff0a910b9f4f5683f76096726eba565e932fbb0497322f8c8ff44bd990c0"
+    "fingerprint": "39a705c76a22a0f74c1d9926a7a77eefcde37b70de9fa253d9075d340018b82d"
   },
   "machine-kubevirt-v1": {
     "contentDigest": "51ddb3590eb7ac455201230a9d7cc259fa7373e1ee5b647b9e8b3af828b40b92",

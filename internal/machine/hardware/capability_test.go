@@ -633,3 +633,77 @@ func TestTheDeclaredStopsAreACopy(t *testing.T) {
 		t.Fatalf("stops = %+v", second)
 	}
 }
+
+func TestTheHardwareClaimUsesTheLoginWithoutSudo(t *testing.T) {
+	block := servicesBlock(t)
+	request, err := DecodeRequest(block.Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Placement.User, request.Placement.Privilege = "automation", "sudo"
+	block.Request, err = request.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := &scripted{result: lifecycle.RunResult{
+		Outcome:  reconciliation.OutcomeUnchanged,
+		Evidence: evidenceOf(t, block.RequestDigest, "52:54:00:9a:1b:01"),
+	}}
+	_, err = New(runner).Apply(context.Background(), lifecycle.Execution{Block: block, Context: "lab", Attempt: 1})
+	if err != nil || runner.seen.Placement.User != "automation" || runner.seen.Placement.Sudo() {
+		t.Fatalf("claim used %+v (%v)", runner.seen.Placement, err)
+	}
+}
+
+func TestTheHardwareClaimBorrowsTheBootstrapLoginBeforeEnrollment(t *testing.T) {
+	block := servicesBlock(t)
+	request, err := DecodeRequest(block.Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Bootstrap = &machine.Bootstrap{Auth: "askPassword", Sudo: true, SudoPrompt: true}
+	request.Placement.User, request.Placement.Privilege = "automation", "sudo"
+	block.Request, err = request.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	reader := func(_ context.Context, contextName string, place machine.Placement, access machine.Bootstrap, _ map[string]secrets.Material) ([]string, error) {
+		calls++
+		if contextName != "lab" || place.Machine != block.Object || access.Auth != "askPassword" {
+			t.Fatal("the hardware claim changed the bootstrap route")
+		}
+		return []string{"52:54:00:9a:1b:01"}, nil
+	}
+	capability := New(nil).WithBootstrap(reader)
+	if !capability.IndependentOfController(block.BlockDefinition) {
+		t.Fatal("the native hardware claim depends on controller stage work")
+	}
+	result, err := capability.Apply(context.Background(), lifecycle.Execution{Block: block, Context: "lab", Attempt: 1})
+	if err != nil || result.Outcome != reconciliation.OutcomeUnchanged || calls != 1 {
+		t.Fatalf("bootstrap claim = %+v, calls=%d (%v)", result, calls, err)
+	}
+	if _, err := New(nil).Apply(context.Background(), lifecycle.Execution{Block: block, Context: "lab", Attempt: 1}); err == nil {
+		t.Fatal("an enrollment claim without its bootstrap reader succeeded")
+	}
+}
+
+func TestStandaloneEnrollmentPlansAClaimWithItsBoundBootstrapKey(t *testing.T) {
+	host := sshHost("services", "192.0.2.9")
+	lifecycleLogin := api.MapValue(
+		text("privateKeyRef", "managed-key"), text("knownHostsRef", "services-known-hosts"),
+		text("user", "automation"), text("privilege", "sudo"),
+		field("bootstrap", api.MapValue(text("user", "operator"),
+			field("auth", api.MapValue(text("privateKeyRef", "bootstrap-key"))),
+			field("privilege", api.MapValue(field("sudo", api.MapValue()))))),
+	)
+	host = host.WithSpec(host.Spec().WithPath(lifecycleLogin, "access", "lifecycle"))
+	plan := planned(t, catalogOf(host), reconciliation.Apply)
+	if len(plan.Definitions) != 1 || !slices.Equal(plan.Secrets, []string{"bootstrap-key", "managed-key", "services-known-hosts"}) {
+		t.Fatalf("standalone enrollment plan: %+v", plan)
+	}
+	request, err := DecodeRequest(plan.Definitions[0].Request)
+	if err != nil || request.Bootstrap.AuthRef != "bootstrap-key" || request.SecretClasses()["bootstrap-key"] != secrets.AccessCredential {
+		t.Fatal("the claim did not bind the bootstrap credential")
+	}
+}

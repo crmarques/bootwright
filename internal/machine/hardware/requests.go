@@ -27,9 +27,10 @@ type Identity struct {
 }
 
 type Request struct {
-	Identity  Identity             `json:"identity"`
-	Placement machineref.Placement `json:"placement"`
-	Version   string               `json:"version"`
+	Bootstrap *machineref.Bootstrap `json:"bootstrap,omitempty"`
+	Identity  Identity              `json:"identity"`
+	Placement machineref.Placement  `json:"placement"`
+	Version   string                `json:"version"`
 }
 
 func BlockID(machine string) string {
@@ -47,7 +48,13 @@ func Requests(catalog api.Catalog, controllerMachine, contextName string) ([]Req
 	}
 	requests := make([]Request, 0, len(placements))
 	for _, placement := range placements {
-		requests = append(requests, Request{
+		var access *machineref.Bootstrap
+		if object, ok := catalog.Find(api.Machine, placement.Machine); ok {
+			if value, managed := machineref.BootstrapOf(object); managed {
+				access = &value
+			}
+		}
+		requests = append(requests, Request{Bootstrap: access,
 			Identity:  Identity{Block: BlockID(placement.Machine), Context: contextName, Object: placement.Machine},
 			Placement: placement, Version: Implementation,
 		})
@@ -65,12 +72,22 @@ func DecodeRequest(data []byte) (Request, error) {
 	placement := request.Placement
 	if request.Identity.Object == "" || request.Identity.Context == "" || request.Identity.Block != BlockID(request.Identity.Object) ||
 		placement.Connection != machineref.ConnectionSSH || placement.Machine != request.Identity.Object || placement.Address == "" ||
-		placement.KnownHostsRef == "" || placement.PrivateKeyRef == "" {
+		placement.KnownHostsRef == "" || placement.PrivateKeyRef == "" || request.Bootstrap != nil && !request.Bootstrap.Valid(placement.User) {
 		return Request{}, hardwareRequestInvalid.Fail("the frozen machine hardware request names no Machine reached over SSH", "destroy it with the build that applied it")
 	}
 	return request, nil
 }
 
-func (r Request) SecretReferences() []string { return r.Placement.SecretReferences() }
+func (r Request) SecretReferences() []string {
+	if r.Bootstrap == nil {
+		return r.Placement.SecretReferences()
+	}
+	return []string{r.Placement.KnownHostsRef, r.Placement.PrivateKeyRef, r.Bootstrap.AuthRef}
+}
 
-func (r Request) SecretClasses() secrets.Classes { return r.Placement.SecretClasses() }
+func (r Request) SecretClasses() secrets.Classes {
+	if r.Bootstrap == nil {
+		return r.Placement.SecretClasses()
+	}
+	return secrets.Classes{}.Add(secrets.AccessCredential, r.Bootstrap.AuthRef, r.Placement.PrivateKeyRef).Add(secrets.TrustAnchor, r.Placement.KnownHostsRef)
+}

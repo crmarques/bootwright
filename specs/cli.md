@@ -1757,6 +1757,21 @@ DataVolume of that name another owner holds, touching nothing. Its read back is
 of the VirtualMachine, so a running instance still presents the image until it
 next stops, while `none` is already reported.
 
+## Managed Machine enrollment
+
+`machine enroll --name <machine>` prepares the account declared by the
+[Machine's bootstrap record](api/machines.md#managed-lifecycle-enrollment).
+It registers the same hardware claim and enrollment blocks as apply and
+keeps their receipts in the current apply lineage. Repeat an interrupted
+explicit enrollment with the same target. A later apply starts dependent
+work under the verified account. `--dry-run` previews without obtaining
+bootstrap credentials or connecting to the Machine. `--ssh-id-file` supplies
+one key for this Machine's operator-identity bootstrap. Password prompts
+name the Machine, remote account and purpose. They require an interactive
+text terminal and either a root login or verified controller sudo input policy.
+A supervised command whose sudo policy cannot be verified can proceed when its
+bootstrap uses bound or key credentials.
+
 ## Enrollment into a host-key Secret
 
 With `--referenced-secret`, `machine trust` takes exactly one `--name` of

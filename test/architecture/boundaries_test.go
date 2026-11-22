@@ -121,7 +121,7 @@ func packageRoles() map[string]packageRole {
 		"containercluster/installation", "containercluster/preflight",
 		"controller/clients", "controller/prerequisites", "controller/firewall", "desiredstate/compilation",
 		"environment/access", "environment/clusterpreflight", "environment/inspection", "environment/preflight",
-		"machine/access", "machine/sessionpolicy", "machine/hardware", "machine/inventory", "machine/power", "managedos/media", "managedos/installation", "managedos/hostfirewall", "managedos/physicalerase", "managedos/diskdiscovery",
+		"machine/access", "machine/sessionpolicy", "machine/account", "machine/hardware", "machine/inventory", "machine/power", "managedos/media", "managedos/installation", "managedos/hostfirewall", "managedos/physicalerase", "managedos/diskdiscovery",
 		"nativeartifacts/rendering", "reconciliation/lifecycle",
 		"secrets/custody", "secrets/encryption", "storage/preflight", "storage/rendering", "storage/ceph",
 		"substrate/baremetal", "substrate/kubevirt", "substrate/libvirt", "trust/enrollment", "workspace/contexts",
@@ -184,6 +184,7 @@ func applicationDependencies() map[string][]string {
 		"internal/machine/power":                         {"internal/desiredstate/compilation", "internal/reconciliation/lifecycle"},
 		"internal/machine/inventory":                     {"internal/desiredstate/compilation"},
 		"internal/machine/hardware":                      {"internal/reconciliation/lifecycle"},
+		"internal/machine/account":                       {"internal/reconciliation/lifecycle"},
 		"internal/trust/enrollment":                      {"internal/desiredstate/compilation"},
 		"internal/managedos/media":                       {},
 		"internal/controller/prerequisites":              {"internal/desiredstate/compilation"},
@@ -650,6 +651,7 @@ func effectGrants() map[string][]string {
 		"internal/workspace/contexts":           {"io"},
 		"internal/secrets/material":             {"crypto/rand", "io", "net.IP", "os", "syscall"},
 		"internal/secrets/localkeyring":         {"crypto/rand", "io"},
+		"internal/machine/account":              {"io"},
 		"internal/reconciliation/ansiblerunner": {"io", "os", "os/exec", "syscall"},
 		// The engine names a host fault an untyped failure carries by its errno
 		// alone; these are constants and the errno type, no effect.

@@ -22,7 +22,7 @@ func HardwareHosts(catalog api.Catalog, controllerMachine string) ([]Placement, 
 		if host.Name() == controllerMachine || installed(host) {
 			continue
 		}
-		if placementHost(host, catalog) {
+		if _, enrolled := BootstrapOf(host); enrolled || placementHost(host, catalog) {
 			placement, err := PlacementFor(host, controllerMachine)
 			if err != nil {
 				return nil, err

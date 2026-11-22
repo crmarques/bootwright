@@ -292,7 +292,7 @@ and their output goldens:
 
 | Command | Result fields |
 | --- | --- |
-| `apply`, `destroy` | `context`, `verb`, `steps`, optional `blocks`, optional `settled`, optional `recovered`, optional `next`, `receipt`, optional `checks`, optional `stages`, optional `clusters`, optional `machines`, optional `until`, optional `waves`, optional `widest`, optional `bound`, optional `startable`, optional `later`, optional `blocked`, optional `excluded`, optional `deferred`, optional `continuation`, optional `finalizes`, optional `addsTo`, optional `takesBack`, optional `anotherBuild`, optional `stops`, optional `stopsAfterOnline`, optional `authorizationSteps`, optional `authorizations` |
+| `apply`, `destroy`, `machine enroll` | `context`, `verb`, `steps`, optional `blocks`, optional `settled`, optional `recovered`, optional `next`, `receipt`, optional `checks`, optional `stages`, optional `clusters`, optional `machines`, optional `until`, optional `waves`, optional `widest`, optional `bound`, optional `startable`, optional `later`, optional `blocked`, optional `excluded`, optional `deferred`, optional `continuation`, optional `finalizes`, optional `addsTo`, optional `takesBack`, optional `anotherBuild`, optional `stops`, optional `stopsAfterOnline`, optional `authorizationSteps`, optional `authorizations` |
 | `catalog add-ons info` | `package` |
 | `catalog add-ons list` | `addOns` |
 | `catalog media add`, `catalog media delete` | `name`, `outcome`, `size`, optional `sha256` |

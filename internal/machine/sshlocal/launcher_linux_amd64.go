@@ -102,7 +102,16 @@ func (l Launcher) Run(ctx context.Context, session machine.Session, in io.Reader
 	if err != nil {
 		return 0, err
 	}
-	command := interactive(client, arguments(session, held, pinned), l.environment(), in, out, errOut)
+	environment := l.environment()
+	if len(session.Password) != 0 {
+		password, err := anonymous(l.Scratch, session.Password)
+		if err != nil {
+			return 0, err
+		}
+		defer password.Close()
+		environment = append(environment, passwordEnvironment(password)...)
+	}
+	command := interactive(client, arguments(session, held, pinned), environment, in, out, errOut)
 	if session.Kind == machine.IdentityOperator && session.IdentityFile == "" && os.Geteuid() == 0 {
 		command, err = l.invokingCommand(ctx, command, session, pinned, files)
 		if err != nil {

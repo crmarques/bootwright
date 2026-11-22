@@ -47,9 +47,7 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 		return nil, err
 	}
 	if borrowed {
-		return nil, engineBorrowedSSH.Fail(
-			"borrowed SSH credentials are unsupported for lifecycle operations",
-			"remove --ssh-user, --ssh-id-file and --ssh-ask-sudo-password and author the Machine's own access")
+		return nil, BorrowedSSHRefusal()
 	}
 	name, err := s.resolve(ctx, contextName)
 	if err != nil {
@@ -184,4 +182,10 @@ func (s Service) withParallelism(value int) (Service, error) {
 		s.options.Concurrency = value
 	}
 	return s, nil
+}
+
+// BorrowedSSHRefusal keeps preview and execution on the same access contract.
+func BorrowedSSHRefusal() error {
+	return engineBorrowedSSH.Fail("borrowed SSH credentials are unsupported for lifecycle operations",
+		"remove the SSH override flags and declare Machine access, or use machine enroll for a single-Machine first-access key")
 }

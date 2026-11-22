@@ -56,7 +56,7 @@ func sshPrivilege(user, privilege string) bool {
 }
 
 func LifecyclePlacement(o api.Object, c api.Catalog) (Placement, bool) {
-	if !placementHost(o, c) {
+	if _, managed := BootstrapOf(o); !managed && !placementHost(o, c) {
 		return Placement{}, false
 	}
 	controller := controllerForPlacement(c)
@@ -194,9 +194,15 @@ var privilegeRemediations = map[string]string{
 func validatePlacementHost(o api.Object, c api.Catalog) []api.Issue {
 	ssh := o.Spec().Get("access", "ssh")
 	if login := o.Spec().Get("access", "lifecycle"); login.Present() {
-		if !api.MachineProvided(o) || !ssh.Present() || !placementHost(o, c) || o.Name() == controllerForPlacement(c) {
+		bootstrap, enroll := BootstrapOf(o)
+		if !api.MachineProvided(o) || !ssh.Present() || (!enroll && !placementHost(o, c)) || o.Name() == controllerForPlacement(c) {
 			return []api.Issue{invariant("$.spec.access.lifecycle", "a dedicated lifecycle login requires a remote provided placement host",
 				"select a provided placement host reached over SSH or remove spec.access.lifecycle")}
+		}
+		if enroll && (!bootstrap.Valid(login.Get("user").Text()) || login.Get("privilege").Text() != "sudo" ||
+			login.Get("knownHostsRef").Text() != ssh.Get("knownHostsRef").Text() || o.Spec().Get("access", "rootLogin").Text() == "revoke") {
+			return []api.Issue{invariant("$.spec.access.lifecycle.bootstrap", "enrollment requires a separate bootstrap identity, a shared explicit host pin and a non-root lifecycle login with sudo",
+				"declare bootstrap access and keep the original administrator available")}
 		}
 		if _, err := dedicatedPlacement(o, ssh, login); err != nil {
 			return []api.Issue{invariant("$.spec.access.lifecycle", err.Error(), "declare a key and host pin, and choose root with direct or a non-root user with sudo")}
