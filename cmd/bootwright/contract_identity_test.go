@@ -34,6 +34,7 @@ import (
 	"github.com/crmarques/bootwright/internal/managedos/hostfirewall"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/managedos/physicalerase"
+	"github.com/crmarques/bootwright/internal/managedos/providedupdate"
 	"github.com/crmarques/bootwright/internal/storage/ceph"
 	"github.com/crmarques/bootwright/internal/substrate"
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
@@ -144,6 +145,7 @@ func contractRecipes() map[string]digestRecipe {
 			partVersion(mirrorfill.ReleaseEvidenceVersion), partPin("explicit-https-route-for-client-downloads")),
 		diskdiscovery.DiscoveryImplementation: {separator: ":", parts: []digestPart{partImplementation(diskdiscovery.DiscoveryImplementation), partRequest("os-disk-discovery-v1"), partPin("bmc-drive-inventory-or-minimal-ram-boot-pinned-ssh-bmc-poweroff-v1"), partPin(substrate.RedfishMediaPolicy)}},
 		physicalerase.EraseImplementation:     {separator: ":", parts: []digestPart{partImplementation(physicalerase.EraseImplementation), partRequest("physical-erase-v1"), partPin("descriptor-diskseq-method-regions-readback-dm-release-by-number-parallel-paced-union-scan-receipt-v1"), partPin(substrate.RedfishMediaPolicy)}},
+		providedupdate.Implementation:         digestOf(partImplementation(providedupdate.Implementation), partRequest(providedupdate.Version), partVersion(providedupdate.EvidenceVersion), partPin(providedupdate.WorkerRule)),
 		hostfirewall.FirewallImplementation: digestOf(partDomain("bootwright.managedos.host-firewall-v1"), partImplementation(hostfirewall.FirewallImplementation),
 			partVersion(hostfirewall.FirewallEvidenceVersion), partPin(hostfirewall.FirewallServiceRoot),
 			partPin("bootwright-host-firewall context=context block=os-firewall-machine apply=operation"), partPin("bootwright-context-publisher"),
@@ -202,6 +204,7 @@ func requestIdentities() map[string][]string {
 		hardware.Implementation:               {"identity.context", "identity.object", "identity.block", "placement.machine"},
 		mirrorfill.ImagesImplementation:       {"identity.context", "identity.environment", "identity.registry", "mirror.host", "images[].repository", "images[].digest", "placement.machine"},
 		mirrorfill.ReleaseImplementation:      {"identity.context", "identity.cluster", "identity.registry", "mirror.host", "release.repository", "release.components", "release.tag", "placement.machine"},
+		providedupdate.Implementation:         {"identity.context", "identity.object", "identity.block", "placement.machine", "release"},
 		hostfirewall.FirewallImplementation:   {"identity.context", "identity.object", "identity.block", "services[].name", "address", "placement.machine"},
 		diskdiscovery.DiscoveryImplementation: {"identity.context", "identity.object", "identity.block"},
 		physicalerase.EraseImplementation: {"install.identity.context", "install.identity.object", "install.identity.block", "installDigest",

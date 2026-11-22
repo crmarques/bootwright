@@ -1,0 +1,43 @@
+---
+- name: Validate the frozen provided update request
+  ansible.builtin.assert:
+    that:
+      - bootwright_provided_update_request.version == 'provided-os-update-request-v1'
+      - bootwright_provided_update_request.placement.connection == 'ssh'
+      - bootwright_provided_update_request.release is string
+      - bootwright_provided_update_request.release | length <= 64
+      - bootwright_provided_update_request.release is match('^(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)$(?!\n)')
+      - bootwright_provided_update_digest is match('^[0-9a-f]{64}$(?!\n)')
+      - bootwright_provided_update_material.owner is match('^[0-9a-f]{64}$(?!\n)')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.managedos_provided_update_protocol:
+    phase: loaded
+
+- name: Observe the operating system update receipt
+  bootwright.core.managedos_provided_update:
+    operation: observe
+    request: '{{ bootwright_provided_update_digest }}'
+    owner: '{{ bootwright_provided_update_material.owner }}'
+    release: '{{ bootwright_provided_update_request.release }}'
+  register: managedos_provided_update_observed
+  failed_when: false
+  timeout: 90
+  no_log: true
+
+- name: Resolve a bounded observation refusal
+  ansible.builtin.import_tasks: refused.yml
+  vars:
+    managedos_provided_update_answer: '{{ managedos_provided_update_observed }}'
+
+- name: Publish observed provided update evidence
+  bootwright.core.managedos_provided_update_protocol:
+    phase: completed
+    digest: '{{ bootwright_provided_update_digest }}'
+    release: '{{ bootwright_provided_update_request.release }}'
+    answer: '{{ managedos_provided_update_observed }}'
+    observed: true
+    outcome: unchanged
+  no_log: true

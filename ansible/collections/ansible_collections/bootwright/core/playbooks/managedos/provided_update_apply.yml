@@ -1,0 +1,13 @@
+---
+- name: Execute one provided operating system update capability
+  hosts: bootwright_target
+  gather_facts: false
+  any_errors_fatal: true
+  serial: 1
+  strategy: ansible.builtin.linear
+
+  tasks:
+    - name: Execute the provided operating system update apply
+      ansible.builtin.import_role:
+        name: bootwright.core.managedos_provided_update
+        tasks_from: apply

@@ -1,0 +1,39 @@
+implementation: os-provided-update-v1
+content-digest: 838ca785639f9e4b5fc6632987e7858a38a745e4b3a1c8feec52fd191982b6f9
+request-version: provided-os-update-request-v1
+automation-formats: none
+mark-formats: bootwright-provided-update:
+proof-ids: none
+fixed-places: /etc/bootwright/provided-updates
+effect-pins:
+  pinned-rhel-transaction-and-reboot-proof-v1
+request-identity:
+  identity.context
+  identity.object
+  identity.block
+  placement.machine
+  release
+request-schema:
+  identity struct providedupdate.Identity
+  identity.block string
+  identity.context string
+  identity.object string
+  placement struct machine.Placement
+  placement.address string omitempty
+  placement.connection string
+  placement.knownHostsRef string omitempty
+  placement.machine string
+  placement.port int omitempty
+  placement.privateKeyRef string omitempty
+  placement.privilege string omitempty
+  placement.user string omitempty
+  release string
+  version string
+evidence-schema:
+  packages int
+  postcondition bool
+  rebooted bool
+  release string
+  request string
+  state string
+  version string

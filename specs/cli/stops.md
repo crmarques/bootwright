@@ -395,6 +395,16 @@ The host firewall capability's stops (`internal/managedos/hostfirewall`).
 | `firewall.inactive` | adapter-run | none | target | - | fix-then-repeat | firewalld is not running on a Machine whose install profile enables it, so its firewall was left unchanged | start firewalld on the Machine, then run the command again |
 | `firewall.change-refused` | adapter-run | possible | target | - | fix-then-repeat | firewalld refused a change on the Machine partway through its apply or removal | read the firewalld journal on the Machine, correct it, then run the command again |
 
+## Provided OS update stops
+
+Stops for [provided OS updates](../managed-os.md#provided-os-updates).
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `osupdate.request-invalid` | block | none | defect | - | none | the provided OS update request is invalid, so no adapter ran | report the message as a defect |
+| `osupdate.refused` | adapter-run | possible | target | - | fix-then-repeat | the Machine or its update source did not satisfy the provided OS update policy | check the Machine's OS release, update repositories and lifecycle access, then repeat the operation |
+| `osupdate.unproved` | block | unproved | target | - | repeat | the provided OS update adapter ended without proving the update | repeat the operation to observe the Machine before resuming the update |
+
 ## Managed OS installation stops
 
 The managed OS installation capability's stops (`internal/managedos/installation`).

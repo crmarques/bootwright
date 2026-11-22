@@ -1,0 +1,15 @@
+---
+- name: Publish a bounded provided update refusal
+  bootwright.core.managedos_provided_update_protocol:
+    phase: refused
+    reason: '{{ managedos_provided_update_answer.reason }}'
+    detail: "{{ managedos_provided_update_answer.detail | default('') }}"
+  when:
+    - managedos_provided_update_answer.ok | default(false) is not true
+    - managedos_provided_update_answer.reason is defined
+  no_log: true
+
+- name: Refuse a provided update that did not provide success evidence
+  ansible.builtin.fail:
+    msg: 'The provided operating system update did not return success evidence'
+  when: managedos_provided_update_answer.ok | default(false) is not true

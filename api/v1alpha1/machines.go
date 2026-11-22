@@ -82,7 +82,11 @@ func machineSchema() *Shape {
 	network.Fields = append(network.Fields,
 		field("installAddressRef", nestedIn(Scope{Noun: "address", Entries: []string{"network", "addresses"}})), field("addresses", named(record(required("name", nonempty()), required("address", lexical(LexicalHost)), field("interface", lexical(LexicalIfname))))),
 		field("interfaceMatches", &Shape{Type: Sequence, Atomic: true, NameKey: "interface", Element: record(required("interface", lexical(LexicalIfname)), required("nicRef", nestedIn(Scope{Noun: "hardware NIC", Entries: []string{"hardware", "nics"}})))}), field("overrides", native()))
-	os := choice(field("provided", record()), field("install", record(required("profileRef", ref(MachineInstallProfile)), field("hostKeyRef", secret("sshKeyPair")), field("ntp", serverSelections(NTPServer)))), field("clusterInstalled", record()))
+	provided := record(field("updates", atomic(record(
+		required("policy", enumeration("withinRelease")),
+		required("release", lexical(LexicalOSRelease)),
+	))))
+	os := choice(field("provided", provided), field("install", record(required("profileRef", ref(MachineInstallProfile)), field("hostKeyRef", secret("sshKeyPair")), field("ntp", serverSelections(NTPServer)))), field("clusterInstalled", record()))
 	source := choice(field("ip", ip()), field("cidr", cidr()), field("machine", record(
 		required("machineRef", ref(Machine)),
 		required("addressRef", nestedIn(Scope{Noun: "address", Owner: []string{"machineRef"}, Kind: Machine, Entries: []string{"network", "addresses"}})),

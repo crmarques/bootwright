@@ -1,7 +1,7 @@
 {
   "go": {
-    "ansible": 93.0,
-    "api/v1alpha1": 81.6,
+    "ansible": 93.2,
+    "api/v1alpha1": 81.7,
     "cmd/bootwright": 82.8,
     "internal/acquisition": 61.7,
     "internal/acquisition/listing": 11.0,
@@ -59,7 +59,7 @@
     "internal/infrastructureservices/ntpserver": 0.0,
     "internal/infrastructureservices/proxy": 84.5,
     "internal/infrastructureservices/registry": 89.5,
-    "internal/machine": 83.7,
+    "internal/machine": 84.1,
     "internal/machine/access": 90.8,
     "internal/machine/account": 64.1,
     "internal/machine/diskselection": 76.6,
@@ -78,6 +78,7 @@
     "internal/managedos/media/storecontract": 0.0,
     "internal/managedos/medialocal": 91.4,
     "internal/managedos/physicalerase": 81.6,
+    "internal/managedos/providedupdate": 63.6,
     "internal/nativeartifacts/comparisonlocal": 81.4,
     "internal/nativeartifacts/rendering": 89.8,
     "internal/nativeartifacts/renderlocal": 87.5,

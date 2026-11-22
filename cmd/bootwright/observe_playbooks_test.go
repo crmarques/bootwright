@@ -84,6 +84,15 @@ func observeAllowlist() map[observeTaskKey]observeAllowance {
 	} {
 		add(role, "observe.yml", "ansible.builtin.assert", "validates the frozen request in memory", read)
 	}
+	const update = "managedos_provided_update"
+	const updateProtocol = observeCollection + "managedos_provided_update_protocol"
+	add(update, "observe.yml", observeCollection+update, "reads the provided update receipt and OS state", observeIs("operation", "observe"))
+	add(update, "observe.yml", updateProtocol, "publishes read-only update evidence", func(params, _ map[string]any) bool {
+		return params["phase"] == "loaded" || params["phase"] == "completed" && params["observed"] == true
+	})
+	add(update, "observe.yml", "ansible.builtin.assert", "validates the frozen request in memory", read)
+	add(update, "refused.yml", updateProtocol, "publishes a bounded read-only refusal", observeIs("phase", "refused"))
+	add(update, "refused.yml", "ansible.builtin.fail", "reports a failed read without touching the host", read)
 	add("managedos_disk_discovery", "result.yml", "ansible.builtin.assert", "reports only static bounded failure classifications in memory", read)
 	add("managedos_disk_discovery", "observe.yml", observeCollection+"managedos_disk_discovery", "reads custody and BMC identity/state without boot, acknowledgement or cleanup", func(params, _ map[string]any) bool {
 		return params["operation"] == "observe"

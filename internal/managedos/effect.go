@@ -6,6 +6,9 @@ func EffectBearing(object api.Object) (string, bool) {
 	if object.Kind() != api.Machine {
 		return "", false
 	}
+	if object.Spec().Has("os", "provided", "updates") {
+		return "no capability of this executable realizes the Machine's provided OS update", true
+	}
 	if !api.MachineInstalled(object) && !api.MachineClusterInstalled(object) {
 		return "", false
 	}

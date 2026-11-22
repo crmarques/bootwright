@@ -1,0 +1,16 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: witness-host-key
+
+spec:
+  type: opaque
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: witness-admin
+
+spec:
+  type: sshKeyPair

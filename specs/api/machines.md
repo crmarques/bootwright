@@ -281,7 +281,7 @@ own refusal.
 | `spec.hardware.nics[].segmentRef` | string | no | the provider's sole segment | A segment of the provider; refused without `providerRef`. |
 | `spec.hardware.rootDisk` | object | no | — | The root disk's identity, selector and hints, and its removal action; [root disk](#root-disk). |
 | `spec.hardware.dataDisks` | array | no | — | Data disks acted on at installation or removal; [data disks and disk actions](#data-disks-and-disk-actions). |
-| `spec.os.provided` | empty object | union | — | The OS-ready arm, `provided: {}`. |
+| `spec.os.provided` | object | union | — | The OS-ready arm. Use `provided: {}` or opt into [provided OS updates](#provided-os-updates). |
 | `spec.os.install.profileRef` | string | with `install` | — | Global `MachineInstallProfile`; the Bootwright-installed arm. |
 | `spec.os.install.ntp` | array of selections | no | install-profile selections | NTPServer selections for a Bootwright-installed Machine; `[]` clears profile selections. |
 | `spec.os.install.hostKeyRef` | string | conditional | — | `sshKeyPair` `Secret` delivered as the installed SSH host key; required on bare metal, optional on libvirt ([completion channel](../managed-os.md#delivered-identity-off-the-hypervisor)), forbidden otherwise. Unique per Machine and no other credential. Effect material. |
@@ -367,6 +367,23 @@ its emulated BMC ([substrates](../substrates.md#machine-realization),
 Such a Machine takes no part in the graph-wide MAC uniqueness check, and an
 NMState `mac-address` on any of its ethernet interfaces refuses with
 `api.invariant` at its network selection (D197).
+
+### Provided OS updates
+
+`spec.os.provided.updates` opts a remote Machine into a one-time package
+update during apply. It is a closed record and a whole value for kind defaults.
+Both fields are required when it is present.
+
+| Field | Type | Rule |
+| --- | --- | --- |
+| `policy` | string | `withinRelease`. Omit the `updates` record to leave OS updates to the operator. |
+| `release` | string | The exact installed RHEL major and minor, such as `"9.8"`. A mismatched host refuses before the package transaction. |
+
+The Machine requires pinned lifecycle SSH. Provide a dedicated
+[access.lifecycle](#addresses-and-access) login or pinned root SSH. The host
+must reboot unattended and have enabled repositories that supply the declared
+release. The controller Machine keeps its own maintenance policy. See
+[provided OS updates](../managed-os.md#provided-os-updates) for effect and replay.
 
 ### Hardware and substrate
 
@@ -596,7 +613,7 @@ identity supplied by the managed storage-cluster relationship; it is invalid
 on a Bootwright-installed machine or a machine without that successor login.
 
 A remote provided Machine that hosts managed infrastructure, a provider, or
-its own managed firewall may declare `access.lifecycle`. The record is atomic and requires the four fields below. An optional
+its own managed firewall or requests provided OS updates may declare `access.lifecycle`. The record is atomic and requires the four fields below. An optional
 [bootstrap](#managed-lifecycle-enrollment) record enrolls the lifecycle login. It shares the effective `ssh.addressRef`
 and `ssh.port`. Sessions continue to use the account and credential in
 `access.ssh`.
@@ -646,7 +663,7 @@ proved.
 
 ### Managed lifecycle enrollment
 
-A remote Machine with `os.provided: {}` opts into account creation by adding
+A remote Machine with `os.provided` opts into account creation by adding
 `access.lifecycle.bootstrap`. The lifecycle login is non-root with
 `privilege: sudo`. Its host pin matches `access.ssh.knownHostsRef`. The account
 and sudo rule are the context's owned effects. Session authentication comes

@@ -2051,7 +2051,53 @@ them.
 | Satellite, release not offered | The release is unset and the selected content view (explicit or inherited from the activation key) is the pin; the evidence pin is `contentView`. A newer minor in the view stops the update at `update-release-drift`. |
 | Configured repositories beside a Satellite | No release variable is written, so `$releasever` expands to the major; a minor is written literally in `baseURL`. |
 | `templateClone` qcow2 | Refused today ([B99](milestones/m1.md#b99)); steps 2 to 6 read no installer media. |
-| Provided Machine | Out of scope: Bootwright installs no operating system on it. |
+| Provided Machine | [Provided OS updates](#provided-os-updates) use the host’s existing OS and repositories. |
+
+## Provided OS updates
+
+### Selection
+
+A remote RHEL Machine opts in through
+[`spec.os.provided.updates`](api/machines.md#provided-os-updates). The policy
+applies once during the context's apply, through pinned lifecycle SSH with
+root privilege. The Machine's owner supplies the installed OS, unattended
+boot, registration, repository configuration and signing keys.
+
+### Implementations
+
+`providedupdate.Capability` freezes the expected minor and pinned placement
+in an `os-update-<machine>` block in the machines stage. It waits for the
+hardware claim and any managed lifecycle enrollment. Consumers of that claim
+wait for the update before setup on the host. Managed firewall blocks and the
+update are serialized on the same Machine. The firewall can run as a
+controller-stage prerequisite.
+
+The worker proves `ID=rhel` and an exact `VERSION_ID` on the target. It scopes
+DNF's release substitutions to the declared minor for its transaction. Fixed
+repository URLs still require operator-published content for that minor.
+Candidates that would change or remove the release identity or explicitly name
+a later minor refuse before the exact resolved DNF transaction runs. RPM
+release tags need not identify a minor, so repository selection remains part
+of the release boundary. The worker preserves DNF signature verification and
+leaves the host's persistent release settings and registration to its owner.
+See the [DNF Base API](https://dnf.readthedocs.io/en/latest/api_base.html).
+
+A root-only receipt scoped to the original apply records the package
+transaction and the boot ID before updating. After a package change, the
+worker waits for the pinned host to return, proves a new boot ID, and proves
+the declared release and existing FIPS state. An interrupted apply observes
+the receipt and DNF history before resuming. An already completed apply runs
+no new update. Destroy retains the provided Machine, updated packages and
+update receipt. The update block's removal has no inverse host effect.
+
+### Refusal table
+
+| Input or observation | Remedy |
+| --- | --- |
+| Controller Machine or missing pinned lifecycle SSH | Maintain the controller separately or supply pinned lifecycle SSH on a remote Machine. |
+| A different operating system or release | Supply a host already running the declared RHEL release. |
+| No enabled update source, unusable repository or release drift in the transaction | Enable reachable repositories serving the declared minor and repeat apply. |
+| An unresolved package transaction or unproved reboot | Check DNF history and unattended boot on the host, resolve the reported problem and repeat apply. |
 
 ## Shared package-tree publication
 

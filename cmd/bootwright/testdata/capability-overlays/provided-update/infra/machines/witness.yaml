@@ -1,0 +1,23 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: witness
+
+spec:
+  os:
+    provided:
+      updates:
+        policy: withinRelease
+        release: "9.8"
+
+  network:
+    addresses:
+      - name: ssh
+        address: 192.0.2.234
+
+  access:
+    ssh:
+      knownHostsRef: witness-host-key
+
+      auth:
+        privateKeyRef: witness-admin

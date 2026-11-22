@@ -43,6 +43,8 @@ plugins/modules/managedos_host_firewall.py validate-modules:missing-gplv3-licens
 plugins/modules/managedos_install_inspect.py validate-modules:missing-gplv3-license
 plugins/modules/managedos_install_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/managedos_network_compare.py validate-modules:missing-gplv3-license
+plugins/modules/managedos_provided_update.py validate-modules:missing-gplv3-license
+plugins/modules/managedos_provided_update_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/managedos_registration.py validate-modules:missing-gplv3-license
 plugins/modules/managedos_tree_inspect.py validate-modules:missing-gplv3-license
 plugins/modules/managedos_tree_protocol.py validate-modules:missing-gplv3-license

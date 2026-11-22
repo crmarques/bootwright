@@ -34,6 +34,7 @@ import (
 	"github.com/crmarques/bootwright/internal/managedos/hostfirewall"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/managedos/physicalerase"
+	"github.com/crmarques/bootwright/internal/managedos/providedupdate"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/storage/ceph"
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
@@ -63,6 +64,7 @@ func contractVersions() []contractVersion {
 		{installation.TreeImplementation, installation.TreeContentDigest(), reflect.TypeFor[installation.TreeRequest](), reflect.TypeFor[installation.TreeEvidence]()},
 		{diskdiscovery.DiscoveryImplementation, diskdiscovery.DiscoveryContentDigest(), reflect.TypeFor[diskdiscovery.DiscoveryRequest](), reflect.TypeFor[diskdiscovery.DiscoveryEvidence]()},
 		{physicalerase.EraseImplementation, physicalerase.EraseContentDigest(), reflect.TypeFor[physicalerase.EraseRequest](), reflect.TypeFor[physicalerase.EraseEvidence]()},
+		{providedupdate.Implementation, providedupdate.ContentDigest(), reflect.TypeFor[providedupdate.Request](), reflect.TypeFor[providedupdate.Evidence]()},
 		{hostfirewall.FirewallImplementation, hostfirewall.FirewallContentDigest(), reflect.TypeFor[hostfirewall.FirewallRequest](), reflect.TypeFor[hostfirewall.FirewallEvidence]()},
 		{installation.Implementation, installation.ContentDigest(), reflect.TypeFor[installation.Request](), reflect.TypeFor[installation.Evidence]()},
 		{agentinstall.MediaImplementation, agentinstall.MediaContentDigest(), reflect.TypeFor[agentinstall.MediaRequest](), reflect.TypeFor[agentinstall.MediaEvidence]()},
@@ -160,11 +162,13 @@ func validated(reason string) automationFormat {
 func automationFormats() map[string]automationFormat {
 	host, core := persistedBy(ceph.HostImplementation), persistedBy(ceph.Implementation)
 	formats := map[string]automationFormat{
-		"addon-instance-request-v1":  {class: formatMirrored},
-		"ceph-export-request-v1":     {class: formatMirrored},
-		"ceph-export-evidence-v1":    {class: formatMirrored},
-		"cluster-network-request-v1": {class: formatMirrored},
-		"cluster-objects-v1":         {class: formatMirrored},
+		"addon-instance-request-v1":    {class: formatMirrored},
+		"ceph-export-request-v1":       {class: formatMirrored},
+		"ceph-export-evidence-v1":      {class: formatMirrored},
+		"cluster-network-request-v1":   {class: formatMirrored},
+		providedupdate.Version:         {class: formatMirrored},
+		providedupdate.EvidenceVersion: {class: formatMirrored},
+		"cluster-objects-v1":           {class: formatMirrored},
 		// The host block writes them; the core block's workers read them back
 		// for the manager account, the cephadm cache and the OSD identities.
 		"ceph-runtime-profile-v1":         persistedBy(ceph.HostImplementation, ceph.Implementation),
@@ -361,6 +365,8 @@ func automationIdentities() map[string]automationFormat {
 		"/.bootwright-kubeconfig":                 fixedBy(kindPlace, "the kept copy of the installer's kubeconfig in the work root", media, install),
 		"/etc/bootwright":                         fixedBy(kindPlace, "the guest directory of the registration and update records", anaconda),
 		"/etc/bootwright/registration.json":       fixedBy(kindProof, "the registration record the unregistration reads", anaconda),
+		"/etc/bootwright/provided-updates":        fixedBy(kindPlace, "the root of the operation-owned provided OS update receipts", providedupdate.Implementation),
+		"bootwright-provided-update:":             fixedBy(kindMark, "the DNF history comment identifying an operation-owned update transaction", providedupdate.Implementation),
 		"/etc/bootwright/update.json":             fixedBy(kindProof, "the update record the update worker resumes from and an observation reads", anaconda),
 		"/etc/bootwright/root-wwn":                fixedBy(kindProof, "the WWN a root disk declared by serial number reported to the installer, which the completion and an observation read", anaconda),
 		"/etc/rhsm/ca/bootwright-satellite.pem":   fixedBy(kindPlace, "the Satellite CA bundle the registration worker writes and rhsm.conf names", anaconda),

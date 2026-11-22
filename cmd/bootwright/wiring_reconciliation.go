@@ -34,6 +34,7 @@ import (
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/managedos/media"
 	"github.com/crmarques/bootwright/internal/managedos/physicalerase"
+	"github.com/crmarques/bootwright/internal/managedos/providedupdate"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/ansiblerunner"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -195,6 +196,8 @@ func operationPlaybook() map[string]string {
 		diskdiscovery.DiscoveryImplementation + "/destroy":          "managedos/discovery_destroy.yml",
 		physicalerase.EraseImplementation + "/destroy":              "managedos/erase_destroy.yml",
 		physicalerase.EraseImplementation + "/observe":              "managedos/erase_observe.yml",
+		providedupdate.Implementation + "/apply":                    "managedos/provided_update_apply.yml",
+		providedupdate.Implementation + "/observe":                  "managedos/provided_update_observe.yml",
 		hostfirewall.FirewallImplementation + "/apply":              "managedos/firewall_apply.yml",
 		hostfirewall.FirewallImplementation + "/observe":            "managedos/firewall_observe.yml",
 		hostfirewall.FirewallImplementation + "/destroy":            "managedos/firewall_destroy.yml",
@@ -310,6 +313,9 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 	}, {
 		kind: installation.Kind, implementation: installation.Implementation, family: installation.InstallFamily,
 	}, {
+		kind: installation.Kind, implementation: providedupdate.Implementation, family: machine.ProvidedUpdateFamily,
+		capability: providedupdate.New(runner),
+	}, boundCapability{
 		kind: installation.Kind, implementation: hostfirewall.FirewallImplementation, family: hostfirewall.FirewallFamily,
 		capability: hostfirewall.New(runner).WithHostPorts(hostPortRequirements),
 	}, {

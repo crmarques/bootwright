@@ -271,7 +271,7 @@ func (s Service) planFromEvidence(ctx context.Context, view View, state *compila
 }
 
 func (s Service) freezeApplyGraph(definitions []reconciliation.BlockDefinition, scope *reconciliation.PreparationScope) (reconciliation.Plan, error) {
-	definitions = dependOnEnrollment(definitions)
+	definitions = dependOnProvidedUpdates(dependOnEnrollment(definitions))
 	definitions, err := s.dependOnStageTails(definitions)
 	if err != nil {
 		return reconciliation.Plan{}, err
@@ -740,6 +740,34 @@ func dependOnEnrollment(definitions []reconciliation.BlockDefinition) []reconcil
 		}
 		if d.Family == machine.FirewallFamily && managed[d.Object] {
 			d.Requires = append(d.Requires, reconciliation.ObjectRef{Kind: string(api.Machine), Object: d.Object, Family: machine.EnrollmentFamily})
+		}
+	}
+	return definitions
+}
+
+func dependOnProvidedUpdates(definitions []reconciliation.BlockDefinition) []reconciliation.BlockDefinition {
+	updates := map[string]bool{}
+	for _, definition := range definitions {
+		if definition.Family == machine.ProvidedUpdateFamily {
+			updates[definition.Object] = true
+		}
+	}
+	for index := range definitions {
+		d := &definitions[index]
+		switch d.Family {
+		case machine.ProvidedUpdateFamily, machine.FirewallFamily:
+			if updates[d.Object] {
+				d.Exclusive = append(d.Exclusive, "provided-os/"+d.Object)
+				slices.Sort(d.Exclusive)
+				d.Exclusive = slices.Compact(d.Exclusive)
+			}
+		case machine.EnrollmentFamily:
+		default:
+			for _, ref := range d.Requires {
+				if ref.Kind == string(api.Machine) && ref.Family == machine.HardwareFamily && updates[ref.Object] {
+					d.Requires = append(d.Requires, reconciliation.ObjectRef{Kind: string(api.Machine), Object: ref.Object, Family: machine.ProvidedUpdateFamily})
+				}
+			}
 		}
 	}
 	return definitions

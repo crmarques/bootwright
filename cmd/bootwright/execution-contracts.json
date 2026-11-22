@@ -83,6 +83,10 @@
     "contentDigest": "62218223d7cca3604594c231a1265d351e6c12e0e9d6d8b31f2f51086a839445",
     "fingerprint": "06de7b0e71cf143bad146f736424cc824be8a296f3c294d8463af82981089e6b"
   },
+  "os-provided-update-v1": {
+    "contentDigest": "838ca785639f9e4b5fc6632987e7858a38a745e4b3a1c8feec52fd191982b6f9",
+    "fingerprint": "bb84415ba25df00dc8a79692b6fb7c680a8f4963d3598253b924119b811286b1"
+  },
   "physical-erase-v1": {
     "contentDigest": "6c1c49685138b533ada39706c004909f33a27c52b3694793cb4e121e09f6643e",
     "fingerprint": "701dfc42cb63c44329df052377d07dabc5f0095e3edbb1a553861dd1753eb08c"
