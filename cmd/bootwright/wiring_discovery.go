@@ -9,6 +9,7 @@ import (
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/managedos/diskdiscovery"
+	"github.com/crmarques/bootwright/internal/managedos/hostfirewall"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
@@ -34,7 +35,7 @@ func discoveryPreparations(resolver lifecycle.CapabilityResolver) []lifecycle.Pr
 		switch binding.Implementation {
 		case baremetal.Implementation, diskdiscovery.DiscoveryImplementation:
 			definition.Bindings = append(definition.Bindings, binding)
-		case clients.Implementation, artifactserver.Implementation:
+		case clients.Implementation, artifactserver.Implementation, hostfirewall.FirewallImplementation:
 			definition.Prerequisites = append(definition.Prerequisites, binding)
 		default:
 			if binding.Family == managedservice.Family {

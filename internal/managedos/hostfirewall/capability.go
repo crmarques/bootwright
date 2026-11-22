@@ -79,6 +79,9 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		return plan, err
 	}
 	for _, request := range requests {
+		if input.Preparation != nil && !request.Direct {
+			continue
+		}
 		canonical, err := request.Canonical()
 		if err != nil {
 			return plan, err
