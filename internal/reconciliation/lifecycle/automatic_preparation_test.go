@@ -103,6 +103,17 @@ func TestAutomaticPreparationPreviewAndControllerStageHaveNoInventoryEffects(t *
 	if len(h.capability.destroys) != 3 {
 		t.Fatal(h.capability.destroys)
 	}
+	preview, err = h.service.Plan(ctx, PlanRequest{Verb: reconciliation.Apply, ContextName: testContextName})
+	if err != nil || preview == nil || len(preview.Authorizations) != 0 {
+		t.Fatalf("fresh preview should prepare inventory before installation: %v %+v", err, preview)
+	}
+	_, err = h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
+	if reports := diagnostics.Of(err); len(reports) == 0 || !authorizationRefusal(reports[0].Code) {
+		t.Fatalf("fresh installation should require authorization after collecting new inventory: %v (%v)", err, reports)
+	}
+	if !slices.Equal(h.capability.applies, []string{"setup", "inventory", "installation", "setup", "inventory"}) {
+		t.Fatalf("fresh apply did not collect new inventory: %v", h.capability.applies)
+	}
 }
 func TestAutomaticPreparationRejectsFutureAuthorizationAndUntilBeforeEffects(t *testing.T) {
 	t.Parallel()
@@ -118,6 +129,7 @@ func TestAutomaticPreparationRejectsFutureAuthorizationAndUntilBeforeEffects(t *
 		}
 	}
 }
+
 func TestAutomaticPreparationRequiresConfirmationAndResumesFrozenScope(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

@@ -176,6 +176,10 @@ func ancestorsOf(definitions []reconciliation.BlockDefinition, identity string) 
 // planFrom asks every resolvable capability for its blocks. Planning is pure:
 // it opens no payload, contacts nothing and materializes no Secret.
 func (s Service) planFrom(ctx context.Context, view View, state *compilation.State, scope *reconciliation.PreparationScope) (reconciliation.Plan, capabilityBinding, error) {
+	return s.planFromEvidence(ctx, view, state, scope, planningOwners)
+}
+
+func (s Service) planFromEvidence(ctx context.Context, view View, state *compilation.State, scope *reconciliation.PreparationScope, owners ownersOf) (reconciliation.Plan, capabilityBinding, error) {
 	controller, err := controllerMachine(state)
 	if err != nil {
 		return reconciliation.Plan{}, capabilityBinding{}, err
@@ -184,7 +188,7 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 	if len(bindings) == 0 {
 		return reconciliation.Plan{}, capabilityBinding{}, planCapabilityMissing.Fail("no lifecycle capability is available for the selected state", "")
 	}
-	input := s.planInput(view, state, controller, scope)
+	input := s.planInputWithEvidence(view, state, controller, scope, owners)
 	if err := s.validatePreparationScope(ctx, input); err != nil {
 		return reconciliation.Plan{}, capabilityBinding{}, err
 	}
@@ -276,9 +280,21 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 }
 
 func (s Service) planInput(view View, state *compilation.State, controller string, scope *reconciliation.PreparationScope) PlanInput {
+	return s.planInputWithEvidence(view, state, controller, scope, planningOwners)
+}
+
+func (s Service) planInputWithEvidence(view View, state *compilation.State, controller string, scope *reconciliation.PreparationScope, owners ownersOf) PlanInput {
 	return PlanInput{AppliedEvidence: func(ctx context.Context, kind, object string) ([]BlockEvidence, error) {
-		return s.objectEvidenceAt(ctx, view, kind, object, appliedOwners)
+		return s.objectEvidenceAt(ctx, view, kind, object, owners)
 	}, Verb: reconciliation.Apply, Context: view.Identity(), State: state, Controller: controller, Preparation: scope, Derived: NewDerivations()}
+}
+
+// A new plan admits prerequisite evidence only from an active apply lineage.
+func planningOwners(ctx context.Context, store recordReader, current lineageMember) ([]lineageMember, error) {
+	if current.operation.Verb != reconciliation.Apply {
+		return nil, nil
+	}
+	return evidenceOwners(ctx, store, current)
 }
 
 // refuseOwnSocketConflicts compares the sockets this context's own blocks claim

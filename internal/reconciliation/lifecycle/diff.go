@@ -246,18 +246,18 @@ func (s Service) appliedState(ctx context.Context, view View, owning operationst
 }
 
 func (s Service) freshPlan(ctx context.Context, view View, desired *compilation.State) (reconciliation.Plan, string) {
-	plan, err := s.planSelected(ctx, view, desired)
+	plan, err := s.planSelected(ctx, view, desired, planningOwners)
 	if err != nil {
 		return reconciliation.Plan{}, firstMessage(err)
 	}
 	return plan, ""
 }
 
-func (s Service) planSelected(ctx context.Context, view View, state *compilation.State) (reconciliation.Plan, error) {
+func (s Service) planSelected(ctx context.Context, view View, state *compilation.State, owners ownersOf) (reconciliation.Plan, error) {
 	if err := s.refuseUnsupported(state, nil); err != nil {
 		return reconciliation.Plan{}, err
 	}
-	plan, _, err := s.planFrom(ctx, view, state, nil)
+	plan, _, err := s.planFromEvidence(ctx, view, state, nil, owners)
 	return plan, err
 }
 
@@ -268,7 +268,7 @@ func (s Service) rebuiltBlocks(ctx context.Context, view View, owning operations
 	replanned := reconciliation.Plan{}
 	if len(frozen.Files) != 0 {
 		if state, err := s.compileSources(ctx, frozen); err == nil {
-			if plan, err := s.planSelected(ctx, view, state); err == nil {
+			if plan, err := s.planSelected(ctx, view, state, appliedOwners); err == nil {
 				replanned = plan
 			}
 		}

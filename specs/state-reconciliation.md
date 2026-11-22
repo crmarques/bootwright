@@ -207,6 +207,10 @@ additive apply alone. An addition never adds, changes or removes a Machine,
 cluster, network, storage or service block, and never reaches an imported
 cluster.
 
+Fresh apply planning takes prerequisite evidence from the current apply
+lineage. A completed destroy's source lineage remains available to removal
+and historical comparison.
+
 ## Context mutation evidence
 
 Reconciliation owns a closed version-1 mutation record initialized with
