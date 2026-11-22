@@ -675,7 +675,22 @@ func TestTheHardwareClaimBorrowsTheBootstrapLoginBeforeEnrollment(t *testing.T) 
 		}
 		return []string{"52:54:00:9a:1b:01"}, nil
 	}
-	capability := New(nil).WithBootstrap(reader)
+	prompted := 0
+	refused := errors.New("missing credential")
+	prompt := func(_ context.Context, contextName string, place machine.Placement, access machine.Bootstrap, _ map[string]secrets.Material) error {
+		prompted++
+		if contextName != "lab" || place.Machine != block.Object || access.Auth != "askPassword" {
+			t.Fatal("the prompt changed the bootstrap route")
+		}
+		return refused
+	}
+	capability := New(nil).WithBootstrap(reader, prompt)
+	if err := capability.CheckApplyStart(context.Background(), lifecycle.Probe{Block: block, Context: "lab"}); !errors.Is(err, refused) || prompted != 1 || calls != 0 {
+		t.Fatalf("start prompt = %v, prompts = %d, hardware reads = %d", err, prompted, calls)
+	}
+	if err := capability.CheckApplyStart(context.Background(), lifecycle.Probe{Block: servicesBlock(t), Context: "lab"}); err != nil || prompted != 1 {
+		t.Fatalf("a claim without bootstrap prompted %d times (%v)", prompted, err)
+	}
 	if !capability.IndependentOfController(block.BlockDefinition) {
 		t.Fatal("the native hardware claim depends on controller stage work")
 	}

@@ -35,12 +35,9 @@ func (r Remote) bootstrap(ctx context.Context, contextName string, place machine
 	if err != nil {
 		return nil, err
 	}
-	user := access.User
-	if user == "" && r.Caller != nil {
-		user, err = r.Caller(ctx)
-	}
-	if err != nil || !validUser(user) || user == place.User || user == "root" && access.Sudo {
-		return nil, refused(place, "bootstrap account", "choose a distinct, valid existing remote administrator")
+	user, err := r.bootstrapUser(ctx, place, access)
+	if err != nil {
+		return nil, err
 	}
 	session := machine.Session{Machine: place.Machine, Address: place.Address, Port: place.Port, HostKey: host,
 		Identity: machine.Identity{User: user}, Command: command, Batch: true}
@@ -72,6 +69,34 @@ func (r Remote) bootstrap(ctx context.Context, contextName string, place machine
 		return nil, remoteRefusal(err, place, user, "first access as "+user, "check SSH authentication and, for privileged work, that this account can sudo to root")
 	}
 	return output, nil
+}
+
+func (r Remote) bootstrapUser(ctx context.Context, place machine.Placement, access machine.Bootstrap) (string, error) {
+	user := access.User
+	var err error
+	if user == "" && r.Caller != nil {
+		user, err = r.Caller(ctx)
+	}
+	if err != nil || !validUser(user) || user == place.User || user == "root" && access.Sudo {
+		return "", refused(place, "bootstrap account", "choose a distinct, valid existing remote administrator")
+	}
+	return user, nil
+}
+
+func (r Remote) PromptSSH(ctx context.Context, contextName string, place machine.Placement, access machine.Bootstrap, material map[string]secrets.Material) error {
+	if access.Auth != "askPassword" {
+		return nil
+	}
+	if err := place.ProveHostPin(contextName, material); err != nil {
+		return err
+	}
+	user, err := r.bootstrapUser(ctx, place, access)
+	if err != nil {
+		return err
+	}
+	password, err := r.password(ctx, place.Machine, user, "SSH", "", material)
+	clear(password)
+	return err
 }
 
 func (r Remote) sshCredential(ctx context.Context, session *machine.Session, access machine.Bootstrap, bound map[string]secrets.Material) error {

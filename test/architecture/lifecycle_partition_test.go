@@ -26,7 +26,7 @@ func lifecycleFileClasses() map[string]string {
 		"operation_plan.go": "planner", "other_build.go": "planner", "planning.go": "planner", "presentation.go": "planner",
 		"removal_phases.go": "planner", "removal_plan.go": "planner", "reservations.go": "planner", "secret_references.go": "planner",
 		"stage_tails.go": "planner", "target_owners.go": "planner", "transitions.go": "planner",
-		"access_tool.go": "reader", "attempts.go": "executor", "evidence.go": "executor", "executor.go": "executor", "frozenbinding.go": "executor",
+		"access_tool.go": "reader", "apply_start.go": "executor", "attempts.go": "executor", "evidence.go": "executor", "executor.go": "executor", "frozenbinding.go": "executor",
 		"installed_placement.go": "executor", "invocation.go": "executor", "logging.go": "executor", "mutation.go": "executor", "online_gates.go": "executor", "produced.go": "executor",
 		"rebind.go": "executor", "register_run.go": "executor", "registration.go": "executor",
 		"registered_power.go": "executor", "removal_evidence.go": "executor", "removal_gates.go": "executor", "removal_machine_power.go": "executor", "start_power.go": "orchestrator", "runtime.go": "executor",

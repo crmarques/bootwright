@@ -175,6 +175,11 @@ func (Capability) Quiescent(context.Context, lifecycle.Probe) (lifecycle.Quiesce
 	return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: "the owned access is removed after dependent effects"}, nil
 }
 
+func (c Capability) CheckApplyStart(ctx context.Context, p lifecycle.Probe) error {
+	_, err := c.run(ctx, p.Execution(), "observe", false)
+	return err
+}
+
 func (c Capability) Apply(ctx context.Context, e lifecycle.Execution) (lifecycle.Result, error) {
 	return c.effect(ctx, e, "apply", "ready")
 }

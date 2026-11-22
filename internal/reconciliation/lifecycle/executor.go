@@ -199,20 +199,39 @@ func (s Service) run(ctx context.Context, tx Transaction, decided operationPlan,
 	// The location is named before the first effect, because its whole purpose
 	// is to be followed while the work runs.
 	result.LogLocation = store.LogDirectory(operation.ID)
-	if s.options.Progress != nil && result.LogLocation != "" {
-		s.options.Progress.ReportLogLocation(ctx, LogLocation{Path: result.LogLocation, Context: result.Context.Name, Operation: operation.ID})
-	}
 	states, err := store.BlockStates(ctx, operation.ID, plan)
 	if err != nil {
 		return result, err
 	}
-	var effects map[string]bool
-	if operation.Verb == reconciliation.Apply {
-		effects, _ = reachableEffects(decided.plan, decided.states, decided.selection)
+	run := invocation{
+		stopGroups: stopGroups, tx: tx, store: store, approved: located, boundary: logging,
+		operation: operation, plan: plan, material: material,
 	}
-	boundary, warned, cause := s.converge(work, invocation{effects: effects, stopGroups: stopGroups, tx: tx, store: store, approved: located, boundary: logging, operation: operation, plan: plan, material: material}, decided.phases, states, decided.selection)
-	result.Warnings = warned
+	var refusal error
+	if operation.Verb == reconciliation.Apply {
+		run.effects, _ = reachableEffects(decided.plan, decided.states, decided.selection)
+		refusal = s.checkApplyStart(work, run, states)
+	}
+	boundary := true
+	var cause error
+	if refusal == nil {
+		if s.options.Progress != nil && result.LogLocation != "" {
+			s.options.Progress.ReportLogLocation(ctx, LogLocation{Path: result.LogLocation, Context: result.Context.Name, Operation: operation.ID})
+		}
+		boundary, result.Warnings, cause = s.converge(work, run, decided.phases, states, decided.selection)
+	} else {
+		for _, state := range states {
+			if state == reconciliation.BlockRunning {
+				boundary = false
+				break
+			}
+		}
+	}
 	logging.close(ctx, log)
 	final, terminal := s.finish(recordingContext(ctx), tx, store, operation, plan, states, decided.selection, boundary, logging.faulted(), result)
-	return final, withCause(logging.err(), withCause(cause, terminal))
+	err = withCause(logging.err(), withCause(cause, terminal))
+	if refusal != nil {
+		err = beside(refusal, err)
+	}
+	return final, err
 }

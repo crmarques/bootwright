@@ -347,7 +347,7 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 		capability: mirrorfill.NewFiles(runner, acquisitionTools().MirrorFiles).WithInstalledHostKeys(installation.ProvedHostKey),
 	})
 	resolver = append(resolver, boundCapability{
-		kind: hardware.Kind, implementation: hardware.Implementation, family: hardware.Family, capability: hardware.New(runner).WithBootstrap(remote.HardwareAddresses),
+		kind: hardware.Kind, implementation: hardware.Implementation, family: hardware.Family, capability: hardware.New(runner).WithBootstrap(remote.HardwareAddresses, remote.PromptSSH),
 	})
 	resolver = append(resolver, boundCapability{
 		kind: mirrorfill.ImagesKind, implementation: mirrorfill.ImagesImplementation, family: mirrorfill.Family,

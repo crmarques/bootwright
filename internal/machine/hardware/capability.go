@@ -15,16 +15,18 @@ import (
 )
 
 type BootstrapReader func(context.Context, string, machineref.Placement, machineref.Bootstrap, map[string]secrets.Material) ([]string, error)
+type BootstrapPrompter func(context.Context, string, machineref.Placement, machineref.Bootstrap, map[string]secrets.Material) error
 
 type Capability struct {
 	runner        Runner
 	readBootstrap BootstrapReader
+	promptSSH     BootstrapPrompter
 }
 
 func New(runner Runner) Capability { return Capability{runner: runner} }
 
-func (c Capability) WithBootstrap(reader BootstrapReader) Capability {
-	c.readBootstrap = reader
+func (c Capability) WithBootstrap(reader BootstrapReader, prompt BootstrapPrompter) Capability {
+	c.readBootstrap, c.promptSSH = reader, prompt
 	return c
 }
 
@@ -95,6 +97,14 @@ func (Capability) Removal(ctx context.Context, block reconciliation.Block) (life
 	}
 	return lifecycle.Removal{Description: description(reconciliation.Destroy, request), Impacts: impacts(reconciliation.Destroy, request),
 		Groups: groups(reconciliation.Destroy, request), Consumes: []string{}}, nil
+}
+
+func (c Capability) CheckApplyStart(ctx context.Context, p lifecycle.Probe) error {
+	request, err := DecodeRequest(p.Block.Request)
+	if err != nil || request.Bootstrap == nil || c.promptSSH == nil {
+		return err
+	}
+	return c.promptSSH(ctx, p.Context, request.Placement, *request.Bootstrap, p.Material)
 }
 
 func (c Capability) Apply(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {

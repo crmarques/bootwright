@@ -61,7 +61,7 @@
     "internal/infrastructureservices/registry": 89.5,
     "internal/machine": 83.7,
     "internal/machine/access": 90.8,
-    "internal/machine/account": 63.4,
+    "internal/machine/account": 64.1,
     "internal/machine/diskselection": 76.6,
     "internal/machine/hardware": 94.5,
     "internal/machine/inventory": 93.9,

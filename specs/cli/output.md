@@ -212,9 +212,11 @@ same total still runs keeps its outcome in the block, and an appended stream
 withholds it, until every earlier running step settles. Closing the block
 writes any outcome still withheld, in position order.
 
-While Bootwright reads an enrollment password, progress yields the terminal to
-the prompt and releases its echo hold. Other work can still report progress.
-The presenter draws the updated rows after the prompt ends.
+Apply reads its [enrollment passwords](../api/machines.md#managed-lifecycle-enrollment)
+before progress begins. If another flow prompts while showing progress, the
+presenter yields the terminal and releases its echo hold. Other work can
+still report progress, and the presenter draws the updated rows after the
+prompt ends.
 
 Progress failures never change an effect, outcome or receipt. Cancellation
 stops reporting rather than claiming an unobserved outcome. Timers and terminal

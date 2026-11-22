@@ -663,6 +663,10 @@ The `sudo.askPassword` and `sudo.passwordRef` arms independently select the
 remote sudo credential. The username in each password Secret matches its
 bootstrap principal.
 
+Before starting apply progress or attempts, Bootwright collects the needed
+bootstrap passwords and uses the pinned login for a read-only check on each
+enrollment it can start or must resolve. A refused check pauses a fresh
+apply and leaves any unproved effect of a continued apply to be resolved.
 Apply reads the hardware through the pinned bootstrap login without sudo
 and holds the host claim before creating the account. Bootwright authorizes
 the public key, configures noninteractive sudo and verifies a fresh connection
