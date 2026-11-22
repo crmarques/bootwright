@@ -82,7 +82,7 @@
     "internal/nativeexec": 96.3,
     "internal/nativefs": 89.3,
     "internal/network": 96.2,
-    "internal/reconciliation": 89.7,
+    "internal/reconciliation": 90.5,
     "internal/reconciliation/ansiblerunner": 88.2,
     "internal/reconciliation/contextguard": 82.8,
     "internal/reconciliation/lifecycle": 90.1,
