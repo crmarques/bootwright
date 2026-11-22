@@ -133,6 +133,28 @@ func TestExplicitSSHPasswordUsesTheSudoInputGuard(t *testing.T) {
 	}
 }
 
+func TestDelegatedEntryRefusesAdministrativeCommandsAndUnprivilegedCallers(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		args        []string
+		uid, status int
+	}{
+		{"policy install", []string{"policy", "install", "--context", "lab", "--file", "policy.yaml"}, 0, 1},
+		{"read-only command", []string{"version"}, 0, 1},
+		{"unprivileged session", []string{"machine", "exec", "--name", "node", "uptime"}, 1001, 255},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			boundary := privilegeBoundary{euid: func() int { return test.uid }}
+			args := append([]string{delegatedSessionEntry}, test.args...)
+			if status := boundary.run(t.Context(), args, &stdout, &stderr); status != test.status ||
+				stdout.Len() != 0 || !strings.Contains(stderr.String(), "error  access.denied") {
+				t.Fatalf("exit %d, stdout %q, stderr %q", status, stdout.String(), stderr.String())
+			}
+		})
+	}
+}
+
 // A root invocation sudo started refuses a foreign variable before it resolves
 // an account or runs anything, whether or not its command needs root.
 func TestASudoStartedRootInvocationRefusesAForeignVariableFirst(t *testing.T) {

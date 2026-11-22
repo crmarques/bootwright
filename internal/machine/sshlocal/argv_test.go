@@ -137,6 +137,24 @@ func TestOnlyABatchSessionForbidsTheClientToPrompt(t *testing.T) {
 	}
 }
 
+func TestDelegatedArgumentsDisableEscapeAndForwardingAndKeepShellInteractive(t *testing.T) {
+	for _, command := range [][]string{nil, {"/usr/bin/uptime"}} {
+		with := session(machine.IdentityKey)
+		with.Delegated, with.Command = true, command
+		args := arguments(with, paths{config: 3, privateKey: 4, knownHosts: 5}, with.HostKey.Algorithms())
+		for _, option := range []string{"EscapeChar=none", "ClearAllForwardings=yes"} {
+			if !slices.Contains(args, option) {
+				t.Fatalf("delegated arguments lack %s: %v", option, args)
+			}
+		}
+		for _, flag := range []string{"-n", "-T"} {
+			if slices.Contains(args, flag) != (len(command) > 0) {
+				t.Fatalf("unexpected %s setting for command %q: %v", flag, command, args)
+			}
+		}
+	}
+}
+
 func TestAPinnedRSAKeyAdmitsTheSignaturesItsServerMayOffer(t *testing.T) {
 	with := session(machine.IdentityKey)
 	with.HostKey = trust.HostKey{Type: "ssh-rsa", PublicKey: "AAAA"}

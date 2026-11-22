@@ -7,6 +7,41 @@ import (
 	"testing"
 )
 
+func TestAccountFilesResolveOnlyAnUnambiguousGroup(t *testing.T) {
+	for _, test := range []struct {
+		name, groups string
+		want         uint32
+		err          error
+	}{
+		{"canonical", "other:x:2043:\nsupport:x:2042:member\n", 2042, nil},
+		{"absent", "other:x:2043:\n", 0, errNoEntry},
+		{"duplicate name", "support:x:2042:\nsupport:x:2043:\n", 0, errMalformed},
+		{"duplicate gid", "support:x:2042:\nother:x:2042:\n", 0, errMalformed},
+		{"malformed id", "support:x:02042:\n", 0, errMalformed},
+		{"incomplete entry", "support:x:2042\n", 0, errMalformed},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			files := accountFiles{groups: []byte(test.groups)}
+			got, err := files.groupID(t.Context(), "support")
+			if got != test.want || !errors.Is(err, test.err) {
+				t.Fatalf("group ID %d, error %v; want %d, %v", got, err, test.want, test.err)
+			}
+		})
+	}
+}
+
+func TestLocalGroupMembershipWithAnInvalidGIDRefusesTheAccount(t *testing.T) {
+	files := accountFiles{
+		passwd: []byte("operator:x:1001:1002::/home/operator:/bin/sh\n"),
+		groups: []byte("support:x:02042:operator\n"),
+	}
+	_, err := accountFrom(t.Context(), files, accountRequest{uid: 1001, euid: 1001})
+	var refusal accountRefusal
+	if !errors.As(err, &refusal) || refusal.reason != "the account database answered inconsistently for operator" {
+		t.Fatalf("invalid group membership: %v", err)
+	}
+}
+
 func TestLocalAccountAndManualSudoIdentity(t *testing.T) {
 	passwd := []byte("root:x:0:0::/root:/bin/sh\noperator:x:1001:1002::/home/operator:/bin/sh\n")
 	groups := []byte("operator:x:1002:\nshared:x:1003:operator\n")

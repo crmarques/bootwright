@@ -18191,3 +18191,14 @@ proves bound pin material before fresh apply registration.
 `TestCephAdmissionChecksTheProvidedTiebreakerPinAndItsFIPSPolicy` and
 the lifecycle binding-proof tests. Gate commands and results are recorded in
 the delivering commit.
+
+## X653 — Delegated session policy coverage
+
+**Owner:** Developer tooling and Access. **Item:** B1655 (defect).
+**Authority:** explicit owner request to repair the failed GitHub check.
+
+Tests exercise policy installation and admission, verified group resolution,
+and the SSH client's delegated exec and shell options. The
+[coverage gate](../architecture.md#architecture-verification) retains the
+existing floors and adds one for the session policy package. The delivering
+commit records the verification results.

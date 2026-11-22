@@ -16,6 +16,28 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
+func TestDelegatedEntryRefusesNonSessionCommandsAndNonRoot(t *testing.T) {
+	for _, test := range []struct {
+		allowed bool
+		uid     int
+	}{
+		{allowed: false, uid: 0},
+		{allowed: true, uid: 1001},
+	} {
+		if diagnostic := AdmitDelegatedEntry(test.allowed, test.uid); diagnostic == nil || diagnostic.Code != "access.denied" {
+			t.Fatalf("admitted %+v with diagnostic %+v", test, diagnostic)
+		}
+	}
+}
+
+func TestSSHPasswordRefusalNamesTheKeyFileAlternative(t *testing.T) {
+	diagnostic := UnsupervisedSSHPassword()
+	if diagnostic.Code != "access.unavailable" || !strings.Contains(diagnostic.Remediation, "--ssh-id-file") ||
+		!strings.Contains(fileRemedy(SSHPasswordInput), "--ssh-id-file") {
+		t.Fatalf("unverified prompt diagnostic %+v, remedy %q", diagnostic, fileRemedy(SSHPasswordInput))
+	}
+}
+
 // scriptedChild is what the fake sudo does once the -ll probe is answered:
 // it writes the child's streams in order, runs during, then ends.
 type scriptedChild struct {

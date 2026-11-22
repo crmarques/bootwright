@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 
@@ -27,6 +28,34 @@ func TestDelegatedBatchDenialPrecedesCredentialLending(t *testing.T) {
 	_, err := h.service.Exec(t.Context(), ExecRequest{Names: []string{"declared", "guest"}, Command: []string{"/usr/bin/uptime"}})
 	if !errors.Is(err, refusal) || checks != 1 || h.lender.lends != 0 {
 		t.Fatalf("error %v, authorizations %d, lends %d", err, checks, h.lender.lends)
+	}
+}
+
+func TestDelegatedShellChecksTheGrantBeforeLendingAndKeepsInteractiveInput(t *testing.T) {
+	refusal := errors.New("denied by policy")
+	input := strings.NewReader("local input")
+	h := newHarness(t, func(options *Options) {
+		options.Streams.In = input
+		options.Authorize = func(_ context.Context, name string, _ api.Catalog, targets []machine.SessionTarget, argv []string) error {
+			want := []machine.SessionTarget{{Machine: "declared", RemoteUser: "admin"}}
+			if name != "lab" || !slices.Equal(targets, want) || len(argv) != 0 {
+				t.Fatalf("shell authorization received %q %+v %v", name, targets, argv)
+			}
+			return refusal
+		}
+	})
+	service := h.service.WithCatalog(catalog())
+	request := RshRequest{Name: "declared"}
+	if _, err := service.Rsh(t.Context(), request); !errors.Is(err, refusal) || h.lender.lends != 0 {
+		t.Fatalf("refused shell: %v, lends %d", err, h.lender.lends)
+	}
+	refusal = nil
+	if _, err := service.Rsh(t.Context(), request); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.client.sessions) != 1 || !h.client.sessions[0].Delegated || h.client.sessions[0].Batch ||
+		len(h.client.inputs) != 1 || h.client.inputs[0] != input {
+		t.Fatalf("shell sessions %+v, input %v", h.client.sessions, h.client.inputs)
 	}
 }
 

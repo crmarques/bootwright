@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
 )
 
@@ -120,6 +121,72 @@ func TestSessionPolicyRejectsInvalidDocuments(t *testing.T) {
 	}
 	if _, err := Decode([]byte(policyFixture), "another-context"); err == nil {
 		t.Fatal("accepted different context")
+	}
+}
+
+func TestSessionPolicyRejectsInvalidGrants(t *testing.T) {
+	for _, test := range []struct {
+		name, original, replacement, want string
+	}{
+		{"duplicated grant", "name: shell", "name: diagnostics", "distinct DNS-label names"},
+		{"both subject types", "group: PLATFORM_SUPPORT", "group: PLATFORM_SUPPORT\n          user: analyst", "one valid user or group"},
+		{"numeric subject", "group: PLATFORM_SUPPORT", "group: '2042'", "one valid user or group"},
+		{"invalid target", "machineRefs: [gateway]", "machineRefs: [gateway.example.test]", "DNS-label target names"},
+		{"missing command", `commands: [["/usr/bin/uptime"]]`, "commands: []", "at least one exec command"},
+		{"relative command", "/usr/bin/uptime", "../uptime", "absolute executable path"},
+		{"noncanonical command", "/usr/bin/uptime", "/usr/bin/../bin/uptime", "absolute executable path"},
+		{"command with control character", `"/usr/bin/uptime"`, `"/usr/bin/uptime", "first\nsecond"`, "without control characters"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			data := strings.Replace(policyFixture, test.original, test.replacement, 1)
+			if _, err := Decode([]byte(data), "lab"); err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("decode error %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
+type unreadablePolicy struct{}
+
+func (unreadablePolicy) ReadSessionPolicy(context.Context, string) ([]byte, error) {
+	return nil, errors.New("cannot read policy")
+}
+
+func TestPolicyPermissionsRefuseUnusableState(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		store      Store
+		lookup     func(context.Context, bool, string) (uint32, error)
+		wantReason string
+	}{
+		{name: "unset policy", store: policyBytes("")},
+		{name: "empty policy", store: policyBytes(strings.Split(policyFixture, "  grants:")[0] + "  grants: []\n")},
+		{name: "unreadable policy", store: unreadablePolicy{}, wantReason: "active policy could not be read"},
+		{name: "invalid policy", store: policyBytes("invalid"), wantReason: "active policy is invalid"},
+		{
+			name: "unresolved subject", store: policyBytes(policyFixture),
+			lookup:     func(context.Context, bool, string) (uint32, error) { return 0, errors.New("directory is down") },
+			wantReason: "a policy subject could not be verified",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			service := testPolicy()
+			service.Store = test.store
+			if test.lookup != nil {
+				service.Lookup = test.lookup
+			}
+			grants, err := service.Permissions(t.Context(), Principal{UID: 3001}, "lab", policyCatalog("worker"))
+			if test.wantReason == "" {
+				if err != nil || grants == nil || len(grants) != 0 {
+					t.Fatalf("permissions %+v, error %v, want an empty grant list", grants, err)
+				}
+				return
+			}
+			if got := diagnostics.Of(err); grants != nil || len(got) != 1 || got[0].Code != "access.denied" ||
+				!strings.Contains(got[0].Message, test.wantReason) {
+				t.Fatalf("permissions %+v, diagnostics %+v, want %q", grants, got, test.wantReason)
+			}
+		})
 	}
 }
 

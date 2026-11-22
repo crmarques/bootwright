@@ -65,6 +65,7 @@
     "internal/machine/hardware": 94.5,
     "internal/machine/inventory": 93.9,
     "internal/machine/power": 93.7,
+    "internal/machine/sessionpolicy": 85.9,
     "internal/machine/sshlocal": 84.6,
     "internal/managedos": 96.7,
     "internal/managedos/diskdiscovery": 66.5,

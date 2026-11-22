@@ -240,3 +240,44 @@ func TestDirectorySubjectNamesAndSudoAliasesResolveToIDs(t *testing.T) {
 		t.Fatal("accepted an alias for another UID")
 	}
 }
+
+func TestNameServiceRefusesGroupsWithoutOneConsistentReverseEntry(t *testing.T) {
+	const key = "support@example.test"
+	const group = "group " + key
+	const byID = "group 2042"
+	const entry = key + ":x:2042:"
+	for _, test := range []struct {
+		name     string
+		answers  map[string]string
+		expected error
+	}{
+		{"missing group", nil, errNoEntry},
+		{"missing reverse", map[string]string{group: printed(entry)}, errMalformed},
+		{"name disagrees", map[string]string{group: printed(entry), byID: printed("other:x:2042:")}, errMalformed},
+		{"gid disagrees", map[string]string{group: printed(entry), byID: printed(key + ":x:2043:")}, errMalformed},
+		{"multiple results", map[string]string{group: printed(entry) + "; " + printed(entry)}, errMalformed},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			source := nameService{executable: fakeGetent(t, test.answers), bound: 5 * time.Second}
+			if got, err := source.groupID(t.Context(), key); got != 0 || !errors.Is(err, test.expected) {
+				t.Fatalf("group id %d, error %v; want %v", got, err, test.expected)
+			}
+		})
+	}
+}
+
+func TestCancelledAccountResolutionPreservesCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	source := nameService{executable: fakeGetent(t, carolsAnswers()), bound: 5 * time.Second}
+	account, err := accountFrom(ctx, source, accountRequest{uid: 1152, euid: 1152})
+	if account.Name != "" || !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled lookup resolved %+v, error %v", account, err)
+	}
+}
+
+func TestDelegatedEntryRequiresAnInstalledExecutable(t *testing.T) {
+	if diagnostic := AdmitDelegatedEntry(true, 0); diagnostic == nil || diagnostic.Code != "runtime.privilege" {
+		t.Fatalf("the uninstalled test binary admitted delegation: %+v", diagnostic)
+	}
+}
