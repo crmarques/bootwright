@@ -18202,3 +18202,12 @@ and the SSH client's delegated exec and shell options. The
 [coverage gate](../architecture.md#architecture-verification) retains the
 existing floors and adds one for the session policy package. The delivering
 commit records the verification results.
+
+## X655 — Docs check name resolution
+
+**Owner:** Developer tooling. **Item:** B1666 (defect).
+
+**Outcome:** The [docs check for working-tree readers](../architecture.md#architecture-verification)
+respects a local binding that shadows a package function or variable. X654's
+integration gate exposed the false classification on the destination tree.
+A syntax fixture and the complete docs check exercise the correction.

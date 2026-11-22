@@ -1454,8 +1454,9 @@ owning spec, which names the check.
   directory (`Glob`, `ReadDir` and `WalkDir` of `io/fs`, `ReadDir` of `os` and
   `io/ioutil`, and `Glob`, `Walk` and `WalkDir` of `path/filepath`), or to a
   method named `Glob`, `ReadDir`, `Readdir` or `Readdirnames`, whose receiver
-  a syntax walk cannot type. A listing reached only through another package's
-  function is beyond it, and another package's function of the same name,
+  a syntax walk cannot type. Name references follow their local binding when
+  it shadows a package function or variable. A listing reached only through
+  another package's function is beyond it, and another package's function of the same name,
   such as `ast.Walk`, is no listing. A listing of a filesystem whose syntax
   makes it an `fstest.MapFS` lists nothing: a literal, a conversion, or a
   parameter or variable declared as one, a package variable in any file of

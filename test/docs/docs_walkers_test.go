@@ -80,17 +80,27 @@ func directoryGoFiles(t *testing.T, module fs.FS, names, directories []string) m
 // directly or through an element, field or pointer, by name, and the bodies of
 // its methods, by method name. qualifiers are the names under which its
 // external tests import the package they test, all gathered before any
-// assignment through one is read. listings are the references that list a
-// directory.
+// assignment through one is read. declarations distinguish package bindings
+// from locals, and listings are the references that list a directory.
 type packageReferences struct {
 	named, methods map[string][]ast.Node
 	qualifiers     map[string]bool
+	declarations   map[ast.Node]bool
 	listings       map[ast.Node]bool
+}
+
+func (references packageReferences) packageBinding(name *ast.Ident) bool {
+	if name.Obj == nil {
+		return true
+	}
+	declaration, _ := name.Obj.Decl.(ast.Node)
+	return references.declarations[declaration]
 }
 
 func directoryReferences(files map[string]*ast.File, tested string) packageReferences {
 	references := packageReferences{
-		named: map[string][]ast.Node{}, methods: map[string][]ast.Node{}, qualifiers: map[string]bool{}, listings: map[ast.Node]bool{},
+		named: map[string][]ast.Node{}, methods: map[string][]ast.Node{}, qualifiers: map[string]bool{},
+		declarations: map[ast.Node]bool{}, listings: map[ast.Node]bool{},
 	}
 	variables, memory := map[string]bool{}, memoryVariables(files)
 	for name, file := range files {
@@ -112,6 +122,7 @@ func directoryReferences(files map[string]*ast.File, tested string) packageRefer
 				if declaration.Recv != nil {
 					references.methods[declaration.Name.Name] = append(references.methods[declaration.Name.Name], declaration.Body)
 				} else {
+					references.declarations[declaration] = true
 					references.named[declaration.Name.Name] = append(references.named[declaration.Name.Name], declaration.Body)
 				}
 			case *ast.GenDecl:
@@ -122,6 +133,7 @@ func directoryReferences(files map[string]*ast.File, tested string) packageRefer
 								continue
 							}
 							variables[variable.Name] = true
+							references.declarations[value] = true
 							references.named[variable.Name] = append(references.named[variable.Name], valueNodes(value.Values)...)
 						}
 					}
@@ -133,7 +145,7 @@ func directoryReferences(files map[string]*ast.File, tested string) packageRefer
 		ast.Inspect(file, func(node ast.Node) bool {
 			if assignment, ok := node.(*ast.AssignStmt); ok && assignment.Tok == token.ASSIGN {
 				for _, target := range assignment.Lhs {
-					for _, variable := range assignedVariables(target, references.qualifiers) {
+					for _, variable := range assignedVariables(target, references) {
 						if variables[variable] {
 							references.named[variable] = append(references.named[variable], valueNodes(assignment.Rhs)...)
 						}
@@ -150,18 +162,21 @@ func directoryReferences(files map[string]*ast.File, tested string) packageRefer
 // target may write: the variable it names, the one whose element or field it
 // writes or through which it writes a pointed value, and the one it names
 // through the tested package's qualifier.
-func assignedVariables(target ast.Expr, qualifiers map[string]bool) []string {
+func assignedVariables(target ast.Expr, references packageReferences) []string {
 	var names []string
 	for {
 		switch expression := ast.Unparen(target).(type) {
 		case *ast.Ident:
-			return append(names, expression.Name)
+			if references.packageBinding(expression) {
+				names = append(names, expression.Name)
+			}
+			return names
 		case *ast.IndexExpr:
 			target = expression.X
 		case *ast.StarExpr:
 			target = expression.X
 		case *ast.SelectorExpr:
-			if qualifier, ok := expression.X.(*ast.Ident); ok && qualifiers[qualifier.Name] {
+			if qualifier, ok := expression.X.(*ast.Ident); ok && qualifier.Obj == nil && references.qualifiers[qualifier.Name] {
 				names = append(names, expression.Sel.Name)
 			}
 			target = expression.X
@@ -367,10 +382,11 @@ func workingTreeWalkers(files map[string]*ast.File, tested string, pattern *rege
 			case *ast.SelectorExpr:
 				qualifier, qualified := node.X.(*ast.Ident)
 				found = found || references.listings[node] || walks(node.X, seen) || follow(references.methods[node.Sel.Name], seen) ||
-					qualified && references.qualifiers[qualifier.Name] && follow(references.named[node.Sel.Name], seen)
+					qualified && qualifier.Obj == nil && references.qualifiers[qualifier.Name] && follow(references.named[node.Sel.Name], seen)
 				return false
 			case *ast.Ident:
-				found = found || references.listings[node] || follow(references.named[node.Name], seen)
+				found = found || references.listings[node] ||
+					references.packageBinding(node) && follow(references.named[node.Name], seen)
 			}
 			return !found
 		})
@@ -420,12 +436,16 @@ func TestDocsCallsItsSources(t *testing.T) { Sources() }
 func TestDocsLoops(t *testing.T) { loop(); tracked() }
 func TestDocsReadsTracked(t *testing.T) { tracked(); _ = other.sources; _ = other.unreached }
 func TestDocsDiscards(t *testing.T) { _ = t }
+func TestDocsCallsAShadowedName(t *testing.T) { sources := func(*testing.T) {}; sources(t) }
+func TestDocsReadsALocalAssignment(t *testing.T) { var pointed func(string); pointed = func(string) {}; pointed(".") }
+func TestDocsReadsThePackageVariable(t *testing.T) { unassigned(".") }
 func TestOtherWalks(t *testing.T) { sources(t) }
 var _ = probeLister{}
 type probeLister struct{}
 func (probeLister) list(root string) { _, _ = os.ReadDir(root) }
 var listProbe = func(root string) { _, _ = os.ReadDir(root) }
 var assigned func(string)
+var unassigned = func(string) {}
 var listers = map[string]func(string){}
 var hooks struct{ probe func(string) }
 var pointed = new(func(string))
@@ -434,6 +454,11 @@ func init() {
 	listers["probe"] = func(root string) { _, _ = os.ReadDir(root) }
 	hooks.probe = func(root string) { _ = filepath.WalkDir(root, nil) }
 	*pointed = func(root string) { _, _ = os.ReadDir(root) }
+}
+func shadowAssignment() {
+	unassigned := func(string) {}
+	unassigned = func(root string) { _, _ = os.ReadDir(root) }
+	unassigned(".")
 }
 func sources(t *testing.T) { _ = filepath.WalkDir(".", nil) }
 func visit(list func() []string) {}
