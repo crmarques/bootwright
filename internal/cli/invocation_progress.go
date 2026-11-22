@@ -14,6 +14,7 @@ import (
 type InvocationProgress interface {
 	lifecycle.ProgressReporter
 	Finish()
+	WithPrompt(func())
 }
 
 // NewInvocationProgress selects the reporter the invocation's output mode
@@ -35,6 +36,7 @@ type silentProgress struct{}
 func (silentProgress) ReportProgress(context.Context, lifecycle.ProgressEvent)  {}
 func (silentProgress) ReportLogLocation(context.Context, lifecycle.LogLocation) {}
 func (silentProgress) Finish()                                                  {}
+func (silentProgress) WithPrompt(read func())                                   { read() }
 
 // NewMediaProgress reports a media command's progress through the invocation's
 // progress reporter, so it takes the same output-mode selection: a check

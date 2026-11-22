@@ -105,7 +105,7 @@ func TestTerminalSecretPromptTurnsEchoOffAndRestoresIt(t *testing.T) {
 		t.Fatalf("prompt = %q", prompt)
 	}
 	waiting := termiosOf(t, slave)
-	if waiting.Lflag&(syscall.ECHO|syscall.ECHOE|syscall.ECHOK) != 0 || waiting.Lflag&syscall.ECHONL == 0 ||
+	if waiting.Lflag&(syscall.ECHO|syscall.ECHOE|syscall.ECHOK|syscall.ECHONL) != 0 ||
 		waiting.Lflag&(syscall.ICANON|syscall.ISIG) != original.Lflag&(syscall.ICANON|syscall.ISIG) {
 		t.Fatalf("waiting lflag = %#o from %#o", waiting.Lflag, original.Lflag)
 	}
@@ -121,8 +121,11 @@ func TestTerminalSecretPromptTurnsEchoOffAndRestoresIt(t *testing.T) {
 	if read.err != nil || read.value != "typed-password\n" {
 		t.Fatalf("read %q (%v)", read.value, read.err)
 	}
-	if echoed := drain(master, 300*time.Millisecond); strings.Contains(echoed, "typed") || !strings.Contains(echoed, "\n") {
+	if echoed := drain(master, 300*time.Millisecond); echoed != "" {
 		t.Fatalf("the terminal echoed %q", echoed)
+	}
+	if newline := awaitPrompt(t, prompts); newline != "\n" {
+		t.Fatalf("password prompt ended with %q", newline)
 	}
 	if restored := termiosOf(t, slave); restored != original {
 		t.Fatalf("restored lflag %#o, want %#o", restored.Lflag, original.Lflag)
@@ -139,6 +142,9 @@ func TestTerminalSecretPromptTurnsEchoOffAndRestoresIt(t *testing.T) {
 	}
 	if !errors.Is(read.err, context.Canceled) || read.value != "" {
 		t.Fatalf("a canceled read returned %q (%v)", read.value, read.err)
+	}
+	if newline := awaitPrompt(t, prompts); newline != "\n" {
+		t.Fatalf("canceled password prompt ended with %q", newline)
 	}
 	if restored := termiosOf(t, slave); restored != original {
 		t.Fatalf("restored lflag after cancellation %#o, want %#o", restored.Lflag, original.Lflag)

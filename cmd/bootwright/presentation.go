@@ -26,3 +26,15 @@ func (t structuredSecretTerminal) Interactive() (bool, error) {
 func (structuredSecretTerminal) ReadHidden(context.Context, string, []byte) (int, error) {
 	return 0, errStructuredSecretTerminal
 }
+
+type enrollmentPromptTerminal struct {
+	material.TerminalInput
+	withPrompt func(func())
+}
+
+func (t enrollmentPromptTerminal) ReadHidden(ctx context.Context, prompt string, buffer []byte) (n int, err error) {
+	t.withPrompt(func() {
+		n, err = t.TerminalInput.ReadHidden(ctx, prompt, buffer)
+	})
+	return n, err
+}

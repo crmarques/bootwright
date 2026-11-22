@@ -666,7 +666,12 @@ bootstrap principal.
 Apply reads the hardware through the pinned bootstrap login without sudo
 and holds the host claim before creating the account. Bootwright authorizes
 the public key, configures noninteractive sudo and verifies a fresh connection
-as the new account. The managed login grants root-equivalent access. Its key
+as the new account. Both sudo calls run without a remote terminal. When
+sudo reports a terminal requirement, `machine.enrollment` names the affected
+account and asks for a host policy that permits sudo without a terminal.
+The managed account requires the local grant Bootwright writes under
+`/etc/sudoers.d` to be effective in the host's sudo policy.
+The managed login grants root-equivalent access. Its key
 pair is effect material. [Ceph's provided stretch tiebreaker](../ceph.md#stretch-topology)
 also receives the fleet public key when it opts into enrollment.
 

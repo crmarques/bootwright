@@ -47,7 +47,7 @@ func (r Remote) manage(ctx context.Context, contextName string, request Request,
 	args = append(args, keys...)
 	var output []byte
 	if mode == "inspect" {
-		output, err = r.asManaged(ctx, contextName, request.Placement, material, append([]string{"/usr/bin/sudo", "-H", "-n", "-k", "-u", "root", "--"}, args...))
+		output, err = r.asManaged(ctx, contextName, request.Placement, material, append([]string{sudoExecutable, "-H", "-n", "-k", "-u", "root", "--"}, args...))
 	} else {
 		output, err = r.bootstrap(ctx, contextName, request.Placement, request.Bootstrap, material, true, args)
 	}
@@ -78,11 +78,11 @@ func (r Remote) prove(ctx context.Context, contextName string, request Request, 
 			clear(key)
 			return refused(place, "the new SSH login as "+place.User, "check the provisioned account and its SSH authorization")
 		}
-		session.Command = []string{"/usr/bin/sudo", "-H", "-n", "-k", "-u", "root", "--", "/usr/bin/id", "-u"}
+		session.Command = []string{sudoExecutable, "-H", "-n", "-k", "-u", "root", "--", "/usr/bin/id", "-u"}
 		uid, sudoErr := r.run(ctx, session, nil)
 		clear(key)
 		if sudoErr != nil || strings.TrimSpace(string(uid)) != "0" {
-			return refused(place, "noninteractive root sudo as "+place.User, "check the provisioned account and its remote sudo policy")
+			return remoteRefusal(sudoErr, place, place.User, "noninteractive root sudo as "+place.User, "check the provisioned account and its remote sudo policy")
 		}
 	}
 	return nil
@@ -120,7 +120,7 @@ func (r Remote) asManaged(ctx context.Context, contextName string, place machine
 		Identity: machine.Identity{User: place.User, Kind: machine.IdentityKey, PrivateKey: key}}
 	output, err := r.run(ctx, session, nil)
 	if err != nil {
-		return nil, refused(place, "the managed login and sudo", "check the managed account's granted SSH key and sudo policy")
+		return nil, remoteRefusal(err, place, place.User, "the managed login and sudo", "check the managed account's granted SSH key and sudo policy")
 	}
 	return output, nil
 }

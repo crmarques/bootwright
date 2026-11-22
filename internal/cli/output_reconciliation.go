@@ -83,6 +83,10 @@ func (p *LifecycleProgressPresenter) Finish() {
 	}
 }
 
+func (p *LifecycleProgressPresenter) WithPrompt(read func()) {
+	p.progress.withPrompt(read)
+}
+
 func (p *LifecycleProgressPresenter) ReportProgress(ctx context.Context, event lifecycle.ProgressEvent) {
 	if p == nil || p.progress.out == nil || ctx.Err() != nil || event.Block == "" {
 		return

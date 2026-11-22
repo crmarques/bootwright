@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -30,6 +31,11 @@ type sshFixture struct {
 }
 
 func (f *sshFixture) Run(_ context.Context, session machine.Session, in io.Reader, out, stderr io.Writer) (int, error) {
+	if len(f.results) != 0 && f.results[0] == "tty-refused" {
+		f.results = f.results[1:]
+		_, _ = io.WriteString(stderr, "fixture-private banner\nsudo: sorry, you must have a tty to run sudo\n")
+		return 1, nil
+	}
 	var input []byte
 	if slices.Contains(session.Command, sudoChallenge) {
 		_, _ = io.WriteString(stderr, sudoChallenge)
@@ -130,6 +136,34 @@ func TestEnrollmentLeavesSudoRefusalUnknown(t *testing.T) {
 	if err == nil || result.Outcome != reconciliation.OutcomeUnknown {
 		t.Fatalf("outcome=%s err=%v", result.Outcome, err)
 	}
+}
+
+func TestEnrollmentExplainsRemoteSudoTTYRefusal(t *testing.T) {
+	ctx, release := BeginInvocation(context.Background())
+	defer release()
+	capability, execution, _, _ := enrollmentFixture(t, "tty-refused", "tty-refused", "ready", "bootwright", "tty-refused")
+	outcome, err := capability.Apply(ctx, execution)
+	if outcome.Outcome != reconciliation.OutcomeUnknown {
+		t.Fatalf("unexpected outcome %s", outcome.Outcome)
+	}
+	check := func(err error, account string) {
+		t.Helper()
+		stops := diagnostics.Of(err)
+		if len(stops) != 1 || stops[0].Code != "machine.enrollment" ||
+			!strings.Contains(stops[0].Message, "requires a terminal for "+account) ||
+			strings.Contains(stops[0].Message, "fixture-private") ||
+			!strings.Contains(stops[0].Remediation, "without a terminal") {
+			t.Fatalf("unexpected diagnostic: %v", stops)
+		}
+	}
+	check(err, "operator")
+	observation, err := capability.Observe(ctx, execution)
+	if observation.Effect != reconciliation.EffectUnknown {
+		t.Fatalf("unexpected observation %s", observation.Effect)
+	}
+	check(err, "operator")
+	_, err = capability.Apply(ctx, execution)
+	check(err, "bootwright")
 }
 
 func TestEnrollmentWithdrawalNeedsAnIndependentPositiveProof(t *testing.T) {

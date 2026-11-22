@@ -3,6 +3,7 @@ package account
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"slices"
@@ -53,7 +54,7 @@ func (r Remote) bootstrap(ctx context.Context, contextName string, place machine
 	defer clear(session.PrivateKey)
 	var password []byte
 	if elevate && access.Sudo {
-		args := []string{"/usr/bin/sudo", "-H", "-k"}
+		args := []string{sudoExecutable, "-H", "-k"}
 		if access.SudoPrompt || access.SudoRef != "" {
 			password, err = r.password(ctx, place.Machine, user, "remote sudo", access.SudoRef, bound)
 			if err != nil {
@@ -68,7 +69,7 @@ func (r Remote) bootstrap(ctx context.Context, contextName string, place machine
 	}
 	output, err := r.run(ctx, session, password)
 	if err != nil {
-		return nil, refused(place, "first access as "+user, "check SSH authentication and, for privileged work, that this account can sudo to root")
+		return nil, remoteRefusal(err, place, user, "first access as "+user, "check SSH authentication and, for privileged work, that this account can sudo to root")
 	}
 	return output, nil
 }
@@ -125,7 +126,13 @@ func (r Remote) password(ctx context.Context, machineName, user, purpose, refere
 	return password, nil
 }
 
-const sudoChallenge = "[bootwright remote sudo password]"
+const (
+	sudoExecutable = "/usr/bin/sudo"
+	sudoChallenge  = "[bootwright remote sudo password]"
+	sudoTTYRefusal = "sudo: sorry, you must have a tty to run sudo"
+)
+
+var errSudoTTYRequired = errors.New("remote sudo requires a terminal")
 
 func (r Remote) run(ctx context.Context, session machine.Session, password []byte) ([]byte, error) {
 	if r.Launcher == nil {
@@ -135,6 +142,12 @@ func (r Remote) run(ctx context.Context, session machine.Session, password []byt
 	defer cancel()
 	output := nativeexec.Refusing(64 << 10)
 	input, stderr := sudoPasswordExchange(bounded, password)
+	var sudoOutput *nativeexec.Output
+	if len(session.Command) > 0 && session.Command[0] == sudoExecutable {
+		sudoOutput = nativeexec.Tail(4 << 10)
+		defer sudoOutput.Clear()
+		stderr = io.MultiWriter(stderr, sudoOutput)
+	}
 	if input != nil {
 		piped, release, err := nativeexec.PipeInput(input, cancel)
 		if err != nil {
@@ -146,9 +159,28 @@ func (r Remote) run(ctx context.Context, session machine.Session, password []byt
 	code, err := r.Launcher.Run(bounded, session, input, output, stderr)
 	if err != nil || code != 0 || output.Overflowed() {
 		output.Clear()
+		if err == nil && code == 1 && sudoOutput != nil {
+			stderr := sudoOutput.Bytes()
+			if sudoOutput.Overflowed() {
+				_, stderr, _ = bytes.Cut(stderr, []byte{'\n'})
+			}
+			for line := range bytes.SplitSeq(stderr, []byte{'\n'}) {
+				if bytes.Equal(bytes.TrimSpace(line), []byte(sudoTTYRefusal)) {
+					return nil, errSudoTTYRequired
+				}
+			}
+		}
 		return nil, fmt.Errorf("SSH command did not complete")
 	}
 	return output.Bytes(), nil
+}
+
+func remoteRefusal(err error, place machine.Placement, user, step, remedy string) error {
+	if errors.Is(err, errSudoTTYRequired) {
+		return machine.EnrollmentRefused("Machine/"+place.Machine+" remote sudo requires a terminal for "+user+" (requiretty)",
+			"have the host administrator authorize sudo without a terminal for this account, then repeat the operation")
+	}
+	return refused(place, step, remedy)
 }
 
 func refused(place machine.Placement, step, remedy string) error {

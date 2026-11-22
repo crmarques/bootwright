@@ -238,6 +238,67 @@ func TestTerminalProgressRewritesTheRunningRowInPlace(t *testing.T) {
 	}
 }
 
+func TestLifecycleProgressYieldsToPasswordPrompt(t *testing.T) {
+	ctx := context.Background()
+	var out bytes.Buffer
+	clock := newManualClock()
+	echoHeld := false
+	options := PresentationOptions{HoldInputEcho: func() func() {
+		echoHeld = true
+		return func() { echoHeld = false }
+	}}
+	_, reporter := NewLifecyclePresenters(WithPresentation(&out, options), fixedColumns(120), false)
+	reporter.(*LifecycleProgressPresenter).progress.clock = clock.clock()
+
+	event := lifecycle.ProgressEvent{Block: "claim", Description: "Claim a provided host", Status: "running"}
+	reporter.ReportProgress(ctx, event)
+	if !echoHeld {
+		t.Fatal("progress did not acquire its terminal")
+	}
+	const prompt = "SSH password for operator on Machine/fixture: "
+	reported := make(chan struct{})
+	read := func() {
+		if echoHeld {
+			t.Error("progress held terminal echo during the prompt")
+		}
+		out.WriteString(prompt)
+		before := out.String()
+		go func() {
+			defer close(reported)
+			other := lifecycle.ProgressEvent{Block: "independent", Description: "Independent step", Status: "running"}
+			reporter.ReportProgress(ctx, other)
+			other.Status = "ok"
+			reporter.ReportProgress(ctx, other)
+		}()
+		select {
+		case <-reported:
+		case <-time.After(5 * time.Second):
+			t.Error("progress for another block waited for the password")
+			out.WriteByte('\n')
+			return
+		}
+		clock.advance(2 * time.Second)
+		if out.String() != before {
+			t.Error("progress overwrote the prompt while it was waiting for input")
+		}
+		if !strings.HasSuffix(before, eraseLine+prompt) {
+			t.Error("progress did not clear its row before the prompt")
+		}
+		out.WriteByte('\n')
+	}
+	reporter.WithPrompt(read)
+	<-reported
+
+	clock.advance(time.Second)
+	event.Status = "ok"
+	reporter.ReportProgress(ctx, event)
+	reporter.Finish()
+	if echoHeld || !strings.Contains(out.String(), prompt+"\n") || !strings.Contains(out.String(), "[OK]") ||
+		!strings.Contains(out.String(), "Independent step") {
+		t.Fatalf("the prompt or the progress outcome was lost: %q", out.String())
+	}
+}
+
 // A step that starts while another is still running takes a line of its own,
 // so the block grows rather than one step overwriting another's row. A heading
 // owns its block: the steps under the previous one keep the rows they last

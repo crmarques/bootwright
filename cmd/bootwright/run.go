@@ -233,6 +233,8 @@ func interactiveProcess(classification cli.InvocationClass, args []string, stdou
 	}
 	if classification.JSON {
 		process.SecretTerminal = structuredSecretTerminal{source: process.SecretTerminal}
+	} else if classification.EnrollmentInput {
+		process.SecretTerminal = enrollmentPromptTerminal{TerminalInput: process.SecretTerminal, withPrompt: lifecycleProgress.WithPrompt}
 	}
 	hooks := invocationHooks{presentation: options, errorColumns: errorOptions.Columns, begin: beginSignalOperation, finish: func() {
 		controllerPresenter.Finish()

@@ -84,8 +84,10 @@ type progressPresenter struct {
 	overview       func() []string
 	separateResult bool
 
-	mu      sync.Mutex
-	heading string
+	mu             sync.Mutex
+	heading        string
+	prompting      bool
+	pendingHeading string
 	// steps are the block's steps in position order; a settled step stays
 	// until no earlier step still runs.
 	steps []*progressStep
@@ -121,16 +123,25 @@ type progressStep struct {
 }
 
 func (p *progressPresenter) report(ctx context.Context, event progressEvent) {
-	if p == nil || p.out == nil || ctx.Err() != nil || event.Label == "" || presentationFor(p.out).Progress == "never" {
+	if p == nil || p.out == nil || event.Label == "" || presentationFor(p.out).Progress == "never" {
 		return
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if ctx.Err() != nil {
+		return
+	}
 	now := p.clock.now()
-	p.openHeading(event.Heading)
+	if p.prompting {
+		if event.Heading != "" {
+			p.pendingHeading = event.Heading
+		}
+	} else {
+		p.openHeading(event.Heading)
+	}
 	step := p.find(event)
 	if step == nil {
-		step = &progressStep{label: event.Label, position: event.Position, total: event.Total, started: now, reported: now}
+		step = &progressStep{label: event.Label, position: event.Position, total: event.Total, started: now}
 		p.insert(step)
 	}
 	step.ctx = ctx
@@ -146,12 +157,17 @@ func (p *progressPresenter) report(ctx context.Context, event progressEvent) {
 	if event.Nested || event.Status == "running" {
 		step.nested = event.Nested
 		step.detail, step.note, step.measure = event.Detail, "", event.Measure
-		p.running(step, now)
-		p.arm(now)
+		if !p.prompting {
+			p.running(step, now)
+			p.arm(now)
+		}
 		return
 	}
-	p.settle(step, event.Status, event.Detail, now)
-	p.arm(now)
+	step.settled, step.detail, step.note = event.Status, event.Detail, formatElapsed(now.Sub(step.started))
+	if !p.prompting {
+		p.flushSettled(now)
+		p.arm(now)
+	}
 }
 
 // find answers with the step an event belongs to. A step is identified by what
@@ -217,6 +233,49 @@ func (p *progressPresenter) finish() {
 		io.WriteString(p.out, "\n")
 		p.heading = ""
 	}
+}
+
+// withPrompt suspends terminal writes while progress events continue.
+func (p *progressPresenter) withPrompt(read func()) {
+	p.mu.Lock()
+	p.prompting = true
+	p.stopHeartbeat()
+	p.generation++
+	var out strings.Builder
+	p.erase(&out)
+	if out.Len() != 0 {
+		io.WriteString(p.out, out.String())
+	}
+	p.holdEcho(false)
+	p.mu.Unlock()
+	defer p.resumeAfterPrompt()
+	read()
+}
+
+func (p *progressPresenter) resumeAfterPrompt() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.prompting = false
+	if p.pendingHeading != "" && p.pendingHeading != p.heading {
+		p.writeHeading(p.pendingHeading)
+	}
+	p.pendingHeading = ""
+	p.steps = slices.DeleteFunc(p.steps, func(step *progressStep) bool {
+		return step.settled == "" && !step.active()
+	})
+	if len(p.steps) == 0 {
+		return
+	}
+	now := p.clock.now()
+	p.flushSettled(now)
+	if !p.terminal() {
+		for _, step := range p.steps {
+			if step.active() && step.reported.IsZero() {
+				p.running(step, now)
+			}
+		}
+	}
+	p.arm(now)
 }
 
 // arm schedules the next moment any step needs a row: the next redraw on a
@@ -329,6 +388,10 @@ func (p *progressPresenter) openHeading(heading string) {
 		return
 	}
 	p.closeLine()
+	p.writeHeading(heading)
+}
+
+func (p *progressPresenter) writeHeading(heading string) {
 	p.heading = heading
 	io.WriteString(p.out, "\n"+displayIndent+styleAccent(escapeDisplayLine(heading), presentationFor(p.out))+"\n")
 }
@@ -363,10 +426,9 @@ func (p *progressPresenter) running(step *progressStep, now time.Time) {
 	p.redraw(now)
 }
 
-// settle writes above the block, in position order, every outcome that no
+// flushSettled writes above the block, in position order, every outcome that no
 // earlier running step holds back.
-func (p *progressPresenter) settle(step *progressStep, status, detail string, now time.Time) {
-	step.settled, step.detail, step.note = status, detail, formatElapsed(now.Sub(step.started))
+func (p *progressPresenter) flushSettled(now time.Time) {
 	released := p.release()
 	if !p.terminal() {
 		for _, settled := range released {

@@ -93,17 +93,16 @@ func newSecretTerminal(input *os.File, prompt io.Writer) secretTerminal {
 
 func (t secretTerminal) Interactive() (bool, error) { return terminalDescriptor(uintptr(t.fd)) }
 
-// ReadHidden turns echo off, keeping the echo of the final line feed so the
-// next output starts on its own line, and reads one line a byte at a time so
-// nothing past it is consumed. It restores the saved settings on every return.
+// ReadHidden turns echo off and reads one line a byte at a time so nothing
+// past it is consumed. It ends the prompt on its own stream and restores the
+// saved settings on every return.
 func (t secretTerminal) ReadHidden(ctx context.Context, prompt string, buffer []byte) (n int, err error) {
 	var saved syscall.Termios
 	if err := termiosControl(t.fd, syscall.TCGETS, &saved); err != nil {
 		return 0, err
 	}
 	hidden := saved
-	hidden.Lflag &^= syscall.ECHO | syscall.ECHOE | syscall.ECHOK
-	hidden.Lflag |= syscall.ECHONL
+	hidden.Lflag &^= syscall.ECHO | syscall.ECHOE | syscall.ECHOK | syscall.ECHONL
 	if err := termiosControl(t.fd, syscall.TCSETS, &hidden); err != nil {
 		return 0, err
 	}
@@ -115,6 +114,11 @@ func (t secretTerminal) ReadHidden(ctx context.Context, prompt string, buffer []
 	if _, err := io.WriteString(t.prompt, prompt); err != nil {
 		return 0, err
 	}
+	defer func() {
+		if _, endErr := io.WriteString(t.prompt, "\n"); err == nil {
+			err = endErr
+		}
+	}()
 	for n < len(buffer) {
 		read, err := readInputFD(ctx, t.fd, buffer[n:n+1])
 		n += read

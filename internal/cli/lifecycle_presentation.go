@@ -189,7 +189,8 @@ func (quietInvocationProgress) ReportProgress(context.Context, lifecycle.Progres
 func (p quietInvocationProgress) ReportLogLocation(ctx context.Context, location lifecycle.LogLocation) {
 	p.presenter.ReportLogLocation(ctx, location)
 }
-func (p quietInvocationProgress) Finish() { p.presenter.Finish() }
+func (p quietInvocationProgress) Finish()              { p.presenter.Finish() }
+func (quietInvocationProgress) WithPrompt(read func()) { read() }
 
 func (p *lifecyclePresentation) action(id string) (string, string) {
 	p.mu.Lock()
