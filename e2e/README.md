@@ -358,8 +358,6 @@ Return to the case's final cleanup and result step. The shared controller
 installation, build tools, firewalld and cached media remain available for
 later cases.
 
-[Removing Bootwright from the host](../docs/operator-guide.md#uninstalling-bootwright-from-this-host)
-uses `./bin/bootwright uninstall` after every environment is
-destroyed, every context deleted and all imported media removed. That command
-removes the shared controller state and install-owned packages; it belongs
-to host removal after testing, beyond an individual case's cleanup.
+Use [Controller teardown and manual recovery](controller-teardown.md) to
+retire the shared controller installation or recover orphaned libvirt resources
+after a failed run.
