@@ -190,3 +190,125 @@ packages. Review the preview before running the second command.
 "$BW" uninstall --dry-run --discard-unreadable
 "$BW" uninstall --discard-unreadable
 ```
+
+## Reset the controller without Bootwright
+
+Use this when neither build can finish uninstall and the entire controller
+installation is disposable. Archive the available evidence and anything you
+need from the store and guest disks to private storage outside the paths
+below. Stop all Bootwright invocations and their workers. Verify that the
+run's resources are gone from any separate placement host, then use the
+[native libvirt cleanup](#remove-orphaned-libvirt-resources-by-hand) on the
+controller. This is a host-wide reset across all its contexts.
+
+### Remove owned host configuration
+
+Inventory candidate files and live objects. Check each candidate against the
+run's ownership records before removing it. Skip tools the case did not use.
+
+```sh
+sudo find /etc/containers/systemd /etc/systemd/system \
+    /etc/NetworkManager/conf.d /etc/NetworkManager/system-connections \
+    /etc/bootwright/routing -maxdepth 2 -name '*bootwright-*' -print
+sudo find /etc/firewalld/services -maxdepth 1 -type f -name '*.xml' \
+    -exec grep -lF '<description>bootwright-host-firewall context=' {} +
+sudo nmcli -f NAME,UUID,TYPE,FILENAME connection show
+sudo nft list tables
+```
+
+Remove Quadlets and their containers using the steps above. For Bootwright's
+VLAN profiles, use a console session. After removing the guests, match the
+`bootwright.io.*` ownership keys in the keyfiles to the run. Remove VLAN legs
+before their trunk. Set `PROFILE_UUID` to each exact verified profile UUID.
+
+```sh
+sudo nmcli connection delete uuid "${PROFILE_UUID:?Set the verified profile UUID}"
+```
+
+After all its profiles are gone, inspect the ownership line of the matching
+`90-bootwright-…-vlan-carrier.conf`. Set `CARRIER_CONF` to the verified basename.
+
+```sh
+sudo rm -- "/etc/NetworkManager/conf.d/${CARRIER_CONF:?Set the verified carrier config}"
+sudo nmcli general reload conf
+```
+
+For an owned native unit under `/etc/systemd/system`, inspect
+`systemctl cat "$UNIT"` for its source and ownership mark. Set `UNIT` to its
+exact filename, including `.service`. Retain its contents until you've checked
+its live objects. Run each command after the previous one succeeds.
+
+```sh
+sudo systemctl disable --now -- "${UNIT:?Set the verified native unit name}"
+sudo rm -- "/etc/systemd/system/$UNIT"
+sudo systemctl daemon-reload
+```
+
+Stopping the provider's routing and VLAN refusal units normally removes their
+live table and unreachable routes. If anything remains, use the recorded unit
+contents to match the exact table or route before removing it. Set `TABLE` to
+the name in the routing unit. For a surviving table, inspect with
+`sudo nft list table inet "$TABLE"` and remove the verified table with
+`sudo nft delete table inet "$TABLE"`. Remove a surviving unreachable route
+with its exact family, destination, protocol and metric from the unit's
+`ExecStopPost`. Verify the corresponding `Bootwright owned routing` marker
+before removing the ruleset. See the
+[provider routing ownership rules](../specs/substrates.md#routing-table).
+
+```sh
+sudo rm -- "/etc/bootwright/routing/${TABLE:?Set the verified routing table}.nft"
+```
+
+Use `rmdir` on `/etc/bootwright/routing` and then `/etc/bootwright` if each is
+empty. The provider may have enabled `net.ipv4.ip_forward`. Restore its
+pre-run value only if you recorded it and verified that remaining networks
+can use that value.
+
+For each verified firewalld XML, set `FW_SERVICE` to its basename without
+`.xml`. Inspect both zone listings below. Set `ZONE` to each zone that
+contains the service and remove its membership in each active configuration
+where it is listed. Delete the definition after removing those memberships.
+
+```sh
+sudo firewall-cmd --list-all-zones
+sudo firewall-cmd --permanent --list-all-zones
+```
+
+```sh
+sudo firewall-cmd --zone="${ZONE:?Set the verified zone}" --remove-service="${FW_SERVICE:?Set the owned service}"
+sudo firewall-cmd --permanent --zone="${ZONE:?}" --remove-service="${FW_SERVICE:?}"
+sudo firewall-cmd --permanent --delete-service="${FW_SERVICE:?}"
+```
+
+If the controller also has the optional `bw-ssh-ingress.service`, inspect
+its unit, `/etc/bw_ssh_ingress.nft`, and `sudo nft list table inet bw_ssh_ingress`
+for the matching Bootwright ownership mark. Retire that SSH policy only after
+restoring the host's intended SSH access controls. Disable and remove the
+unit as above, delete its exact `inet bw_ssh_ingress` table if still present,
+and remove `/etc/bw_ssh_ingress.nft`. Restore any case-specific SSH and firewall
+changes using the case's saved records.
+
+### Remove local data roots
+
+Repeat the live inventory before deleting the state. Check for mounts at or
+below the five roots. If this prints any paths, resolve the mounts before
+proceeding. An error reading mounts also stops the reset.
+
+```sh
+mount_targets=$(sudo findmnt -rn -o TARGET)
+printf '%s\n' "$mount_targets" |
+    grep -E '^(/var/lib/(bootwright(-staging|-hosted)?|libvirt/images/bootwright)|/var/log/bootwright)(/|$)'
+```
+
+After checking the paths and confirming the logs, credentials, imported
+media and guest disks can be deleted:
+
+```sh
+sudo rm -rf --one-file-system --preserve-root=all -- /var/lib/bootwright /var/lib/bootwright-staging /var/lib/bootwright-hosted
+sudo rm -rf --one-file-system --preserve-root=all -- /var/log/bootwright /var/lib/libvirt/images/bootwright
+```
+
+If uninstall was interrupted, locate its renamed trees using the exact naming
+forms in the [uninstall flow](../specs/controller.md#the-uninstall-flow). Apply
+the same ownership and mount checks and remove any verified tree by its exact
+path. Restore the case's diagnostic tooling using its recorded package list.
