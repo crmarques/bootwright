@@ -730,6 +730,12 @@ administrator, verifies withdrawal, and moves any home data behind a
 root-only directory before releasing the UID. A conflicting
 account or grant refuses. Unknown attempts inspect the owned effect before
 retrying. See [machine enroll](../cli.md#managed-machine-enrollment).
+A destroy that [abandons](../state-reconciliation.md#abandoned-removal) the
+Machine leaves the managed login, its home, its authorized key and its
+`/etc/sudoers.d/90-bootwright-<user>` grant in place without contacting the
+host. The account's mark names the apply that created it, so a later
+enrollment refuses that account as foreign until the host administrator removes
+the grant and the account.
 
 ## Bare-metal hardware
 

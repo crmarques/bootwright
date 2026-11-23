@@ -26,7 +26,30 @@ Review the plan. For an attended libvirt destroy whose plan requests `data-loss`
 
 If it asks you to stop a Machine, follow the case's prerequisites for that
 stop, then run `"$BW" machine stop --context "$CONTEXT" --name "$MACHINE"`
-with the exact Machine name and retry the destroy. Use the case's authorization
+with the exact Machine name and retry the destroy.
+
+If destroy refuses with `destroy.unproved-effects` because a provided
+Machine's enrollment cannot be proved, and you will clean that host yourself,
+leave its steps in place. Set `MACHINE` to the Machine the refusal names, review
+the plan, then run the destroy in a terminal and confirm it:
+
+```sh
+"$BW" destroy --context "$CONTEXT" --dry-run --authorize "abandon=${MACHINE:?Set the Machine to abandon}"
+"$BW" destroy --context "$CONTEXT" --authorize "abandon=$MACHINE"
+```
+
+On that host, as its administrator, check that the managed login's comment
+starts with `bootwright-`, then remove its sudo grant before the account. Set
+`MANAGED_USER` to the login the plan names:
+
+```sh
+getent passwd "${MANAGED_USER:?Set the managed login}"
+sudo rm -- "/etc/sudoers.d/90-bootwright-$MANAGED_USER"
+sudo userdel -- "$MANAGED_USER"
+```
+
+Its home stays under `/home/$MANAGED_USER-<suffix>`; remove it once you no
+longer need its data. Use the case's authorization
 and cleanup steps if its plan calls for anything else. After destroy completes,
 check final status and archive the evidence before deleting the context.
 

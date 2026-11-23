@@ -272,7 +272,7 @@ func authorizationFlag() flagSpec {
 
 func destroyAuthorizationFlag() flagSpec {
 	flag := authorizationFlag()
-	flag.help += ", or relax one Machine's declared removal erase for this destroy (erase=<machine>:metadataClear or erase=<machine>:retain)"
+	flag.help += ", relax one Machine's declared removal erase for this destroy (erase=<machine>:metadataClear or erase=<machine>:retain), or leave what this destroy cannot remove from one Machine in place unmanaged (abandon=<machine>)"
 	return flag
 }
 

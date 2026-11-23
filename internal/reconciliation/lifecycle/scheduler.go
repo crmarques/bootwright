@@ -82,6 +82,7 @@ type scheduler struct {
 // invocation is what each attempt and resolution runs under; once boundary latches a fault, nothing further is admitted.
 type invocation struct {
 	deferredSource map[string]error
+	abandoned      map[string]bool
 	effects        map[string]bool
 	selection      reconciliation.Selection
 	stopGroups     []*removalMachineGroup
@@ -226,7 +227,7 @@ func (c *scheduler) next() (reconciliation.Block, int, bool) {
 	case kind == StepResolve:
 		for _, index := range admitted {
 			block := c.plan.Blocks[index]
-			if !c.running[block.ID] && c.deferredSource[block.ID] == nil {
+			if !c.running[block.ID] && c.deferredSource[block.ID] == nil && !c.abandoned[block.ID] {
 				return block, index, true
 			}
 		}

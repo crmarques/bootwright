@@ -293,7 +293,7 @@ func TestAContinuationKeepsExactlyTheRelaxationsItsRemovalFroze(t *testing.T) {
 	_, err := destroyRelaxed(h, nil, reconciliation.AuthorizationDataLoss)
 	reported := diagnostics.Of(err)
 	if len(reported) != 1 || !authorizationRefusal(reported[0].Code) ||
-		!strings.Contains(reported[0].Message, "continues only under the erase relaxations its plan froze (erase=bravo:retain)") ||
+		!strings.Contains(reported[0].Message, "continues only under the relaxations its plan froze (erase=bravo:retain)") ||
 		!strings.Contains(reported[0].Remediation, "--authorize erase=bravo:retain") {
 		t.Fatalf("a continuation without its relaxation refused %+v (%v)", reported, err)
 	}

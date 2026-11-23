@@ -92,7 +92,7 @@ func (v *requestValues) singleFile() string {
 func (v *requestValues) authorizations() []string {
 	var tokens []string
 	for _, token := range v.authorizeTokens() {
-		if !lifecycle.IsEraseAuthorization(token) {
+		if !lifecycle.IsRelaxationAuthorization(token) {
 			tokens = append(tokens, token)
 		}
 	}
@@ -102,11 +102,11 @@ func (v *requestValues) authorizations() []string {
 func (v *requestValues) relaxations() map[string]string {
 	var tokens []string
 	for _, token := range v.authorizeTokens() {
-		if lifecycle.IsEraseAuthorization(token) {
+		if lifecycle.IsRelaxationAuthorization(token) {
 			tokens = append(tokens, token)
 		}
 	}
-	relaxations, err := lifecycle.ParseEraseRelaxations(tokens)
+	relaxations, err := lifecycle.ParseRelaxations(tokens)
 	v.recordFirstError(err)
 	return relaxations
 }

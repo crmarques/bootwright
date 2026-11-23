@@ -122,6 +122,11 @@ func (s Service) removalStart(ctx context.Context, tx Transaction, store Operati
 	}
 	skip := maps.Clone(decided.phases.machines)
 	maps.Copy(skip, decided.phases.preStopMachines)
+	abandoned := abandonedBlocks(decided.plan)
+	if skip == nil && len(abandoned) != 0 {
+		skip = map[string]bool{}
+	}
+	maps.Copy(skip, abandoned)
 	var groups []*removalMachineGroup
 
 	var deferred map[string]error

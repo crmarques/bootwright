@@ -54,9 +54,10 @@ func (s Service) proveRemovable(ctx context.Context, tx Transaction, store Opera
 		}
 		members = append(members, member)
 	}
+	abandoned := abandonedBlocks(decided.plan)
 	declared, faulted := 0, false
 	for _, member := range members {
-		declared += len(unprovedBlocks(member.plan, member.states))
+		declared += len(unprovedOutside(member.plan, member.states, abandoned))
 		faulted = faulted || member.operation.LogFault
 	}
 	if declared == 0 && !faulted {
@@ -67,7 +68,7 @@ func (s Service) proveRemovable(ctx context.Context, tx Transaction, store Opera
 	observer.options.Progress = reporter
 	deferred := map[string]error{}
 	for _, member := range members {
-		settled, err := observer.resolveMember(ctx, tx, store, approved, decided, material, member)
+		settled, err := observer.resolveMember(ctx, tx, store, approved, decided, material, member, abandoned)
 		if err != nil {
 			return nil, err
 		}
@@ -89,7 +90,8 @@ func (s Service) proveRemovable(ctx context.Context, tx Transaction, store Opera
 			}
 			unresolved = destroyUnprovedEffects.Fail(
 				"this removal cannot prove what these effects left behind, so "+outcome+": "+strings.Join(settled.left, ", "),
-				"do what the diagnostic of each reports, then repeat "+contextCommand(name, string(reconciliation.Destroy), authorizingUnfixed(decided.plan)...))
+				"do what the diagnostic of each reports, then repeat "+contextCommand(name, string(reconciliation.Destroy), authorizingUnfixed(decided.plan)...)+
+					s.abandonExit(name, decided.plan, settled.left))
 		}
 		return nil, withCause(settled.fault, withCause(settled.cause, unresolved))
 	}
@@ -105,7 +107,7 @@ func (s Service) proveRemovable(ctx context.Context, tx Transaction, store Opera
 
 func canDeferSourceProof(decided operationPlan, member lineageMember, settled memberResolution) bool {
 	if settled.fault != nil || member.operation.Verb != reconciliation.Apply || member.operation.ID != decided.source ||
-		len(decided.phases.preStop) != 0 || len(decided.phases.effects) != 0 {
+		len(decided.phases.preStop) != 0 || len(decided.phases.effects) != 0 || len(abandonedBlocks(decided.plan)) != 0 {
 		return false
 	}
 	for _, retired := range decided.phases.retired {
@@ -118,11 +120,37 @@ func canDeferSourceProof(decided operationPlan, member lineageMember, settled me
 			return false
 		}
 		block, found := decided.plan.Block(id)
-		if !found || len(block.Dependencies) != 0 || !machine.IsEnrollmentSudoTTY(settled.causes[id]) {
+		if !found || len(block.Dependencies) != 0 || !machine.IsEnrollmentRefusal(settled.causes[id]) {
 			return false
 		}
 	}
 	return true
+}
+
+// abandonExit names, after a refusal's remedy, the abandonment that would let
+// this removal leave every effect it cannot prove in place, when each one's
+// capability offers it and no other relaxation of the plan names its Machine.
+func (s Service) abandonExit(contextName string, plan reconciliation.Plan, left []string) string {
+	methods := frozenRelaxations(plan)
+	added := map[string]string{}
+	for _, id := range left {
+		block, found := plan.Block(id)
+		if !found {
+			return ""
+		}
+		capability, resolved := s.capabilities.Resolve(block.Kind, block.Implementation)
+		abandoner, abandons := capability.(RemovalAbandoner)
+		if !resolved || !abandons || !abandoner.AbandonsMachine(block) || methods[block.Object] != "" {
+			return ""
+		}
+		added[block.Object] = Abandon
+	}
+	if len(added) == 0 {
+		return ""
+	}
+	return "; or, to leave what they left in place unmanaged, review " +
+		contextCommand(contextName, string(reconciliation.Destroy)+" --dry-run", relaxationFlags(added)...) +
+		" and run " + contextCommand(contextName, string(reconciliation.Destroy), append(authorizingUnfixed(plan), relaxationFlags(added)...)...)
 }
 
 type memberResolution struct {
@@ -131,9 +159,9 @@ type memberResolution struct {
 	causes       map[string]error
 }
 
-func (s Service) resolveMember(ctx context.Context, tx Transaction, store OperationStore, approved approved, decided operationPlan, material map[string]secrets.Material, member lineageMember) (memberResolution, error) {
+func (s Service) resolveMember(ctx context.Context, tx Transaction, store OperationStore, approved approved, decided operationPlan, material map[string]secrets.Material, member lineageMember, abandoned map[string]bool) (memberResolution, error) {
 	replaced, frozen, states := member.operation, member.plan, member.states
-	unproved := unprovedBlocks(frozen, states)
+	unproved := unprovedOutside(frozen, states, abandoned)
 	if len(unproved) == 0 && !replaced.LogFault {
 		return memberResolution{}, nil
 	}
@@ -171,14 +199,18 @@ func (s Service) resolveMember(ctx context.Context, tx Transaction, store Operat
 	if removal {
 		removalPlan = &decided.plan
 	}
-	causes, cause := s.observe(work, invocation{tx: tx, store: store, approved: approved, boundary: logging, operation: replaced, plan: frozen, material: material}, phases, states, removalPlan, decided.phases)
+	causes, cause := s.observe(work, invocation{tx: tx, store: store, approved: approved, boundary: logging, operation: replaced, plan: frozen, material: material, abandoned: abandoned}, phases, states, removalPlan, decided.phases)
 	logging.close(ctx, log)
 	if err := s.recordFromBlocks(recordingContext(ctx), tx, store, replaced, frozen, states); err != nil {
 		return memberResolution{}, err
 	}
 	// A log fault refuses the removal even when every observation proved its
 	// block, because the removal's own effects would follow.
-	return memberResolution{left: unprovedBlocks(frozen, states), fault: logging.err(), cause: cause, causes: causes}, nil
+	return memberResolution{left: unprovedOutside(frozen, states, abandoned), fault: logging.err(), cause: cause, causes: causes}, nil
+}
+
+func unprovedOutside(plan reconciliation.Plan, states map[string]reconciliation.BlockState, abandoned map[string]bool) []string {
+	return slices.DeleteFunc(unprovedBlocks(plan, states), func(id string) bool { return abandoned[id] })
 }
 
 // recordFromBlocks publishes the state the replaced operation's blocks give it.

@@ -29,7 +29,7 @@ func (s Service) presentation(decided operationPlan) PlanResult {
 	result.Verb, result.Warnings = string(decided.verb), s.removalWarnings(decided.removed())
 	result.KeepGoing = s.keepGoing && decided.verb == reconciliation.Destroy
 	if result.KeepGoing && decided.basis.record.Verb == reconciliation.Apply {
-		markSourceProofs(result.Steps, decided.basis.blocks)
+		markSourceProofs(result.Steps, decided.basis.blocks, abandonedBlocks(decided.plan))
 	}
 	result.Continuation = !decided.fresh
 	result.AddsTo = decided.predecessor

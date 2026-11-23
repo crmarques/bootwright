@@ -151,7 +151,7 @@ the `--name` that names several Machines and the `--name` and `--node` that name
 several clusters and nodes.
 Collection flags aggregate in command-line order only where this contract says
 they are repeatable. `validate --input-dir` is repeatable. `--authorize` (with
-`erase=<machine>:<method>`, once per Machine, on `destroy` and `destroy --dry-run`) and
+`erase=<machine>:<method>` and `abandon=<machine>`, once per Machine, on `destroy` and `destroy --dry-run`) and
 `destroy --unregistered` are repeatable and each occurrence may also contain
 commas. Supplying an empty required value
 is a usage error.
@@ -755,7 +755,11 @@ exits `0` and execution makes its own proofs. `--keep-going` uses the
 and leaves the existing confirmation and token requirements in force. A
 partial run reports the remaining cleanup and the retry command. An
 operator who removes a target by hand can repeat destroy so its capability
-proves the removal.
+proves the removal. An operator who accepts that a Machine's remaining effects
+stay where they are names it with `--authorize abandon=<machine>`, which lets
+the destroy complete without that proof
+([abandoned removal](state-reconciliation.md#abandoned-removal)); a refusal
+whose unproved effects can be abandoned names that command and its preview.
 
 An invocation whose work durable state already proves settles before any of
 that: it presents no plan, asks for no confirmation, requires and refuses no
@@ -773,7 +777,9 @@ consumes an authorization and closes with the tokens it requires; a `destroy`,
 and a `destroy --dry-run --authorize erase=<machine>:<method>` that previews it, also marks
 each step an erase relaxation changes, naming the Machine and the method in the
 step's description, so the relaxation is reviewed in the plan and bound by its
-`data-loss` digest. Then they check the authorizations, then ask the ordinary
+`data-loss` digest. A step an abandonment leaves in place carries the
+description and impacts its capability gives, which name what stays on the
+host, and consumes no authorization. Then they check the authorizations, then ask the ordinary
 confirmation. A required token not
 supplied, or a supplied one the whole frozen plan does not require, then
 refuses `authorize.missing` or `authorize.unneeded`, naming the consuming steps by their number

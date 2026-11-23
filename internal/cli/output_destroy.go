@@ -51,7 +51,7 @@ func writeCleanupPreview(text *display, plan lifecycle.PlanResult) {
 	if cleanupPreviewBlocked(plan) {
 		text.lines([]string{"No cleanup would start under the current checks."})
 	} else {
-		text.lines([]string{"Independent cleanup can continue after an eligible target failure or an enrollment proof blocked by a remote sudo terminal requirement. Dependent steps wait for proof and cleanup."})
+		text.lines([]string{"Independent cleanup can continue after an eligible target failure or an enrollment proof its host refused. Dependent steps wait for proof and cleanup; --authorize abandon=<machine> leaves them in place instead."})
 	}
 	for _, check := range plan.Checks {
 		switch check.ID {

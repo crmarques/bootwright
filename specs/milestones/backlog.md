@@ -9509,3 +9509,16 @@ firewall. A bootstrap refusal names the login that ran it through sudo, and
 apply asks for its passwords before any check. This opens X663 and
 [B1679](m1.md#b1679), [B1680](m1.md#b1680) and [B1681](m1.md#b1681), with
 integration into local main; no push.
+
+### D283
+
+**owner** (2026-11-23): after `destroy --keep-going` cleaned nothing over a
+provided Machine's enrollment it could not prove, the owner asked for a flag
+that lets destroy, and then uninstall, go on when the operator is confident,
+and accepted the proposal: `destroy --authorize abandon=<machine>` leaves the
+steps of that Machine its capabilities can abandon in place without contacting
+its host, so the removal completes. This reopens [D38](#d38), and the
+[D183](#d183) answer to Q92, for an acknowledged abandonment only; a removal
+that names none keeps D38. Keep-going defers any refusal of the enrolled
+Machine's own access. This opens X664, [B1682](m1.md#b1682) and
+[B1683](m1.md#b1683), with integration into local main; no push.

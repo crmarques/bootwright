@@ -96,11 +96,11 @@ func validatePlanFlags(command *cobra.Command) string {
 		return refusal
 	}
 	for _, token := range tokens {
-		if !lifecycle.IsEraseAuthorization(token) {
-			return "destroy --dry-run accepts only --authorize erase=<machine>:metadataClear or erase=<machine>:retain; data-loss and rebind=<secret> are consumed by apply and destroy"
+		if !lifecycle.IsRelaxationAuthorization(token) {
+			return "destroy --dry-run accepts only --authorize erase=<machine>:metadataClear, erase=<machine>:retain or abandon=<machine>; data-loss and rebind=<secret> are consumed by apply and destroy"
 		}
 	}
-	_, err := lifecycle.ParseEraseRelaxations(tokens)
+	_, err := lifecycle.ParseRelaxations(tokens)
 	return refusalText(err)
 }
 
@@ -116,16 +116,16 @@ func validateAuthorizations(command *cobra.Command, erase bool) string {
 	}
 	var relaxing, others []string
 	for _, token := range tokens {
-		if lifecycle.IsEraseAuthorization(token) {
+		if lifecycle.IsRelaxationAuthorization(token) {
 			relaxing = append(relaxing, token)
 		} else {
 			others = append(others, token)
 		}
 	}
 	if len(relaxing) != 0 && !erase {
-		return "--authorize erase=<machine>:<method> relaxes a removal and applies only to destroy and destroy --dry-run, not " + command.Name()
+		return "--authorize erase=<machine>:<method> and abandon=<machine> relax a removal and apply only to destroy and destroy --dry-run, not " + command.Name()
 	}
-	if _, err := lifecycle.ParseEraseRelaxations(relaxing); err != nil {
+	if _, err := lifecycle.ParseRelaxations(relaxing); err != nil {
 		return err.Error()
 	}
 	if !lifecycle.ValidAuthorizations(others) {

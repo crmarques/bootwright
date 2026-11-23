@@ -46,7 +46,7 @@ func (s Service) freshDestroy(ctx context.Context, contextName string, frozenBy 
 func (s Service) stopsFirst(plan reconciliation.Plan, phases removalPhases) []string {
 	var named []string
 	for _, block := range plan.Blocks {
-		if phases.machines[block.ID] || phases.preStopMachines[block.ID] {
+		if phases.machines[block.ID] || phases.preStopMachines[block.ID] || block.Relaxation == Abandon {
 			continue
 		}
 		capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)

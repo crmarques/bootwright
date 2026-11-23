@@ -36,6 +36,13 @@ func recordingContext(ctx context.Context) context.Context { return context.With
 // pending block stays pending and a failed one it would have retried stays
 // failed, exactly as their records still say.
 func (s Service) attempt(ctx context.Context, run invocation, block reconciliation.Block, retired map[string]bool, position, total int, warn func([]operationstore.Warning)) (reconciliation.BlockState, error) {
+	if run.operation.Verb == reconciliation.Destroy && block.Relaxation == Abandon {
+		return s.abandonAttempt(ctx, run, block, position, total)
+	}
+	return s.runAttempt(ctx, run, block, retired, position, total, warn)
+}
+
+func (s Service) runAttempt(ctx context.Context, run invocation, block reconciliation.Block, retired map[string]bool, position, total int, warn func([]operationstore.Warning)) (reconciliation.BlockState, error) {
 	if run.effects != nil && !run.effects[block.ID] {
 		return "", engineRequestDefect.Fail("block "+block.ID+" is outside the reviewed apply effects", "review the current apply preview and repeat")
 	}
@@ -111,7 +118,7 @@ func (s Service) attempt(ctx context.Context, run invocation, block reconciliati
 	})
 	runErr = stageReading(runErr, block, operation.Verb, tx.Identity().Name)
 	outcome := result.Outcome
-	if !reconciliation.ValidOutcome(outcome) {
+	if !reconciliation.ValidOutcome(outcome) || outcome == reconciliation.OutcomeAbandoned {
 		outcome = reconciliation.OutcomeUnknown
 	}
 	if runErr != nil && errors.Is(runErr, context.Canceled) {
@@ -133,6 +140,44 @@ func (s Service) attempt(ctx context.Context, run invocation, block reconciliati
 	}
 	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Status: string(state), Position: position, Total: total})
 	return state, runErr
+}
+
+// abandonAttempt records a step the operator left in place without its
+// adapter, its runtime or any read of its target, so it contacts nothing and
+// removes nothing.
+func (s Service) abandonAttempt(ctx context.Context, run invocation, block reconciliation.Block, position, total int) (reconciliation.BlockState, error) {
+	tx, store, boundary, operation, plan := run.tx, run.store, run.boundary, run.operation, run.plan
+	release, err := admitAttempt(ctx, tx, store, operation, plan, block.ID, false)
+	if err != nil {
+		return "", err
+	}
+	defer release()
+	number, err := store.StartAttempt(ctx, operation.ID, block.ID, s.ranUnder(block))
+	if err != nil {
+		return "", err
+	}
+	logPath, err := operationstore.AttemptLogPath(operation.ID, block.ID, number, 0)
+	if err != nil {
+		return reconciliation.BlockPending, err
+	}
+	recording := recordingContext(ctx)
+	log, err := boundary.open(ctx, logPath)
+	if err != nil {
+		return reconciliation.BlockUnknown, store.CompleteAttempt(recording, operation.ID, block.ID, number,
+			reconciliation.OutcomeUnknown, reconciliation.EffectUnknown, reconciliation.BlockUnknown, nil)
+	}
+	defer boundary.close(ctx, log)
+	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Status: "running", Position: position, Total: total})
+	_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "outcome", Block: block.ID, Detail: string(reconciliation.OutcomeAbandoned)})
+	effect, state, err := reconciliation.AttemptTransition(reconciliation.OutcomeAbandoned)
+	if err != nil {
+		return reconciliation.BlockUnknown, err
+	}
+	if err := store.CompleteAttempt(recording, operation.ID, block.ID, number, reconciliation.OutcomeAbandoned, effect, state, nil); err != nil {
+		return reconciliation.BlockUnknown, err
+	}
+	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Status: string(state), Position: position, Total: total})
+	return state, nil
 }
 
 func completeAttempt(ctx context.Context, store OperationStore, id, block string, number int, outcome reconciliation.Outcome, effect reconciliation.EffectState, state reconciliation.BlockState, evidence json.RawMessage, failure *operationstore.ObservationFailure, warned []operationstore.Warning) error {
@@ -358,6 +403,9 @@ func logObservationFailures(ctx context.Context, boundary *logBoundary, log *ope
 // resolved by the removal's own check (D119). Every other resolution reads
 // observed once, for verb.
 func resolutionReading(ctx context.Context, boundary *logBoundary, log *operationstore.Log, applied reconciliation.Verb, block, observed reconciliation.Block, verb reconciliation.Verb, removal, offline bool, read func(reconciliation.Block, reconciliation.Verb) (Observation, error)) (Observation, bool, error) {
+	if applied == reconciliation.Destroy && verb == reconciliation.Destroy && observed.Relaxation == Abandon {
+		return Observation{Effect: reconciliation.EffectNoEffect}, false, nil
+	}
 	if !removal || offline {
 		observation, err := read(observed, verb)
 		return observation, removal && offline, err

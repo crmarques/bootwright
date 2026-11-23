@@ -325,7 +325,7 @@ func (s Service) preview(ctx context.Context, decision decider, view View, previ
 		if err := previousRemovalFailures(ctx, store, decided.basis, result.Steps); err != nil {
 			return &result, decided, marked.basis, err
 		}
-		if err := sourceProofPreview(ctx, store, decided.basis, result.Steps); err != nil {
+		if err := sourceProofPreview(ctx, store, decided.basis, result.Steps, abandonedBlocks(decided.plan)); err != nil {
 			return &result, decided, marked.basis, err
 		}
 	}
@@ -473,7 +473,7 @@ func previousRemovalFailures(ctx context.Context, store OperationStore, from bas
 	return nil
 }
 
-func sourceProofPreview(ctx context.Context, store OperationStore, from basis, steps []PlanStep) error {
+func sourceProofPreview(ctx context.Context, store OperationStore, from basis, steps []PlanStep, abandoned map[string]bool) error {
 	var states map[string]reconciliation.BlockState
 	switch {
 	case from.record.Verb == reconciliation.Apply:
@@ -485,13 +485,13 @@ func sourceProofPreview(ctx context.Context, store OperationStore, from basis, s
 		}
 		states = member.states
 	}
-	markSourceProofs(steps, states)
+	markSourceProofs(steps, states, abandoned)
 	return nil
 }
 
-func markSourceProofs(steps []PlanStep, states map[string]reconciliation.BlockState) {
+func markSourceProofs(steps []PlanStep, states map[string]reconciliation.BlockState, abandoned map[string]bool) {
 	for index := range steps {
-		if unproved(states[steps[index].ID]) {
+		if unproved(states[steps[index].ID]) && !abandoned[steps[index].ID] {
 			steps[index].Selection = StepResolve
 		}
 	}

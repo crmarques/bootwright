@@ -135,7 +135,7 @@ The three `catalog media` commands follow the host-wide
 | `bootwright render installer` | `--clusters <list>` default all OpenShiftClusters; `--sensitive` false | installer artifact manifest | local placeholder files and optional sensitive files |
 | `bootwright render storage` | `--clusters <list>` default all CephClusters | storage artifact manifest | local native files or scripts only; never execution |
 | `bootwright apply` | `--dry-run` false; repeatable `--authorize <token>[=<digest>][,<token>...]`; `--stage <list>` default all stages; `--clusters <list>` or `--machines <list>`; `--until <cluster>.<package>`; `--parallelism <n>` default 8; `--yes` false | completed full apply or additive apply of instances, a pause at the selected stage boundary or after the named add-on instance, exact continued state, or a settled result when the declared state is realized; with `--dry-run`, the plan and prerequisite checks | complete planned mutation, including automatic disk-inventory preparation before separately authorized installation, or none when it settles, beyond completing an operation's interrupted finalization; with `--dry-run`, bounded read-only observation |
-| `bootwright destroy` | `--dry-run` false; `--keep-going` false, continues independently eligible cleanup after a recorded target-local failure; repeatable `--authorize <token>[=<digest>][,<token>...]`, which also takes `erase=<machine>:<method>` to relax one Machine's declared removal erase for this destroy; repeatable `--unregistered <machine>[,<machine>...]`; `--parallelism <n>` default 8; `--yes` false | completed full destroy, exact continued state, a settled result when the context owns nothing, or a remaining-cleanup report; with `--dry-run`, the removal plan and prerequisite checks | complete planned removal, or partial removal with `--keep-going`, or none when it settles, beyond the same interrupted finalization or releasing what an interrupted registration left, and the [housekeeping](../state-reconciliation.md#context-mutation-evidence) of the operation claims that hold nothing; over an apply that did not complete, it first proves the outcome of every effect it takes back; with `--dry-run`, bounded read-only observation |
+| `bootwright destroy` | `--dry-run` false; `--keep-going` false, continues independently eligible cleanup after a recorded target-local failure; repeatable `--authorize <token>[=<digest>][,<token>...]`, which also takes `erase=<machine>:<method>` to relax one Machine's declared removal erase for this destroy and `abandon=<machine>` to leave one Machine's remaining effects in place; repeatable `--unregistered <machine>[,<machine>...]`; `--parallelism <n>` default 8; `--yes` false | completed full destroy, exact continued state, a settled result when the context owns nothing, or a remaining-cleanup report; with `--dry-run`, the removal plan and prerequisite checks | complete planned removal, or partial removal with `--keep-going`, or none when it settles, beyond the same interrupted finalization or releasing what an interrupted registration left, and the [housekeeping](../state-reconciliation.md#context-mutation-evidence) of the operation claims that hold nothing; over an apply that did not complete, it first proves the outcome of every effect it takes back; with `--dry-run`, bounded read-only observation |
 
 Not yet met: `render installer` and `render storage` run no use case
 and answer `cli.not-implemented`; their contracts are intent, tracked as
@@ -430,9 +430,17 @@ sixteen independent steps. Higher values can increase controller and target load
 
 `--authorize` accepts only `data-loss`, `data-loss=<digest>` with the 16
 lowercase hexadecimal digits a plan prints for the steps it authorizes,
-`rebind=<secret>` and `erase=<machine>:<method>`; the first three only on
-`apply` and `destroy`, `erase=` only on `destroy` and `destroy --dry-run`; `--yes`, or input
+`rebind=<secret>`, `erase=<machine>:<method>` and `abandon=<machine>`; the first
+three only on `apply` and `destroy`, `erase=` and `abandon=` only on `destroy`
+and `destroy --dry-run`; `--yes`, or input
 that cannot answer a prompt, requires the `data-loss=<digest>` form.
+`abandon=<machine>` leaves the steps of one Machine that its capabilities can
+abandon in place for that invocation, under the
+[abandoned removal](../state-reconciliation.md#abandoned-removal):
+`<machine>` is the Machine's name, a lowercase DNS label, and it is
+repeatable, once per Machine. An empty or bare `abandon`, a name that is not a
+Machine name, and a Machine named twice or also in an `erase=` token are usage
+errors.
 `erase=<machine>:<method>` relaxes the declared
 [removal erase](../state-reconciliation.md#opt-in-physical-logical-overwrite) of
 one Machine, every target of it, for that invocation: `<machine>` is the

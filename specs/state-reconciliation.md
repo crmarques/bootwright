@@ -588,10 +588,10 @@ sends the operator back to `status`, which needs the same unreadable record.
 | apply paused | continue that exact apply under any stage selection, or start a fresh destroy of the blocks it started |
 | apply unknown | continue it, resolving every unproved block first and then retrying what resolution leaves `failed` (D146), or start a fresh destroy of the blocks it started, which resolves them first |
 | apply done | start a fresh destroy of its whole frozen plan and its predecessors', which first resolves every unproved block; an `apply` of the unchanged input settles without effect, of an input that only adds add-on instances starts an [additive apply](#additive-apply), and of any other changed input refuses; that apply refuses while a block of these plans is not `done`, naming that destroy and `context delete --purge` |
-| destroy running | continue that exact destroy, or, under an erase relaxation its frozen plan does not hold, start a fresh destroy of what it has not removed, which resolves every unproved block first |
-| destroy paused | continue that exact destroy, or, under an erase relaxation its frozen plan does not hold, start a fresh destroy of what it has not removed, which resolves every unproved block first |
+| destroy running | continue that exact destroy, or, under a relaxation its frozen plan does not hold, start a fresh destroy of what it has not removed, which resolves every unproved block first |
+| destroy paused | continue that exact destroy, or, under a relaxation its frozen plan does not hold, start a fresh destroy of what it has not removed, which resolves every unproved block first |
 | destroy failed | start a fresh destroy of what it has not removed |
-| destroy unknown | continue it, resolving every unproved block first and then retrying what resolution leaves `failed` (D146), or, under an erase relaxation its frozen plan does not hold, start a fresh destroy of what it has not removed, which resolves them first |
+| destroy unknown | continue it, resolving every unproved block first and then retrying what resolution leaves `failed` (D146), or, under a relaxation its frozen plan does not hold, start a fresh destroy of what it has not removed, which resolves them first |
 
 For an apply that names a predecessor, every fresh destroy these rows start also takes back the whole frozen plan of each predecessor ([removal over a lineage](#removal-over-a-lineage)).
 
@@ -631,8 +631,11 @@ row changes only together with the code.
 ### Attempt outcomes
 
 An attempt records the effect and block state its capability's outcome
-justifies. An outcome outside this set is recorded as `unknown`, and an attempt
+justifies. An outcome outside this set, and `abandoned` from a capability, is
+recorded as `unknown`, and an attempt
 its invocation's cancellation interrupted as `canceled`, whatever it reported.
+Only the engine records `abandoned`, for a removal step the operator
+[leaves in place](#abandoned-removal), whose attempt runs no adapter.
 An attempt whose required log failed before its outcome was logged records a
 reported `failed` as `unknown`, because a typed failure proves less than
 completion, and one whose log could not be created records `unknown` without
@@ -659,11 +662,13 @@ not admit it.
 | `failed` | `unknown` | `failed` |
 | `canceled` | `unknown` | `unknown` |
 | `unknown` | `unknown` | `unknown` |
+| `abandoned` | `no-effect` | `done` |
 
 A typed failure proves nothing about the target, so its effect stays `unknown`,
 yet its block is `failed` rather than `unknown`: the retry that follows
-[converges](#converging-an-effect) whatever the attempt left. An attempt never
-records `no-effect` or `partial`; only a resolution does. A canceled attempt
+[converges](#converging-an-effect) whatever the attempt left. An adapter's
+attempt never records `no-effect` or `partial`; only a resolution and an
+abandonment do. A canceled attempt
 stays `unknown` even when its adapter proves it performed no effect, because
 the next verb's resolution reads it read-only.
 
@@ -1999,16 +2004,58 @@ belongs to the invocation. All unfinished removals remain owned and only
 complete removal enters normal finalization.
 
 An incomplete source apply's enrollment can stay unproved when its
-read-only removal observation reports the remote sudo terminal requirement.
+read-only removal observation reports a refusal of that Machine's own access,
+`machine.enrollment` or `machine.enrollment-sudo-tty`.
 With `--keep-going`, the enrollment and everything its inverse holds back
 remain pending while independent steps can run. This applies when the
-enrollment has no inverse prerequisites and the removal has no pre-stop,
-online, or host-retirement phase to preserve. The destroy record carries a
+enrollment has no inverse prerequisites, the removal has no pre-stop,
+online, or host-retirement phase to preserve, and it
+[abandons](#abandoned-removal) no step. The destroy record carries a
 source block IDs before its first effect. Every retry, including a
 plain destroy, requires readable positive proof before admitting those inverses.
 Native power-off groups exclude Machines held behind an unresolved proof.
 The source record retains the failed proof and its reason. A stopped or
 interrupted destroy keeps ownership and custody until all inverses finish.
+The way to finish without that proof is an [abandoned removal](#abandoned-removal).
+
+## Abandoned removal
+
+A `destroy` may name, with `--authorize abandon=<machine>`, a Machine whose
+remaining effects the operator leaves in place unmanaged for that removal
+([D283](milestones/backlog.md#d283)). Each step whose capability offers
+abandonment for that Machine freezes the relaxation `abandon` beside its
+unchanged identity, request and digests, takes the description and impacts its
+capability gives, and consumes no authorization. A capability offers it only
+for a step whose effect lives on the host of the Machine the step names and
+whose next apply reads what that effect leaves as foreign and refuses it rather
+than adopting it. The [provided-Machine enrollment](api/machines.md#managed-lifecycle-enrollment)
+offers it; every other step of the Machine runs as usual.
+
+An abandoned step contacts nothing. The removal observes no unproved effect it
+leaves, probes no quiescence and stops no Machine for it, and its attempt runs
+no adapter and records `abandoned`, `no-effect` and `done`, so every step that
+waits on it starts. An abandoned attempt that was interrupted before it
+recorded its outcome resolves as never performed without contacting its host,
+and its retry abandons it again. A removal whose every step is done completes,
+releases what the context held and publishes pristine evidence, so
+`context delete --purge` needs no orphan acknowledgement and
+[uninstall](controller.md#the-uninstall-flow) may follow. What it abandoned
+stays on its host, and once the context is deleted no record names it.
+
+A token naming a Machine that holds no step this destroy can abandon refuses
+`authorize.unneeded` before registration, and naming one Machine in both an
+`erase=` and an `abandon=` token is a usage error. An unattended `destroy`
+naming one refuses `authorize.abandon-unattended` before registration, because
+no digest binds an abandonment to the steps an operator reviewed. Abandonment
+follows the continuation rules of the [erase relaxation](#erase-relaxation):
+a fresh removal abandons only what its own invocation names, a running, paused
+or unknown removal continues only under the set its plan froze, and a destroy
+naming one its plan does not hold supersedes that removal. A removal that
+abandons a step defers no source proof under keep-going, so every record that
+defers one holds every unproved source block it leaves. A refusal of
+unproved effects names the abandonment and its `--dry-run` preview when the
+capability of every step it cannot prove offers one, together with the
+abandonments the plan already holds.
 
 ## Selecting apply targets
 
@@ -2991,7 +3038,8 @@ power, probe, or digest checks.
 `data-loss` is the only authorization token a block consumes; `rebind=<secret>`
 is the [access-credential rebind](#access-credential-rebind), which no block
 consumes and which refuses when it does not apply, and `erase=<machine>:<method>`
-is the [erase relaxation](#erase-relaxation), which no block consumes either. `all`, unknown, duplicate,
+is the [erase relaxation](#erase-relaxation), which no block consumes either,
+nor does `abandon=<machine>`, the [abandoned removal](#abandoned-removal). `all`, unknown, duplicate,
 empty, and inapplicable values are errors. An apply requires exactly the tokens [consumed](#plan-and-execution) by
 unfinished blocks that could reach an attempt in this invocation. This
 includes later waves and retries under the selected stages and targets.
@@ -3030,7 +3078,8 @@ recovery.
 
 ### Erase relaxation
 
-An erase relaxation is the only relaxation an invocation can name, and only a
+An erase relaxation and an [abandonment](#abandoned-removal) are the only
+relaxations an invocation can name, and only a
 `destroy` and the `plan` that previews it name one:
 `erase=<machine>:metadataClear` or `erase=<machine>:retain`, in the
 [grammar](cli/commands.md#flag-relationships-and-safeguards), relaxes the

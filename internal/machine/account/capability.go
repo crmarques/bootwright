@@ -171,6 +171,21 @@ func removal(request Request) lifecycle.Removal {
 		Groups: []reconciliation.Group{{ID: "withdraw", Description: "remove and verify the managed SSH login", Machines: []string{request.Placement.Machine}}}}
 }
 
+func (Capability) AbandonsMachine(block reconciliation.Block) bool {
+	_, err := decode(block)
+	return err == nil
+}
+
+func (Capability) Abandon(_ context.Context, block reconciliation.Block) (lifecycle.Removal, error) {
+	request, err := decode(block)
+	if err != nil {
+		return lifecycle.Removal{}, err
+	}
+	place := request.Placement
+	return lifecycle.Removal{Description: "leave the owned login " + place.User + " on " + place.Machine + " in place, contacting nothing",
+		Impacts: []string{"abandon root-equivalent SSH access for " + place.User}, Consumes: []string{}}, nil
+}
+
 func (Capability) Quiescent(context.Context, lifecycle.Probe) (lifecycle.Quiescence, error) {
 	return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: "the owned access is removed after dependent effects"}, nil
 }

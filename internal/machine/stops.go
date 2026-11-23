@@ -53,6 +53,12 @@ func IsEnrollmentSudoTTY(err error) bool {
 	return ok && !failure.Usage && len(failure.Diagnostics) == 1 && failure.Diagnostics[0].Code == enrollmentSudoTTY.Code
 }
 
+func IsEnrollmentRefusal(err error) bool {
+	failure, ok := err.(*diagnostics.Failure)
+	return ok && !failure.Usage && len(failure.Diagnostics) == 1 &&
+		(failure.Diagnostics[0].Code == enrollment.Code || failure.Diagnostics[0].Code == enrollmentSudoTTY.Code)
+}
+
 var stops = []diagnostics.Stop{enrollment, enrollmentSudoTTY, machinePlacementNoAccess, machinePlacementAuthUnsupported, machinePlacementKeyMissing, machinePlacementHostKeyMissing,
 	machinePlacementEscalates, machineInstalledAccessMismatch}
 

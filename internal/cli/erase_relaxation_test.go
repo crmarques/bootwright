@@ -23,9 +23,13 @@ func TestEraseRelaxationUsageErrors(t *testing.T) {
 		{[]string{"destroy", "--authorize", "erase=Srv_01:retain"}, `"Srv_01" is not a Machine name`},
 		{[]string{"destroy", "--dry-run", "--authorize", "erase=srv-01:retain,"}, "--authorize must not contain an empty member"},
 		{[]string{"destroy", "--authorize", "erase=srv-01:retain,,data-loss"}, "--authorize must not contain an empty member"},
-		{[]string{"apply", "--authorize", "erase=srv-01:retain"}, "applies only to destroy and destroy --dry-run, not apply"},
+		{[]string{"apply", "--authorize", "erase=srv-01:retain"}, "apply only to destroy and destroy --dry-run, not apply"},
+		{[]string{"apply", "--authorize", "abandon=srv-01"}, "apply only to destroy and destroy --dry-run, not apply"},
 		{[]string{"destroy", "--dry-run", "--authorize", "data-loss"}, "destroy --dry-run accepts only --authorize erase="},
 		{[]string{"destroy", "--dry-run", "--authorize", "rebind=bmc"}, "destroy --dry-run accepts only --authorize erase="},
+		{[]string{"destroy", "--authorize", "abandon"}, "must be abandon=<machine>"},
+		{[]string{"destroy", "--authorize", "abandon=Srv_01"}, `"Srv_01" is not a Machine name`},
+		{[]string{"destroy", "--authorize", "abandon=srv-01,erase=srv-01:retain"}, "an abandoned Machine is neither erased nor relaxed"},
 	} {
 		t.Run(strings.Join(test.args, " "), func(t *testing.T) {
 			code, _, errOut, record := runRecorded(test.args)
@@ -40,6 +44,8 @@ func TestEraseRelaxationsAreCarriedBesideTheOtherAuthorizations(t *testing.T) {
 	for _, args := range [][]string{
 		{"destroy", "--authorize", "data-loss,erase=srv-01:retain", "--authorize", "erase=srv-02:metadataClear", "--yes"},
 		{"destroy", "--dry-run", "--authorize", "erase=srv-01:retain,erase=srv-02:metadataClear"},
+		{"destroy", "--keep-going", "--authorize", "abandon=srv-03", "--authorize", "erase=srv-01:retain"},
+		{"destroy", "--dry-run", "--authorize", "abandon=srv-03"},
 		{"apply", "--dry-run"},
 	} {
 		code, _, errOut, record := runRecorded(args)

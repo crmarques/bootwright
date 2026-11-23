@@ -14,6 +14,9 @@ func (s Service) authorized(name string, decided operationPlan, authorizations, 
 	if err := authorize(name, decided.verb, decided.selection, decided.plan, decided.authorizationPlan(), authorizations, unregistered, unattended); err != nil {
 		return err
 	}
+	if err := s.refuseUnattendedAbandonment(name, unattended); err != nil {
+		return err
+	}
 	return acknowledgedReleases(name, decided.plan, decided.phases.preStop, unregistered)
 }
 

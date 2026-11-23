@@ -245,7 +245,7 @@ func stateMachineRows() map[string]stateMachineRow {
 			},
 		},
 		"destroy running": {
-			transition: "continue that exact destroy, or, under an erase relaxation its frozen plan does not hold, start a fresh destroy of what it has not removed, which resolves every unproved block first",
+			transition: "continue that exact destroy, or, under a relaxation its frozen plan does not hold, start a fresh destroy of what it has not removed, which resolves every unproved block first",
 			cases: map[string]stateMachineCase{
 				"a removal whose executor died": {
 					arrange: func(t *testing.T, h *harness) {
@@ -257,7 +257,7 @@ func stateMachineRows() map[string]stateMachineRow {
 			},
 		},
 		"destroy paused": {
-			transition: "continue that exact destroy, or, under an erase relaxation its frozen plan does not hold, start a fresh destroy of what it has not removed, which resolves every unproved block first",
+			transition: "continue that exact destroy, or, under a relaxation its frozen plan does not hold, start a fresh destroy of what it has not removed, which resolves every unproved block first",
 			cases: map[string]stateMachineCase{
 				"a removal paused at the online boundary": {
 					arrange: func(t *testing.T, h *harness) {
@@ -285,7 +285,7 @@ func stateMachineRows() map[string]stateMachineRow {
 			},
 		},
 		"destroy unknown": {
-			transition: "continue it, resolving every unproved block first and then retrying what resolution leaves `failed` (D146), or, under an erase relaxation its frozen plan does not hold, start a fresh destroy of what it has not removed, which resolves them first",
+			transition: "continue it, resolving every unproved block first and then retrying what resolution leaves `failed` (D146), or, under a relaxation its frozen plan does not hold, start a fresh destroy of what it has not removed, which resolves them first",
 			cases: map[string]stateMachineCase{
 				"a removal whose first block lost its outcome": {
 					arrange: func(t *testing.T, h *harness) {

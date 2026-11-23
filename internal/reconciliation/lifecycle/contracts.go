@@ -286,6 +286,14 @@ type RemovalRelaxer interface {
 	Relax(context.Context, reconciliation.Block, string) (Removal, error)
 }
 
+// RemovalAbandoner opts in only a block whose effect lives on the host of the
+// Machine its Object names, and whose next apply refuses, never adopts, what
+// that effect leaves there.
+type RemovalAbandoner interface {
+	AbandonsMachine(reconciliation.Block) bool
+	Abandon(context.Context, reconciliation.Block) (Removal, error)
+}
+
 type HostBound interface {
 	HostMachines(reconciliation.Block) ([]string, error)
 }

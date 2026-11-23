@@ -47,6 +47,7 @@ const (
 	OutcomeFailed    Outcome = "failed"
 	OutcomeCanceled  Outcome = "canceled"
 	OutcomeUnknown   Outcome = "unknown"
+	OutcomeAbandoned Outcome = "abandoned"
 )
 
 func (o Outcome) Settled() bool { return o == OutcomeChanged || o == OutcomeUnchanged }
@@ -77,7 +78,7 @@ func ValidEffectState(value EffectState) bool {
 
 func ValidOutcome(value Outcome) bool {
 	switch value {
-	case OutcomeChanged, OutcomeUnchanged, OutcomeFailed, OutcomeCanceled, OutcomeUnknown:
+	case OutcomeChanged, OutcomeUnchanged, OutcomeFailed, OutcomeCanceled, OutcomeUnknown, OutcomeAbandoned:
 		return true
 	}
 	return false
@@ -89,6 +90,8 @@ func AttemptTransition(outcome Outcome) (EffectState, BlockState, error) {
 	switch outcome {
 	case OutcomeChanged, OutcomeUnchanged:
 		return EffectCompleted, BlockDone, nil
+	case OutcomeAbandoned:
+		return EffectNoEffect, BlockDone, nil
 	case OutcomeFailed:
 		return EffectUnknown, BlockFailed, nil
 	case OutcomeCanceled, OutcomeUnknown:

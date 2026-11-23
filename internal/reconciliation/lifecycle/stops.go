@@ -192,7 +192,10 @@ var (
 		Meaning: "a block's outcome is still unknown after an observation, for the reason the message names", Remedy: "do what the reason names, then repeat the command to observe the block again"}
 	authorizeRelaxationChanged = diagnostics.Stop{Code: "authorize.relaxation-changed", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryFixThenRepeat,
-		Meaning: "an operation continues only under the erase relaxations its plan froze, and the invocation names others", Remedy: "continue it naming the relaxations its plan froze, or replace it with a fresh destroy"}
+		Meaning: "an operation continues only under the relaxations its plan froze, and the invocation names others", Remedy: "continue it naming the relaxations its plan froze, or replace it with a fresh destroy"}
+	authorizeAbandonUnattended = diagnostics.Stop{Code: "authorize.abandon-unattended", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "an unattended destroy names --authorize abandon=<machine>, which only a confirmation an operator answers accepts, so nothing was registered", Remedy: "run the destroy in a terminal without --yes and confirm the plan"}
 	diffContextMoved = diagnostics.Stop{Code: "diff.context-moved", Level: diagnostics.LevelContext, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseConcurrency, Recovery: diagnostics.RecoveryRepeat,
 		Meaning: "the context changed while diff read it", Remedy: "repeat the diff"}
@@ -289,7 +292,7 @@ var stops = []diagnostics.Stop{engineRecordsFull, engineRecordsReadOnly, engineR
 	engineRecordsDamaged, applyProducedInputMissing, engineRecaptureMismatch, engineResolvedUnperformed, destroyPostconditionUnknown,
 	prepareRefused, prepareUnsupported,
 	engineBorrowedSSH, engineConfirmationRequired, engineInputInvalid, engineCredentialMoved, engineFinalizationIncomplete,
-	destroyReleaseIncomplete, destroyUnprovedEffects, engineOutcomeUnknown, authorizeRelaxationChanged, diffContextMoved,
+	destroyReleaseIncomplete, destroyUnprovedEffects, engineOutcomeUnknown, authorizeRelaxationChanged, authorizeAbandonUnattended, diffContextMoved,
 	engineCredentialUnapplied, engineCredentialClusterUnknown, engineCredentialLoginInapplicable, engineCredentialExternal, engineCredentialCustody, engineCredentialPending,
 	engineCredentialPreparationInvalid, engineCredentialUpdateUnproved, engineControllerUnprepared, engineControllerUnbound, engineControllerOtherHost,
 	engineRuntimeUnprepared, engineClientNotInstalled, engineWiringMissing, engineLogUnmaintained, engineProducedNameInvalid,
