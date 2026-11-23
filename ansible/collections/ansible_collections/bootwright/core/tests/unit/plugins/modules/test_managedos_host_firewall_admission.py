@@ -13,13 +13,15 @@ import pytest
 from ansible_collections.bootwright.core.plugins.module_utils import managedos_firewall_worker as worker
 from ansible_collections.bootwright.core.plugins.modules import managedos_host_firewall as module
 
-ZONES = "public (default, active)\n  target: default\n  interfaces: eth0\n  sources: \n  rich rules: \n"
+ZONES = ("public (default, active)\n  target: default\n  interfaces: eth0\n  sources: \n  rich rules: \n\n"
+         "nm-shared\n  target: ACCEPT\n  sources: \n  rich rules: \n\trule priority=\"32767\" reject\n")
 
 
 class Host:
     """A host whose commands answer from a table and record what started."""
 
-    def __init__(self, sshd="port 22\n", admitted=("22",), zone=b"", devices=b"eth0:connected\nlo:connected (externally)\n"):
+    def __init__(self, sshd="port 22\n", admitted=("22",), zone=b"", devices=b"eth0:connected\nlo:connected (externally)\n",
+                 method=b"manual"):
         self.started = []
         self.answers = {
             ("/usr/bin/systemctl", "is-enabled", "firewalld.service"): (1, b"disabled"),
@@ -34,6 +36,8 @@ class Host:
             (module.NMCLI, "--get-values", "DEVICE,STATE", "device"): (0, devices),
             (module.NMCLI, "--get-values", "GENERAL.CONNECTION", "device", "show", "eth0"): (0, b"System eth0"),
             (module.NMCLI, "--get-values", "connection.zone", "connection", "show", "System eth0"): (0, zone),
+            (module.NMCLI, "--get-values", "ipv4.method", "connection", "show", "System eth0"): (0, method),
+            (module.NMCLI, "--get-values", "ipv6.method", "connection", "show", "System eth0"): (0, b"auto"),
             (module.OFFLINE, "--zone=public", "--query-service=ssh"): (1, b""),
             (module.OFFLINE, "--info-service=ssh"): (0, b"ssh\n  ports: 22/tcp\n"),
         }
@@ -65,7 +69,9 @@ def test_a_local_start_proves_every_listening_port_before_it_starts():
     Host(sshd="port 22\nport 2222\n", admitted=("2222",)),
     Host(sshd="", admitted=()),
     Host(devices=b"lo:connected (externally)\n"),
-], ids=["an unadmitted port", "one of two ports", "no port in sshd's configuration", "no connected interface"])
+    Host(sshd="port 2222\n", admitted=("2222",), method=b"shared"),
+], ids=["an unadmitted port", "one of two ports", "no port in sshd's configuration", "no connected interface",
+        "a shared connection that NetworkManager puts in nm-shared"])
 def test_a_local_start_that_would_lock_out_ssh_refuses_and_starts_nothing(host):
     with pytest.raises(worker.Refused) as refused:
         prepared(host)

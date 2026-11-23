@@ -1078,7 +1078,7 @@ def offline_zones(rich_rules=(), extra=""):
 
 def test_offline_ssh_shape_admits_zones_without_sources_or_rich_rules():
     from ansible_collections.bootwright.core.plugins.modules import managedos_host_firewall as direct
-    direct.offline_ssh_shape(offline_zones())
+    direct.offline_ssh_shape(offline_zones(), {"public"}, {"ens192"})
 
 
 @pytest.mark.parametrize("rules", [
@@ -1090,7 +1090,7 @@ def test_offline_ssh_shape_admits_zones_without_sources_or_rich_rules():
 def test_offline_ssh_shape_refuses_every_rich_rule_including_one_holding_a_colon(rules):
     from ansible_collections.bootwright.core.plugins.modules import managedos_host_firewall as direct
     with pytest.raises(worker.Refused) as refused:
-        direct.offline_ssh_shape(offline_zones(rules))
+        direct.offline_ssh_shape(offline_zones(rules), {"public"}, {"ens192"})
     assert refused.value.cause == "ssh-admission"
 
 
@@ -1102,8 +1102,100 @@ def test_offline_ssh_shape_refuses_a_zone_listing_it_cannot_parse(extra):
     zones = extra.encode("latin-1") + guest.run(["--list-all-zones"])[1]
     guest.run = lambda argv: (0, zones if argv[-1] == "--list-all-zones" else b"")
     with pytest.raises(worker.Refused) as refused:
-        direct.offline_ssh_shape(guest)
+        direct.offline_ssh_shape(guest, {"public"}, {"ens192"})
     assert refused.value.cause == "ssh-admission"
+
+
+NM_SHARED = ("nm-shared\n  target: ACCEPT\n  sources: \n  services: dhcp dns ssh\n  rich rules: \n"
+             "\trule priority=\"32767\" reject\n\n")
+
+
+def test_offline_ssh_shape_admits_a_rich_rule_in_a_zone_that_carries_no_ssh():
+    """RHEL 9 ships nm-shared with a rich rule; it binds no interface SSH arrives on."""
+    from ansible_collections.bootwright.core.plugins.modules import managedos_host_firewall as direct
+    direct.offline_ssh_shape(offline_zones(extra="\n" + NM_SHARED), {"public"}, {"ens192"})
+    with pytest.raises(worker.Refused) as refused:
+        direct.offline_ssh_shape(offline_zones(extra="\n" + NM_SHARED), {"public", "nm-shared"}, {"ens192"})
+    assert refused.value.cause == "ssh-admission"
+
+
+@pytest.mark.parametrize("extra", ["\ntrusted\n  sources: 192.0.2.0/24\n  rich rules: \n",
+                                   "\nnm-shared\n  rich rules: \n\tnot a rule\n"])
+def test_offline_ssh_shape_still_refuses_a_source_anywhere_and_a_malformed_rule(extra):
+    from ansible_collections.bootwright.core.plugins.modules import managedos_host_firewall as direct
+    with pytest.raises(worker.Refused) as refused:
+        direct.offline_ssh_shape(offline_zones(extra=extra), {"public"}, {"ens192"})
+    assert refused.value.cause == "ssh-admission"
+
+
+RHEL98_ZONES = (
+    'block\n'
+    '  target: %%REJECT%%\n'
+    '  icmp-block-inversion: no\n'
+    '  interfaces:\n'
+    '  sources:\n'
+    '  services:\n'
+    '  ports:\n'
+    '  protocols:\n'
+    '  forward: yes\n'
+    '  masquerade: no\n'
+    '  forward-ports:\n'
+    '  source-ports:\n'
+    '  icmp-blocks:\n'
+    '  rich rules:\n'
+    '\n'
+    'nm-shared\n'
+    '  target: ACCEPT\n'
+    '  icmp-block-inversion: no\n'
+    '  interfaces:\n'
+    '  sources:\n'
+    '  services: dhcp dns ssh\n'
+    '  ports:\n'
+    '  protocols: icmp ipv6-icmp\n'
+    '  forward: no\n'
+    '  masquerade: no\n'
+    '  forward-ports:\n'
+    '  source-ports:\n'
+    '  icmp-blocks:\n'
+    '  rich rules:\n'
+    '        rule priority="32767" reject\n'
+    '\n'
+    'public\n'
+    '  target: default\n'
+    '  icmp-block-inversion: no\n'
+    '  interfaces:\n'
+    '  sources:\n'
+    '  services: cockpit dhcpv6-client ssh\n'
+    '  ports:\n'
+    '  protocols:\n'
+    '  forward: yes\n'
+    '  masquerade: no\n'
+    '  forward-ports:\n'
+    '  source-ports:\n'
+    '  icmp-blocks:\n'
+    '  rich rules:\n'
+    '\n'
+)
+
+
+def test_offline_ssh_shape_admits_a_stock_rhel_9_8_listing_whose_ssh_arrives_in_public():
+    from ansible_collections.bootwright.core.plugins.modules import managedos_host_firewall as direct
+    answers = {"--list-all-zones": RHEL98_ZONES.encode(), "--get-policies": b""}
+    guest = SimpleNamespace(run=lambda argv: (0, answers.get(argv[-1], b"")))
+    direct.offline_ssh_shape(guest, {"public"}, {"ens192"})
+    with pytest.raises(worker.Refused):
+        direct.offline_ssh_shape(guest, {"nm-shared"}, {"ens192"})
+
+
+@pytest.mark.parametrize("bound, refuses", [("ens192", True), ("ens224", False)])
+def test_offline_ssh_shape_refuses_an_ssh_interface_bound_to_another_zone(bound, refuses):
+    from ansible_collections.bootwright.core.plugins.modules import managedos_host_firewall as direct
+    guest = offline_zones(extra="\ninternal\n  interfaces: " + bound + "\n  sources: \n  rich rules: \n")
+    if not refuses:
+        direct.offline_ssh_shape(guest, {"public"}, {"ens192"})
+        return
+    with pytest.raises(worker.Refused):
+        direct.offline_ssh_shape(guest, {"public"}, {"ens192"})
 
 
 def test_an_overridden_ssh_service_name_does_not_prove_ssh_port_admission():

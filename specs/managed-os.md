@@ -2250,10 +2250,17 @@ still proves its own substrate can do so.
 On an explicitly managed provided host, apply installs firewalld and enables
 and starts its daemon. It refuses to start alongside another active firewall
 service. Before starting over SSH, it proves the connection's port admitted
-in its interface's configured NetworkManager zone. Before starting locally,
+in its interface's configured NetworkManager zone: the connection's
+`connection.zone`, `nm-shared` for a sharing connection that names none, or
+else the default zone. Before starting locally,
 where an operator may still be logged in over SSH, it proves every port a
 running sshd listens on (`sshd -T`) admitted in the zone of every connected
-interface. Ambiguous or unproved access refuses with `ssh-admission`. Destroy retains the shared package and daemon enablement.
+interface. A source in any zone, a direct rule or passthrough, or a policy
+other than one that only accepts ICMPv6 can override that admission and
+refuses, as does another zone that binds an interface carrying SSH. A rich rule refuses only in a zone that carries the proved SSH
+traffic, so one in an unused zone, such as the `nm-shared` zone RHEL 9
+ships, does not.
+Ambiguous or unproved access refuses with `ssh-admission`. Destroy retains the shared package and daemon enablement.
 Preflight, plan and observation never prepare a daemon or change a rule.
 
 The frozen `installation.FirewallRequest` carries either direct local or

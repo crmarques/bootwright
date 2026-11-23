@@ -116,8 +116,8 @@ def harmless_offline_policy(guest, name):
                     ("services", "ports", "protocols", "forward-ports", "source-ports", "icmp-blocks", "rich rules")))
 
 
-def offline_ssh_shape(guest):
-    """A source zone, rich rule or host policy can override a port grant."""
+def offline_ssh_shape(guest, carrying, interfaces):
+    """A source anywhere, an SSH interface bound to another zone, or a rich rule where SSH arrives overrides a grant."""
     code, output = guest.run([OFFLINE, "--list-all-zones"])
     if code != 0:
         raise worker.failed("ssh-admission")
@@ -125,21 +125,27 @@ def offline_ssh_shape(guest):
         lines = output.decode("ascii").splitlines()
     except UnicodeError:
         raise worker.failed("ssh-admission") from None
-    zone = rich = False
+    zone, rich = None, False
     for line in lines:
         stripped = line.strip()
         if not stripped:
-            zone = rich = False
+            zone, rich = None, False
             continue
         if not line[0].isspace():
             if not ZONE_HEADER.fullmatch(line):
                 raise worker.failed("ssh-admission")
-            zone, rich = True, False
+            zone, rich = line.split(" ", 1)[0], False
+            continue
+        if rich:
+            if zone in carrying or not stripped.startswith("rule "):
+                raise worker.failed("ssh-admission")
             continue
         # firewalld prints each rich rule on its own indented line after the
         # field, and a rule may itself contain a colon.
         key, separator, value = stripped.partition(":")
-        if rich or not zone or not separator or (key in ("sources", "rich rules") and value.strip()):
+        bound = key == "interfaces" and zone not in carrying and bool(set(value.split()) & interfaces)
+        if zone is None or not separator or bound or (key == "sources" and value.strip()) or (
+                key == "rich rules" and value.strip() and zone in carrying):
             raise worker.failed("ssh-admission")
         rich = key == "rich rules"
     for flag in ("--get-all-rules", "--get-all-passthroughs", "--get-all-chains"):
@@ -179,11 +185,24 @@ def zone_of(guest, interface):
     if code != 0:
         raise worker.failed("ssh-admission")
     zone = output.strip()
+    if not zone and shared(guest, connection):
+        zone = b"nm-shared"
     if not zone:
         code, zone = guest.run([OFFLINE, "--get-default-zone"])
         if code != 0:
             raise worker.failed("ssh-admission")
     return worker.token(zone, worker.ZONE)
+
+
+def shared(guest, connection):
+    """NetworkManager puts a sharing connection that names no zone in nm-shared."""
+    for field in ("ipv4.method", "ipv6.method"):
+        code, output = guest.run([NMCLI, "--get-values", field, "connection", "show", connection])
+        if code != 0:
+            raise worker.failed("ssh-admission")
+        if output.strip() == b"shared":
+            return True
+    return False
 
 
 def admits(guest, zone, port):
@@ -198,12 +217,13 @@ def admits(guest, zone, port):
 
 def ssh_admitted(guest, address, port):
     """Before remote startup, prove SSH in the interface's configured NM zone."""
-    offline_ssh_shape(guest)
     found = guest.addresses()
     interfaces, complete = guest.service_interfaces({"addresses": [address]}, found)
     if not complete:
         raise worker.failed("ssh-admission")
-    if not admits(guest, zone_of(guest, interfaces[0]), port):
+    zone = zone_of(guest, interfaces[0])
+    offline_ssh_shape(guest, {zone}, {interfaces[0]})
+    if not admits(guest, zone, port):
         raise worker.failed("ssh-admission")
 
 
@@ -232,7 +252,6 @@ def local_ssh_admitted(guest):
     ports = listening_ports(guest)
     if not ports:
         return
-    offline_ssh_shape(guest)
     code, output = guest.run([NMCLI, "--get-values", "DEVICE,STATE", "device"])
     if code != 0:
         raise worker.failed("ssh-admission")
@@ -243,7 +262,9 @@ def local_ssh_admitted(guest):
             devices.append(device)
     if not devices:
         raise worker.failed("ssh-admission")
-    for zone in sorted({zone_of(guest, device) for device in devices}):
+    zones = {zone_of(guest, device) for device in devices}
+    offline_ssh_shape(guest, zones, set(devices))
+    for zone in sorted(zones):
         if not all(admits(guest, zone, port) for port in ports):
             raise worker.failed("ssh-admission")
 
