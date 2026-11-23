@@ -99,7 +99,7 @@ func (Capability) Removal(ctx context.Context, block reconciliation.Block) (life
 		Groups: groups(reconciliation.Destroy, request), Consumes: []string{}}, nil
 }
 
-func (c Capability) CheckApplyStart(ctx context.Context, p lifecycle.Probe) error {
+func (c Capability) PromptApplyStart(ctx context.Context, p lifecycle.Probe) error {
 	request, err := DecodeRequest(p.Block.Request)
 	if err != nil || request.Bootstrap == nil || c.promptSSH == nil {
 		return err

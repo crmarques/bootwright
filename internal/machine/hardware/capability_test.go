@@ -685,10 +685,10 @@ func TestTheHardwareClaimBorrowsTheBootstrapLoginBeforeEnrollment(t *testing.T) 
 		return refused
 	}
 	capability := New(nil).WithBootstrap(reader, prompt)
-	if err := capability.CheckApplyStart(context.Background(), lifecycle.Probe{Block: block, Context: "lab"}); !errors.Is(err, refused) || prompted != 1 || calls != 0 {
+	if err := capability.PromptApplyStart(context.Background(), lifecycle.Probe{Block: block, Context: "lab"}); !errors.Is(err, refused) || prompted != 1 || calls != 0 {
 		t.Fatalf("start prompt = %v, prompts = %d, hardware reads = %d", err, prompted, calls)
 	}
-	if err := capability.CheckApplyStart(context.Background(), lifecycle.Probe{Block: servicesBlock(t), Context: "lab"}); err != nil || prompted != 1 {
+	if err := capability.PromptApplyStart(context.Background(), lifecycle.Probe{Block: servicesBlock(t), Context: "lab"}); err != nil || prompted != 1 {
 		t.Fatalf("a claim without bootstrap prompted %d times (%v)", prompted, err)
 	}
 	if !capability.IndependentOfController(block.BlockDefinition) {

@@ -14,6 +14,7 @@ type Launcher interface {
 }
 
 type remoteAccount interface {
+	collect(context.Context, string, Request, map[string]secrets.Material) error
 	manage(context.Context, string, Request, string, string, map[string]secrets.Material) (string, error)
 	prove(context.Context, string, Request, map[string]secrets.Material) error
 }

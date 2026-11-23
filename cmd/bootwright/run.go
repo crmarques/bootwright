@@ -216,13 +216,14 @@ func interactiveProcess(classification cli.InvocationClass, args []string, stdou
 	// An operation records the build the version command reports, which names
 	// the commit of a build stamped with no version.
 	build := buildInformation()
+	prompts := promptStream(os.Stdin, stderr)
 	process := processDependencies{
 		Confirmer:          confirmer,
 		SessionConfirmer:   confirmer,
 		Streams:            machineaccess.Streams{In: os.Stdin, Out: stdout, Err: stderr},
 		Terminal:           stdinTerminal,
 		SecretInput:        secretInputFunc(readStdin),
-		SecretTerminal:     newSecretTerminal(os.Stdin, stderr),
+		SecretTerminal:     newSecretTerminal(os.Stdin, prompts),
 		Progress:           controllerPresenter,
 		Presenter:          controllerPresenter,
 		LifecycleProgress:  lifecycleProgress,
@@ -234,7 +235,10 @@ func interactiveProcess(classification cli.InvocationClass, args []string, stdou
 	if classification.JSON {
 		process.SecretTerminal = structuredSecretTerminal{source: process.SecretTerminal}
 	} else if classification.EnrollmentInput {
-		process.SecretTerminal = enrollmentPromptTerminal{TerminalInput: process.SecretTerminal, withPrompt: lifecycleProgress.WithPrompt}
+		promptOptions := errorOptions
+		promptOptions.Columns = terminalColumns(prompts)
+		process.SecretTerminal = enrollmentPromptTerminal{TerminalInput: process.SecretTerminal, withPrompt: lifecycleProgress.WithPrompt,
+			access: cli.NewAccessPrompt(cli.WithPresentation(prompts, promptOptions))}
 	}
 	hooks := invocationHooks{presentation: options, errorColumns: errorOptions.Columns, begin: beginSignalOperation, finish: func() {
 		controllerPresenter.Finish()

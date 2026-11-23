@@ -22,6 +22,7 @@ Alias cell.
 | [B1622](#b1622) | new, 2026-11-18 (X627 review) | product | Substrate and Reconciliation | Prove a hosted KubeVirt Machine off or absent without creating access on its host cluster | Fails closed: a context with a hosted KubeVirt Machine refuses every new apply and destroy |
 | [B1623](#b1623) | new, 2026-11-18 (X627 review) | safety | Reconciliation and Machine | Decide whether explicit `machine discover` and `machine inventory` take the power entry check | The owner's request named apply and destroy only |
 | [B1624](#b1624) | new, 2026-11-18 (X627 review) | product | Reconciliation, with CLI | `Stop first` names the whole fleet an automatic preparation's entry check reads | The refusal already names every blocking Machine |
+| [B1678](#b1678) | new, 2026-11-23 (X662 rehearsal) | defect | CLI | A confirmation is asked on the terminal it reads from when standard error is redirected | `--yes` and an unredirected error stream both avoid it |
 | [B82](#b82) | C5; moved from M4 on 2026-10-10 (D128); parked on 2026-10-11 (D129) | product | Managed OS | One more image, profile or entitlement variant | No concrete additional OS variant beyond the qualified M2 matrix |
 | [B96](#b96) | Y3 | enabling | Architecture | Collection metadata and naming polish | Pruned from M1 on 2026-09-28 |
 | [B97](#b97) | A8 (kind tables) | enabling | Desired state and Workspace | Kind field-table parity and a path checker | Pruned from M1 on 2026-09-28 |
@@ -3973,6 +3974,19 @@ reads every managed Machine of the fleet. List the fleet the check reads.
 
 **Exit evidence:** a plan golden for an automatic preparation naming every
 fleet Machine under `Stop first`.
+
+### B1678
+
+**Owner:** CLI. **Kind:** defect. **Requires:** none.
+**Definition:** Specified.
+
+**Outcome:** a confirmation whose standard error is not a terminal writes its
+question to the terminal it reads the answer from, as a
+[hidden-input prompt](../cli/output.md#long-running-progress) already does.
+Today the question goes to the redirected stream and the command waits unseen.
+
+**Exit evidence:** a pseudo-terminal test whose redirected error stream stays
+empty while the question appears on the terminal.
 
 ## Retired
 

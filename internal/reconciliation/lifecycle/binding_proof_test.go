@@ -87,6 +87,54 @@ func (c *applyCheckingCapability) CheckApplyStart(ctx context.Context, p Probe) 
 	return c.check(ctx, p)
 }
 
+type applyPromptingCapability struct {
+	*applyCheckingCapability
+	events *[]string
+}
+
+func (c *applyPromptingCapability) PromptApplyStart(_ context.Context, p Probe) error {
+	*c.events = append(*c.events, "prompt "+p.Block.ID)
+	return nil
+}
+
+func (*applyPromptingCapability) ApplyStartCheck(block reconciliation.Block) string {
+	return "prove access for " + block.ID
+}
+
+func TestApplyStartCollectsEveryPromptBeforeItsDescribedChecks(t *testing.T) {
+	t.Parallel()
+	h := newPlannedHarness(t, []reconciliation.BlockDefinition{
+		stagedDefinition("tools", reconciliation.StageController),
+		definition("artifact-server-lab"),
+	})
+	progress := &testProgress{}
+	h.service.options.Progress = progress
+	var events []string
+	refusal := failure("machine.enrollment", "remote sudo refused", "")
+	checking := &applyCheckingCapability{h.capability, func(_ context.Context, p Probe) error {
+		events = append(events, "check "+p.Block.ID)
+		if p.Block.ID == "artifact-server-lab" {
+			return refusal
+		}
+		return nil
+	}}
+	h.service.capabilities = testResolver{capability: &applyPromptingCapability{checking, &events}}
+	result, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	if result == nil || result.Receipt.State != "paused" || firstCode(err) != firstCode(refusal) || len(h.capability.calls) != 0 {
+		t.Fatalf("result=%+v err=%v calls=%v", result, err, h.capability.calls)
+	}
+	if want := []string{"prompt tools", "prompt artifact-server-lab", "check tools", "check artifact-server-lab"}; !slices.Equal(events, want) {
+		t.Fatalf("start order = %v, want %v", events, want)
+	}
+	want := []string{
+		"check:prove access for tools::running", "check:prove access for tools::ok",
+		"check:prove access for artifact-server-lab::running", "check:prove access for artifact-server-lab::failed",
+	}
+	if !slices.Equal(progress.rows, want) || progress.location != "" {
+		t.Fatalf("start check rows = %v at %q, want %v before any log location", progress.rows, progress.location, want)
+	}
+}
+
 func TestApplyStartRefusalPausesBeforeTheFirstAttempt(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")

@@ -701,6 +701,16 @@ The managed login grants root-equivalent access. Its key
 pair is effect material. [Ceph's provided stretch tiebreaker](../ceph.md#stretch-topology)
 also receives the fleet public key when it opts into enrollment.
 
+A bootstrap refusal names its cause: an SSH session that did not open or ended
+early, a sudo password the host did not accept, a sudo policy that does not
+authorize the account, a password the declaration omits, another sudo error,
+or a privileged check that refused the host's existing account, home, SSH
+grant or sudo rule. A sudo warning that does not stop the command names no
+cause, and neither does an operator interrupt. Bootwright answers
+remote sudo once: when sudo asks again, it ends that session at once and
+reports the password as refused. A session that outlives its bound names what
+the host was waiting for. No refusal carries remote output.
+
 For a new remote libvirt provider, enroll its provided host before an apply
 that allocates guests there so the capacity check has a verified login. An
 explicit bootstrap key file is scoped to enrollment. Withdrawal uses the

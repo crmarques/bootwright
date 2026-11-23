@@ -175,6 +175,18 @@ func (Capability) Quiescent(context.Context, lifecycle.Probe) (lifecycle.Quiesce
 	return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: "the owned access is removed after dependent effects"}, nil
 }
 
+func (c Capability) PromptApplyStart(ctx context.Context, p lifecycle.Probe) error {
+	request, err := decode(p.Block)
+	if err != nil {
+		return err
+	}
+	return c.Remote.collect(ctx, p.Context, request, p.Material)
+}
+
+func (Capability) ApplyStartCheck(block reconciliation.Block) string {
+	return "prove first access to Machine/" + block.Object + ", changing nothing"
+}
+
 func (c Capability) CheckApplyStart(ctx context.Context, p lifecycle.Probe) error {
 	_, err := c.run(ctx, p.Execution(), "observe", false)
 	return err

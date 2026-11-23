@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/secrets/material"
 )
 
@@ -30,11 +31,12 @@ func (structuredSecretTerminal) ReadHidden(context.Context, string, []byte) (int
 type enrollmentPromptTerminal struct {
 	material.TerminalInput
 	withPrompt func(func())
+	access     *cli.AccessPrompt
 }
 
 func (t enrollmentPromptTerminal) ReadHidden(ctx context.Context, prompt string, buffer []byte) (n int, err error) {
 	t.withPrompt(func() {
-		n, err = t.TerminalInput.ReadHidden(ctx, prompt, buffer)
+		n, err = t.TerminalInput.ReadHidden(ctx, t.access.Line(prompt), buffer)
 	})
 	return n, err
 }

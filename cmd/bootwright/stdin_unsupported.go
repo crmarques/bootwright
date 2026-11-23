@@ -26,6 +26,8 @@ type secretTerminal struct{}
 
 func newSecretTerminal(*os.File, io.Writer) secretTerminal { return secretTerminal{} }
 
+func promptStream(_ *os.File, errOut io.Writer) io.Writer { return errOut }
+
 func (secretTerminal) Interactive() (bool, error) { return false, nil }
 
 func (secretTerminal) ReadHidden(ctx context.Context, _ string, _ []byte) (int, error) {

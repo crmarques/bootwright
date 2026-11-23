@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -151,6 +152,70 @@ func TestTerminalSecretPromptTurnsEchoOffAndRestoresIt(t *testing.T) {
 	}
 }
 
+func awaitTerminalText(t *testing.T, master *os.File, want string) string {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	var shown strings.Builder
+	buffer := make([]byte, 64)
+	for !strings.Contains(shown.String(), want) {
+		n, err := readInputFD(ctx, int(master.Fd()), buffer)
+		shown.Write(buffer[:n])
+		if err != nil {
+			t.Fatalf("the terminal showed %q, want %q (%v)", shown.String(), want, err)
+		}
+	}
+	return shown.String()
+}
+
+func TestAHiddenPromptFollowsItsTerminalWhenTheErrorStreamIsRedirected(t *testing.T) {
+	t.Parallel()
+	master, slave := openTestTerminal(t)
+	var redirected bytes.Buffer
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	defer writer.Close()
+	if promptStream(slave, slave) != io.Writer(slave) || promptStream(reader, &redirected) != io.Writer(&redirected) {
+		t.Fatal("a terminal error stream or an input that is no terminal lost its own prompt stream")
+	}
+	stream := promptStream(slave, &redirected)
+	if stream != io.Writer(slave) {
+		t.Fatal("a redirected error stream kept the prompt away from the terminal")
+	}
+	readOnly, err := os.OpenFile(fmt.Sprintf("/proc/self/fd/%d", slave.Fd()), os.O_RDONLY|syscall.O_NOCTTY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer readOnly.Close()
+	if promptStream(readOnly, &redirected) != io.Writer(&redirected) {
+		t.Fatal("a terminal opened for reading only took a prompt it cannot show")
+	}
+	done := make(chan hiddenRead, 1)
+	go func() {
+		buffer := make([]byte, 64)
+		n, err := newSecretTerminal(slave, stream).ReadHidden(context.Background(), "Password for fixture: ", buffer)
+		done <- hiddenRead{string(buffer[:n]), err}
+	}()
+	awaitTerminalText(t, master, "Password for fixture: ")
+	if _, err := master.Write([]byte("typed-password\n")); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case read := <-done:
+		if read.err != nil || read.value != "typed-password\n" {
+			t.Fatalf("read %q (%v)", read.value, read.err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the typed line was not read")
+	}
+	if redirected.Len() != 0 {
+		t.Fatalf("the redirected error stream received %q", redirected.String())
+	}
+}
+
 // recordingTerminal is an interactive terminal at which line is typed.
 type recordingTerminal struct {
 	line    string
@@ -203,7 +268,7 @@ func TestTheComposedSecretSetReadsFromTheTerminalBehindStandardInput(t *testing.
 	var errOut bytes.Buffer
 	args := []string{"secret", "set", "--name", "token", "--value-stdin"}
 	process, _ := interactiveProcess(cli.ClassifyInvocation(args), args, io.Discard, &errOut, controller.Route{})
-	want := newSecretTerminal(os.Stdin, &errOut)
+	want := newSecretTerminal(os.Stdin, promptStream(os.Stdin, &errOut))
 	if process.SecretTerminal != want {
 		t.Fatalf("an interactive process bound %#v as the secret terminal, want %#v", process.SecretTerminal, want)
 	}

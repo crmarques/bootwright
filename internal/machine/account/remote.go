@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -71,9 +72,18 @@ func (r Remote) bootstrap(ctx context.Context, contextName string, place machine
 		output, err = r.run(ctx, session, nil)
 	}
 	if err != nil {
-		return nil, remoteRefusal(err, place, user, "first access as "+user, "check SSH authentication and, for privileged work, that this account can sudo to root")
+		return nil, bootstrapRefusal(err, place, user)
 	}
 	return output, nil
+}
+
+func bootstrapRefusal(err error, place machine.Placement, user string) error {
+	var known *cause
+	if errors.As(err, &known) {
+		names := strings.NewReplacer("{login}", user, "{managed}", place.User)
+		return machine.EnrollmentRefused("Machine/"+place.Machine+" "+names.Replace(known.reason), names.Replace(known.remedy))
+	}
+	return remoteRefusal(err, place, user, "first access as "+user, "check SSH authentication and, for privileged work, that this account can sudo to root")
 }
 
 type terminalTarget struct {
@@ -97,7 +107,8 @@ func (r Remote) bootstrapSudo(ctx context.Context, contextName string, session m
 	if observing && !useTTY && errors.Is(err, errSudoTTYRequired) {
 		session.ForceTTY = true
 		output, err = r.run(ctx, session, password)
-		if err != nil && !errors.Is(err, errBootstrapTTYUnavailable) {
+		var known *cause
+		if err != nil && !errors.Is(err, errBootstrapTTYUnavailable) && !errors.As(err, &known) {
 			return nil, errBootstrapTTY
 		}
 	}
@@ -141,6 +152,23 @@ func (r Remote) PromptSSH(ctx context.Context, contextName string, place machine
 		return err
 	}
 	password, err := r.password(ctx, place.Machine, user, "SSH", "", material)
+	clear(password)
+	return err
+}
+
+func (r Remote) collect(ctx context.Context, contextName string, request Request, material map[string]secrets.Material) error {
+	place, access := request.Placement, request.Bootstrap
+	if err := r.PromptSSH(ctx, contextName, place, access, material); err != nil || !access.SudoPrompt {
+		return err
+	}
+	if err := place.ProveHostPin(contextName, material); err != nil {
+		return err
+	}
+	user, err := r.bootstrapUser(ctx, place, access)
+	if err != nil {
+		return err
+	}
+	password, err := r.password(ctx, place.Machine, user, "remote sudo", "", material)
 	clear(password)
 	return err
 }
@@ -211,7 +239,103 @@ var (
 	errSudoTTYRequired         = errors.New("remote sudo requires a terminal")
 	errBootstrapTTY            = errors.New("bootstrap sudo could not be proved in a terminal")
 	errBootstrapTTYUnavailable = errors.New("bootstrap terminal could not be prepared")
+	errIncomplete              = errors.New("SSH command did not complete")
 )
+
+type cause struct{ reason, remedy string }
+
+func (c *cause) Error() string { return c.reason }
+
+var (
+	errSSHSession = &cause{"SSH session as {login} did not open or ended early",
+		"check that the host is reachable, that its pinned host key is current, and this account's SSH credential"}
+	errSSHDropped = &cause{"SSH session as {login} ended before the remote command finished",
+		"check the connection to the host, then repeat the operation"}
+	errSudoPasswordRefused = &cause{"remote sudo did not accept the password for {login}",
+		"check this account's remote sudo password; sudo asked again, which also happens when it needs a second authentication factor"}
+	errSudoPasswordRequired = &cause{"remote sudo requires a password for {login}",
+		"declare privilege.sudo.askPassword or privilege.sudo.passwordRef in the Machine's bootstrap, or grant this account passwordless sudo"}
+	errSudoDenied = &cause{"does not authorize {login} to run the enrollment as root through sudo",
+		"grant this account sudo to root on the host, or declare another bootstrap user"}
+	errSudoFailed = &cause{"remote sudo reported an error for {login} and the enrollment did not complete",
+		"run sudo -v as this account on the host and resolve what it reports; if sudo works there, inspect the account {managed}, /etc/sudoers.d/90-bootwright-{managed} and /home/{managed}-*"}
+	errRemoteRefused = &cause{"ran the enrollment as root, which refused the host state for {managed}",
+		"on the host, inspect the account {managed}, /etc/sudoers.d/90-bootwright-{managed} and /home/{managed}-*; remove what an abandoned operation left, or continue the operation that created it"}
+	errSessionStalled = &cause{"did not reach the remote sudo prompt for {login} within 90 seconds",
+		"check that the host is reachable and that this account's login starts a command without waiting for input"}
+	errSudoPromptStalled = &cause{"remote sudo did not ask {login} for its password within 90 seconds",
+		"run sudo -v as this account on the host; a different prompt or another authentication step is not supported"}
+	errRemoteStalled = &cause{"did not finish the remote command for {login} within 90 seconds",
+		"check that the host is reachable and responsive, then repeat the operation"}
+)
+
+var sudoRefusals = []struct {
+	phrase string
+	cause  error
+}{
+	{"is not in the sudoers file", errSudoDenied},
+	{"is not allowed to execute", errSudoDenied},
+	{"may not run sudo", errSudoDenied},
+	{"sudo: a password is required", errSudoPasswordRequired},
+	{"incorrect password attempt", errSudoPasswordRefused},
+	{"sudo: no password was provided", errSudoPasswordRefused},
+}
+
+var sudoWarnings = []string{"sudo: unable to resolve host", "sudo: setrlimit("}
+
+type sudoReport struct {
+	line   []byte
+	named  error
+	failed bool
+}
+
+func (s *sudoReport) Write(data []byte) (int, error) {
+	for _, b := range data {
+		switch {
+		case b == '\n':
+			s.judge()
+		case len(s.line) < 256:
+			s.line = append(s.line, b)
+		}
+	}
+	return len(data), nil
+}
+
+func (s *sudoReport) judge() {
+	line := strings.TrimSpace(strings.ReplaceAll(string(s.line), sudoChallenge, ""))
+	clear(s.line)
+	s.line = s.line[:0]
+	for _, refusal := range sudoRefusals {
+		if strings.Contains(line, refusal.phrase) {
+			if s.named == nil {
+				s.named = refusal.cause
+			}
+			return
+		}
+	}
+	warned := slices.ContainsFunc(sudoWarnings, func(warning string) bool { return strings.HasPrefix(line, warning) })
+	s.failed = s.failed || strings.HasPrefix(line, "sudo: ") && !warned
+}
+
+func (s *sudoReport) cause() error {
+	s.judge()
+	switch {
+	case s.named != nil:
+		return s.named
+	case s.failed:
+		return errSudoFailed
+	}
+	return nil
+}
+
+func interrupted(ctx context.Context) bool {
+	select {
+	case <-ctx.Done():
+		return true
+	case <-time.After(200 * time.Millisecond):
+		return false
+	}
+}
 
 const prepareTerminal = `if [ ! -t 0 ] || ! /usr/bin/stty raw -echo; then
 	printf '%s\n' "$1-denied"
@@ -227,39 +351,36 @@ func (r Remote) run(ctx context.Context, session machine.Session, password []byt
 	}
 	bounded, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
-	output := nativeexec.Refusing(64 << 10)
-	var stdout io.Writer = output
-	var stderr io.Writer
-	var input io.Reader
-	var sudoOutput *nativeexec.Output
-	var marker, denial string
-	sudo := len(session.Command) > 0 && session.Command[0] == sudoExecutable
-	if sudo {
+	seen := observation{output: nativeexec.Refusing(64 << 10), report: &sudoReport{line: make([]byte, 0, 256)}}
+	defer seen.report.judge()
+	seen.sudo = len(session.Command) > 0 && session.Command[0] == sudoExecutable
+	if seen.sudo {
 		session.Command = slices.Concat([]string{"/usr/bin/env", "LC_ALL=C"}, session.Command)
 	}
+	var stdout, stderr io.Writer
+	var input io.Reader
 	if session.ForceTTY {
-		if r.Entropy == nil {
-			return nil, errBootstrapTTY
+		token, err := r.terminalToken()
+		if err != nil {
+			return nil, err
 		}
-		var nonce [16]byte
-		if n, err := r.Entropy(nonce[:]); err != nil || n != len(nonce) {
-			return nil, errBootstrapTTY
-		}
-		token := hex.EncodeToString(nonce[:])
-		marker = token + "\n"
-		denial = token + "-denied"
+		seen.marker, seen.denial = token+"\n", token+"-denied"
 		session.Command = slices.Concat([]string{"/bin/sh", "-c", prepareTerminal, "sh", token}, session.Command)
-		var exchange io.Writer
-		input, exchange = sudoPasswordExchange(bounded, password, marker, sudoChallenge)
-		stdout, stderr = io.MultiWriter(output, exchange), io.Discard
+		input, seen.exchange = sudoPasswordExchange(bounded, password, seen.marker, sudoChallenge)
+		stdout, stderr = io.MultiWriter(seen.exchange, seen.output), io.Discard
+		if seen.sudo {
+			stdout = io.MultiWriter(seen.exchange, seen.report, seen.output)
+		}
 	} else {
-		input, stderr = sudoPasswordExchange(bounded, password, sudoChallenge)
-		if sudo {
-			sudoOutput = nativeexec.Tail(4 << 10)
-			defer sudoOutput.Clear()
-			stderr = io.MultiWriter(stderr, sudoOutput)
+		input, seen.exchange = sudoPasswordExchange(bounded, password, sudoChallenge)
+		stdout, stderr = seen.output, seen.exchange
+		if seen.sudo {
+			seen.sudoOutput = nativeexec.Tail(4 << 10)
+			defer seen.sudoOutput.Clear()
+			stderr = io.MultiWriter(seen.exchange, seen.report, seen.sudoOutput)
 		}
 	}
+	seen.exchange.refuse = cancel
 	if input != nil {
 		piped, release, err := nativeexec.PipeInput(input, cancel)
 		if err != nil {
@@ -269,37 +390,96 @@ func (r Remote) run(ctx context.Context, session machine.Session, password []byt
 		input = piped
 	}
 	code, err := r.Launcher.Run(bounded, session, input, stdout, stderr)
-	if err != nil || code != 0 || output.Overflowed() {
-		defer output.Clear()
-		if err == nil && code == 1 {
-			if denial != "" && !output.Overflowed() && !bytes.Contains(output.Bytes(), []byte(marker)) &&
-				containsLine(output.Bytes(), denial) {
-				return nil, errBootstrapTTYUnavailable
-			}
-			if sudoOutput != nil {
-				stderr := sudoOutput.Bytes()
-				if sudoOutput.Overflowed() {
-					_, stderr, _ = bytes.Cut(stderr, []byte{'\n'})
-				}
-				if containsLine(stderr, sudoTTYRefusal) {
-					return nil, errSudoTTYRequired
-				}
-			}
-		}
-		return nil, fmt.Errorf("SSH command did not complete")
+	if err != nil || code != 0 || seen.output.Overflowed() {
+		defer seen.output.Clear()
+		return nil, seen.failure(ctx, bounded, code, err)
 	}
-	if marker != "" {
-		defer output.Clear()
-		_, proof, present := bytes.Cut(output.Bytes(), []byte(marker))
-		if !present {
-			return nil, errBootstrapTTY
-		}
-		if _, afterPrompt, prompted := bytes.Cut(proof, []byte(sudoChallenge)); prompted {
-			proof = afterPrompt
-		}
-		return slices.Clone(proof), nil
+	return seen.proof()
+}
+
+func (r Remote) terminalToken() (string, error) {
+	var nonce [16]byte
+	if r.Entropy == nil {
+		return "", errBootstrapTTY
 	}
-	return output.Bytes(), nil
+	if n, err := r.Entropy(nonce[:]); err != nil || n != len(nonce) {
+		return "", errBootstrapTTY
+	}
+	return hex.EncodeToString(nonce[:]), nil
+}
+
+type observation struct {
+	sudo           bool
+	marker, denial string
+	output         *nativeexec.Output
+	sudoOutput     *nativeexec.Output
+	exchange       *challenge
+	report         *sudoReport
+}
+
+func (o observation) proof() ([]byte, error) {
+	if o.marker == "" {
+		return o.output.Bytes(), nil
+	}
+	defer o.output.Clear()
+	_, proof, present := bytes.Cut(o.output.Bytes(), []byte(o.marker))
+	if !present {
+		return nil, errBootstrapTTY
+	}
+	if _, afterPrompt, prompted := bytes.Cut(proof, []byte(sudoChallenge)); prompted {
+		proof = afterPrompt
+	}
+	return slices.Clone(proof), nil
+}
+
+func (o observation) failure(ctx, bounded context.Context, code int, err error) error {
+	switch {
+	case o.exchange.refused:
+		return errSudoPasswordRefused
+	case ctx.Err() == nil && errors.Is(bounded.Err(), context.DeadlineExceeded):
+		return o.exchange.stalled()
+	}
+	if refusal := o.terminalRefusal(code, err); refusal != nil {
+		return refusal
+	}
+	if err != nil || ctx.Err() != nil || o.output.Overflowed() {
+		return errIncomplete
+	}
+	switch refused := o.report.cause(); {
+	case code == 255 && interrupted(ctx):
+	case code == 255 && o.exchange.started:
+		return errSSHDropped
+	case code == 255:
+		return errSSHSession
+	case o.sudo && (code == 124 || code == 137):
+		return errRemoteStalled
+	case o.sudo && refused != nil:
+		return refused
+	case o.sudo && code == 1:
+		return errRemoteRefused
+	}
+	return errIncomplete
+}
+
+func (o observation) terminalRefusal(code int, err error) error {
+	if err != nil || code != 1 {
+		return nil
+	}
+	if o.denial != "" && !o.output.Overflowed() && !bytes.Contains(o.output.Bytes(), []byte(o.marker)) &&
+		containsLine(o.output.Bytes(), o.denial) {
+		return errBootstrapTTYUnavailable
+	}
+	if o.sudoOutput == nil {
+		return nil
+	}
+	stderr := o.sudoOutput.Bytes()
+	if o.sudoOutput.Overflowed() {
+		_, stderr, _ = bytes.Cut(stderr, []byte{'\n'})
+	}
+	if containsLine(stderr, sudoTTYRefusal) {
+		return errSudoTTYRequired
+	}
+	return nil
 }
 
 func containsLine(output []byte, want string) bool {
@@ -379,13 +559,13 @@ func (r Remote) prompted(ctx context.Context, credential promptedCredential, mac
 	if value := scope.values[credential]; value != nil {
 		return slices.Clone(value)
 	}
-	label := fmt.Sprintf("%s password for %s on Machine/%s", credential.purpose, credential.user, machineName)
-	var reuse []byte
+	title, reuse := "SSH", []byte(nil)
 	if credential.purpose == "remote sudo" {
-		reuse = scope.values[promptedCredential{credential.user, "SSH"}]
-		if len(reuse) != 0 {
-			label += " (Enter to reuse SSH password)"
-		}
+		title, reuse = "Sudo", scope.values[promptedCredential{credential.user, "SSH"}]
+	}
+	label := fmt.Sprintf("%s password for %s on Machine/%s", title, credential.user, machineName)
+	if len(reuse) != 0 {
+		label += " (Enter reuses the SSH password)"
 	}
 	buffer := make([]byte, 4097)
 	defer clear(buffer)
@@ -408,27 +588,52 @@ type challenge struct {
 	ready   chan struct{}
 	pending []byte
 	tokens  []string
+	again   string
+	refuse  func()
+	refused bool
+	started bool
 }
 
 func (c *challenge) Write(data []byte) (int, error) {
 	for _, b := range data {
-		if len(c.tokens) == 0 {
+		want := c.again
+		if len(c.tokens) != 0 {
+			want = c.tokens[0]
+		}
+		if want == "" || c.refused {
 			break
 		}
-		prefix := []byte(c.tokens[0])
 		c.pending = append(c.pending, b)
-		if bytes.Equal(c.pending, prefix) {
-			c.tokens = c.tokens[1:]
-			c.pending = c.pending[:0]
-			if len(c.tokens) == 0 {
-				close(c.ready)
-			}
-		}
-		for len(c.pending) > 0 && !bytes.HasPrefix(prefix, c.pending) {
+		for len(c.pending) > 0 && !strings.HasPrefix(want, string(c.pending)) {
 			c.pending = c.pending[1:]
 		}
+		if string(c.pending) != want {
+			continue
+		}
+		c.pending = c.pending[:0]
+		if len(c.tokens) == 0 {
+			c.refused = true
+			if c.refuse != nil {
+				c.refuse()
+			}
+			break
+		}
+		if c.tokens = c.tokens[1:]; len(c.tokens) == 0 {
+			close(c.ready)
+		}
+		c.started = true
 	}
 	return len(data), nil
+}
+
+func (c *challenge) stalled() error {
+	switch {
+	case len(c.tokens) == 0:
+		return errRemoteStalled
+	case c.started:
+		return errSudoPromptStalled
+	}
+	return errSessionStalled
 }
 
 type sudoPasswordReader struct {
@@ -446,10 +651,10 @@ func (r sudoPasswordReader) Read(dst []byte) (int, error) {
 	}
 }
 
-func sudoPasswordExchange(ctx context.Context, password []byte, tokens ...string) (io.Reader, io.Writer) {
+func sudoPasswordExchange(ctx context.Context, password []byte, tokens ...string) (io.Reader, *challenge) {
 	if len(password) == 0 {
-		return nil, io.Discard
+		return nil, &challenge{}
 	}
-	exchange := &challenge{ready: make(chan struct{}), tokens: tokens}
+	exchange := &challenge{ready: make(chan struct{}), tokens: tokens, again: tokens[len(tokens)-1]}
 	return sudoPasswordReader{ctx, exchange.ready, io.MultiReader(bytes.NewReader(password), bytes.NewReader([]byte{'\n'}))}, exchange
 }

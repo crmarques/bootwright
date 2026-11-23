@@ -213,10 +213,17 @@ withholds it, until every earlier running step settles. Closing the block
 writes any outcome still withheld, in position order.
 
 Apply reads its [enrollment passwords](../api/machines.md#managed-lifecycle-enrollment)
-before progress begins. If another flow prompts while showing progress, the
-presenter yields the terminal and releases its echo hold. Other work can
-still report progress, and the presenter draws the updated rows after the
-prompt ends.
+before progress begins. Their prompts form one `First access` group on
+standard error: the heading, a grey note that typing stays hidden and that the
+passwords are kept in memory for the invocation, then one prompt per password
+at four spaces with any hint in grey. Every password is read before the first
+start check runs. A start check that names itself then reports one row under
+`Checks`, so the wait for the host is visible. A hidden-input prompt follows
+its terminal: when standard error is not a terminal, the prompt is written to
+the terminal its input is read from, so a redirected error stream never hides
+it. If another flow prompts while showing progress, the presenter yields the
+terminal and releases its echo hold. Other work can still report progress, and
+the presenter draws the updated rows after the prompt ends.
 
 Progress failures never change an effect, outcome or receipt. Cancellation
 stops reporting rather than claiming an unobserved outcome. Timers and terminal

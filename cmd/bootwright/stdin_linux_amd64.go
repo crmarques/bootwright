@@ -91,6 +91,20 @@ func newSecretTerminal(input *os.File, prompt io.Writer) secretTerminal {
 	return secretTerminal{fd: int(input.Fd()), prompt: prompt}
 }
 
+func promptStream(input *os.File, errOut io.Writer) io.Writer {
+	if _, shown := terminalFile(errOut); shown {
+		return errOut
+	}
+	if terminal, err := terminalDescriptor(input.Fd()); err != nil || !terminal {
+		return errOut
+	}
+	flags, _, errno := syscall.Syscall(syscall.SYS_FCNTL, input.Fd(), syscall.F_GETFL, 0)
+	if errno != 0 || flags&syscall.O_ACCMODE == syscall.O_RDONLY {
+		return errOut
+	}
+	return input
+}
+
 func (t secretTerminal) Interactive() (bool, error) { return terminalDescriptor(uintptr(t.fd)) }
 
 // ReadHidden turns echo off and reads one line a byte at a time so nothing

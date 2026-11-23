@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"slices"
 	"testing"
 
+	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/machine/account"
 	"github.com/crmarques/bootwright/internal/machine/hardware"
@@ -52,6 +54,25 @@ func TestEnrollmentUsesTheAuthorizedProcessTerminal(t *testing.T) {
 	n, err := remote.Prompt(context.Background(), prompt, buffer)
 	if err != nil || string(buffer[:n]) != terminal.line || !slices.Equal(terminal.prompts, []string{prompt}) {
 		t.Fatalf("enrollment terminal received %v and returned %d bytes, %v", terminal.prompts, n, err)
+	}
+}
+
+func TestEnrollmentPromptsShareOneFirstAccessGroupOnTheErrorStream(t *testing.T) {
+	var errOut bytes.Buffer
+	terminal := &recordingTerminal{line: "typed\n"}
+	yielded := 0
+	prompted := enrollmentPromptTerminal{TerminalInput: terminal, withPrompt: func(read func()) { yielded++; read() },
+		access: cli.NewAccessPrompt(cli.WithPresentation(&errOut, cli.PresentationOptions{}))}
+	buffer := make([]byte, 16)
+	for _, prompt := range []string{"SSH password for operator on Machine/enrolled: ", "Sudo password for operator on Machine/enrolled (Enter reuses the SSH password): "} {
+		if n, err := prompted.ReadHidden(context.Background(), prompt, buffer); err != nil || string(buffer[:n]) != terminal.line {
+			t.Fatalf("prompt %q returned %d bytes, %v", prompt, n, err)
+		}
+	}
+	want := []string{"    SSH password for operator on Machine/enrolled: ", "    Sudo password for operator on Machine/enrolled (Enter reuses the SSH password): "}
+	group := "\n  First access\n    Typing stays hidden. Passwords are kept in memory for this run only.\n\n"
+	if yielded != 2 || !slices.Equal(terminal.prompts, want) || errOut.String() != group {
+		t.Fatalf("progress yielded %d times for prompts %q after group %q", yielded, terminal.prompts, errOut.String())
 	}
 }
 
