@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"io"
 	"slices"
 	"strings"
@@ -252,7 +254,7 @@ func TestEnrollmentExplainsRemoteSudoTTYRefusal(t *testing.T) {
 }
 
 func TestEnrollmentWithdrawalNeedsAnIndependentPositiveProof(t *testing.T) {
-	capability, execution, ssh, _ := enrollmentFixture(t, "refuse", "absent")
+	capability, execution, ssh, _ := enrollmentFixture(t, "refuse", "lookup unavailable", "absent")
 	ctx, release := BeginInvocation(context.Background())
 	defer release()
 	observation, err := capability.ObserveRemoval(ctx, execution)
@@ -260,7 +262,7 @@ func TestEnrollmentWithdrawalNeedsAnIndependentPositiveProof(t *testing.T) {
 		t.Fatalf("failed connection observation=%+v err=%v", observation, err)
 	}
 	observation, err = capability.ObserveRemoval(ctx, execution)
-	if err != nil || observation.Effect != reconciliation.EffectCompleted || ssh.received[1].user != "operator" {
+	if err != nil || observation.Effect != reconciliation.EffectCompleted || ssh.received[2].user != "operator" {
 		t.Fatalf("positive observation=%+v err=%v", observation, err)
 	}
 }
@@ -330,10 +332,10 @@ func TestBootstrapRefusalsNameTheirCause(t *testing.T) {
 		"not-listed":        "does not authorize operator to run the enrollment as root",
 		"password-required": "remote sudo requires a password for operator",
 		"sudo-failed":       "remote sudo reported an error for operator",
-		"warned-refuse":     "refused the host state for bootwright",
+		"warned-refuse":     "refused the enrollment that operator ran through sudo, because of existing host state for bootwright",
 		"warned-timeout":    "did not finish the remote command for operator",
 		"timed-out":         "did not finish the remote command for operator",
-		"refuse":            "refused the host state for bootwright",
+		"refuse":            "refused the enrollment that operator ran through sudo, because of existing host state for bootwright",
 	} {
 		for _, responses := range [][]string{{result}, {"tty-refused", result}} {
 			t.Run(strings.Join(responses, " then "), func(t *testing.T) {
@@ -348,6 +350,40 @@ func TestBootstrapRefusalsNameTheirCause(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestARefusedEnrollmentNamesTheAccountItsLoginReadsWithoutSudo(t *testing.T) {
+	_, execution, _, _ := enrollmentFixture(t)
+	owner := fmt.Sprintf("bootwright-%x", sha256.Sum256([]byte(execution.ApplyOperation+"\x00"+execution.Block.RequestDigest)))
+	other := "bootwright-" + strings.Repeat("b", 64)
+	for entry, want := range map[string]string{
+		"bootwright:x:1001:1001:" + other + ":/home/bootwright-bbbbbbbbbbbbbbbb:/bin/bash": "already has the account bootwright, which another Bootwright operation created",
+		"bootwright:x:1001:1001:Ceph orchestration:/home/bootwright:/bin/bash":             "already has an account named bootwright that Bootwright did not create",
+		"absent": "has no account named bootwright, but refused the enrollment that operator ran through sudo",
+		"bootwright:x:1001:1001:" + owner + ":/home/bootwright-" + owner[len(owner)-16:] + ":/bin/bash": "refused the enrollment that operator ran through sudo, because of existing host state",
+		"bootwright:x:1001:1001:" + owner + ":/srv/moved-home:/bin/bash":                                "refused the enrollment that operator ran through sudo, because of existing host state",
+		"unexpected output": "refused the enrollment that operator ran through sudo, because of existing host state",
+	} {
+		t.Run(entry, func(t *testing.T) {
+			capability, execution, ssh, _ := enrollmentFixture(t, "refuse", entry)
+			ctx, release := BeginInvocation(t.Context())
+			defer release()
+			probe := lifecycle.Probe{Context: execution.Context, ApplyOperation: execution.ApplyOperation, Block: execution.Block, Material: execution.Material}
+			stops := diagnostics.Of(capability.CheckApplyStart(ctx, probe))
+			if len(stops) != 1 || stops[0].Code != "machine.enrollment" || !strings.Contains(stops[0].Message, want) ||
+				strings.Contains(stops[0].Message+stops[0].Remediation, "Ceph orchestration") || strings.Contains(stops[0].Message, "/bin/bash") {
+				t.Fatalf("unexpected diagnostic: %v", stops)
+			}
+			if len(ssh.received) != 2 {
+				t.Fatalf("made %d connections, want the check and one lookup", len(ssh.received))
+			}
+			lookup := ssh.received[1]
+			if lookup.user != "operator" || lookup.terminal || slices.Contains(lookup.command, sudoExecutable) ||
+				!slices.Contains(lookup.command, accountLookup) || lookup.command[len(lookup.command)-1] != "bootwright" {
+				t.Fatalf("the account lookup ran as %+v", lookup)
+			}
+		})
 	}
 }
 
@@ -546,6 +582,28 @@ func TestEnrollmentUsesTheSamePromptsForTwoMachineChecksAndEffects(t *testing.T)
 		if request.password != "fixture-login" || request.input != "fixture-sudo\n" {
 			t.Fatal("the bootstrap session received the wrong SSH or sudo password")
 		}
+	}
+}
+
+func TestAnInnerInvocationKeepsThePasswordsTheOuterOneCollected(t *testing.T) {
+	outer, end := BeginInvocation(t.Context())
+	defer end()
+	prompts := 0
+	remote := Remote{Prompt: func(_ context.Context, _ string, buffer []byte) (int, error) {
+		prompts++
+		return copy(buffer, "fixture-login\n"), nil
+	}}
+	first, err := remote.password(outer, "node", "operator", "SSH", "", nil)
+	clear(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inner, release := BeginInvocation(outer)
+	release()
+	again, err := remote.password(inner, "node", "operator", "SSH", "", nil)
+	defer clear(again)
+	if err != nil || string(again) != "fixture-login" || prompts != 1 {
+		t.Fatalf("the inner invocation prompted %d times and read %q: %v", prompts, again, err)
 	}
 }
 

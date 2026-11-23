@@ -39,6 +39,60 @@ func (m *powerMachine) StartPower(_ context.Context, probe Probe) (Quiescence, e
 	return Quiescence{State: m.state, Reason: "native state"}, nil
 }
 
+type promptedPowerMachine struct {
+	*powerMachine
+	events *[]string
+}
+
+func (m *promptedPowerMachine) PromptApplyStart(_ context.Context, probe Probe) error {
+	*m.events = append(*m.events, "prompt "+probe.Block.ID)
+	return nil
+}
+
+func (m *promptedPowerMachine) StartPower(ctx context.Context, probe Probe) (Quiescence, error) {
+	*m.events = append(*m.events, "read "+probe.Block.ID)
+	return m.powerMachine.StartPower(ctx, probe)
+}
+
+func TestAFreshApplyAsksForEveryPasswordBeforeItReadsMachinePowerAndShowsEachReading(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h := newHarness(t)
+	progress := &testProgress{}
+	h.service.options.Progress = progress
+	var events []string
+	h.service.options.BeginPrompts = func(ctx context.Context) (context.Context, func()) {
+		events = append(events, "begin prompts")
+		return ctx, func() { events = append(events, "end prompts") }
+	}
+	bindings := claimResolver{}.Bindings()
+	machine := &powerMachine{testCapability: claimingCapability("machine-first-v1", "node-a"), state: Live}
+	h.service.capabilities = claimResolver{
+		bindings[0]: &promptedPowerMachine{machine, &events}, bindings[1]: claimingCapability("machine-second-v1"), bindings[2]: claimingCapability("os-install-v1"),
+	}
+	reading := "check:prove Machine/node-a is powered off, changing nothing::"
+	result, err := h.service.Apply(ctx, ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	if ds := diagnostics.Of(err); result != nil || len(ds) != 1 || ds[0].Code != "lifecycle.start-power" {
+		t.Fatalf("result=%+v error=%v", result, err)
+	}
+	if want := []string{"begin prompts", "prompt machine-first-v1-node-a", "read machine-first-v1-node-a", "end prompts"}; !slices.Equal(events, want) {
+		t.Fatalf("a refused start ran %v, want %v", events, want)
+	}
+	if want := []string{reading + "running:1/1", reading + "failed:1/1"}; !slices.Equal(progress.rows, want) {
+		t.Fatalf("a refused reading reported %v, want %v", progress.rows, want)
+	}
+	events, progress.rows, machine.state = nil, nil, Quiescent
+	if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	if len(events) < 3 || !slices.Equal(events[:3], []string{"begin prompts", "prompt machine-first-v1-node-a", "read machine-first-v1-node-a"}) {
+		t.Fatalf("an admitted start ran %v", events)
+	}
+	if len(progress.rows) < 2 || !slices.Equal(progress.rows[:2], []string{reading + "running:1/1", reading + "ok:1/1"}) {
+		t.Fatalf("an admitted reading reported %v", progress.rows)
+	}
+}
+
 func TestFreshMachineAdmissionLeavesNoStateOnRefusalAndRecoveryKeepsItsIdentity(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

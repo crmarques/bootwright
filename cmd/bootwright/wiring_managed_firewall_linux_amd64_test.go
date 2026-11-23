@@ -11,6 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/clients"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/machine/hardware"
 	"github.com/crmarques/bootwright/internal/managedos/hostfirewall"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -145,5 +146,67 @@ func TestManagedBridgeFirewallGrantsWaitForTheProviderButDaemonPreparationDoesNo
 	}
 	if !waitsForProvider {
 		t.Fatalf("grant does not wait for its bridge: %+v", grant)
+	}
+}
+
+func TestAControllerOnlyApplyLeavesAnEnrolledRemoteHostAlone(t *testing.T) {
+	t.Parallel()
+	state, _ := compileAcceptance(t, contractSources(t, "lab-rhel+enrollment"))
+	objects := state.Effective().Objects()
+	for i, object := range objects {
+		if object.Kind() == api.Machine && object.Name() == "enrolled" {
+			objects[i] = object.WithSpec(object.Spec().WithPath(api.StringValue("managed"), "firewall", "management"))
+		}
+	}
+	catalog := api.NewCatalog(objects)
+	state = compilation.NewState(catalog, catalog, nil)
+	definitions, err := reconciliation.ResolveRequirements(productionDefinitions(t, state, "lab"))
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	definitions, err = lifecycle.DependOnController(buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{}), definitions)
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	plan, err := reconciliation.NewPlan(reconciliation.Apply, definitions)
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	preparation := hostfirewall.FirewallPreparationBlockID("enrolled")
+	remote := []string{reconciliation.BlockIdentity("machine-enrollment-", "enrolled"), hardware.BlockID("enrolled"), preparation}
+	if _, planned := plan.Block(hostfirewall.FirewallBlockID("enrolled")); planned {
+		remote = append(remote, hostfirewall.FirewallBlockID("enrolled"))
+	}
+	controller, found := plan.Block(clients.BlockID)
+	if !found {
+		t.Fatal("no controller block")
+	}
+	ancestors := firewallAncestors(plan, controller.ID)
+	selection, err := reconciliation.ParseSelection([]string{"controller"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	selection, bound := selection.Bind(plan)
+	if !bound {
+		t.Fatal("the controller selection does not bind to the plan")
+	}
+	for _, id := range remote {
+		block, planned := plan.Block(id)
+		if !planned {
+			t.Fatalf("the plan has no %s", id)
+		}
+		if slices.Contains(controller.Dependencies, id) || ancestors[id] {
+			t.Fatalf("the controller block waits for the enrolled host's %s", id)
+		}
+		if selection.Admits(block) {
+			t.Fatalf("a controller-only selection admits the enrolled host's %s", id)
+		}
+	}
+	if !selection.Admits(controller) {
+		t.Fatal("a controller-only selection omits the controller block")
+	}
+	prepared, _ := plan.Block(preparation)
+	if !slices.Contains(prepared.Dependencies, clients.BlockID) {
+		t.Fatalf("the enrolled host's firewall preparation does not wait for the controller: %v", prepared.Dependencies)
 	}
 }

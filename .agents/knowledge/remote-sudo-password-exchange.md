@@ -15,9 +15,30 @@ launcher. Required behavior stays in
   holding `sudo -S -p [bootwright remote sudo password]`.
 - The same two messages appeared at once for causes that had nothing to do
   with SSH or sudo authentication.
-- With `--yes` and output redirected to a file, an apply waited for a password
-  while the screen showed no prompt: the prompt had been written to standard
-  error, which was the file.
+- With output redirected to a file, an apply waited for a password while the
+  screen showed no prompt: the prompt had been written to standard error,
+  which was the file. A rehearsal reproduced this; the operator's report did
+  not involve a redirection.
+- The operator's report: `apply --yes` showed the plan and then nothing, while
+  the same apply without `--yes` asked for the passwords at once. Those `--yes`
+  runs were fresh applies, and the run without `--yes` continued the operation
+  one of them registered. A fresh apply first reads the power state of every
+  managed physical Machine through its management controller (the
+  [power entry rule](../../specs/state-reconciliation.md#power-before-a-new-apply-or-destroy)),
+  one Ansible run per Machine, and reported nothing while it did. Only then did
+  it register and prompt. A continuation makes no entry check, so it prompted
+  at once. `--yes` itself changed nothing but the confirmation.
+- `apply --stage controller` asked for a provided Machine's SSH and sudo
+  passwords and checked its enrollment. `controllerHostFirewalls` in
+  [wiring_service_firewall.go](../../cmd/bootwright/wiring_service_firewall.go),
+  then named `providedHostFirewalls`, made the controller prerequisites wait
+  for every directly reached managed host's firewall, and an enrolled host's
+  firewall waits for its enrollment and hardware claim. A continued operation
+  keeps the graph it froze, so the fix reaches a fresh operation only.
+- After a manual controller reset
+  ([controller teardown](../../e2e/controller-teardown.md)) the enrolled
+  account stayed on the provided Machine, and the next operation's check
+  refused it because its comment holds the earlier operation's ownership mark.
 
 ## Mechanism
 
@@ -80,6 +101,16 @@ told them apart:
   from one that showed none.
 - A read-only start check names itself and reports a row, so a slow host is
   visible while it is being proved.
+- Apply asks for every bootstrap password right after the plan and its
+  confirmation, before the power entry check, inside one prompt scope that
+  `applyPrepared` opens for an automatic preparation and its installation;
+  each power reading reports a row. Prompting needs no bound material: the
+  host-key pin is proved before every connection, not before the prompt.
+- The controller stage waits only for the controller Machine's own host
+  firewall ([D282](../../specs/milestones/backlog.md#d282)).
+- After a refused privileged check, the bootstrap login runs `getent passwd`
+  without sudo and Bootwright classifies the entry by its comment against the
+  ownership mark, never showing it.
 - A hidden-input prompt is written to the terminal it reads from when standard
   error is not a terminal (`promptStream` in
   [stdin_linux_amd64.go](../../cmd/bootwright/stdin_linux_amd64.go)). Under
@@ -95,8 +126,11 @@ Evidence: `TestARepeatedSudoPromptRefusesThePasswordOnce`,
 `TestBootstrapRefusalsNameTheirCause`,
 `TestAnUnprivilegedBootstrapReadNamesOnlyAnSSHCause`,
 `TestAnInterruptedSessionNamesNoSSHCause`,
-`TestApplyStartCollectsEveryPromptBeforeItsDescribedChecks` and
-`TestAHiddenPromptFollowsItsTerminalWhenTheErrorStreamIsRedirected`. The
+`TestApplyStartCollectsEveryPromptBeforeItsDescribedChecks`,
+`TestAHiddenPromptFollowsItsTerminalWhenTheErrorStreamIsRedirected`,
+`TestAFreshApplyAsksForEveryPasswordBeforeItReadsMachinePowerAndShowsEachReading`,
+`TestAControllerOnlyApplyLeavesAnEnrolledRemoteHostAlone` and
+`TestARefusedEnrollmentNamesTheAccountItsLoginReadsWithoutSudo`. The
 rehearsal measured a wrong sudo password at 90.3 seconds before the change and
 1.7 seconds after it, and showed the prompt on the terminal with every output
 stream redirected; real sudo and sshd remain operator-run.

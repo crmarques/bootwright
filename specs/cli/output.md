@@ -213,12 +213,15 @@ withholds it, until every earlier running step settles. Closing the block
 writes any outcome still withheld, in position order.
 
 Apply reads its [enrollment passwords](../api/machines.md#managed-lifecycle-enrollment)
-before progress begins. Their prompts form one `First access` group on
+directly after the plan and its confirmation, before any check. Their prompts
+form one `First access` group on
 standard error: the heading, a grey note that typing stays hidden and that the
 passwords are kept in memory for the invocation, then one prompt per password
 at four spaces with any hint in grey. Every password is read before the first
-start check runs. A start check that names itself then reports one row under
-`Checks`, so the wait for the host is visible. A hidden-input prompt follows
+check runs, so nothing waits on the operator once checks start. The
+[power entry](../state-reconciliation.md#power-before-a-new-apply-or-destroy)
+readings and each start check that names itself report one row under
+`Checks`, so the wait for a host is visible. A hidden-input prompt follows
 its terminal: when standard error is not a terminal, the prompt is written to
 the terminal its input is read from, so a redirected error stream never hides
 it. If another flow prompts while showing progress, the presenter yields the

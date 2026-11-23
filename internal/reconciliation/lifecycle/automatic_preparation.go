@@ -94,6 +94,11 @@ func (s Service) automaticPreparation(ctx context.Context, name string, selectio
 }
 
 func (s Service) applyPrepared(ctx context.Context, request ApplyRequest, selection reconciliation.Selection, scope *reconciliation.PreparationScope) (*OperationResult, error) {
+	if s.options.BeginPrompts != nil {
+		var end func()
+		ctx, end = s.options.BeginPrompts(ctx)
+		defer end()
+	}
 	prepared, automatic := scope, false
 	if prepared == nil {
 		var err error

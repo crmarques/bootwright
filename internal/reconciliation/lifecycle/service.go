@@ -36,6 +36,7 @@ type Options struct {
 	Contracts         func(reconciliation.Block) (ExecutionContract, bool)
 	Preparations      []PreparationDefinition
 	BeginInvocation   BeginInvocation
+	BeginPrompts      BeginInvocation
 	Confirmer         Confirmer
 	Presenter         PlanPresenter
 	Progress          ProgressReporter

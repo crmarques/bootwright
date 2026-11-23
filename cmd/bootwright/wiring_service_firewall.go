@@ -16,7 +16,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
 )
 
-func providedHostFirewalls(catalog api.Catalog) ([]string, error) {
+func controllerHostFirewalls(catalog api.Catalog) ([]string, error) {
 	controller, err := lifecycle.ControllerMachine(catalog)
 	if err != nil {
 		return nil, err
@@ -31,7 +31,7 @@ func providedHostFirewalls(catalog api.Catalog) ([]string, error) {
 	}
 	var prerequisites []string
 	for _, request := range requests {
-		if request.Direct && (request.Preparation || len(hostfirewall.FirewallProviderRequirements(catalog, request)) == 0) {
+		if request.Identity.Object == controller && request.Direct && (request.Preparation || len(hostfirewall.FirewallProviderRequirements(catalog, request)) == 0) {
 			prerequisites = append(prerequisites, request.Identity.Block)
 		}
 	}

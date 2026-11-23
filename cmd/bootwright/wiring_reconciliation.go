@@ -292,7 +292,7 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 		kind: instance.Kind, implementation: instance.Implementation, family: "addon-instance", capability: instance.New(runner, packages.Builtin(), addonFacts),
 	}, {
 		kind: clients.Kind, implementation: clients.Implementation, family: "controller-prerequisites",
-		capability: clients.New(controller.Tools, controller.StagePackages, controller.Setup, controller.ClientInstaller).WithHostPrerequisites(providedHostFirewalls),
+		capability: clients.New(controller.Tools, controller.StagePackages, controller.Setup, controller.ClientInstaller).WithHostPrerequisites(controllerHostFirewalls),
 	}, {
 		kind: libvirt.MachineKind, implementation: libvirt.MachineImplementation, family: substrate.MachineFamily,
 		capability: libvirt.NewMachine(runner),
@@ -445,7 +445,7 @@ func lifecycleOptions(deps lifecycleDependencies, clock systemClock, runner ansi
 		DriveMachine:    registeredMachineDriver(runner),
 		Confirmer:       deps.Confirmer, Presenter: deps.Presenter, Progress: deps.Progress,
 		Clock: clock, Entropy: rand.Read, Selection: currentSelection(deps.Selection),
-		BeginInvocation: withEnrollmentInvocation(runner.BeginInvocation), EffectBearing: effectBearing,
+		BeginInvocation: withEnrollmentInvocation(runner.BeginInvocation), BeginPrompts: account.BeginInvocation, EffectBearing: effectBearing,
 		Executable: deps.Executable,
 		Operations: operationStores(clock, deps.Executable),
 		Setup:      deps.Setup,

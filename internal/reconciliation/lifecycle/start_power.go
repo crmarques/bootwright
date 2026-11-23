@@ -110,11 +110,19 @@ func (s Service) prepareStart(ctx context.Context, view View, decided operationP
 		}
 		return s.withPython(ctx, located, func(launch prerequisites.PythonLaunch) error {
 			var blocked, remedies []string
-			for _, target := range targets {
+			for position, target := range targets {
 				if err := ctx.Err(); err != nil {
 					return err
 				}
+				event := ProgressEvent{Phase: CheckPhase, Block: "start-power-" + target.probe.Block.ID, Position: position + 1, Total: len(targets),
+					Description: "prove Machine/" + target.probe.Block.Object + " is powered off, changing nothing", Status: "running"}
+				s.report(ctx, event)
 				q, err := s.readStartPower(ctx, target, launch, decided.rebinds)
+				event.Status = "ok"
+				if err != nil || !q.Settled() {
+					event.Status = "failed"
+				}
+				s.report(ctx, event)
 				if err != nil {
 					return err
 				}

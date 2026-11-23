@@ -18,22 +18,34 @@ type applyStartDescriber interface {
 	ApplyStartCheck(reconciliation.Block) string
 }
 
-type applyStartCheck struct {
-	probe       Probe
-	checker     applyStartChecker
-	description string
+func applyStartBlocks(plan reconciliation.Plan, states map[string]reconciliation.BlockState, effects map[string]bool) []reconciliation.Block {
+	var blocks []reconciliation.Block
+	for _, block := range plan.Blocks {
+		if effects[block.ID] || unproved(states[block.ID]) {
+			blocks = append(blocks, block)
+		}
+	}
+	return blocks
+}
+
+func (s Service) promptApplyStart(ctx context.Context, name string, decided operationPlan) error {
+	effects, _ := reachableEffects(decided.plan, decided.states, decided.selection)
+	for _, block := range applyStartBlocks(decided.plan, decided.states, effects) {
+		capability, _ := s.capabilities.Resolve(block.Kind, block.Implementation)
+		if prompter, ok := capability.(applyStartPrompter); ok {
+			if err := prompter.PromptApplyStart(ctx, Probe{Context: name, Block: block}); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (s Service) checkApplyStart(ctx context.Context, run invocation, states map[string]reconciliation.BlockState) error {
-	var checks []applyStartCheck
-	for _, block := range run.plan.Blocks {
-		if !run.effects[block.ID] && !unproved(states[block.ID]) {
-			continue
-		}
+	for _, block := range applyStartBlocks(run.plan, states, run.effects) {
 		capability, _ := s.capabilities.Resolve(block.Kind, block.Implementation)
-		prompter, prompts := capability.(applyStartPrompter)
-		checker, checked := capability.(applyStartChecker)
-		if !prompts && !checked {
+		checker, ok := capability.(applyStartChecker)
+		if !ok {
 			continue
 		}
 		owner, err := ownerID(ctx, run.store, run.operation, block.ID)
@@ -41,34 +53,24 @@ func (s Service) checkApplyStart(ctx context.Context, run invocation, states map
 			return err
 		}
 		probe := Probe{Context: run.tx.Identity().Name, Block: block, ApplyOperation: owner, Material: run.material}
-		if prompts {
-			if err := prompter.PromptApplyStart(ctx, probe); err != nil {
-				return err
-			}
+		description := ""
+		if describer, described := capability.(applyStartDescriber); described {
+			description = describer.ApplyStartCheck(block)
 		}
-		if checked {
-			check := applyStartCheck{probe: probe, checker: checker}
-			if describer, described := capability.(applyStartDescriber); described {
-				check.description = describer.ApplyStartCheck(block)
-			}
-			checks = append(checks, check)
-		}
-	}
-	for _, check := range checks {
-		if err := s.runApplyStartCheck(ctx, check); err != nil {
+		if err := s.runApplyStartCheck(ctx, checker, probe, description); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (s Service) runApplyStartCheck(ctx context.Context, check applyStartCheck) error {
-	if check.description == "" {
-		return check.checker.CheckApplyStart(ctx, check.probe)
+func (s Service) runApplyStartCheck(ctx context.Context, checker applyStartChecker, probe Probe, description string) error {
+	if description == "" {
+		return checker.CheckApplyStart(ctx, probe)
 	}
-	event := ProgressEvent{Phase: CheckPhase, Block: "apply-start-" + check.probe.Block.ID, Description: check.description, Status: "running"}
+	event := ProgressEvent{Phase: CheckPhase, Block: "apply-start-" + probe.Block.ID, Description: description, Status: "running"}
 	s.report(ctx, event)
-	err := check.checker.CheckApplyStart(ctx, check.probe)
+	err := checker.CheckApplyStart(ctx, probe)
 	event.Status = "ok"
 	if err != nil {
 		event.Status = "failed"

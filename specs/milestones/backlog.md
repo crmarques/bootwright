@@ -9497,3 +9497,15 @@ in [D243](#d243) and makes the operation explicit in the
 **owner** (2026-11-22): authorized implementation of the scoped apply and
 invocation authorization proposal and integration into local main.
 This opens X651 and [B1661](m1.md#b1661).
+
+### D282
+
+**owner** (2026-11-23): `apply --stage controller` must not ask for a remote
+provided Machine's credentials or contact it, because the controller stage
+does not use that Machine: review the plan and correct its dependencies.
+The controller stage now waits only for the controller Machine's own host
+firewall, replacing the rule that it waits for every managed provided host's
+firewall. A bootstrap refusal names the login that ran it through sudo, and
+apply asks for its passwords before any check. This opens X663 and
+[B1679](m1.md#b1679), [B1680](m1.md#b1680) and [B1681](m1.md#b1681), with
+integration into local main; no push.

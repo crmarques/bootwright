@@ -23,7 +23,7 @@ func (r Remote) HardwareAddresses(ctx context.Context, contextName string, place
 		return nil, refused(place, "hardware identity", "use a build with the Machine hardware reader")
 	}
 	output, err := r.bootstrap(ctx, contextName, place, access, material, false,
-		[]string{"/usr/bin/python3", "-I", "-c", r.Hardware + "\nimport json\nprint(json.dumps(read()))"}, nil)
+		[]string{"/usr/bin/python3", "-I", "-c", r.Hardware + "\nimport json\nprint(json.dumps(read()))"}, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +56,8 @@ func (r Remote) manage(ctx context.Context, contextName string, request Request,
 		if workerMode != "observe" {
 			probe = command("observe")
 		}
-		output, err = r.bootstrap(ctx, contextName, request.Placement, request.Bootstrap, material, true, args, probe)
+		explain := func(login string) error { return r.explainHostState(ctx, contextName, request, owner, material, login) }
+		output, err = r.bootstrap(ctx, contextName, request.Placement, request.Bootstrap, material, true, args, probe, explain)
 	}
 	if err != nil {
 		return "", err

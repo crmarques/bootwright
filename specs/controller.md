@@ -1242,8 +1242,8 @@ firewalld zone and reports the socket, interface, zone and `open`, `closed` or
 `unknown` result. Inspection never changes firewall configuration. One check
 reads the host-wide firewalld state, policies and direct rules once and each
 zone and service once, under one shared deadline; a socket reached after that
-deadline reports the exhausted budget. Explicitly managed host
-firewalls are prepared by the controller stage through the
+deadline reports the exhausted budget. The controller Machine's explicitly
+managed host firewall is prepared by the controller stage through the
 [host firewall capability](managed-os.md#host-firewall-requirements).
 
 Only an explicit runtime port/range or an accepting zone proves admission in
@@ -1274,7 +1274,7 @@ claims or registration, `apply` checks every starting listener and the
 listeners its starting consumers depend on, including listeners already
 proved ready. It repeats inspection under the exclusive transaction. An explicitly managed firewall prerequisite may prepare closed sockets before
 its dependent listener starts; live admission is rechecked at that boundary. A
-controller-only stage prepares the declared host firewall and needs no listener
+controller-only stage prepares the controller Machine's declared host firewall and needs no listener
 admission unless one of its own dependencies serves a listener. The native queries use the runtime semantics documented by
 [firewall-cmd](https://firewalld.org/documentation/man-pages/firewall-cmd.html)
 and [zone targets](https://firewalld.org/documentation/man-pages/firewalld.zone.html).

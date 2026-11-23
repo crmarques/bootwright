@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -33,7 +34,7 @@ func WithKeyFile(ctx context.Context, machineName, keyFile string) context.Conte
 }
 
 func (r Remote) bootstrap(ctx context.Context, contextName string, place machine.Placement, access machine.Bootstrap,
-	bound map[string]secrets.Material, elevate bool, command, probe []string) ([]byte, error) {
+	bound map[string]secrets.Material, elevate bool, command, probe []string, explain func(string) error) ([]byte, error) {
 	host, err := machine.BoundHostKey(contextName, place.Machine, place.Address, place.Port, place.KnownHostsRef, bound)
 	if err != nil {
 		return nil, err
@@ -72,9 +73,55 @@ func (r Remote) bootstrap(ctx context.Context, contextName string, place machine
 		output, err = r.run(ctx, session, nil)
 	}
 	if err != nil {
+		if explain != nil && errors.Is(err, errRemoteRefused) {
+			if explained := explain(user); explained != nil {
+				return nil, explained
+			}
+		}
 		return nil, bootstrapRefusal(err, place, user)
 	}
 	return output, nil
+}
+
+const accountLookup = `entry=$(/usr/bin/getent passwd -- "$1")
+case $? in
+0) printf '%s\n' "$entry" ;;
+2) printf 'absent\n' ;;
+*) exit 1 ;;
+esac`
+
+var ownershipMark = regexp.MustCompile(`^bootwright-[0-9a-f]{64}$`)
+
+func (r Remote) explainHostState(ctx context.Context, contextName string, request Request, owner string, material map[string]secrets.Material, login string) error {
+	place := request.Placement
+	output, err := r.bootstrap(ctx, contextName, place, request.Bootstrap, material, false,
+		[]string{"/bin/sh", "-c", accountLookup, "sh", place.User}, nil, nil)
+	if err != nil {
+		return nil
+	}
+	return existingAccount(bytes.TrimSpace(output), place, login, owner)
+}
+
+func existingAccount(entry []byte, place machine.Placement, login, owner string) error {
+	subject, managed := "Machine/"+place.Machine, place.User
+	leftovers := "/etc/sudoers.d/90-bootwright-" + managed + " and /home/" + managed + "-*"
+	if string(entry) == "absent" {
+		return machine.EnrollmentRefused(subject+" has no account named "+managed+", but refused the enrollment that "+login+
+			" ran through sudo, because files remain for it", "on the host, inspect "+leftovers+" and its .ssh/authorized_keys, and that /home is a root-owned directory; remove what an abandoned operation left, then repeat the operation")
+	}
+	fields := strings.Split(string(entry), ":")
+	if len(fields) != 7 || fields[0] != managed {
+		return nil
+	}
+	switch comment := fields[4]; {
+	case comment == owner:
+		return nil
+	case ownershipMark.MatchString(comment):
+		return machine.EnrollmentRefused(subject+" already has the account "+managed+", which another Bootwright operation created and this context does not record, such as one a controller reset removed",
+			"if no context still manages it, remove the account with userdel, then "+leftovers+", and repeat the operation; otherwise continue the operation that created it")
+	}
+	return machine.EnrollmentRefused(subject+" already has an account named "+managed+" that Bootwright did not create",
+		"declare another spec.access.lifecycle.user for "+subject+", or remove that account from the host once nothing uses it")
 }
 
 func bootstrapRefusal(err error, place machine.Placement, user string) error {
@@ -140,12 +187,9 @@ func (r Remote) bootstrapUser(ctx context.Context, place machine.Placement, acce
 	return user, nil
 }
 
-func (r Remote) PromptSSH(ctx context.Context, contextName string, place machine.Placement, access machine.Bootstrap, material map[string]secrets.Material) error {
+func (r Remote) PromptSSH(ctx context.Context, _ string, place machine.Placement, access machine.Bootstrap, material map[string]secrets.Material) error {
 	if access.Auth != "askPassword" {
 		return nil
-	}
-	if err := place.ProveHostPin(contextName, material); err != nil {
-		return err
 	}
 	user, err := r.bootstrapUser(ctx, place, access)
 	if err != nil {
@@ -159,9 +203,6 @@ func (r Remote) PromptSSH(ctx context.Context, contextName string, place machine
 func (r Remote) collect(ctx context.Context, contextName string, request Request, material map[string]secrets.Material) error {
 	place, access := request.Placement, request.Bootstrap
 	if err := r.PromptSSH(ctx, contextName, place, access, material); err != nil || !access.SudoPrompt {
-		return err
-	}
-	if err := place.ProveHostPin(contextName, material); err != nil {
 		return err
 	}
 	user, err := r.bootstrapUser(ctx, place, access)
@@ -259,7 +300,7 @@ var (
 		"grant this account sudo to root on the host, or declare another bootstrap user"}
 	errSudoFailed = &cause{"remote sudo reported an error for {login} and the enrollment did not complete",
 		"run sudo -v as this account on the host and resolve what it reports; if sudo works there, inspect the account {managed}, /etc/sudoers.d/90-bootwright-{managed} and /home/{managed}-*"}
-	errRemoteRefused = &cause{"ran the enrollment as root, which refused the host state for {managed}",
+	errRemoteRefused = &cause{"refused the enrollment that {login} ran through sudo, because of existing host state for {managed}",
 		"on the host, inspect the account {managed}, /etc/sudoers.d/90-bootwright-{managed} and /home/{managed}-*; remove what an abandoned operation left, or continue the operation that created it"}
 	errSessionStalled = &cause{"did not reach the remote sudo prompt for {login} within 90 seconds",
 		"check that the host is reachable and that this account's login starts a command without waiting for input"}
@@ -537,6 +578,9 @@ func (p *invocationAccess) rememberTerminal(target terminalTarget, terminal bool
 }
 
 func BeginInvocation(ctx context.Context) (context.Context, func()) {
+	if _, held := ctx.Value(invocationKey{}).(*invocationAccess); held {
+		return ctx, func() {}
+	}
 	scope := &invocationAccess{values: map[promptedCredential][]byte{}, terminals: map[terminalTarget]bool{}}
 	return context.WithValue(ctx, invocationKey{}, scope), func() {
 		scope.lock.Lock()

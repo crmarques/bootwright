@@ -129,6 +129,11 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 			return nil, err
 		}
 	}
+	if verb == reconciliation.Apply {
+		if err := s.promptApplyStart(ctx, name, decided); err != nil {
+			return nil, err
+		}
+	}
 	if s.startsFlow(decided) {
 		s.startCheck, err = s.startFor(ctx, identity, decided)
 		if err != nil {

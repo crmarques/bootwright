@@ -2470,6 +2470,10 @@ ambiguous reading refuses the complete flow before any registration,
 credential issue, recovery write or cleanup. It leaves existing records,
 logs, staged files and subscriptions intact. Repeating the command checks
 again. Authorization and `--unregistered` leave this condition in force.
+Each reading reports one row under `Checks` while it runs and settles with
+its outcome, so the wait for a management controller is visible; an apply
+asks for its [bootstrap passwords](api/machines.md#managed-lifecycle-enrollment)
+before the first reading.
 
 A staged or additive apply checks its managed fleet. A destroy derives its
 targets from the frozen work it takes back. Destroy over an incomplete apply

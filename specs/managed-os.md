@@ -2237,8 +2237,12 @@ the constant its run deadline is derived from, and an observation's session as
 `budgets.inspection`.
 Infrastructure services wait for that block. The installed-host block runs
 in the machines stage after OS installation and before consumers. Provided-host blocks run in infrastructure-services. The controller stage
-requires daemon preparation and grants for already-existing interfaces, so a
-controller-only selection includes them. A grant for a provider-created bridge
+requires the controller Machine's own daemon preparation and its grants for
+already-existing interfaces, so a controller-only selection includes them.
+Another provided host's blocks wait for the controller stage unless a
+controller-stage block consumes a service placed on that host, such as an
+artifact mirror; otherwise a controller-only selection never contacts that
+host or asks for its credentials. A grant for a provider-created bridge
 waits for that provider instead; the provider waits only for daemon preparation.
 The block can precede controller clients, while every ancestor installation
 still proves its own substrate can do so.

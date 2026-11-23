@@ -680,9 +680,13 @@ The `sudo.askPassword` and `sudo.passwordRef` arms independently select the
 remote sudo credential. The username in each password Secret matches its
 bootstrap principal.
 
-After confirmation or `--yes`, and before starting apply progress or attempts,
-Bootwright collects the needed bootstrap passwords and uses the pinned login
-for a read-only check on each enrollment it can start or must resolve. Within
+Right after confirmation or `--yes`, before the
+[power entry check](../state-reconciliation.md#power-before-a-new-apply-or-destroy),
+registration, apply progress or attempts, Bootwright collects the bootstrap
+passwords of the enrollments and hardware claims the invocation can start or
+must resolve. It then uses the pinned login for a read-only check on each
+enrollment. A selection that starts none of a Machine's blocks asks for none
+of its passwords. Within
 the invocation it prompts once per bootstrap user for SSH and once for remote
 sudo where needed, reusing each prompted password across the Machines that
 select that method. At the sudo prompt, Enter reuses that user's prompted SSH
@@ -705,7 +709,12 @@ A bootstrap refusal names its cause: an SSH session that did not open or ended
 early, a sudo password the host did not accept, a sudo policy that does not
 authorize the account, a password the declaration omits, another sudo error,
 or a privileged check that refused the host's existing account, home, SSH
-grant or sudo rule. A sudo warning that does not stop the command names no
+grant or sudo rule. Each names the bootstrap login that ran it and says when
+that login ran it through sudo. After a refused privileged check, the same
+login reads the account database without sudo and the refusal names what it
+finds: an account another Bootwright operation created that this context does
+not record, an account Bootwright did not create, or no account and only
+leftover files. A sudo warning that does not stop the command names no
 cause, and neither does an operator interrupt. Bootwright answers
 remote sudo once: when sudo asks again, it ends that session at once and
 reports the password as refused. A session that outlives its bound names what
