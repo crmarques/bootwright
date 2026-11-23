@@ -23,7 +23,7 @@ func (r Remote) HardwareAddresses(ctx context.Context, contextName string, place
 		return nil, refused(place, "hardware identity", "use a build with the Machine hardware reader")
 	}
 	output, err := r.bootstrap(ctx, contextName, place, access, material, false,
-		[]string{"/usr/bin/python3", "-I", "-c", r.Hardware + "\nimport json\nprint(json.dumps(read()))"})
+		[]string{"/usr/bin/python3", "-I", "-c", r.Hardware + "\nimport json\nprint(json.dumps(read()))"}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -39,17 +39,24 @@ func (r Remote) manage(ctx context.Context, contextName string, request Request,
 	if mode == "inspect" {
 		workerMode = "observe"
 	}
-	args := []string{"/usr/bin/timeout", "--kill-after=5s", "55s", "/usr/bin/python3", "-I", "-c", worker, workerMode, request.Placement.User, owner}
 	keys, err := publicKeys(request, material)
 	if err != nil {
 		return "", err
 	}
-	args = append(args, keys...)
+	command := func(mode string) []string {
+		return append([]string{"/usr/bin/timeout", "--kill-after=5s", "55s", "/usr/bin/python3", "-I", "-c",
+			worker, mode, request.Placement.User, owner}, keys...)
+	}
+	args := command(workerMode)
 	var output []byte
 	if mode == "inspect" {
 		output, err = r.asManaged(ctx, contextName, request.Placement, material, append([]string{sudoExecutable, "-H", "-n", "-k", "-u", "root", "--"}, args...))
 	} else {
-		output, err = r.bootstrap(ctx, contextName, request.Placement, request.Bootstrap, material, true, args)
+		var probe []string
+		if workerMode != "observe" {
+			probe = command("observe")
+		}
+		output, err = r.bootstrap(ctx, contextName, request.Placement, request.Bootstrap, material, true, args, probe)
 	}
 	if err != nil {
 		return "", err

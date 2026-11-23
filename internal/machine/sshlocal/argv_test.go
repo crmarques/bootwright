@@ -233,3 +233,17 @@ func TestAnObservationOffersNoCredential(t *testing.T) {
 }
 
 func trustless() trust.HostKey { return trust.HostKey{} }
+
+func TestOnlyBootstrapCommandsCanRequestAForcedTerminal(t *testing.T) {
+	held := paths{config: 3, knownHosts: 4}
+	session := machine.Session{Address: "192.0.2.3", Command: []string{"id"}, ForceTTY: true}
+	bootstrap := strings.Join(arguments(session, held, "ssh-ed25519"), " ")
+	if !strings.Contains(bootstrap, " -tt -e none ") {
+		t.Fatalf("bootstrap arguments = %q", bootstrap)
+	}
+	session.Delegated = true
+	delegated := strings.Join(arguments(session, held, "ssh-ed25519"), " ")
+	if strings.Contains(delegated, " -tt ") || !strings.Contains(delegated, " -n -T ") {
+		t.Fatalf("delegated arguments = %q", delegated)
+	}
+}

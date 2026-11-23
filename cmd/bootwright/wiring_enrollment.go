@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 
 	"github.com/crmarques/bootwright/ansible"
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -16,6 +17,7 @@ func enrollmentRemote(deps serviceDependencies) account.Remote {
 	remote := account.Remote{
 		Launcher: sessionClient(deps.Home, deps.Owner, deps.Files, deps.CopyAccount),
 		Caller:   invokingSSHUser(deps.CopyAccount), Hardware: ansible.MachineHardwareSource(),
+		Entropy: rand.Read,
 	}
 	if deps.EnrollmentTerminal != nil {
 		remote.Prompt = deps.EnrollmentTerminal.ReadHidden

@@ -118,7 +118,7 @@ func TestApplyStartRefusalPausesBeforeTheFirstAttempt(t *testing.T) {
 	}
 }
 
-func TestApplyStartSkipsPreviewAndUnselectedPendingBlocks(t *testing.T) {
+func TestApplyStartSkipsPreviewDeclinedApplyAndUnselectedPendingBlocks(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{
@@ -133,8 +133,12 @@ func TestApplyStartSkipsPreviewAndUnselectedPendingBlocks(t *testing.T) {
 	if _, err := h.service.Plan(ctx, PlanRequest{ContextName: "lab", Verb: reconciliation.Apply}); err != nil || len(checked) != 0 {
 		t.Fatalf("preview checked %v (%v)", checked, diagnostics.Of(err))
 	}
-	if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: "lab", Stages: []string{"controller"}, SkipConfirmation: true}); err != nil || !slices.Equal(checked, []string{"tools"}) {
-		t.Fatalf("controller apply checked %v (%v)", checked, diagnostics.Of(err))
+	h.confirmer.decline = true
+	if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: "lab"}); err == nil || len(checked) != 0 || h.confirmer.asked != 1 {
+		t.Fatalf("declined apply checked %v after %d confirmations (%v)", checked, h.confirmer.asked, err)
+	}
+	if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: "lab", Stages: []string{"controller"}, SkipConfirmation: true}); err != nil || !slices.Equal(checked, []string{"tools"}) || h.confirmer.asked != 1 {
+		t.Fatalf("controller apply checked %v after %d confirmations (%v)", checked, h.confirmer.asked, diagnostics.Of(err))
 	}
 }
 

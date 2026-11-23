@@ -43,6 +43,11 @@ func EnrollmentSudoTTYRefused(machine, user string) error {
 	return enrollmentSudoTTY.Fail("Machine/"+machine+" remote sudo requires a terminal for "+user+" (requiretty)", "")
 }
 
+func EnrollmentSudoTTYUnavailable(machine, user string) error {
+	return enrollmentSudoTTY.Fail("Machine/"+machine+" requires a remote terminal for sudo, but could not prepare one for "+user,
+		"check that sshd permits terminal allocation for this account, then repeat the operation")
+}
+
 func IsEnrollmentSudoTTY(err error) bool {
 	failure, ok := err.(*diagnostics.Failure)
 	return ok && !failure.Usage && len(failure.Diagnostics) == 1 && failure.Diagnostics[0].Code == enrollmentSudoTTY.Code

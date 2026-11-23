@@ -42,6 +42,8 @@ type Session struct {
 	Password []byte
 	Command  []string
 	Batch    bool
+	// ForceTTY is reserved for a bootstrap command that prepares the terminal before sending credentials.
+	ForceTTY bool
 }
 
 // SessionResult is what an access command reports once the client has exited.

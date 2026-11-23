@@ -680,16 +680,21 @@ The `sudo.askPassword` and `sudo.passwordRef` arms independently select the
 remote sudo credential. The username in each password Secret matches its
 bootstrap principal.
 
-Before starting apply progress or attempts, Bootwright collects the needed
-bootstrap passwords and uses the pinned login for a read-only check on each
-enrollment it can start or must resolve. A refused check pauses a fresh
-apply and leaves any unproved effect of a continued apply to be resolved.
+After confirmation or `--yes`, and before starting apply progress or attempts,
+Bootwright collects the needed bootstrap passwords and uses the pinned login
+for a read-only check on each enrollment it can start or must resolve. Within
+the invocation it prompts once per bootstrap user for SSH and once for remote
+sudo where needed, reusing each prompted password across the Machines that
+select that method. At the sudo prompt, Enter reuses that user's prompted SSH
+password when available. Bound credentials keep their declared references.
+A refused check pauses a fresh apply and leaves any unproved effect of a
+continued apply to be resolved.
 Apply reads the hardware through the pinned bootstrap login without sudo
-and holds the host claim before creating the account. Bootwright authorizes
-the public key, configures noninteractive sudo and verifies a fresh connection
-as the new account. Both sudo calls run without a remote terminal. When
-sudo reports a terminal requirement, `machine.enrollment` names the affected
-account and asks for a host policy that permits sudo without a terminal.
+and holds the host claim before creating the account. When bootstrap sudo
+requires a terminal, Bootwright proves a read-only check through a remote
+terminal before using one for account changes. It disables echo before sending
+a prompted or bound sudo password. The fresh managed login and its root sudo
+proof run without a remote terminal.
 The managed account requires the local grant Bootwright writes under
 `/etc/sudoers.d` to be effective in the host's sudo policy.
 The managed login grants root-equivalent access. Its key

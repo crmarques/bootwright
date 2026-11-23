@@ -57,6 +57,9 @@ func clientArguments(session machine.Session, held paths, pinned string, descrip
 	if session.Batch {
 		args = append(args, "-o", "BatchMode=yes")
 	}
+	if session.ForceTTY && !session.Delegated && len(session.Command) != 0 {
+		args = append(args, "-tt", "-e", "none")
+	}
 	if session.Delegated {
 		args = append(args, "-o", "EscapeChar=none", "-o", "ClearAllForwardings=yes")
 		if len(session.Command) > 0 {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"errors"
 	"io"
 	"slices"
 	"strings"
@@ -23,6 +24,7 @@ type sshRequest struct {
 	password string
 	command  []string
 	input    string
+	terminal bool
 }
 
 type sshFixture struct {
@@ -31,24 +33,39 @@ type sshFixture struct {
 }
 
 func (f *sshFixture) Run(_ context.Context, session machine.Session, in io.Reader, out, stderr io.Writer) (int, error) {
-	if len(f.results) != 0 && f.results[0] == "tty-refused" {
-		f.results = f.results[1:]
-		_, _ = io.WriteString(stderr, "fixture-private banner\nsudo: sorry, you must have a tty to run sudo\n")
-		return 1, nil
-	}
-	var input []byte
-	if slices.Contains(session.Command, sudoChallenge) {
-		_, _ = io.WriteString(stderr, sudoChallenge)
-	}
-	if in != nil {
-		input, _ = io.ReadAll(in)
-	}
-	f.received = append(f.received, sshRequest{session.User, session.Kind, string(session.Password), session.Command, string(input)})
-	if !session.HostKey.Present() || len(f.results) == 0 {
+	if len(f.results) == 0 || !session.HostKey.Present() {
 		return 255, nil
 	}
 	result := f.results[0]
 	f.results = f.results[1:]
+	request := sshRequest{session.User, session.Kind, string(session.Password), session.Command, "", session.ForceTTY}
+	if result == "tty-refused" {
+		f.received = append(f.received, request)
+		_, _ = io.WriteString(stderr, "fixture-private banner\nsudo: sorry, you must have a tty to run sudo\n")
+		return 1, nil
+	}
+	if result == "no-tty" {
+		f.received = append(f.received, request)
+		_, _ = io.WriteString(out, session.Command[4]+"-denied\r\n")
+		return 1, nil
+	}
+	if session.ForceTTY {
+		_, _ = io.WriteString(out, "login notice\n"+session.Command[4]+"\n")
+		stderr = out
+		if result == "conflicting-tty" {
+			f.received = append(f.received, request)
+			_, _ = io.WriteString(out, session.Command[4]+"-denied\n")
+			return 1, nil
+		}
+	}
+	if slices.Contains(session.Command, sudoChallenge) {
+		_, _ = io.WriteString(stderr, sudoChallenge)
+	}
+	if in != nil {
+		input, _ := io.ReadAll(in)
+		request.input = string(input)
+	}
+	f.received = append(f.received, request)
 	if result == "refuse" {
 		return 1, nil
 	}
@@ -85,6 +102,7 @@ func enrollmentFixture(t *testing.T, responses ...string) (Capability, lifecycle
 			return copy(buffer, "fixture-sudo\n"), nil
 		},
 		Hardware: "def read(): return []",
+		Entropy:  func(b []byte) (int, error) { return len(b), nil },
 	}
 	material := map[string]secrets.Material{
 		"admin-key": secrets.NewMaterial(map[secrets.Part][]byte{secrets.PublicKeyPart: ssh.MarshalAuthorizedKey(pub), secrets.PrivateKeyPart: []byte("private-key-fixture")}),
@@ -102,7 +120,7 @@ func TestEnrollmentUsesSeparateCredentialsAndProvesAHandoff(t *testing.T) {
 	if err := capability.CheckApplyStart(ctx, probe); err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(*prompts, []string{"SSH password for operator on Machine/node: ", "remote sudo password for operator on Machine/node: "}) {
+	if !slices.Equal(*prompts, []string{"SSH password for operator on Machine/node: ", "remote sudo password for operator on Machine/node (Enter to reuse SSH password): "}) {
 		t.Fatalf("start check prompts %q", *prompts)
 	}
 	r, err := decode(execution.Block)
@@ -116,14 +134,14 @@ func TestEnrollmentUsesSeparateCredentialsAndProvesAHandoff(t *testing.T) {
 	if err != nil || result.Outcome != reconciliation.OutcomeChanged || len(ssh.received) != 5 {
 		t.Fatalf("outcome=%s connections=%d err=%v", result.Outcome, len(ssh.received), err)
 	}
-	if !slices.Equal(*prompts, []string{"SSH password for operator on Machine/node: ", "remote sudo password for operator on Machine/node: "}) {
+	if !slices.Equal(*prompts, []string{"SSH password for operator on Machine/node: ", "remote sudo password for operator on Machine/node (Enter to reuse SSH password): "}) {
 		t.Fatalf("prompts %q", *prompts)
 	}
 	check, claim, enrollment, login, sudo := ssh.received[0], ssh.received[1], ssh.received[2], ssh.received[3], ssh.received[4]
 	if !slices.Contains(check.command, "observe") || slices.Contains(check.command, "apply") ||
-		check.command[0] != sudoExecutable || check.password != "fixture-login" || check.input != "fixture-sudo\n" ||
+		!slices.Contains(check.command, sudoExecutable) || check.password != "fixture-login" || check.input != "fixture-sudo\n" ||
 		claim.user != "operator" || claim.input != "" || claim.command[0] != "/usr/bin/python3" ||
-		enrollment.user != "operator" || enrollment.password != "fixture-login" || enrollment.input != "fixture-sudo\n" || enrollment.command[0] != "/usr/bin/sudo" ||
+		enrollment.user != "operator" || enrollment.password != "fixture-login" || enrollment.input != "fixture-sudo\n" || !slices.Contains(enrollment.command, sudoExecutable) ||
 		login.user != "bootwright" || sudo.user != "bootwright" || login.kind != machine.IdentityKey || sudo.kind != machine.IdentityKey ||
 		login.password != "" || sudo.input != "" {
 		t.Fatal("the hardware claim, enrollment and successor received the wrong access")
@@ -162,7 +180,7 @@ func TestHardwareRecoveryCanCollectOnlyTheSSHPasswordBeforeProgress(t *testing.T
 }
 
 func TestEnrollmentLeavesSudoRefusalUnknown(t *testing.T) {
-	capability, execution, _, _ := enrollmentFixture(t, "ready", "bootwright", "refuse")
+	capability, execution, _, _ := enrollmentFixture(t, "absent", "ready", "bootwright", "refuse")
 	ctx, release := BeginInvocation(context.Background())
 	defer release()
 	result, err := capability.Apply(ctx, execution)
@@ -174,7 +192,7 @@ func TestEnrollmentLeavesSudoRefusalUnknown(t *testing.T) {
 func TestEnrollmentExplainsRemoteSudoTTYRefusal(t *testing.T) {
 	ctx, release := BeginInvocation(context.Background())
 	defer release()
-	capability, execution, _, _ := enrollmentFixture(t, "tty-refused", "tty-refused", "tty-refused", "ready", "bootwright", "tty-refused")
+	capability, execution, _, _ := enrollmentFixture(t, "tty-refused", "no-tty", "absent", "ready", "bootwright", "tty-refused")
 	check := func(err error, account string) {
 		t.Helper()
 		stops := diagnostics.Of(err)
@@ -186,18 +204,16 @@ func TestEnrollmentExplainsRemoteSudoTTYRefusal(t *testing.T) {
 		}
 	}
 	probe := lifecycle.Probe{Context: execution.Context, ApplyOperation: execution.ApplyOperation, Block: execution.Block, Material: execution.Material}
-	check(capability.CheckApplyStart(ctx, probe), "operator")
+	denied := capability.CheckApplyStart(ctx, probe)
+	stops := diagnostics.Of(denied)
+	if !machine.IsEnrollmentSudoTTY(denied) || len(stops) != 1 || !strings.Contains(stops[0].Message, "could not prepare one") ||
+		!strings.Contains(stops[0].Remediation, "terminal allocation") || strings.Contains(stops[0].Message, "fixture-private") {
+		t.Fatalf("unexpected bootstrap diagnostic: %v", stops)
+	}
 	outcome, err := capability.Apply(ctx, execution)
 	if outcome.Outcome != reconciliation.OutcomeUnknown {
 		t.Fatalf("unexpected outcome %s", outcome.Outcome)
 	}
-	check(err, "operator")
-	observation, err := capability.Observe(ctx, execution)
-	if observation.Effect != reconciliation.EffectUnknown {
-		t.Fatalf("unexpected observation %s", observation.Effect)
-	}
-	check(err, "operator")
-	_, err = capability.Apply(ctx, execution)
 	check(err, "bootwright")
 }
 
@@ -217,7 +233,7 @@ func TestEnrollmentWithdrawalNeedsAnIndependentPositiveProof(t *testing.T) {
 
 func TestSudoPasswordWaitsForTheRemotePrompt(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	in, errOut := sudoPasswordExchange(ctx, []byte("fixture-password"))
+	in, errOut := sudoPasswordExchange(ctx, []byte("fixture-password"), sudoChallenge)
 	_, _ = io.WriteString(errOut, "[sudo: no challenge]")
 	cancel()
 	data, err := io.ReadAll(in)
@@ -225,7 +241,7 @@ func TestSudoPasswordWaitsForTheRemotePrompt(t *testing.T) {
 		t.Fatal("the password was offered without the controlled sudo prompt")
 	}
 
-	in, errOut = sudoPasswordExchange(context.Background(), []byte("second-password"))
+	in, errOut = sudoPasswordExchange(context.Background(), []byte("second-password"), sudoChallenge)
 	_, _ = io.WriteString(errOut, sudoChallenge[:7])
 	_, _ = io.WriteString(errOut, sudoChallenge[7:])
 	data, err = io.ReadAll(in)
@@ -245,5 +261,186 @@ func TestSameKeyMaterialUnderDifferentNamesIsRefused(t *testing.T) {
 	execution.Material["native"] = execution.Material["admin-key"]
 	if _, err := publicKeys(r, execution.Material); err == nil {
 		t.Fatal("duplicate key material was admitted as root-equivalent access")
+	}
+}
+
+func TestPromptedCredentialsFollowTheBootstrapUserAcrossMachines(t *testing.T) {
+	ctx, release := BeginInvocation(t.Context())
+	defer release()
+	var labels []string
+	remote := Remote{Prompt: func(_ context.Context, label string, buffer []byte) (int, error) {
+		labels = append(labels, label)
+		switch {
+		case strings.HasPrefix(label, "SSH"):
+			return copy(buffer, "fixture-login\n"), nil
+		case strings.Contains(label, "(Enter to reuse SSH password)"):
+			return copy(buffer, "\n"), nil
+		default:
+			return copy(buffer, "fixture-sudo\n"), nil
+		}
+	}}
+	check := func(ctx context.Context, machineName, user, purpose, want string) {
+		t.Helper()
+		got, err := remote.password(ctx, machineName, user, purpose, "", nil)
+		defer clear(got)
+		if err != nil || string(got) != want {
+			t.Fatalf("%s %s on %s did not receive its expected password: %v", user, purpose, machineName, err)
+		}
+	}
+	check(ctx, "first", "operator", "SSH", "fixture-login")
+	check(ctx, "first", "operator", "remote sudo", "fixture-login")
+	check(ctx, "second", "operator", "SSH", "fixture-login")
+	check(ctx, "second", "operator", "remote sudo", "fixture-login")
+	check(ctx, "second", "other", "remote sudo", "fixture-sudo")
+	next, end := BeginInvocation(t.Context())
+	defer end()
+	check(next, "first", "operator", "remote sudo", "fixture-sudo")
+	if len(labels) != 4 {
+		t.Fatalf("prompted %d times, want 4", len(labels))
+	}
+}
+
+func TestEnrollmentProvesTerminalSudoBeforeChangingTheAccount(t *testing.T) {
+	for _, effect := range []string{"apply", "destroy"} {
+		t.Run(effect, func(t *testing.T) {
+			want := "ready"
+			if effect == "destroy" {
+				want = "absent"
+			}
+			capability, execution, ssh, prompts := enrollmentFixture(t, "tty-refused", "absent", want, "bootwright", "0")
+			ctx, release := BeginInvocation(t.Context())
+			defer release()
+			var result lifecycle.Result
+			var err error
+			if effect == "apply" {
+				probe := lifecycle.Probe{Context: execution.Context, ApplyOperation: execution.ApplyOperation, Block: execution.Block, Material: execution.Material}
+				if err := capability.CheckApplyStart(ctx, probe); err != nil {
+					t.Fatal(err)
+				}
+				result, err = capability.Apply(ctx, execution)
+			} else {
+				result, err = capability.Destroy(ctx, execution)
+			}
+			if err != nil || result.Outcome != reconciliation.OutcomeChanged || len(*prompts) != 2 || len(ssh.received) < 3 {
+				t.Fatalf("outcome %s, connections %d, prompts %d, error %v", result.Outcome, len(ssh.received), len(*prompts), err)
+			}
+			first, fallback, changed := ssh.received[0], ssh.received[1], ssh.received[2]
+			if first.terminal || !slices.Contains(first.command, "observe") || first.input != "" ||
+				!fallback.terminal || !slices.Contains(fallback.command, "observe") || fallback.input != "fixture-sudo\n" ||
+				!changed.terminal || !slices.Contains(changed.command, effect) || changed.input != "fixture-sudo\n" {
+				t.Fatal("the terminal fallback must prove sudo with a read-only observation before the single effect")
+			}
+			for _, request := range ssh.received[3:] {
+				if request.terminal || request.user != "bootwright" {
+					t.Fatal("the managed handoff must keep SSH and sudo terminal-free")
+				}
+			}
+		})
+	}
+}
+
+func TestTerminalSudoPasswordRequiresReadinessAndTheSudoPrompt(t *testing.T) {
+	marker := "fixture-terminal-ready\n"
+	ctx, cancel := context.WithCancel(t.Context())
+	in, stdout := sudoPasswordExchange(ctx, []byte("fixture-password"), marker, sudoChallenge)
+	_, _ = io.WriteString(stdout, sudoChallenge+marker)
+	cancel()
+	if data, err := io.ReadAll(in); err != nil || len(data) != 0 {
+		t.Fatal("the password was offered for a prompt that preceded terminal readiness")
+	}
+
+	in, stdout = sudoPasswordExchange(t.Context(), []byte("fixture-password"), marker, sudoChallenge)
+	_, _ = io.WriteString(stdout, marker[:5])
+	_, _ = io.WriteString(stdout, marker[5:]+sudoChallenge[:5])
+	_, _ = io.WriteString(stdout, sudoChallenge[5:])
+	if data, err := io.ReadAll(in); err != nil || string(data) != "fixture-password\n" {
+		t.Fatal("the split terminal readiness and sudo prompt did not release the password")
+	}
+}
+
+func TestEnrollmentUsesTheSamePromptsForTwoMachineChecksAndEffects(t *testing.T) {
+	capability, first, ssh, prompts := enrollmentFixture(t, "absent", "absent", "ready", "bootwright", "0", "ready", "bootwright", "0")
+	ctx, release := BeginInvocation(t.Context())
+	defer release()
+	request, err := decode(first.Block)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Placement.Machine = "other"
+	request.Placement.Address = "192.0.2.8"
+	second := first
+	second.Material = map[string]secrets.Material{"admin-key": first.Material["admin-key"]}
+	pub, _ := second.Material["admin-key"].Part(secrets.PublicKeyPart)
+	second.Material["host-pin"] = secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: append([]byte("192.0.2.8 "), pub...)})
+	canonical, err := reconciliation.Freeze(request, "fixture")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second.Block = reconciliation.Block{BlockDefinition: enrollmentBlock(request, canonical), RequestDigest: strings.Repeat("b", 64)}
+
+	for _, execution := range []lifecycle.Execution{first, second} {
+		probe := lifecycle.Probe{Context: execution.Context, ApplyOperation: execution.ApplyOperation, Block: execution.Block, Material: execution.Material}
+		if err := capability.CheckApplyStart(ctx, probe); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, execution := range []lifecycle.Execution{first, second} {
+		result, err := capability.Apply(ctx, execution)
+		if err != nil || result.Outcome != reconciliation.OutcomeChanged {
+			t.Fatalf("enrollment did not complete: %v", err)
+		}
+	}
+	if len(*prompts) != 2 || len(ssh.received) != 8 {
+		t.Fatalf("prompts = %d, connections = %d", len(*prompts), len(ssh.received))
+	}
+	for _, i := range []int{0, 1, 2, 5} {
+		request := ssh.received[i]
+		if request.password != "fixture-login" || request.input != "fixture-sudo\n" {
+			t.Fatal("the bootstrap session received the wrong SSH or sudo password")
+		}
+	}
+}
+
+func TestAReadWithoutEnterDoesNotReuseTheSSHPassword(t *testing.T) {
+	ctx, release := BeginInvocation(t.Context())
+	defer release()
+	remote := Remote{Prompt: func(_ context.Context, _ string, buffer []byte) (int, error) {
+		return copy(buffer, "fixture-login\n"), nil
+	}}
+	got, err := remote.password(ctx, "node", "operator", "SSH", "", nil)
+	clear(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	remote.Prompt = func(context.Context, string, []byte) (int, error) { return 0, nil }
+	if got, err := remote.password(ctx, "node", "operator", "remote sudo", "", nil); err == nil {
+		clear(got)
+		t.Fatal("an empty read reused the SSH password")
+	}
+}
+
+func TestAForcedBootstrapTerminalNeedsEntropyBeforeConnecting(t *testing.T) {
+	session := machine.Session{ForceTTY: true, Command: []string{sudoExecutable}}
+	remote := Remote{Launcher: &sshFixture{}}
+	if _, err := remote.run(t.Context(), session, nil); !errors.Is(err, errBootstrapTTY) {
+		t.Fatalf("without an entropy source: %v", err)
+	}
+	remote.Entropy = func([]byte) (int, error) { return 0, nil }
+	if _, err := remote.run(t.Context(), session, nil); !errors.Is(err, errBootstrapTTY) {
+		t.Fatalf("with insufficient entropy: %v", err)
+	}
+}
+
+func TestEnrollmentTerminalFailureAfterReadinessLeavesRemovalUnknown(t *testing.T) {
+	for _, result := range []string{"refuse", "conflicting-tty"} {
+		t.Run(result, func(t *testing.T) {
+			capability, execution, _, _ := enrollmentFixture(t, "tty-refused", result)
+			ctx, release := BeginInvocation(t.Context())
+			defer release()
+			observation, err := capability.ObserveRemoval(ctx, execution)
+			if observation.Effect != reconciliation.EffectUnknown || err == nil || machine.IsEnrollmentSudoTTY(err) {
+				t.Fatalf("observation = %s, error = %v", observation.Effect, err)
+			}
+		})
 	}
 }
