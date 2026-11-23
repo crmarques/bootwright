@@ -39,6 +39,7 @@ func (s Service) Destroy(ctx context.Context, request DestroyRequest) (*Operatio
 	if err != nil {
 		return nil, err
 	}
+	s.keepGoing = request.KeepGoing
 	return s.mutate(ctx, reconciliation.Destroy, request.ContextName, reconciliation.Selection{}, request.Authorizations, request.Unregistered, request.SkipConfirmation, request.Unattended, request.SSH.Borrowed(), nil)
 }
 

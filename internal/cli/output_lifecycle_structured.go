@@ -20,24 +20,25 @@ func displayReceipt(receipt lifecycle.Receipt) receiptPresentation {
 }
 
 type planStepPresentation struct {
-	ID          string   `json:"id"`
-	Description string   `json:"description"`
-	Kind        string   `json:"kind"`
-	Object      string   `json:"object"`
-	Stage       string   `json:"stage"`
-	Impacts     []string `json:"impacts"`
-	State       string   `json:"state"`
-	Selection   string   `json:"selection"`
-	WaitsOn     string   `json:"waitsOn"`
-	After       []int    `json:"after"`
-	Wave        int      `json:"wave"`
-	Consumes    []string `json:"consumes"`
+	ID              string         `json:"id"`
+	Description     string         `json:"description"`
+	Kind            string         `json:"kind"`
+	Object          string         `json:"object"`
+	Stage           string         `json:"stage"`
+	Impacts         []string       `json:"impacts"`
+	State           string         `json:"state"`
+	Selection       string         `json:"selection"`
+	WaitsOn         string         `json:"waitsOn"`
+	After           []int          `json:"after"`
+	PreviousFailure *statusFailure `json:"previousFailure,omitempty"`
+	Wave            int            `json:"wave"`
+	Consumes        []string       `json:"consumes"`
 }
 
 func displayPlanSteps(steps []lifecycle.PlanStep) []planStepPresentation {
 	shown := make([]planStepPresentation, 0, len(steps))
 	for _, s := range steps {
-		shown = append(shown, planStepPresentation{ID: escapeDisplayLine(s.ID), Description: escapeDisplayLine(s.Description), Kind: escapeDisplayLine(s.Kind), Object: escapeDisplayLine(s.Object), Stage: escapeDisplayLine(s.Stage), Impacts: displayLines(s.Impacts), State: escapeDisplayLine(s.State), Selection: escapeDisplayLine(s.Selection), WaitsOn: escapeDisplayLine(s.WaitsOn), After: append([]int{}, s.After...), Wave: s.Wave, Consumes: displayLines(s.Consumes)})
+		shown = append(shown, planStepPresentation{ID: escapeDisplayLine(s.ID), Description: escapeDisplayLine(s.Description), Kind: escapeDisplayLine(s.Kind), Object: escapeDisplayLine(s.Object), Stage: escapeDisplayLine(s.Stage), Impacts: displayLines(s.Impacts), State: escapeDisplayLine(s.State), Selection: escapeDisplayLine(s.Selection), WaitsOn: escapeDisplayLine(s.WaitsOn), After: append([]int{}, s.After...), Wave: s.Wave, PreviousFailure: displayFailure(s.PreviousFailure), Consumes: displayLines(s.Consumes)})
 	}
 	return shown
 }
@@ -55,6 +56,7 @@ type planCheckPresentation struct {
 }
 
 type planPresentation struct {
+	KeepGoing          bool                    `json:"keepGoing,omitempty"`
 	Checks             []planCheckPresentation `json:"checks,omitempty"`
 	Context            resultContext           `json:"context"`
 	Verb               string                  `json:"verb"`
@@ -87,7 +89,7 @@ type planPresentation struct {
 func (planPresentation) documentedResult() {}
 
 func displayPlan(result *lifecycle.PlanResult) planPresentation {
-	shown := planPresentation{Context: resultContext{Name: escapeDisplayLine(result.Context.Name), Mode: escapeDisplayLine(result.Context.Mode)}, Verb: escapeDisplayLine(result.Verb), Steps: displayPlanSteps(result.Steps), Stages: displayLines(result.Stages), Until: escapeDisplayLine(result.Until), Waves: result.Waves, Widest: result.Widest, Bound: result.Bound, Startable: result.Startable, Deferred: result.Deferred, Continuation: result.Continuation, Finalizes: result.Finalizes, Settled: result.Settled, Stops: displayLines(result.Stops), StopsAfterOnline: displayLines(result.StopsAfterOnline), Authorizations: displayLines(result.Authorizations), Receipt: displayReceipt(result.Receipt)}
+	shown := planPresentation{KeepGoing: result.KeepGoing, Context: resultContext{Name: escapeDisplayLine(result.Context.Name), Mode: escapeDisplayLine(result.Context.Mode)}, Verb: escapeDisplayLine(result.Verb), Steps: displayPlanSteps(result.Steps), Stages: displayLines(result.Stages), Until: escapeDisplayLine(result.Until), Waves: result.Waves, Widest: result.Widest, Bound: result.Bound, Startable: result.Startable, Deferred: result.Deferred, Continuation: result.Continuation, Finalizes: result.Finalizes, Settled: result.Settled, Stops: displayLines(result.Stops), StopsAfterOnline: displayLines(result.StopsAfterOnline), Authorizations: displayLines(result.Authorizations), Receipt: displayReceipt(result.Receipt)}
 	for _, check := range result.Checks {
 		shown.Checks = append(shown.Checks, planCheckPresentation{ID: escapeDisplayLine(check.ID), Status: escapeDisplayLine(check.Status), Summary: escapeDisplayLine(check.Summary), Remedy: escapeDisplayLine(check.Remedy)})
 	}
@@ -102,14 +104,17 @@ func displayPlan(result *lifecycle.PlanResult) planPresentation {
 }
 
 type operationPresentation struct {
-	Context   resultContext                `json:"context"`
-	Verb      string                       `json:"verb"`
-	Steps     []planStepPresentation       `json:"steps"`
-	Blocks    []operationBlockPresentation `json:"blocks"`
-	Settled   bool                         `json:"settled"`
-	Recovered string                       `json:"recovered"`
-	Next      string                       `json:"next"`
-	Receipt   receiptPresentation          `json:"receipt"`
+	KeepGoing         bool                         `json:"keepGoing,omitempty"`
+	Remaining         []string                     `json:"remaining,omitempty"`
+	RetiringWithHosts []string                     `json:"retiringWithHosts,omitempty"`
+	Context           resultContext                `json:"context"`
+	Verb              string                       `json:"verb"`
+	Steps             []planStepPresentation       `json:"steps"`
+	Blocks            []operationBlockPresentation `json:"blocks"`
+	Settled           bool                         `json:"settled"`
+	Recovered         string                       `json:"recovered"`
+	Next              string                       `json:"next"`
+	Receipt           receiptPresentation          `json:"receipt"`
 }
 
 func (operationPresentation) documentedResult() {}
@@ -127,7 +132,7 @@ type operationBlockPresentation struct {
 }
 
 func displayOperation(result *lifecycle.OperationResult) operationPresentation {
-	shown := operationPresentation{Context: resultContext{Name: escapeDisplayLine(result.Context.Name), Mode: escapeDisplayLine(result.Context.Mode)}, Verb: escapeDisplayLine(result.Verb), Steps: displayPlanSteps(result.Steps), Blocks: []operationBlockPresentation{}, Settled: result.Settled, Recovered: escapeDisplayLine(result.Recovered), Next: escapeDisplayLine(result.NextCommand), Receipt: displayReceipt(result.Receipt)}
+	shown := operationPresentation{KeepGoing: result.KeepGoing, RetiringWithHosts: displayLines(result.RetiringWithHosts), Context: resultContext{Name: escapeDisplayLine(result.Context.Name), Mode: escapeDisplayLine(result.Context.Mode)}, Verb: escapeDisplayLine(result.Verb), Steps: displayPlanSteps(result.Steps), Blocks: []operationBlockPresentation{}, Settled: result.Settled, Recovered: escapeDisplayLine(result.Recovered), Next: escapeDisplayLine(result.NextCommand), Receipt: displayReceipt(result.Receipt)}
 	for _, b := range result.Blocks {
 		block := operationBlockPresentation{ID: escapeDisplayLine(b.ID), Description: escapeDisplayLine(b.Description), Stage: escapeDisplayLine(b.Stage), State: escapeDisplayLine(b.State), Outcome: escapeDisplayLine(b.Outcome), Attempts: b.Attempts}
 		if b.Unresolved != nil {
@@ -136,6 +141,9 @@ func displayOperation(result *lifecycle.OperationResult) operationPresentation {
 		block.Failure = displayFailure(b.Failure)
 		block.WaitsFor = displayLines(b.WaitsFor)
 		shown.Blocks = append(shown.Blocks, block)
+		if result.KeepGoing && b.State != "done" {
+			shown.Remaining = append(shown.Remaining, block.ID)
+		}
 	}
 	return shown
 }

@@ -12,22 +12,27 @@ import (
 
 // removalPhases follows frozen dependencies and capability opt-in, never kind alone.
 type removalPhases struct {
-	effects         map[string]bool
-	machines        map[string]bool
-	retired         map[string]bool
-	preStop         map[string]bool
-	preStopMachines map[string]bool
-	survivors       map[string][]SurvivingConsumer
+	effects          map[string]bool
+	machines         map[string]bool
+	retired          map[string]bool
+	retirementProofs map[string][][]string
+	preStop          map[string]bool
+	preStopMachines  map[string]bool
+	survivors        map[string][]SurvivingConsumer
 }
 
 func (s Service) computePhases(plan reconciliation.Plan) removalPhases {
 	if plan.Verb != reconciliation.Destroy {
 		return removalPhases{effects: map[string]bool{}, machines: map[string]bool{}, retired: map[string]bool{}, preStop: map[string]bool{}, preStopMachines: map[string]bool{}, survivors: map[string][]SurvivingConsumer{}}
 	}
-	retired, consumerHosts, survivors := s.retiredWithHosts(plan)
+	var proofs map[string][][]string
+	if s.keepGoing {
+		proofs = map[string][][]string{}
+	}
+	retired, consumerHosts, survivors := s.retiredWithHosts(plan, proofs)
 	for {
 		boundary := s.deferral(plan, retired)
-		boundary.retired, boundary.survivors = retired, survivors
+		boundary.retired, boundary.survivors, boundary.retirementProofs = retired, survivors, proofs
 		unretired := false
 		for _, block := range plan.Blocks {
 			if retired[block.ID] && (s.hostsDeferred(block, plan, boundary.machines) || machinesDeferred(consumerHosts[block.ID], plan, boundary.machines)) {
@@ -113,7 +118,7 @@ func (s Service) deferral(plan reconciliation.Plan, retired map[string]bool) rem
 	return boundary
 }
 
-func (s Service) retiredWithHosts(plan reconciliation.Plan) (map[string]bool, map[string][]string, map[string][]SurvivingConsumer) {
+func (s Service) retiredWithHosts(plan reconciliation.Plan, proofs map[string][][]string) (map[string]bool, map[string][]string, map[string][]SurvivingConsumer) {
 	before := map[string]map[string]bool{}
 	for _, block := range plan.Blocks {
 		reach := map[string]bool{}
@@ -150,9 +155,27 @@ func (s Service) retiredWithHosts(plan reconciliation.Plan) (map[string]bool, ma
 		if err != nil || len(machines) == 0 {
 			continue
 		}
-		retired[block.ID] = !slices.ContainsFunc(machines, func(machine string) bool {
-			return !slices.ContainsFunc(plan.Blocks, func(candidate reconciliation.Block) bool { return removesHost(candidate, block, machine) })
-		})
+		retired[block.ID] = true
+		var perHost [][]string
+		for _, machine := range machines {
+			var witnesses []string
+			for _, candidate := range plan.Blocks {
+				if removesHost(candidate, block, machine) {
+					witnesses = append(witnesses, candidate.ID)
+					if proofs == nil {
+						break
+					}
+				}
+			}
+			if len(witnesses) == 0 {
+				retired[block.ID] = false
+				break
+			}
+			perHost = append(perHost, witnesses)
+		}
+		if proofs != nil && retired[block.ID] {
+			proofs[block.ID] = perHost
+		}
 	}
 	consumerHosts, direct := s.consumers(plan, retired, before)
 	survivors := map[string][]SurvivingConsumer{}
@@ -299,7 +322,7 @@ func (s Service) removalWarnings(plan reconciliation.Plan) []diagnostics.Diagnos
 	if err != nil {
 		return nil
 	}
-	_, _, survivors := s.retiredWithHosts(inverse)
+	_, _, survivors := s.retiredWithHosts(inverse, nil)
 	var found []SurvivingConsumer
 	for _, block := range inverse.Blocks {
 		found = append(found, survivors[block.ID]...)
@@ -332,4 +355,21 @@ func stopsAfterOnline(plan reconciliation.Plan, phases removalPhases, states map
 		}
 	}
 	return names
+}
+
+func pendingRetirements(plan reconciliation.Plan, phases removalPhases, states map[string]reconciliation.BlockState) []string {
+	var pending []string
+	for _, block := range plan.Blocks {
+		if !phases.retired[block.ID] || states[block.ID] != reconciliation.BlockDone {
+			continue
+		}
+		if slices.ContainsFunc(phases.retirementProofs[block.ID], func(witnesses []string) bool {
+			return !slices.ContainsFunc(witnesses, func(id string) bool {
+				return states[id] == reconciliation.BlockDone
+			})
+		}) {
+			pending = append(pending, block.ID)
+		}
+	}
+	return pending
 }

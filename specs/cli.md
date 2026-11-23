@@ -745,6 +745,18 @@ A settled verb previews no steps. An interrupted finalization is identified
 when the selected verb would finish it. Previews allocate no identity,
 create no log, and consume no authorization. Previews include available read-only prerequisite checks for the verb. Execution still performs its own required proofs.
 
+`bootwright destroy --keep-going --dry-run` previews the same owned removal
+as the effectful command. It shows the order of cleanup, names previous
+failures as retry history and identifies the proofs deferred to execution.
+The dependencies show what would remain if a retry fails again. A failed
+global check identifies the refusal and exits `1`. A successful preview
+exits `0` and execution makes its own proofs. `--keep-going` uses the
+[removal admission policy](state-reconciliation.md#keep-going-removal)
+and leaves the existing confirmation and token requirements in force. A
+partial run reports the remaining cleanup and the retry command. An
+operator who removes a target by hand can repeat destroy so its capability
+proves the removal.
+
 An invocation whose work durable state already proves settles before any of
 that: it presents no plan, asks for no confirmation, requires and refuses no
 authorization, and reports `done` with the blocks its completed operation

@@ -24,7 +24,8 @@ var (
 		Meaning: "the erase evidence does not prove every byte its method erases or the withdrawal of its custody", Remedy: "continue the same removal"}
 	stopMachineRunning = diagnostics.Stop{Code: "erase.machine-running", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
-		Meaning: "the machine is running, so the offline erase inserted no media into it and did not boot it", Remedy: "stop the machine, then repeat the destroy"}
+		LocalRemovalFailure: true,
+		Meaning:             "the machine is running, so the offline erase inserted no media into it and did not boot it", Remedy: "stop the machine, then repeat the destroy"}
 	stopTargetMismatch = diagnostics.Stop{Code: "erase.target-mismatch", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
 		Meaning: "the controller answers as another system, or the machine reports other hardware, than the apply proved, so the erase stopped before it acted", Remedy: "correct the controller or the hardware, then repeat the destroy"}

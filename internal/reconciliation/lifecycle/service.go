@@ -63,6 +63,7 @@ type Options struct {
 }
 
 type Service struct {
+	keepGoing  bool
 	startCheck func(View) error
 	// Only the installation phase following this invocation's completed preparation inherits admission.
 	completedPreparation string
@@ -131,7 +132,14 @@ func (s Service) Plan(ctx context.Context, request PlanRequest) (*PlanResult, er
 	if err != nil {
 		return nil, err
 	}
-	return s.relaxingFor(relaxingPlan, request.Relaxations).planWithin(ctx, request, nil)
+	s.keepGoing = request.KeepGoing && request.Verb == reconciliation.Destroy
+	result, err := s.relaxingFor(relaxingPlan, request.Relaxations).planWithin(ctx, request, nil)
+	if s.keepGoing && result != nil && err != nil {
+		result.Checks = append(result.Checks, PlanCheck{
+			ID: "destroy-admission", Status: "failed", Summary: "No cleanup would start under the current checks",
+		})
+	}
+	return result, err
 }
 
 func (s Service) planWithin(ctx context.Context, request PlanRequest, scope *reconciliation.PreparationScope) (*PlanResult, error) {
@@ -221,6 +229,11 @@ func (s Service) previewReadiness(ctx context.Context, view View, decided operat
 		result.Checks = append(result.Checks, PlanCheck{ID: "initial-power", Status: "passed", Summary: "Managed Machines are stopped or absent"})
 	}
 	if decided.verb == reconciliation.Destroy {
+		if s.keepGoing {
+			if err := survivorRefusal(decided.plan.Blocks, decided.phases.survivors); err != nil {
+				return err
+			}
+		}
 		result.Checks = append(result.Checks, PlanCheck{ID: "removal-evidence", Status: "deferred", Summary: "Removal proofs run against recorded ownership before effects"})
 	}
 	return nil
@@ -306,6 +319,11 @@ func (s Service) preview(ctx context.Context, decision decider, view View, previ
 		result.Receipt = Receipt{Operation: decided.operation.ID, Verb: "plan", State: "preview", Next: nextAction(decided.operation, decided.plan, decided.states)}
 	}
 	result.Context, result.Bound = view.Identity(), s.Concurrency()
+	if result.KeepGoing {
+		if err := previousRemovalFailures(ctx, s.store(view), decided.basis, result.Steps); err != nil {
+			return &result, decided, marked.basis, err
+		}
+	}
 	return &result, decided, marked.basis, nil
 }
 
@@ -427,4 +445,25 @@ func heldBehind(plan reconciliation.Plan, states map[string]reconciliation.Block
 
 func failure(code, message, remediation string) error {
 	return diagnostics.NewFailureWithRemediation(code, message, "", remediation)
+}
+
+func previousRemovalFailures(ctx context.Context, store OperationStore, from basis, steps []PlanStep) error {
+	if from.record.Verb != reconciliation.Destroy {
+		return nil
+	}
+	for index := range steps {
+		step := &steps[index]
+		if from.blocks[step.ID] != reconciliation.BlockFailed || from.attempts[step.ID] == 0 {
+			continue
+		}
+		attempt, err := store.Attempt(ctx, from.operation, step.ID, from.attempts[step.ID])
+		if err != nil {
+			return err
+		}
+		step.PreviousFailure = &BlockFailure{Message: "The previous attempt failed"}
+		if cause := attempt.Failure; cause != nil {
+			*step.PreviousFailure = BlockFailure{Code: cause.Code, Message: cause.Message, Remedy: cause.Remediation}
+		}
+	}
+	return nil
 }

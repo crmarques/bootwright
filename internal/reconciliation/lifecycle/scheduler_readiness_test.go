@@ -41,7 +41,7 @@ func TestTheSchedulerAdmitsWhatTheFrozenAdmissionAdmitsAsBlocksSettle(t *testing
 		c := Service{}.newScheduler(invocation{plan: plan}, states, reconciliation.Selection{}, removalPhases{}, removalPhases{})
 		for move := range 3 * len(plan.Blocks) {
 			wantKind, want := firstAdmission(plan, c.states, c.selection, c.observed, c.worked, c.running)
-			gotKind, got := admissionOver(plan, c.states, c.selection, c.observed, c.worked, c.running, c.startable)
+			gotKind, got := admissionOver(plan, c.states, c.selection, c.observed, c.worked, c.running, false, c.startable)
 			if gotKind != wantKind || !slices.Equal(got, want) {
 				t.Fatalf("round %d move %d: the scheduler admits %s %v where the frozen admission admits %s %v", round, move, gotKind, got, wantKind, want)
 			}
@@ -55,7 +55,7 @@ func BenchmarkSchedulerAdmissionOverAWidePlan(b *testing.B) {
 	plan := readinessPlan(rand.New(rand.NewPCG(1, 2)), 256)
 	c := Service{}.newScheduler(invocation{plan: plan}, map[string]reconciliation.BlockState{}, reconciliation.Selection{}, removalPhases{}, removalPhases{})
 	for b.Loop() {
-		admissionOver(plan, c.states, c.selection, c.observed, c.worked, c.running, c.startable)
+		admissionOver(plan, c.states, c.selection, c.observed, c.worked, c.running, false, c.startable)
 	}
 }
 

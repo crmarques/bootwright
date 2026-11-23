@@ -27,6 +27,7 @@ func (s Service) present(ctx context.Context, name string, decided operationPlan
 func (s Service) presentation(decided operationPlan) PlanResult {
 	result := planPreview(decided.plan, decided.states, decided.selection, s.Throttle())
 	result.Verb, result.Warnings = string(decided.verb), s.removalWarnings(decided.removed())
+	result.KeepGoing = s.keepGoing && decided.verb == reconciliation.Destroy
 	result.Continuation = !decided.fresh
 	result.AddsTo = decided.predecessor
 	if decided.verb == reconciliation.Destroy && len(decided.takes) > 1 {

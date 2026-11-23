@@ -116,6 +116,8 @@ func (p *lifecyclePresentation) rows(opts PresentationOptions) []string {
 func (d *display) lifecycleSteps(result lifecycle.PlanResult) {
 	d.custom(func(r *displayRenderer) {
 		previousStage := ""
+		keepGoing := result.KeepGoing && !cleanupPreviewBlocked(result)
+		blockedBy := retryDependents(result.Steps)
 		for index, planned := range result.Steps {
 			if planned.Stage != previousStage {
 				if index != 0 {
@@ -137,19 +139,30 @@ func (d *display) lifecycleSteps(result lifecycle.PlanResult) {
 				state = "pending"
 			}
 			detail := styleMuted(" · "+escapeDisplayLine(state), r.options)
-			if selected := selectionMarker(planned); selected != "" {
+			if keepGoing && state != "done" {
+				detail += styleMuted(" · "+cleanupPreviewAction(planned), r.options)
+			} else if selected := selectionMarker(planned); selected != "" {
 				detail += styleMuted(" · "+escapeDisplayLine(selected), r.options)
 			}
 			if len(planned.Consumes) != 0 {
 				detail += styleMuted(" · ", r.options) + presentationStyle(escapeDisplayLine(strings.Join(planned.Consumes, ", ")), stateStyleCode("warning"), r.options)
 			}
-			if r.options.Detail == "full" {
+			if result.KeepGoing || r.options.Detail == "full" {
 				if waiting := waitMarker(planned); waiting != "" {
 					detail += styleMuted(" · "+escapeDisplayLine(waiting), r.options)
 				}
 			}
 			action := lifecycleActionLabel(planned.Description, planned.Object, r.options)
 			r.styledParagraph(action+detail, fmt.Sprintf("    %s %d. ", marker, index+1), "plain")
+			if cause := planned.PreviousFailure; cause != nil {
+				r.paragraph("Last attempt failed. "+cause.Message, "      ", "muted")
+				if cause.Remedy != "" {
+					r.paragraph(cause.Remedy, "      ", "muted")
+				}
+				if keepGoing && len(blockedBy[index+1]) != 0 {
+					r.paragraph("If this retry fails, steps "+strings.Join(blockedBy[index+1], ", ")+" still wait.", "      ", "muted")
+				}
+			}
 			for _, impact := range planned.Impacts {
 				r.paragraph(impact, "      ", "muted")
 			}

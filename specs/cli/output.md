@@ -298,7 +298,7 @@ and their output goldens:
 
 | Command | Result fields |
 | --- | --- |
-| `apply`, `destroy`, `machine enroll` | `context`, `verb`, `steps`, optional `blocks`, optional `settled`, optional `recovered`, optional `next`, `receipt`, optional `checks`, optional `stages`, optional `clusters`, optional `machines`, optional `until`, optional `waves`, optional `widest`, optional `bound`, optional `startable`, optional `later`, optional `blocked`, optional `excluded`, optional `deferred`, optional `continuation`, optional `finalizes`, optional `addsTo`, optional `takesBack`, optional `anotherBuild`, optional `stops`, optional `stopsAfterOnline`, optional `authorizationSteps`, optional `authorizations` |
+| `apply`, `destroy`, `machine enroll` | optional `keepGoing`, optional `remaining`, optional `retiringWithHosts`, `context`, `verb`, `steps`, optional `blocks`, optional `settled`, optional `recovered`, optional `next`, `receipt`, optional `checks`, optional `stages`, optional `clusters`, optional `machines`, optional `until`, optional `waves`, optional `widest`, optional `bound`, optional `startable`, optional `later`, optional `blocked`, optional `excluded`, optional `deferred`, optional `continuation`, optional `finalizes`, optional `addsTo`, optional `takesBack`, optional `anotherBuild`, optional `stops`, optional `stopsAfterOnline`, optional `authorizationSteps`, optional `authorizations` |
 | `catalog add-ons info` | `package` |
 | `catalog add-ons list` | `addOns` |
 | `catalog media add`, `catalog media delete` | `name`, `outcome`, `size`, optional `sha256` |
@@ -319,7 +319,7 @@ and their output goldens:
 | `install` | optional `context`, optional `machine`, optional `route`, optional `dryRun`, `outcome`, `platform`, optional `checks`, optional `actions`, optional `requirements`, optional `files`, optional `preview`, optional `progress`, optional `receipt`, optional `next` |
 | `logs` | optional `context`, optional `operation`, optional `verb`, optional `state`, optional `events`, optional `source`, optional `path`, optional `bytes`, optional `truncated`, optional `output` |
 | `machine cp` | `context`, `source`, `machines` |
-| `machine discover` | optional `checks`, optional `context`, optional `verb`, optional `steps`, optional `stages`, optional `clusters`, optional `machines`, optional `until`, optional `waves`, optional `widest`, optional `bound`, optional `startable`, optional `later`, optional `blocked`, optional `excluded`, optional `deferred`, optional `continuation`, optional `settled`, optional `finalizes`, optional `addsTo`, optional `takesBack`, optional `anotherBuild`, optional `stops`, optional `stopsAfterOnline`, optional `authorizationSteps`, optional `authorizations`, optional `receipt`, optional `operation`, optional `inventories`, optional `next` |
+| `machine discover` | optional `keepGoing`, optional `checks`, optional `context`, optional `verb`, optional `steps`, optional `stages`, optional `clusters`, optional `machines`, optional `until`, optional `waves`, optional `widest`, optional `bound`, optional `startable`, optional `later`, optional `blocked`, optional `excluded`, optional `deferred`, optional `continuation`, optional `settled`, optional `finalizes`, optional `addsTo`, optional `takesBack`, optional `anotherBuild`, optional `stops`, optional `stopsAfterOnline`, optional `authorizationSteps`, optional `authorizations`, optional `receipt`, optional `operation`, optional `inventories`, optional `next` |
 | `machine info`, `machine list` | `context`, `machines`, `powerRead` |
 | `machine inventory` | `inventories` |
 | `machine media eject`, `machine restart`, `machine start`, `machine stop` | `context`, `verb`, `machines` |
@@ -372,6 +372,19 @@ plan order, which the human row adds as `, waiting for <block>, ...`. Each
 diagnostic a block's cause reports that names no
 object names the block's own, so the causes of several failed blocks pair with
 their rows.
+With `destroy --keep-going`, `keepGoing` identifies the policy in the
+preview and the registered result. A preview step's optional
+`previousFailure` uses the same shape as `failure` and comes from the
+removal being retried. Its effect still needs to be attempted. A
+`destroy-admission` check with status `failed` says no cleanup would start.
+In an executed result, `remaining` lists the IDs of unfinished blocks in
+frozen order. `retiringWithHosts` names steps in the current removal whose
+recorded retirement still relies on unfinished host cleanup. A failed or
+unproved block establishes unfinished cleanup and carries no inventory claim
+about physical presence. The human result shows `Remaining cleanup` before
+the retry command and receipt. Incomplete cleanup exits `1`, including a
+pause awaiting an operator action, and interruption exits `130`.
+
 For these results and `status`, `outcome` is the latest attempt or resolution
 outcome: `unknown` while unfinished, or the block state when never attempted.
 `stages` names the stages the plan holds; `until` is the `--until` add-on

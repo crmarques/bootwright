@@ -34,8 +34,9 @@ type Diagnostic struct {
 // Failure carries a refusal's diagnostics. Usage marks a refusal of how the
 // command was invoked, which the CLI reports as a usage failure.
 type Failure struct {
-	Diagnostics []Diagnostic
-	Usage       bool
+	Diagnostics         []Diagnostic
+	Usage               bool
+	LocalRemovalFailure bool
 }
 
 func (f *Failure) Error() string { return "failed with diagnostics" }

@@ -1673,7 +1673,7 @@ attempt, left `failed` is one the invocation has not yet retried (D146). Go
 owns ordering and lifecycle state and invokes capability ports under the
 [Go/Ansible boundary](architecture.md#go-and-ansible-responsibility-boundary).
 
-A failed attempt admits no further first attempt, although the selected failed
+By default a failed attempt admits no further first attempt, although the selected failed
 blocks the invocation has not yet retried are still retried, and the blocks
 already running are waited for rather than abandoned: each records the outcome it proved, and stopping one
 mid-effect would turn a provable outcome into an unproved one. The result names
@@ -1683,8 +1683,8 @@ environment. An attempt that ends `unknown` admits nothing further, first
 attempts and retries alike, and waits for what is in flight; the invocation
 never observes it, because its own attempt left it unproved. Cancellation is
 the same: it admits nothing further and waits for what is in flight, and it is
-never a pause. These three are every cause that stops admission short of a
-stage or operator-stop boundary.
+never a pause. See [keep-going removal](#keep-going-removal) for the opt-in
+destroy policy.
 
 Destroy is planned from the plan its apply froze, not from desired state and
 not from what current code would derive from it. Every block a removal carries
@@ -1986,6 +1986,18 @@ The removal reopens one Secret binding: its own if an
 the first binding of the root apply, never the head's. A rebind may name only
 Secrets that binding holds. Its completion releases the bindings of every
 apply of the lineage.
+
+## Keep-going removal
+
+With `destroy --keep-going`, a durably recorded failed attempt permits
+further admission only when its declared stop explicitly confines the
+failure to that removal target. A pending inverse starts only after its
+frozen prerequisites are done and all the existing phase gates, exclusive
+claims and throttles admit it. An unclassified or shared failure, an
+unstarted attempt, a required log or records fault, an unproved effect or
+cancellation still closes admission and drains in-flight work. The policy
+belongs to the invocation. All unfinished removals remain owned and only
+complete removal enters normal finalization.
 
 ## Selecting apply targets
 

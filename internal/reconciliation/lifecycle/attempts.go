@@ -757,6 +757,9 @@ func (s Service) finish(ctx context.Context, tx Transaction, store OperationStor
 	}
 	name := tx.Identity().Name
 	command := continuationCommand(name, current, plan, states)
+	if result.KeepGoing && command != "" {
+		command += " --keep-going"
+	}
 	if next != reconciliation.OperationDone && !selection.Empty() {
 		if next == reconciliation.OperationPaused {
 			command = contextCommand(name, "apply --dry-run")

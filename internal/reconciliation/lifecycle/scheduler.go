@@ -55,11 +55,13 @@ type scheduler struct {
 	// An unstarted attempt blocks further admission; its refusal may affect others.
 	unstarted map[string]bool
 	// held maps each exclusive resource in use to the block using it.
-	held      map[string]string
-	throttled map[string]int
-	throttle  int
-	causes    map[string]error
-	results   chan step
+	held          map[string]string
+	throttled     map[string]int
+	throttle      int
+	causes        map[string]error
+	keepGoing     bool
+	stopAdmission bool
+	results       chan step
 	// observeOnly admits resolutions and nothing else. A removal uses it to
 	// prove the outcome of the effects it is about to take back, which is
 	// read-only and may start no attempt of the operation it observes.
@@ -153,7 +155,8 @@ func (s Service) Throttle() int {
 func (s Service) newScheduler(work invocation, states map[string]reconciliation.BlockState, selection reconciliation.Selection, phases, removalPlanPhases removalPhases) *scheduler {
 	plan := work.plan
 	return &scheduler{
-		service: s, invocation: work, selection: selection, bound: s.Concurrency(),
+		keepGoing: s.keepGoing && work.operation.Verb == reconciliation.Destroy,
+		service:   s, invocation: work, selection: selection, bound: s.Concurrency(),
 		states: states, readiness: newReadiness(plan, states), running: map[string]bool{}, observed: map[string]bool{}, worked: map[string]bool{},
 		unstarted: map[string]bool{}, announced: map[string]int{},
 		held: map[string]string{}, throttled: map[string]int{}, throttle: s.Throttle(), causes: map[string]error{},
@@ -201,7 +204,7 @@ func (c *scheduler) converge(ctx context.Context) (bool, error) {
 // reached so far, and neither does an attempt that could not start; what is
 // already in flight is waited for either way.
 func (c *scheduler) admit(ctx context.Context) {
-	for len(c.running) < c.bound && !c.boundary.faulted() && len(c.unstarted) == 0 && !c.onlineBlocked {
+	for len(c.running) < c.bound && !c.boundary.faulted() && len(c.unstarted) == 0 && !c.onlineBlocked && !c.stopAdmission {
 		block, position, ok := c.next()
 		if !ok {
 			return
@@ -217,7 +220,7 @@ func (c *scheduler) admit(ctx context.Context) {
 // advance the longest selected unfinished chain, with frozen order breaking ties.
 // A worked pending block never starts twice: its earlier start was refused.
 func (c *scheduler) next() (reconciliation.Block, int, bool) {
-	kind, admitted := admissionOver(c.plan, c.states, c.selection, c.observed, c.worked, c.running, c.startable)
+	kind, admitted := admissionOver(c.plan, c.states, c.selection, c.observed, c.worked, c.running, c.keepGoing, c.startable)
 	switch {
 	case kind == StepResolve:
 		for _, index := range admitted {
@@ -269,10 +272,10 @@ func (c *scheduler) nextPreStop() (reconciliation.Block, int, bool) {
 // the stage preview all derive from it, so the preview marks exactly what the
 // next apply admits.
 func firstAdmission(plan reconciliation.Plan, states map[string]reconciliation.BlockState, selection reconciliation.Selection, observed, worked, running map[string]bool) (string, []int) {
-	return admissionOver(plan, states, selection, observed, worked, running, startableIn(plan, states, selection))
+	return admissionOver(plan, states, selection, observed, worked, running, false, startableIn(plan, states, selection))
 }
 
-func admissionOver(plan reconciliation.Plan, states map[string]reconciliation.BlockState, selection reconciliation.Selection, observed, worked, running map[string]bool, startable func(int, reconciliation.Block) bool) (string, []int) {
+func admissionOver(plan reconciliation.Plan, states map[string]reconciliation.BlockState, selection reconciliation.Selection, observed, worked, running map[string]bool, keepGoing bool, startable func(int, reconciliation.Block) bool) (string, []int) {
 	admitted := []int{}
 	if slices.ContainsFunc(plan.Blocks, func(block reconciliation.Block) bool { return unproved(states[block.ID]) }) {
 		for index, block := range plan.Blocks {
@@ -290,7 +293,7 @@ func admissionOver(plan reconciliation.Plan, states map[string]reconciliation.Bl
 			switch {
 			case states[block.ID] != reconciliation.BlockFailed, running[block.ID]:
 			case worked[block.ID]:
-				failedAgain = true
+				failedAgain = !keepGoing
 			case selection.Admits(block):
 				admitted = append(admitted, index)
 			}
@@ -421,6 +424,9 @@ func (c *scheduler) settle(finished step) {
 	c.readiness.moved(finished.block, c.states[finished.block], finished.state)
 	c.states[finished.block] = finished.state
 	c.warn(finished)
+	if c.keepGoing && c.worked[finished.block] && finished.state == reconciliation.BlockFailed && !localRemovalFailure(finished.err) {
+		c.stopAdmission = true
+	}
 	if finished.unstarted {
 		c.unstarted[finished.block] = true
 	}
@@ -530,4 +536,13 @@ func environmentFault(err error) (diagnostics.Stop, string, bool) {
 		return engineRecordsDevice, "a record or log write met a device error (" + errno.Error() + ")", true
 	}
 	return diagnostics.Stop{}, "", false
+}
+
+func localRemovalFailure(err error) bool {
+	failure, ok := err.(*diagnostics.Failure)
+	if !ok || failure.Usage || !failure.LocalRemovalFailure || len(failure.Diagnostics) != 1 {
+		return false
+	}
+	stop := failure.Diagnostics[0]
+	return stop.Certainty == diagnostics.CertaintyNone || stop.Certainty == diagnostics.CertaintyPossible
 }

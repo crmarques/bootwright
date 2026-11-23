@@ -506,8 +506,8 @@ func (j *lifecycleJudge) unprepared(err error) error {
 type completedRefusal interface{ WithDetail(detail string) error }
 
 func refusalDetail(named error, detail string) error {
-	if completed, ok := named.(completedRefusal); ok && detail != "" {
-		return keepSignals(named, completed.WithDetail(detail))
+	if completed, ok := named.(completedRefusal); ok {
+		return completed.WithDetail(detail)
 	}
 	found := diagnostics.Of(named)
 	if detail == "" || len(found) == 0 {
@@ -526,8 +526,9 @@ func refusalNative(named error, native *adapterprotocol.NativeError) error {
 	return keepSignals(named, &diagnostics.Failure{Diagnostics: found, Usage: diagnostics.IsUsage(named)})
 }
 
-func keepSignals(named, rewritten error) error {
-	if _, plain := named.(*diagnostics.Failure); plain {
+func keepSignals(named error, rewritten *diagnostics.Failure) error {
+	if original, plain := named.(*diagnostics.Failure); plain {
+		rewritten.LocalRemovalFailure = original.LocalRemovalFailure
 		return rewritten
 	}
 	return errors.Join(rewritten, named)

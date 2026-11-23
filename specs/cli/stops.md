@@ -17,6 +17,11 @@ attempt's outcome: `unproved` leaves it `unknown`, every other certainty
 `TestEveryLifecycleDiagnosticIsBuiltFromADeclaredStop` counts them in a ledger
 that only shrinks.
 
+A stop may also explicitly attest that a failed removal is confined to its
+target. [Removal admission](../state-reconciliation.md#keep-going-removal)
+uses that attestation after the failure is recorded. Other stop metadata
+cannot establish that independent work may continue.
+
 ## Stop vocabulary
 
 | Field | Values |

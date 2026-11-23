@@ -24,13 +24,15 @@ var (
 		Meaning: "the host firewall adapter ended without proving its postcondition", Remedy: "repeat the operation, which observes the firewall before anything else starts"}
 	firewallForeignService = diagnostics.Stop{Code: "firewall.foreign-service", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
-		Meaning: "the Machine holds a firewalld service of the same name this context did not write, so its firewall was left unchanged", Remedy: "remove the foreign firewalld service, then run the command again"}
+		LocalRemovalFailure: true,
+		Meaning:             "the Machine holds a firewalld service of the same name this context did not write, so its firewall was left unchanged", Remedy: "remove the foreign firewalld service, then run the command again"}
 	firewallNoInterface = diagnostics.Stop{Code: "firewall.no-interface", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
 		Meaning: "the Machine has no interface on a network a firewalld service admits traffic on, so its firewall was left unchanged", Remedy: "give the Machine the declared listener address or required network, then run the command again"}
 	firewallInactive = diagnostics.Stop{Code: "firewall.inactive", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
-		Meaning: "firewalld is not running on a Machine whose install profile enables it, so its firewall was left unchanged", Remedy: "start firewalld on the Machine, then run the command again"}
+		LocalRemovalFailure: true,
+		Meaning:             "firewalld is not running on a Machine whose install profile enables it, so its firewall was left unchanged", Remedy: "start firewalld on the Machine, then run the command again"}
 	firewallChangeRefused = diagnostics.Stop{Code: "firewall.change-refused", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyPossible,
 		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
 		Meaning: "firewalld refused a change on the Machine partway through its apply or removal", Remedy: "read the firewalld journal on the Machine, correct it, then run the command again"}

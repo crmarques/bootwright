@@ -66,21 +66,22 @@ const (
 )
 
 type Stop struct {
-	Code      string
-	Level     StopLevel
-	Certainty Certainty
-	Cause     Cause
-	Fault     Fault
-	Recovery  Recovery
-	Meaning   string
-	Remedy    string
+	Code                string
+	Level               StopLevel
+	Certainty           Certainty
+	Cause               Cause
+	Fault               Fault
+	Recovery            Recovery
+	Meaning             string
+	Remedy              string
+	LocalRemovalFailure bool
 }
 
 func (s Stop) Fail(message, remediation string) error {
 	if remediation == "" {
 		remediation = s.Remedy
 	}
-	return &Failure{Diagnostics: []Diagnostic{{Severity: "error", Code: s.Code, Message: message, Remediation: remediation, Cause: s.Cause, Recovery: s.Recovery, Certainty: s.Certainty}}}
+	return &Failure{LocalRemovalFailure: s.LocalRemovalFailure, Diagnostics: []Diagnostic{{Severity: "error", Code: s.Code, Message: message, Remediation: remediation, Cause: s.Cause, Recovery: s.Recovery, Certainty: s.Certainty}}}
 }
 
 func Unproved(err error) bool {

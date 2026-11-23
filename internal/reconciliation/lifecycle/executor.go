@@ -177,7 +177,7 @@ func (s Service) run(ctx context.Context, tx Transaction, decided operationPlan,
 	if err != nil {
 		return nil, err
 	}
-	result := &OperationResult{Context: tx.Identity(), Verb: string(operation.Verb), Steps: steps(plan, nil)}
+	result := &OperationResult{Context: tx.Identity(), Verb: string(operation.Verb), Steps: steps(plan, nil), KeepGoing: s.keepGoing}
 	// A log fault requests cancellation of the work in flight, never of the
 	// records that settle it, which are written under the recording boundary.
 	work, cancel := context.WithCancel(ctx)
@@ -229,6 +229,9 @@ func (s Service) run(ctx context.Context, tx Transaction, decided operationPlan,
 	}
 	logging.close(ctx, log)
 	final, terminal := s.finish(recordingContext(ctx), tx, store, operation, plan, states, decided.selection, boundary, logging.faulted(), result)
+	if result.KeepGoing && len(result.Blocks) != 0 && result.Receipt.State != string(reconciliation.OperationDone) {
+		result.RetiringWithHosts = pendingRetirements(plan, decided.phases, states)
+	}
 	err = withCause(logging.err(), withCause(cause, terminal))
 	if refusal != nil {
 		err = beside(refusal, err)

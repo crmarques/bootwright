@@ -11,6 +11,7 @@ import (
 type PlanRequest struct {
 	Verb        reconciliation.Verb
 	Readiness   bool
+	KeepGoing   bool
 	Parallelism int
 	ContextName string
 	Stages      []string
@@ -101,6 +102,7 @@ type ApplyRequest struct {
 }
 
 type DestroyRequest struct {
+	KeepGoing bool
 	// Parallelism overrides the running-block bound for this invocation; zero uses the service default.
 	Parallelism      int
 	ContextName      string
@@ -140,7 +142,8 @@ type PlanStep struct {
 	// After names the steps this one waits for, by their place in the plan, so
 	// an operator reads what orders the work from the list itself. A step that
 	// waits for nothing names none.
-	After []int
+	After           []int
+	PreviousFailure *BlockFailure
 	// Wave is the earliest round this step can start in, counted from one.
 	Wave int
 	// Consumes names the authorizations this step's consequence needs, which
@@ -171,14 +174,15 @@ type PlanCheck struct{ ID, Status, Summary, Remedy string }
 // PlanResult previews the next legal operation or the exact continuation point
 // of an incomplete one. It allocates no identity and creates no log.
 type PlanResult struct {
-	Checks   []PlanCheck
-	Context  ContextIdentity
-	Verb     string
-	Steps    []PlanStep
-	Stages   []string
-	Clusters []string
-	Machines []string
-	Until    string
+	KeepGoing bool
+	Checks    []PlanCheck
+	Context   ContextIdentity
+	Verb      string
+	Steps     []PlanStep
+	Stages    []string
+	Clusters  []string
+	Machines  []string
+	Until     string
 	// Waves is how many rounds the plan's own shape needs, and Widest is how
 	// many steps of the fullest one its claims and throttles start together:
 	// how much of the work the plan lets run at once, which an operator reads
@@ -266,11 +270,13 @@ type BlockFailure struct {
 }
 
 type OperationResult struct {
-	Context ContextIdentity
-	Verb    string
-	Steps   []PlanStep
-	Blocks  []BlockResult
-	Logs    []string
+	KeepGoing         bool
+	RetiringWithHosts []string
+	Context           ContextIdentity
+	Verb              string
+	Steps             []PlanStep
+	Blocks            []BlockResult
+	Logs              []string
 	// LogLocation is where this operation's logs are on the host, for an
 	// operator to open. It is human presentation only and is absent from every
 	// structured result, which keeps naming paths relative to the state root.

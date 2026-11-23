@@ -164,6 +164,9 @@ func writeLifecycleSteps(text *display, result lifecycle.PlanResult) {
 			}
 		}
 	}
+	if result.KeepGoing {
+		writeCleanupPreview(text, result)
+	}
 	if len(result.Steps) == 0 {
 		text.section("Plan")
 		text.lines([]string{"no blocks"})
@@ -378,7 +381,9 @@ func writeLifecycleOperationAs(out io.Writer, result *lifecycle.OperationResult,
 		text.section("")
 		text.lines([]string{settledNote(result.Verb, result.Recovered)})
 	}
-	if len(result.Blocks) != 0 {
+	if result.KeepGoing && result.Receipt.State != "done" && len(result.Blocks) != 0 {
+		writeRemainingCleanup(&text, result)
+	} else if len(result.Blocks) != 0 {
 		text.section("Result")
 		text.lifecycleOutcomes(result.Blocks)
 	}
