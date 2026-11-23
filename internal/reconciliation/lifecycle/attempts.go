@@ -845,7 +845,7 @@ func blockResults(plan reconciliation.Plan, states map[string]reconciliation.Blo
 	return out
 }
 
-func waitsFor(blocks []BlockResult, plan reconciliation.Plan, verb reconciliation.Verb) {
+func waitsFor(blocks []BlockResult, plan reconciliation.Plan) {
 	state := map[string]string{}
 	for _, block := range blocks {
 		state[block.ID] = block.State
@@ -854,17 +854,10 @@ func waitsFor(blocks []BlockResult, plan reconciliation.Plan, verb reconciliatio
 		if blocks[index].State != string(reconciliation.BlockPending) {
 			continue
 		}
+		block, _ := plan.Block(blocks[index].ID)
 		for _, other := range plan.Blocks {
-			first := other.ID
-			if verb == reconciliation.Destroy {
-				if !slices.Contains(other.Dependencies, blocks[index].ID) {
-					continue
-				}
-			} else if block, _ := plan.Block(blocks[index].ID); !slices.Contains(block.Dependencies, first) {
-				continue
-			}
-			if waited := state[first]; waited != "" && waited != string(reconciliation.BlockDone) {
-				blocks[index].WaitsFor = append(blocks[index].WaitsFor, first)
+			if slices.Contains(block.Dependencies, other.ID) && state[other.ID] != string(reconciliation.BlockDone) {
+				blocks[index].WaitsFor = append(blocks[index].WaitsFor, other.ID)
 			}
 		}
 	}
@@ -1008,7 +1001,7 @@ func adapterWarning(plan reconciliation.Plan, block reconciliation.Block, warnin
 
 func (s Service) recordedBlockResults(ctx context.Context, store OperationStore, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, command string) ([]BlockResult, error) {
 	blocks := blockResults(plan, states)
-	waitsFor(blocks, plan, operation.Verb)
+	waitsFor(blocks, plan)
 	for i := range blocks {
 		record, err := store.Block(ctx, operation.ID, blocks[i].ID)
 		if err != nil {
