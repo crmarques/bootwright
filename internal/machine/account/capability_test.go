@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
-	"crypto/sha256"
 	"errors"
-	"fmt"
 	"io"
+	"os"
+	"os/exec"
 	"slices"
 	"strings"
 	"testing"
@@ -72,6 +72,10 @@ func (f *sshFixture) Run(ctx context.Context, session machine.Session, in io.Rea
 		request.input = string(input)
 	}
 	f.received = append(f.received, request)
+	if line, reported := strings.CutPrefix(result, "report "); reported {
+		_, err := io.WriteString(out, line+"\n")
+		return 3, err
+	}
 	switch result {
 	case "refuse":
 		return 1, nil
@@ -79,6 +83,8 @@ func (f *sshFixture) Run(ctx context.Context, session machine.Session, in io.Rea
 		return 255, nil
 	case "timed-out":
 		return 124, nil
+	case "missing-program":
+		return 127, nil
 	case "warned-refuse", "warned-timeout":
 		_, _ = io.WriteString(stderr, "sudo: unable to resolve host fixture: Name or service not known\n")
 		if result == "warned-timeout" {
@@ -254,7 +260,7 @@ func TestEnrollmentExplainsRemoteSudoTTYRefusal(t *testing.T) {
 }
 
 func TestEnrollmentWithdrawalNeedsAnIndependentPositiveProof(t *testing.T) {
-	capability, execution, ssh, _ := enrollmentFixture(t, "refuse", "lookup unavailable", "absent")
+	capability, execution, ssh, _ := enrollmentFixture(t, "refuse", "absent")
 	ctx, release := BeginInvocation(context.Background())
 	defer release()
 	observation, err := capability.ObserveRemoval(ctx, execution)
@@ -262,7 +268,7 @@ func TestEnrollmentWithdrawalNeedsAnIndependentPositiveProof(t *testing.T) {
 		t.Fatalf("failed connection observation=%+v err=%v", observation, err)
 	}
 	observation, err = capability.ObserveRemoval(ctx, execution)
-	if err != nil || observation.Effect != reconciliation.EffectCompleted || ssh.received[2].user != "operator" {
+	if err != nil || observation.Effect != reconciliation.EffectCompleted || ssh.received[1].user != "operator" {
 		t.Fatalf("positive observation=%+v err=%v", observation, err)
 	}
 }
@@ -332,10 +338,11 @@ func TestBootstrapRefusalsNameTheirCause(t *testing.T) {
 		"not-listed":        "does not authorize operator to run the enrollment as root",
 		"password-required": "remote sudo requires a password for operator",
 		"sudo-failed":       "remote sudo reported an error for operator",
-		"warned-refuse":     "refused the enrollment that operator ran through sudo, because of existing host state for bootwright",
+		"warned-refuse":     "remote sudo or the enrollment program failed for operator without reporting a reason",
 		"warned-timeout":    "did not finish the remote command for operator",
 		"timed-out":         "did not finish the remote command for operator",
-		"refuse":            "refused the enrollment that operator ran through sudo, because of existing host state for bootwright",
+		"missing-program":   "could not start the enrollment program for operator",
+		"refuse":            "remote sudo or the enrollment program failed for operator without reporting a reason",
 	} {
 		for _, responses := range [][]string{{result}, {"tty-refused", result}} {
 			t.Run(strings.Join(responses, " then "), func(t *testing.T) {
@@ -353,37 +360,83 @@ func TestBootstrapRefusalsNameTheirCause(t *testing.T) {
 	}
 }
 
-func TestARefusedEnrollmentNamesTheAccountItsLoginReadsWithoutSudo(t *testing.T) {
-	_, execution, _, _ := enrollmentFixture(t)
-	owner := fmt.Sprintf("bootwright-%x", sha256.Sum256([]byte(execution.ApplyOperation+"\x00"+execution.Block.RequestDigest)))
-	other := "bootwright-" + strings.Repeat("b", 64)
-	for entry, want := range map[string]string{
-		"bootwright:x:1001:1001:" + other + ":/home/bootwright-bbbbbbbbbbbbbbbb:/bin/bash": "already has the account bootwright, which another Bootwright operation created",
-		"bootwright:x:1001:1001:Ceph orchestration:/home/bootwright:/bin/bash":             "already has an account named bootwright that Bootwright did not create",
-		"absent": "has no account named bootwright, but refused the enrollment that operator ran through sudo",
-		"bootwright:x:1001:1001:" + owner + ":/home/bootwright-" + owner[len(owner)-16:] + ":/bin/bash": "refused the enrollment that operator ran through sudo, because of existing host state",
-		"bootwright:x:1001:1001:" + owner + ":/srv/moved-home:/bin/bash":                                "refused the enrollment that operator ran through sudo, because of existing host state",
-		"unexpected output": "refused the enrollment that operator ran through sudo, because of existing host state",
+func TestARefusedEnrollmentNamesTheStepAndReasonTheProgramReports(t *testing.T) {
+	const prefix = "bootwright-enrollment-refused "
+	const unnamed = "the enrollment program refused for operator without a reason this build recognizes"
+	for _, c := range []struct{ line, message, remedy string }{
+		{"account other-operation", "already has the account bootwright, which another Bootwright operation created", "remove the account with userdel"},
+		{"account not-bootwright", "already has an account named bootwright that Bootwright did not create", "declare another spec.access.lifecycle.user"},
+		{"account system-uid", "has the account bootwright with a UID below the host's UID_MIN, which Bootwright refuses as a system account", "remove the account with userdel, then repeat the operation"},
+		{"home EACCES", "could not create the home of bootwright under /home: permission denied (EACCES)", "not an automount"},
+		{"keys EOPNOTSUPP", "could not update the authorized key of bootwright: the file system does not support it (EOPNOTSUPP)", "root-squashing NFS export"},
+		{"lock EAGAIN", "could not lock /etc/sudoers.d: another process holds it (EAGAIN)", "another Bootwright enrollment on this host holds the lock"},
+		{"useradd exit-9", "could not create the account bootwright with useradd: useradd exited 9 (the user or group name bootwright is already in use)", "remove the leftover user or group bootwright"},
+		{"useradd timeout", "useradd did not finish within 15 seconds", "SSSD or LDAP"},
+		{"userdel signal-9", "userdel was ended by signal 9", "journalctl -t userdel"},
+		{"home EFOO", "could not create the home of bootwright under /home: a system error this build does not name", "not an automount"},
+		{"home ESTALE", "could not create the home of bootwright under /home: the file handle is stale, as on a remounted network file system (ESTALE)", "not an automount"},
+		{"home ELOOP", "could not create the home of bootwright under /home: a symbolic link stands where a directory or file is required (ELOOP)", "remove the symbolic link under /home/bootwright-*"},
+		{"rule ELOOP", "could not read /etc/sudoers.d/90-bootwright-bootwright: a symbolic link stands where a directory or file is required (ELOOP)", "remove the symbolic link /etc/sudoers.d/90-bootwright-bootwright"},
+		{"labels exit-1", "could not restore the SELinux labels of the home of bootwright with restorecon: restorecon exited 1", "resolve why restorecon fails"},
+		{"home internal", "the enrollment program failed unexpectedly while it tried to create the home of bootwright under /home", "report this as a Bootwright defect"},
+		{"request invalid", "rejected the enrollment request this build sent", "report this as a Bootwright defect"},
+		{"removal unproved", "could not prove the account bootwright, its home and its sudo rule removed", "inspect them on the host"},
+		{"removal other-operation", "could not prove the account bootwright, its home and its sudo rule removed", "inspect them on the host"},
+		{"archive unsafe", "has a /home or /home/.bootwright-retired that is not a root-owned directory closed to other users", "make both root-owned directories"},
+		{"frobnicate EACCES", unnamed, "report this as a Bootwright defect"},
+		{"home exit-9", unnamed, "report this as a Bootwright defect"},
+		{"home os-error", unnamed, "report this as a Bootwright defect"},
+		{"home " + strings.Repeat("a", 30), unnamed, "report this as a Bootwright defect"},
+		{"home EACCES\x1b[31m", unnamed, "report this as a Bootwright defect"},
+		{"\x1b]0;forged\x07" + prefix + "home EACCES", unnamed, "report this as a Bootwright defect"},
+		{"sudo: a password is required " + prefix + "home EACCES", unnamed, "report this as a Bootwright defect"},
 	} {
-		t.Run(entry, func(t *testing.T) {
-			capability, execution, ssh, _ := enrollmentFixture(t, "refuse", entry)
-			ctx, release := BeginInvocation(t.Context())
-			defer release()
-			probe := lifecycle.Probe{Context: execution.Context, ApplyOperation: execution.ApplyOperation, Block: execution.Block, Material: execution.Material}
-			stops := diagnostics.Of(capability.CheckApplyStart(ctx, probe))
-			if len(stops) != 1 || stops[0].Code != "machine.enrollment" || !strings.Contains(stops[0].Message, want) ||
-				strings.Contains(stops[0].Message+stops[0].Remediation, "Ceph orchestration") || strings.Contains(stops[0].Message, "/bin/bash") {
-				t.Fatalf("unexpected diagnostic: %v", stops)
-			}
-			if len(ssh.received) != 2 {
-				t.Fatalf("made %d connections, want the check and one lookup", len(ssh.received))
-			}
-			lookup := ssh.received[1]
-			if lookup.user != "operator" || lookup.terminal || slices.Contains(lookup.command, sudoExecutable) ||
-				!slices.Contains(lookup.command, accountLookup) || lookup.command[len(lookup.command)-1] != "bootwright" {
-				t.Fatalf("the account lookup ran as %+v", lookup)
-			}
-		})
+		line := c.line
+		if !strings.Contains(line, prefix) {
+			line = prefix + line
+		}
+		for _, responses := range [][]string{{"report " + line}, {"tty-refused", "report " + line}} {
+			t.Run(strings.Join(responses, " then "), func(t *testing.T) {
+				capability, execution, ssh, _ := enrollmentFixture(t, responses...)
+				ctx, release := BeginInvocation(t.Context())
+				defer release()
+				probe := lifecycle.Probe{Context: execution.Context, ApplyOperation: execution.ApplyOperation, Block: execution.Block, Material: execution.Material}
+				stops := diagnostics.Of(capability.CheckApplyStart(ctx, probe))
+				if len(stops) != 1 || stops[0].Code != "machine.enrollment" || !strings.Contains(stops[0].Message, c.message) ||
+					!strings.Contains(stops[0].Remediation, c.remedy) {
+					t.Fatalf("unexpected diagnostic: %v", stops)
+				}
+				text := stops[0].Message + stops[0].Remediation
+				for _, remote := range []string{"{", "}", "\x1b", "forged", "frobnicate", "aaaa", "os-error", "exit-", "password is required", "EFOO"} {
+					if strings.Contains(text, remote) {
+						t.Fatalf("the diagnostic carries %q: %q", remote, text)
+					}
+				}
+				if len(ssh.received) != len(responses) {
+					t.Fatalf("made %d connections, want %d", len(ssh.received), len(responses))
+				}
+			})
+		}
+	}
+}
+
+func TestTheEnrollmentProgramReportsItsRefusalWithoutRoot(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("the program does not refuse an invalid request as root")
+	}
+	if _, err := os.Stat("/usr/bin/python3"); err != nil {
+		t.Fatal(err)
+	}
+	command := exec.CommandContext(t.Context(), "/usr/bin/python3", "-I", "-c", worker,
+		"observe", "bootwright", "bootwright-"+strings.Repeat("a", 64), "ssh-ed25519 AAAA")
+	var stdout bytes.Buffer
+	command.Stdout = &stdout
+	var exit *exec.ExitError
+	if err := command.Run(); !errors.As(err, &exit) || exit.ExitCode() != 3 {
+		t.Fatalf("the program ended with %v, want exit status 3", err)
+	}
+	if stdout.String() != "bootwright-enrollment-refused request invalid\n" {
+		t.Fatalf("the program reported %q", stdout.String())
 	}
 }
 

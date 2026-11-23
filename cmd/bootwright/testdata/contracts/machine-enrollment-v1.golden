@@ -1,12 +1,12 @@
 implementation: machine-enrollment-v1
-content-digest: d119316289e0f878a6c12d58453176caf1b3ca59c08fa7ba9a2b5985eca7f568
+content-digest: ea17627e291cadecedb86c4aa2a2959d2d7fc3b69e1aa3a2ede43d50d40d0de1
 request-version: machine-enrollment-v1
 automation-formats: none
 mark-formats: none
 proof-ids: none
 fixed-places: none
 effect-pins:
-  6f645984f9dcf032c353faadadec75a7b76a66a6a068f965c11a7c376cc1e424
+  6771d2ecdd01726c6d12c9ad2bfec9591e15f09e50f67cac920913d37d1e70dc
 request-identity:
   placement.machine
   placement.user

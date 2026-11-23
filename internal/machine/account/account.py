@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ctypes
+import errno
 import fcntl
 import os
 import pwd
@@ -10,6 +11,13 @@ import re
 import stat
 import subprocess
 import sys
+
+step = "request"
+
+
+def at(name):
+    global step
+    step = name
 
 
 def execute(*args):
@@ -22,7 +30,7 @@ def directory(path, *, parent=None, owner=0):
     attributes = os.fstat(fd)
     if attributes.st_uid != owner or attributes.st_mode & 0o022:
         os.close(fd)
-        raise ValueError("unsafe directory")
+        raise ValueError("unsafe")
     return fd
 
 
@@ -34,10 +42,10 @@ def content(path, parent, owner):
     with os.fdopen(fd, "rb") as stream:
         attributes = os.fstat(stream.fileno())
         if not stat.S_ISREG(attributes.st_mode) or attributes.st_uid not in owner or attributes.st_nlink != 1 or attributes.st_mode & 0o022:
-            raise ValueError("unsafe file")
+            raise ValueError("unsafe")
         data = stream.read(32769)
         if len(data) > 32768:
-            raise ValueError("oversized file")
+            raise ValueError("oversized")
         return data
 
 
@@ -46,7 +54,7 @@ def publish(name, expected, parent, owner, group, mode):
     if actual == expected:
         return
     if actual is not None:
-        raise ValueError("foreign file")
+        raise ValueError("foreign")
     fd = os.open(".", os.O_WRONLY | os.O_TMPFILE | os.O_CLOEXEC, mode, dir_fd=parent)
     with os.fdopen(fd, "wb") as stream:
         os.fchown(stream.fileno(), owner, group)
@@ -62,13 +70,32 @@ def publish(name, expected, parent, owner, group, mode):
     os.fsync(parent)
 
 
+def regular_floor():
+    floor = 1000
+    try:
+        with open("/etc/login.defs", "rb") as stream:
+            for line in stream.read(1 << 20).splitlines():
+                fields = line.split()
+                if len(fields) >= 2 and fields[0] == b"UID_MIN" and fields[1].isdigit():
+                    floor = max(1, int(fields[1]))
+    except FileNotFoundError:
+        pass
+    return floor
+
+
 def login(user, mark, home):
     try:
         entry = pwd.getpwnam(user)
     except KeyError:
         return None
-    if entry.pw_uid < 1000 or entry.pw_dir != home or entry.pw_gecos != mark:
-        raise ValueError("foreign account")
+    if entry.pw_gecos != mark:
+        if re.fullmatch(r"bootwright-[0-9a-f]{64}", entry.pw_gecos):
+            raise ValueError("other-operation")
+        raise ValueError("not-bootwright")
+    if entry.pw_dir != home:
+        raise ValueError("home-differs")
+    if entry.pw_uid < regular_floor():
+        raise ValueError("system-uid")
     return entry
 
 
@@ -91,7 +118,7 @@ def owned_directory(mode, name, entry, parent=None):
             os.close(fd)
             return None
         if attributes.st_uid != entry.pw_uid or attributes.st_mode & 0o022:
-            raise ValueError("foreign home")
+            raise ValueError("foreign")
         return fd
     except BaseException:
         os.close(fd)
@@ -99,23 +126,27 @@ def owned_directory(mode, name, entry, parent=None):
 
 
 def grants(mode, entry, expected, home):
+    at("home")
     home_fd = owned_directory(mode, home, entry)
     if home_fd is None:
         return False
     try:
+        at("ssh-directory")
         ssh_fd = owned_directory(mode, ".ssh", entry, parent=home_fd)
         if ssh_fd is None:
             return False
         try:
+            at("keys")
             actual = content("authorized_keys", ssh_fd, (0, entry.pw_uid))
             if mode == "observe":
                 return actual is not None and set(expected.splitlines()) <= set(actual.splitlines())
             if actual is not None and actual != expected:
-                raise ValueError("foreign authorized keys")
+                raise ValueError("foreign")
             if mode == "apply":
                 if actual is None:
                     publish("authorized_keys", expected, ssh_fd, entry.pw_uid, entry.pw_gid, 0o600)
                 if os.path.isfile("/usr/sbin/restorecon"):
+                    at("labels")
                     execute("/usr/sbin/restorecon", home, home + "/.ssh", home + "/.ssh/authorized_keys")
             elif mode == "destroy" and actual is not None:
                 os.unlink("authorized_keys", dir_fd=ssh_fd)
@@ -137,10 +168,10 @@ def quarantine_home(home, entry):
             original = child_attributes(parent, name)
             if archived is not None:
                 if not owned_home(archived, entry) or original is not None:
-                    raise ValueError("conflicting archived home")
+                    raise ValueError("conflict")
             elif original is not None:
                 if not owned_home(original, entry):
-                    raise ValueError("foreign home")
+                    raise ValueError("foreign")
                 os.rename(name, name, src_dir_fd=parent, dst_dir_fd=archive)
             os.fsync(archive)
             os.fsync(parent)
@@ -158,7 +189,7 @@ def retired_directory(parent):
     archive = directory(".bootwright-retired", parent=parent)
     if os.fstat(archive).st_mode & 0o077:
         os.close(archive)
-        raise ValueError("archive is accessible to other users")
+        raise ValueError("exposed")
     return archive
 
 
@@ -177,31 +208,46 @@ def reconcile(mode, user, mark, keys, parent):
     home = "/home/" + user + "-" + mark[-16:]
     name = "90-bootwright-" + user
     rule = ("Defaults:%s !requiretty\n%s ALL=(root) NOPASSWD: ALL\n" % (user, user)).encode("ascii")
+    at("account")
     entry = login(user, mark, home)
+    at("rule")
     actual = content(name, parent, (0,))
-    if actual is not None and (actual != rule or entry is None):
-        raise ValueError("foreign sudo rule")
+    if actual is not None and actual != rule:
+        raise ValueError("foreign")
+    if actual is not None and entry is None:
+        raise ValueError("orphan")
     if entry is None:
         if mode != "apply":
+            at("keys")
             if os.path.lexists(home + "/.ssh/authorized_keys"):
-                raise ValueError("remaining authorized keys")
+                raise ValueError("exists")
             return "absent"
+        at("home")
         if os.path.lexists(home):
-            raise ValueError("foreign home")
+            raise ValueError("exists")
+        at("useradd")
         execute("/usr/sbin/useradd", "-M", "-U", "-p", "!", "-d", home, "-s", "/bin/bash", "-c", mark, "--", user)
+        at("account")
         entry = login(user, mark, home)
+        if entry is None:
+            raise ValueError("unlisted")
     ready = grants(mode, entry, keys, home)
     if mode == "apply":
+        at("rule-publish")
         publish(name, rule, parent, 0, 0, 0o440)
         return "ready"
     if mode == "destroy":
         if actual is not None:
+            at("rule")
             os.unlink(name, dir_fd=parent)
             os.fsync(parent)
+        at("archive")
         quarantine_home(home, entry)
+        at("userdel")
         execute("/usr/sbin/userdel", "--", user)
+        at("removal")
         if login(user, mark, home) is not None or os.path.lexists(home) or content(name, parent, (0,)) is not None:
-            raise ValueError("removal unproved")
+            raise ValueError("unproved")
         return "absent"
     return "ready" if ready and actual is not None else "partial"
 
@@ -212,18 +258,36 @@ def main(argv):
             or not re.fullmatch(r"[a-z_][a-z0-9_-]{0,31}", user)
             or not re.fullmatch(r"bootwright-[0-9a-f]{64}", mark) or not 1 <= len(keys) <= 2
             or any(not re.fullmatch(r"[a-zA-Z0-9@._-]+ [a-zA-Z0-9+/=]{1,16000}", key) for key in keys)):
-        raise ValueError("invalid account request")
+        raise ValueError("invalid")
+    at("home-root")
     os.close(directory("/home"))
+    at("rule-root")
     parent = directory("/etc/sudoers.d")
     try:
+        at("lock")
         fcntl.flock(parent, fcntl.LOCK_EX | fcntl.LOCK_NB)
         print(reconcile(mode, user, mark, ("\n".join(keys) + "\n").encode("ascii"), parent))
     finally:
         os.close(parent)
 
 
+def refusal(error):
+    if isinstance(error, subprocess.TimeoutExpired):
+        return "timeout"
+    if isinstance(error, subprocess.CalledProcessError):
+        if error.returncode < 0:
+            return "signal-%d" % -error.returncode
+        return "exit-%d" % error.returncode
+    if isinstance(error, OSError):
+        return errno.errorcode.get(error.errno, "os-error")
+    if isinstance(error, ValueError) and re.fullmatch(r"[a-z][a-z-]{0,23}", str(error)):
+        return str(error)
+    return "internal"
+
+
 if __name__ == "__main__":
     try:
         main(sys.argv[1:])
-    except (OSError, ValueError, subprocess.SubprocessError):
-        sys.exit(1)
+    except Exception as error:
+        print("bootwright-enrollment-refused %s %s" % (step, refusal(error)))
+        sys.exit(3)

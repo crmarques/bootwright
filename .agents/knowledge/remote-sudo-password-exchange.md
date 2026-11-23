@@ -39,6 +39,12 @@ launcher. Required behavior stays in
   ([controller teardown](../../e2e/controller-teardown.md)) the enrolled
   account stayed on the provided Machine, and the next operation's check
   refused it because its comment holds the earlier operation's ownership mark.
+- An apply on a host with no leftover state refused with "existing host
+  state". The program had created the account, then failed at a later step
+  that a silent exit 1 hid. The host's `UID_MIN` was 800, `useradd` assigned
+  UID 800, and the program refused its own new account as a system account
+  because it compared the UID with a fixed 1000, leaving the account behind
+  each run.
 
 ## Mechanism
 
@@ -62,8 +68,8 @@ told them apart:
   after the command started, and when an operator interrupt reaches it before
   the invocation's context is canceled, because it runs in the foreground
   process group. That status alone never proves a refused login.
-- sudo exits 1 for a refused policy, and so does the enrollment worker for a
-  host state it does not own. `<user> is not in the sudoers file.` follows the
+- sudo exits 1 for a refused policy, and the enrollment worker exits 3 for
+  every refusal. `<user> is not in the sudoers file.` follows the
   prompt on the same line without a terminal. `Sorry, user <user> is not
   allowed to execute '<command>' as root on <host>.` quotes the whole command,
   the worker source included, so it runs past 8 KiB and a 4 KiB tail of
@@ -72,9 +78,12 @@ told them apart:
   resolve host <name>` on a host whose name does not resolve and `sudo:
   setrlimit(RLIMIT_CORE)` in a container. A line that begins `sudo: ` is
   therefore no proof that the command did not run.
-- The worker prints nothing when it refuses. A new operation that meets the
-  managed account, home or `/etc/sudoers.d` rule of an earlier one refuses
-  this way: the owner mark is derived from the apply operation, so an
+- The worker once printed nothing when it refused, and its subprocesses sent
+  their output to `/dev/null`, so a refusal at any step looked like host
+  state. It now prints one line naming its step and a reason, and exits 3. A
+  new operation that meets the managed account, home or `/etc/sudoers.d` rule
+  of an earlier one refuses at its `account` step: the owner mark is derived
+  from the apply operation, so an
   operation that a manual controller reset abandoned leaves an account no
   later operation owns. The
   [manual reset](../../e2e/controller-teardown.md) removes controller state
@@ -108,9 +117,12 @@ told them apart:
   host-key pin is proved before every connection, not before the prompt.
 - The controller stage waits only for the controller Machine's own host
   firewall ([D282](../../specs/milestones/backlog.md#d282)).
-- After a refused privileged check, the bootstrap login runs `getent passwd`
-  without sudo and Bootwright classifies the entry by its comment against the
-  ownership mark, never showing it.
+- The worker reports the step it stopped at and a reason from a closed list
+  with exit status 3, and Bootwright accepts only a last line that matches a
+  strict grammar and known sets, so no remote byte reaches a message. An
+  unprivileged `getent passwd` lookup after a refusal told only some host
+  states apart and was removed; the worker tells another operation's account
+  from a foreign one itself.
 - A hidden-input prompt is written to the terminal it reads from when standard
   error is not a terminal (`promptStream` in
   [stdin_linux_amd64.go](../../cmd/bootwright/stdin_linux_amd64.go)). Under
@@ -129,11 +141,18 @@ Evidence: `TestARepeatedSudoPromptRefusesThePasswordOnce`,
 `TestApplyStartCollectsEveryPromptBeforeItsDescribedChecks`,
 `TestAHiddenPromptFollowsItsTerminalWhenTheErrorStreamIsRedirected`,
 `TestAFreshApplyAsksForEveryPasswordBeforeItReadsMachinePowerAndShowsEachReading`,
-`TestAControllerOnlyApplyLeavesAnEnrolledRemoteHostAlone` and
-`TestARefusedEnrollmentNamesTheAccountItsLoginReadsWithoutSudo`. The
+`TestAControllerOnlyApplyLeavesAnEnrolledRemoteHostAlone`,
+`TestARefusedEnrollmentNamesTheStepAndReasonTheProgramReports` and
+`TestTheEnrollmentProgramReportsItsRefusalWithoutRoot`. The
 rehearsal measured a wrong sudo password at 90.3 seconds before the change and
 1.7 seconds after it, and showed the prompt on the terminal with every output
-stream redirected; real sudo and sshd remain operator-run.
+stream redirected; real sudo and sshd remain operator-run. A later rehearsal
+with `UID_MIN 800` enrolled UID 800 and proved its root sudo, while the earlier
+program exited 1 silently on that account. `useradd` assigns the next UID above
+the highest local one in range, so a local account such as `systemd-coredump`
+at 999 inside that range moves the first UID to 1000. The same rehearsal named
+the `system-uid`, `other-operation`, `home-root unsafe`, `useradd exit-9` and
+`archive conflict` refusals, with and without a terminal.
 
 ## Rehearsal
 

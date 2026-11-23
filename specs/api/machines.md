@@ -666,8 +666,10 @@ proved.
 A remote Machine with `os.provided` opts into account creation by adding
 `access.lifecycle.bootstrap`. The lifecycle login is non-root with
 `privilege: sudo`. Its host pin matches `access.ssh.knownHostsRef`. The account
-and sudo rule are the context's owned effects. Session authentication comes
-from `access.ssh`.
+and sudo rule are the context's owned effects. The managed account is a
+regular account by the host's own definition: its UID is at least `UID_MIN`
+from `/etc/login.defs`, or 1000 where that file sets none. Session
+authentication comes from `access.ssh`.
 
 Bootstrap chooses one `auth` arm. `operatorIdentity: {}` uses the invoking
 operator's SSH key files. `askPassword: {}` prompts for the SSH password.
@@ -708,17 +710,21 @@ also receives the fleet public key when it opts into enrollment.
 A bootstrap refusal names its cause: an SSH session that did not open or ended
 early, a sudo password the host did not accept, a sudo policy that does not
 authorize the account, a password the declaration omits, another sudo error,
-or a privileged check that refused the host's existing account, home, SSH
-grant or sudo rule. Each names the bootstrap login that ran it and says when
-that login ran it through sudo. After a refused privileged check, the same
-login reads the account database without sudo and the refusal names what it
-finds: an account another Bootwright operation created that this context does
-not record, an account Bootwright did not create, or no account and only
-leftover files. A sudo warning that does not stop the command names no
-cause, and neither does an operator interrupt. Bootwright answers
-remote sudo once: when sudo asks again, it ends that session at once and
-reports the password as refused. A session that outlives its bound names what
-the host was waiting for. No refusal carries remote output.
+or a refusal by the enrollment program. Each session or sudo refusal names the
+bootstrap login that ran it. The enrollment program
+reports the step it stopped at and a reason from a closed list, with exit
+status 3: host state it does not own, either another Bootwright operation's or
+not Bootwright's, or the system error, exit status, timeout or signal of the
+file operation, `useradd`, `userdel` or `restorecon` behind that step. The
+refusal names that step and reason in fixed words, with the remedy that fits;
+a system error outside its list is named as one without its symbol. A program
+that cannot start names the tools it needs, and any other exit after sudo
+names sudo or the program as failed. A sudo warning
+that does not stop the command names no cause, and neither does an operator
+interrupt. Bootwright answers remote sudo once: when sudo asks again, it ends
+that session at once and reports the password as refused. A session that
+outlives its bound names what the host was waiting for. No refusal carries
+remote text; a report outside the closed list names no reason.
 
 For a new remote libvirt provider, enroll its provided host before an apply
 that allocates guests there so the capacity check has a verified login. An
