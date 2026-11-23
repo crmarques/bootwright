@@ -8,6 +8,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/fanout"
+	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -23,18 +24,8 @@ const (
 	resolutionCheckDescription = "prove the outcome of every effect this removal takes back"
 )
 
-// proveRemovable re-proves, under the exclusive lock, the operation this
-// removal replaces, and resolves every effect of it whose outcome is still
-// unproved. Both happen before the removal registers anything: an unproved
-// effect admits no removal, because nothing says what it owns, and a resolution
-// is read-only, so a removal that cannot prove one leaves the context exactly
-// as it found it. Resolving needs the replaced operation's logging boundary,
-// and a log fault recorded there blocks the removal until it is restored, so
-// either one restores that boundary first.
-func (s Service) proveRemovable(ctx context.Context, tx Transaction, store OperationStore, approved approved, decided operationPlan, material map[string]secrets.Material) error {
-	if decided.basis.operation == "" {
-		return nil
-	}
+// proveRemovable settles source evidence under the exclusive lock before any inverse starts.
+func (s Service) proveRemovable(ctx context.Context, tx Transaction, store OperationStore, approved approved, decided operationPlan, material map[string]secrets.Material) (map[string]error, error) {
 	name := tx.Identity().Name
 	replaced, frozen, states, err := s.verifyBasis(ctx, store, decided.basis, func(basis) error {
 		return enginePlanMoved.Fail(
@@ -42,11 +33,26 @@ func (s Service) proveRemovable(ctx context.Context, tx Transaction, store Opera
 			"repeat "+contextCommand(name, string(reconciliation.Destroy))+" to plan it from the operation the context holds now")
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	members, err := resolutionMembers(ctx, store, lineageMember{operation: replaced, plan: frozen, states: states})
-	if err != nil {
-		return err
+	if !decided.fresh {
+		if err := s.verifyContinuation(ctx, tx, replaced, decided.executionProof, &approved); err != nil {
+			return nil, err
+		}
+	}
+	var members []lineageMember
+	if decided.fresh {
+		members, err = resolutionMembers(ctx, store, lineageMember{operation: replaced, plan: frozen, states: states})
+		if err != nil {
+			return nil, err
+		}
+	}
+	if len(replaced.DeferredSourceProofs) != 0 {
+		member, err := readDeferredSource(ctx, store, replaced)
+		if err != nil {
+			return nil, err
+		}
+		members = append(members, member)
 	}
 	declared, faulted := 0, false
 	for _, member := range members {
@@ -54,41 +60,75 @@ func (s Service) proveRemovable(ctx context.Context, tx Transaction, store Opera
 		faulted = faulted || member.operation.LogFault
 	}
 	if declared == 0 && !faulted {
-		return nil
+		return nil, nil
 	}
-	observed := s
 	reporter := &resolutionProgress{report: s.report, declared: declared}
-	observed.options.Progress = reporter
-	var settled memberResolution
+	observer := s
+	observer.options.Progress = reporter
+	deferred := map[string]error{}
 	for _, member := range members {
-		if settled, err = observed.resolveMember(ctx, tx, store, approved, decided, material, member); err != nil {
-			return err
+		settled, err := observer.resolveMember(ctx, tx, store, approved, decided, material, member)
+		if err != nil {
+			return nil, err
 		}
-		if len(settled.left) != 0 || settled.fault != nil {
-			break
+		if settled.fault == nil && len(settled.left) == 0 {
+			continue
+		}
+		if s.keepGoing && ctx.Err() == nil && canDeferSourceProof(decided, member, settled) {
+			for _, id := range settled.left {
+				deferred[id] = settled.causes[id]
+			}
+			continue
+		}
+		s.reportResolution(ctx, ProgressEvent{Status: "unknown"})
+		var unresolved error
+		if len(settled.left) != 0 {
+			outcome := "no new cleanup started"
+			if decided.fresh {
+				outcome = "it registered nothing"
+			}
+			unresolved = destroyUnprovedEffects.Fail(
+				"this removal cannot prove what these effects left behind, so "+outcome+": "+strings.Join(settled.left, ", "),
+				"do what the diagnostic of each reports, then repeat "+contextCommand(name, string(reconciliation.Destroy), authorizingUnfixed(decided.plan)...))
+		}
+		return nil, withCause(settled.fault, withCause(settled.cause, unresolved))
+	}
+	if declared != 0 {
+		status := "ok"
+		if len(deferred) != 0 {
+			status = "unknown"
+		}
+		s.reportResolution(ctx, ProgressEvent{Status: status})
+	}
+	return deferred, nil
+}
+
+func canDeferSourceProof(decided operationPlan, member lineageMember, settled memberResolution) bool {
+	if settled.fault != nil || member.operation.Verb != reconciliation.Apply || member.operation.ID != decided.source ||
+		len(decided.phases.preStop) != 0 || len(decided.phases.effects) != 0 {
+		return false
+	}
+	for _, retired := range decided.phases.retired {
+		if retired {
+			return false
 		}
 	}
-	if declared == 0 {
-		return nil
+	for _, id := range settled.left {
+		if decided.basis.record.Verb == reconciliation.Destroy && decided.basis.blocks[id] != reconciliation.BlockPending {
+			return false
+		}
+		block, found := decided.plan.Block(id)
+		if !found || len(block.Dependencies) != 0 || !machine.IsEnrollmentSudoTTY(settled.causes[id]) {
+			return false
+		}
 	}
-	left, fault, cause := settled.left, settled.fault, settled.cause
-	if len(left) == 0 && fault == nil {
-		s.reportResolution(ctx, ProgressEvent{Status: "ok"})
-		return nil
-	}
-	s.reportResolution(ctx, ProgressEvent{Status: "unknown"})
-	var unresolved error
-	if len(left) != 0 {
-		unresolved = destroyUnprovedEffects.Fail(
-			"this removal cannot prove what these effects left behind, so it registered nothing: "+strings.Join(left, ", "),
-			"do what the diagnostic of each reports, then repeat "+contextCommand(name, string(reconciliation.Destroy), authorizingUnfixed(decided.plan)...))
-	}
-	return withCause(fault, withCause(cause, unresolved))
+	return true
 }
 
 type memberResolution struct {
 	left         []string
 	fault, cause error
+	causes       map[string]error
 }
 
 func (s Service) resolveMember(ctx context.Context, tx Transaction, store OperationStore, approved approved, decided operationPlan, material map[string]secrets.Material, member lineageMember) (memberResolution, error) {
@@ -131,14 +171,14 @@ func (s Service) resolveMember(ctx context.Context, tx Transaction, store Operat
 	if removal {
 		removalPlan = &decided.plan
 	}
-	cause := s.observe(work, invocation{tx: tx, store: store, approved: approved, boundary: logging, operation: replaced, plan: frozen, material: material}, phases, states, removalPlan, decided.phases)
+	causes, cause := s.observe(work, invocation{tx: tx, store: store, approved: approved, boundary: logging, operation: replaced, plan: frozen, material: material}, phases, states, removalPlan, decided.phases)
 	logging.close(ctx, log)
 	if err := s.recordFromBlocks(recordingContext(ctx), tx, store, replaced, frozen, states); err != nil {
 		return memberResolution{}, err
 	}
 	// A log fault refuses the removal even when every observation proved its
 	// block, because the removal's own effects would follow.
-	return memberResolution{left: unprovedBlocks(frozen, states), fault: logging.err(), cause: cause}, nil
+	return memberResolution{left: unprovedBlocks(frozen, states), fault: logging.err(), cause: cause, causes: causes}, nil
 }
 
 // recordFromBlocks publishes the state the replaced operation's blocks give it.
@@ -171,6 +211,10 @@ func (s Service) recordFromBlocks(ctx context.Context, tx Transaction, store Ope
 	}
 	current.State = next
 	if err := store.UpdateOperation(ctx, current); err != nil {
+		return err
+	}
+	index, err := store.Index(ctx)
+	if err != nil || index.Current != current.ID {
 		return err
 	}
 	return s.project(ctx, tx, current.Verb, next)

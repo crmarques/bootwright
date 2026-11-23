@@ -178,7 +178,7 @@ func TestEnrollmentExplainsRemoteSudoTTYRefusal(t *testing.T) {
 	check := func(err error, account string) {
 		t.Helper()
 		stops := diagnostics.Of(err)
-		if len(stops) != 1 || stops[0].Code != "machine.enrollment" ||
+		if len(stops) != 1 || stops[0].Code != "machine.enrollment-sudo-tty" ||
 			!strings.Contains(stops[0].Message, "requires a terminal for "+account) ||
 			strings.Contains(stops[0].Message, "fixture-private") ||
 			!strings.Contains(stops[0].Remediation, "without a terminal") {

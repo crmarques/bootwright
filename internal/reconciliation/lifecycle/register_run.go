@@ -73,7 +73,7 @@ func (s Service) register(ctx context.Context, tx Transaction, store OperationSt
 		InputDigest: inputDigest(tx), PlanDigest: digest, AutomationDigest: s.automation.CatalogDigest(),
 		Executable: operationstore.Executable{Version: s.options.Executable.Version, Commit: s.options.Executable.Commit},
 		Closure:    &closure, Contracts: contracts,
-		Source: decided.source, Predecessor: decided.predecessor, Bindings: bindings, State: reconciliation.OperationRunning,
+		Source: decided.source, DeferredSourceProofs: decided.deferredSourceProofs, Predecessor: decided.predecessor, Bindings: bindings, State: reconciliation.OperationRunning,
 		Created: stamp, Updated: stamp,
 	}
 	if decided.verb == reconciliation.Destroy && decided.basis.record.Verb == reconciliation.Destroy &&

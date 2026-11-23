@@ -2,6 +2,7 @@ package lifecycle
 
 import (
 	"context"
+	"maps"
 	"slices"
 
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -152,11 +153,9 @@ func (s Service) run(ctx context.Context, tx Transaction, decided operationPlan,
 		defer release()
 	}
 	store := s.store(tx)
-	// A removal proves every effect's outcome and quiescence before registering.
-	// Only Machines following opted-in online or pre-stop removal defer their stop
-	// proof until those effects are durably absent. Unrelated capabilities keep
-	// the all-or-nothing gate. The proofs, the registration and every attempt
-	// share one located runtime, whose closure it freezes.
+	// Admission proves quiescence and determines any pending source proofs.
+	// Proofs, registration, and attempts share the located runtime whose closure
+	// the operation freezes.
 	if decided.fresh && decided.verb == reconciliation.Destroy {
 		// The host is proved before anything is resolved, probed or
 		// registered, so no removal touches a context from a host its
@@ -169,10 +168,11 @@ func (s Service) run(ctx context.Context, tx Transaction, decided operationPlan,
 	if err != nil {
 		return nil, err
 	}
-	stopGroups, err := s.removalStart(ctx, tx, store, located, decided, material)
+	stopGroups, deferred, err := s.removalStart(ctx, tx, store, located, decided, material)
 	if err != nil {
 		return nil, err
 	}
+	decided.deferredSourceProofs = slices.Sorted(maps.Keys(deferred))
 	operation, plan, log, err := s.register(ctx, tx, store, decided, binding, material, record, located)
 	if err != nil {
 		return nil, err
@@ -204,7 +204,7 @@ func (s Service) run(ctx context.Context, tx Transaction, decided operationPlan,
 		return result, err
 	}
 	run := invocation{
-		stopGroups: stopGroups, tx: tx, store: store, approved: located, boundary: logging,
+		stopGroups: stopGroups, deferredSource: deferred, tx: tx, store: store, approved: located, boundary: logging,
 		operation: operation, plan: plan, material: material,
 	}
 	var refusal error
@@ -233,6 +233,9 @@ func (s Service) run(ctx context.Context, tx Transaction, decided operationPlan,
 		result.RetiringWithHosts = pendingRetirements(plan, decided.phases, states)
 	}
 	err = withCause(logging.err(), withCause(cause, terminal))
+	for _, block := range plan.Blocks {
+		err = withCause(deferred[block.ID], err)
+	}
 	if refusal != nil {
 		err = beside(refusal, err)
 	}

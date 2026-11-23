@@ -215,5 +215,24 @@ func (s Service) explainUnproved(ctx context.Context, store OperationStore, oper
 		}
 		blocks[index].Unresolved = &unresolved
 	}
+	if len(operation.DeferredSourceProofs) != 0 {
+		member, err := readDeferredSource(ctx, store, operation)
+		if err != nil {
+			return err
+		}
+		for index := range blocks {
+			block := &blocks[index]
+			if block.State != string(reconciliation.BlockPending) || !unproved(member.states[block.ID]) {
+				continue
+			}
+			original, _ := member.plan.Block(block.ID)
+			unresolved, err := s.unresolvedOf(ctx, store, member.operation, original, command)
+			if err != nil {
+				return err
+			}
+			block.Unresolved = &unresolved
+		}
+	}
+
 	return nil
 }

@@ -81,17 +81,18 @@ type scheduler struct {
 
 // invocation is what each attempt and resolution runs under; once boundary latches a fault, nothing further is admitted.
 type invocation struct {
-	effects       map[string]bool
-	selection     reconciliation.Selection
-	stopGroups    []*removalMachineGroup
-	clusterStarts *sync.Map
-	tx            Transaction
-	store         OperationStore
-	approved      approved
-	boundary      *logBoundary
-	operation     operationstore.Operation
-	plan          reconciliation.Plan
-	material      map[string]secrets.Material
+	deferredSource map[string]error
+	effects        map[string]bool
+	selection      reconciliation.Selection
+	stopGroups     []*removalMachineGroup
+	clusterStarts  *sync.Map
+	tx             Transaction
+	store          OperationStore
+	approved       approved
+	boundary       *logBoundary
+	operation      operationstore.Operation
+	plan           reconciliation.Plan
+	material       map[string]secrets.Material
 }
 
 // removalReading reads a block by the block of plan that takes it back, when plan is set.
@@ -127,12 +128,12 @@ func (s Service) converge(ctx context.Context, work invocation, phases removalPh
 // else, leaving the block states it was given holding what each one proved.
 // removal, when set, says a fresh removal resolves an apply's blocks, by the
 // check of the block of that plan that takes each one back.
-func (s Service) observe(ctx context.Context, work invocation, phases removalPhases, states map[string]reconciliation.BlockState, removal *reconciliation.Plan, removalPlanPhases removalPhases) error {
+func (s Service) observe(ctx context.Context, work invocation, phases removalPhases, states map[string]reconciliation.BlockState, removal *reconciliation.Plan, removalPlanPhases removalPhases) (map[string]error, error) {
 	run := s.newScheduler(work, states, reconciliation.Selection{}, phases, removalPlanPhases)
 	run.observeOnly = true
 	run.removal = removal
 	_, err := run.converge(ctx)
-	return err
+	return run.causes, err
 }
 
 // Concurrency reports how many of an operation's blocks this service runs at
@@ -224,8 +225,9 @@ func (c *scheduler) next() (reconciliation.Block, int, bool) {
 	switch {
 	case kind == StepResolve:
 		for _, index := range admitted {
-			if !c.running[c.plan.Blocks[index].ID] {
-				return c.plan.Blocks[index], index, true
+			block := c.plan.Blocks[index]
+			if !c.running[block.ID] && c.deferredSource[block.ID] == nil {
+				return block, index, true
 			}
 		}
 		return reconciliation.Block{}, 0, false
@@ -245,7 +247,7 @@ func (c *scheduler) next() (reconciliation.Block, int, bool) {
 		if c.phases.machines[block.ID] && !c.phases.complete(c.states) {
 			continue
 		}
-		if !c.running[block.ID] && !c.worked[block.ID] && c.free(block) {
+		if !c.running[block.ID] && !c.worked[block.ID] && c.deferredSource[block.ID] == nil && c.free(block) {
 			return block, index, true
 		}
 	}

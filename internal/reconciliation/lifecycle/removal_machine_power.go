@@ -113,31 +113,55 @@ func (s Service) stopRemovalGroup(ctx context.Context, run invocation, execution
 	return nil
 }
 
-func (s Service) removalStart(ctx context.Context, tx Transaction, store OperationStore, located approved, decided operationPlan, material map[string]secrets.Material) ([]*removalMachineGroup, error) {
+func (s Service) removalStart(ctx context.Context, tx Transaction, store OperationStore, located approved, decided operationPlan, material map[string]secrets.Material) ([]*removalMachineGroup, map[string]error, error) {
 	if decided.verb != reconciliation.Destroy {
-		return nil, nil
+		return nil, nil, nil
 	}
 	if err := survivorRefusal(decided.plan.Blocks, decided.phases.survivors); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	skip := maps.Clone(decided.phases.machines)
 	maps.Copy(skip, decided.phases.preStopMachines)
 	var groups []*removalMachineGroup
+
+	var deferred map[string]error
+	if decided.fresh || len(decided.basis.record.DeferredSourceProofs) != 0 {
+		var err error
+		deferred, err = s.proveRemovable(ctx, tx, store, located, decided, material)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
 	if decided.basis.record.Verb == reconciliation.Destroy {
-		if group := s.deferMachineStops(decided.plan, skip); group != nil {
+		stopExclusions := maps.Clone(skip)
+		maps.Copy(stopExclusions, heldRemovalBlocks(decided.plan, deferred))
+		if group := s.deferMachineStops(decided.plan, stopExclusions); group != nil {
 			groups = append(groups, group)
+			for _, block := range group.machines {
+				skip[block.ID] = true
+			}
 		}
 	}
 	if !decided.fresh {
-		return groups, nil
-	}
-	if err := s.proveRemovable(ctx, tx, store, located, decided, material); err != nil {
-		return nil, err
+		return groups, deferred, nil
 	}
 	chain, err := sourceLineage(ctx, store, decided.source)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	err = s.proveQuiescent(ctx, store, tx.Identity().Name, located, decided.plan, decided.phases, material, chain, skip)
-	return groups, err
+	return groups, deferred, err
+}
+
+func heldRemovalBlocks(plan reconciliation.Plan, deferred map[string]error) map[string]bool {
+	if len(deferred) == 0 {
+		return nil
+	}
+	held := map[string]bool{}
+	for _, block := range plan.Blocks {
+		if deferred[block.ID] != nil || slices.ContainsFunc(block.Dependencies, func(id string) bool { return held[id] }) {
+			held[block.ID] = true
+		}
+	}
+	return held
 }

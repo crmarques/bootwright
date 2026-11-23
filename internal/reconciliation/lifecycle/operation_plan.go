@@ -9,9 +9,10 @@ import (
 // transition is the legal step that has nothing left to do: the context
 // already holds the state its verb would leave it in.
 type operationPlan struct {
-	reserveAddition bool
-	fresh           bool
-	noop            bool
+	deferredSourceProofs []string
+	reserveAddition      bool
+	fresh                bool
+	noop                 bool
 	// finalize marks an operation whose block records prove it complete while
 	// its record, evidence, reservations or Secret bindings do not yet say so.
 	finalize bool
@@ -58,12 +59,8 @@ type operationPlan struct {
 // decision is taken under the shared lock and the effects run under the
 // exclusive one, so the transition re-proves this before it does anything.
 //
-// The apply a removal releases is not part of it. That apply is either the
-// basis operation itself, for a fresh removal over an apply, or one that
-// stopped being current when its first removal registered, and it is written
-// only by the restoration and the resolutions recorded in the transaction that
-// registers that removal, so nothing moves it between a later decision and its
-// effects.
+// Deferred original apply proofs are checked under the exclusive lock before
+// resuming the destroy that owns them.
 type basis struct {
 	operation string
 	state     reconciliation.OperationState

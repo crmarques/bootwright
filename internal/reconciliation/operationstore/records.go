@@ -152,25 +152,26 @@ var (
 // before it does work: the exact context, input, plan, implementations,
 // executable and execution closure that registered it.
 type Operation struct {
-	Version          int                           `json:"version"`
-	ID               string                        `json:"id"`
-	Verb             reconciliation.Verb           `json:"verb"`
-	Context          string                        `json:"context"`
-	Revision         string                        `json:"revision"`
-	InputDigest      string                        `json:"inputDigest"`
-	PlanDigest       string                        `json:"planDigest"`
-	AutomationDigest string                        `json:"automationDigest"`
-	Contracts        map[string]string             `json:"contracts"`
-	Executable       Executable                    `json:"executable"`
-	Closure          *Closure                      `json:"closure,omitempty"`
-	Source           string                        `json:"source"`
-	Replaces         string                        `json:"replaces,omitempty"`
-	Predecessor      string                        `json:"predecessor,omitempty"`
-	Bindings         []string                      `json:"bindings"`
-	State            reconciliation.OperationState `json:"state"`
-	LogFault         bool                          `json:"logFault"`
-	Created          string                        `json:"created"`
-	Updated          string                        `json:"updated"`
+	Version              int                           `json:"version"`
+	ID                   string                        `json:"id"`
+	Verb                 reconciliation.Verb           `json:"verb"`
+	Context              string                        `json:"context"`
+	Revision             string                        `json:"revision"`
+	InputDigest          string                        `json:"inputDigest"`
+	PlanDigest           string                        `json:"planDigest"`
+	AutomationDigest     string                        `json:"automationDigest"`
+	Contracts            map[string]string             `json:"contracts"`
+	Executable           Executable                    `json:"executable"`
+	Closure              *Closure                      `json:"closure,omitempty"`
+	Source               string                        `json:"source"`
+	Replaces             string                        `json:"replaces,omitempty"`
+	DeferredSourceProofs []string                      `json:"deferredSourceProofs,omitempty"`
+	Predecessor          string                        `json:"predecessor,omitempty"`
+	Bindings             []string                      `json:"bindings"`
+	State                reconciliation.OperationState `json:"state"`
+	LogFault             bool                          `json:"logFault"`
+	Created              string                        `json:"created"`
+	Updated              string                        `json:"updated"`
 }
 
 type BlockRecord struct {
@@ -343,17 +344,8 @@ func validateOperation(operation Operation) error {
 	if !reconciliation.ValidOperationState(operation.State) {
 		return recordError("lifecycle operation state is invalid")
 	}
-	if operation.Source != "" && !reconciliation.ValidOperationID(operation.Source) {
-		return recordError("lifecycle operation source is invalid")
-	}
-	if operation.Verb == reconciliation.Destroy && operation.Source == "" {
-		return recordError("a destroy operation requires the applied operation it removes")
-	}
-	if operation.Replaces != "" && (operation.Verb != reconciliation.Destroy || !reconciliation.ValidOperationID(operation.Replaces) || operation.Replaces == operation.ID || operation.Replaces == operation.Source) {
-		return recordError("lifecycle operation replacement is invalid")
-	}
-	if operation.Predecessor != "" && (operation.Verb != reconciliation.Apply || !reconciliation.ValidOperationID(operation.Predecessor) || operation.Predecessor == operation.ID) {
-		return recordError("lifecycle operation predecessor is invalid")
+	if err := validateOperationLinks(operation); err != nil {
+		return err
 	}
 	for _, value := range []string{operation.Context, operation.Revision, operation.InputDigest, operation.PlanDigest, operation.AutomationDigest} {
 		if value == "" || len(value) > maxIdentifier {
@@ -375,6 +367,38 @@ func validateOperation(operation Operation) error {
 		return recordError("lifecycle operation bindings must be unique")
 	}
 	return validateTimestamps(operation.Created, operation.Updated)
+}
+
+func validateOperationLinks(operation Operation) error {
+	if operation.Source != "" && !reconciliation.ValidOperationID(operation.Source) {
+		return recordError("lifecycle operation source is invalid")
+	}
+	if operation.Verb == reconciliation.Destroy && operation.Source == "" {
+		return recordError("a destroy operation requires the applied operation it removes")
+	}
+	if err := validateDeferredSourceProofs(operation.Verb, operation.DeferredSourceProofs); err != nil {
+		return err
+	}
+	if operation.Replaces != "" && (operation.Verb != reconciliation.Destroy || !reconciliation.ValidOperationID(operation.Replaces) || operation.Replaces == operation.ID || operation.Replaces == operation.Source) {
+		return recordError("lifecycle operation replacement is invalid")
+	}
+	if operation.Predecessor != "" && (operation.Verb != reconciliation.Apply || !reconciliation.ValidOperationID(operation.Predecessor) || operation.Predecessor == operation.ID) {
+		return recordError("lifecycle operation predecessor is invalid")
+	}
+	return nil
+}
+
+func validateDeferredSourceProofs(verb reconciliation.Verb, proofs []string) error {
+	if len(proofs) > 0 && (verb != reconciliation.Destroy || len(proofs) > reconciliation.MaxBlocks ||
+		!slices.IsSorted(proofs) || len(slices.Compact(slices.Clone(proofs))) != len(proofs)) {
+		return recordError("deferred destroy source proofs must form a bounded ordered set")
+	}
+	for _, block := range proofs {
+		if !reconciliation.ValidSegment(block) {
+			return recordError("deferred destroy source proof names an invalid block")
+		}
+	}
+	return nil
 }
 
 // validateRegistration holds a new operation to the record version this build

@@ -373,7 +373,9 @@ diagnostic a block's cause reports that names no
 object names the block's own, so the causes of several failed blocks pair with
 their rows.
 With `destroy --keep-going`, `keepGoing` identifies the policy in the
-preview and the registered result. A preview step's optional
+preview and the registered result. A step awaiting original enrollment evidence shows `resolve` in the
+preview's `selection` field. In a partial result and in status, that pending
+block carries the original proof's `unresolved` reason and remedy. A preview step's optional
 `previousFailure` uses the same shape as `failure` and comes from the
 removal being retried. Its effect still needs to be attempted. A
 `destroy-admission` check with status `failed` says no cleanup would start.

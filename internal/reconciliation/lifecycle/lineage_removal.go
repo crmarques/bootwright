@@ -136,3 +136,51 @@ func (l lineage) operationIDs() []string {
 	}
 	return ids
 }
+
+func readDeferredSource(ctx context.Context, store OperationStore, removal operationstore.Operation) (lineageMember, error) {
+	applied, err := store.ReadOperation(ctx, removal.Source)
+	if err != nil {
+		return lineageMember{}, err
+	}
+	if applied.Verb != reconciliation.Apply {
+		return lineageMember{}, notAnApply()
+	}
+	plan, err := store.ReadPlan(ctx, applied.ID)
+	if err != nil {
+		return lineageMember{}, err
+	}
+	states, err := store.BlockStates(ctx, applied.ID, plan)
+	if err != nil {
+		return lineageMember{}, err
+	}
+	damaged := func(id string) error {
+		return engineRecordsDamaged.Fail("the original apply has no consistent deferred proof for "+id, "restore the context store")
+	}
+	for _, block := range unprovedBlocks(plan, states) {
+		if _, held := slices.BinarySearch(removal.DeferredSourceProofs, block); !held {
+			return lineageMember{}, damaged(block)
+		}
+	}
+	for _, id := range removal.DeferredSourceProofs {
+		record, err := store.Block(ctx, applied.ID, id)
+		if err != nil {
+			return lineageMember{}, err
+		}
+		if _, found := states[id]; !found || record.Attempts == 0 || record.State == reconciliation.BlockPending {
+			return lineageMember{}, damaged(id)
+		}
+		if unproved(record.State) {
+			continue
+		}
+		proof, found, err := store.LastResolution(ctx, applied.ID, id, record.Attempts)
+		if err != nil {
+			return lineageMember{}, err
+		}
+		_, state, transitionErr := reconciliation.ResolutionTransition(proof.Effect)
+		if !found || proof.Phase != "observed" || transitionErr != nil || state != record.State ||
+			proof.Effect == reconciliation.EffectInconclusive || proof.Failure != nil {
+			return lineageMember{}, damaged(id)
+		}
+	}
+	return lineageMember{operation: applied, plan: plan, states: states}, nil
+}

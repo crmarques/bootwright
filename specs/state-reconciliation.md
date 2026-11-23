@@ -1217,7 +1217,7 @@ Before any effect, an apply refuses with `lifecycle.stage`:
 
 Destroy accepts no apply selection.
 
-Selection never weakens a safety rule. An unproved effect is resolved before anything else. When an explicit
+Selection never weakens a safety rule. When an explicit
 selection excludes controller and a controller block has an unproved effect,
 apply refuses and names the controller recovery invocation. For other
 blocks resolution is a read-only observation; several unproved effects may be observed together, and nothing
@@ -1928,10 +1928,9 @@ removal, each one a removal of the same `source` it replaces proved `done` and
 no nearer removal carries. An apply
 qualifies however it stopped, because the set it owns is the same at a
 boundary, at a failure, and at an interruption.
-An unproved effect is not an exception: the removal resolves it first, by its
-apply observation and otherwise by the removal's own check
-([resolution outcomes](#resolution-outcomes)), and refuses,
-registering nothing, when it cannot. A continuation of an apply still
+A removal resolves unproved effects first by the apply or removal
+[check](#resolution-outcomes). It refuses if a proof fails unless
+[keep-going removal](#keep-going-removal) permits deferral. A continuation of an apply still
 resolves by the apply's check. A running, paused or unknown removal is
 continued rather than replaced, because a removal that lost an outcome is
 resolved by repeating itself, except under a new
@@ -1998,6 +1997,18 @@ unstarted attempt, a required log or records fault, an unproved effect or
 cancellation still closes admission and drains in-flight work. The policy
 belongs to the invocation. All unfinished removals remain owned and only
 complete removal enters normal finalization.
+
+An incomplete source apply's enrollment can stay unproved when its
+read-only removal observation reports the remote sudo terminal requirement.
+With `--keep-going`, the enrollment and everything its inverse holds back
+remain pending while independent steps can run. This applies when the
+enrollment has no inverse prerequisites and the removal has no pre-stop,
+online, or host-retirement phase to preserve. The destroy record carries a
+source block IDs before its first effect. Every retry, including a
+plain destroy, requires readable positive proof before admitting those inverses.
+Native power-off groups exclude Machines held behind an unresolved proof.
+The source record retains the failed proof and its reason. A stopped or
+interrupted destroy keeps ownership and custody until all inverses finish.
 
 ## Selecting apply targets
 

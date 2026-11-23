@@ -52,7 +52,7 @@ func (r readiness) moved(id string, from, to reconciliation.BlockState) {
 
 func (c *scheduler) startable(index int, block reconciliation.Block) bool {
 	state := c.states[block.ID]
-	return c.readiness.waiting[index] == 0 && (state == "" || state == reconciliation.BlockPending) && c.selection.Admits(block)
+	return c.deferredSource[block.ID] == nil && c.readiness.waiting[index] == 0 && (state == "" || state == reconciliation.BlockPending) && c.selection.Admits(block)
 }
 
 func startableIn(plan reconciliation.Plan, states map[string]reconciliation.BlockState, selection reconciliation.Selection) func(int, reconciliation.Block) bool {

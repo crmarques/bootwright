@@ -17,7 +17,7 @@ func cleanupPreviewBlocked(plan lifecycle.PlanResult) bool {
 
 func cleanupPreviewAction(step lifecycle.PlanStep) string {
 	switch {
-	case step.State == "unknown" || step.State == "running":
+	case step.Selection == lifecycle.StepResolve || step.State == "unknown" || step.State == "running":
 		return "resolve before cleanup"
 	case step.PreviousFailure != nil || step.State == "failed":
 		return "will retry"
@@ -51,7 +51,7 @@ func writeCleanupPreview(text *display, plan lifecycle.PlanResult) {
 	if cleanupPreviewBlocked(plan) {
 		text.lines([]string{"No cleanup would start under the current checks."})
 	} else {
-		text.lines([]string{"Independent cleanup can continue after a recorded target-local failure. Steps that depend on a failed step wait for its cleanup."})
+		text.lines([]string{"Independent cleanup can continue after an eligible target failure or an enrollment proof blocked by a remote sudo terminal requirement. Dependent steps wait for proof and cleanup."})
 	}
 	for _, check := range plan.Checks {
 		switch check.ID {

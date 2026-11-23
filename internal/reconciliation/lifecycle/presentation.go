@@ -28,6 +28,9 @@ func (s Service) presentation(decided operationPlan) PlanResult {
 	result := planPreview(decided.plan, decided.states, decided.selection, s.Throttle())
 	result.Verb, result.Warnings = string(decided.verb), s.removalWarnings(decided.removed())
 	result.KeepGoing = s.keepGoing && decided.verb == reconciliation.Destroy
+	if result.KeepGoing && decided.basis.record.Verb == reconciliation.Apply {
+		markSourceProofs(result.Steps, decided.basis.blocks)
+	}
 	result.Continuation = !decided.fresh
 	result.AddsTo = decided.predecessor
 	if decided.verb == reconciliation.Destroy && len(decided.takes) > 1 {

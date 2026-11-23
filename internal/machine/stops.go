@@ -34,7 +34,21 @@ var enrollment = diagnostics.Stop{Code: "machine.enrollment", Level: diagnostics
 
 func EnrollmentRefused(reason, remedy string) error { return enrollment.Fail(reason, remedy) }
 
-var stops = []diagnostics.Stop{enrollment, machinePlacementNoAccess, machinePlacementAuthUnsupported, machinePlacementKeyMissing, machinePlacementHostKeyMissing,
+var enrollmentSudoTTY = diagnostics.Stop{Code: "machine.enrollment-sudo-tty", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyNone,
+	Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
+	Meaning: "remote sudo requires a terminal and did not start the enrollment command",
+	Remedy:  "have the host administrator authorize sudo without a terminal for this account, then repeat the operation"}
+
+func EnrollmentSudoTTYRefused(machine, user string) error {
+	return enrollmentSudoTTY.Fail("Machine/"+machine+" remote sudo requires a terminal for "+user+" (requiretty)", "")
+}
+
+func IsEnrollmentSudoTTY(err error) bool {
+	failure, ok := err.(*diagnostics.Failure)
+	return ok && !failure.Usage && len(failure.Diagnostics) == 1 && failure.Diagnostics[0].Code == enrollmentSudoTTY.Code
+}
+
+var stops = []diagnostics.Stop{enrollment, enrollmentSudoTTY, machinePlacementNoAccess, machinePlacementAuthUnsupported, machinePlacementKeyMissing, machinePlacementHostKeyMissing,
 	machinePlacementEscalates, machineInstalledAccessMismatch}
 
 func Stops() []diagnostics.Stop { return slices.Clone(stops) }

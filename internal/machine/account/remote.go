@@ -202,8 +202,7 @@ func (r Remote) run(ctx context.Context, session machine.Session, password []byt
 
 func remoteRefusal(err error, place machine.Placement, user, step, remedy string) error {
 	if errors.Is(err, errSudoTTYRequired) {
-		return machine.EnrollmentRefused("Machine/"+place.Machine+" remote sudo requires a terminal for "+user+" (requiretty)",
-			"have the host administrator authorize sudo without a terminal for this account, then repeat the operation")
+		return machine.EnrollmentSudoTTYRefused(place.Machine, user)
 	}
 	return refused(place, step, remedy)
 }

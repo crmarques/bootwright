@@ -320,7 +320,11 @@ func (s Service) preview(ctx context.Context, decision decider, view View, previ
 	}
 	result.Context, result.Bound = view.Identity(), s.Concurrency()
 	if result.KeepGoing {
-		if err := previousRemovalFailures(ctx, s.store(view), decided.basis, result.Steps); err != nil {
+		store := s.store(view)
+		if err := previousRemovalFailures(ctx, store, decided.basis, result.Steps); err != nil {
+			return &result, decided, marked.basis, err
+		}
+		if err := sourceProofPreview(ctx, store, decided.basis, result.Steps); err != nil {
 			return &result, decided, marked.basis, err
 		}
 	}
@@ -466,4 +470,28 @@ func previousRemovalFailures(ctx context.Context, store OperationStore, from bas
 		}
 	}
 	return nil
+}
+
+func sourceProofPreview(ctx context.Context, store OperationStore, from basis, steps []PlanStep) error {
+	var states map[string]reconciliation.BlockState
+	switch {
+	case from.record.Verb == reconciliation.Apply:
+		states = from.blocks
+	case len(from.record.DeferredSourceProofs) != 0:
+		member, err := readDeferredSource(ctx, store, from.record)
+		if err != nil {
+			return err
+		}
+		states = member.states
+	}
+	markSourceProofs(steps, states)
+	return nil
+}
+
+func markSourceProofs(steps []PlanStep, states map[string]reconciliation.BlockState) {
+	for index := range steps {
+		if unproved(states[steps[index].ID]) {
+			steps[index].Selection = StepResolve
+		}
+	}
 }

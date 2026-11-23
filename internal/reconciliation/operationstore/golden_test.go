@@ -301,6 +301,7 @@ func TestOperationRecordsMatchTheirGoldens(t *testing.T) {
 	}
 	removal := testOperation(t, inverse)
 	removal.ID, removal.Source, removal.Bindings = "op-"+strings.Repeat("cd", 16), applied.ID, applied.Bindings
+	removal.DeferredSourceProofs = []string{"install-node-01"}
 	if err := store.Register(ctx, removal, inverse); err != nil {
 		t.Fatalf("registering the removal: %v", diagnostics.Of(err))
 	}
