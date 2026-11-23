@@ -176,7 +176,7 @@ def owned_home(attributes, entry):
 def reconcile(mode, user, mark, keys, parent):
     home = "/home/" + user + "-" + mark[-16:]
     name = "90-bootwright-" + user
-    rule = ("%s ALL=(root) NOPASSWD: ALL\n" % user).encode("ascii")
+    rule = ("Defaults:%s !requiretty\n%s ALL=(root) NOPASSWD: ALL\n" % (user, user)).encode("ascii")
     entry = login(user, mark, home)
     actual = content(name, parent, (0,))
     if actual is not None and (actual != rule or entry is None):

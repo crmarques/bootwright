@@ -694,9 +694,9 @@ and holds the host claim before creating the account. When bootstrap sudo
 requires a terminal, Bootwright proves a read-only check through a remote
 terminal before using one for account changes. It disables echo before sending
 a prompted or bound sudo password. The fresh managed login and its root sudo
-proof run without a remote terminal.
-The managed account requires the local grant Bootwright writes under
-`/etc/sudoers.d` to be effective in the host's sudo policy.
+proof run without a remote terminal. The owned grant under `/etc/sudoers.d`
+gives only the managed user passwordless root sudo and a `!requiretty`
+exception. The host's effective sudo policy must honor that grant.
 The managed login grants root-equivalent access. Its key
 pair is effect material. [Ceph's provided stretch tiebreaker](../ceph.md#stretch-topology)
 also receives the fleet public key when it opts into enrollment.
