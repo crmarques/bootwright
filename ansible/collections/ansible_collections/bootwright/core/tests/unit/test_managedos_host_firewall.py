@@ -807,6 +807,21 @@ def test_every_entry_point_validates_the_request_before_the_handoff_and_any_scra
     assert not holds(conditions, bootwright_os_firewall_material=wrong)
 
 
+@pytest.mark.parametrize("name", ["apply.yml", "observe.yml", "destroy.yml"])
+def test_every_entry_point_admits_a_provided_host_whose_only_grant_is_its_ssh_sources(name):
+    """Go freezes a direct request with no service and only SSH sources; it is no preparation."""
+    conditions = tasks(name)[0]["ansible.builtin.assert"]["that"]
+    request = {"version": "os-host-firewall-v1", "direct": True, "preparation": False, "address": "", "user": "", "fleetKeyRef": "",
+               "budgets": {"inspection": INSPECTION, "session": SESSION},
+               "identity": {"block": "os-firewall-vrt3068", "context": "lab", "object": "vrt3068"},
+               "placement": {"connection": "ssh", "machine": "vrt3068", "address": "192.0.2.5", "port": 22},
+               "services": [], "sshSources": ["192.0.2.0/24"]}
+    material = {"mark": MARK, "services": "[]"}
+    assert holds(conditions, bootwright_os_firewall_request=request, bootwright_os_firewall_material=material)
+    bare = dict(request, sshSources=[])
+    assert not holds(conditions, bootwright_os_firewall_request=bare, bootwright_os_firewall_material=material)
+
+
 def test_the_argument_specification_declares_the_same_request_for_every_entry_point():
     declared = yaml.safe_load((ROLE / "meta" / "argument_specs.yml").read_text())["argument_specs"]
     assert sorted(declared) == ["apply", "destroy", "observe"]

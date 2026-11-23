@@ -44,3 +44,10 @@ The next run failed in the grant block `os-firewall-<machine>` with
 firewall example declares no sources, so `roleRefusals` never saw the field;
 `TestTheHostFirewallRoleAdmitsARequestRestrictingSSHSources` now sends it. Until
 this fix no SSH source filter had run on a real host.
+With the argument fixed, the role's first assertion, `Validate the frozen host
+firewall request` (hidden by `no_log`), required `services | length > 0 or
+preparation`, while Go freezes a direct grant with no service and only SSH
+sources (`TestSSHSourcesPlanAFilterWithoutListenerGrants`). The assertion now
+also admits non-empty `sshSources`, as the module, worker and evidence already
+did; `test_every_entry_point_admits_a_provided_host_whose_only_grant_is_its_ssh_sources`
+evaluates it.

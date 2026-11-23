@@ -13,6 +13,7 @@
       - bootwright_os_firewall_request.services is sequence
       - bootwright_os_firewall_request.services is not string
       - bootwright_os_firewall_request.services | length > 0 or bootwright_os_firewall_request.preparation
+        or bootwright_os_firewall_request.sshSources | default([]) | length > 0
       - bootwright_os_firewall_material.mark is string
       - bootwright_os_firewall_request.direct or bootwright_os_firewall_material.fleetIdentity is string
       - bootwright_os_firewall_request.direct or bootwright_os_firewall_material.hostKey is string
