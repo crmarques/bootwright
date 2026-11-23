@@ -38,6 +38,10 @@ argument_specs:
             type: list
             elements: dict
             required: true
+          sshSources:
+            type: list
+            elements: str
+            required: false
           user:
             type: str
             required: true

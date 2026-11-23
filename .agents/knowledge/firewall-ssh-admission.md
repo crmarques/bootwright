@@ -32,3 +32,15 @@ configuration refuses. Evidence:
 `test_offline_ssh_shape_admits_a_stock_rhel_9_8_listing_whose_ssh_arrives_in_public`
 replays the host's listing; the local-start admission tests carry the same
 `nm-shared` block and failed before the change.
+
+
+## Argument specification without `sshSources`
+
+The next run failed in the grant block `os-firewall-<machine>` with
+`Validation of arguments failed: bootwright_os_firewall_request.sshSources`.
+`FirewallRequest` sends `sshSources` (omitted when empty) for a Machine with
+`spec.firewall.ssh.allowedSources`, and the role's
+`meta/argument_specs.yml` never declared it. The capability contract suite's
+firewall example declares no sources, so `roleRefusals` never saw the field;
+`TestTheHostFirewallRoleAdmitsARequestRestrictingSSHSources` now sends it. Until
+this fix no SSH source filter had run on a real host.

@@ -19,6 +19,7 @@ import (
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/machine/power"
 	"github.com/crmarques/bootwright/internal/managedos/diskdiscovery"
+	"github.com/crmarques/bootwright/internal/managedos/hostfirewall"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
@@ -326,6 +327,30 @@ func TestTheDiscoveryRolesAdmitTheRequestsThisBuildSends(t *testing.T) {
 			for _, problem := range roleRefusals(run) {
 				t.Errorf("%s, port %d: %s", operation, port, problem)
 			}
+		}
+	}
+}
+
+// The contract suite's firewall example declares no SSH sources, so a Machine
+// that restricts inbound SSH by source sends a field only its own run carries.
+func TestTheHostFirewallRoleAdmitsARequestRestrictingSSHSources(t *testing.T) {
+	t.Parallel()
+	request := hostfirewall.FirewallRequest{
+		Address: "192.0.2.7", Budgets: hostfirewall.FirewallBudgets{Inspection: 60, Session: 600}, FleetKeyRef: "fleet",
+		Identity:  hostfirewall.FirewallIdentity{Context: "lab", Object: "node", Block: "os-firewall-node"},
+		Placement: machine.Placement{Machine: "node", Address: "192.0.2.7", Port: 22, Connection: machine.ConnectionSSH},
+		Services:  []hostfirewall.FirewallService{}, SSHSources: []string{"192.0.2.0/24"},
+		User: "bootwright", Version: hostfirewall.FirewallImplementation,
+	}
+	wire, err := json.Marshal(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, operation := range []string{"apply", "observe", "destroy"} {
+		run := lifecycle.RunRequest{Implementation: hostfirewall.FirewallImplementation, Operation: operation,
+			Variable: "bootwright_os_firewall", Canonical: wire}
+		for _, problem := range roleRefusals(run) {
+			t.Errorf("%s: %s", operation, problem)
 		}
 	}
 }

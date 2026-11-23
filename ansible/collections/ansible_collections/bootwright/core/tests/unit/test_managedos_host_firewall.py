@@ -813,7 +813,9 @@ def test_the_argument_specification_declares_the_same_request_for_every_entry_po
     options = declared["apply"]["options"]
     assert all(declared[name]["options"] == options for name in declared)
     request = options["bootwright_os_firewall_request"]["options"]
-    assert sorted(request) == ["address", "budgets", "direct", "fleetKeyRef", "identity", "placement", "preparation", "services", "user", "version"]
+    assert sorted(request) == ["address", "budgets", "direct", "fleetKeyRef", "identity", "placement", "preparation", "services",
+                               "sshSources", "user", "version"]
+    assert request["sshSources"] == {"type": "list", "elements": "str", "required": False}
     assert request["budgets"]["required"] is True and request["budgets"]["options"] == {
         "inspection": {"type": "int", "required": True}, "session": {"type": "int", "required": True}}
     assert request["version"]["choices"] == ["os-host-firewall-v1"]
