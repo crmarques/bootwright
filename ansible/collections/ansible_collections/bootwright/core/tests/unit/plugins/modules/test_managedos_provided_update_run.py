@@ -6,7 +6,7 @@ import os
 
 from ansible_collections.bootwright.core.plugins.modules import managedos_provided_update as module
 
-INPUT = {"operation": "apply", "owner": "1" * 64, "request": "2" * 64, "release": "9.8"}
+INPUT = {"operation": "apply", "owner": "1" * 64, "request": "2" * 64, "release": "9.8", "policy": "toRelease"}
 
 
 def test_the_module_passes_the_frozen_request(monkeypatch, run_module):
@@ -19,7 +19,7 @@ def test_the_module_passes_the_frozen_request(monkeypatch, run_module):
     monkeypatch.setattr(module.update, "execute", update)
     result = run_module(module, INPUT)
 
-    assert seen == [("apply", INPUT["owner"], INPUT["request"], "9.8")]
+    assert seen == [("apply", INPUT["owner"], INPUT["request"], "9.8", "toRelease")]
     assert result["ok"] and result["changed"] and result["state"] == "upgraded"
     assert result["transaction"] == 42
 

@@ -63,7 +63,7 @@ func TestUpdateRemovalRetainsTheHostWithoutRunningAnAdapter(t *testing.T) {
 func updateExecution(t *testing.T) lifecycle.Execution {
 	t.Helper()
 	id := Identity{Block: blockID("witness"), Context: "example", Object: "witness"}
-	request := Request{Identity: id, Release: "9.8", Version: Version,
+	request := Request{Identity: id, Policy: PolicyWithinRelease, Release: "9.8", Version: Version,
 		Placement: machine.Placement{Connection: machine.ConnectionSSH, Port: 22, Address: "192.0.2.234", User: "root",
 			KnownHostsRef: "witness-host-key", PrivateKeyRef: "witness-admin", Machine: id.Object}}
 	data, err := reconciliation.Freeze(request, "provided OS update test")

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -48,7 +49,8 @@ func (Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecycl
 			return plan, err
 		}
 		id := Identity{Block: blockID(object.Name()), Context: input.Context.Name, Object: object.Name()}
-		request := Request{Identity: id, Placement: placement, Release: release, Version: Version}
+		policy := machine.ProvidedUpdatePolicy(object)
+		request := Request{Identity: id, Placement: placement, Policy: policy, Release: release, Version: Version}
 		data, err := reconciliation.Freeze(request, "provided OS update")
 		if err != nil {
 			return plan, err
@@ -58,6 +60,10 @@ func (Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecycl
 		}
 		description := "update " + id.Object + " within RHEL " + release
 		impacts := []string{"update packages and reboot if changed on " + id.Object}
+		if policy == PolicyToRelease {
+			description = "update " + id.Object + " to RHEL " + release
+			impacts = []string{"update packages to RHEL " + release + " and reboot if changed on " + id.Object}
+		}
 		if input.Verb == reconciliation.Destroy {
 			description, impacts = retentionDescription(id.Object), nil
 		}
@@ -163,14 +169,21 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 
 func refusals(request Request) map[string]error {
 	result := make(map[string]error)
+	major, _, _ := strings.Cut(request.Release, ".")
+	mismatch := "the installed system must already run RHEL " + request.Release +
+		"; set spec.os.provided.updates.policy to toRelease to update it from an earlier RHEL " + major + " minor release"
+	if request.Policy == PolicyToRelease {
+		mismatch = "the installed system must run RHEL " + request.Release + " or an earlier RHEL " + major + " minor release"
+	}
 	for reason, message := range map[string]string{
-		"update-release-mismatch": "the installed system must already run RHEL " + request.Release,
-		"update-release-drift":    "the resolved package transaction would leave RHEL " + request.Release,
-		"update-no-repository":    "no enabled update repository supplies packages",
-		"update-foreign":          "the update receipt could not be attributed to this operation",
-		"update-unavailable":      "the host could not resolve or download the release-scoped update",
-		"update-failed":           "the package update did not settle",
-		"update-reboot":           "the host did not prove that it rebooted after updating",
+		"update-release-mismatch":    mismatch,
+		"update-release-unavailable": "the enabled repositories offer no RHEL " + request.Release + " release package to update to",
+		"update-release-drift":       "the resolved package transaction would leave RHEL " + request.Release,
+		"update-no-repository":       "no enabled update repository supplies packages",
+		"update-foreign":             "the update receipt could not be attributed to this operation",
+		"update-unavailable":         "the host could not resolve or download the release-scoped update",
+		"update-failed":              "the package update did not settle",
+		"update-reboot":              "the host did not prove that it rebooted after updating",
 	} {
 		result[reason] = updateRefused.Fail(fmt.Sprintf("Machine/%s: %s", request.Identity.Object, message), "")
 	}

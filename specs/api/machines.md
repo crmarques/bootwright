@@ -376,13 +376,17 @@ Both fields are required when it is present.
 
 | Field | Type | Rule |
 | --- | --- | --- |
-| `policy` | string | `withinRelease`. Omit the `updates` record to leave OS updates to the operator. |
-| `release` | string | The exact installed RHEL major and minor, such as `"9.8"`. A mismatched host refuses before the package transaction. |
+| `policy` | string | `withinRelease` or `toRelease`. Omit the `updates` record to leave OS updates to the operator. |
+| `release` | string | The RHEL major and minor the host runs after the update, such as `"9.8"`. `withinRelease` requires the host to already run it. `toRelease` also admits an earlier minor of the same major, such as 9.6, and updates the host to the release. A host on another major or on a later minor refuses before the package transaction. |
 
 The Machine requires pinned lifecycle SSH. Provide a dedicated
 [access.lifecycle](#addresses-and-access) login or pinned root SSH. The host
 must reboot unattended and have enabled repositories that supply the declared
-release. The controller Machine keeps its own maintenance policy. See
+release. With `toRelease`, those repositories must offer that release's
+`redhat-release` package, so a sticky `subscription-manager release` or a
+content view that stops at the host's current minor refuses before anything
+changes. Moving to another major is not supported. The controller Machine keeps
+its own maintenance policy. See
 [provided OS updates](../managed-os.md#provided-os-updates) for effect and replay.
 
 ### Hardware and substrate

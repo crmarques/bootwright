@@ -4,6 +4,7 @@
     that:
       - bootwright_provided_update_request.version == 'provided-os-update-request-v1'
       - bootwright_provided_update_request.placement.connection == 'ssh'
+      - bootwright_provided_update_request.policy in ['withinRelease', 'toRelease']
       - bootwright_provided_update_request.release is string
       - bootwright_provided_update_request.release | length <= 64
       - bootwright_provided_update_request.release is match('^(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)$(?!\n)')
@@ -22,6 +23,7 @@
     request: '{{ bootwright_provided_update_digest }}'
     owner: '{{ bootwright_provided_update_material.owner }}'
     release: '{{ bootwright_provided_update_request.release }}'
+    policy: '{{ bootwright_provided_update_request.policy }}'
   register: managedos_provided_update_observed
   failed_when: false
   timeout: 90

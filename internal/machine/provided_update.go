@@ -8,6 +8,10 @@ func ProvidedUpdateRelease(object api.Object) string {
 	return object.Spec().Get("os", "provided", "updates", "release").Text()
 }
 
+func ProvidedUpdatePolicy(object api.Object) string {
+	return object.Spec().Get("os", "provided", "updates", "policy").Text()
+}
+
 func validateProvidedUpdate(object api.Object, catalog api.Catalog) []api.Issue {
 	if ProvidedUpdateRelease(object) == "" {
 		return nil

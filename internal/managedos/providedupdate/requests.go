@@ -19,9 +19,15 @@ type Identity struct {
 	Object  string `json:"object"`
 }
 
+const (
+	PolicyWithinRelease = "withinRelease"
+	PolicyToRelease     = "toRelease"
+)
+
 type Request struct {
 	Identity  Identity          `json:"identity"`
 	Placement machine.Placement `json:"placement"`
+	Policy    string            `json:"policy"`
 	Release   string            `json:"release"`
 	Version   string            `json:"version"`
 }
@@ -41,8 +47,9 @@ func decodeRequest(data []byte) (Request, error) {
 	}
 	identity, placement := request.Identity, request.Placement
 	if identity.Context == "" || identity.Object == "" || identity.Block != blockID(identity.Object) ||
-		!placement.PinnedSSH() || placement.Machine != identity.Object || !api.ValidLexical(api.LexicalOSRelease, request.Release) {
-		return Request{}, requestInvalid.Fail("the frozen provided OS update does not name a release and a pinned SSH target", "")
+		!placement.PinnedSSH() || placement.Machine != identity.Object || !api.ValidLexical(api.LexicalOSRelease, request.Release) ||
+		request.Policy != PolicyWithinRelease && request.Policy != PolicyToRelease {
+		return Request{}, requestInvalid.Fail("the frozen provided OS update does not name a policy, a release and a pinned SSH target", "")
 	}
 	return request, nil
 }

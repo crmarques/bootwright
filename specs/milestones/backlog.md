@@ -9522,3 +9522,24 @@ its host, so the removal completes. This reopens [D38](#d38), and the
 that names none keeps D38. Keep-going defers any refusal of the enrolled
 Machine's own access. This opens X664, [B1682](m1.md#b1682) and
 [B1683](m1.md#b1683), with integration into local main; no push.
+
+### D284
+
+**owner** (2026-11-23): the provided arbiter runs RHEL 9.6 while the chart
+declares 9.8. The owner asked whether Bootwright can declare that upgrade and,
+if not, to pick the best design, implement it, update the ceph-stretch chart
+and merge into local main. Chosen: a second policy value,
+`spec.os.provided.updates.policy: toRelease`, with `release` as the target. The
+host may start on an earlier minor of the same major. The resolved transaction
+must install that release's `redhat-release`, and the host must prove the
+release after the reboot. Rejected alternatives:
+
+- Widening `withinRelease`: its name would no longer describe it, and an
+  unnoticed old host would be upgraded without anyone asking.
+- A `from` list of admitted minors: it repeats live host state in desired
+  state and goes stale with every manual update.
+- A `machine upgrade` command: it is imperative, and day-2 operation is out of
+  scope.
+
+Moving to another major is still not supported. This opens X669 and
+[B1689](m1.md#b1689), with integration into local main; no push.

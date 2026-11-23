@@ -2065,18 +2065,25 @@ boot, registration, repository configuration and signing keys.
 
 ### Implementations
 
-`providedupdate.Capability` freezes the expected minor and pinned placement
-in an `os-update-<machine>` block in the machines stage. It waits for the
+`providedupdate.Capability` freezes the policy, the declared minor and the
+pinned placement in an `os-update-<machine>` block in the machines stage. It waits for the
 hardware claim and any managed lifecycle enrollment. Consumers of that claim
 wait for the update before setup on the host. Managed firewall blocks and the
 update are serialized on the same Machine. The firewall can run as a
 controller-stage prerequisite.
 
-The worker proves `ID=rhel` and an exact `VERSION_ID` on the target. It scopes
-DNF's release substitutions to the declared minor for its transaction. Fixed
-repository URLs still require operator-published content for that minor.
-Candidates that would change or remove the release identity or explicitly name
-a later minor refuse before the exact resolved DNF transaction runs. RPM
+The worker proves `ID=rhel` and the target's `VERSION_ID` before its
+transaction: `withinRelease` requires the declared minor, and `toRelease`
+also admits an earlier minor of the same major. It scopes DNF's release
+substitutions to the declared minor for its transaction. Fixed repository URLs
+still require operator-published content for that minor. Candidates that
+would change the release identity to any other version, remove it, or
+explicitly name a later minor refuse before the exact resolved DNF transaction
+runs. A host on an earlier minor moves only when that transaction installs the
+declared minor's `redhat-release`. Otherwise it refuses
+`update-release-unavailable`, naming the host's minor, before anything is
+downloaded. After the transaction, and again after the reboot, the host must
+run the declared minor under either policy. RPM
 release tags need not identify a minor, so repository selection remains part
 of the release boundary. The worker preserves DNF signature verification and
 leaves the host's persistent release settings and registration to its owner.
@@ -2095,7 +2102,8 @@ update receipt. The update block's removal has no inverse host effect.
 | Input or observation | Remedy |
 | --- | --- |
 | Controller Machine or missing pinned lifecycle SSH | Maintain the controller separately or supply pinned lifecycle SSH on a remote Machine. |
-| A different operating system or release | Supply a host already running the declared RHEL release. |
+| A different operating system, another major, a later minor, or under `withinRelease` an earlier minor | Supply a host on the declared RHEL release, or set `toRelease` to move a host from an earlier minor of the same major. |
+| `toRelease` from an earlier minor whose repositories offer no `redhat-release` of the declared minor | Make the host's repositories serve the declared minor, for example by setting or clearing its sticky `subscription-manager release` or by selecting a content view that holds it, and repeat apply. |
 | No enabled update source, unusable repository or release drift in the transaction | Enable reachable repositories serving the declared minor and repeat apply. |
 | An unresolved package transaction or unproved reboot | Check DNF history and unattended boot on the host, resolve the reported problem and repeat apply. |
 

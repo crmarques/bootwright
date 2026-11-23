@@ -24,7 +24,7 @@ def test_transaction_rejects_an_os_release_replacement_and_newer_tag():
     stable = package("redhat-release", "9.8")
     package_update = package("systemd", "1")
     exact = SimpleNamespace(install_set=[stable, package_update], remove_set=[stable])
-    assert update.check_release_transaction(exact, "9.8") == [stable, package_update]
+    assert update.check_release_transaction(exact, "9.8", "9.8") == [stable, package_update]
 
     for changed, detail in (
         (SimpleNamespace(install_set=[package("redhat-release", "9.9")], remove_set=[stable]), "9.9@baseos"),
@@ -33,9 +33,29 @@ def test_transaction_rejects_an_os_release_replacement_and_newer_tag():
         (SimpleNamespace(install_set=[package("systemd", "1", "1.el10_0")], remove_set=[]), "10.0@baseos"),
     ):
         with pytest.raises(Refused) as error:
-            update.check_release_transaction(changed, "9.8")
+            update.check_release_transaction(changed, "9.8", "9.8")
         assert error.value.reason == "update-release-drift"
         assert error.value.detail == detail
+
+
+def test_a_move_from_an_earlier_minor_requires_the_release_identity_in_the_transaction():
+    previous = package("redhat-release", "9.6", "1.el9")
+    target = package("redhat-release", "9.8", "1.el9")
+    systemd = package("systemd", "1")
+    moving = SimpleNamespace(install_set=[target, systemd], remove_set=[previous])
+    assert update.check_release_transaction(moving, "9.8", "9.6") == [target, systemd]
+
+    for stuck in (
+        SimpleNamespace(install_set=[package("systemd", "1", "1.el9_6")], remove_set=[]),
+        SimpleNamespace(install_set=[], remove_set=[]),
+    ):
+        with pytest.raises(Refused) as error:
+            update.check_release_transaction(stuck, "9.8", "9.6")
+        assert error.value.reason == "update-release-unavailable"
+        assert error.value.detail == "9.6"
+    with pytest.raises(Refused) as error:
+        update.check_release_transaction(SimpleNamespace(install_set=[package("redhat-release", "9.9")], remove_set=[previous]), "9.8", "9.6")
+    assert error.value.reason == "update-release-drift"
 
 
 def test_failed_or_incomplete_history_never_proves_a_transaction():
@@ -68,20 +88,20 @@ class Receipt:
 
 def test_updated_receipt_waits_for_reboot_and_recovers_without_running_again(monkeypatch):
     current = {"boot": BOOT, "history": (0, 0), "fips": "1"}
-    monkeypatch.setattr(update, "prove_release", lambda release: None)
+    monkeypatch.setattr(update, "prove_release", lambda release, **kwargs: release)
     monkeypatch.setattr(update, "boot_id", lambda: current["boot"])
     monkeypatch.setattr(update, "fips_mode", lambda: current["fips"])
     monkeypatch.setattr(update, "history", lambda owner, dnf: current["history"])
     calls = []
 
-    def upgrade(owner, release, dnf):
+    def upgrade(owner, release, installed, dnf):
         calls.append((owner, release))
         current["history"] = (31, 3)
         return True
 
     monkeypatch.setattr(update, "upgrade", upgrade)
     receipt = Receipt()
-    machine = update.Update(receipt, OWNER, "9.8", dnf=lambda: None)
+    machine = update.Update(receipt, OWNER, "9.8", "withinRelease", dnf=lambda: None)
     assert machine.apply(None) == {"changed": True, "state": "upgraded", "packages": 3, "transaction": 31, "rebooted": False}
     assert receipt.writes[-1]["boot"] == BOOT
     assert machine.observe(receipt.writes[-1])["state"] == "upgraded"
@@ -100,26 +120,26 @@ def test_updated_receipt_waits_for_reboot_and_recovers_without_running_again(mon
 
 
 def test_pending_transaction_recovers_from_successful_history(monkeypatch):
-    monkeypatch.setattr(update, "prove_release", lambda release: None)
+    monkeypatch.setattr(update, "prove_release", lambda release, **kwargs: release)
     monkeypatch.setattr(update, "boot_id", lambda: BOOT)
     monkeypatch.setattr(update, "fips_mode", lambda: "0")
     monkeypatch.setattr(update, "history", lambda owner, dnf: (31, 3))
     monkeypatch.setattr(update, "upgrade", lambda *args: pytest.fail("re-executed a completed DNF transaction"))
     receipt = Receipt()
-    machine = update.Update(receipt, OWNER, "9.8", dnf=lambda: None)
+    machine = update.Update(receipt, OWNER, "9.8", "withinRelease", dnf=lambda: None)
     pending = {"request": DIGEST, "boot": BOOT, "fips": "0", "state": "pending", "transaction": 0, "packages": 0}
     assert machine.apply(pending)["state"] == "upgraded"
     assert receipt.writes[-1]["transaction"] == 31
 
 
 def test_no_package_change_completes_without_reboot(monkeypatch):
-    monkeypatch.setattr(update, "prove_release", lambda release: None)
+    monkeypatch.setattr(update, "prove_release", lambda release, **kwargs: release)
     monkeypatch.setattr(update, "boot_id", lambda: BOOT)
     monkeypatch.setattr(update, "fips_mode", lambda: "0")
     monkeypatch.setattr(update, "history", lambda owner, dnf: (0, 0))
     monkeypatch.setattr(update, "upgrade", lambda *args: False)
     receipt = Receipt()
-    machine = update.Update(receipt, OWNER, "9.8", dnf=lambda: None)
+    machine = update.Update(receipt, OWNER, "9.8", "withinRelease", dnf=lambda: None)
     assert machine.apply(None)["state"] == "complete"
     assert machine.observe(receipt.writes[-1])["rebooted"] is False
 
@@ -133,6 +153,64 @@ def test_os_release_checks_distribution_as_well_as_minor(tmp_path):
     os_release.write_text('ID="centos"\nVERSION_ID="9.8"\n')
     with pytest.raises(Refused):
         update.prove_release("9.8", path=os_release)
+
+
+@pytest.mark.parametrize(("found", "admitted"), [
+    ("9.6", True), ("9.0", True), ("9.8", True), ("9.9", False), ("8.10", False), ("10.0", False), ("9", False),
+])
+def test_only_a_move_admits_an_earlier_minor_of_the_same_major(tmp_path, found, admitted):
+    os_release = tmp_path / "os-release"
+    os_release.write_text('ID="rhel"\nVERSION_ID="%s"\n' % found)
+    if admitted:
+        assert update.prove_release("9.8", path=os_release, earlier=True) == found
+    else:
+        with pytest.raises(Refused) as error:
+            update.prove_release("9.8", path=os_release, earlier=True)
+        assert error.value.reason == "update-release-mismatch"
+    if found != "9.8":
+        with pytest.raises(Refused) as error:
+            update.prove_release("9.8", path=os_release)
+        assert error.value.detail == found
+
+
+def test_a_move_upgrades_from_the_found_minor_and_proves_the_release_after(monkeypatch):
+    current = {"release": "9.6", "boot": BOOT, "history": (0, 0)}
+
+    def prove(release, earlier=False):
+        if current["release"] != release and not (earlier and update.earlier_minor(current["release"], release)):
+            raise Refused("update-release-mismatch", detail=current["release"])
+        return current["release"]
+
+    def upgrade(owner, release, installed, dnf):
+        assert (release, installed) == ("9.8", "9.6")
+        current.update(release="9.8", history=(40, 120))
+        return True
+
+    monkeypatch.setattr(update, "prove_release", prove)
+    monkeypatch.setattr(update, "boot_id", lambda: current["boot"])
+    monkeypatch.setattr(update, "fips_mode", lambda: "0")
+    monkeypatch.setattr(update, "history", lambda owner, dnf: current["history"])
+    monkeypatch.setattr(update, "upgrade", upgrade)
+
+    within = update.Update(Receipt(), OWNER, "9.8", "withinRelease", dnf=lambda: None)
+    with pytest.raises(Refused) as error:
+        within.apply(None)
+    assert error.value.detail == "9.6"
+    assert within.receipt.writes == []
+
+    receipt = Receipt()
+    moving = update.Update(receipt, OWNER, "9.8", "toRelease", dnf=lambda: None)
+    pending = {"request": DIGEST, "boot": BOOT, "fips": "0", "state": "pending", "transaction": 0, "packages": 0}
+    assert moving.observe(pending)["state"] == "pending"
+    assert moving.apply(None)["state"] == "upgraded"
+    current["boot"] = SECOND_BOOT
+    assert moving.apply(receipt.writes[-1])["rebooted"]
+
+    # A completed receipt is proved against the release alone.
+    current["release"] = "9.6"
+    with pytest.raises(Refused) as error:
+        moving.observe(receipt.writes[-1])
+    assert error.value.reason == "update-release-mismatch"
 
 
 class Substitutions(dict):
@@ -175,7 +253,7 @@ def test_transaction_uses_the_exact_minor_during_repository_configuration():
 def test_only_the_inspected_solver_transaction_can_commit(monkeypatch):
     monkeypatch.setitem(sys.modules, "dnf.callback", SimpleNamespace(TransactionProgress=object))
     monkeypatch.setattr(update, "configure", lambda *args: None)
-    monkeypatch.setattr(update, "prove_release", lambda release: None)
+    monkeypatch.setattr(update, "prove_release", lambda release, **kwargs: release)
     steps = []
     transaction = SimpleNamespace(install_set=[], remove_set=[])
 
@@ -199,12 +277,12 @@ def test_only_the_inspected_solver_transaction_can_commit(monkeypatch):
 
     transaction.install_set = [package("redhat-release", "9.9")]
     with pytest.raises(Refused):
-        update.upgrade(OWNER, "9.8", dnf)
+        update.upgrade(OWNER, "9.8", "9.8", dnf)
     assert steps == ["input", "upgrade", "resolve"]
 
     steps.clear()
     transaction.install_set = [package("systemd", "1")]
-    assert update.upgrade(OWNER, "9.8", dnf)
+    assert update.upgrade(OWNER, "9.8", "9.8", dnf)
     assert steps == ["input", "upgrade", "resolve", "download", "signatures", "commit"]
 
 
@@ -225,7 +303,7 @@ class RootView:
 def test_receipt_namespace_is_read_only_until_apply_and_locked_across_owners(tmp_path, monkeypatch):
     monkeypatch.setattr(update, "os", RootView())
     root = tmp_path / "bootwright"
-    assert update.execute("observe", OWNER, DIGEST, "9.8", root=root)["state"] == "absent"
+    assert update.execute("observe", OWNER, DIGEST, "9.8", "withinRelease", root=root)["state"] == "absent"
     assert not root.exists()
 
     pending = {"request": DIGEST, "boot": BOOT, "fips": "0", "state": "pending", "transaction": 0, "packages": 0}
@@ -236,10 +314,10 @@ def test_receipt_namespace_is_read_only_until_apply_and_locked_across_owners(tmp
         receipt.write(pending)
         assert receipt.read() == pending
         with pytest.raises(Refused) as error:
-            update.execute("observe", other, DIGEST, "9.8", root=root)
+            update.execute("observe", other, DIGEST, "9.8", "withinRelease", root=root)
         assert error.value.cause == "busy"
 
-    assert update.execute("observe", other, DIGEST, "9.8", root=root)["state"] == "absent"
+    assert update.execute("observe", other, DIGEST, "9.8", "withinRelease", root=root)["state"] == "absent"
     owned_file, = (root / update.DIRECTORY).iterdir()
     assert owned_file.name == OWNER + ".json"
     assert owned_file.stat().st_mode & 0o777 == 0o600
@@ -255,7 +333,7 @@ def test_foreign_receipts_are_never_replaced(tmp_path, monkeypatch):
     outside.write_bytes(b"another effect")
     owned_file.symlink_to(outside)
     with pytest.raises(Refused) as error:
-        update.execute("apply", OWNER, DIGEST, "9.8", root=root)
+        update.execute("apply", OWNER, DIGEST, "9.8", "withinRelease", root=root)
     assert error.value.reason == "update-foreign"
     assert outside.read_bytes() == b"another effect"
 
@@ -264,12 +342,12 @@ def test_foreign_receipts_are_never_replaced(tmp_path, monkeypatch):
     for mode in (0o644, 0o600):
         owned_file.chmod(mode)
         with pytest.raises(Refused) as error:
-            update.execute("apply", OWNER, DIGEST, "9.8", root=root)
+            update.execute("apply", OWNER, DIGEST, "9.8", "withinRelease", root=root)
         assert error.value.reason == "update-foreign"
         assert owned_file.read_bytes() == b"not a receipt"
 
     owned_file.unlink()
     (root / update.DIRECTORY).chmod(0o744)
     with pytest.raises(Refused) as error:
-        update.execute("observe", OWNER, DIGEST, "9.8", root=root)
+        update.execute("observe", OWNER, DIGEST, "9.8", "withinRelease", root=root)
     assert error.value.reason == "update-foreign"

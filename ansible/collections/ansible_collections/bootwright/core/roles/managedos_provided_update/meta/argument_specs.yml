@@ -17,6 +17,12 @@ argument_specs:
           placement:
             type: dict
             required: true
+          policy:
+            type: str
+            required: true
+            choices:
+              - withinRelease
+              - toRelease
           release:
             type: str
             required: true

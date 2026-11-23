@@ -31,6 +31,15 @@ options:
     description: The required major and minor RHEL release.
     type: str
     required: true
+  policy:
+    description:
+      - The update policy. C(toRelease) also admits a host on an earlier minor of the same major
+        and moves it to the release.
+    type: str
+    required: true
+    choices:
+      - withinRelease
+      - toRelease
 author:
   - Bootwright contributors (@crmarques)
 """
@@ -42,6 +51,7 @@ EXAMPLES = r"""
     owner: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
     request: 123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0
     release: "9.8"
+    policy: withinRelease
 """
 
 RETURN = r"""
@@ -105,7 +115,7 @@ def quiet_native():
 def execute(params):
     try:
         with quiet_native():
-            result = update.execute(params["operation"], params["owner"], params["request"], params["release"])
+            result = update.execute(params["operation"], params["owner"], params["request"], params["release"], params["policy"])
         return dict(result, ok=True)
     except Refused as refused:
         reason = refused.reason if refused.reason in update.REFUSALS else "update-failed"
@@ -121,6 +131,7 @@ def main():
             "owner": {"type": "str", "required": True},
             "request": {"type": "str", "required": True},
             "release": {"type": "str", "required": True},
+            "policy": {"type": "str", "required": True, "choices": ["withinRelease", "toRelease"]},
         },
         supports_check_mode=False,
     )

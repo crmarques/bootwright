@@ -20,8 +20,10 @@ BOOT = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}")
 RELEASE_TAG = re.compile(r"(?:^|[.+])el([0-9]+)(?:[_.]([0-9]+))?(?:$|[.+_])")
 COMMENT = "bootwright-provided-update:"
 STATES = ("absent", "pending", "upgraded", "complete")
+POLICIES = ("withinRelease", "toRelease")
+IDENTITY = ("redhat-release", "redhat-release-eula")
 REFUSALS = (
-    "update-release-mismatch", "update-release-drift", "update-no-repository",
+    "update-release-mismatch", "update-release-unavailable", "update-release-drift", "update-no-repository",
     "update-foreign", "update-unavailable", "update-failed", "update-reboot",
 )
 DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
@@ -35,8 +37,15 @@ def read_value(path, pattern, limit, reason):
     return value
 
 
-def prove_release(release, path=shared.OS_RELEASE):
-    """Require RHEL and its exact current major/minor, before and after updating."""
+def earlier_minor(found, release):
+    if not shared.RELEASE.fullmatch(found):
+        return False
+    have, want = (tuple(int(part) for part in value.split(".")) for value in (found, release))
+    return have[0] == want[0] and have[1] < want[1]
+
+
+def prove_release(release, path=shared.OS_RELEASE, earlier=False):
+    """Require RHEL at the release, or before a move to it an earlier minor of its major; return VERSION_ID."""
     with open(path, "rb") as stream:
         data = stream.read(shared.MAX_OS_RELEASE + 1)
     if len(data) > shared.MAX_OS_RELEASE:
@@ -44,8 +53,9 @@ def prove_release(release, path=shared.OS_RELEASE):
     values = dict(line.split("=", 1) for line in data.decode("utf-8", "replace").splitlines()
                   if line.startswith(("ID=", "VERSION_ID=")))
     found = values.get("VERSION_ID", "").strip().strip("\"'")
-    if values.get("ID", "").strip().strip("\"'") != "rhel" or found != release:
+    if values.get("ID", "").strip().strip("\"'") != "rhel" or found != release and not (earlier and earlier_minor(found, release)):
         raise shared.Refused("update-release-mismatch", detail=shared.token(found))
+    return found
 
 
 def boot_id():
@@ -190,20 +200,25 @@ def release_swap(package, version):
     raise shared.Refused("update-release-drift", detail=shared.token(version) + "@" + repository)
 
 
-def check_release_transaction(transaction, release):
-    """Reject an identity upgrade or removal, and a visible later RHEL content tag."""
+def check_release_transaction(transaction, release, installed):
+    """Reject an identity change other than one to the release, and a visible later RHEL content tag.
+
+    A host on an earlier minor moves only when the transaction installs the release's own identity.
+    """
     installing = list(transaction.install_set)
     target = tuple(int(part) for part in release.split("."))
     for package in installing:
-        if package.name in ("redhat-release", "redhat-release-eula") and package.version != release:
+        if package.name in IDENTITY and package.version != release:
             release_swap(package, package.version)
         tag = RELEASE_TAG.search(package.release)
         if tag and (int(tag[1]) != target[0] or tag[2] is not None and int(tag[2]) > target[1]):
             release_swap(package, ".".join(part for part in tag.groups() if part is not None))
     replacements = {package.name for package in installing if package.version == release}
     for package in transaction.remove_set:
-        if package.name in ("redhat-release", "redhat-release-eula") and package.name not in replacements:
+        if package.name in IDENTITY and package.name not in replacements:
             release_swap(package, "removed")
+    if installed != release and "redhat-release" not in replacements:
+        raise shared.Refused("update-release-unavailable", detail=shared.token(installed))
     return installing
 
 
@@ -248,7 +263,7 @@ def check_signatures(base, packages):
             raise shared.Refused("update-failed", "signature")
 
 
-def upgrade(owner, release, dnf):
+def upgrade(owner, release, installed, dnf):
     """Commit the inspected solver result once; do not let a second solve select different RPMs."""
     from dnf.callback import TransactionProgress  # pylint: disable=import-outside-toplevel
 
@@ -270,7 +285,7 @@ def upgrade(owner, release, dnf):
             base.resolve()
         except dnf.exceptions.Error:
             raise shared.Refused("update-failed", "resolution") from None
-        packages = check_release_transaction(base.transaction, release)
+        packages = check_release_transaction(base.transaction, release, installed)
         if not packages:
             return False
         try:
@@ -278,7 +293,7 @@ def upgrade(owner, release, dnf):
         except dnf.exceptions.Error:
             raise shared.Refused("update-unavailable", "download") from None
         check_signatures(base, packages)
-        prove_release(release)
+        prove_release(installed)
         progress = Progress()
         base.do_transaction(progress)
         if progress.failed:
@@ -296,11 +311,16 @@ def result(record, changed=False):
 class Update:
     """Coordinate the receipt, exact transaction and boot proof."""
 
-    def __init__(self, receipt, owner, release, dnf=shared.load_dnf):
+    def __init__(self, receipt, owner, release, policy, dnf=shared.load_dnf):
         self.receipt = receipt
         self.owner = owner
         self.release = release
+        self.policy = policy
         self.dnf = dnf
+
+    def starting_release(self):
+        """Before its transaction a move to the release also admits an earlier minor."""
+        return prove_release(self.release, earlier=self.policy == "toRelease")
 
     def finish(self, record, changed):
         prove_release(self.release)
@@ -313,9 +333,9 @@ class Update:
         return result(record, changed)
 
     def apply(self, record):
-        prove_release(self.release)
         if record is not None and record["state"] != "pending":
             return self.finish(record, record["state"] == "upgraded")
+        installed = self.starting_release()
         if record is None:
             record = {"request": self.receipt.digest, "state": "pending", "boot": boot_id(),
                       "fips": fips_mode(), "transaction": 0, "packages": 0}
@@ -327,7 +347,7 @@ class Update:
         if not transaction:
             record = dict(record, boot=boot_id())
             self.receipt.write(record)
-            if upgrade(self.owner, self.release, dnf):
+            if upgrade(self.owner, self.release, installed, dnf):
                 transaction, packages = history(self.owner, dnf)
                 if not transaction:
                     raise shared.Refused("update-failed", "history")
@@ -342,14 +362,17 @@ class Update:
     def observe(self, record):
         if record is None:
             return result(None)
-        prove_release(self.release)
+        if record["state"] == "pending":
+            self.starting_release()
+        else:
+            prove_release(self.release)
         if record["state"] == "complete" and (fips_mode() != record["fips"] or record["transaction"] and boot_id() == record["boot"]):
             raise shared.Refused("update-reboot", "boot-proof")
         return result(record)
 
 
-def execute(operation, owner, digest, release, root=ROOT):
-    if (operation not in ("apply", "complete", "observe")
+def execute(operation, owner, digest, release, policy, root=ROOT):
+    if (operation not in ("apply", "complete", "observe") or policy not in POLICIES
             or not all(isinstance(value, str) and shared.DIGEST.fullmatch(value) for value in (owner, digest))
             or not isinstance(release, str) or len(release) > 64 or not shared.RELEASE.fullmatch(release)
             or os.geteuid() != 0):
@@ -357,7 +380,7 @@ def execute(operation, owner, digest, release, root=ROOT):
     with directory(root, operation != "observe") as descriptor:
         receipt = Receipt(descriptor, owner, digest)
         current = receipt.read()
-        update = Update(receipt, owner, release)
+        update = Update(receipt, owner, release, policy)
         if operation == "observe":
             return update.observe(current)
         if operation == "apply":

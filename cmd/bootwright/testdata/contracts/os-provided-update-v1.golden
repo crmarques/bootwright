@@ -27,6 +27,7 @@ request-schema:
   placement.privateKeyRef string omitempty
   placement.privilege string omitempty
   placement.user string omitempty
+  policy string
   release string
   version string
 evidence-schema:
