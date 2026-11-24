@@ -1239,8 +1239,9 @@ no refusal stays the generic adapter failure, failing the attempt.
 When the original policy retains the root, the registered Ceph host inverse
 starts the original Machine. It uses the original cluster block's delegated
 service placement to prove its daemon layout and removes its FSID, cluster-key
-entry and bound registry credential without disk zap. It records native
-absence before proving the Machine off. A retry with the durable receipt
+entry, sshd drop-in and bound registry credential without disk zap, each as
+[a provided tiebreaker's removal](#a-provided-tiebreakers-removal) proves and
+removes it. It records native absence before proving the Machine off. A retry with the durable receipt
 finishes the shutdown without another guest cleanup. The terminal retirement
 checks that receipt for each retained root, including an installed host with
 no selected Ceph disks or erase targets, and checks verified erase receipts
@@ -1254,8 +1255,8 @@ If the retained-root cleanup SSH command exits unsuccessfully, its transport
 failure can report the exit status and a fixed category derived from SSH
 stderr. Both raw command streams remain private.
 
-Protected Bootwright recovery/custody and retry journals and its restrictive
-SSH policy remain on the retained OS; native absence is not whole-filesystem
+Protected Bootwright recovery/custody and retry journals and the managed OS's
+own SSH policy remain on the retained OS; native absence is not whole-filesystem
 cleanup or sanitization. Reinstallation overwrites the independently selected
 root, and explicit root erasure keeps its existing whole-disk semantics.
 
@@ -2532,9 +2533,13 @@ and needs neither the bootstrap host nor MON quorum.
   only `cephadm:v1` daemons, none of another FSID and, of this FSID, a
   subset of the host's `mon` and `crash`; `/var/lib/ceph` holds nothing but
   this FSID's directory; the cluster SSH user's `authorized_keys` names the
-  recorded key in no line but the recorded one; and each registry
-  credential name is absent or carries the descriptor metadata its record
-  holds. A host the cluster's claim never reached, as when its apply
+  recorded key in no line but the recorded one; this cluster's sshd drop-in
+  `/etc/ssh/sshd_config.d/05-bootwright-ceph-<token>.conf` is absent, or is
+  a regular, root-owned file with one link and no group or world write, in
+  a directory root alone may write, whose bytes match the digest of the
+  record the `authorize` phase writes before it publishes the drop-in; and
+  each registry credential name is absent or carries the descriptor
+  metadata its record holds. A host the cluster's claim never reached, as when its apply
   refused at the host prerequisites, holds no owner marker: with no record
   in that marker directory but a marker write's `.ownership-` stage name (a
   claim writes the marker first), no `authorized_keys` line of the cluster
@@ -2562,7 +2567,13 @@ and needs neither the bootstrap host nor MON quorum.
   while its part remains: the cluster-key line the `authorize` phase added
   to the cluster SSH user's `authorized_keys`, exactly as recorded, removed
   by a staged rewrite that keeps every other byte, the file's owner and
-  mode, and refuses a file changed since it was read; the registry
+  mode, and refuses a file changed since it was read; then this cluster's
+  sshd drop-in, unlinked under its directory descriptor once the key line
+  is gone, so the cluster SSH user never holds the cluster key without the
+  drop-in's forwarding restriction, after a record that the reload is owed;
+  then `sshd -t` proves the configuration left valid, `systemctl reload
+  sshd.service` applies it, and a second record says it reloaded;
+  the registry
   credential `/etc/ceph/podman-auth.json`, removed under its recorded
   descriptor metadata; and, while any native part remains, the package
   cephadm binary's `rm-cluster --fsid <fsid> --force`, never `--zap-osds`,
@@ -2581,8 +2592,8 @@ and needs neither the bootstrap host nor MON quorum.
   `ceph.target.wants`, neither `/var/lib/ceph/<fsid>`,
   `/var/log/ceph/<fsid>` nor the FSID's logrotate file exists,
   `/etc/ceph/ceph.conf` does not name the FSID, and neither the recorded
-  `authorized_keys` line nor the credential remains, read without following
-  links. The FSID's systemd units, Podman objects, socket and temporary
+  `authorized_keys` line, this cluster's sshd drop-in, an owed sshd reload
+  nor the credential remains, the files read without following links. The FSID's systemd units, Podman objects, socket and temporary
   directories and sysctl fragments are absent. When
   removal attributed the default configuration to this FSID, the default
   public key and admin keyring are independently absent. Only then is the
@@ -2590,7 +2601,10 @@ and needs neither the bootstrap host nor MON quorum.
   cluster's retirement evidence names the tiebreaker as cleaned.
 - **Recovery.** A lost reply leaves the effect unknown: the next attempt
   observes first, completes without a command when absence is proved, and
-  otherwise repeats each removal under its attempt record. The removal
+  otherwise repeats each removal under its attempt record. A reload owed
+  and not recorded done counts as part of the footprint, so a failed
+  `sshd -t` or a lost reply after the unlink repeats the check and the
+  reload, never the unlink, before completion. The removal
   observation reports a partial effect once an attempt record exists and
   no effect before one, so either retries the destroy. An unreachable
   tiebreaker is unknown, never absent, and refuses `tiebreaker-unreachable`
@@ -2607,10 +2621,6 @@ credential live in the cluster's monitor store, whose copy on the tiebreaker
 goes with the FSID's data under `rm-cluster`, and their custody is on the
 bootstrap host, which is never the tiebreaker; no rbd-mirror daemon runs
 there, since the tiebreaker [runs a MON alone](#stretch-topology).
-
-Not yet met: the sshd drop-in
-the `authorize` phase writes stays on the tiebreaker after its removal;
-tracked as [B940](milestones/m2.md#b940).
 
 Not yet met: a tiebreaker the operator has decommissioned or reinstalled
 refuses this removal with no exit; tracked as

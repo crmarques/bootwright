@@ -24,6 +24,13 @@ UID = 4242
 PUBLIC = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH"
 OPERATOR_LINE = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOperatorOwnKeyOperatorOwnKeyOperatorOwnKeyA operator@example.test"
 DIGEST = "d" * 64
+OPERATOR_DROP_IN = b"PermitRootLogin no\n"
+SSHD_CHECK = ["/usr/sbin/sshd", "-t", "-f", "/etc/ssh/sshd_config"]
+SSHD_RELOAD = ["/usr/bin/systemctl", "reload", "sshd.service"]
+
+
+def policy_name(value):
+    return "05-bootwright-ceph-" + hashlib.sha256((FSID + "\x00" + value["owner"]).encode()).hexdigest() + ".conf"
 
 
 def request():
@@ -63,6 +70,7 @@ class Host:
         self.host = next(host for host in value["hosts"] if host["name"] == "node-5")
         self.tool = value["cephadm"]["path"]
         self.commands, self.declared, self.lose = [], [], False
+        self.sshd, self.sshd_lose = [], None
         self.styles = {}
         self.runtime_present = False
 
@@ -89,6 +97,13 @@ class Host:
             return ("ceph-" + FSID + "@mon.node-5.service loaded active running\n").encode() if self.runtime_present else b""
         if argv[:2] == ["/usr/bin/podman", "ps"]:
             return []
+        if argv in (SSHD_CHECK, SSHD_RELOAD):
+            assert not json_result
+            self.sshd.append(list(argv))
+            if argv == self.sshd_lose:
+                self.sshd_lose = None
+                raise ceph_native.Refusal("native-unknown")
+            return b""
         assert not json_result and timeout == stretch.RM_CLUSTER_TIMEOUT
         self.commands.append(list(argv))
         assert argv == [self.tool, "rm-cluster", "--fsid", FSID, "--force"]
@@ -128,6 +143,9 @@ def tiebreaker(tmp_path, monkeypatch):
     write(os.path.join(root, "etc/ceph/podman-auth.json"), b'{"auths":{}}\n', 0o600)
     keys = os.path.join(root, "home/operator/.ssh/authorized_keys")
     write(keys, (OPERATOR_LINE + "\n" + line + "\n").encode(), 0o600)
+    policy = ceph_tunnel.guest_policy(value["clusterSSHUser"])
+    write(os.path.join(root, "etc/ssh/sshd_config.d", policy_name(value)), policy, 0o600)
+    write(os.path.join(root, "etc/ssh/sshd_config.d/50-operator.conf"), OPERATOR_DROP_IN, 0o600)
     real_open, real_fstat = os.open, os.fstat
     user = set()
 
@@ -159,6 +177,7 @@ def tiebreaker(tmp_path, monkeypatch):
     host = Host(root, value, None)
     intent = host.registry_intent()
     records = {"owner.json": ceph_native.marker_identity(value), "ssh-authorization.json": {"uid": UID, "home": "/home/operator", "line": line},
+               "sshd-policy.json": {"name": policy_name(value), "sha256": hashlib.sha256(policy).hexdigest()},
                "registry-intent.json": intent, "registry-pending.json": {"intent": intent, "metadata": metadata},
                "registry-file.json": {"intent": intent, "metadata": dict(metadata, ctimeNS=auth.st_ctime_ns)}}
     host.markers = Markers(records)
@@ -189,9 +208,15 @@ def assert_absent(host):
     assert stat_mode(os.path.join(root, "home/operator/.ssh/authorized_keys")) == 0o600
     for kept in ("etc/systemd/system/ceph.target", "etc/systemd/system/sshd.service", "var/lib/ceph", "var/log/ceph", "etc/ceph"):
         assert os.path.lexists(os.path.join(root, kept)), kept
+    assert sorted(os.listdir(os.path.join(root, "etc/ssh/sshd_config.d"))) == ["50-operator.conf"]
+    assert open(os.path.join(root, "etc/ssh/sshd_config.d/50-operator.conf"), "rb").read() == OPERATOR_DROP_IN
     record = {"version": stretch.REMOVAL_VERSION, "owner": host.request["owner"], "fsid": FSID, "host": "node-5"}
     assert host.markers.records[stretch.REMOVAL_ATTEMPT] == host.markers.records[stretch.REMOVAL_COMPLETE] == record
     assert host.markers.records["owner.json"] == ceph_native.marker_identity(host.request)
+    if host.sshd:
+        assert host.markers.records[stretch.SSHD_REMOVAL] == host.markers.records[stretch.SSHD_RELOADED] == record
+    else:
+        assert stretch.SSHD_REMOVAL not in host.markers.records and stretch.SSHD_RELOADED not in host.markers.records
 
 
 def stat_mode(path):
@@ -207,9 +232,32 @@ def test_a_complete_removal_refuses_nothing_and_proves_every_part_absent(tiebrea
     assert removal(tiebreaker).observe() == {"removed": True, "attempted": True}
     assert removal(tiebreaker).remove() == {"changed": False, "removed": True, "attempted": True}
     assert len(tiebreaker.commands) == 1
+    assert tiebreaker.sshd == [SSHD_CHECK, SSHD_RELOAD]
 
 
-@pytest.mark.parametrize("lost", ["attempt", "key", "credential", "rm-cluster", "completion"])
+def test_the_sshd_drop_in_goes_only_after_the_cluster_key_line_and_sshd_reloads_onto_what_remains(tiebreaker, monkeypatch):
+    original = stretch.TiebreakerRemoval.remove_policy
+    seen = []
+
+    def ordered(self):
+        keys = open(tiebreaker.path("home/operator/.ssh/authorized_keys"), "rb").read()
+        seen.append((keys == (OPERATOR_LINE + "\n").encode(), os.path.lexists(tiebreaker.path("etc/ssh/sshd_config.d", policy_name(self.request)))))
+        original(self)
+
+    monkeypatch.setattr(stretch.TiebreakerRemoval, "remove_policy", ordered)
+    assert removal(tiebreaker).remove()["removed"] is True
+    assert seen == [(True, True)] and tiebreaker.sshd == [SSHD_CHECK, SSHD_RELOAD]
+    assert_absent(tiebreaker)
+
+
+def test_a_record_whose_drop_in_was_never_published_removes_the_rest_without_touching_sshd(tiebreaker):
+    os.unlink(tiebreaker.path("etc/ssh/sshd_config.d", policy_name(tiebreaker.request)))
+    assert removal(tiebreaker).remove()["removed"] is True
+    assert tiebreaker.sshd == []
+    assert_absent(tiebreaker)
+
+
+@pytest.mark.parametrize("lost", ["attempt", "key", "sshd-check", "sshd-reload", "credential", "rm-cluster", "completion"])
 def test_a_lost_reply_at_each_effect_is_observed_first_and_repeated_only_under_its_attempt(tiebreaker, monkeypatch, lost):
     native = removal(tiebreaker)
     if lost == "attempt":
@@ -218,6 +266,8 @@ def test_a_lost_reply_at_each_effect_is_observed_first_and_repeated_only_under_i
         tiebreaker.markers.lose_after = stretch.REMOVAL_COMPLETE
     elif lost == "rm-cluster":
         tiebreaker.lose = True
+    elif lost.startswith("sshd-"):
+        tiebreaker.sshd_lose = SSHD_CHECK if lost == "sshd-check" else SSHD_RELOAD
     else:
         method = "remove_key" if lost == "key" else "credential_present"
         original = getattr(stretch.TiebreakerRemoval, method)
@@ -239,10 +289,32 @@ def test_a_lost_reply_at_each_effect_is_observed_first_and_repeated_only_under_i
     assert removal(tiebreaker).remove()["removed"] is True
     assert len(tiebreaker.commands) == commands + (0 if lost in ("rm-cluster", "completion") else 1)
     assert_absent(tiebreaker)
+    assert tiebreaker.sshd == {"sshd-check": [SSHD_CHECK, SSHD_CHECK, SSHD_RELOAD],
+                               "sshd-reload": [SSHD_CHECK, SSHD_RELOAD, SSHD_CHECK, SSHD_RELOAD]}.get(lost, [SSHD_CHECK, SSHD_RELOAD])
+
+
+def test_a_configuration_sshd_refuses_after_the_unlink_keeps_the_reload_owed_until_a_retry_reloads(tiebreaker):
+    def refused(argv, timeout=60, json_result=True):
+        if argv == SSHD_CHECK:
+            tiebreaker.sshd.append(list(argv))
+            raise ceph_native.NativeFailure("native-command", "sshd", b"")
+        return Host.command(tiebreaker, argv, timeout, json_result)
+
+    tiebreaker.command = refused
+    with pytest.raises(ceph_native.NativeFailure):
+        removal(tiebreaker).remove()
+    assert not os.path.lexists(tiebreaker.path("etc/ssh/sshd_config.d", policy_name(tiebreaker.request)))
+    assert stretch.SSHD_RELOADED not in tiebreaker.markers.records
+    del tiebreaker.command
+    assert removal(tiebreaker).observe() == {"removed": False, "attempted": True}
+    assert removal(tiebreaker).remove()["removed"] is True
+    assert tiebreaker.sshd == [SSHD_CHECK, SSHD_CHECK, SSHD_RELOAD]
+    assert_absent(tiebreaker)
 
 
 @pytest.mark.parametrize("foreign", ["owner", "missing-owner", "other-fsid", "daemon-type", "daemon-host", "legacy", "key-line", "credential",
-                                     "unrecorded-credential", "linked-conf"])
+                                     "unrecorded-credential", "linked-conf", "sshd-bytes", "sshd-record", "sshd-unrecorded", "sshd-link",
+                                     "sshd-hard-link", "sshd-mode", "sshd-directory-mode"])
 def test_anything_but_this_clusters_own_footprint_refuses_tiebreaker_foreign_with_nothing_changed(tiebreaker, foreign):
     root = tiebreaker.root
     records = tiebreaker.markers.records
@@ -269,6 +341,24 @@ def test_anything_but_this_clusters_own_footprint_refuses_tiebreaker_foreign_wit
     elif foreign == "unrecorded-credential":
         for name in ("registry-file.json", "registry-pending.json"):
             del records[name]
+    elif foreign.startswith("sshd-"):
+        directory = os.path.join(root, "etc/ssh/sshd_config.d")
+        policy = os.path.join(directory, policy_name(tiebreaker.request))
+        if foreign == "sshd-bytes":
+            write(policy, open(policy, "rb").read() + b"  PermitTTY yes\n", 0o600)
+        elif foreign == "sshd-record":
+            records["sshd-policy.json"] = dict(records["sshd-policy.json"], sha256="0" * 64)
+        elif foreign == "sshd-unrecorded":
+            del records["sshd-policy.json"]
+        elif foreign == "sshd-link":
+            os.unlink(policy)
+            os.symlink("50-operator.conf", policy)
+        elif foreign == "sshd-hard-link":
+            os.link(policy, os.path.join(directory, "50-copy.conf"))
+        elif foreign == "sshd-mode":
+            os.chmod(policy, 0o622)
+        else:
+            os.chmod(directory, 0o777)
     else:
         os.unlink(os.path.join(root, "etc/ceph/ceph.conf"))
         os.symlink("/etc/hosts", os.path.join(root, "etc/ceph/ceph.conf"))
@@ -276,7 +366,7 @@ def test_anything_but_this_clusters_own_footprint_refuses_tiebreaker_foreign_wit
     for call in (lambda: removal(tiebreaker).observe(), lambda: removal(tiebreaker).remove()):
         with pytest.raises(ceph_native.Refusal, match="^tiebreaker-foreign$"):
             call()
-        assert tree(root) == before and tiebreaker.markers.records == kept and not tiebreaker.commands
+        assert tree(root) == before and tiebreaker.markers.records == kept and not tiebreaker.commands and not tiebreaker.sshd
 
 
 def markers(host):
@@ -293,6 +383,7 @@ def unclaimed(host):
                      "etc/systemd/system/ceph.target.wants/ceph-" + FSID + ".target", "etc/ceph/ceph.conf"):
         os.unlink(os.path.join(root, relative))
     write(os.path.join(root, "home/operator/.ssh/authorized_keys"), (OPERATOR_LINE + "\n").encode(), 0o600)
+    os.unlink(os.path.join(root, "etc/ssh/sshd_config.d", policy_name(host.request)))
     host.verify_tool = host.registry_intent = None
 
 
@@ -471,6 +562,7 @@ def test_retained_physical_root_removes_owned_fsid_daemons_without_zapping(tiebr
     assert host.commands == [[host.tool, "rm-cluster", "--fsid", FSID, "--force"]]
     assert "--zap-osds" not in host.commands[0]
     assert open(host.path("home/operator/.ssh/authorized_keys"), encoding="utf-8").read() == OPERATOR_LINE + "\n"
+    assert sorted(os.listdir(host.path("etc/ssh/sshd_config.d"))) == ["50-operator.conf"] and host.sshd == [SSHD_CHECK, SSHD_RELOAD]
 
 
 def test_retained_physical_root_never_removes_foreign_fsid(tiebreaker):

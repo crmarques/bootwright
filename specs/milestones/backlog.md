@@ -4108,6 +4108,7 @@ item, whose Alias cell names the old ID too. Searching an old ID over
 | N1 to N5, L2, L4, L5, L6 | 2026-09-28 | Became items whose Alias cells name them; L1 and L3 never existed. |
 | K01 to K73 | 2026-09-28 | The audit plan's cluster tokens, defined nowhere in the repository; the grouping stays in Git history. |
 | Phase 0 to Phase 4 | 2026-09-28 | The audit plan's ordering; slices carry order now. |
+| B1602 | 2026-11-24 | Duplicate of [B940](m2.md#b940), which took over its retained-root removal for X692. |
 | M1h's (D1) to (D6) | 2026-09-28 | Capability labels that collided with the decision log; they became prose. |
 | D13, D15 | never issued | Recorded so nobody looks for them. |
 | B497 | 2026-10-12 | Answered by [D143](#d143): M2b's acceptance is an ordinary staged apply recorded as an owner-accepted ledger row ([B476](delivered.md#x94--post-destroy-cluster-inspection)), and there is no runtime registry to promote. |

@@ -488,6 +488,10 @@ UNIT_WANTS = "ceph.target.wants"
 MAX_LISTING = 4096
 MAX_KEYS = 1024 * 1024
 MAX_CONF = 1024 * 1024
+SSHD_ROOT, SSHD_POLICY_MARKER = "/etc/ssh/sshd_config.d", "sshd-policy.json"
+# Written before the drop-in's unlink and after sshd's reload: between them the reload is still owed, even with the drop-in gone.
+SSHD_REMOVAL, SSHD_RELOADED = "native-removal-sshd.json", "native-removal-sshd-reloaded.json"
+MAX_SSHD_POLICY = 4096
 NATIVE = ("daemons", "data", "log", "logrotate", "units", "conf")
 # The private name a marker write stages under before it links the record (ceph_native.Markers.write); never a record itself.
 MARKER_STAGE = ".ownership-"
@@ -731,6 +735,65 @@ class TiebreakerRemoval:
                 raise Refusal("tiebreaker-foreign") from None
             raise
 
+    def sshd_policy(self):
+        """This cluster's sshd drop-in name, and the record the authorize phase writes before it publishes that drop-in, or None."""
+        helper, unused = tunnel_helpers()
+        token = hashlib.sha256((self.fsid + "\x00" + self.request["owner"]).encode()).hexdigest()
+        expected = {"name": "05-bootwright-ceph-" + token + ".conf",
+                    "sha256": hashlib.sha256(helper.guest_policy(self.request["clusterSSHUser"])).hexdigest()}
+        record = self.markers.read(SSHD_POLICY_MARKER)
+        require(record in (None, expected), "tiebreaker-foreign")
+        return expected["name"], record
+
+    def policy_present(self, remove=False):
+        """Whether this cluster's sshd drop-in remains; with remove, unlink it once its record and bytes prove it this cluster's.
+        A drop-in with no record, other bytes, another owner, a link or a group- or world-writable mode is not this cluster's."""
+        name, record = self.sshd_policy()
+        with walked(SSHD_ROOT) as directory:
+            if directory is None:
+                return False
+            info = os.fstat(directory)
+            require(info.st_uid == 0 and info.st_mode & 0o022 == 0, "tiebreaker-foreign")
+            try:
+                fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC, dir_fd=directory)
+            except FileNotFoundError:
+                return False
+            except OSError:
+                raise Refusal("tiebreaker-foreign") from None
+            with os.fdopen(fd, "rb") as handle:
+                info = os.fstat(handle.fileno())
+                require(record is not None and stat.S_ISREG(info.st_mode) and info.st_nlink == 1 and info.st_uid == 0
+                        and info.st_mode & 0o022 == 0 and info.st_size <= MAX_SSHD_POLICY, "tiebreaker-foreign")
+                content = handle.read(MAX_SSHD_POLICY + 1)
+            require(hashlib.sha256(content).hexdigest() == record["sha256"], "tiebreaker-foreign")
+            if remove:
+                now = os.stat(name, dir_fd=directory, follow_symlinks=False)
+                require((now.st_dev, now.st_ino) == (info.st_dev, info.st_ino), "tiebreaker-foreign")
+                os.unlink(name, dir_fd=directory)
+                os.fsync(directory)
+            return True
+
+    def reload_owed(self):
+        removal, reloaded = self.markers.read(SSHD_REMOVAL), self.markers.read(SSHD_RELOADED)
+        require(removal in (None, self.record) and reloaded in (None, self.record) and (reloaded is None or removal is not None), "ownership")
+        return removal is not None and reloaded is None
+
+    def sshd_pending(self):
+        """Whether this cluster's drop-in remains or sshd has not yet reloaded since this removal unlinked it."""
+        return self.policy_present() or self.reload_owed()
+
+    def remove_policy(self):
+        """After the cluster key line: unlink this cluster's drop-in, prove the configuration left valid, then reload sshd onto it.
+        The reload is recorded owed before the unlink, so a failed check or a lost reply leaves it owed for the next attempt."""
+        if self.policy_present():
+            self.markers.write(SSHD_REMOVAL, self.record)
+            self.policy_present(remove=True)
+        if not self.reload_owed():
+            return
+        self.worker.command(["/usr/sbin/sshd", "-t", "-f", "/etc/ssh/sshd_config"], timeout=15, json_result=False)
+        self.worker.command(["/usr/bin/systemctl", "reload", "sshd.service"], timeout=60, json_result=False)
+        self.markers.write(SSHD_RELOADED, self.record)
+
     def units(self):
         prefix = "ceph-" + self.fsid
         found = [name for name in listing(UNIT_ROOT) if name.startswith(prefix)]
@@ -799,7 +862,7 @@ class TiebreakerRemoval:
         line tagged with this cluster's owner in the cluster SSH user's authorized_keys, this cluster's sshd drop-in, its podman engine
         route, or its registry credential anchor."""
         token = hashlib.sha256((self.fsid + "\x00" + self.request["owner"]).encode()).hexdigest()
-        if present("/etc/ssh/sshd_config.d/" + "05-bootwright-ceph-" + token + ".conf"):
+        if present(SSHD_ROOT + "/" + "05-bootwright-ceph-" + token + ".conf"):
             return True
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_registry as registry
         if present(registry.ROUTE_DIRECTORY + "/" + registry.route_name(self.request)):
@@ -828,8 +891,9 @@ class TiebreakerRemoval:
         return any(tag in line.split() for line in lines)
 
     def footprint(self, authorization):
-        return dict(self.scoped(), daemons=self.daemons(), key=self.key_present(authorization), credential=self.credential_present(),
-                    route=self.route_present(), confResidue=self.config_residue(), runtime=self.native_runtime())
+        return dict(self.scoped(), daemons=self.daemons(), key=self.key_present(authorization), sshdPolicy=self.sshd_pending(),
+                    credential=self.credential_present(), route=self.route_present(), confResidue=self.config_residue(),
+                    runtime=self.native_runtime())
 
     def prove(self):
         """Read only: this cluster's owner marker, its records, and a footprint that is only its own; None for a host the cluster's
@@ -878,6 +942,8 @@ class TiebreakerRemoval:
         self.markers.write(REMOVAL_ATTEMPT, self.record)
         if footprint["key"]:
             self.remove_key(authorization)
+        if footprint["sshdPolicy"]:
+            self.remove_policy()
         if footprint["credential"]:
             self.credential_present(remove=True)
         if footprint["route"]:
