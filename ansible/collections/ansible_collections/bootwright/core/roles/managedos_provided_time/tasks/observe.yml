@@ -1,0 +1,40 @@
+---
+- name: Validate the frozen provided time synchronization request
+  ansible.builtin.assert:
+    that:
+      - bootwright_provided_time_request.version == 'provided-os-time-request-v1'
+      - bootwright_provided_time_request.placement.connection == 'ssh'
+      - bootwright_provided_time_request.servers | length > 0
+      - bootwright_provided_time_request.servers | length <= 256
+      - bootwright_provided_time_digest is match('^[0-9a-f]{64}$(?!\n)')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.managedos_provided_time_protocol:
+    phase: loaded
+
+- name: Observe the chrony configuration and clock of the host
+  bootwright.core.managedos_provided_time:
+    operation: observe
+    request: '{{ bootwright_provided_time_digest }}'
+    servers: '{{ bootwright_provided_time_request.servers }}'
+  register: managedos_provided_time_observed
+  failed_when: false
+  timeout: 90
+  no_log: true
+
+- name: Resolve a bounded observation refusal
+  ansible.builtin.import_tasks: refused.yml
+  vars:
+    managedos_provided_time_answer: '{{ managedos_provided_time_observed }}'
+
+- name: Publish observed provided time synchronization evidence
+  bootwright.core.managedos_provided_time_protocol:
+    phase: completed
+    digest: '{{ bootwright_provided_time_digest }}'
+    servers: '{{ bootwright_provided_time_request.servers }}'
+    answer: '{{ managedos_provided_time_observed }}'
+    observed: true
+    outcome: unchanged
+  no_log: true

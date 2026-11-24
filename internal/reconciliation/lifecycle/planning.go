@@ -746,7 +746,7 @@ func dependOnEnrollment(definitions []reconciliation.BlockDefinition) []reconcil
 }
 
 func dependOnProvidedUpdates(definitions []reconciliation.BlockDefinition) []reconciliation.BlockDefinition {
-	updates, hostnames, registrations := map[string]bool{}, map[string]bool{}, map[string]bool{}
+	updates, hostnames, registrations, times := map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, definition := range definitions {
 		switch definition.Family {
 		case machine.ProvidedUpdateFamily:
@@ -755,24 +755,28 @@ func dependOnProvidedUpdates(definitions []reconciliation.BlockDefinition) []rec
 			hostnames[definition.Object] = true
 		case machine.ProvidedRegistrationFamily:
 			registrations[definition.Object] = true
+		case machine.ProvidedTimeFamily:
+			times[definition.Object] = true
 		}
 	}
 	for index := range definitions {
 		d := &definitions[index]
 		switch d.Family {
-		case machine.ProvidedUpdateFamily, machine.ProvidedHostnameFamily, machine.FirewallFamily:
-			if updates[d.Object] || hostnames[d.Object] {
+		case machine.ProvidedUpdateFamily, machine.ProvidedHostnameFamily, machine.ProvidedTimeFamily, machine.FirewallFamily:
+			if updates[d.Object] || hostnames[d.Object] || times[d.Object] {
 				d.Exclusive = append(d.Exclusive, "provided-os/"+d.Object)
 				slices.Sort(d.Exclusive)
 				d.Exclusive = slices.Compact(d.Exclusive)
 			}
-		case machine.ProvidedRegistrationFamily:
+		}
+		switch d.Family {
+		case machine.ProvidedRegistrationFamily, machine.ProvidedTimeFamily:
 			for _, ref := range d.Requires {
 				if ref.Kind == string(api.Machine) && ref.Family == machine.HardwareFamily && hostnames[ref.Object] && machinesStageOrLater(d.Stage) {
 					d.Requires = append(d.Requires, reconciliation.ObjectRef{Kind: string(api.Machine), Object: ref.Object, Family: machine.ProvidedHostnameFamily})
 				}
 			}
-		case machine.EnrollmentFamily:
+		case machine.ProvidedUpdateFamily, machine.ProvidedHostnameFamily, machine.FirewallFamily, machine.EnrollmentFamily:
 		default:
 			for _, ref := range d.Requires {
 				if ref.Kind != string(api.Machine) || ref.Family != machine.HardwareFamily {
@@ -789,9 +793,15 @@ func dependOnProvidedUpdates(definitions []reconciliation.BlockDefinition) []rec
 		if d.Family == machine.ProvidedRegistrationFamily || d.Family == machine.ProvidedHostnameFamily || d.Family == machine.FirewallFamily || d.Family == machine.EnrollmentFamily {
 			continue
 		}
-		for _, ref := range d.Requires {
-			if ref.Kind == string(api.Machine) && ref.Family == machine.HardwareFamily && registrations[ref.Object] {
+		for _, ref := range slices.Clone(d.Requires) {
+			if ref.Kind != string(api.Machine) || ref.Family != machine.HardwareFamily {
+				continue
+			}
+			if registrations[ref.Object] {
 				d.Requires = append(d.Requires, reconciliation.ObjectRef{Kind: string(api.Machine), Object: ref.Object, Family: machine.ProvidedRegistrationFamily})
+			}
+			if times[ref.Object] && d.Family != machine.ProvidedTimeFamily && machinesStageOrLater(d.Stage) {
+				d.Requires = append(d.Requires, reconciliation.ObjectRef{Kind: string(api.Machine), Object: ref.Object, Family: machine.ProvidedTimeFamily})
 			}
 		}
 	}

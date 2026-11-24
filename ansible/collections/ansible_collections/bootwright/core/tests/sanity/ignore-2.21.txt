@@ -47,6 +47,8 @@ plugins/modules/managedos_provided_hostname.py validate-modules:missing-gplv3-li
 plugins/modules/managedos_provided_hostname_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/managedos_provided_registration.py validate-modules:missing-gplv3-license
 plugins/modules/managedos_provided_registration_protocol.py validate-modules:missing-gplv3-license
+plugins/modules/managedos_provided_time.py validate-modules:missing-gplv3-license
+plugins/modules/managedos_provided_time_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/managedos_provided_update.py validate-modules:missing-gplv3-license
 plugins/modules/managedos_provided_update_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/managedos_registration.py validate-modules:missing-gplv3-license

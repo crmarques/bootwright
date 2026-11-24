@@ -147,7 +147,7 @@ func (s Service) Check(ctx context.Context, request PreflightRequest) (*Report, 
 	}
 	guests := fanout.Run(ctx, fanout.Options[string, []Check]{Limit: capacity.ProbeConcurrency}, hostNames, func(ctx context.Context, name string) ([]Check, error) {
 		ports := slices.DeleteFunc(slices.Clone(published), func(requirement HostPortRequirement) bool { return requirement.Machine != name })
-		return s.guestChecks(ctx, selected, catalog, name, owned, HostRequirements{Ports: ports, Fleet: fleet[name], Peers: peers[name], AppliedHostname: appliedHostname(catalog, name)}, request)
+		return s.guestChecks(ctx, selected, catalog, name, owned, HostRequirements{Ports: ports, Fleet: fleet[name], Peers: peers[name], AppliedHostname: appliedHostname(catalog, name), AppliedTime: appliedTime(catalog, name)}, request)
 	})
 	if err := fanout.FirstError(guests); err != nil {
 		return nil, err
@@ -174,6 +174,11 @@ func appliedHostname(catalog api.Catalog, name string) string {
 		return ""
 	}
 	return machine.ProvidedHostname(host, machine.ControllerName(catalog))
+}
+
+func appliedTime(catalog api.Catalog, name string) bool {
+	host, found := catalog.Find(api.Machine, name)
+	return found && len(machine.ProvidedTime(host, machine.ControllerName(catalog))) != 0
 }
 
 var nameAddressingServices = []string{"alertmanager", "alloy", "grafana", "loki", "mgmt-gateway", "prometheus", "promtail"}

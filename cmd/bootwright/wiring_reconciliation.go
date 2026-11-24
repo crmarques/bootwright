@@ -36,6 +36,7 @@ import (
 	"github.com/crmarques/bootwright/internal/managedos/physicalerase"
 	"github.com/crmarques/bootwright/internal/managedos/providedhostname"
 	"github.com/crmarques/bootwright/internal/managedos/providedregistration"
+	"github.com/crmarques/bootwright/internal/managedos/providedtime"
 	"github.com/crmarques/bootwright/internal/managedos/providedupdate"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/ansiblerunner"
@@ -204,6 +205,8 @@ func operationPlaybook() map[string]string {
 		providedhostname.Implementation + "/observe":                "managedos/provided_hostname_observe.yml",
 		providedregistration.Implementation + "/apply":              "managedos/provided_registration_apply.yml",
 		providedregistration.Implementation + "/observe":            "managedos/provided_registration_observe.yml",
+		providedtime.Implementation + "/apply":                      "managedos/provided_time_apply.yml",
+		providedtime.Implementation + "/observe":                    "managedos/provided_time_observe.yml",
 		hostfirewall.FirewallImplementation + "/apply":              "managedos/firewall_apply.yml",
 		hostfirewall.FirewallImplementation + "/observe":            "managedos/firewall_observe.yml",
 		hostfirewall.FirewallImplementation + "/destroy":            "managedos/firewall_destroy.yml",
@@ -327,6 +330,9 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 	}, {
 		kind: installation.Kind, implementation: providedregistration.Implementation, family: machine.ProvidedRegistrationFamily,
 		capability: providedregistration.New(runner),
+	}, {
+		kind: installation.Kind, implementation: providedtime.Implementation, family: machine.ProvidedTimeFamily,
+		capability: providedtime.New(runner),
 	}, boundCapability{
 		kind: installation.Kind, implementation: hostfirewall.FirewallImplementation, family: hostfirewall.FirewallFamily,
 		capability: hostfirewall.New(runner).WithHostPorts(hostPortRequirements),

@@ -91,6 +91,10 @@
     "contentDigest": "0fb5f78ccca444bb834fcbd3c07325852fc5b6ae4c5368134f8e7efd403936ce",
     "fingerprint": "0bdf6e613a77763a9bb923cac06e0b64b9b8bcef689459b49a6ef3a01c608b10"
   },
+  "os-provided-time-v1": {
+    "contentDigest": "4819cd4506a2a6d5428fc494fce756c4e69e3e7b20851101de6e2d6e5fe1b5e8",
+    "fingerprint": "59eea0b3636f10f1588792c265d84e12d9643da5e366305bb749a87ffef3d559"
+  },
   "os-provided-update-v1": {
     "contentDigest": "838ca785639f9e4b5fc6632987e7858a38a745e4b3a1c8feec52fd191982b6f9",
     "fingerprint": "eaeffb491a114da926aefe3d70b8cef59a2fdef2ec009f386687fc3a1309bdf3"

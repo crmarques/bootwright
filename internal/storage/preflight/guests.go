@@ -78,6 +78,10 @@ func (g GuestChecks) CheckGuest(ctx context.Context, contextName string, host ap
 			check.Status, check.Reason = capacity.Pending, "apply sets the hostname to "+hostname
 			check.Next = "run bootwright apply --context " + contextName + " --stage machines"
 		}
+		if probe.id == "host.time" && check.Status == capacity.Failed && err == nil && requirements.AppliedTime {
+			check.Status, check.Reason = capacity.Pending, "apply synchronizes its clock"
+			check.Next = "run bootwright apply --context " + contextName + " --stage machines"
+		}
 		checks = append(checks, check)
 		clear(data)
 	}

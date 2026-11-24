@@ -749,7 +749,9 @@ The same read proves each host's clock: a host where `timedatectl` does not
 report `NTPSynchronized=yes` refuses `time-unsynchronized`, whose native
 error names the Machine and the value it reported.
 Apply sets a provided Machine's hostname first
-([provided hostname](managed-os.md#provided-hostname)).
+([provided hostname](managed-os.md#provided-hostname)), and synchronizes its
+clock first when it declares `spec.os.provided.ntp`
+([provided time synchronization](managed-os.md#provided-time-synchronization)).
 The generated native HostSpec is visible as non-secret plan intent. A raw
 `service_type: host` entry in `services` refuses because it would create a
 second infrastructure owner.

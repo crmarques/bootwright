@@ -2261,6 +2261,95 @@ Satellite; the block's removal has no host effect.
 | `registration-unavailable` | Restore the Machine's route to the Satellite and its subscription tooling, or, when the record `/etc/bootwright/provided-registration.json` is unreadable, restore its settings by hand and remove it, and repeat apply. |
 | `registration-content-root` | Make the Satellite serve the host's repositories beneath the declared `contentBaseURL`, or correct it, and repeat apply. |
 
+## Provided time synchronization
+
+### Selection
+
+A remote provided Machine opts in through a nonempty
+[`spec.os.provided.ntp`](api/machines.md#provided-time-synchronization). Ceph
+monitors need clocks that agree, and a provided host's chrony is otherwise
+its owner's, so a Ceph tiebreaker or host whose time service is stopped or
+points at unreachable servers would refuse
+[`time-unsynchronized`](ceph-native-api.md#hosts-placement-and-crush). A
+Machine that is the controller or has no pinned lifecycle SSH refuses at plan,
+naming the field. Each selection resolves to one address under the
+[selection list rules](api/infrastructure-services.md#dns-and-ntp-selection-lists):
+an external server's declared `address`, a managed server's selected
+endpoint address.
+
+### Effect
+
+`providedtime.Capability` freezes the ordered server addresses and the pinned
+placement in an `os-time-<machine>` block in the machines stage. It waits for
+the hardware claim, any managed lifecycle enrollment, the Machine's
+[provided hostname](#provided-hostname) and
+[registration](#provided-registration), and the service block of each managed
+`NTPServer` it selects. Every other block that waits for that Machine's
+hardware claim, except its managed firewall, its enrollment, its hostname and
+its registration, also waits for it, so a Ceph host reads a synchronized
+clock. It shares the `provided-os/<machine>` exclusion with the Machine's
+other provided blocks.
+
+The worker runs as root on the pinned host:
+
+1. A time service other than chrony (`systemd-timesyncd`, `ntpd`, `ntpsec`,
+   `openntpd` or `timemaster`) that is enabled or active refuses
+   `time-service-conflict`, naming the unit, before any change. Bootwright
+   never stops another owner's time service.
+2. A host without the `chrony` package installs it from its enabled
+   repositories with `dnf -y install chrony` within a bounded time; a failure
+   refuses `time-package`.
+3. The desired `/etc/chrony.conf` is the current file with every line whose
+   first word is `server`, `pool` or `peer` removed and one
+   `server <address> iburst` line per selection, in order, at the first
+   removed line or, when there is none, at the start. Every other directive,
+   `sourcedir`, `confdir` and `include` included, stays as it is. A file that
+   is a link, not a regular file, or larger than 64 KiB refuses
+   `time-config` before any change.
+4. When the file differs, `chronyd` is not both enabled and active, or a
+   record is outstanding, it first records the file's prior bytes, mode, owner and SELinux label or its
+   absence, and whether `chronyd` was enabled and active, naming the request
+   digest for the operator alone, in the root-only
+   `/etc/bootwright/provided-time.json`, written 0600 through a staged rename
+   and synced with its directory. A record an earlier apply left outstanding
+   is the rollback target and is never recorded again. It then writes the
+   desired file through a staged rename that keeps the prior mode, owner and
+   label, runs `systemctl enable chronyd` and restarts `chronyd`.
+5. It proves the clock: `timedatectl show --property=NTPSynchronized --value`
+   must print `yes`, the value the Ceph prerequisites read, within 180
+   seconds, read every 5 seconds. A host whose file and service were already
+   desired waits the same bound and changes nothing. When the bound passes
+   while a record exists, this run's or an outstanding one, it restores the
+   recorded file and the recorded enablement and activity of `chronyd`,
+   removes the record and refuses `time-unproved`, naming each source of
+   `chronyc -n sources` with its mode, state and reachability; a host without
+   a record refuses the same without a restore. A failed command, an unreadable record or a failed
+   restore refuses `time-unavailable` and keeps the record. Success removes
+   the record.
+
+It reports `converged` when it changed the file or the service or settled an
+outstanding record, and `unchanged` otherwise. An observation reads the
+record, the file, `chronyd`'s state and `NTPSynchronized` without changing
+them: an outstanding or unreadable record reads a partial effect, the
+desired file with `chronyd` enabled, active and synchronized proves
+completion, the desired file otherwise a partial effect the next apply
+converges, and any other file no effect. Destroy retains the configuration,
+which names the declared servers; the block's removal has no host effect.
+
+The storage preflight reports its `host.time` probe on such a Machine as
+pending, not failed, because the machines stage synchronizes the clock before
+any Ceph block runs.
+
+### Refusal table
+
+| Reason | Remedy |
+| --- | --- |
+| `time-service-conflict` | Disable the named time service on the Machine, such as with `systemctl disable --now <unit>`, and repeat apply. |
+| `time-package` | Enable a repository that provides `chrony` on the Machine, or install it, and repeat apply. |
+| `time-config` | Replace `/etc/chrony.conf` with a regular file of at most 64 KiB, and repeat apply. |
+| `time-unproved` | Make the declared servers reachable from the Machine on UDP port 123, or name servers it can reach in `spec.os.provided.ntp`, and repeat apply; the host keeps the configuration it had. |
+| `time-unavailable` | Restore `chronyd` and the Machine's route to its tools, or, when the record `/etc/bootwright/provided-time.json` is unreadable or outstanding, restore `/etc/chrony.conf` and `chronyd` from it by hand and remove it, and repeat apply. |
+
 ## Shared package-tree publication
 
 For a hosted package source, Managed OS plans one block per context and

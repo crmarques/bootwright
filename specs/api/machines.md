@@ -281,7 +281,7 @@ own refusal.
 | `spec.hardware.nics[].segmentRef` | string | no | the provider's sole segment | A segment of the provider; refused without `providerRef`. |
 | `spec.hardware.rootDisk` | object | no | — | The root disk's identity, selector and hints, and its removal action; [root disk](#root-disk). |
 | `spec.hardware.dataDisks` | array | no | — | Data disks acted on at installation or removal; [data disks and disk actions](#data-disks-and-disk-actions). |
-| `spec.os.provided` | object | union | — | The OS-ready arm. Use `provided: {}` or opt into [provided OS updates](#provided-os-updates) and a [provided registration](#provided-registration). |
+| `spec.os.provided` | object | union | — | The OS-ready arm. Use `provided: {}` or opt into [provided OS updates](#provided-os-updates), a [provided registration](#provided-registration) and [provided time synchronization](#provided-time-synchronization). |
 | `spec.os.install.profileRef` | string | with `install` | — | Global `MachineInstallProfile`; the Bootwright-installed arm. |
 | `spec.os.install.ntp` | array of selections | no | install-profile selections | NTPServer selections for a Bootwright-installed Machine; `[]` clears profile selections. |
 | `spec.os.install.hostKeyRef` | string | conditional | — | `sshKeyPair` `Secret` delivered as the installed SSH host key; required on bare metal, optional on libvirt ([completion channel](../managed-os.md#delivered-identity-off-the-hypervisor)), forbidden otherwise. Unique per Machine and no other credential. Effect material. |
@@ -408,6 +408,20 @@ names: Bootwright points the registration at the declared hostname, content
 root and CA, and never creates or removes a consumer on a provided host. See
 [provided registration](../managed-os.md#provided-registration) for the
 effect and its refusals.
+
+### Provided time synchronization
+
+`spec.os.provided.ntp` names the time servers a remote provided Machine's
+chrony converges onto. It is an
+[NTP selection list](infrastructure-services.md#dns-and-ntp-selection-lists):
+each record has required `serverRef` to an `NTPServer` and, for a managed
+server, optional `endpointRef`. Omission or an empty list leaves the host's
+time synchronization to its owner.
+
+The Machine requires pinned lifecycle SSH, as
+[provided OS updates](#provided-os-updates) do, and is not the controller. See
+[provided time synchronization](../managed-os.md#provided-time-synchronization)
+for the effect and its refusals.
 
 ### Hardware and substrate
 
@@ -1219,7 +1233,8 @@ profile list; absent NTP remains absent for the native OS default. An explicit
 `ntp: []` clears inherited selections without disabling OS time
 synchronization. Invalid explicit values never fall back to profile values.
 Only Bootwright-installed Machines may author this NTP override; provided and
-downstream-installer Machines reject it. Container installation owns its
+downstream-installer Machines reject it. A provided Machine names its servers in
+[`spec.os.provided.ntp`](#provided-time-synchronization). Container installation owns its
 separate cluster proxy and NTP choices and does not inherit Machine fields.
 
 ### Customizations

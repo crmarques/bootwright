@@ -32,7 +32,7 @@ PROTOCOLS = {
     "infrastructureservices_mirror_release_protocol",
     "machine_hardware_protocol", "machine_power_protocol", "machine_privilege_protocol",
     "managedos_firewall_protocol", "managedos_install_protocol", "managedos_provided_hostname_protocol",
-    "managedos_provided_update_protocol", "managedos_provided_registration_protocol",
+    "managedos_provided_update_protocol", "managedos_provided_registration_protocol", "managedos_provided_time_protocol",
     "managedos_tree_protocol", "managedos_disk_discovery_protocol",
     "substrate_host_protocol", "substrate_libvirt_machine_protocol", "substrate_physical_protocol", "physical_erase_protocol",
     "substrate_kubevirt_protocol",

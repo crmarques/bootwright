@@ -1,0 +1,23 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: witness
+
+spec:
+  os:
+    provided:
+      ntp:
+        - serverRef: lab-ntp
+          endpointRef: ip
+
+  network:
+    addresses:
+      - name: ssh
+        address: 192.0.2.234
+
+  access:
+    ssh:
+      knownHostsRef: witness-host-key
+
+      auth:
+        privateKeyRef: witness-admin

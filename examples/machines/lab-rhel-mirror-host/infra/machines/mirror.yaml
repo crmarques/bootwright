@@ -5,7 +5,10 @@ metadata:
 
 spec:
   os:
-    provided: {}
+    provided:
+      ntp:
+        - serverRef: lab-ntp
+          endpointRef: ip
 
   proxy:
     direct: {}

@@ -1,0 +1,13 @@
+---
+- name: Execute one provided time synchronization capability
+  hosts: bootwright_target
+  gather_facts: false
+  any_errors_fatal: true
+  serial: 1
+  strategy: ansible.builtin.linear
+
+  tasks:
+    - name: Execute the provided time synchronization apply
+      ansible.builtin.import_role:
+        name: bootwright.core.managedos_provided_time
+        tasks_from: apply

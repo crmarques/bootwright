@@ -139,3 +139,53 @@ func TestAHostWithoutAProvidedHostnameExpectsNoAppliedName(t *testing.T) {
 		}
 	}
 }
+
+func TestAClockApplySynchronizesIsPendingNotFailed(t *testing.T) {
+	host := api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue(api.FieldValue{Name: "network", Value: api.MapValue(api.FieldValue{Name: "addresses", Value: api.ListValue(api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue("fqdn")}, api.FieldValue{Name: "address", Value: api.StringValue("guest.example.test")}))})}))
+	checker := GuestChecks{Commands: CommandFunc(func(_ context.Context, request CommandRequest) ([]byte, error) {
+		answers := map[string]string{"/usr/bin/hostname": "guest.example.test\n", "/usr/bin/uname": "kernel\n", "/usr/bin/cat": "ID=rhel\n", "/usr/bin/timedatectl": "no\n", "/usr/bin/id": "0\n", "/usr/bin/getent": "192.0.2.1 STREAM guest.example.test\n"}
+		return []byte(answers[request.Argv[0]]), nil
+	})}
+	for _, test := range []struct {
+		name    string
+		applied bool
+		want    string
+	}{
+		{"apply synchronizes the clock", true, capacity.Pending},
+		{"apply declares no time servers", false, capacity.Failed},
+	} {
+		rows, err := checker.CheckGuest(context.Background(), "synthetic", host, HostRequirements{AppliedTime: test.applied}, PreflightRequest{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, row := range rows {
+			want := capacity.Passed
+			if row.ID == "host.time" {
+				want = test.want
+			}
+			if row.Status != want {
+				t.Fatalf("%s: %+v, want %s", test.name, row, want)
+			}
+			if row.ID == "host.time" && test.want == capacity.Pending && (row.Reason != "apply synchronizes its clock" || row.Next != "run bootwright apply --context synthetic --stage machines") {
+				t.Fatalf("%s: %+v", test.name, row)
+			}
+		}
+	}
+}
+
+func TestOnlyAProvidedMachineDeclaringTimeServersExpectsAnAppliedClock(t *testing.T) {
+	bare := api.NewObject(api.Machine, "bare", api.Value{}, api.MapValue())
+	field := func(name string, value api.Value) api.FieldValue { return api.FieldValue{Name: name, Value: value} }
+	text := func(name, value string) api.FieldValue { return field(name, api.StringValue(value)) }
+	declared := api.NewObject(api.Machine, "declared", api.Value{}, api.MapValue(
+		field("os", api.MapValue(field("provided", api.MapValue(field("ntp", api.ListValue(api.MapValue(text("serverRef", "pool")))))))),
+		field("network", api.MapValue(field("addresses", api.ListValue(api.MapValue(text("name", "ssh"), text("address", "192.0.2.9")))))),
+		field("access", api.MapValue(field("ssh", api.MapValue(text("addressRef", "ssh"), text("knownHostsRef", "pin"),
+			field("auth", api.MapValue(text("privateKeyRef", "key")))))))))
+	catalog := api.NewCatalog([]api.Object{bare, declared})
+	for name, want := range map[string]bool{"absent": false, "bare": false, "declared": true} {
+		if got := appliedTime(catalog, name); got != want {
+			t.Fatalf("Machine %s expects an applied clock = %v, want %v", name, got, want)
+		}
+	}
+}

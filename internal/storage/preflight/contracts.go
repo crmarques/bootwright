@@ -23,6 +23,7 @@ type HostRequirements struct {
 	Fleet           *FleetAccess
 	Peers           *PeerNames
 	AppliedHostname string
+	AppliedTime     bool
 }
 
 type PeerNames struct{ Services, Names []string }

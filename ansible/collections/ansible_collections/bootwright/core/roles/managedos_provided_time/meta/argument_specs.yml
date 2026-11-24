@@ -1,0 +1,40 @@
+argument_specs:
+  apply:
+    short_description: Converge chrony on a provided RHEL host onto its declared time servers and prove its clock.
+    options: &request
+      bootwright_provided_time_request:
+        type: dict
+        required: true
+        options:
+          version:
+            type: str
+            required: true
+            choices:
+              - provided-os-time-request-v1
+          identity:
+            type: dict
+            required: true
+          placement:
+            type: dict
+            required: true
+          servers:
+            type: list
+            elements: str
+            required: true
+      bootwright_provided_time_digest:
+        type: str
+        required: true
+      bootwright_provided_time_material:
+        type: dict
+        required: true
+        options:
+          identity:
+            type: str
+            required: true
+          knownHosts:
+            type: str
+            required: true
+
+  observe:
+    short_description: Read the chrony configuration and clock of a provided RHEL host.
+    options: *request

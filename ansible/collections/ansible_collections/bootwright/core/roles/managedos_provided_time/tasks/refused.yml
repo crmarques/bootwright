@@ -1,0 +1,15 @@
+---
+- name: Publish a bounded provided time synchronization refusal
+  bootwright.core.managedos_provided_time_protocol:
+    phase: refused
+    reason: '{{ managedos_provided_time_answer.reason }}'
+    detail: "{{ managedos_provided_time_answer.detail | default('') }}"
+  when:
+    - managedos_provided_time_answer.ok | default(false) is not true
+    - managedos_provided_time_answer.reason is defined
+  no_log: true
+
+- name: Refuse a provided time synchronization that did not provide success evidence
+  ansible.builtin.fail:
+    msg: 'The provided time synchronization did not return success evidence'
+  when: managedos_provided_time_answer.ok | default(false) is not true

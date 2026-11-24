@@ -208,6 +208,9 @@ func normalizedInstallation(o api.Object, c api.Catalog, s api.Value) api.Value 
 			s = s.WithPath(install, "os", "install")
 		}
 	}
+	if api.MachineProvided(o) && s.Has("os", "provided", "ntp") {
+		s = s.WithPath(infrastructureservices.NormalizeServerSelections(s.Get("os", "provided", "ntp"), c, api.NTPServer), "os", "provided", "ntp")
+	}
 	if api.MachineProvided(o) || installed(o) {
 		s = s.With("proxy", infrastructureservices.NormalizeProxy(s.Get("proxy"), c))
 	}
@@ -300,6 +303,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	issues = api.AppendIssues(issues, validateFirewall(o, c)...)
 	issues = api.AppendIssues(issues, validateProvidedUpdate(o, c)...)
 	issues = api.AppendIssues(issues, validateProvidedRegistration(o, c)...)
+	issues = api.AppendIssues(issues, validateProvidedTime(o, c)...)
 	issues = api.AppendIssues(issues, validatePlacementHost(o, c)...)
 	issues = api.AppendIssues(issues, validateHostKey(o, c)...)
 	return api.AppendIssues(issues, validateBMC(substrate.MachineBMC(o), s.Has("hardware", "providerRef") && !found)...)
@@ -985,6 +989,7 @@ func validateServices(o api.Object, c api.Catalog) []api.Issue {
 		}
 	}
 	issues = api.AppendIssues(issues, infrastructureservices.ValidateServerSelections(s.Get("os", "install", "ntp"), c, api.NTPServer, "$.spec.os.install.ntp")...)
+	issues = api.AppendIssues(issues, infrastructureservices.ValidateServerSelections(s.Get("os", "provided", "ntp"), c, api.NTPServer, "$.spec.os.provided.ntp")...)
 	return issues
 }
 

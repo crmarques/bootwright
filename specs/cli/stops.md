@@ -431,6 +431,16 @@ Stops for [provided registration](../managed-os.md#provided-registration).
 | `osregistration.refused` | adapter-run | possible | target | - | fix-then-repeat | the Machine's registration or its Satellite did not satisfy the provided registration | check the Machine's registration, its route to the Satellite and the Entitlement's CA bundle, then repeat the operation |
 | `osregistration.unproved` | block | unproved | target | - | repeat | the provided registration adapter ended without proving the registration | repeat the operation to observe the Machine before resuming the registration |
 
+## Provided OS time stops
+
+Stops for [provided time synchronization](../managed-os.md#provided-time-synchronization).
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `ostime.request-invalid` | block | none | defect | - | none | the provided time synchronization request is invalid, so no adapter ran | report the message as a defect |
+| `ostime.refused` | adapter-run | possible | target | - | fix-then-repeat | the Machine's time service or configuration did not satisfy the provided time synchronization | check the Machine's time service, its chrony configuration and its route to the declared servers, then repeat the operation |
+| `ostime.unproved` | block | unproved | target | - | repeat | the provided time synchronization adapter ended without proving the clock synchronized | repeat the operation to observe the Machine before resuming the time synchronization |
+
 ## Managed OS installation stops
 
 The managed OS installation capability's stops (`internal/managedos/installation`).

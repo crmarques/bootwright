@@ -469,7 +469,7 @@ func TestAnUnsynchronizedClockNamesTheTimeSourceToCheck(t *testing.T) {
 	refused := adapterRefusals()["time-unsynchronized"]
 	d := diagnostics.Of(refused)
 	const message = "a Ceph host's clock is not synchronized to a time source: timedatectl does not report NTPSynchronized=yes there, and Ceph monitors need clocks that agree"
-	const remedy = "the native error names the Machine and what timedatectl reported; on that host, chronyc sources must show a reachable source selected with *; a Bootwright-installed Machine takes its servers from its install profile's ntp selections, a provided Machine from its own chrony configuration; once timedatectl reports NTPSynchronized=yes there, apply again; the block changed nothing on any Ceph host before the check"
+	const remedy = "the native error names the Machine and what timedatectl reported; on that host, chronyc sources must show a reachable source selected with *; a Bootwright-installed Machine takes its servers from its install profile's ntp selections, a provided Machine from spec.os.provided.ntp, or from its own chrony configuration when it declares none; once timedatectl reports NTPSynchronized=yes there, apply again; the block changed nothing on any Ceph host before the check"
 	if len(d) != 1 || d[0].Code != cephPrerequisite.Code || d[0].Message != message || d[0].Remediation != remedy || !diagnostics.Unproved(refused) {
 		t.Fatalf("a time-unsynchronized refusal reached the operator as %+v", d)
 	}

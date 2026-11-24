@@ -36,6 +36,7 @@ import (
 	"github.com/crmarques/bootwright/internal/managedos/physicalerase"
 	"github.com/crmarques/bootwright/internal/managedos/providedhostname"
 	"github.com/crmarques/bootwright/internal/managedos/providedregistration"
+	"github.com/crmarques/bootwright/internal/managedos/providedtime"
 	"github.com/crmarques/bootwright/internal/managedos/providedupdate"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/storage/ceph"
@@ -69,6 +70,7 @@ func contractVersions() []contractVersion {
 		{providedupdate.Implementation, providedupdate.ContentDigest(), reflect.TypeFor[providedupdate.Request](), reflect.TypeFor[providedupdate.Evidence]()},
 		{providedhostname.Implementation, providedhostname.ContentDigest(), reflect.TypeFor[providedhostname.Request](), reflect.TypeFor[providedhostname.Evidence]()},
 		{providedregistration.Implementation, providedregistration.ContentDigest(), reflect.TypeFor[providedregistration.Request](), reflect.TypeFor[providedregistration.Evidence]()},
+		{providedtime.Implementation, providedtime.ContentDigest(), reflect.TypeFor[providedtime.Request](), reflect.TypeFor[providedtime.Evidence]()},
 		{hostfirewall.FirewallImplementation, hostfirewall.FirewallContentDigest(), reflect.TypeFor[hostfirewall.FirewallRequest](), reflect.TypeFor[hostfirewall.FirewallEvidence]()},
 		{installation.Implementation, installation.ContentDigest(), reflect.TypeFor[installation.Request](), reflect.TypeFor[installation.Evidence]()},
 		{agentinstall.MediaImplementation, agentinstall.MediaContentDigest(), reflect.TypeFor[agentinstall.MediaRequest](), reflect.TypeFor[agentinstall.MediaEvidence]()},
@@ -176,6 +178,8 @@ func automationFormats() map[string]automationFormat {
 		providedhostname.EvidenceVersion:     {class: formatMirrored},
 		providedregistration.Version:         {class: formatMirrored},
 		providedregistration.EvidenceVersion: {class: formatMirrored},
+		providedtime.Version:                 {class: formatMirrored},
+		providedtime.EvidenceVersion:         {class: formatMirrored},
 		"cluster-objects-v1":                 {class: formatMirrored},
 		// The host block writes them; the core block's workers read them back
 		// for the manager account, the cephadm cache and the OSD identities.

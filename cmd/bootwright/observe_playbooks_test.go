@@ -111,6 +111,15 @@ func observeAllowlist() map[observeTaskKey]observeAllowance {
 	add(registration, "observe.yml", "ansible.builtin.assert", "validates the frozen request in memory", read)
 	add(registration, "refused.yml", registrationProtocol, "publishes a bounded read-only refusal", observeIs("phase", "refused"))
 	add(registration, "refused.yml", "ansible.builtin.fail", "reports a failed read without touching the host", read)
+	const timeSync = "managedos_provided_time"
+	const timeProtocol = observeCollection + "managedos_provided_time_protocol"
+	add(timeSync, "observe.yml", observeCollection+timeSync, "reads the rollback record, chrony.conf, chronyd's state and NTPSynchronized without writing them", observeIs("operation", "observe"))
+	add(timeSync, "observe.yml", timeProtocol, "publishes read-only time synchronization evidence", func(params, _ map[string]any) bool {
+		return params["phase"] == "loaded" || params["phase"] == "completed" && params["observed"] == true
+	})
+	add(timeSync, "observe.yml", "ansible.builtin.assert", "validates the frozen request in memory", read)
+	add(timeSync, "refused.yml", timeProtocol, "publishes a bounded read-only refusal", observeIs("phase", "refused"))
+	add(timeSync, "refused.yml", "ansible.builtin.fail", "reports a failed read without touching the host", read)
 	add("managedos_disk_discovery", "result.yml", "ansible.builtin.assert", "reports only static bounded failure classifications in memory", read)
 	add("managedos_disk_discovery", "observe.yml", observeCollection+"managedos_disk_discovery", "reads custody and BMC identity/state without boot, acknowledgement or cleanup", func(params, _ map[string]any) bool {
 		return params["operation"] == "observe"

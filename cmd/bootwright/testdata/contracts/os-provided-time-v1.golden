@@ -1,0 +1,38 @@
+implementation: os-provided-time-v1
+content-digest: 4819cd4506a2a6d5428fc494fce756c4e69e3e7b20851101de6e2d6e5fe1b5e8
+request-version: provided-os-time-request-v1
+automation-formats: none
+mark-formats: none
+proof-ids: none
+fixed-places: none
+effect-pins:
+  chrony-servers-record-restore-ntp-synchronized-proof-v1
+request-identity:
+  identity.context
+  identity.object
+  identity.block
+  placement.machine
+  servers
+request-schema:
+  identity struct providedtime.Identity
+  identity.block string
+  identity.context string
+  identity.object string
+  placement struct machine.Placement
+  placement.address string omitempty
+  placement.connection string
+  placement.knownHostsRef string omitempty
+  placement.machine string
+  placement.port int omitempty
+  placement.privateKeyRef string omitempty
+  placement.privilege string omitempty
+  placement.user string omitempty
+  servers []string
+  version string
+evidence-schema:
+  changed bool
+  postcondition bool
+  request string
+  servers []string
+  state string
+  version string

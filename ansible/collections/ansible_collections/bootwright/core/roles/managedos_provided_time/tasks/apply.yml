@@ -1,0 +1,39 @@
+---
+- name: Validate the frozen provided time synchronization request
+  ansible.builtin.assert:
+    that:
+      - bootwright_provided_time_request.version == 'provided-os-time-request-v1'
+      - bootwright_provided_time_request.placement.connection == 'ssh'
+      - bootwright_provided_time_request.servers | length > 0
+      - bootwright_provided_time_request.servers | length <= 256
+      - bootwright_provided_time_digest is match('^[0-9a-f]{64}$(?!\n)')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.managedos_provided_time_protocol:
+    phase: loaded
+
+- name: Converge chrony onto the declared servers and prove the clock
+  bootwright.core.managedos_provided_time:
+    operation: apply
+    request: '{{ bootwright_provided_time_digest }}'
+    servers: '{{ bootwright_provided_time_request.servers }}'
+  register: managedos_provided_time_applied
+  failed_when: false
+  timeout: 840
+  no_log: true
+
+- name: Resolve a bounded time synchronization refusal
+  ansible.builtin.import_tasks: refused.yml
+  vars:
+    managedos_provided_time_answer: '{{ managedos_provided_time_applied }}'
+
+- name: Publish completed provided time synchronization evidence
+  bootwright.core.managedos_provided_time_protocol:
+    phase: completed
+    digest: '{{ bootwright_provided_time_digest }}'
+    servers: '{{ bootwright_provided_time_request.servers }}'
+    answer: '{{ managedos_provided_time_applied }}'
+    outcome: "{{ 'changed' if managedos_provided_time_applied.changed else 'unchanged' }}"
+  no_log: true

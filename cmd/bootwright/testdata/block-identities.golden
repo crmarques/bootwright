@@ -236,6 +236,7 @@ lab-rhel-mirror-host:
   os-hostname-mirror
   os-install-rhel-01
   os-package-tree-rhel-9-8
+  os-time-mirror
   proxy-lab-proxy
   registry-mirror-registry
   substrate-host-lab-libvirt

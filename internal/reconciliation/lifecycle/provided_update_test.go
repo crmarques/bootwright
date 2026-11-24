@@ -141,3 +141,46 @@ func TestProvidedRegistrationFollowsTheHostnameAndPrecedesTheUpdate(t *testing.T
 		t.Errorf("the registration took the host exclusion %v", got[2].Exclusive)
 	}
 }
+
+func TestProvidedTimeFollowsTheHostnameAndRegistrationAndPrecedesEveryMachineConsumer(t *testing.T) {
+	machineRef := func(object, family string) reconciliation.ObjectRef {
+		return reconciliation.ObjectRef{Kind: string(api.Machine), Object: object, Family: family}
+	}
+	hardware := []reconciliation.ObjectRef{machineRef("witness", machine.HardwareFamily)}
+	definitions := []reconciliation.BlockDefinition{
+		{ID: "claim", Kind: string(api.Machine), Object: "witness", Family: machine.HardwareFamily},
+		{ID: "clock", Stage: reconciliation.StageInfrastructureServices, Kind: string(api.NTPServer), Object: "clock"},
+		{ID: "hostname", Stage: reconciliation.StageMachines, Kind: string(api.Machine), Object: "witness", Family: machine.ProvidedHostnameFamily, Requires: hardware},
+		{ID: "registration", Stage: reconciliation.StageMachines, Kind: string(api.Machine), Object: "witness", Family: machine.ProvidedRegistrationFamily, Requires: hardware},
+		{ID: "time", Stage: reconciliation.StageMachines, Kind: string(api.Machine), Object: "witness", Family: machine.ProvidedTimeFamily,
+			Requires: []reconciliation.ObjectRef{hardware[0], {Kind: string(api.NTPServer), Object: "clock"}}},
+		{ID: "update", Stage: reconciliation.StageMachines, Kind: string(api.Machine), Object: "witness", Family: machine.ProvidedUpdateFamily, Requires: hardware},
+		{ID: "ceph", Stage: reconciliation.StageClusters, Requires: hardware},
+		{ID: "firewall", Stage: reconciliation.StageMachines, Kind: string(api.Machine), Object: "witness", Family: machine.FirewallFamily, Requires: hardware},
+		{ID: "enroll", Stage: reconciliation.StageMachines, Kind: string(api.Machine), Object: "witness", Family: machine.EnrollmentFamily, Requires: hardware},
+		{ID: "controller-consumer", Stage: reconciliation.StageController, Requires: hardware},
+		{ID: "other", Kind: string(api.Machine), Object: "other", Family: machine.HardwareFamily},
+		{ID: "other-ceph", Stage: reconciliation.StageClusters, Requires: []reconciliation.ObjectRef{machineRef("other", machine.HardwareFamily)}},
+	}
+	got, err := reconciliation.ResolveRequirements(dependOnProvidedUpdates(dependOnEnrollment(definitions)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string][]string{
+		"claim": nil, "clock": nil, "hostname": {"claim", "enroll"}, "registration": {"claim", "enroll", "hostname"},
+		"time":     {"claim", "clock", "enroll", "hostname", "registration"},
+		"update":   {"claim", "enroll", "registration", "time"},
+		"ceph":     {"claim", "enroll", "hostname", "registration", "time", "update"},
+		"firewall": {"claim", "enroll"}, "enroll": {"claim"}, "controller-consumer": {"claim", "enroll", "registration", "update"},
+		"other": nil, "other-ceph": {"other"},
+	}
+	for _, definition := range got {
+		if !slices.Equal(definition.Dependencies, want[definition.ID]) {
+			t.Errorf("%s dependencies = %v, want %v", definition.ID, definition.Dependencies, want[definition.ID])
+		}
+		shared := slices.Contains(definition.Exclusive, "provided-os/witness")
+		if wantShared := slices.Contains([]string{"hostname", "time", "update", "firewall"}, definition.ID); shared != wantShared {
+			t.Errorf("%s shares the provided-os exclusion = %v, want %v", definition.ID, shared, wantShared)
+		}
+	}
+}

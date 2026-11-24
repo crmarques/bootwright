@@ -17,21 +17,23 @@ STAGE = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC
 DIRECTORY = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 
 
-def publish(directory, name, data, mode, prefix=".bootwright-"):
-    """Replace directory/name with exactly data at mode; directory is a descriptor or a path."""
+def publish(directory, name, data, mode, prefix=".bootwright-", owner=None, label=None):
+    """Replace directory/name with exactly data at mode; directory is a descriptor or a path.
+
+    An owner, a (uid, gid) pair, and a label, SELinux context bytes, are set on the stage before it is renamed."""
     if os.path.basename(name) != name or name in ("", ".", "..") or not prefix.startswith("."):
         raise ValueError("an atomic publication names one hidden stage and one entry of its directory")
     if isinstance(directory, int):
-        publish_at(directory, name, data, mode, prefix)
+        publish_at(directory, name, data, mode, prefix, owner, label)
         return
     held = os.open(directory, DIRECTORY)
     try:
-        publish_at(held, name, data, mode, prefix)
+        publish_at(held, name, data, mode, prefix, owner, label)
     finally:
         os.close(held)
 
 
-def publish_at(held, name, data, mode, prefix):
+def publish_at(held, name, data, mode, prefix, owner=None, label=None):
     stage = prefix + secrets.token_hex(12)
     descriptor = os.open(stage, STAGE, 0o600, dir_fd=held)
     staged = True
@@ -39,7 +41,11 @@ def publish_at(held, name, data, mode, prefix):
         with os.fdopen(descriptor, "wb") as stream:
             stream.write(data)
             stream.flush()
+            if owner is not None:
+                os.fchown(stream.fileno(), *owner)
             os.fchmod(stream.fileno(), mode)
+            if label is not None:
+                os.setxattr(stream.fileno(), "security.selinux", label)
             os.fsync(stream.fileno())
         os.replace(stage, name, src_dir_fd=held, dst_dir_fd=held)
         staged = False
