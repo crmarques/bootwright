@@ -27,7 +27,7 @@ var (
 		Meaning: "a libvirt adapter ended without a usable outcome", Remedy: "repeat the operation, which observes the host before anything else starts"}
 	libvirtPostconditionUnproved = diagnostics.Stop{Code: "libvirt.postcondition-unproved", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyPossible,
 		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryRepeat,
-		Meaning: "a libvirt adapter ended without proving the postcondition of its apply or its removal", Remedy: "repeat the operation, which observes the host before anything else starts"}
+		Meaning: "a libvirt adapter ended without proving the postcondition of its apply or its removal", Remedy: "repeat the operation, which observes the host again"}
 	libvirtEvidenceMismatch = diagnostics.Stop{Code: "libvirt.evidence-mismatch", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyPossible,
 		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryRepeat,
 		Meaning: "libvirt evidence names another request than the block froze, or reports a shape that request does not allow", Remedy: "repeat the operation, which observes the host again"}

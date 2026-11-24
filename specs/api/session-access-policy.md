@@ -92,7 +92,7 @@ has no session roster. Cluster grants follow membership in the selected
 context's effective state. Roster updates can change access to a Machine.
 A shared Machine has the same authorization through either command route.
 The [cluster session selector](../cli/cluster-access.md#sessions) determines
-which nodes an invocation requests, including its default administrator node.
+which nodes an invocation requests, including its default node.
 
 ## Delegated execution
 

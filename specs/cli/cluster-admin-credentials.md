@@ -15,10 +15,10 @@ hidden-password guidance, with no password read. JSON and YAML place the
 explicitly revealed value in `console.passwordValue`, beside `console.user`.
 
 Absent, malformed or unproved password custody refuses `access.unavailable`
-or `secret.store.corrupt`, with no credential result. Older installations that
-retained only a kubeconfig can generate a password through the update command;
-their original password remains in the installation work area's
-`auth/kubeadmin-password`. Inspection makes no network call and describes
+or `secret.store.corrupt`, with no credential result, and its remedy names the
+installation directory's `auth/kubeadmin-password` and
+`bootwright cluster update-admin-creds --context <context> --name <cluster> --login console`.
+Inspection makes no network call and describes
 custodied credentials; it cannot detect an account removed or changed externally.
 
 ## Administrator credential updates
@@ -99,8 +99,10 @@ refusing unexplained password drift.
 
 ### Monitoring logins
 
-The Prometheus and Alertmanager candidates are 32 characters of the dashboard
-password alphabet that Go generates, with the active login's user. Their
+The Prometheus and Alertmanager candidates are 32 characters of the login
+alphabet, drawn uniformly from A-Z, a-z, 0-9, `-`, `_` and `.`
+(`dashboardAlphabet` in `internal/storage/ceph/produced.go`), with the active
+login's user. Their
 pending records are the protected produced entries `prometheus-update` and
 `alertmanager-update` of the gateway block, closed JSON of `guard`, `password`,
 `previous` (the SHA-256 of the active value) and `user`. A pending record whose
@@ -270,7 +272,7 @@ refusal reveals nothing: values already read are cleared, never printed in
 part. A dashboard whose
 evidence alone does not prove it reachable, its copy unmarked, is revealed with
 `dashboard.status` `unproved` and its reason and no warning (D183, Q101). Each value occurs only in
-a `passwordValue` or monitoring `user` field, and is never copied to a diagnostic, log, evidence
+a [revealed field](output.md#revealed-fields), and is never copied to a diagnostic, log, evidence
 record, plan or second stream.
 
 `cluster info --object-user <name> --name <cluster>` reveals the S3 keys of

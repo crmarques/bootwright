@@ -17,6 +17,17 @@ import (
 // the registry of diagnostic codes. Every code production Go can emit is a row,
 // and every row is a code production Go emits, so a new code is documented with
 // its first emission and a retired one leaves the table with its last.
+//
+// The check follows a code through constants, variables, parameters and calls,
+// function variables included, from a function body or a package-level
+// variable initializer. A variable holds every value written to it anywhere,
+// and a parameter every argument it receives. A method call resolves by name
+// to every method it can select: an unexported one of its package, or an
+// exported one of any package. A write it follows that gives no single value (a
+// tuple or compound assignment, a range clause, a taken address, a package
+// variable declared without a value) fails the check, and so does a function
+// storing its argument as a code that is used as a value other than by calling
+// it or binding it to a variable.
 func TestDiagnosticCodesMatchOutputSpec(t *testing.T) {
 	documented := documentedDiagnosticCodes(t)
 	codes := emittedDiagnosticCodes(productionSources(t))

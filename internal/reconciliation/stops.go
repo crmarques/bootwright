@@ -27,7 +27,7 @@ var (
 		Meaning: "a lifecycle plan, lineage or block breaks the shape or the bounds a plan holds, so nothing ran", Remedy: "report the message as a defect"}
 	recordsLineageReshaped = diagnostics.Stop{Code: "records.lineage-reshaped", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryOtherVerb,
-		Meaning: "an additive apply would freeze a block of the applied lineage differently, so nothing ran", Remedy: "take the apply back with bootwright destroy, then apply the changed input"}
+		Meaning: "an additive apply would freeze a block of the applied lineage differently, so nothing ran", Remedy: "take the apply back with bootwright destroy --context <context>, then apply the changed input"}
 	recordsPlanTooLarge = diagnostics.Stop{Code: "records.plan-too-large", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseBound, Recovery: diagnostics.RecoveryChangeInput,
 		Meaning: "a lifecycle plan exceeds its block count or its aggregate request size, so nothing ran", Remedy: "declare fewer objects in the context, or split them across contexts"}

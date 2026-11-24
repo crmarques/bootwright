@@ -5,24 +5,31 @@ The tables define the complete public command tree, operands, flags and defaults
 
 ## Global flags
 
-Every command accepts and parses the presentation flags below. `--context`
-and the `--ssh-*` flags are accepted only by the commands whose use case reads
-them; any other command refuses them as flags it does not accept. The
-context-free commands, which refuse `--context`, are `install`, `uninstall`, `rebind-host`, `catalog` and `context` (all subcommands), `help`, `completion`, `version` and `sbom`; only `apply`, `destroy`,
-`machine rsh`, `machine exec`, `machine cp`, `cluster rsh`, `cluster exec` accept
-`--ssh-*`. `machine rsh`, `machine exec`, `cluster rsh` and `cluster exec`
-accept `--ssh-id-file`, `--ssh-user` and `--ssh-ask-password`. `machine cp`
-accepts `--ssh-id-file` and `--ssh-user`. `machine enroll` accepts `--ssh-id-file`. Help and completion list each
-command's supported flags. A command resolves a taken global value only when its use case
-consumes it. An unused value grants no authority, performs no discovery or
-prompt, and changes no result; its syntax and context-independent safety
-checks still apply. `TestInheritedFlagScopeIsTheFlagsEachCommandReads` derives
-the flags each command reads from its dispatch and holds these lists, help and
-completion to them.
+Every command accepts and parses the presentation flags below. A command
+accepts `--context` and the `--ssh-*` flags only where this matrix marks them;
+any other command refuses them as flags it does not accept. Help and completion
+list each command's accepted flags.
+
+| Commands | `--context` | `--ssh-id-file` | `--ssh-user` | `--ssh-ask-password` | `--ssh-ask-sudo-password` | `--ssh-user-for-provisioned` |
+| --- | --- | --- | --- | --- | --- | --- |
+| `apply`, `destroy` | yes | yes | yes | no | yes | yes |
+| `machine rsh`, `machine exec`, `cluster rsh`, `cluster exec` | yes | yes | yes | yes | no | no |
+| `machine cp` | yes | yes | yes | no | no | no |
+| `machine enroll` | yes | yes | no | no | no | no |
+| `install`, `uninstall`, `rebind-host`, `catalog` and `context` (all subcommands), `help`, `completion`, `version`, `sbom`, `explain` | no | no | no | no | no | no |
+| every other command | yes | no | no | no | no | no |
+
+A command resolves a taken global value only when its use case consumes it. An
+unused value grants no authority, performs no discovery or prompt, and changes
+no result; its syntax and context-independent safety checks still apply.
+`TestTheInheritedFlagMatrixIsTheFlagsEachCommandReads` holds the matrix to the
+inherited flags each command reads, which
+`TestInheritedFlagScopeIsTheFlagsEachCommandReads` derives from its dispatch and
+holds help and completion to.
 
 | Flag | Type and default | Contract |
 | --- | --- | --- |
-| `-o, --output text\|json\|yaml` | format; `text` | Select human output or one structured envelope. JSON and YAML use the same CLI-owned result DTO; existing JSON schemas remain stable. [Stream exceptions](output.md#streams-and-exit-status) preserve raw default exports and refuse structured live SSH sessions before dispatch. |
+| `-o, --output text\|json\|yaml` | format; `text` | Select human output or one structured envelope. JSON and YAML use the same CLI-owned result DTO. [Stream exceptions](output.md#streams-and-exit-status) preserve raw default exports and refuse structured live SSH sessions before dispatch. |
 | `--color auto\|always\|never` | enum; `auto` | Style human output using injected terminal capabilities; `auto` respects the composition root's no-color and dumb-terminal facts. Structured output never contains ANSI. |
 | `--progress auto\|always\|never` | enum; `auto` | Select automatic terminal redraw, explicitly requested redraw, or no progress stream. This changes no operation or durable result. Structured output suppresses progress. |
 | `--detail compact\|full` | enum; `compact` | Select concise human facts or the available detailed evidence and access templates. Structured results retain every documented field. |
@@ -32,8 +39,8 @@ completion to them.
 | `--ssh-id-file <path>` | path; none | Offer this private key first for an SSH operation; a declared credential remains the fallback. A leading `~` resolves from the invoking account database, not an untrusted `HOME`; the opened file must satisfy the private-file rules in [security](../security.md). |
 | `--ssh-user <name>` | POSIX user name; none | Use one explicitly borrowed account for eligible OS-ready machines. On [`machine rsh` and `machine exec`](../cli.md#machine-ssh-sessions) it reaches any account under the session's credential rules. It does not alter desired state or the managed identity Bootwright installs. |
 | `--ssh-ask-password[=<bool>]` | Boolean; `false` | Prompt for the remote SSH login password through OpenSSH. Requires `--ssh-user`, one target and a terminal. Conflicts with `--ssh-id-file`. |
-| `--ssh-ask-sudo-password[=<bool>]` | Boolean; `false` | Prompt once for the borrowed account's sudo password, hold it only in bounded memory for this invocation, and never place it in arguments, environment, state, output, or logs. It conflicts with JSON or YAML output and non-interactive execution, and is not consumed by `machine rsh` or `machine exec`. |
-| `--ssh-user-for-provisioned[=<bool>]` | Boolean; `false` | Extend `--ssh-user` to Bootwright-provisioned machines. It requires `--ssh-user`; the same frozen account must pass the managed-OS ownership probe. It is not consumed by `machine rsh` or `machine exec`, which reach a provisioned Machine's accounts through `--ssh-user` alone. |
+| `--ssh-ask-sudo-password[=<bool>]` | Boolean; `false` | Prompt once for the borrowed account's sudo password, hold it only in bounded memory for this invocation, and never place it in arguments, environment, state, output, or logs. It conflicts with JSON or YAML output and non-interactive execution. |
+| `--ssh-user-for-provisioned[=<bool>]` | Boolean; `false` | Extend `--ssh-user` to Bootwright-provisioned machines. It requires `--ssh-user`; the same frozen account must pass the managed-OS ownership probe. `machine rsh` and `machine exec` reach a provisioned Machine's accounts through `--ssh-user` alone. |
 
 Every command also accepts `-h` and `--help`. Help performs no desired-state
 discovery, state lookup, secret access, privilege escalation, process launch,
@@ -56,20 +63,17 @@ performs none of those operations.
 
 ## Command and flag catalog
 
-The tables list local flags; inherited global flags and `-h`/`--help` are not
-repeated. “Local” means the command may create or update Bootwright-owned local
-state but contacts no managed target. “Observe” permits bounded read-only
-process or network access, and one local write: the store-internal
-[cache-only rebuild](../controller.md#the-controller-runtime) of this build's
-controller runtime when its directory is missing, for the commands whose cell
-names it. That rebuild waits for `controller/install/lock`, uses no network and changes no
-setup record. “Mutate” permits only the named, planned effects.
+The tables list each command's own flags; inherited global flags and `-h`/`--help` are not
+repeated. A cell that names the
+[cache-only rebuild](../controller.md#the-controller-runtime) may also write the
+store-internal controller runtime when its directory is missing; that rebuild
+waits for `controller/install/lock`, uses no network and changes no setup record.
 
-An *asked* command is one whose cell names a Mutate effect (a planned mutation
-or removal, host packages, a download, SSH, a power operation, a host identity
-rewrite), reveals a secret, or deletes or rotates local state irreversibly
-(`context delete`, `secret delete`, `secret encryption rotate`, `media
-delete`, `policy delete`); an agent runs it only when the owner asks, and
+An *asked* command is one whose applicable Effects clause names a planned
+mutation or removal, host packages, a download, SSH, a power operation or a host
+identity rewrite, reveals a secret, or deletes or rotates local state
+irreversibly (`context delete`, `secret delete`, `secret encryption rotate`,
+`catalog media delete`, `policy delete`); an agent runs it only when the owner asks, and
 `TestDocsAskRulesCoverEveryEffectfulCommand` keeps the tracked
 `.claude/settings.json` and `.codex/rules/bootwright.rules` complete against
 these cells.
@@ -91,7 +95,7 @@ by a related noun, and `--short` is the one flag that prints names only.
 
 ### Setup commands
 
-| Invocation | Local flags and defaults | Successful result | Effects |
+| Invocation | Command flags and defaults | Successful result | Effects |
 | --- | --- | --- | --- |
 | `bootwright context init` | `--check` false; required `--name <name>`; optional `-f, --file <context.yaml>` and `--input-dir <dir>` | initialized context and user selection; optional imported-input summary | local context and keyring creation; with `--check`, bounded admission reads |
 | `bootwright context update` | `--check` false; required `--name <name>`; at least one of `-f, --file <context.yaml>` or `--input-dir <dir>`; `--yes` false | unchanged configuration or imported-input summary | local atomic input replacement; with `--check`, bounded admission reads |
@@ -126,7 +130,7 @@ The three `catalog media` commands follow the host-wide
 
 ### Inspect and lifecycle commands
 
-| Invocation | Local flags and defaults | Successful result | Effects |
+| Invocation | Command flags and defaults | Successful result | Effects |
 | --- | --- | --- | --- |
 | `bootwright validate` | repeatable `--input-dir <file-or-dir>` | validation summary with admission counts, exclusions and advisories | read the supplied input, or the selected context's input when `--input-dir` is omitted; no write |
 | `bootwright status` | `--paths` false | recorded controller and lifecycle state, current block output, missing prerequisites and next steps; `--paths` includes the context roots and their presence | read local state; keyring metadata and media records use shared locks; with `--paths`, inspect each root entry's existence without reading it |
@@ -152,7 +156,7 @@ Not yet met: `apply --dry-run` defers add-on prerequisite checks to execution; t
 
 #### Machine commands
 
-| Invocation | Local flags and defaults | Successful result | Effects |
+| Invocation | Command flags and defaults | Successful result | Effects |
 | --- | --- | --- | --- |
 | `bootwright machine list` | `--clusters <list>` default all; `--power-status` false; `--short` false | Machines with their declared contact and addresses and the evidence-backed lifecycle position each reached, their management-controller-reported power with `--power-status`, or sorted names with `--short` | read local state; with `--power-status`, read each machine's power through its management controller |
 | `bootwright machine info` | `--name <list>` default all; unknown names refuse | [machine details and access identities](output.md#machine-results) | read local inventory |
@@ -171,7 +175,7 @@ Not yet met: `apply --dry-run` defers add-on prerequisite checks to execution; t
 
 #### Controller and cluster commands
 
-| Invocation | Local flags and defaults | Successful result | Effects |
+| Invocation | Command flags and defaults | Successful result | Effects |
 | --- | --- | --- | --- |
 | `bootwright install` | `--dry-run` and `--check` false and mutually exclusive; `--yes` false | [controller setup result](../controller.md#the-setup-flow); `--dry-run` gives the plan and every locked wheel in structured output; `--check` gives readiness findings and their overall outcome | execution installs host packages through the host's dnf after its preview and builds the runtime from carried wheels; `--dry-run` and `--check` use read-only host and private setup inspection |
 | `bootwright rebind-host` | `--yes` false; `--recorded-host-retired` false, required with `--yes`; `--machine-id <id>`, `--product-uuid <uuid>` and `--root-uuid <uuid>` default none, all three this host's and required with `--yes`, and a remedy repeating the command names them by placeholder | the outcome and the counts of the bindings and reservations it kept | [host identity rewrite](../contexts.md#controller-relationship-and-host-binding) of the controller record, once, under the exclusive root lock, after a confirmation naming the recorded and the new identity and affirming that the recorded host no longer runs this store; refuses a store whose directories are not the ones its registry attributed and an unchanged identity, and cannot tell a byte-for-byte clone from the store |
@@ -179,8 +183,8 @@ Not yet met: `apply --dry-run` defers add-on prerequisite checks to execution; t
 | `bootwright cluster list` | none | container and storage cluster names and kinds in canonical order | read local state |
 | `bootwright cluster info` | `--name <list>` default all unless `--secrets` or `--object-user`, which require exactly one cluster; `--secrets` false; `--object-user <name>` none | cluster kinds, endpoints, access-command applicability and availability, artifact availability, for a managed Ceph cluster its release, FSID, frozen image, monitors, administrator command and dashboard access, and optional explicit sensitive values | read local state and optional confidential material |
 | `bootwright cluster update-admin-creds` | required `--name <cluster>`; `--login <list>` default all; `--yes` false | update each selected login with a retained candidate and repeatable recovery | credential update on one managed cluster: its monitoring logins, custody and a bound Grafana Secret's binding |
-| `bootwright cluster rsh` | required `--name <cluster>` (one cluster); `--node <node>` default the cluster's administrator node (at most one) | an interactive SSH session on the resolved node's Machine under the [cluster session contract](../cli.md#cluster-sessions); the client's exit status is the result | same as `machine rsh` |
-| `bootwright cluster exec` | required `--name <list>`; `--node <list>` default each cluster's administrator node; required `<command>...`; `--shell`, `--sudo`, `--var` as `machine exec` | the exact argument vector runs on the resolved node's Machine, or on every resolved Machine concurrently, at most the lifecycle bound at a time, with [each line prefixed by its Machine](../cli.md#several-clusters-and-nodes), under the [cluster session contract](../cli.md#cluster-sessions); the remote command's exit status is the result, the highest of them for several | same as `machine exec` |
+| `bootwright cluster rsh` | required `--name <cluster>` (one cluster); `--node <node>` default the cluster's [default node](cluster-access.md#sessions) (at most one) | an interactive SSH session on the resolved node's Machine under the [cluster session contract](../cli.md#cluster-sessions); the client's exit status is the result | same as `machine rsh` |
+| `bootwright cluster exec` | required `--name <list>`; `--node <list>` default each cluster's [default node](cluster-access.md#sessions); required `<command>...`; `--shell`, `--sudo`, `--var` as `machine exec` | the exact argument vector runs on the resolved node's Machine, or on every resolved Machine concurrently, at most the lifecycle bound at a time, with [each line prefixed by its Machine](../cli.md#several-clusters-and-nodes), under the [cluster session contract](../cli.md#cluster-sessions); the remote command's exit status is the result, the highest of them for several | same as `machine exec` |
 | `bootwright cluster oc` | required `--name <cluster>` and non-empty `<command>...` | bounded `oc` handoff descriptor | read context-owned access metadata only |
 | `bootwright cluster kubectl` | required `--name <cluster>` and non-empty `<command>...` | bounded `kubectl` handoff descriptor | read context-owned access metadata only |
 | `bootwright cluster kubeconfig` | required `--name <cluster>` | kubeconfig through the explicit sensitive-output boundary | read and reveal one context-owned credential artifact |
@@ -254,17 +258,13 @@ The short description and detailed help for `machine rsh`, `machine exec`,
 for a cluster the resolved node's, as its resolved identity, that an unproved
 host key is confirmed interactively or refused, and that the exit status is the
 client's. The cluster commands also state how `--node` selects: by node name,
-then by FQDN, defaulting to the cluster's administrator node.
+then by FQDN, defaulting to the cluster's [default node](cluster-access.md#sessions).
 
-The detailed help of `cluster exec` states that `--name` and `--node` take
-comma-separated lists and that the command runs on every resolved Machine at
-once; that of `cluster info` states that `--name` takes a list and that
-`--secrets` requires exactly one cluster.
-
-The detailed help of `machine start`, `machine stop`, `machine restart`,
-`machine media eject` and `machine exec` states that `--name` takes a
-comma-separated list and that the command applies to every listed Machine
-at once. `machine media status` also describes its comma-separated list.
+The detailed help of every command whose `--name` or `--node` takes a list
+says that it takes a comma-separated list, and, for the commands that act on
+every resolved member at once, that they do. Help states each requirement the
+catalog row puts on a flag combination, such as the one cluster that `cluster
+info --secrets` and `--object-user` require.
 
 Help and completion use the static catalog; they never load a selected cluster
 to hide or enable commands. Target-aware discovery belongs to `cluster info`.
@@ -401,8 +401,9 @@ flag acknowledges, and when deletion refuses, follow
 abandons objects warns once on standard error with `context.orphaned`.
 
 `--stage` accepts only `controller`, `infrastructure-services`, `substrates`,
-`machines`, `clusters`, and `add-ons`, and only on `apply`. Its
-members follow the [comma-list rules](../cli.md#parsing-and-input-conventions);
+`machines`, `clusters`, and `add-ons` on `apply`; on `machine discover` it
+accepts only `controller`, as [that command's row](#machine-commands) states.
+Its members follow the [comma-list rules](../cli.md#parsing-and-input-conventions);
 a supplied value that resolves to no member and an unrecognized member are both
 usage errors. Omission selects every stage. What a selection gates is owned by
 [state reconciliation](../state-reconciliation.md#stages-and-the-pause-boundary).
@@ -437,8 +438,9 @@ lowercase hexadecimal digits a plan prints for the steps it authorizes,
 `rebind=<secret>`, `erase=<machine>:<method>` and `abandon=<machine>`; the first
 three only on `apply` and `destroy`, `erase=` and `abandon=` only on `destroy`
 and `destroy --dry-run`; `--yes`, or input
-that cannot answer a prompt, requires the `data-loss=<digest>` form.
-`abandon=<machine>` leaves the steps of one Machine that its capabilities can
+that cannot answer a prompt, requires the `data-loss=<digest>` form; an
+unattended `abandon=<machine>`, which takes no digest, refuses
+`authorize.abandon-unattended`. `abandon=<machine>` leaves the steps of one Machine that its capabilities can
 abandon in place for that invocation, under the
 [abandoned removal](../state-reconciliation.md#abandoned-removal):
 `<machine>` is the Machine's name, a lowercase DNS label, and it is
@@ -453,8 +455,7 @@ Machine's name, a lowercase DNS label, and `<method>` is `metadataClear` or
 contain commas. A `logicalOverwrite` method, an unknown method, a name that is
 not a Machine name, an empty `erase=`, a missing `:` side and a Machine named
 twice are usage errors, and `logicalOverwrite` is refused because a relaxation
-never strengthens or restates the declared method. `destroy --dry-run` refuses any other
-token. Whether a Machine can be relaxed, and what the relaxation changes, is
+never strengthens or restates the declared method. Whether a Machine can be relaxed, and what the relaxation changes, is
 owned by [state reconciliation](../state-reconciliation.md#confirmation-and-authorization).
 `rebind=<secret>` names one Secret by its API name and
 presents a rotated access credential at its current version through the
@@ -514,8 +515,10 @@ and requires `--output-dir`. A non-empty `--context` or
 `--output-dir`, and `--origins` conflicts with `--output-dir`.
 
 A lifecycle preview checks the work selected by the same verb.
-`destroy --dry-run` takes erase relaxations for plan review. The execution
-uses the data-loss and credential rebind authorizations.
+`apply --dry-run` refuses every `--authorize`. `destroy --dry-run` accepts only
+`erase=` and `abandon=` tokens and refuses `--unregistered`. `data-loss`,
+`rebind=` and `--unregistered` are consumed only on execution
+(`TestEraseRelaxationUsageErrors`).
 
 `machine list --short=true` emits only sorted names as text and conflicts
 with resolved JSON or YAML output and with `--power-status`, because a reading it

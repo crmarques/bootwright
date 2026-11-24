@@ -77,7 +77,7 @@ var (
 		Meaning: "the run scratch directory is not one an adapter may use, so no adapter ran", Remedy: "give the run scratch parent a filesystem that allows execution and is owned by the invoking user alone, then repeat the operation"}
 	runnerStaleRun = diagnostics.Stop{Code: "runner.stale-run", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseEnvironment, Fault: diagnostics.FaultStorage, Recovery: diagnostics.RecoveryFixThenRepeat,
-		Meaning: "an earlier adapter run left a directory the runner could not remove safely", Remedy: "remove the stale bootwright-run directories no process holds, then repeat the operation"}
+		Meaning: "an earlier adapter run left a directory the runner could not remove safely", Remedy: "remove each bootwright-run-<n> directory under /run whose lock file no process holds an advisory lock on, such as one where flock -n <dir>/lock true succeeds, with its bootwright-scratch-<n>-* directories under /var/lib/bootwright-staging/runs, then repeat the operation"}
 	runnerAdapterRunning = diagnostics.Stop{Code: "runner.adapter-running", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseConcurrency, Recovery: diagnostics.RecoveryWait,
 		Meaning: "another lifecycle adapter, or processes it left, still holds the job lock this run needs", Remedy: "wait for the adapter the message names to end and repeat the command"}

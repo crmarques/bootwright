@@ -3,6 +3,8 @@ package cli
 import (
 	"bytes"
 	"context"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -116,6 +118,73 @@ func TestHelpAndCompletionListExactlyTheInheritedFlagsACommandReads(t *testing.T
 		for _, name := range scopedFlags {
 			if slices.Contains(candidates, "--"+name) != reads[name] {
 				t.Errorf("%s completion offers --%s: %t, but the command reads it: %t", spec.path, name, !reads[name], reads[name])
+			}
+		}
+	}
+}
+
+type matrixRow struct {
+	commands []string
+	accepts  map[string]bool
+}
+
+func inheritedFlagMatrix(t *testing.T) (rows []matrixRow, fallback matrixRow) {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("..", "..", "specs", "cli", "commands.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var header []string
+	for _, line := range strings.Split(string(data), "\n") {
+		cells := strings.Split(strings.Trim(line, "| "), " | ")
+		switch {
+		case strings.HasPrefix(line, "| Commands | `--context`"):
+			header = nil
+			for _, cell := range cells[1:] {
+				header = append(header, strings.TrimPrefix(strings.Trim(cell, "`"), "--"))
+			}
+		case header != nil && strings.HasPrefix(line, "| ---"):
+		case header != nil && strings.HasPrefix(line, "| ") && len(cells) == len(header)+1:
+			row := matrixRow{accepts: map[string]bool{}}
+			for index, name := range header {
+				row.accepts[name] = cells[index+1] == "yes"
+			}
+			if strings.HasPrefix(cells[0], "every other") {
+				fallback = row
+				continue
+			}
+			for _, match := range backticked.FindAllStringSubmatch(cells[0], -1) {
+				row.commands = append(row.commands, match[1])
+			}
+			rows = append(rows, row)
+		default:
+			header = nil
+		}
+	}
+	if len(rows) < 5 || fallback.accepts == nil {
+		t.Fatalf("read %d matrix rows; the matrix of specs/cli/commands.md has changed shape", len(rows))
+	}
+	return rows, fallback
+}
+
+func TestTheInheritedFlagMatrixIsTheFlagsEachCommandReads(t *testing.T) {
+	rows, fallback := inheritedFlagMatrix(t)
+	for _, spec := range commandCatalog() {
+		row := fallback
+		for _, candidate := range rows {
+			for _, command := range candidate.commands {
+				if spec.path == command || strings.HasPrefix(spec.path, command+" ") {
+					row = candidate
+				}
+			}
+		}
+		contextFree, sshFlags := inheritedFlagScope(spec.path)
+		if row.accepts["context"] == contextFree {
+			t.Errorf("%s accepts --context: %t in the matrix, but is context-free: %t", spec.path, row.accepts["context"], contextFree)
+		}
+		for _, name := range scopedFlags[1:] {
+			if row.accepts[name] != slices.Contains(sshFlags, name) {
+				t.Errorf("%s accepts --%s: %t in the matrix, but its SSH flags are %v", spec.path, name, row.accepts[name], sshFlags)
 			}
 		}
 	}

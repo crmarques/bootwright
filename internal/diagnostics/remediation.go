@@ -99,6 +99,9 @@ func DefaultRemediationFor(code, contextName string) string {
 func WithRemediation(d Diagnostic) Diagnostic { return WithRemediationFor(d, "") }
 
 func WithRemediationFor(d Diagnostic, contextName string) Diagnostic {
+	if d.Remediation != "" && contextName != "" {
+		d.Remediation = strings.ReplaceAll(d.Remediation, "--context "+ContextPlaceholder, "--context "+contextName)
+	}
 	if d.Severity == "error" && d.Code != usageCode && d.Remediation == "" {
 		d.Remediation = DefaultRemediationFor(d.Code, contextName)
 	}

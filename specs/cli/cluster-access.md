@@ -30,10 +30,16 @@ proxy, plugin or configuration is part of the descriptor.
 The first payload value must be a non-empty command name, with flags after
 it. Payload arguments remain distinct values, including later empty strings; none is
 shell text. At most 256 values, 4096 bytes each and 32 KiB total are accepted,
-with valid UTF-8 and no NUL, CR or LF. Target, credential, cache and TLS
-configuration overrides, `login`, `logout`, `config`, `plugin`, token reveals
-and inline Secret literals refuse `access.handoff` without echoing the
-rejected argument. Sensitive payloads have no supported transport: callers
+with valid UTF-8 and no NUL, CR or LF. These refuse `access.handoff` without
+echoing the rejected argument, and no other argument within those bounds does: a first value of
+`login`, `logout`, `config` or `plugin`; a value starting `-s` but not `--`; a
+`whoami` short flag holding `t`; and, with or without `=<value>`, the flags
+`--from-literal`, `--password-stdin`, `--show-token`, `--kubeconfig`,
+`--context`, `--cluster`, `--user`, `--server`, `--token`, `--username`,
+`--password`, `--client-key`, `--client-certificate`,
+`--certificate-authority`, `--insecure-skip-tls-verify`, `--tls-server-name`,
+`--proxy-url` and `--cache-dir`
+(`TestClientHandoffsRefuseBeforeMetadataOrCredentials`). Sensitive payloads have no supported transport: callers
 must not place secrets in other arbitrary payload values, which the
 descriptor prints as data. Failures emit no partial descriptor.
 
@@ -67,17 +73,17 @@ proof by inference.
 `--node` resolves only within the cluster's declared node roster,
 `OpenShiftCluster.spec.nodes` or `CephCluster.spec.topology.nodes`. Canonical node order is ascending
 bytewise order of node `name`, independent of declaration or map order.
-For a CephCluster, omission selects the administrator node, the `spec.cephadm.bootstrap.nodeRef`
-`cluster info` reports, not the first in canonical order, which may be a MON-only
-tiebreaker without the administrator keyring. An explicitly empty value is a
+Omission selects a cluster's default node: for a CephCluster its administrator
+node, the `spec.cephadm.bootstrap.nodeRef` `cluster info` reports, not the first
+in canonical order, which may be a MON-only tiebreaker without the administrator
+keyring; for an OpenShiftCluster the first node in canonical name order. An explicitly empty value is a
 usage error under the scalar input rules. A supplied value selects the node whose `name` it equals exactly, and failing that the node whose effective FQDN,
 including an authored override, it equals exactly. There is no further tier: a
 role is not a selector for Ceph, because topology nodes carry no role. A node name wins
 over a FQDN that spells it. Node selection changes no desired state, canonical
 serialization or lifecycle scope.
 
-For an OpenShiftCluster, omission selects the first node in canonical name
-order. A supplied selector matches exact node name, then exact effective FQDN,
+For an OpenShiftCluster, a supplied selector matches exact node name, then exact effective FQDN,
 then `<role>-<ordinal>`, where role is the authored `controlPlane`, `worker` or
 `infra` and ordinal is zero-based within that role's canonical node order,
 spelled `0` or `[1-9][0-9]*`. A literal name wins even when it resembles a role
@@ -91,7 +97,7 @@ The checks run in this order, each before the next, and every refusal exits
 | --- | --- | --- |
 | No selected OpenShiftCluster or CephCluster has the name, including one the cluster lists exclude | `access.target`, naming the context and the name | name a cluster the context selects; `bootwright cluster info --context <context>` lists them |
 | The name is an external CephCluster, which declares no node roster | `cluster.not-applicable`, naming the command, the cluster, its kind and the applicable target, a managed CephCluster | `bootwright cluster info --context <context>` lists the clusters the context selects and their kinds |
-| `--node` matches no node, or its FQDN match is shared by several nodes, or is omitted and no declared node is the administrator node | `access.target`, naming the requested selector, or the missing administrator node, and the cluster | choose one declared node name; `bootwright cluster info --context <context> --name <cluster>` lists the nodes |
+| `--node` matches no node, or its FQDN match is shared by several nodes, or is omitted and the cluster has no default node | `access.target`, naming the requested selector, or the missing default node, and the cluster | choose one declared node name; `bootwright cluster info --context <context> --name <cluster>` lists the nodes |
 
 The Machine behind the selected node then resolves as a `machine rsh` or
 `machine exec` target does, and refuses as that section states. Target and node
@@ -105,7 +111,7 @@ a session, not a descriptor.
 under the [list rules](../cli.md#parsing-and-input-conventions); `cluster rsh` names one
 cluster and at most one node. One cluster and one node is the session above,
 unchanged. Otherwise each listed cluster runs the command on the Machine behind
-its administrator node, or, with `--node`, on the Machine behind
+its default node, or, with `--node`, on the Machine behind
 every `--node` member it declares, each member matched in each listed cluster by
 exact node `name`, then exact effective FQDN, then an OpenShift role ordinal
 as above. A node name two
@@ -114,12 +120,9 @@ listed clusters declare selects a node in each.
 Every resolved node's `machineRef` joins one list, deduplicated, and that list
 is run as [`machine exec`](../cli.md#machine-ssh-sessions) runs it. A list of one
 Machine, which two nodes or clusters sharing that Machine also yield, is the
-single session above. Several run as `machine exec` runs several Machines: the
-sessions are concurrent under the same bound, take no standard input and never prompt, and the
-prefix of each output line is the Machine name, not the cluster or the node.
-The invocation's status is the
-highest status any session returned, and a refusal before a session opens exits
-`255`.
+single session above. Several run as `machine exec` runs several Machines,
+except that the prefix of each output line is the Machine name, never the
+cluster or the node.
 
 Clusters resolve in canonical order, ascending bytewise name, and each check
 below applies across every listed cluster before the next one runs:
@@ -133,8 +136,6 @@ below applies across every listed cluster before the next one runs:
 
 A FQDN shared by several nodes of one cluster refuses as above, for the first
 cluster and member in canonical order, after the cluster checks and before the
-two node rows. Without `--node`, a listed cluster with no administrator node refuses
+two node rows. Without `--node`, a listed cluster with no default node refuses
 `access.target` as above. Each Machine then resolves, and refuses, as the
-[`machine exec`](../cli.md#machine-ssh-sessions) section states for one or for several,
-so among several Machines one whose identity is a password refuses the whole
-invocation.
+[`machine exec`](../cli.md#machine-ssh-sessions) section states for one or for several.

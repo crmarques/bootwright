@@ -34,6 +34,7 @@ func TestEveryCatalogedStopIsComposedAndExplained(t *testing.T) {
 	if len(confining) == 0 {
 		t.Fatal("specs/cli/stops.md lists no stop that confines a failed removal")
 	}
+	_, vocabulary, _ := strings.Cut(head, "## Stop vocabulary")
 	listed := map[string]bool{}
 	rows := map[string][]string{}
 	for _, line := range strings.Split(catalog, "\n") {
@@ -68,6 +69,11 @@ func TestEveryCatalogedStopIsComposedAndExplained(t *testing.T) {
 			!stopCodeShape.MatchString(stop.Code) || len(stop.Code) > 64 {
 			t.Errorf("stop %s is malformed or fires as %+v", stop.Code, failed)
 		}
+		for _, value := range []string{string(stop.Level), string(stop.Certainty), string(stop.Cause), string(stop.Fault), string(stop.Recovery)} {
+			if value != "" && !strings.Contains(vocabulary, "`"+value+"`") {
+				t.Errorf("stop %s uses %q, which the stop vocabulary does not define", stop.Code, value)
+			}
+		}
 		if stop.LocalRemovalFailure != confining[stop.Code] {
 			t.Errorf("stop %s confines a failed removal: declared %t, catalog %t", stop.Code, stop.LocalRemovalFailure, confining[stop.Code])
 		}
@@ -86,5 +92,22 @@ func TestEveryCatalogedStopIsComposedAndExplained(t *testing.T) {
 	}
 	for code := range confining {
 		t.Errorf("specs/cli/stops.md says %s confines a failed removal, which no composed stop declares", code)
+	}
+}
+
+// A stop's own remedy names a context-backed command with --context, as the
+// output spec requires of every remediation that names one.
+func TestEveryCatalogedRemedyNamingAContextBackedCommandCarriesTheContext(t *testing.T) {
+	named := 0
+	for _, stop := range stopCatalog() {
+		for _, remedy := range regexp.MustCompile(`bootwright (?:status|plan|apply|destroy|diff|secret|machine|cluster)\b[^,;.]*`).FindAllString(stop.Remedy, -1) {
+			named++
+			if !strings.Contains(remedy, "--context <context>") {
+				t.Errorf("stop %s: the remedy names %q without --context <context>", stop.Code, remedy)
+			}
+		}
+	}
+	if named == 0 {
+		t.Fatal("no stop remedy names a context-backed command, so the check proves nothing")
 	}
 }

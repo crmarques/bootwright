@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	RepeatAdminCredentialUpdate = "repeat bootwright cluster update-admin-creds to finish the retained update"
+	RepeatAdminCredentialUpdate = "repeat bootwright cluster update-admin-creds --context <context> to finish the retained update"
 	maxVisibleValue             = 128
 )
 

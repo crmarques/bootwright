@@ -281,7 +281,7 @@ func (record jobRecord) doing() string {
 
 func (r Runner) unswept() error {
 	return runnerStaleRun.Fail("a stale adapter run directory could not be removed safely",
-		"remove the bootwright-run directories in "+r.jobParent+" and "+r.scratchParent+" that no process holds, then repeat the command")
+		"remove each bootwright-run-<n> directory in "+r.jobParent+" whose lock file no process holds an advisory lock on, such as one where flock -n <dir>/lock true succeeds, with its bootwright-scratch-<n>-* directories in "+r.scratchParent+", then repeat the command")
 }
 
 // runDirectories are the two parents run directories live in, held open so

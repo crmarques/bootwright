@@ -34,8 +34,19 @@ func TestADefaultRemediationNamesTheInvokingContext(t *testing.T) {
 		t.Fatalf("a remediation with no invoking context = %q", got)
 	}
 	own := Diagnostic{Severity: "error", Code: "logs.not-found", Message: "m", Remediation: "run bootwright status --context <context>"}
-	if got := WithRemediationFor(own, "lab").Remediation; got != own.Remediation {
-		t.Fatalf("an emitter's own remediation became %q", got)
+	if got, want := WithRemediationFor(own, "lab").Remediation, "run bootwright status --context lab"; got != want {
+		t.Fatalf("an emitter's own remediation became %q, want %q", got, want)
+	}
+	if got := WithRemediationFor(own, "").Remediation; got != own.Remediation {
+		t.Fatalf("an emitter's own remediation with no invoking context became %q", got)
+	}
+	naming := Diagnostic{Severity: "error", Code: "context.state", Message: "m", Remediation: "select one with bootwright context use --name <context>"}
+	if got := WithRemediationFor(naming, "lab").Remediation; got != naming.Remediation {
+		t.Fatalf("a placeholder that names a context to choose became %q", got)
+	}
+	plain := Diagnostic{Severity: "error", Code: "logs.not-found", Message: "m", Remediation: "restore the file"}
+	if got := WithRemediationFor(plain, "lab").Remediation; got != plain.Remediation {
+		t.Fatalf("a remediation naming no context became %q", got)
 	}
 	free := Diagnostic{Severity: "error", Code: "context.state", Message: "m"}
 	if got, want := WithRemediationFor(free, "lab").Remediation, "run bootwright context list to see the contexts"; got != want {

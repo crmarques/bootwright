@@ -3,7 +3,11 @@ package access
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"regexp"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -66,6 +70,24 @@ func TestClientHandoffsRefuseBeforeMetadataOrCredentials(t *testing.T) {
 		result, err := New(&effectiveState{objects: graph()}, reader, locate, current("lab")).WithMetadata(metadata).OC(t.Context(), OCRequest{Name: "sno", Command: args})
 		if result != nil || code(t, err) != "access.handoff" || len(reader.reads)+len(metadata.calls) != 0 {
 			t.Fatalf("unsafe arguments: result %+v, error %v", result, err)
+		}
+	}
+	spec, readErr := os.ReadFile(filepath.Join("..", "..", "..", "specs", "cli", "cluster-access.md"))
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	_, refused, _ := strings.Cut(string(spec), "These refuse `access.handoff` without")
+	refused, _, _ = strings.Cut(refused, "(`TestClientHandoffsRefuseBeforeMetadataOrCredentials`)")
+	flags := regexp.MustCompile("`(--[a-z-]+)`").FindAllStringSubmatch(refused, -1)
+	if len(flags) != 18 {
+		t.Fatalf("the spec lists %d refused flags, want 18", len(flags))
+	}
+	for _, flag := range flags {
+		for _, args := range [][]string{{"get", flag[1]}, {"get", flag[1] + "=x"}} {
+			result, err := New(&effectiveState{objects: graph()}, custody(), locate, current("lab")).WithMetadata(readyMetadata()).OC(t.Context(), OCRequest{Name: "sno", Command: args})
+			if result != nil || code(t, err) != "access.handoff" {
+				t.Errorf("%v: result %+v, error %v, want access.handoff", args, result, err)
+			}
 		}
 	}
 }

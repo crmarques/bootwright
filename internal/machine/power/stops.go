@@ -18,7 +18,7 @@ var (
 		Meaning: "the power or eject evidence names another request, Machine or survey, or a state the command cannot name", Remedy: "repeat the command; report the message if it stops the same way"}
 	powerUnproved = diagnostics.Stop{Code: "power.unproved", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyUnproved,
 		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryRepeat,
-		Meaning: "the management controller did not prove the power or media state the command asked for", Remedy: "read the power state again with bootwright machine status, then repeat the command"}
+		Meaning: "the management controller did not prove the power or media state the command asked for", Remedy: "read the power state again with bootwright machine list --context <context> --power-status, then repeat the command"}
 )
 
 var stops = []diagnostics.Stop{powerRequestInvalid, powerIdentityChanged, powerEvidenceMismatch, powerUnproved}

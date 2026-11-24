@@ -35,7 +35,7 @@ var (
 		Meaning:             "firewalld is not running on a Machine whose install profile enables it, so its firewall was left unchanged", Remedy: "start firewalld on the Machine, then run the command again"}
 	firewallChangeRefused = diagnostics.Stop{Code: "firewall.change-refused", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyPossible,
 		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
-		Meaning: "firewalld refused a change on the Machine partway through its apply or removal", Remedy: "read the firewalld journal on the Machine, correct it, then run the command again"}
+		Meaning: "firewalld refused a change on the Machine partway through its apply or removal", Remedy: "read the firewalld journal on the Machine, or for SSH admission its SSH ingress unit journal, correct it, then run the command again"}
 )
 
 var stops = []diagnostics.Stop{firewallRequestInvalid, firewallUnconfigured, firewallRecordsMissing, firewallEvidenceMismatch, firewallUnproved,

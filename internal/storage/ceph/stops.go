@@ -66,16 +66,16 @@ var (
 		Meaning: "a Ceph operation needs a run deadline past the bound Ceph holds its derived deadlines to, so no adapter ran", Remedy: "declare fewer hosts, namespaces or initiator hosts"}
 	cephRetirementUnavailable = diagnostics.Stop{Code: "ceph.retirement-unavailable", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
-		Meaning: "the planned Ceph cluster would refuse automatic retirement", Remedy: "review the original erase policy and cluster consumers before apply"}
+		Meaning: "a warning: the planned Ceph cluster would refuse automatic retirement, because it has a physical Ceph consumer or a selected physical disk that the frozen erase policy cannot retire", Remedy: "review the original erase policy and cluster consumers before apply"}
 	cephRetirementRefused = diagnostics.Stop{Code: "ceph.retirement-refused", Level: diagnostics.LevelRemoval, Certainty: diagnostics.CertaintyNone,
-		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
-		Meaning: "a physical Ceph host holds no disk-erasure authority that covers every selected disk, so its retirement took nothing back", Remedy: "retain this context and erase every selected Ceph disk"}
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryAbandonContext,
+		Meaning: "a physical Ceph host holds no disk-erasure authority that covers every selected disk, so its retirement took nothing back", Remedy: "automatic retirement needs every selected data, DB and WAL disk in a hardware.dataDisks entry of each Machine, as originally applied, with a non-retain onRemoval; without it only bootwright context delete --name <context> --purge --allow-orphans remains, which abandons what the context owns"}
 	cephHostsSurvive = diagnostics.Stop{Code: "ceph.hosts-survive", Level: diagnostics.LevelRemoval, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
-		Meaning: "a Ceph cluster would be removed while hosts that outlive the destroy still run it", Remedy: "remove the cluster in the same destroy as every Bootwright-owned virtual host Machine it runs on"}
+		Meaning: "a Ceph cluster would be removed while hosts that outlive the destroy still run it: Bootwright-owned virtual hosts, physical hosts whose original erase policy and verified erase receipt are missing, or a physical CephConsumer", Remedy: "remove the cluster in the same destroy as every Bootwright-owned virtual host Machine it runs on; for physical hosts, supply the original erase policy of every host and its terminal verified erase receipt; retain the context while a physical CephConsumer uses the cluster"}
 	cephSecretInvalid = diagnostics.Stop{Code: "ceph.secret-invalid", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
-		Meaning: "a Secret bound to a Ceph resource is not a value the adapter can lend", Remedy: "bind a Secret holding one line of 1 to 1024 bytes of UTF-8 text"}
+		Meaning: "a Secret a CephSMBResource binds is not a value the adapter can lend", Remedy: "bind a Secret holding one line of 1 to 1024 bytes of UTF-8 text"}
 	cephStretchIntent = diagnostics.Stop{Code: "ceph.stretch-intent-changed", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
 		Meaning: "the stretch topology the input declares differs from the intent the cluster was created with", Remedy: "restore the stretch topology the cluster was created with"}

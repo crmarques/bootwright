@@ -61,6 +61,21 @@ func TestADeclaredHostKeyForAnotherTargetRefuses(t *testing.T) {
 	}
 }
 
+// The Machine's declaration selects the one source of its host key, so a
+// declared Secret that carries no material refuses instead of falling through
+// to the context's trust record or to a first-use observation.
+func TestADeclaredHostKeySecretWithoutMaterialRefusesInsteadOfFallingThrough(t *testing.T) {
+	h := newHarness(t, nil)
+	h.trust.data = recorded(t, "declared", "192.0.2.10", 22, publicKey)
+	h.lender.material["declared-host-key"] = secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: nil})
+	if _, err := exec(t, h, "declared", machine.SSHOptions{}, "true"); err == nil || code(t, err) != "access.unavailable" {
+		t.Fatalf("err = %v", err)
+	}
+	if len(h.client.sessions) != 0 || h.observer.probes != 0 || len(h.trust.written) != 0 {
+		t.Fatal("a Machine whose declared host key carries no material fell through to another source")
+	}
+}
+
 // An installed Machine is proved against its own installation, so it consults
 // no trust store and never needs a trust command.
 func TestAnInstalledMachineIsProvedByItsOwnInstallation(t *testing.T) {

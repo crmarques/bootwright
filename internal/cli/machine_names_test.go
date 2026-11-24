@@ -44,6 +44,8 @@ func TestAMachineNameThatResolvesToNoMachineIsAUsageError(t *testing.T) {
 		{"machine stop --name , --yes", "--name must name at least one machine"},
 		{"machine restart --name=,, --yes", "--name must name at least one machine"},
 		{"machine exec --name , -- true", "--name must name at least one machine"},
+		{"machine discover --name ,", "--name must name at least one machine"},
+		{"machine discover --name , --dry-run", "--name must name at least one machine"},
 		{"machine rsh --name a,b", "machine rsh opens one interactive session; name one machine"},
 		{"machine rsh --name a,", "machine rsh opens one interactive session; name one machine"},
 	} {
@@ -234,5 +236,20 @@ func TestACanceledBatchNamesEveryRunsOutputInItsFailureEnvelope(t *testing.T) {
 		len(envelope.Diagnostics) != 1 || envelope.Diagnostics[0].Code != "runtime.canceled" ||
 		!slices.Equal(envelope.Logs, []string{"contexts/lab/runs/run-000001.output", "contexts/lab/runs/run-000002.output"}) {
 		t.Fatalf("code=%d out=%q err=%q: %v", code, out.String(), errOut.String(), err)
+	}
+}
+
+func TestRenderClustersTreatsEmptyAsOmissionAndRefusesOnlySeparators(t *testing.T) {
+	for _, command := range []string{"installer", "storage"} {
+		for _, value := range []string{"", " "} {
+			code, _, errOut, _ := runRecorded([]string{"render", command, "--clusters=" + value})
+			if code == 2 {
+				t.Errorf("render %s --clusters=%q is a usage error: %q", command, value, errOut)
+			}
+		}
+		code, _, errOut, record := runRecorded([]string{"render", command, "--clusters=,"})
+		if code != 2 || record.calls != 0 || !strings.Contains(errOut, "--clusters must not contain only separators") {
+			t.Errorf("render %s --clusters=,: code=%d calls=%d err=%q", command, code, record.calls, errOut)
+		}
 	}
 }

@@ -81,7 +81,7 @@ func physicalHosts(hosts []Host) bool {
 }
 
 func physicalRemovalRefusal() error {
-	return cephRetirementRefused.Fail("physical Ceph retirement lacks original disk-erasure authority", "retain this context; automatic retirement requires every selected data, DB and WAL disk in a hardware.dataDisks entry of each Machine, as originally applied, with a non-retain onRemoval")
+	return cephRetirementRefused.Fail("physical Ceph retirement lacks original disk-erasure authority", "automatic retirement requires every selected data, DB and WAL disk in a hardware.dataDisks entry of each Machine, as originally applied, with a non-retain onRemoval; without it only bootwright context delete --name <context> --purge --allow-orphans remains, which abandons what the context owns")
 }
 
 func bindPhysicalHosts(hosts []Host, e lifecycle.Execution, readers DependencyProofs) error {

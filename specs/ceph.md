@@ -1834,7 +1834,7 @@ puts Prometheus and Alertmanager behind basic authentication, with the login
 serves that default, the unit's first apply claims a login for each listed
 `prometheus` or `alertmanager` before the gateway deploys, while the unit's
 attempt record is absent, it sets the user `admin` and a
-generated password of 32 dashboard-alphabet characters with `orch <service>
+generated password of 32 login-alphabet characters with `orch <service>
 set-credentials -i -`, on standard input only, replacing any default an earlier
 Prometheus deploy stored. Cephadm keeps it until the read below captures it.
 

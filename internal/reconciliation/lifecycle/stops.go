@@ -60,7 +60,7 @@ var (
 		Meaning: "an operation is due its finalization, which no decision may skip", Remedy: "repeat the command, which finalizes that operation before it decides"}
 	engineRecordsContradict = diagnostics.Stop{Code: "engine.records-contradict", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryAbandonContext,
-		Meaning: "an incomplete operation holds records that contradict what it started", Remedy: "read the records with bootwright status, then restore them from a backup or delete the context"}
+		Meaning: "an incomplete operation holds records that contradict what it started", Remedy: "read the records with bootwright status --context <context>, then restore them from a backup or delete the context"}
 	engineOtherVerbIncomplete = diagnostics.Stop{Code: "engine.other-verb-incomplete", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryOtherVerb,
 		Meaning: "an incomplete operation of the other verb must be continued before another operation", Remedy: "continue or replace the incomplete operation the message names"}
@@ -144,7 +144,7 @@ var (
 		Meaning: "a scoped apply cannot freeze its installation plan before inventory outside its targets exists", Remedy: "complete the named machine inventories and review the scoped apply again"}
 	applyUntilBeforePreparation = diagnostics.Stop{Code: "apply.until-before-preparation", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryOtherVerb,
-		Meaning: "the add-on boundary --until names cannot be planned before preparation completes", Remedy: "run apply to complete preparation, then select --until"}
+		Meaning: "the add-on boundary --until names cannot be planned before preparation completes", Remedy: "run apply without --until to complete preparation, then select --until"}
 	engineRecordsDamaged = diagnostics.Stop{Code: "engine.records-damaged", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryAbandonContext,
 		Meaning: "the context's operation records do not form the lineage or removal the operation needs", Remedy: "restore the context store from a backup, or delete the context with what it may still own"}
@@ -156,7 +156,10 @@ var (
 		Meaning: "an output a block recaptured presents another identity than the one custody holds", Remedy: "find what replaced the effect the block proved; the context's records name the original"}
 	engineResolvedUnperformed = diagnostics.Stop{Code: "engine.resolved-unperformed", Level: diagnostics.LevelResolution, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryRepeat,
-		Meaning: "an observation proved a frozen effect never performed, or left part done, so the block is failed and retried", Remedy: "repeat the operation, which retries the block"}
+		Meaning: "an observation proved a frozen effect never performed, so the block is failed and retried", Remedy: "repeat the operation, which retries the block"}
+	engineResolvedPartial = diagnostics.Stop{Code: "engine.resolved-partial", Level: diagnostics.LevelResolution, Certainty: diagnostics.CertaintyPossible,
+		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryRepeat,
+		Meaning: "an observation left a frozen effect partly realized or a removal's postcondition unreadable, so the block is failed and retried", Remedy: "repeat the operation, which retries the block"}
 	destroyPostconditionUnknown = diagnostics.Stop{Code: "destroy.postcondition-unknown", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
 		Meaning: "a retried removal read its target again and still could not tell its postcondition, so it performed no effect", Remedy: "restore the target the removal reads, then repeat the destroy"}
@@ -204,10 +207,10 @@ var (
 		Meaning: "an administrator credential update names a cluster no completed apply installed and proved", Remedy: "complete the cluster's apply before updating its credentials"}
 	engineCredentialClusterUnknown = diagnostics.Stop{Code: "engine.credential-cluster-unknown", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
-		Meaning: "an administrator credential update names a cluster the context does not select", Remedy: "bootwright cluster info lists the selected clusters"}
+		Meaning: "an administrator credential update names a cluster the context does not select", Remedy: "bootwright cluster info --context <context> lists the selected clusters"}
 	engineCredentialLoginInapplicable = diagnostics.Stop{Code: "engine.credential-login-inapplicable", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
-		Meaning: "a credential update names a login the cluster does not have", Remedy: "bootwright cluster info --name <cluster> shows its logins"}
+		Meaning: "a credential update names a login the cluster does not have", Remedy: "bootwright cluster info --context <context> --name <cluster> shows its logins"}
 	engineCredentialExternal = diagnostics.Stop{Code: "engine.credential-external-cluster", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
 		Meaning: "an administrator credential update names an external cluster, whose credentials its own administrator keeps", Remedy: "update the credentials through the external cluster's administrator"}
@@ -216,7 +219,7 @@ var (
 		Meaning: "the custody of a cluster administrator credential is missing, unproved or invalid, so its update changed nothing", Remedy: "restore the original credential custody"}
 	engineCredentialPending = diagnostics.Stop{Code: "engine.credential-update-pending", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryOtherVerb,
-		Meaning: "an administrator credential update was left pending, so custody holds no credential proved current", Remedy: "finish the retained update with bootwright cluster update-admin-creds"}
+		Meaning: "an administrator credential update was left pending, so custody holds no credential proved current", Remedy: "finish the retained update with bootwright cluster update-admin-creds --context <context>"}
 	engineCredentialPreparationInvalid = diagnostics.Stop{Code: "engine.credential-preparation-invalid", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
 		Meaning: "the cluster's read-only preparation of an administrator credential update was not proved or returned no valid update, so nothing changed", Remedy: "check the cluster's original administrator account"}
@@ -289,7 +292,7 @@ var stops = []diagnostics.Stop{engineRecordsFull, engineRecordsReadOnly, engineR
 	planInputUncompilable, planCapabilityMissing, planCapabilityDefect, planHostKeyUnbound, planEnvironmentInvalid,
 	engineUnindexedRecords, engineRequestDefect, engineOtherBuild, enginePlanMoved, engineInputMoved, engineBindingLost, authorizeUnneeded,
 	authorizeMissing, authorizeStale, authorizeRebindInvalid, destroyStageSelected, applyUntilBeforePreparation, applyTargetBeforePreparation,
-	engineRecordsDamaged, applyProducedInputMissing, engineRecaptureMismatch, engineResolvedUnperformed, destroyPostconditionUnknown,
+	engineRecordsDamaged, applyProducedInputMissing, engineRecaptureMismatch, engineResolvedUnperformed, engineResolvedPartial, destroyPostconditionUnknown,
 	prepareRefused, prepareUnsupported,
 	engineBorrowedSSH, engineConfirmationRequired, engineInputInvalid, engineCredentialMoved, engineFinalizationIncomplete,
 	destroyReleaseIncomplete, destroyUnprovedEffects, engineOutcomeUnknown, authorizeRelaxationChanged, authorizeAbandonUnattended, diffContextMoved,

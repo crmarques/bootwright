@@ -7,7 +7,8 @@ const (
 	environmentRemedy  = "add the SETENV tag to the sudoers rule that runs Bootwright, or run Bootwright as root"
 	passwordRemedy     = "run sudo -v in this terminal, then repeat the command; or run Bootwright as root"
 	policyRemedy       = "the sudo policy must permit Bootwright's re-execution: a rule naming the installed binary, such as /usr/local/bin/bootwright, " +
-		"when root owns it and every directory above it, or ALL or a /proc/[0-9]*/exe rule for any other executable; ask the policy's administrator, or run Bootwright as root"
+		"when root owns it and every directory above it; any other executable re-executes through /proc/<pid>/exe, and a /proc/[0-9]*/exe rule matches every running program, so it is ALL in effect unless a sha256 digest before the command pins one build; " +
+		"ask the policy's administrator, or run Bootwright as root"
 	executionRemedy = "root cannot execute the Bootwright executable where it is (a network home with root squash?); " +
 		"copy it to a local directory such as /usr/local/bin and run it from there"
 )

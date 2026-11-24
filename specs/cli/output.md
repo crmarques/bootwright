@@ -10,8 +10,8 @@ output.
 | Condition | Standard output | Standard error | Exit status |
 | --- | --- | --- | --- |
 | Human success | result or help, LF-terminated | ordered warnings, and the prompt of an interactive confirmation or input | `0` |
-| `diff --exit-code` that found a `changed`, `added`, `removed` or `unknown` object | the comparison, as without the flag | empty | `3` |
-| Human operational or validation failure | empty, except a complete negative secret check, controller readiness report, or already presented setup plan/progress or lifecycle state | ordered diagnostics, each LF-terminated | `1` |
+| `diff --exit-code` that found a difference ([exit status](../cli.md#observation-and-exit-status)) | the comparison, as without the flag | only its outdated-client warnings | `3` |
+| Human operational or validation failure | empty, except a complete negative secret check, controller readiness report, a `diff` comparison followed by a `runtime.tool` failure, or already presented setup plan/progress or lifecycle state | ordered diagnostics, each LF-terminated | `1` |
 | Human usage failure | empty | usage diagnostic and concise help, LF-terminated | `2` |
 | JSON or YAML success or failure | exactly one document in the selected format followed by one LF | empty | the document's required `exitCode` |
 | Effective-state text | exact canonical effective YAML with its required final LF | empty | `0` |
@@ -20,8 +20,8 @@ output.
 | Completion script in default text mode | exact script with its required final LF | empty | `0` |
 | Access handoff | one bounded, escaped descriptor followed by one LF | ordered diagnostics only | `0` or `1` |
 | [`logs`](#reading-and-following-logs) in text mode | event or output lines, each escaped and LF-terminated; a `--follow` writes them as they are written | ordered warnings, and diagnostics on failure | `0`, `1`, `2` or `130` |
-| [SSH session](../cli.md#machine-ssh-sessions) | the remote process's own bytes | Bootwright diagnostics and the host-key confirmation before the connection, then the remote process's own bytes | the SSH client's exit status, even after an interrupt; `255` for a Bootwright refusal before the session opens |
-| [Several SSH sessions](../cli.md#several-machines) | each session's standard output as whole lines prefixed `<machine>: ` | Bootwright diagnostics and the host-key confirmations before any connection, then each session's standard error as whole lines prefixed the same way, then one `access.exit` warning for each nonzero status | the highest status any session returned, even after an interrupt; `255` for a Bootwright refusal before any session opens |
+| [SSH session](../cli.md#machine-ssh-sessions) | the remote process's own bytes | Bootwright diagnostics and the host-key confirmation before the connection, then the remote process's own bytes | the SSH client's exit status, even after an interrupt, or the [pre-session status](../cli.md#machine-ssh-sessions) |
+| [Several SSH sessions](../cli.md#several-machines) | each session's standard output as whole lines prefixed `<machine>: ` | Bootwright diagnostics and the host-key confirmations before any connection, then each session's standard error as whole lines prefixed the same way, then one `access.exit` warning for each nonzero status | the highest status any session returned, `130` when an interrupt kept a session from starting, or the [pre-session status](../cli.md#machine-ssh-sessions) |
 | [Machine file copy](../cli/machine-copy.md) | per-Machine outcomes, including an executed partial result; one document in structured mode | ordered human diagnostics; empty in structured mode | `0`, `1`, `2` or `130` |
 | Interrupt-driven cancellation | as required by the selected structured mode | as required by that mode | `130` |
 
@@ -130,7 +130,8 @@ keeps essential identity, state, access and remedies; full detail adds available
 verbose evidence and access templates. Structured modes retain the complete DTO
 regardless of detail, color, width or ASCII selection.
 
-The lifecycle receipt remains exactly four unstyled, unwrapped lines. Name-only
+The [lifecycle receipt](../cli.md#lifecycle-receipt), including
+[its stop line](../cli.md#the-receipts-stop), is unstyled and unwrapped. Name-only
 text and default raw exports retain their defined bytes. Styling and wrapping
 apply only to product presentation, never to exported content.
 
@@ -246,8 +247,7 @@ Context identity is presented by the commands that own it. `context init`,
 `status` reports on one context, so it opens with that context as its headline,
 `✓ Context <name>`, followed by its `Mode`. Every other human result omits
 the context block; the selected context is already addressable through
-`context current`. JSON results keep their documented `context` field
-unchanged, so machine consumers lose nothing.
+`context current`. JSON results keep their `context` field.
 
 ### Human diagnostics
 
@@ -285,8 +285,7 @@ refuse `--context`. No diagnostic carries confidential material.
 
 Every command accepts inherited `--output json` or `-o json`. It returns one
 compact object with the following envelope fields in this order. Live SSH
-sessions refuse this representation before dispatch. Existing JSON result
-schemas, ordering and escaping remain stable.
+sessions refuse this representation before dispatch.
 
 ```json
 {"schemaVersion":"v1alpha1","command":"validate","ok":true,"exitCode":0,"result":{},"diagnostics":[],"logs":[]}
@@ -435,9 +434,8 @@ Storage preflight reports every check as `id`, `target`, `status`, `reason` and
 `next`. Status is `passed`, `failed`, `unknown` or `pending`; only `passed`
 proves readiness. Optional `capacity` carries `resource`, `unit`, `required`,
 `available`, `reserve`, `deficit` and `observed`. The summary counts each status.
-A plan's optional `checks` list contains read-only controller listener observations
-and host port requirements. Each row has `id`, `status`, `summary` and `remedy`;
-`listener-firewall` status is `open`, `closed` or `unknown`, and `remedy` is empty
+Among the [plan checks](#preflight), read-only controller listener observations
+and host port requirements add these: `listener-firewall` status is `open`, `closed` or `unknown`, and `remedy` is empty
 for an open socket; `host-port` status is `realized` or `manual`, and `remedy` is
 empty for a realized one ([host firewall requirements](../managed-os.md#host-firewall-requirements)).
 Text output lists each kind under its own heading. These observations
@@ -445,9 +443,9 @@ never change the frozen plan or register an operation. An apply preview
 also reports one `plan.consumer-outlives-destroy` warning for each consumer and
 effect a destroy of the context would refuse over
 ([quiescence before removal](../state-reconciliation.md#quiescence-before-removal)),
-in `diagnostics` and on standard error before the plan. The
-`ceph.retirement-unavailable` warning identifies a physical Ceph consumer
-or a selected physical disk that the frozen policy cannot retire.
+in `diagnostics` and on standard error before the plan, and the
+`ceph.retirement-unavailable` warning its [catalog row](stops.md#ceph-stops)
+defines.
 
 JSON retains the complete report when checks fail. Uninstalled guests remain
 pending without remote probes; dry-run performs no live capacity or guest
@@ -544,10 +542,10 @@ exit status.
 `source`, `object`, `field`, and `remediation` are omitted when unavailable and
 are never `null`, except that every `error` diagnostic other than `cli.usage`
 carries `remediation`. When the remedy is a Bootwright command, `remediation` is
-exactly that command, with `--context` for a context-backed one. A diagnostic
-raised from a [stop](stops.md) also carries, after `remediation`, `cause` and
-`recovery`, its row's classes, so a script acts on them without parsing the
-code; any other diagnostic omits both. A present source orders `path`, `document`, `line`, and
+exactly that command, with `--context` for a context-backed one. An error
+diagnostic raised from a [stop](stops.md) also carries, after `remediation`,
+`cause` and `recovery`, its row's classes, so a script acts on them without
+parsing the code; any other diagnostic, a warning included, omits both. A present source orders `path`, `document`, `line`, and
 `column`; positive coordinates are one-based and `0` means unavailable.
 Sensitive explicit-result bytes never appear in this structure.
 
@@ -562,7 +560,13 @@ name, the context its lifecycle result resolved when it named none, and
 `<context>` otherwise
 (`TestEveryDefaultNamingAContextBackedCommandCarriesTheContext`,
 `TestADefaultRemediationNamesTheInvokingContext`,
-`TestADefaultRemediationKeepsThePlaceholderForAnInvalidContext`).
+`TestADefaultRemediationKeepsThePlaceholderForAnInvalidContext`). A stop row's
+own remedy, and any remedy an emitter gives, that names a context-backed command
+writes `--context <context>`, which an invocation with a valid context fills with
+that context, as it does a default's; a `<context>` that is not the value of
+`--context`, such as the name `context use --name` takes, stays as written
+(`TestEveryCatalogedRemedyNamingAContextBackedCommandCarriesTheContext`,
+`TestADefaultRemediationNamesTheInvokingContext`).
 
 Safe display text preserves printable UTF-8 and escapes backslash, control
 characters, ESC, newline, and invalid UTF-8 bytes with deterministic `\\`,
@@ -583,7 +587,9 @@ current apply lineage has an empty `disks` array and omits both fields.
 `machine info` extends the inventory row with optional `session` and
 `lifecyclePlacement` records. Each reports its applicable `user`,
 `credential`, `hostKey`, and `privilege` as local configuration facts.
-Credential and host-key fields identify their sources. The command reads no
+Credential and host-key fields identify their sources. Human output groups
+available Placement, Access and Evidence facts; full detail adds declared
+addresses and provider identity. The command reads no
 Secret material and makes no power or SSH observation.
 
 Each `machines` entry of `machine list` orders its fields as follows:
@@ -707,15 +713,18 @@ optional remedy. The result stays available when a check refuses the
 operation. Successful checks describe observed conditions. Pending and
 deferred checks identify conditions established by earlier planned work or
 proved at execution. A failed or unknown prerequisite blocks the preview
-with a diagnostic and a next action.
+with a diagnostic and a next action. Every check is one `lifecycle.PlanCheck`
+row of the plan's `checks` list, with `id`, `status`, `summary` and `remedy`,
+the last empty when the check needs none.
 
 Apply checks the controller setup only when the selection includes its
 controller stage. Capacity checks use planned substrate work. Firewall checks
 follow the selected blocks and the listeners they use. Cluster checks follow
 the selected clusters when their prerequisite blocks are complete.
 Machines and add-ons have no separate stage preflight, so the preview
-identifies those checks as deferred. A new lifecycle operation can observe
-Machine power when the approved runtime is available. Destroy selects its
+identifies those checks as deferred. A new apply or destroy proves Machine power
+under [power before a new apply or
+destroy](../state-reconciliation.md#power-before-a-new-apply-or-destroy). Destroy selects its
 checks from recorded ownership. The execution re-proves required evidence at
 the effect boundary.
 
@@ -826,8 +835,7 @@ impact line after `create per-consumer Ceph principals for <consumer>`.
 
 `--secrets --name <cluster>` adds `passwordValue` to `dashboard` and `user`
 and `passwordValue` to each `monitoring` row, or `anonymous: true` to a
-`grafana` row with no bound admin password; these are the only fields that
-carry a secret. Text output lists them under Custody after the dashboard's
+`grafana` row with no bound admin password. Text output lists them under Custody after the dashboard's
 user and password, as `<Service> user` and `<Service> password`, Grafana's as
 `Grafana password`, or `Grafana login anonymous access; no admin
 password is bound`. Their contract, refusals and warnings are the
@@ -836,6 +844,23 @@ monitoring `user` is secret, the
 [`cluster update-admin-creds` result](cluster-admin-credentials.md#administrator-credential-updates)
 omits a Prometheus or Alertmanager login's `user`, and its text shows
 `<Service> login  updated` instead.
+
+### Revealed fields
+
+Only these result fields carry a revealed secret; each is present only with the
+flag named, and no other field of a cluster result holds one:
+
+| Path | Flag |
+| --- | --- |
+| `console.passwordValue` | `--secrets` |
+| `dashboard.passwordValue` | `--secrets` |
+| `monitoring[].user` | `--secrets` |
+| `monitoring[].passwordValue` | `--secrets` |
+| `objectUsers[].accessKey` | `--object-user` |
+| `objectUsers[].secretKey` | `--object-user` |
+
+`TestTheRevealedFieldsOfClusterInfoAreTheInventory` holds the table to the
+result types.
 
 `accessCommands` contains exactly one entry for each canonical command, ordered
 `cluster exec`, `cluster keyring`, `cluster kubeconfig`, `cluster kubectl`,
@@ -941,7 +966,7 @@ operation proves before it registers, a `Progress` section while effects run, a
 `Result` section of status rows, the `Logs` and `Follow` fields when an
 operation log exists, a `Next` field naming the exact command, with `--context`, that
 continues a `paused`, `failed`, `unknown` or `running` operation, and the
-receipt as the final four lines.
+[receipt](../cli.md#lifecycle-receipt) as the final lines.
 
 Known frozen kinds and implementations use a concise action followed by a separately
 styled object identity in plan and effect progress rows. When metadata cannot
@@ -1010,7 +1035,7 @@ probe. Its result orders these fields:
 | Field | Contract |
 | --- | --- |
 | `context` | `name`, `mode` of the resolved context. `mode` is the context record's mode, which a lifecycle read admits only as `ready`. |
-| `setupChecks` | `{id, status}` rows derived from stored controller evidence alone, without host probes: `controller-binding`, then `execution-bundle` (shown to humans as "Controller setup"), the identities [controller readiness](../controller.md#results-and-qualification) gives the same prerequisites. `execution-bundle` is `ready` when the setup subtree holds a receipt and no interrupted setup, which is what an apply needs before it claims the host, and `not-ready` otherwise. `controller-binding` is `ready` when that record binds this context, `pending` when it does not and the context holds no operation, because the first apply publishes it, and `not-ready` when it does not while an operation exists. Readiness itself never reports `pending`. |
+| `setupChecks` | `{id, status}` rows derived from stored controller evidence alone, without host probes: `controller-binding`, the identity [controller readiness](../controller.md#results-and-qualification) gives the same prerequisite, then `execution-bundle` (shown to humans as "Controller setup"), a check only `status` reports. `execution-bundle` is `ready` when the setup subtree holds a receipt and no interrupted setup, which is what an apply needs before it claims the host, and `not-ready` otherwise. `controller-binding` is `ready` when that record binds this context, `pending` when it does not and the context holds no operation, because the first apply publishes it, and `not-ready` when it does not while an operation exists. Readiness itself never reports `pending`. |
 | `desired` | `revision`, `environment` and admission `counts` of the selected immutable input. `counts` holds `filesSeen` and `objectsDecoded`, and an input that does not compile fails `status` with its diagnostics, so `desired` is always an object. |
 | `clusters` | Ordered `{name, kind, status}` rows for selected OpenShiftCluster roots, `status` in the realization vocabulary below. |
 | `storageClusters` | Ordered `{name, kind, status, resources}` rows for selected CephClusters. `resources` holds one `{kind, name, status}` row for each selected storage child object (a kind whose `clusterRef` names a CephCluster) whose `clusterRef` names this cluster, ordered by API kind order then name, `status` in the realization vocabulary below; it is `[]` for an external CephCluster and for one with no such object. |
@@ -1049,7 +1074,9 @@ does too, because an earlier attempt took the rest back. An object with some of
 those blocks proved gone and the others not yet run reads `unknown`: nothing
 proves what the removal did to the object as a whole. An object whose removal
 has not started reads what the nearest removal it replaces did to it: `unknown` when that removal left a block of it
-unproved, `failed` when one failed, `pending` when one was proved gone; and
+unproved, `failed` when one failed, `pending` when one was proved gone, because a replaced
+removal is over and no longer holds the object realized, while the current
+removal still runs over an object it has proved only in part; and
 otherwise what the apply proved. An object that apply
 owned and the removal no longer names was released by an earlier attempt and
 reads `pending`. An object no operation names keeps what its declaration gives
@@ -1142,24 +1169,16 @@ carries in its envelope's `diagnostics`.
 
 ## Diagnostic taxonomy and order
 
-Diagnostic codes are stable machine identifiers. The codes of declared stops
-include `lifecycle.start-power` when initial machine power cannot be proved. These codes
-are registered in the [stop catalog](stops.md#catalog), not in this table, and
-each fires with its row's remedy when its raiser gives none. Include an object identity
+Diagnostic codes are stable machine identifiers. A code is registered in
+exactly one place: the [stop catalog](stops.md#catalog) when a declared stop
+raises it, such as `lifecycle.start-power` when initial machine power cannot be
+proved, which fires with its row's remedy when its raiser gives none; otherwise
+this table. `TestDiagnosticCodesMatchOutputSpec` holds the two lists together. Include an object identity
 only when its kind and name form a valid API identity; malformed names are
 reported through the source coordinates and `$.metadata.name` field without
-repeating unbounded authored text. This table is the registry: it lists every
-code production code emits, from a function body or a package-level variable
-initializer, and nothing else (`TestDiagnosticCodesMatchOutputSpec`). That
-check follows a code through constants, variables, parameters and calls,
-function variables included. A variable holds every value written to it
-anywhere, and a parameter every argument it receives. A method call resolves
-by name to every method it can select: an unexported one of its package, or an
-exported one of any package. A write it follows that gives no single value (a tuple or
-compound assignment, a range clause, a taken address, a package variable
-declared without a value) fails the check, and so does a function storing its
-argument as a code that is used as a value other than by calling it or binding
-it to a variable.
+repeating unbounded authored text. This table lists every code production code
+emits outside a declared stop, and nothing else. A code is a literal or a value
+the test can follow, or the test fails.
 
 | Code | Meaning |
 | --- | --- |
@@ -1386,11 +1405,11 @@ runs, so the path an operator is given exists whether or not the run reaches
 its result. Its content is retained while the run produces it, under the same
 [`no_log` rule](../security.md#logs-output-and-diagnostics), so a retained run
 carries no material. It is cut at
-`operationstore.MaxAdapterOutputBytes` without a marker. Neither retaining it
-nor failing to changes what the run reports. An adapter failure that its output explains points its remediation at this file,
-as an attempt's points at the output beside that attempt's log, by the
-`bootwright logs --context <context> --operation <id> --block <block> --raw
---attempt <N>` that prints it. A
+`operationstore.MaxAdapterOutputBytes` without a marker. Once the file exists,
+neither retaining its content nor failing to changes what the run reports. An
+adapter failure that its output explains points its remediation at the run's
+`Logs` file, which `bootwright logs --context <name> --run run-NNNNNN` reads, as
+an attempt's points at the output beside that attempt's log. A
 [reading](../cli.md#resource-inspection-and-explicit-access) names no retained
 output, so it keeps none: it creates no run file, discards what its adapter
 printed and points no remediation at output.
@@ -1414,11 +1433,10 @@ beside them, but one interrupted, canceled or past its deadline has a `null`
 admission lists none, as its human output names no file, and keeps none: the file is
 created only once the runtime is admitted, so a refused admission, such as a
 native package transaction holding its lock, or an interrupt, cancellation or
-deadline that lands first leaves no unnamed file behind. A run whose file
-cannot be created, including one an interrupt stops first and one whose file
-landed before an interrupt, or a failed read-back or sync of its publication,
-stopped it, fails before its adapter runs, names no file and removes the file
-it created, even once interrupted.
+deadline that lands first leaves no unnamed file behind. A run whose file cannot be created, held or made durable fails before its
+adapter runs, names no file and removes any file it created, even when
+interrupted; [log root](../contexts/log-root.md#bounded-runs) owns the
+mechanics.
 
 ### Setup run output
 
@@ -1534,7 +1552,7 @@ with either format is a `cli.usage` refusal, as is `--follow --raw`.
 `logs.not-found`, `context.busy`, an unsafe log file (`context.state`) or a
 failed write to standard output; `2` for usage; `130` for an interrupt, which
 stops only the reader. `logs.not-found`, `logs.detached` and `logs.truncated`
-are in the [taxonomy](#diagnostic-taxonomy-and-order).
+are in the [stop catalog](stops.md#catalog).
 
 ## Multi-machine presentation
 

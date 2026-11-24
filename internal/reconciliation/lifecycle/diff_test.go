@@ -346,7 +346,7 @@ func (leasedWorkspace) ReadLifecycle(context.Context, string, func(View) error) 
 	return failure("context.busy", "another operation holds this context", "wait for it to finish")
 }
 
-func TestDiffRefusesWhileAnOperationHoldsTheContext(t *testing.T) {
+func TestDiffSurfacesTheBusyRefusalOfTheContextRead(t *testing.T) {
 	t.Parallel()
 	f := newDiffHarness(t, "alpha")
 	f.service.workspace = leasedWorkspace{Workspace: f.workspace}

@@ -3,17 +3,19 @@
 Read with [CLI output](output.md#diagnostic-taxonomy-and-order) and
 [attempt outcomes](../state-reconciliation.md#attempt-outcomes).
 
-A stop is a declared way an `apply` or `destroy` ends without completing its
-verb: a refusal, a failed effect, an unproved outcome, a pause or an
-interruption. Each is declared once, beside the code that raises it, as a
+A stop is a declared diagnostic of a Bootwright command, an error or a warning.
+For an `apply` or `destroy` it is a way the verb ends without completing: a
+refusal, a failed effect, an unproved outcome, a pause or an interruption. Each
+is declared once, beside the code that raises it, as a
 `diagnostics.Stop`, and is one row of this catalog. Its code is the
 diagnostic's `code`; this catalog registers it, and the
 [diagnostic registry](output.md#diagnostic-taxonomy-and-order) does not list it
 again. [`bootwright explain`](commands.md#command-and-flag-catalog) prints
 the catalog, or one row with `--code`. A firing's message is composed where it is raised; its remedy defaults
 to the row's when the raising code has none. Its certainty decides the
-attempt's outcome: `unproved` leaves it `unknown`, every other certainty
-`failed`. Codes not yet moved onto a declared stop remain in the registry, and
+attempt's outcome, when it fires inside an apply or destroy attempt:
+`unproved` leaves it `unknown`, every other certainty `failed`. A stop's remedy
+follows the [remediation rule](output.md#json-output). Codes not yet moved onto a declared stop remain in the registry, and
 `TestEveryLifecycleDiagnosticIsBuiltFromADeclaredStop` counts them in a ledger
 that only shrinks.
 
@@ -37,14 +39,16 @@ declared stops.
 
 | Field | Values |
 | --- | --- |
-| Level | `context`, `operation`, `removal-phase`, `block`, `attempt`, `resolution`, `adapter-run` |
-| Certainty | `none`: nothing began; `possible`: an effect may be partial and a repeat converges it; `unproved`: the effect must be observed before anything else starts; `owed`: the effect is complete and its bookkeeping is not |
-| Cause | `input`, `environment`, `target`, `concurrency`, `build`, `records`, `bound`, `interrupt`, `deadline`, `defect`, `unclassified` |
-| Fault | for an `environment` cause: `dns`, `unreachable`, `timeout`, `certificate`, `credential`, `proxy`, `storage`, `host-key` |
+| Level | where the stop ends the verb: `context`: the context as a whole, its records or its selection; `operation`: the whole operation, before any block runs or as it ends; `removal-phase`: one phase of a removal; `block`: one block; `attempt`: one attempt of a block; `resolution`: the observation that resolves an unknown attempt; `adapter-run`: one run of an adapter |
+| Certainty | `none`: nothing began; `possible`: an effect may have begun and be partial, and the Recovery names what converges it; `unproved`: the effect must be observed before anything else starts; `owed`: the effect is complete and its bookkeeping is not; an adapter that ended without proving its postcondition is `unproved`, unless its capability's retry converges without observing first, which its remedy says |
+| Cause | where the stop's reason lies, while the Recovery says what the operator changes: `input`: the authored input or the invocation; `environment`: the host, network or service Bootwright depends on, which the Fault names; `target`: the Machine, cluster or service acted on; `concurrency`: another command or process holds what this one needs; `build`: this executable, or the build that froze the records; `records`: the context's records are missing, unreadable or contradict one another; `bound`: a documented bound was exceeded; `interrupt`: an interrupt ended it; `deadline`: a deadline ended it; `defect`: a defect of Bootwright; `unclassified`: below |
+| Fault | for an `environment` cause, what failed: `dns`: a name did not resolve; `unreachable`: nothing answered; `timeout`: no answer came within its bound; `certificate`: a TLS identity did not verify; `credential`: a credential was refused; `proxy`: a proxy refused or failed; `storage`: a store lacked space or refused a write; `host-key`: an SSH host key was unproved or changed |
 | Recovery | the operator's next action, and whether the context's records survive it: `repeat`: run the same command again unchanged, and the records survive; `fix-then-repeat`: correct what the remedy names on a target, host or environment without changing the input, then run the command again, adjusted as the remedy names, and the records survive; `change-input`: change the input the remedy names, then run the command again, and the records survive; `other-verb`: first run the other command the remedy names, such as `destroy`, a continuation of another operation or a discovery stage, and the records survive for that command to read; `wait`: run the command again once the other command or process the message names ends, and the records survive; `authorize`: run the command again with the confirmation or authorization the remedy names, and the records survive; `registering-build`: run the command the remedy names with the build that registered or froze the records, and the records survive for that build alone; `abandon-context`: the records cannot continue as they are, so only restoring them from a backup or deleting the context remains; `none`: no Bootwright command recovers the stop, so the operator reports the defect or acts outside Bootwright as the remedy names, and the records survive |
 
 `unclassified` is the cause of a stop the code that raises it cannot yet
 attribute, such as a role task that failed without naming a declared reason.
+A row's Recovery names the first step its Remedy asks. Every value of a catalog
+column is defined here.
 
 An adapter-run stop a declared reason raises is selected by that reason, and an
 optional detail, a closed token, only fills its message; neither is the stop's
@@ -84,7 +88,7 @@ start, and the endings of one that ran.
 | `runner.unsupported-platform` | adapter-run | none | build | - | none | lifecycle adapters run only on Linux on amd64 | run Bootwright on Linux on amd64 |
 | `runner.storage` | adapter-run | none | environment | `storage` | fix-then-repeat | the runner's private storage for an adapter run could not be prepared or proved, so no adapter ran | restore the private directories under /var/lib/bootwright and the run scratch parent, then repeat the operation |
 | `runner.scratch-unusable` | adapter-run | none | environment | `storage` | fix-then-repeat | the run scratch directory is not one an adapter may use, so no adapter ran | give the run scratch parent a filesystem that allows execution and is owned by the invoking user alone, then repeat the operation |
-| `runner.stale-run` | adapter-run | none | environment | `storage` | fix-then-repeat | an earlier adapter run left a directory the runner could not remove safely | remove the stale bootwright-run directories no process holds, then repeat the operation |
+| `runner.stale-run` | adapter-run | none | environment | `storage` | fix-then-repeat | an earlier adapter run left a directory the runner could not remove safely | remove each bootwright-run-<n> directory under /run whose lock file no process holds an advisory lock on, such as one where flock -n <dir>/lock true succeeds, with its bootwright-scratch-<n>-* directories under /var/lib/bootwright-staging/runs, then repeat the operation |
 | `runner.adapter-running` | adapter-run | none | concurrency | - | wait | another lifecycle adapter, or processes it left, still holds the job lock this run needs | wait for the adapter the message names to end and repeat the command |
 | `runner.material-unprepared` | adapter-run | none | records | - | fix-then-repeat | the bound Secret material the run lends could not be prepared, so no adapter ran | restore the context's keyring, then repeat the operation |
 | `runner.invocation-ended` | adapter-run | none | defect | - | repeat | a run was asked of an invocation that had already ended, so no adapter ran | repeat the operation |
@@ -121,7 +125,8 @@ refusals of a decision and its plan before any effect.
 | `destroy.consumer-survives` | removal-phase | none | target | - | fix-then-repeat | a removal would retire what a consumer that outlives it still uses | keep this context while the consumer runs; a destroy takes back what a consumer uses only when the consumer leaves with owned virtual node Machines the same destroy deletes |
 | `apply.produced-input-missing` | block | none | records | - | fix-then-repeat | a block borrows an output its producer has not proved, or no longer offers | complete the producer block, then repeat the operation |
 | `engine.recapture-mismatch` | block | possible | target | - | fix-then-repeat | an output a block recaptured presents another identity than the one custody holds | find what replaced the effect the block proved; the context's records name the original |
-| `engine.resolved-unperformed` | resolution | none | target | - | repeat | an observation proved a frozen effect never performed, or left part done, so the block is failed and retried | repeat the operation, which retries the block |
+| `engine.resolved-unperformed` | resolution | none | target | - | repeat | an observation proved a frozen effect never performed, so the block is failed and retried | repeat the operation, which retries the block |
+| `engine.resolved-partial` | resolution | possible | target | - | repeat | an observation left a frozen effect partly realized or a removal's postcondition unreadable, so the block is failed and retried | repeat the operation, which retries the block |
 | `destroy.postcondition-unknown` | block | none | target | - | fix-then-repeat | a retried removal read its target again and still could not tell its postcondition, so it performed no effect | restore the target the removal reads, then repeat the destroy |
 | `engine.finalization-incomplete` | operation | owed | records | - | repeat | an operation's effects are complete and its finalization is not | repeat the command, which finishes the finalization |
 | `destroy.release-incomplete` | operation | owed | records | - | repeat | the removal completed, and releasing what it owned did not | repeat the destroy to finish it |
@@ -135,7 +140,7 @@ refusals of a decision and its plan before any effect.
 | Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `engine.finalization-due` | operation | owed | defect | - | repeat | an operation is due its finalization, which no decision may skip | repeat the command, which finalizes that operation before it decides |
-| `engine.records-contradict` | operation | none | records | - | abandon-context | an incomplete operation holds records that contradict what it started | read the records with bootwright status, then restore them from a backup or delete the context |
+| `engine.records-contradict` | operation | none | records | - | abandon-context | an incomplete operation holds records that contradict what it started | read the records with bootwright status --context <context>, then restore them from a backup or delete the context |
 | `engine.other-verb-incomplete` | operation | none | input | - | other-verb | an incomplete operation of the other verb must be continued before another operation | continue or replace the incomplete operation the message names |
 | `apply.records-missing` | operation | none | records | - | abandon-context | a completed apply records no completion for blocks it froze, so nothing proves its input applied | restore the context's records, or take back what it owns and apply again |
 | `destroy.records-missing` | operation | none | records | - | abandon-context | a completed destroy records no completion for blocks it froze, so nothing proves their effects removed | restore the context's records, or delete the context with what it may still own |
@@ -154,7 +159,7 @@ refusals of a decision and its plan before any effect.
 | `engine.binding-lost` | operation | none | records | - | abandon-context | a Secret binding the operation froze is lost, so its material cannot be lent again | restore the context's keyring from a complete backup, or delete the context and remove what it named by hand |
 | `destroy.stage-selected` | operation | none | input | - | fix-then-repeat | the next operation is a destroy, which accepts no stage selection | repeat the command without --stage and --until |
 | `apply.target-before-preparation` | operation | none | input | - | other-verb | a scoped apply cannot freeze its installation plan before inventory outside its targets exists | complete the named machine inventories and review the scoped apply again |
-| `apply.until-before-preparation` | operation | none | input | - | other-verb | the add-on boundary --until names cannot be planned before preparation completes | run apply to complete preparation, then select --until |
+| `apply.until-before-preparation` | operation | none | input | - | other-verb | the add-on boundary --until names cannot be planned before preparation completes | run apply without --until to complete preparation, then select --until |
 | `engine.records-damaged` | operation | none | records | - | abandon-context | the context's operation records do not form the lineage or removal the operation needs | restore the context store from a backup, or delete the context with what it may still own |
 | `engine.borrowed-ssh` | operation | none | input | - | fix-then-repeat | a lifecycle operation was given borrowed SSH credentials, which it never uses | remove the --ssh flags and author each Machine's own access |
 | `engine.confirmation-required` | operation | none | input | - | authorize | the operation needs a confirmation the invocation cannot ask for | repeat the command on a terminal, or with --yes once the plan is reviewed |
@@ -191,13 +196,13 @@ refusals of a decision and its plan before any effect.
 | Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `engine.credential-unapplied` | operation | none | input | - | other-verb | an administrator credential update names a cluster no completed apply installed and proved | complete the cluster's apply before updating its credentials |
-| `engine.credential-cluster-unknown` | operation | none | input | - | change-input | an administrator credential update names a cluster the context does not select | bootwright cluster info lists the selected clusters |
-| `engine.credential-login-inapplicable` | operation | none | input | - | change-input | a credential update names a login the cluster does not have | bootwright cluster info --name <cluster> shows its logins |
+| `engine.credential-cluster-unknown` | operation | none | input | - | change-input | an administrator credential update names a cluster the context does not select | bootwright cluster info --context <context> lists the selected clusters |
+| `engine.credential-login-inapplicable` | operation | none | input | - | change-input | a credential update names a login the cluster does not have | bootwright cluster info --context <context> --name <cluster> shows its logins |
 | `engine.credential-external-cluster` | operation | none | input | - | change-input | an administrator credential update names an external cluster, whose credentials its own administrator keeps | update the credentials through the external cluster's administrator |
 | `engine.credential-custody-unproved` | operation | none | records | - | fix-then-repeat | the custody of a cluster administrator credential is missing, unproved or invalid, so its update changed nothing | restore the original credential custody |
-| `engine.credential-update-pending` | operation | none | records | - | other-verb | an administrator credential update was left pending, so custody holds no credential proved current | finish the retained update with bootwright cluster update-admin-creds |
+| `engine.credential-update-pending` | operation | none | records | - | other-verb | an administrator credential update was left pending, so custody holds no credential proved current | finish the retained update with bootwright cluster update-admin-creds --context <context> |
 | `engine.credential-preparation-invalid` | operation | none | target | - | fix-then-repeat | the cluster's read-only preparation of an administrator credential update was not proved or returned no valid update, so nothing changed | check the cluster's original administrator account |
-| `engine.credential-update-unproved` | operation | possible | target | - | repeat | the adapter that updates a cluster administrator credential ended without proving the update | repeat bootwright cluster update-admin-creds to finish the retained update |
+| `engine.credential-update-unproved` | operation | possible | target | - | repeat | the adapter that updates a cluster administrator credential ended without proving the update | repeat bootwright cluster update-admin-creds --context <context> to finish the retained update |
 | `engine.controller-unprepared` | operation | none | environment | - | fix-then-repeat | this host has no completed controller setup, so nothing ran | run bootwright install |
 | `engine.controller-unbound` | operation | none | records | - | fix-then-repeat | the context is not bound to the controller host it runs on, so nothing ran | run bootwright install to record the controller binding and host evidence |
 | `engine.controller-other-host` | operation | none | target | - | fix-then-repeat | this host is not the controller host the context is bound to, or the recorded binding does not match it, so nothing ran | run the command on the host the context is bound to |
@@ -208,7 +213,9 @@ refusals of a decision and its plan before any effect.
 ### Warnings
 
 Warnings the engine reports, or relays from an adapter's completed result.
-They carry the row's code and end no verb.
+They carry the row's code and the raiser's remedy, end no verb and emit no
+default remedy, `cause` or `recovery`; their Level, Certainty, Cause and
+Recovery cells are shown by `explain` alone.
 
 | Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -227,7 +234,7 @@ The Machine power and media eject capability's stops (`internal/machine/power`).
 | `power.request-invalid` | adapter-run | none | input | - | fix-then-repeat | the power request names a verb or context the command does not take, so nothing was sent | repeat the command with a supported verb and context |
 | `power.identity-changed` | adapter-run | none | target | - | fix-then-repeat | the management controller answers as another system than the one the context's apply proved, so no power request was sent | correct the Machine's BMC or provider, or take back and apply the context again |
 | `power.evidence-mismatch` | adapter-run | possible | defect | - | repeat | the power or eject evidence names another request, Machine or survey, or a state the command cannot name | repeat the command; report the message if it stops the same way |
-| `power.unproved` | adapter-run | unproved | target | - | repeat | the management controller did not prove the power or media state the command asked for | read the power state again with bootwright machine status, then repeat the command |
+| `power.unproved` | adapter-run | unproved | target | - | repeat | the management controller did not prove the power or media state the command asked for | read the power state again with bootwright machine list --context <context> --power-status, then repeat the command |
 
 ## Disk discovery stops
 
@@ -239,12 +246,12 @@ The managed OS disk discovery capability's stops (`internal/managedos/diskdiscov
 | `discovery.request-invalid` | block | none | defect | - | none | the frozen disk discovery request names something its adapter cannot run, so no adapter ran | report the message as a defect |
 | `discovery.unsupported` | context | none | input | - | change-input | the Machine or the artifact server it names cannot host a disk discovery boot | use a controller-local HTTPS artifact server and full or certificate BMC verification |
 | `discovery.machine-installed` | context | none | target | - | change-input | the Machine already has installation ownership, so booting it for discovery would disturb that installation | retain the existing installation or remove it through its recorded lifecycle first |
-| `discovery.prerequisites-missing` | context | none | input | - | other-verb | the controller and infrastructure setup a discovery boot needs is not applied | repeat bootwright machine discover with --stage controller to review and confirm controller and infrastructure setup |
+| `discovery.prerequisites-missing` | context | none | input | - | other-verb | the controller and infrastructure setup a discovery boot needs is not applied | repeat bootwright machine discover --context <context> --name <machine> with --stage controller to review and confirm controller and infrastructure setup |
 | `discovery.refinement-refused` | context | none | input | - | change-input | a change after preparation reaches beyond the disk-selection fields that may follow it | keep prepared ownership unchanged and update only the disk-selection fields |
 | `discovery.records-missing` | block | none | records | - | abandon-context | the records a disk discovery builds on hold no inventory, proof or identity the block names | restore the context store from a backup |
 | `discovery.records-mismatch` | block | none | records | - | none | a recorded disk inventory or attempt names another Machine, request or execution than the block froze | retain the original inventory and resolve its ownership before preparing another |
 | `discovery.records-conflict` | block | none | records | - | none | more than one owned disk inventory competes for one Machine | retain one inventory and resolve the ownership of the others |
-| `discovery.inventory-missing` | context | none | input | - | other-verb | the Machine has no completed disk discovery for its current policy and media | run bootwright machine discover with --stage controller |
+| `discovery.inventory-missing` | context | none | input | - | other-verb | the Machine has no completed disk discovery for its current policy and media | run bootwright machine discover --context <context> --name <machine> with --stage controller |
 | `discovery.inventory-stale` | context | none | input | - | change-input | an owned inventory belongs to a different discovery request | restore the recorded discovery settings or review removal of the current lifecycle ownership before discovering again |
 | `discovery.root-unprovable` | context | none | input | - | change-input | the recorded inventory cannot prove the protected disks and exactly one eligible root | inspect the recorded inventory and correct the protected storage claim or root match named by the refusal, then update the context |
 | `discovery.evidence-mismatch` | block | possible | records | - | repeat | the disk discovery evidence names another contract or request than the block froze | repeat the operation, which observes the discovery again |
@@ -394,7 +401,7 @@ The libvirt substrate's stops (`internal/substrate/libvirt`).
 | `libvirt.unconfigured` | block | none | defect | - | none | a libvirt capability runs without its adapter | report the message as a defect |
 | `libvirt.records-missing` | block | none | records | - | abandon-context | the applied revision places no libvirt profile under a machine whose evidence it holds | restore the context store from a backup |
 | `libvirt.outcome-unusable` | block | unproved | target | - | repeat | a libvirt adapter ended without a usable outcome | repeat the operation, which observes the host before anything else starts |
-| `libvirt.postcondition-unproved` | block | possible | target | - | repeat | a libvirt adapter ended without proving the postcondition of its apply or its removal | repeat the operation, which observes the host before anything else starts |
+| `libvirt.postcondition-unproved` | block | possible | target | - | repeat | a libvirt adapter ended without proving the postcondition of its apply or its removal | repeat the operation, which observes the host again |
 | `libvirt.evidence-mismatch` | block | possible | records | - | repeat | libvirt evidence names another request than the block froze, or reports a shape that request does not allow | repeat the operation, which observes the host again |
 | `libvirt.host-drifted` | block | possible | target | - | repeat | the provider host or machine does not hold what the frozen libvirt request declares | repeat the apply, which restores what the request declares |
 | `libvirt.host-silent` | block | possible | target | - | fix-then-repeat | the libvirt connection, a driver or NetworkManager did not answer for what the evidence asks about, so nothing is proved | restore the service the message names on the provider host, then repeat the operation |
@@ -415,7 +422,7 @@ The host firewall capability's stops (`internal/managedos/hostfirewall`).
 | `firewall.foreign-service` | adapter-run | none | target | - | fix-then-repeat | the Machine holds a firewalld service of the same name this context did not write, so its firewall was left unchanged | remove the foreign firewalld service, then run the command again |
 | `firewall.no-interface` | adapter-run | none | input | - | change-input | the Machine has no interface on a network a firewalld service admits traffic on, so its firewall was left unchanged | give the Machine the declared listener address or required network, then run the command again |
 | `firewall.inactive` | adapter-run | none | target | - | fix-then-repeat | firewalld is not running on a Machine whose install profile enables it, so its firewall was left unchanged | start firewalld on the Machine, then run the command again |
-| `firewall.change-refused` | adapter-run | possible | target | - | fix-then-repeat | firewalld refused a change on the Machine partway through its apply or removal | read the firewalld journal on the Machine, correct it, then run the command again |
+| `firewall.change-refused` | adapter-run | possible | target | - | fix-then-repeat | firewalld refused a change on the Machine partway through its apply or removal | read the firewalld journal on the Machine, or for SSH admission its SSH ingress unit journal, correct it, then run the command again |
 
 ## Provided OS update stops
 
@@ -471,16 +478,16 @@ The managed OS installation capability's stops (`internal/managedos/installation
 | `install.records-missing` | block | none | records | - | abandon-context | the apply records no longer prove the installation, publication or discovery a later step depends on | restore the original apply records |
 | `install.evidence-invalid` | block | possible | records | - | repeat | the installation evidence is malformed or names another request, address, marker or state than the block froze | repeat the operation, which observes the installation again |
 | `install.postcondition-unmet` | block | possible | target | - | repeat | the installation evidence does not show the state the check requires | repeat the operation, which observes the installation again |
-| `install.foreign-state` | block | possible | target | - | other-verb | the installed machine holds an installation, registration or update record this installation did not create | take the context back with bootwright destroy and apply again |
+| `install.foreign-state` | block | possible | target | - | other-verb | the installed machine holds an installation, registration or update record this installation did not create | take the context back with bootwright destroy --context <context> and apply again |
 | `install.no-outcome` | block | unproved | defect | - | repeat | the installation adapter reported no usable outcome after it ran | repeat the operation, which observes the installation again |
-| `install.host-key-mismatch` | block | none | records | - | other-verb | the host key type a request froze is not the one the bound Secret or this build delivers | take the context back with bootwright destroy, then plan and apply it again |
+| `install.host-key-mismatch` | block | none | records | - | other-verb | the host key type a request froze is not the one the bound Secret or this build delivers | take the context back with bootwright destroy --context <context>, then plan and apply it again |
 | `install.foreign-installation` | adapter-run | none | target | - | change-input | the machine answered with another installation's marker, so no installer was booted | verify the declared Machine and its management controller |
-| `install.source-changed` | adapter-run | none | target | - | other-verb | an image or package tree no longer has the size and digest the operation froze, so nothing was published | take the context back with bootwright destroy and import the image again |
+| `install.source-changed` | adapter-run | none | target | - | other-verb | an image or package tree no longer has the size and digest the operation froze, so nothing was published | take the context back with bootwright destroy --context <context> and import the image again |
 | `install.artifact-server-not-applied` | adapter-run | none | target | - | fix-then-repeat | the artifact server that serves the package tree is not applied on this host, so nothing was published | apply the artifact server, then repeat this apply |
-| `install.guest-policy-unmet` | adapter-run | possible | target | - | other-verb | the installed machine lacks the root encryption or FIPS mode its installation set only at install time | take the context back with bootwright destroy, then apply again |
+| `install.guest-policy-unmet` | adapter-run | possible | target | - | other-verb | the installed machine lacks the root encryption or FIPS mode its installation set only at install time | take the context back with bootwright destroy --context <context>, then apply again |
 | `install.registration-rejected` | adapter-run | possible | input | - | fix-then-repeat | the subscription service or Satellite did not accept the registration the installation declares | correct the registration declaration, then repeat the operation |
 | `install.service-unavailable` | adapter-run | possible | environment | `unreachable` | fix-then-repeat | the subscription service, an update repository or the machine's own tooling did not answer | restore the route from the machine to the service, then repeat the operation |
-| `install.foreign-record` | adapter-run | possible | target | - | other-verb | the machine holds a subscription registration or update record of another installation | take the context back with bootwright destroy and apply again |
+| `install.foreign-record` | adapter-run | possible | target | - | other-verb | the machine holds a subscription registration or update record of another installation | take the context back with bootwright destroy --context <context> and apply again |
 | `install.update-refused` | adapter-run | possible | input | - | fix-then-repeat | the update sources cannot hold the machine within the release its installation declares | correct the update sources of the install profile, then apply again |
 | `install.update-failed` | adapter-run | possible | target | - | fix-then-repeat | the package transaction of the machine's update failed | repeat the operation once the update sources offer a consistent transaction |
 
@@ -509,10 +516,10 @@ The Ceph storage capability's stops (`internal/storage/ceph`).
 | `ceph.unsupported-pool` | block | none | input | - | change-input | a Ceph pool, placement policy or consumer names a setting or pool kind the core adapter does not realize | select a replicated pool and the settings the core Ceph profile supports |
 | `ceph.package-source-unsupported` | block | none | input | - | change-input | the package source a Ceph host selects is not one the core adapter can acquire packages from | select the hosted DVD or subscription profile used to install each Ceph Machine |
 | `ceph.budget-exceeded` | block | none | bound | - | change-input | a Ceph operation needs a run deadline past the bound Ceph holds its derived deadlines to, so no adapter ran | declare fewer hosts, namespaces or initiator hosts |
-| `ceph.retirement-refused` | removal-phase | none | input | - | change-input | a physical Ceph host holds no disk-erasure authority that covers every selected disk, so its retirement took nothing back | retain this context and erase every selected Ceph disk |
-| `ceph.retirement-unavailable` | operation | none | input | - | change-input | the planned Ceph cluster would refuse automatic retirement | review the original erase policy and cluster consumers before apply |
-| `ceph.hosts-survive` | removal-phase | none | target | - | fix-then-repeat | a Ceph cluster would be removed while hosts that outlive the destroy still run it | remove the cluster in the same destroy as every Bootwright-owned virtual host Machine it runs on |
-| `ceph.secret-invalid` | block | none | input | - | change-input | a Secret bound to a Ceph resource is not a value the adapter can lend | bind a Secret holding one line of 1 to 1024 bytes of UTF-8 text |
+| `ceph.retirement-refused` | removal-phase | none | input | - | abandon-context | a physical Ceph host holds no disk-erasure authority that covers every selected disk, so its retirement took nothing back | automatic retirement needs every selected data, DB and WAL disk in a hardware.dataDisks entry of each Machine, as originally applied, with a non-retain onRemoval; without it only bootwright context delete --name <context> --purge --allow-orphans remains, which abandons what the context owns |
+| `ceph.retirement-unavailable` | operation | none | input | - | change-input | a warning: the planned Ceph cluster would refuse automatic retirement, because it has a physical Ceph consumer or a selected physical disk that the frozen erase policy cannot retire | review the original erase policy and cluster consumers before apply |
+| `ceph.hosts-survive` | removal-phase | none | target | - | fix-then-repeat | a Ceph cluster would be removed while hosts that outlive the destroy still run it: Bootwright-owned virtual hosts, physical hosts whose original erase policy and verified erase receipt are missing, or a physical CephConsumer | remove the cluster in the same destroy as every Bootwright-owned virtual host Machine it runs on; for physical hosts, supply the original erase policy of every host and its terminal verified erase receipt; retain the context while a physical CephConsumer uses the cluster |
+| `ceph.secret-invalid` | block | none | input | - | change-input | a Secret a CephSMBResource binds is not a value the adapter can lend | bind a Secret holding one line of 1 to 1024 bytes of UTF-8 text |
 | `ceph.stretch-intent-changed` | adapter-run | none | input | - | change-input | the stretch topology the input declares differs from the intent the cluster was created with | restore the stretch topology the cluster was created with |
 | `ceph.ssh-policy-excluded` | adapter-run | none | input | - | change-input | an SSH crypto policy admits none of the algorithms of a Ceph host's pinned host key, so no session opened | pin a host key the SSH crypto policy admits |
 | `ceph.ssh-policy-unreadable` | adapter-run | none | environment | - | fix-then-repeat | the controller's SSH crypto policy could not be read or evaluated, so no Ceph session opened | restore the controller's SSH crypto policy files, then repeat the operation |
@@ -561,13 +568,13 @@ The Machine placement and access checks' stops (`internal/machine`).
 
 | Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `machine.enrollment` | operation | none | input | - | fix-then-repeat | a provided Machine's enrollment could not verify a credential, account, or grant | inspect the named Machine's first-access declaration and retry with its authorized administrator |
+| `machine.enrollment` | block | possible | input | - | fix-then-repeat | a provided Machine's enrollment could not verify a credential, account, or grant | inspect the named Machine's first-access declaration and retry with its authorized administrator |
 | `machine.enrollment-sudo-tty` | block | none | target | - | fix-then-repeat | remote sudo requires a terminal and did not start the enrollment command | have the host administrator authorize sudo without a terminal for this account, then repeat the operation |
 | `machine.placement-no-access` | operation | none | input | - | change-input | a Machine that hosts lifecycle work is neither the controller nor declares SSH access, so no work was placed on it | place the work on the controller Machine, or author access.ssh on the Machine |
 | `machine.placement-auth-unsupported` | operation | none | input | - | change-input | a Machine that hosts lifecycle work authenticates with an operator identity or a password, which a placement does not support | author access.ssh.auth.privateKeyRef on the Machine |
-| `machine.placement-key-missing` | operation | none | input | - | change-input | a Machine that hosts lifecycle work declares no SSH private key reference | author access.ssh.auth.privateKeyRef on the Machine |
+| `machine.placement-key-missing` | operation | none | input | - | change-input | a Machine that hosts lifecycle work declares no private key reference or, for access.lifecycle, no host pin | author the Machine's private key reference as its message names |
 | `machine.placement-host-key-missing` | operation | none | input | - | change-input | a Machine that hosts lifecycle work declares no bound SSH host key | author access.ssh.knownHostsRef on the Machine |
-| `machine.placement-escalates` | operation | none | input | - | change-input | a Machine that hosts lifecycle work declares an SSH account other than root | set access.ssh.user to root or omit it on the Machine |
+| `machine.placement-escalates` | operation | none | input | - | change-input | a Machine that hosts lifecycle work declares a login whose account and privilege a placement does not admit: an access.ssh account other than root or an escalation Secret, or an access.lifecycle login other than root with direct privilege or a non-root account with sudo | author the Machine's login as its message names |
 | `machine.installed-access-mismatch` | operation | none | input | - | change-input | a Machine Bootwright installs declares SSH access other than its installation's own, so no work was placed on it | remove spec.access.ssh from the Machine so its access is the installation's own |
 
 ## Machine hardware stops
@@ -650,7 +657,7 @@ The command line's stops (`internal/cli`).
 
 | Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `command.unconfirmed` | operation | none | input | - | authorize | the confirmation an apply or destroy asks for was declined, canceled or could not be asked, so nothing began | review the plan, then repeat the command with --yes |
+| `command.unconfirmed` | operation | none | input | - | authorize | the confirmation an apply or destroy asks for was declined, canceled or could not be asked, so nothing began | after a decline or a non-interactive refusal, review the plan, then repeat the command with --yes; after a cancellation, repeat the command to be asked again |
 
 ## Context input stops
 
@@ -658,8 +665,8 @@ The context input checks' stops (`internal/workspace/contexts`).
 
 | Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `input.added-since-apply` | context | none | input | - | repeat | imported input declares more than an apply in progress froze, and the next apply adds it without running its blocks | run bootwright apply to add it to that apply |
-| `input.changed-since-apply` | context | none | input | - | other-verb | the context holds a completed apply and imported input changed since it, which apply refuses until a destroy takes back what that apply owns | take the apply back with bootwright destroy, then apply again |
+| `input.added-since-apply` | context | none | input | - | repeat | a warning: imported input declares more than the completed apply froze, only add-on instances, and the next apply adds it without running its blocks | run bootwright apply --context <context> to add it to that apply |
+| `input.changed-since-apply` | context | none | input | - | other-verb | a warning: the context holds a completed apply and imported input changed since it, which apply refuses until a destroy takes back what that apply owns | take the apply back with bootwright destroy --context <context>, then apply again |
 
 ## Context store stops
 
@@ -681,7 +688,7 @@ The reconciliation records' and plans' stops (`internal/reconciliation`).
 | `records.evidence-unreadable` | block | possible | defect | - | none | the evidence an adapter returned is empty, unbounded or not the one shape its capability declares | report the message as a defect |
 | `records.state-unrecognized` | block | possible | defect | - | none | a lifecycle record, number or identity holds a value this build does not recognize | report the message as a defect |
 | `records.plan-invalid` | operation | none | defect | - | none | a lifecycle plan, lineage or block breaks the shape or the bounds a plan holds, so nothing ran | report the message as a defect |
-| `records.lineage-reshaped` | operation | none | input | - | other-verb | an additive apply would freeze a block of the applied lineage differently, so nothing ran | take the apply back with bootwright destroy, then apply the changed input |
+| `records.lineage-reshaped` | operation | none | input | - | other-verb | an additive apply would freeze a block of the applied lineage differently, so nothing ran | take the apply back with bootwright destroy --context <context>, then apply the changed input |
 | `records.plan-too-large` | operation | none | bound | - | change-input | a lifecycle plan exceeds its block count or its aggregate request size, so nothing ran | declare fewer objects in the context, or split them across contexts |
 | `records.block-identity-clash` | operation | none | input | - | change-input | two objects of different kinds name one block, so the plan cannot tell them apart and nothing ran | rename one of the two objects so their block identities differ |
 | `records.dependency-cycle` | operation | none | input | - | change-input | the blocks of a plan wait for one another in a cycle, so no order exists and nothing ran | remove one of the references that order these blocks after one another |

@@ -861,8 +861,9 @@ of an `opaque` or `token` Secret:
 | `ceph.smb.join.auth` | `/auth/password` | value | required |
 | `ceph.smb.usersgroups` | `/values/users/<i>/password` for an existing user `<i>` | value | required for every user |
 
-An authored password at either leaf refuses; binding time checks the value's
-UTF-8 encoding and its bound.
+An authored password at either leaf refuses; binding time refuses
+`ceph.secret-invalid` unless the value is one line of 1 to 1024 bytes of UTF-8
+text.
 
 This partial cluster binds Grafana's initial password without changing the
 native placement or authentication field names:

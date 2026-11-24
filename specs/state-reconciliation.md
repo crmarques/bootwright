@@ -2130,8 +2130,9 @@ build's priority, including continuation of an operation another build froze.
 A comparison sets a context's desired state beside what its operations
 realized, object by object. It is a read: it registers no operation, writes no
 record, binds no Secret, reserves nothing and runs no effect. It runs under one
-shared-lock read of the context, so it refuses `context.busy` while an apply
-or destroy holds the context, refuses a retired operation index and unreadable
+shared-lock read of the context, so it refuses `context.busy` as the
+[lock table](contexts.md#storage-locking-and-publication) says of a read,
+refuses a retired operation index and unreadable
 or contradictory records as every lifecycle read does, and refuses with the
 compiler's own diagnostics when the selected input revision does not compile.
 Nothing else refuses it except as
@@ -2535,7 +2536,7 @@ Under the exclusive context lease, the Machine implementation must identify
 the target and observe it off, or prove the virtual Machine absent at its
 provider. A physical Machine must answer even before its first installation.
 Provided infrastructure and the controller stay available. A failed or
-ambiguous reading refuses the complete flow before any registration,
+ambiguous reading refuses the complete flow with `lifecycle.start-power` before any registration,
 credential issue, recovery write or cleanup. It leaves existing records,
 logs, staged files and subscriptions intact. Repeating the command checks
 again. Authorization and `--unregistered` leave this condition in force.

@@ -177,7 +177,7 @@ func (r PhysicalRetirementRequest) authorized() error {
 		}
 		for _, device := range host.Devices {
 			if !host.covers(device) {
-				return cephRetirementRefused.Fail("physical Ceph retirement requires explicit erasure of every selected data, DB and WAL disk", "include every selected Ceph disk, by its WWN or its serial number and size, in a hardware.dataDisks entry of each Machine, as originally applied, with a non-retain onRemoval")
+				return cephRetirementRefused.Fail("physical Ceph retirement requires explicit erasure of every selected data, DB and WAL disk", "include every selected Ceph disk, by its WWN or its serial number and size, in a hardware.dataDisks entry of each Machine, as originally applied, with a non-retain onRemoval; without it only bootwright context delete --name <context> --purge --allow-orphans remains, which abandons what the context owns")
 			}
 		}
 	}

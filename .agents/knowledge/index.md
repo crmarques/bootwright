@@ -94,6 +94,7 @@ investigating or designing, then open only the relevant page.
 | `secret "webhook-server-cert" not found` on the GitLab controller, a `GitLab` create refused by its validating webhook | [gitlab-operator-on-openshift.md](gitlab-operator-on-openshift.md) |
 | A `GitLab` that is `Available` while Gitaly or the registry is not running | [gitlab-operator-on-openshift.md](gitlab-operator-on-openshift.md) |
 | A Let's Encrypt HTTP01 issuer Job failing on a lab cluster | [gitlab-operator-on-openshift.md](gitlab-operator-on-openshift.md) |
+| Acquisition list delivery hosts, `docker.io` token realm and blob redirect, `cdn.quay.io`, `cdn02.quay.io` to `cdn06.quay.io`, `access.redhat.com` signature store, `api.openshift.com`, `cp.icr.io` entitlement, default catalog names and the OLMv1 `redhat-marketplace` catalog | [registry-delivery-host-provenance.md](registry-delivery-host-provenance.md) |
 
 Add one focused page for each durable lesson and index it with searchable topic
 terms, affected symbols, or error text. Each new or revised entry identifies the

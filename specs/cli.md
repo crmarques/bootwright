@@ -31,12 +31,13 @@ command paths. With no arguments, the root prints root help and succeeds.
 Bare `help` prints root help. A command group without a subcommand prints its
 own help and succeeds. A command missing a required flag, a required choice
 of input, or a positional operand also prints its own help and succeeds
-after validating supplied input.
+after validating supplied input; a required flag spelled among the payload
+tokens of a [payload-bearing command](#parsing-and-input-conventions) is the
+one exception, and refuses.
 
-The former root groups `example` and `container-cluster` are absent, with no
-aliases or hidden compatibility handlers. Their paths, including explicit help
-requests, fail command resolution with `cli.usage` and exit `2`. Repository
-examples remain desired-state inputs; the CLI does not generate them.
+`example` and `container-cluster` are not commands: their paths, including
+explicit help requests, fail command resolution with `cli.usage` and exit `2`.
+Repository examples are desired-state inputs; the CLI does not generate them.
 
 Private completion entries are fixed by the implementation and generated
 scripts. They are absent from public help and candidates and are outside the
@@ -59,7 +60,7 @@ Every invocation admitted by that boundary follows this precedence:
    and flag relationships, and identify missing required inputs;
 5. show help for an incomplete command;
 6. decide whether the resolved use case, or the part of its selection that
-   [apply --dry-run --stage](cli/commands.md#flag-relationships-and-safeguards)
+   [`apply --dry-run --stage`](cli/commands.md#flag-relationships-and-safeguards)
    names, is available.
 
 Explicit help therefore outranks required-value, enum, cardinality, and
@@ -146,64 +147,50 @@ values and subsequent arguments are omitted. These errors retain exit `2`,
 the selected output format and the no-effect boundary.
 
 Scalar flags follow command-line order and the last occurrence wins, including
-the scalar comma-list flags `--clusters`, `--replace`, `--stage`,
-the `--name` that names several Machines and the `--name` and `--node` that name
-several clusters and nodes.
-Collection flags aggregate in command-line order only where this contract says
-they are repeatable. `validate --input-dir` is repeatable. `--authorize` (with
-`erase=<machine>:<method>` and `abandon=<machine>`, once per Machine, on `destroy` and `destroy --dry-run`) and
-`destroy --unregistered` are repeatable and each occurrence may also contain
-commas. Supplying an empty required value
-is a usage error.
+every flag the [catalog](cli/commands.md#command-and-flag-catalog) writes as a
+`<list>`. Collection flags aggregate in command-line order only where the
+catalog writes them as `repeatable`: `validate --input-dir`, `--authorize` and
+`destroy --unregistered`. Each occurrence of the last two may also contain
+commas, and `--authorize` carries `erase=<machine>:<method>` and
+`abandon=<machine>` once per Machine on `destroy` and `destroy --dry-run`.
+Supplying an empty required value is a usage error.
 
 An explicitly supplied empty scalar value is also a usage error unless this
 contract names one of these exceptions: `--context=` is omission and selects
-the current context; an optional `--sha256=` is absence; and comma-list
-flags use their command-specific empty-list rules below.
+the current context; an optional `--sha256=` is absence; and a list flag uses
+its rule below.
 
 Empty-value rejection is occurrence-local: a later scalar occurrence does not
 erase an earlier explicitly empty occurrence. The named empty exceptions remain
 valid occurrences; enum and format validation otherwise applies to the final
 resolved scalar value under the last-occurrence-wins rule.
 
-`--clusters`, `--replace`, and `--stage` are comma-separated
-lists, and so are the optional `--name` of `machine trust`, the required `--name` of `machine start`, `machine stop`,
-`machine restart`, `machine media eject`, `machine media status` and `machine exec`, the required `--name` and the `--node` of
-`cluster exec`, and the optional `--name` of `cluster info`, `machine info` and `secret info`.
+A flag the catalog writes as a `<list>` is a comma-separated list.
 Whitespace around a member is ignored, empty members are ignored, and duplicate
 members collapse to their first occurrence. Omission selects all eligible
-objects only where the command row says “default all.” Empty resolved lists
-preserve these command-specific compatibility rules:
+objects only where the command row says “default all.” A supplied value that
+resolves to no member, a comma-only value for one, is a `cli.usage` refusal with
+exit `2`, and so is a member outside a closed set such as the stage names,
+unless one of these rules names the command:
 
 - `apply --clusters` and `--machines` follow the
-  [apply rule](cli/commands.md#flag-relationships-and-safeguards), which refuses an
-  empty, whitespace-only or comma-only value;
+  [apply rule](cli/commands.md#flag-relationships-and-safeguards), which also
+  refuses an empty or whitespace-only value;
 - `machine list --clusters` treats an empty or whitespace-only value as
   omission and a comma-only value as an empty result, and a member naming no
   OpenShiftCluster or CephCluster the context selects fails
   `access.target`, naming every such member and the clusters it can select;
-  and
-- `machine trust --name` treats an empty or comma-only value as omission,
-  while an empty or comma-only `--replace` selects no replacement; and
-- a supplied `--stage` must resolve to at least one member, so a comma-only
-  value is a usage error, and every member must be a declared stage name; and
-- a supplied `--name` of `machine start`, `machine stop`, `machine restart`,
-  `machine media eject`, `machine media status` and `machine exec` must likewise resolve to at least one member, so a
-  comma-only value is a usage error. `machine rsh` opens one interactive
-  session and keeps a single `--name`: a value containing a comma is a usage
-  error;
-- a supplied `--name` of `cluster exec` and `cluster info`, and a supplied
-  `--node` of `cluster exec`, must likewise resolve to at least one member, so
-  a comma-only value is a usage error. `cluster rsh` opens one interactive
-  session, so a comma in its `--name` or `--node` is a usage error; and
-- `machine info` and `secret info` omit `--name` to select all metadata rows;
-  supplied names match exactly after list normalization. A supplied `--name`
-  must likewise resolve to at least one member, so a comma-only value is a
-  usage error, and a member naming no Machine or Secret the context holds
-  fails `access.target` with exit status 1, naming every such member and the
-  list command that shows the resources the context selects, as `cluster info`
-  does ([D165](milestones/backlog.md#d165)). An explicitly empty scalar
-  occurrence still fails under the general rule above; and
+- `render installer --clusters` and `render storage --clusters` treat an empty
+  or whitespace-only value as omission and refuse a comma-only one;
+- `machine trust --name` treats an empty or comma-only value as omission, and
+  an empty or comma-only `--replace` selects no replacement;
+- `machine rsh` and `cluster rsh` open one interactive session and keep a
+  single `--name` (and `--node`): a value containing a comma is a usage error;
+- `machine info` and `secret info` omit `--name` to select all metadata rows,
+  and a member naming no Machine or Secret the context holds fails
+  `access.target` with exit status 1, naming every such member and the list
+  command that shows the resources the context selects, as `cluster info`
+  does ([D165](milestones/backlog.md#d165)); and
 - `cluster info --secrets` requires `--name` to name exactly one cluster after
   normalization, so a list of several is a usage error.
 
@@ -246,14 +233,17 @@ flag-shaped or not, including a token that spells a Bootwright flag such as
 retargets the session. A flag-shaped first payload token therefore requires
 `--`; for example, `--name c -- --help` treats `--help` as payload, while
 `--name c --help` requests Bootwright help, and `--name c ls -la` runs `ls -la`.
-A required Bootwright flag written after the payload is missing, and the usage
-refusal adds that Bootwright flags go before the remote command. The `--`
+A required Bootwright flag spelled among the payload tokens refuses `cli.usage`
+with exit `2`, adding that Bootwright flags go before the remote command
+(`TestAFlagWrittenAfterThePayloadIsRefusedWithWhereFlagsGo`); one that is
+absent shows help. The `--`
 separator is syntax only for these four payload-bearing commands and is a usage
 error on every other command.
 
 Standard input is read only for an ordinary confirmation, the host-key
-confirmation and the session of [`machine rsh` and `machine exec`](#machine-ssh-sessions),
-an explicitly requested sudo-password prompt, `secret set --password-stdin`,
+confirmation, a single session of [`machine rsh` or `machine exec`](#machine-ssh-sessions)
+or of [`cluster rsh` or `cluster exec`](cli/cluster-access.md#sessions), an
+explicitly requested sudo-password prompt, `secret set --password-stdin`,
 or `secret set --value-stdin`. The [Secrets contract](secrets.md) requires yes
 before stdin-backed replacement. No command reads an ambient desired-state configuration file. The invoking
 user's explicit current-context selection is defined by [Contexts](contexts.md).
@@ -278,7 +268,8 @@ A declined, non-interactive or unanswerable confirmation refuses under the
 confirming command's own code (`controller.install`, `controller.uninstall`, `media.store`,
 `machine.power`, `command.unconfirmed`, `trust.identity`, `context.state` or
 `secret.store.conflict`), with the reason in its message and the command
-repeated with `--yes` in `next:`; a cancellation names no command. The
+repeated with `--yes` in `next:`; a cancellation refuses under the same code and
+names no command (`TestACanceledConfirmationKeepsItsCodeAndNamesNoYesRemedy`). The
 repeated command is the invocation's own: its command path and every flag it
 set, so a stage, Machine or source selection, an authorization, every
 `erase=<machine>:<method>` relaxation and every other choice stay. It runs the verb afresh, so its plan is the one the records then
@@ -321,10 +312,10 @@ before its path. Sudo policies that refuse the executable path fail closed.
 Sudo owns terminal password handling; Bootwright never captures it. Every output
 format permits authentication with terminal stdin; otherwise sudo is
 noninteractive and requires cached or passwordless authorization. Preserve argv,
-stdin payloads, outputs and status.
+stdin, outputs and status.
 A human invocation with terminal stdin hands sudo each terminal stream
-unchanged, so sudo's own terminal relay carries prompts and
-answers to the child. A confirmation read whose terminal belongs to another
+unchanged, so sudo's terminal relay carries prompts and answers
+to the child. A confirmation read whose terminal belongs to another
 foreground process group requests the terminal through job control instead of
 waiting for input that cannot arrive.
 
@@ -357,13 +348,14 @@ exited 1 having held a line. That `runtime.privilege` report, and a structured
 invocation's, carries the held lines, each without sudo's prefix, as the reason
 sudo refused. The first held line that names a cause decides its remedy: a
 required password points to `sudo -v` in that terminal, or running as root; a
-sudoers policy refusal points to the rule that permits the re-executed path; a
-failure to execute points to a local copy of the executable that root can
+sudoers policy refusal points to the rule naming the installed binary and says a
+`/proc/[0-9]*/exe` rule is `ALL` unless a `sha256:` digest pins a
+build (`TestElevationOutcomes`); a failure to execute points to a local copy of the executable that root can
 execute; and the sudoers policy refusing to set the forwarded
 [acquisition route](controller.md#the-context-free-acquisition-route)'s
 variables points to the `SETENV` tag on the sudoers rule that runs Bootwright,
-or running as root. Held lines that name none of these keep the remedy to
-authenticate to sudo or run as root. A report the supervisor writes replaces the held
+or running as root. Any other held line keeps the remedy to authenticate to sudo
+or run as root. A report the supervisor writes replaces the held
 lines and exits `130` after an interrupt and `1` otherwise, as
 [streams and exit status](cli/output.md#streams-and-exit-status) requires;
 every other ending forwards a human invocation's held lines and exits with the
@@ -390,17 +382,17 @@ own and the supervisor's second signal kills sudo.
 The supervisor owns bounded `sudo -n -v` refresh subprocesses during that child.
 Keep the same parent and terminal identity. An unambiguous positive effective
 timeout refreshes at half its duration, including fractional minutes. Zero and
-negative timeouts need no expiry refresh. Unknown policy uses a 30-second
-best-effort interval; never assume a 5-minute timeout. Refresh failure or
+negative timeouts never refresh. Unknown policy uses a 30-second
+best-effort interval, never an assumed 5-minute timeout. Refresh failure or
 timeout ends refresh, never the elevated command; one after a success warns
 once on standard error after the child exits, except in structured mode.
-Completion/cancellation stops and reaps every refresh process. Never leave a
-daemon or invalidate the user's wider sudo cache. The same `sudo -n -ll`
+Completion or cancellation stops and reaps every refresh process. Never leave
+a daemon or invalidate the user's wider sudo cache. The same `sudo -n -ll`
 listing decides whether a standard-input `secret set` refuses before sudo
 starts it because the policy logs input
 ([secret custody](secrets.md)).
 
-Capture the real invoking account before elevation. Resolve it through the
+Capture the real invoking account before elevation, resolved through the
 name service with the pinned, root-owned `/usr/bin/getent`: `passwd` by UID and
 by name, and `initgroups` by name, each with a fixed environment, within ten
 seconds and 64 KiB of output. The answers must name exactly one account, agree
@@ -528,19 +520,18 @@ as `validate --input-dir` does; context-backed it reads the selected context's i
 requires `--sensitive`. A compile failure writes nothing. Publication runs
 with the invoking account's credentials, including when a
 context-backed read needs root. Context-free `render effective --input-dir` does not
-elevate. An absent output directory is created and owned by the invoking
-account, mode `0755`, or `0700` with `--sensitive`, and may be a
-link to a directory. Every later step works through one held handle on that
+elevate. The output directory may exist, including as a link to a directory.
+When it is absent, it and its missing parents are created, owned by the
+invoking account, mode `0755`, or `0700` with `--sensitive`. Every later step works through one held handle on that
 directory, never a path walked again: the file is published atomically, a
 synced temporary file created exclusively beside it and renamed, mode `0644`,
 or `0600` with `--sensitive`, and replaces an earlier regular file of that name;
 the directory is synced and a failed sync is a failure. The effective state
 holds no secret value (printing it gives the same bytes), so
-`--sensitive` changes the modes and one check until the sensitive installer
-artifacts of [B52](milestones/m7.md#b52) exist: with it the output directory
-must be owned by the invoking account and not be group- or other-writable
-unless sticky. A path that exists as a link or any other non-regular file, an
-output path that is a file, an output directory that is or lies inside
+`--sensitive` sets the modes `0700` and `0600` and requires the output directory
+to be owned by the invoking account and not be group- or other-writable
+unless sticky. An existing `effective-state.yaml` that is a link or any other
+non-regular file, an output path that exists and is not a directory, an output directory that is or lies inside
 `--input-dir` (compared after resolving links) and an input that is the file
 render would write are `render.publish` refusals before any write. A failure
 after the directory was created removes the directories render made, if still
@@ -549,11 +540,11 @@ empty, and names the operating-system error
 `TestPublishRefusesASensitiveArtifactInADirectoryOthersCanChangeOrNotOwnedHere`,
 `TestPublishLeavesNothingBehindWhenTheContextEndsBeforeTheRename`,
 `TestRenderRefusesAnOutputInsideTheInput`,
-`TestRenderRefusesAnInputThatIsTheFileItWouldWrite`). `--clusters` and the installer and
-storage members of the manifest return with B52 and
-[B55](milestones/m7.md#b55). What those two renderers write, and the Environment
-preflight families' dry-run detail, are
-[deferred](deferred/cli-access-and-rendering.md).
+`TestRenderRefusesAnInputThatIsTheFileItWouldWrite`). What `render installer` and
+`render storage` write, and the Environment
+preflight families' dry-run and host-key detail, are
+[deferred](deferred/cli-access-and-rendering.md); the
+[catalog](cli/commands.md#inspect-and-lifecycle-commands) states their availability.
 Without `--output-dir`, `render effective` is read-only: text mode emits canonical
 effective YAML, and either structured mode places the complete canonical effective-state
 array in `result.effectiveState`, alongside admission `counts`; neither mode
@@ -606,11 +597,10 @@ The rows, sorted by kind, artifact and selecting object, cover:
   nodes and named alone: the operator images the catalog's index names are
   not in the desired state, so the list leaves them, and the catalog's
   contents, to the cluster's own mirror tooling (`oc-mirror`);
-- for an `openshift` cluster, its default OperatorHub catalogs, one image on
-  `registry.redhat.io` for each of the add-on catalog names
-  `addons.DefaultCatalogs` holds (`redhat-operator-index`,
-  `certified-operator-index`, `community-operator-index` and
-  `redhat-marketplace-index`), tagged with the release's minor, and its
+- for an `openshift` cluster, its default OperatorHub catalogs, one image for
+  each name `addons.DefaultCatalogs` holds, at the repository
+  `listing.DefaultCatalogRepository` maps it to on `registry.redhat.io`,
+  tagged with the release's minor, and its
   update service,
   `https://api.openshift.com/api/upgrades_info/v1/graph`, because Bootwright
   never changes `OperatorHub` or the cluster's update server
@@ -650,16 +640,6 @@ list to an example, and
 `TestAnAuthoredAddOnNamesItsCatalogImageAloneOnTheRegistryItsAuthorChose` to
 the add-on and Machine rows. The text mode writes one table; either structured
 mode places the rows in `result.acquisitions`.
-
-The delivery hosts rest on what a registry showed an anonymous client or Red
-Hat and Docker publish, not on a run of this executable: a token realm and a
-blob redirect were read for `docker.io`, `quay.io`, `registry.access.redhat.com`
-and `icr.io`; the `cdn.quay.io` and `cdn02.quay.io` to `cdn06.quay.io` hosts,
-the `access.redhat.com` signature store, the `registry.redhat.io` delivery
-hosts and `api.openshift.com` come from Red Hat's OpenShift firewall list, and
-the default catalog names from its Operator documentation, which lists
-`redhat-marketplace` only for the OLMv1 catalog.
-`cp.icr.io`'s delivery host needs an entitlement to read and is not named.
 
 Not yet met: the list names no delivery host for `cp.icr.io`, which answers
 only an entitled client; tracked as
@@ -788,7 +768,7 @@ step's description, so the relaxation is reviewed in the plan and bound by its
 description and impacts its capability gives, which name what stays on the
 host, and consumes no authorization. Then they check the authorizations, then ask the ordinary
 confirmation. A required token not
-supplied, or a supplied one the whole frozen plan does not require, then
+supplied, or a supplied one the frozen plan holds no step for, then
 refuses `authorize.missing` or `authorize.unneeded`, naming the consuming steps by their number
 in that plan and their description and the exact command that passes, before
 the ordinary confirmation and before registration. A new apply or destroy requires its managed Machines stopped or absent
@@ -817,9 +797,10 @@ retry; Bootwright never takes a lease over.
 [authorization gates](state-reconciliation.md#confirmation-and-authorization).
 The CLI presents the frozen plan and required authorizations, each bound to
 the digest of the steps that consume it, then obtains ordinary confirmation
-unless `--yes` was supplied. Under `--yes`, or input that cannot answer a
-prompt, an authorization must carry that digest. A flag bypasses no state or
-safety gate.
+unless `--yes` was supplied. Input that cannot answer a prompt follows the
+authorization gates, including the
+[abandoned removal](state-reconciliation.md#abandoned-removal)'s refusal of an
+unattended abandonment. A flag bypasses no state or safety gate.
 
 The add-on journey runs these commands in order: `catalog add-ons list` and `add-ons info
 --name <package>` choose a package and give its binding skeleton, `validate`
@@ -868,16 +849,17 @@ the steps `status` offers name the command the token maps to:
 The labels, order, enum values, escaping, and final LF are stable. Every lifecycle preview
 receipt has state `preview`, a CLI-only marker that is never persisted as an
 operation state. Its `operation` names the incomplete operation the plan would
-continue, or `none` when it previews a fresh operation, and its `next` names
-that continuation or the verb it previews. An `apply` or `destroy` receipt
+continue, or `none` when it previews a fresh operation, and its `next` follows
+the rule below. An `apply` or `destroy` receipt
 carries the exact durable `running`, `paused`, `failed`, `unknown`, or `done`
 state owned by state reconciliation. A refusal before registration has no
 trustworthy lifecycle result and emits no receipt. A `paused` apply is a
 successful result: it exits zero and its next action is `continue-apply`. The
 receipt and `status --output json` derive from the same trustworthy state. A
-`running`, `failed` or `unknown` result's diagnostic names as its `next:` the
-exact command its records call for, with the `--context` and `--authorize`
-flags a next step carries below: a failed destroy
+`running`, `failed` or `unknown` result's diagnostic and its `Next` field name
+the exact command its records call for, the one the receipt's `next:` token
+maps to above, with the `--context` and `--authorize` flags a next step carries
+below: a failed destroy
 names the `destroy` that replaces it with a fresh removal, and an unknown apply
 names beside its resolution the `destroy` that takes back what it started. A
 resolution that proves an effect never performed or only partly realized names,
@@ -1045,9 +1027,13 @@ selected context's immutable input revision, which is exactly what `apply`
 reads. It reads durable records under the shared lock, so it contacts no host,
 registers no operation, allocates no identity, writes no record, binds no
 Secret and creates no log; only `--output-dir` and `--tool` write files,
-outside the store. While an apply or destroy holds the context it
-refuses `context.busy`, naming the safe retry; every other refusal is a
-lifecycle read's own.
+outside the store. Without `--observe` it is a read of the
+[lock table](contexts.md#storage-locking-and-publication), holding the shared
+root lock and no lease, so it runs beside an apply or destroy and refuses
+`context.busy` only while another command holds the root lock exclusively;
+`--observe` takes the bounded-run shared lease and refuses `context.busy` while
+an apply or destroy executes. Every other refusal is a lifecycle read's own
+(`TestALifecycleReadRunsBesideAHeldLeaseAndRefusesBusyOnlyOnTheRootLock`).
 
 ### Observation and exit status
 
@@ -1199,7 +1185,8 @@ the command's. A program
 that cannot be started refuses `runtime.tool`, naming it, and so does `--tool`
 when the invoking account is root, as a direct root launch or one through
 another elevator is, with the remedy of writing the trees with `--output-dir`
-and running the program on them. `--tool` needs a
+and running the program on them. Either refusal follows the written comparison
+and exits `1` (`TestDiffToolThatCannotBeStartedRefusesAfterTheResult`). `--tool` needs a
 terminal and the text output, and conflicts with `--output-dir`.
 
 ## Machine file copies
@@ -1226,8 +1213,8 @@ sensitive-byte exports.
 They require an exact context and object, perform no implicit fallback, emit
 only the requested material, and add no status prefix or suffix. A
 `cluster info --secrets` result is instead structured and explicitly sensitive
-over its exact resolved selection; in JSON, values occur only in fields whose
-names end in `Value`. Neither form copies a sensitive value to a diagnostic,
+over its exact resolved selection; in JSON, values occur only in the
+[revealed fields](cli/output.md#revealed-fields). Neither form copies a sensitive value to a diagnostic,
 log, history, cache, terminal title, or second stream, and an elevated reveal
 starts only under the [sudo I/O-log proof](secrets.md#sudo-io-log-proof) that
 sudo's I/O log records no output. Callers are responsible
@@ -1237,10 +1224,10 @@ completion never reveal.
 `machine info [--name <list>]` reads the same local inventory service as
 `machine list`, with power reads disabled. It filters exact names at the CLI
 boundary after the service returns, retaining an independent copy of selected
-rows, and refuses a name the listing lacks before showing any row. Human output groups available Placement, Access and Evidence facts;
-full detail adds declared addresses and provider identity. No host, management
-controller, trust probe or credential is contacted or read. Its structured
-result has the same fields as the machine listing, with its own command name.
+rows, and refuses a name the listing lacks before showing any row. Its
+[machine results](cli/output.md#machine-results) own the human groups and the
+structured fields. No host, management controller, trust probe or credential is
+contacted or read.
 
 `secret info [--name <list>]` similarly filters the existing metadata listing
 and refuses a name it lacks.
@@ -1381,8 +1368,7 @@ fallback; a leading `~` resolves from the invoking account database, the file
 is opened with the invoking account's credentials and must satisfy the
 private-file rules in [security](security.md), and the key reaches the client
 as a private copy. Neither flag alters desired state or the managed identity
-Bootwright installs, and neither `--ssh-user-for-provisioned` nor
-`--ssh-ask-sudo-password` is consumed.
+Bootwright installs.
 
 `--ssh-ask-password` requires an explicit `--ssh-user` and one target at an
 interactive terminal. It conflicts with `--ssh-id-file`. After host-key
@@ -1391,14 +1377,18 @@ uses no password Secret and produces no Secret-reveal advisory. When
 Bootwright elevates through sudo, the [sudo I/O-log proof](secrets.md#sudo-io-log-proof)
 admits the prompt.
 
-The host key is proved before any credential is offered, from exactly one
-source in this order: the Machine's `access.ssh.knownHostsRef` `Secret`; for a
-Bootwright-installed Machine, the host key its
+The host key is proved before any credential is offered, from the one source
+the Machine's declaration selects; nothing falls through to another
+(`TestADeclaredHostKeySecretWithoutMaterialRefusesInsteadOfFallingThrough`). A
+`access.ssh.knownHostsRef` `Secret` that is unavailable or empty refuses
+`access.unavailable`. A Bootwright-installed Machine uses the host key its
 [installation evidence](substrates.md#identity-and-power-operations) proves,
-which requires that this context currently owns that installation and that the
-session dials the address that installation proved, so another address refuses
-`trust.identity` naming the proved one; the
-[context trust store](contexts.md#storage-locking-and-publication); and
+which requires that this context currently owns that installation, so one it
+does not own, or one that proved no key, refuses `access.target`
+(`TestAnInstallationThisContextDoesNotOwnProvesNothing`), and the session must
+dial the address that installation proved, or it refuses `trust.identity`
+naming the proved one. Any other SSH Machine uses the
+[context trust store](contexts.md#storage-locking-and-publication) and
 finally, on an interactive terminal alone, one observation of the endpoint
 confirmed against its displayed fingerprint and recorded as context trust. The
 prompt names the context, and when a record of a Machine the context no longer
@@ -1479,8 +1469,7 @@ concurrently, at most as the lifecycle engine's
 allows, as the runs of a [power batch](#machine-power-operations) do; a session
 past the bound waits for a slot, and an interrupt or cancellation stops a
 waiting session from starting. When it kept any from starting, the invocation
-ends as that interrupt, never with status `0`, whatever the started sessions
-returned. Each client's standard output and standard error reach
+exits `130`, never `0`, whatever the started sessions returned. Each client's standard output and standard error reach
 Bootwright's own, line by line, each line prefixed `<machine>: `; a line is
 written whole, so lines of different sessions are interleaved but never mixed
 within a line. An unterminated final line is completed when its session ends,
@@ -1521,12 +1510,13 @@ once; compiles that context's effective state; and resolves `--name` in the
 selected graph's shared OpenShiftCluster/CephCluster name namespace and
 `--client` among the selected CephClients. It reveals one client of one
 cluster, never searches outside the selected graph and never selects another
-cluster or client. The checks run in this order, each before the next:
+cluster or client. An explicitly empty value is a `cli.usage` refusal before
+these checks, which run in this order, each before the next:
 
 | Condition | Diagnostic, exit `1` | Next action |
 | --- | --- | --- |
-| `--name` is empty | `access.target`, saying the command requires one cluster name | `bootwright cluster info --context <context>` lists the clusters the context selects |
-| `--client` is empty | `access.target`, saying the command requires one CephClient name | `bootwright cluster info --context <context> --name <cluster>` lists the CephClients of the cluster |
+| `--name` holds only whitespace | `access.target`, saying the command requires one cluster name | `bootwright cluster info --context <context>` lists the clusters the context selects |
+| `--client` holds only whitespace | `access.target`, saying the command requires one CephClient name | `bootwright cluster info --context <context> --name <cluster>` lists the CephClients of the cluster |
 | No selected OpenShiftCluster or CephCluster has the name | `access.target`, naming the context and the name | name a managed CephCluster the context selects; `bootwright cluster info --context <context>` lists them |
 | The name is an OpenShiftCluster | `cluster.not-applicable`, naming `bootwright cluster keyring`, the cluster, its kind and the applicable targets, managed CephClusters | `bootwright cluster info --context <context>` lists the clusters the context selects and their kinds |
 | The name is an external CephCluster | `cluster.not-applicable`, as above | as above |
@@ -1666,15 +1656,21 @@ cancellation of the invocation cancels all of them. Each run is one progress
 step at its canonical position of the batch total. The batch reports no single
 log location: each Machine's result row names its own.
 
-Every Machine whose run was admitted has a result row, settled or not. The
-invocation exits `0` only when every Machine settled; otherwise it exits `1`
-with the diagnostics of every Machine that failed, a run that ended on its own
-deadline included, each naming its `Machine/<name>`, and still presents the
-rows.
+Every Machine whose run started has a result row, settled or not; a run still
+waiting for a slot when an interrupt cancels the invocation never started and
+has none. The invocation exits `0` only when every Machine settled; otherwise it
+exits `1` with the diagnostics of every Machine that failed, a run that ended on
+its own deadline included, each naming its `Machine/<name>`, and still presents
+the rows. An interrupt exits `130`, as
+[streams and exit status](cli/output.md#streams-and-exit-status) requires, and
+presents the rows of the runs that started
+(`TestCancelingABatchStopsEveryRun`).
 
 Not yet met: a batch of more than the 16 runs a context's runs area keeps can
 retire the retained output of its own earliest finished runs before its result
 names them; tracked as [B545](milestones/backlog.md#b545).
+
+#### Single-Machine power operation
 
 Resolution follows explicit access: an unknown or excluded name fails
 `access.target`, and a Machine this executable cannot reach a management
@@ -1771,12 +1767,12 @@ machine or lifecycle state.
 
 `machine media eject` releases whatever image the virtual-media device that
 Bootwright inserts through presents, whichever operation, context or operator
-attached it, so an insert that refused a device presenting other media can run
+attached it, except where the arm requires ownership as stated below, so an insert that refused a device presenting other media can run
 again; another device of the same management controller is neither read nor
 ejected. It reads what the device
 presents, ejects it through the arm's `media_eject`
-[entry point](substrates.md#adapter-boundary), and reads it back; only a read
-showing the device empty settles the run, and the result reports `media`
+[entry point](substrates.md#adapter-boundary), and reads it back; a read-back
+showing no media settles the run, and the result reports `media`
 `none`, what the device presented before, `present`, `none` or `unknown`, and
 the power state, which the eject leaves as it was. It never reports which image
 was presented, because an image address can carry a credential. A device
@@ -1784,8 +1780,10 @@ already empty settles unchanged. It takes the ordinary confirmation of a stop,
 naming the media eject, and no `--force`. A Machine whose realization the
 current destroy removed reports `none` and unchanged, as a stop reports it
 `off`. On the KubeVirt arm the eject removes the `media` volume from the
-VirtualMachine and deletes this context's upload DataVolume; it refuses a
-DataVolume of that name another owner holds, touching nothing. Its read back is
+VirtualMachine and deletes this context's upload DataVolume, which is this Machine's only through
+its owner reference to the pinned VirtualMachine
+([KubeVirt realization](substrates.md#kubevirt-machine-realization)); it
+refuses a DataVolume of that name without it, touching nothing. Its read back is
 of the VirtualMachine, so a running instance still presents the image until it
 next stops, while `none` is already reported.
 
@@ -1811,12 +1809,28 @@ credentials or a key.
 
 With `--referenced-secret`, `machine trust` takes exactly one `--name` of
 a provided Machine reached over SSH. Its `access.ssh.knownHostsRef` names a
-declared opaque contextStore Secret. Any dedicated lifecycle login names
-the same Secret. The Secret must belong exclusively to this Machine's SSH
-endpoint and may also serve that Machine's provided Ceph tiebreaker role.
-Enrollment refuses a missing or ambiguous reference, a reference shared with
-another Machine or unrelated consumer, or another Machine named by an
-expectation or replacement before contacting the endpoint.
+declared opaque contextStore Secret, and the `knownHostsRef` of a dedicated
+lifecycle login, when declared, names that same Secret. The Secret must belong
+exclusively to this Machine's SSH endpoint and may also serve that Machine's
+provided Ceph tiebreaker role. Enrollment refuses these conditions, the first
+four before contacting the endpoint:
+
+| Condition | Diagnostic, exit `1` unless stated | Next action |
+| --- | --- | --- |
+| `--name` selects other than one Machine, or `--expect` or `--replace` names another Machine | `cli.usage`, exit `2` | select one Machine and name it in `--expect` |
+| The Machine is no provided Machine reached over SSH | `trust.identity` | select a provided Machine with SSH access |
+| `knownHostsRef` is missing, or differs from the lifecycle login's | `trust.identity` | set both to one Secret |
+| Another object references the Secret | `trust.identity`, naming the object and path | give the Machine its own `knownHostsRef` |
+| `--expect` and the key of `--host-public-key-file` disagree | `trust.identity` | verify both out of band |
+| The observed key is not the expected one | `trust.identity`, recording nothing | verify the fingerprint independently |
+| The Secret holds another key, an old endpoint or invalid material, and `--replace` is absent | `trust.identity` | verify the key, then repeat with `--replace <machine>` |
+| An unattended addition or replacement has neither `--expect` nor `--host-public-key-file` | `trust.identity` | repeat with one |
+| The Secret's version changed, or a live effect holds it, before confirmation or at publication | `secret.store.conflict`, writing nothing | repeat the command |
+
+`TestReferencedEnrollmentRejectsMissingOrAmbiguousSelections`,
+`TestReferencedEnrollmentRefusesAnOpaqueSecretUsedByAnotherConsumer`,
+`TestReferencedEnrollmentWritesOneCanonicalHostPin` and
+`TestHostPinPublicationRechecksCurrentVersionAndEffectHolds` hold the table.
 
 Bootwright observes that address and port without offering a login credential
 or issuing a remote command. An operator compares the displayed fingerprint
@@ -1824,7 +1838,8 @@ with a trusted source before confirming. Unattended additions and replacements
 require either an independently verified `--expect` fingerprint or an ordinary
 server host public key in `--host-public-key-file`, which selects a permitted
 host-key algorithm for the observation. When both are supplied they must
-agree. The observed fingerprint must match the expectation. The file follows
+agree. The observed key must equal the file's key and match any `--expect`
+fingerprint; a mismatch fails `trust.identity` and records nothing. The file follows
 the [public-key acquisition rules](secrets.md#acquisition-and-commands).
 The client pins the verified key for subsequent authenticated connections.
 

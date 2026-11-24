@@ -15,19 +15,19 @@ var (
 		Meaning: "a Machine that hosts lifecycle work authenticates with an operator identity or a password, which a placement does not support", Remedy: "author access.ssh.auth.privateKeyRef on the Machine"}
 	machinePlacementKeyMissing = diagnostics.Stop{Code: "machine.placement-key-missing", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
-		Meaning: "a Machine that hosts lifecycle work declares no SSH private key reference", Remedy: "author access.ssh.auth.privateKeyRef on the Machine"}
+		Meaning: "a Machine that hosts lifecycle work declares no private key reference or, for access.lifecycle, no host pin", Remedy: "author the Machine's private key reference as its message names"}
 	machinePlacementHostKeyMissing = diagnostics.Stop{Code: "machine.placement-host-key-missing", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
 		Meaning: "a Machine that hosts lifecycle work declares no bound SSH host key", Remedy: "author access.ssh.knownHostsRef on the Machine"}
 	machinePlacementEscalates = diagnostics.Stop{Code: "machine.placement-escalates", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
-		Meaning: "a Machine that hosts lifecycle work declares an SSH account other than root", Remedy: "set access.ssh.user to root or omit it on the Machine"}
+		Meaning: "a Machine that hosts lifecycle work declares a login whose account and privilege a placement does not admit: an access.ssh account other than root or an escalation Secret, or an access.lifecycle login other than root with direct privilege or a non-root account with sudo", Remedy: "author the Machine's login as its message names"}
 	machineInstalledAccessMismatch = diagnostics.Stop{Code: "machine.installed-access-mismatch", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
 		Meaning: "a Machine Bootwright installs declares SSH access other than its installation's own, so no work was placed on it", Remedy: "remove spec.access.ssh from the Machine so its access is the installation's own"}
 )
 
-var enrollment = diagnostics.Stop{Code: "machine.enrollment", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+var enrollment = diagnostics.Stop{Code: "machine.enrollment", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyPossible,
 	Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryFixThenRepeat,
 	Meaning: "a provided Machine's enrollment could not verify a credential, account, or grant",
 	Remedy:  "inspect the named Machine's first-access declaration and retry with its authorized administrator"}

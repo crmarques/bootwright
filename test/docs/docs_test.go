@@ -920,10 +920,10 @@ func notYetMetParagraph(pages map[string]markdownFile, from string, line int, te
 
 // askRuleMarkers are the phrases of a catalog Effects cell that name a remote
 // or host effect, a command that reveals a secret, or an irreversible local
-// change (a deletion or a key rotation): the cells of the "Mutate" class that
-// specs/cli/commands.md defines and those local deletions, never other "Local"
-// or "Observe" ones. A marker with a flag fires only for the invocation that
-// carries the flag, because the command reveals the secret by that flag alone.
+// change (a deletion or a key rotation): the asked commands that
+// specs/cli/commands.md defines, never a read or a local write of the command's
+// own context. A marker with a flag fires only for the invocation that carries
+// the flag, because the command reveals the secret by that flag alone.
 var askRuleMarkers = []struct{ phrase, flag string }{
 	{phrase: "planned mutation"},
 	{phrase: "credential update"},
@@ -946,9 +946,9 @@ var askRuleMarkers = []struct{ phrase, flag string }{
 }
 
 // askRuleNoAsk classifies each catalog row that has no marker: the command,
-// and the phrase of its Effects cell that makes it a Local or Observe command
-// (none, read local state, local writes of its own context, bounded observation)
-// that needs no ask rule. A row whose Effects cell gains a marker, or loses the
+// and the phrase of its Effects cell that makes it a command that needs no ask
+// rule (none, read local state, local writes of its own context, bounded
+// observation). A row whose Effects cell gains a marker, or loses the
 // phrase, fails until it is classified again.
 var askRuleNoAsk = map[string]string{
 	"context init": "local", "context update": "local", "context use": "local",

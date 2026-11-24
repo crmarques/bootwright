@@ -360,7 +360,7 @@ func (s Service) resolveUnknown(ctx context.Context, run invocation, block recon
 			"the frozen effect was never performed",
 			resolutionRemedy(tx.Identity().Name, operation.Verb, plan, run.selection, false))
 	case resolvedEffect == reconciliation.EffectPartial || resolvedEffect == reconciliation.EffectInconclusive:
-		return state, engineResolvedUnperformed.Fail(retriedEffect[resolvedEffect], resolutionRemedy(tx.Identity().Name, operation.Verb, plan, run.selection, true))
+		return state, engineResolvedPartial.Fail(retriedEffect[resolvedEffect], resolutionRemedy(tx.Identity().Name, operation.Verb, plan, run.selection, true))
 	}
 	explanation := s.explainIn(ctx, store, operation, verb, observed, observation.Evidence)
 	_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "unresolved", Block: block.ID, Detail: explanation.Reason})
