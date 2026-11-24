@@ -5,8 +5,9 @@ audits across topics, starting at `001`; use a short topic name. The
 specification audit is `001-spec`, the add-ons audit is `002-addons`, the
 code audit is `003-code`, the specification and user API audit is
 `004-spec-api`, the code quality audit is `005-code-quality`, the
-lifecycle flows audit is `006-lifecycle-flows`, and the Ceph lifecycle audit is
-`007-ceph-lifecycle`.
+lifecycle flows audit is `006-lifecycle-flows`, the Ceph lifecycle audit is
+`007-ceph-lifecycle`, and the specification quality audit is
+`008-spec-quality`.
 
 ## Directory format
 
@@ -78,3 +79,4 @@ or effects.
 - [Code quality audit 005](005-code-quality/README.md)
 - [Lifecycle flows audit 006](006-lifecycle-flows/README.md)
 - [Ceph apply and destroy audit 007](007-ceph-lifecycle/README.md)
+- [Specification quality audit 008](008-spec-quality/README.md)
