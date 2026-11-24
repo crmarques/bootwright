@@ -63,6 +63,29 @@ def test_an_echoed_image_matches_unless_it_names_another_port(observed, expected
     assert redfish_discovery.image_matches(observed, expected) is matches
 
 
+# Inserted decides; a null or absent one leaves it to the standard ConnectedVia.
+@pytest.mark.parametrize("member, present", [
+    ({"Inserted": True}, True),
+    ({"Inserted": "false", "ConnectedVia": "URI"}, False),
+    ({"Inserted": False, "ConnectedVia": "URI"}, False),
+    ({"ConnectedVia": "NotConnected"}, False),
+    ({"Inserted": None, "ConnectedVia": "NotConnected", "Image": None}, False),
+    ({"Inserted": None, "ConnectedVia": "NotConnected", "Image": ""}, False),
+    ({"Inserted": None, "ConnectedVia": "URI", "Image": "https://server.test/os.iso"}, True),
+    ({"ConnectedVia": "Applet"}, True),
+    ({"ConnectedVia": "Oem"}, True),
+    ({"Inserted": None, "ConnectedVia": "NotConnected", "Image": "https://server.test/os.iso"}, None),
+    ({"Inserted": None, "ConnectedVia": "notconnected"}, None),
+    ({"Inserted": "indeterminate", "ConnectedVia": "NotConnected"}, None),
+    ({"Inserted": 0, "ConnectedVia": "NotConnected"}, None),
+    ({"Inserted": None}, None),
+    ({}, None),
+    (None, None),
+])
+def test_insertion_is_read_from_inserted_then_from_the_connection(member, present):
+    assert redfish_discovery.media_present(member) is present
+
+
 def reset(**action):
     target = {"target": "/redfish/v1/Systems/1/Actions/ComputerSystem.Reset"}
     return {"Actions": {"#ComputerSystem.Reset": dict(target, **action)}}

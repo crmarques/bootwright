@@ -206,9 +206,19 @@ def inserted_image(member):
     return image if isinstance(image, str) else ""
 
 
+CONNECTIONS = ("URI", "Applet", "Oem")
+
+
 def media_present(member):
-    """Whether a member reports insertion, or None for an unknown state."""
-    value = member.get("Inserted") if isinstance(member, dict) else None
+    """Whether a member reports insertion, or None for an unknown state.
+
+    `Inserted` decides. A device that reports it null or omits it is read by
+    its `ConnectedVia`: `NotConnected` with no image named is empty, and a
+    connection kind is occupied. Anything else is unknown.
+    """
+    if not isinstance(member, dict):
+        return None
+    value = member.get("Inserted")
     if isinstance(value, bool):
         return value
     if isinstance(value, str):
@@ -217,7 +227,13 @@ def media_present(member):
             return True
         if value in ("0", "false", "no", "off"):
             return False
-    return None
+        return None
+    if value is not None:
+        return None
+    connection = member.get("ConnectedVia")
+    if connection == "NotConnected" and member.get("Image") in (None, ""):
+        return False
+    return True if connection in CONNECTIONS else None
 
 
 def image_matches(observed, expected):

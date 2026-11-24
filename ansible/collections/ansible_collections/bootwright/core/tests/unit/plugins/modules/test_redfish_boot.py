@@ -1090,6 +1090,57 @@ def test_private_media_opt_out_works_without_a_security_write_when_the_bmc_is_al
     assert firmware.transfer_verification is False
 
 
+def unreported_insertion(firmware, empty, attached=None):
+    """Each CD device reports Inserted null while empty, or, like OpenBMC,
+    neither Inserted nor Image; one presenting an image reports Inserted null
+    and its connection, and `attached` overrides what an empty one reports."""
+    for path in [path for path in firmware.resources if path.endswith("/VirtualMedia/CD")]:
+        def serve(instance, original=firmware.resources[path]):
+            status, body, headers = original(instance)
+            body = {key: value for key, value in body.items() if key not in ("Inserted", "Image")}
+            body.update(dict(Inserted=None, Image=instance.image) if instance.image else empty)
+            return status, dict(body, **(attached or {})), headers
+        firmware.resources[path] = serve
+    return firmware
+
+
+@pytest.mark.parametrize("empty", [{"Inserted": None, "Image": None}, {}], ids=["null", "absent"])
+def test_a_device_without_an_insertion_flag_is_read_by_its_connection(monkeypatch, empty):
+    firmware = unreported_insertion(verifying(xfusion(), device=False, manager=False), empty)
+    assert read(monkeypatch, firmware) == ("Off", "")
+    result = run(monkeypatch, firmware, "insert", image=IMAGE, trust=redfish_control.TRUST_DISABLED, **PRIVATE)
+    assert result[0:2] == (True, "Off") and redfish_control.redfish_discovery.image_matches(result[2], IMAGE)
+    mark = len(firmware.calls)
+    assert run(monkeypatch, firmware, "insert", image=IMAGE, trust=redfish_control.TRUST_DISABLED, **PRIVATE)[0] is False
+    assert not writes(firmware, mark)
+    assert run(monkeypatch, firmware, "eject")[0:3] == (True, "Off", "") and not firmware.image
+
+
+def test_a_device_naming_an_image_while_not_connected_proves_nothing(monkeypatch):
+    firmware = unreported_insertion(verifying(xfusion(), device=False, manager=False), {}, {"Image": IMAGE})
+    with pytest.raises(ControllerError, match="did not report whether media is inserted"):
+        run(monkeypatch, firmware, "insert", image=IMAGE, trust=redfish_control.TRUST_DISABLED, **PRIVATE)
+    with pytest.raises(ControllerError, match="did not report whether media is inserted"):
+        run(monkeypatch, firmware, "eject")
+    assert not writes(firmware)
+
+
+def test_a_connected_device_without_an_insertion_flag_holds_foreign_media(monkeypatch):
+    firmware = unreported_insertion(verifying(xfusion(), device=False, manager=False), {})
+    firmware.image = "https://other.test/os/foreign.iso"
+    with pytest.raises(ControllerError, match="refuses attached foreign media"):
+        run(monkeypatch, firmware, "insert", image=IMAGE, trust=redfish_control.TRUST_DISABLED, **PRIVATE)
+    assert not writes(firmware)
+
+
+def test_an_eject_is_not_proved_while_the_device_stays_connected(monkeypatch):
+    firmware = unreported_insertion(xfusion(), {}, {"ConnectedVia": "URI", "Image": IMAGE})
+    firmware.image = IMAGE
+    with pytest.raises(ControllerError, match="the device still presents media"):
+        run(monkeypatch, firmware, "eject")
+    assert [call[1] for call in writes(firmware)] == ["/redfish/v1/Managers/1/VirtualMedia/CD/Actions/VirtualMedia.EjectMedia"]
+
+
 def test_explicit_private_media_opt_out_disables_and_reads_back_the_authoritative_setting(monkeypatch):
     firmware = managed_verification(verifying(xfusion(), manager=True), wanted=False)
     assert run(monkeypatch, firmware, "insert", image=IMAGE, trust=redfish_control.TRUST_DISABLED, **PRIVATE)[0] is True

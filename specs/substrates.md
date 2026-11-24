@@ -1991,6 +1991,9 @@ is not a Redfish resource, fails rather than answering empty, and the target
 proof reports what it could not read as unobserved, which proves nothing; a
 BMC that offers no virtual media reports none, and inserting into it
 refuses. A media observation distinguishes occupancy from the image name.
+The device's `Inserted` decides occupancy. A device that reports it null or
+omits it is read by its `ConnectedVia`: `NotConnected` with no image named
+is empty, and `URI`, `Applet` or `Oem` is occupied.
 An occupied device without an image name cannot prove absence or ownership,
 and an unreadable insertion state refuses. A partial NIC or virtual-media
 collection cannot prove identity or absence.

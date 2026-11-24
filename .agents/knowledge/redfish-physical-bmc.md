@@ -48,6 +48,28 @@ client that reads an unreadable view as empty proves a release against a device
 it never found, which is how an agent-install removal could resolve released
 with media still attached.
 
+## An empty device may not report `Inserted`
+
+The [DMTF VirtualMedia schema](https://redfish.dmtf.org/schemas/VirtualMedia.v1_6_5.json)
+lets `Inserted` be null. OpenBMC's bmcweb (master, read 2026-11-23, the item
+template in `redfish-core/lib/virtual_media.hpp`) builds an empty device with
+`ConnectedVia` `NotConnected` and neither `Inserted` nor `Image`, and sets
+`Inserted` only from its media process's `Active` state. A client that
+requires a boolean `Inserted` refuses every empty device there, before any
+attach and after every eject. The
+[adapter boundary](../../specs/substrates.md#identity-and-power-operations)
+lets `ConnectedVia` decide when `Inserted` is null or absent.
+
+The owner's ceph-stretch destroy of 2026-11-23 refused all six physical erases
+at the insert, with a controller line that named no HTTP status, on the
+captured BMC family. The same dc1 servers had erased on 2026-11-18. Reading
+the code, of what the shared client changed since then only its refusal of an
+unreadable insertion state reaches the insert without a status. That fits the captured
+BMC reporting `Inserted` null or absent when empty, but no capture shows the
+empty device. **UNVERIFIED, with its check:** with nothing mounted, GET
+`/redfish/v1/Managers/1/VirtualMedia/CD` and record `Inserted`, `Image` and
+`ConnectedVia`.
+
 ## A request is not an outcome
 
 `ComputerSystem.Reset` returning 204 means the request was accepted. The
@@ -312,7 +334,8 @@ and that journal.
 follows the manager's switch
 ([above](#virtual-media-certificate-trust)); the virtual-media ClientHello
 against an ECDSA server; a completed insert task's shape; `Once`/`Hdd` under
-UEFI; and whether a PATCH requires `If-Match`.
+UEFI; whether a PATCH requires `If-Match`; and what an empty device reports
+for `Inserted` ([above](#an-empty-device-may-not-report-inserted)).
 
 ## `no_log` hides the BMC's own explanation
 

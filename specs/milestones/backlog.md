@@ -22,6 +22,7 @@ Alias cell.
 | [B1622](#b1622) | new, 2026-11-18 (X627 review) | product | Substrate and Reconciliation | Prove a hosted KubeVirt Machine off or absent without creating access on its host cluster | Fails closed: a context with a hosted KubeVirt Machine refuses every new apply and destroy |
 | [B1623](#b1623) | new, 2026-11-18 (X627 review) | safety | Reconciliation and Machine | Decide whether explicit `machine discover` and `machine inventory` take the power entry check | The owner's request named apply and destroy only |
 | [B1624](#b1624) | new, 2026-11-18 (X627 review) | product | Reconciliation, with CLI | `Stop first` names the whole fleet an automatic preparation's entry check reads | The refusal already names every blocking Machine |
+| [B1695](#b1695) | new, 2026-11-23 (X673 diagnosis) | product | Managed OS, with CLI | A physical erase's controller refusal shows the controller's own printable line in the destroy's diagnostic | The retained output already holds the line, and the remedy names it |
 | [B1678](#b1678) | new, 2026-11-23 (X662 rehearsal) | defect | CLI | A confirmation is asked on the terminal it reads from when standard error is redirected | `--yes` and an unredirected error stream both avoid it |
 | [B82](#b82) | C5; moved from M4 on 2026-10-10 (D128); parked on 2026-10-11 (D129) | product | Managed OS | One more image, profile or entitlement variant | No concrete additional OS variant beyond the qualified M2 matrix |
 | [B96](#b96) | Y3 | enabling | Architecture | Collection metadata and naming polish | Pruned from M1 on 2026-09-28 |
@@ -3987,6 +3988,22 @@ Today the question goes to the redirected stream and the command waits unseen.
 
 **Exit evidence:** a pseudo-terminal test whose redirected error stream stays
 empty while the question appears on the terminal.
+
+### B1695
+
+**Owner:** Managed OS, with CLI. **Kind:** product. **Requires:** none.
+**Definition:** Needs definition.
+
+**Outcome:** a [physical erase](../state-reconciliation.md#physical-disk-safety)
+refused by its management controller shows the controller's printable line
+(the shared Redfish client's failure, which names no credential, image or
+token) in the destroy's diagnostic, beside the closed code and detail the
+runner hears now. In the owner's ceph-stretch destroy of 2026-11-23 the
+diagnostic said only `adapter detail: insert`, and the line was readable only
+as root in the attempt's retained output.
+
+**Exit evidence:** a refused erase whose diagnostic carries the controller's
+line, bounded and printable, with no request material.
 
 ## Retired
 
