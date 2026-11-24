@@ -701,3 +701,27 @@ func TestReleaseVersionRequiresAPatchAndAcceptsPublisherPrereleases(t *testing.T
 		}
 	}
 }
+
+func TestAnInstallationProxyBypassNamesNoPort(t *testing.T) {
+	choice := m("noProxy", api.StringList(".example.test", "registry.example.test:5000", "10.0.0.0/24"))
+	issues := validateInstallationProxy(choice, api.NewCatalog(nil))
+	if len(issues) != 1 || issues[0].Code != "api.invariant" || issues[0].Field != "$.spec.install.proxy.noProxy[1]" {
+		t.Fatalf("port-qualified bypass not refused at its entry alone: %v", issues)
+	}
+}
+
+func TestTopologyAdmitsAnImageOnlyReleaseWithAnyControlPlaneCount(t *testing.T) {
+	imageOnly := func(spec api.Value) api.Value {
+		return spec.WithPath(m("image", "quay.io/example/release:4.21.15"), "distribution", "release")
+	}
+	o, c := roster("libvirt", []string{"controlPlane", "controlPlane"}, imageOnly)
+	for _, issue := range Validate(o, c) {
+		if issue.Field == "$.spec.nodes" {
+			t.Fatalf("a control-plane count refused for a release pinned by image alone: %v", issue)
+		}
+	}
+	o, c = roster("libvirt", []string{"worker"}, imageOnly)
+	if !hasIssue(Validate(o, c), "$.spec.nodes", "requires at least one controlPlane node") {
+		t.Fatal("a cluster without a control plane admitted for a release pinned by image alone")
+	}
+}

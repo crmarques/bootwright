@@ -190,21 +190,23 @@ func TestDiskAdmissionBoundsOnlyLogicalOverwriteTo896GiB(t *testing.T) {
 	diskOneIssue(t, physicalDisks(pair), "$.spec.hardware.dataDisks[1].sizeBytes")
 }
 
-func TestErasureRequiresVerifiedBMCTLSAndAMediaTrustPolicy(t *testing.T) {
+func TestErasureRequiresVerifiedBMCTLS(t *testing.T) {
 	noBMC := func(o api.Object) api.Object {
 		return o.WithSpec(o.Spec().WithPath(o.Spec().Get("hardware").Without("bmc"), "hardware"))
 	}
+	// A case named unnormalized skips NormalizeBMCDefaults, so its absent trust
+	// stays absent; admission always runs after normalization fills it.
 	for name, bmc := range map[string]api.Value{
 		"verification none":               diskBMC("none", "established"),
-		"no media trust":                  diskBMC("full", ""),
+		"unnormalized, no media trust":    diskBMC("full", ""),
 		"verification none, no trust":     diskBMC("none", ""),
-		"no media trust, default tls":     diskBMC("", ""),
+		"unnormalized, default tls":       diskBMC("", ""),
 		"verification none, import trust": diskBMC("none", "importCertificate"),
 	} {
 		t.Run(name, func(t *testing.T) {
 			root := diskSet(diskMachine(diskRoot("logicalOverwrite")), bmc, "hardware", "bmc")
 			issue := diskOneIssue(t, physicalDisks(root), "$.spec.hardware.rootDisk.onRemoval")
-			if !strings.Contains(issue.Message, "verified BMC TLS and a declared media trust policy") {
+			if issue.Message != "physical erase requires verified BMC TLS" || !strings.Contains(issue.Remediation, "https://") || strings.Contains(issue.Remediation, "tls.trust") {
 				t.Fatalf("issue = %+v", issue)
 			}
 			data := diskSet(diskMachine(diskRoot(""), dataDisk("5000000000000001", "DATA-01", "metadataClear")), bmc, "hardware", "bmc")
@@ -228,6 +230,16 @@ func TestErasureRequiresVerifiedBMCTLSAndAMediaTrustPolicy(t *testing.T) {
 		dataDisk("5000000000000002", "DATA-02", "metadataClear"),
 		dataDisk("5000000000000003", "DATA-03", "logicalOverwrite")), diskBMC("none", "established"), "hardware", "bmc")
 	diskOneIssue(t, physicalDisks(unverified), "$.spec.hardware.dataDisks[0].onRemoval")
+}
+
+func TestErasureAcceptsTheDefaultedMediaTrustOfAVerifiedBMC(t *testing.T) {
+	bmc := substrate.NormalizeBMCDefaults(diskBMC("full", ""))
+	if trust := bmc.Get("virtualMedia", "tls", "trust").Text(); trust != "importCertificate" {
+		t.Fatalf("normalized trust = %q", trust)
+	}
+	diskNoIssues(t, physicalDisks(diskSet(diskMachine(diskRoot("logicalOverwrite")), bmc, "hardware", "bmc")))
+	unverified := substrate.NormalizeBMCDefaults(diskBMC("none", ""))
+	diskOneIssue(t, physicalDisks(diskSet(diskMachine(diskRoot("logicalOverwrite")), unverified, "hardware", "bmc")), "$.spec.hardware.rootDisk.onRemoval")
 }
 
 // A plain-HTTP BMC carries no TLS leg, so it is unverified whatever its

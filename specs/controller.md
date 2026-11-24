@@ -948,7 +948,8 @@ unauthenticated external proxies using the qualified system trust store, whose
 the `# <label>` lines `update-ca-trust` writes, which may hold UTF-8; only a
 connection to the artifact mirror's own host adds that mirror's declared
 anchor. That
-route follows the [context-free route's grammar](#the-context-free-acquisition-route):
+route follows the [Proxy endpoint](api/infrastructure-services.md#proxy-dns-ntp-and-registry-deployment)
+and [proxy choice](api/infrastructure-services.md#proxy-choice) grammar:
 admission refuses an endpoint or bypass entry outside it, and controller
 selection proves it again, naming the Proxy or Machine field that breaks it
 with a remedy. A managed Proxy, `proxyAuthRef`, `trustBundleRef`, a Proxy with
@@ -1005,18 +1006,16 @@ setting is consulted.
 
 Every approved source is HTTPS, so `HTTPS_PROXY` alone selects the route and
 `HTTP_PROXY` without it refuses rather than acquiring directly. The endpoint
-follows the same grammar as a declared external Proxy: an absolute HTTP or
-HTTPS URL, bounded and ASCII, with no `userinfo`, path, query or fragment. A
-credential-bearing endpoint refuses, so this route never carries a secret and
+is admitted under the declared external Proxy's [endpoint
+grammar](api/infrastructure-services.md#proxy-dns-ntp-and-registry-deployment).
+An endpoint with `userinfo` refuses, so this route never carries a secret and
 needs no Secret consumer. The endpoint's host is recorded in lowercase.
 
-`NO_PROXY` is a comma-separated list of the same bypass entries a declared
-[proxy choice](api/infrastructure-services.md#proxy-choice) carries: a host
-name, a domain suffix with or without a leading dot, an IP address, a CIDR
-block, a `host:port` pair, or `*` for every destination. Entries are trimmed,
-deduplicated and bounded by what the controller stage's acquisition may carry,
-each entry at most 1024 bytes, matching consults no resolver, and a bypass list
-without a selected proxy is nothing. An unqualified value refuses before any
+`NO_PROXY` is a comma-separated list of bypass entries, each admitted under the
+[proxy choice](api/infrastructure-services.md#proxy-choice) grammar. Entries are
+trimmed, deduplicated and bounded by what the controller stage's acquisition may
+carry, matching consults no resolver, and a bypass list without a selected
+proxy is nothing. An unqualified value refuses before any
 privilege escalation, acquisition or local effect, and names the variable to
 correct.
 

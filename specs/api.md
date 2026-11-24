@@ -31,10 +31,10 @@ no executable support for its effectful consumer.
 An admitted declaration that no capability of this build realizes refuses
 when `apply` plans it, before registration, with `plan.object-unsupported`: that is the default
 refusal point, and each capability's refusal table names its rows. Admission
-refuses a declaration with `api.invariant` instead only when no build of this
-API version has any consumer for it, as it refuses `spec.lifecycle.rescue`
-under [D29](milestones/backlog.md#d29). Kind pages link this rule rather
-than restate it.
+refuses a declaration with `api.invariant` instead only when a decision fixes
+that no capability realizes it, or no consumer in this API version can accept
+it, as [D29](milestones/backlog.md#d29) does for `spec.lifecycle.rescue`; every other unrealized declaration is a row of the
+table below. Kind pages link this rule rather than restate it.
 
 ### Admitted but unrealized
 
@@ -70,12 +70,12 @@ by the [refusal table](add-ons.md#refusal-table) only. The
 libvirt client.
 Other plan-time refusals, such as bounds, placements and trust shapes, stay in
 their capabilities' refusal tables and raise no warning here. `api.deferred`
-stays the warning for a declaration that plans but changes nothing: an
-OpenShift endpoint `dnsName` and node `labels` and `taints`
-([inert fields](openshift-clusters.md#selection-and-refusal)), an OS-ready
-Machine's root-disk hints other than `hints.deviceName` and `wwn`
-([root disk](api/machines.md#root-disk)), a disabled
-`CustomPlaybook`, and a Ceph stretch topology without a tiebreaker.
+is the warning for an admitted declaration that plans but changes nothing; the
+owning page names each row:
+[OpenShift inert fields](openshift-clusters.md#selection-and-refusal),
+[root disk](api/machines.md#root-disk),
+[installation network services](api/machines.md#installation-network-services)
+and [CustomPlaybook](api/custom-playbooks.md#lifecycle-refusal).
 
 ## Version authority
 
@@ -268,9 +268,14 @@ The deliberate exceptions are:
   cluster-add-on step target lists are inventory selections;
 - `CephFilesystem.spec.dataPoolRefs` accepts either scalar names or the
   owning schema's `{name, default}` records;
-- `InfraProvider` KubeVirt `networkRef` is the sole object-form external
-  reference and carries its Kubernetes group, kind, name, and a namespace only
-  for namespaced resource kinds.
+- `InfraProvider` KubeVirt `networkRef` and `storageClassRef` are the only
+  object-form external references and carry their Kubernetes group, kind, name,
+  and a namespace only for namespaced resource kinds;
+- `CephNFSExport.spec.serviceID` and `spec.topology.stretch.tiebreaker.node` of
+  a `CephCluster` are plain names that their owning admission resolves; an
+  unresolved one raises `api.invariant`, not `api.reference`
+  (`TestNFSExportServiceIDResolvesDeclaredNFSService`,
+  `TestStretchTopologyRefusesEachBrokenInput`).
 
 The object form `{name: ...}` is rejected for ordinary Bootwright references
 outside that explicitly documented data-pool record.
@@ -280,10 +285,10 @@ Reference fields fall into these classes:
 | Class | Written | Resolves against |
 | --- | --- | --- |
 | Object | `*Ref` and `*Refs` | `metadata.name` in the schema's target kind. |
-| Nested | `addressRef`, a topology node name | One entry nested in its already selected owner, such as one address of the referenced Machine or one node of the cluster topology, never an object of its own. |
+| Nested | `addressRef`, `nodeRef` | One entry nested in its already selected owner, such as one address of the referenced Machine or one node of the cluster topology, never an object of its own. |
 | Endpoint selection | `{serverRef, endpointRef}` | The server object, then the endpoint named on it. |
-| Native service | `mdsServiceRef`, `serviceRef`, `serviceID` | One entry of the cluster's native service declarations, written `<service_type>.<service_id>`; the owning page fixes the form. |
-| External object | KubeVirt `networkRef` | The object form above. |
+| Native service | `mdsServiceRef`, `serviceRef` | One entry of the cluster's native service declarations, written `<service_type>.<service_id>`; the owning page fixes the form. |
+| External object | KubeVirt `networkRef` and `storageClassRef` | The object form above. |
 
 The schema types every reference field with its class, and
 `TestEveryReferenceFieldEndsInRefAndIsTyped` holds every registered schema to

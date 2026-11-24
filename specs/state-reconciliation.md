@@ -2715,11 +2715,8 @@ exception: Bootwright never claims ownership of or destroys the physical
 machine. Before changing it, an implementation must durably hold an exclusive
 context claim, prove the exact management controller/System identity, prove
 the complete live MAC set matches the immutable `Machine`, select one whole
-root disk by a durable identity in one of the forms of the
-[root-disk rule](api/machines.md#root-disk): a WWN, a
-serial number and exact size, or a logical volume proved through verified BMC
-TLS by its NAA identifier and exact capacity and found again by that
-identifier inside the installer. The selector resolves to exactly one whole
+root disk by a durable identity of the
+[root-disk rule](api/machines.md#root-disk). The selector resolves to exactly one whole
 disk, never a kernel device name another boot may give another disk. The implementation must prove the
 machine is off, and consume `data-loss`. The live MAC set matches when the MACs
 the system reports for its own network ports, a management controller's host

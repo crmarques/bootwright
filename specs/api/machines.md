@@ -103,7 +103,7 @@ its 63-byte identity.
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
 | `spec.baremetal.defaults.bmc.credentialsRef` | string | no | — | Default `usernamePassword` `Secret` reference for a Machine that omits its own BMC credentials. Access credential. |
-| `spec.baremetal.defaults.bmc.tls.trustBundleRef` | string | no | — | Default `caBundle` or `trustBundle` `Secret` reference for a machine BMC that is a [verified BMC](../secrets.md#client-tls-trust); refused beside `tls.verification: none`. Trust anchor. |
+| `spec.baremetal.defaults.bmc.tls.trustBundleRef` | string | no | — | Default `caBundle` or `trustBundle` `Secret` reference, inherited only by a machine BMC that is a [verified BMC](../secrets.md#client-tls-trust) (see below). Trust anchor. |
 | `spec.baremetal.defaults.bmc.virtualMedia.tls.trust` | string | no | `importCertificate` | `importCertificate` or `established`. `disableVerification` is refused here: it is a per-Machine exception and never a provider default. |
 | `spec.baremetal.defaults.bmc.virtualMedia.tls.enableVerification` | boolean | no | `true` with verified BMC access | Automatic media-verification setup inherited with the complete virtual-media block; follows the Machine rule below. |
 | `spec.baremetal.defaults.bmc.virtualMedia.tls.restoreVerificationAfterBoot` | boolean | no | — | Refused: it is valid only with `disableVerification`, which a provider never defaults. |
@@ -162,9 +162,13 @@ disks occupy separate subtrees ([substrates](../substrates.md#machine-realizatio
 
 Optional `spec.libvirt.capacityReserve` contains exactly the required integer
 fields `cpu`, `memoryMiB` and `diskGiB`, each nonnegative. Explicit zero is
-allowed; omission supplies no reserve policy and storage preflight reports
-unknown capacity with a remedy naming these fields. Providers sharing one
-host and backing filesystem must agree on reserve quantities. These are
+allowed. Omission, or reserves that differ between providers sharing one
+host and backing filesystem, leaves capacity unknown, so
+[capacity admission](../substrates.md#capacity-admission) refuses an apply that
+may start a libvirt Machine there, and storage preflight reports unknown
+capacity with a remedy naming these fields.
+`TestReserveRequiresExplicitCompleteNonnegativeSafeQuantities` and
+`TestConflictingSharedReserveNeverPasses` hold both. These are
 operator-selected host headroom, not a Ceph version compatibility table or
 vendor minimum. Overflow beyond the native quantity representation refuses.
 
@@ -648,8 +652,11 @@ installer-provisioned machine, omission means no Bootwright login.
 Exactly one SSH `auth` arm is present. `access.rootLogin` admits only `keep`,
 its default; no Bootwright operation changes the host's root login.
 
-A remote provided Machine that hosts managed infrastructure, a provider, or
-its own managed firewall or requests provided OS updates may declare `access.lifecycle`. The record is atomic and requires the four fields below. An optional
+A remote provided Machine that hosts managed
+infrastructure or a provider, manages its own firewall, requests
+[provided OS updates](#provided-os-updates), a [provided registration](#provided-registration)
+or [provided time synchronization](#provided-time-synchronization), or has an `fqdn` address
+([provided hostname](../managed-os.md#provided-hostname)) may declare `access.lifecycle`. The record is atomic and requires the four fields below. An optional
 [bootstrap](#managed-lifecycle-enrollment) record enrolls the lifecycle login. It shares the effective `ssh.addressRef`
 and `ssh.port`. Sessions continue to use the account and credential in
 `access.ssh`.
@@ -672,10 +679,14 @@ The `knownHostsRef` Secret, a trust anchor, is ASCII split at spaces
 and tabs only. Blank and `#` lines are ignored; exactly one data line remains,
 `<host> <type> <key>` optionally followed by a comment. Its host token is the effective SSH address for port `22`, or
 `[<address>]:<port>` otherwise. Markers, patterns, hashed hosts and
-comma-separated hosts are invalid. The key is
-boundedly decoded, its type matches the algorithm token, and the consumer
-accepts only its qualified algorithm allow-list; one declared target, port,
-and key is therefore bound before observation.
+comma-separated hosts are invalid. The text is at most 32 KiB
+(`maxLineBytes`) and the decoded key at most 16 KiB (`maxKeyBytes`), both in
+`internal/trust/hostkeys.go`. The key's type matches the algorithm token and is
+one of the host-key types `algorithms` names in that file; the session's
+[SSH crypto policy](../security.md#direct-ssh-sessions) then narrows the
+algorithms it offers. One declared target, port, and key is therefore bound
+before observation. `TestAHostKeyIsAcceptedOnlyAsTheTypeItsBlobProves` holds
+the type rules.
 
 A Bootwright-installed machine authors no `access` or `rootLogin`.
 Normalization derives its access only when the fleet
@@ -728,8 +739,12 @@ the invocation it prompts once per bootstrap user for SSH and once for remote
 sudo where needed, reusing each prompted password across the Machines that
 select that method. At the sudo prompt, Enter reuses that user's prompted SSH
 password when available. Bound credentials keep their declared references.
-A refused check pauses a fresh apply and leaves any unproved effect of a
-continued apply to be resolved.
+A refused check starts no block of the apply: a fresh apply pauses with no
+attempt made, and a continued apply keeps each block it left running as
+recorded, for the next continuation to resolve under
+[attempts and unknown outcomes](../state-reconciliation.md#attempts-and-unknown-outcomes).
+`TestApplyStartRefusalPausesBeforeTheFirstAttempt` and
+`TestApplyStartRefusalPreservesAnInterruptedBlockRecord` hold both.
 Apply reads the hardware through the pinned bootstrap login without sudo
 and holds the host claim before creating the account. When bootstrap sudo
 requires a terminal, Bootwright proves a read-only check through a remote
@@ -758,8 +773,8 @@ names sudo or the program as failed. A sudo warning
 that does not stop the command names no cause, and neither does an operator
 interrupt. Bootwright answers remote sudo once: when sudo asks again, it ends
 that session at once and reports the password as refused. A session that
-outlives its bound names what the host was waiting for. No refusal carries
-remote text; a report outside the closed list names no reason.
+outlives its bound of 90 seconds, `remoteSessionBound`, names what the host
+was waiting for. No refusal carries remote text; a report outside the closed list names no reason.
 
 For a new remote libvirt provider, enroll its provided host before an apply
 that allocates guests there so the capacity check has a verified login. An
@@ -845,7 +860,7 @@ the block names no protocol.
 | `tls.verification` | string | no | `full` | `full`, `certificate`, or `none` under [client TLS trust](../secrets.md#client-tls-trust), for the controller-to-BMC TLS leg; `none` skips certificate and hostname checks. Only a [verified BMC](../secrets.md#client-tls-trust) satisfies a consumer that requires one, and an `http://` address refuses this field. A non-full value must be authored on this Machine: neither a provider default nor an Environment kind default selects one. |
 | `tls.trustBundleRef` | string | no | configured provider default | `caBundle` or `trustBundle` `Secret`; the one anchor of the controller-to-BMC leg, against which a verified leg checks alone, else against the system trust store. Refused beside `verification: none`. Trust anchor. |
 | `virtualMedia.tls.trust` | string | no | `importCertificate` | How the BMC trusts the artifact server it fetches media from. `importCertificate` uses the device certificate collection or qualified discovered SecurityService [media trust contract](../substrates.md#identity-and-power-operations); `established` imports no certificate; `disableVerification` turns deciding verification off before insertion and is the per-Machine exception below. |
-| `virtualMedia.tls.enableVerification` | boolean | no | `true` with verified BMC access and verified media trust | Authorizes media insertion to enable the deciding verification property with a conditional write and read-back. Requires a [verified BMC](../secrets.md#client-tls-trust) and `importCertificate` or `established`. Explicit `false` requires preconfigured verification. Successful enables remain enabled after cleanup and destroy. |
+| `virtualMedia.tls.enableVerification` | boolean | no | `true` with a [verified BMC](../secrets.md#client-tls-trust) and `importCertificate` or `established`; otherwise `false` | Authorizes media insertion to enable the deciding verification property with a conditional write and read-back. Requires a verified BMC and `importCertificate` or `established`. `false`, authored or defaulted, requires verification already preconfigured. A `true` beside an unverified BMC or a plain `http://` address is refused at `virtualMedia.tls.enableVerification`. `TestMediaVerificationDefaultsOffBesideAnUnverifiedBMC` holds the default. Successful enables remain enabled after cleanup and destroy. |
 | `virtualMedia.tls.restoreVerificationAfterBoot` | boolean | no | `true` | Only with `disableVerification`; eject restores the deciding manager switches, or the device flag when no manager declares one. Explicit `false` retains the disabled state. |
 | `virtualMedia.tls.removeCertificateAfterBoot` | boolean | no | `false` | Only with `importCertificate`; the eject deletes the imported certificate. |
 
@@ -1119,10 +1134,17 @@ deadline; a larger one refuses at that disk's `sizeBytes`, with the remedy of
 `metadataClear` or a smaller disk.
 
 An `onRemoval` other than `retain`, on the root or a data disk, also requires
-a [verified BMC](../secrets.md#client-tls-trust) and a
-declared media trust policy (`virtualMedia.tls.trust` of `importCertificate`,
-`established` or `disableVerification`) on this Machine, else `api.invariant`
-at that `onRemoval`, with the remedy to declare both.
+a [verified BMC](../secrets.md#client-tls-trust) in this Machine's effective
+BMC block, else `api.invariant` at that `onRemoval`, with the remedy to
+address the BMC at its `https://` endpoint with `tls.verification` absent,
+`full` or `certificate`. The media trust policy
+(`virtualMedia.tls.trust` of `importCertificate`, `established` or
+`disableVerification`) is whatever the effective block holds, authored,
+inherited from the provider or defaulted to `importCertificate`. A defaulted
+`importCertificate` on a verified BMC is the verified-media option, no weaker
+than an authored one, and a provider default never selects `disableVerification`.
+`TestErasureAcceptsTheDefaultedMediaTrustOfAVerifiedBMC` and
+`TestErasureRequiresVerifiedBMCTLS` hold it.
 
 Each refusal below is `api.invariant` at the entry's or field's path:
 
@@ -1195,7 +1217,7 @@ optional. Validation is lexical only.
 | `spec.updates.policy` | string | no | `withinRelease` (default) or `none`. `withinRelease` updates every installed package at installation, after registration, to the newest its update sources offer within `spec.os.version`, then reboots when anything changed; `none` installs the media's packages alone ([update within release](../managed-os.md#update-within-release)). `spec.updates` is closed. |
 | `spec.installer.anaconda` | object | union | Anaconda arm below. |
 | `spec.installer.templateClone` | object | union | A [refused arm](#refused-arms). |
-| `spec.subscription.entitlementRef` | string | no | Global `Entitlement` of type `redhatRhel`; registers the installed system with the hosted subscription service, or with the Entitlement's declared Satellite, and unregisters it on destroy ([managed OS](../managed-os.md#registration)). |
+| `spec.subscription.entitlementRef` | string | no | Global `Entitlement` of type `redhatRhel`; a `managed` one registers the installed system and unregisters it on destroy, an `external` one registers nothing ([managed OS](../managed-os.md#registration)). |
 | `spec.proxy` | choice object | no | External Proxy choice; omission uses direct access. |
 | `spec.ntp` | array of selections | no | NTPServer selections; omission leaves the native OS default. |
 | `spec.customizations` | object | no | Closed customization groups below. |
@@ -1266,8 +1288,9 @@ covers, as the
 [derived installation](../managed-os.md#installation) states. A Machine whose
 profile configures a repository refuses while its effective proxy names a
 Proxy with `spec.connection.auth` or `spec.connection.trustBundleRef`, or one
-with no proxy URL; with no configured repository such a Proxy is accepted and validate warns that
-the installed repositories receive no configuration.
+with no proxy URL; with no configured repository such a Proxy is otherwise accepted and validate warns that
+the installed repositories receive no configuration. A profile whose `spec.subscription` registers the system refuses
+any effective Proxy ([registration](../managed-os.md#registration)).
 
 Machine proxy precedence and applicability belong to
 [the Machine proxy field](#machine-proxy). Profile proxy policy is inherited
@@ -1295,7 +1318,7 @@ separate cluster proxy and NTP choices and does not inherit Machine fields.
 | `localization.keyboard` | string | no | `us` | Kickstart token. |
 | `localization.timezone` | string | no | `UTC` | Kickstart token. |
 | `localization.additionalLocales` | array of strings | no | `[]` | Unique Kickstart tokens. |
-| `packages.install` | array of strings | no | `[]` | Unique entries, each a package name, glob or `@group`; no whitespace, quote or `#`, and no leading `%` or `-`. |
+| `packages.install` | array of strings | no | `[]` | Unique entries, each matching `LexicalPackageSpec` (`api/v1alpha1/lexical.go`): a package name, glob or `@group` that starts with a letter, digit, `_`, `@` or `*` and continues with letters, digits and `_.+*?@:~^/[]-`; any other byte refuses at the entry. |
 | `packages.excludeDocs` | boolean | no | `false` | Exclude package documentation. |
 | `packages.installWeakDeps` | boolean | no | OS/package-manager default | Absence is distinct from `false`. |
 | `repositories.configure` | array | no | `[]` | Set keyed by `id`; exact entry shape below. |
@@ -1351,7 +1374,7 @@ the console. The bound passphrase is the disk's recovery secret, which no
 renewal or replacement reaches while the Machine exists
 ([effect material under a live binding](../secrets.md#effect-material-under-a-live-binding)).
 
-Any referenced install profile enables `sshd`; cross-field service and
+Normalization adds `sshd` to `customizations.services.enabled` of every install profile a Machine references; `sshd` in `customizations.services.disabled` of such a profile refuses `api.invariant` at `$.spec.customizations.services`, as `TestAConsumedProfileThatDisablesSSHDRefusesAfterNormalization` holds. Cross-field service and
 firewall requirements are checked before effective rendering.
 
 ## NetworkConfig
@@ -1429,10 +1452,11 @@ declaration order.
 Installation reads the composed map without the injected addresses and MACs;
 a libvirt domain attaches one vNIC per `hardware.nics` entry, whatever the
 map's ethernet interfaces. The
-gateway a managed-OS installation carries is the install interface's default
-route: the `next-hop-address` of the first composed route that is not `absent`,
-whose destination is a zero-prefix IPv4 CIDR, whose next hop is an IPv4 address
-and whose `next-hop-interface` is absent or the install interface. The
+gateway of a family F is the `next-hop-address` of the first composed route
+that is not `absent`, whose destination is a zero-prefix CIDR of F, whose next
+hop is an address of F without a zone and whose `next-hop-interface` is absent
+or the install interface. A managed-OS installation carries the gateway with
+F = IPv4; admission reads it with F = the install address's family. The
 installation's renderer also reads `controller`, `link-aggregation.mode`,
 `link-aggregation.port`, `link-aggregation.options`, `vlan.base-iface`,
 `vlan.id` and `vlan.protocol` of the install interface and its bond, and
@@ -1441,13 +1465,13 @@ the subset interprets only the keys its table lists. Every other route and the o
 the line does not carry are applied after installation by
 [network convergence](../managed-os.md#network-convergence).
 
-The install gateway lies inside the install address's Network prefix. For every
+The install gateway lies inside the install address's Network prefix, as `TestAnInstallGatewayLiesInsideTheInstallPrefix` holds. For every
 Machine with a selected install address, admission reads the default route of
-that address's family, IPv4 or IPv6, by the rule above; a gateway outside the
+that address's family, by the gateway rule above; a gateway outside the
 prefix refuses `api.invariant` at `network.installAddressRef`, naming the
 gateway, the install address with its Network's prefix and the `NetworkConfig` or inline
-network holding the route. No such route or `next-hop-address`, or an IPv6
-link-local gateway, on-link by definition, is untouched; an on-link route to
+network holding the route. No such route or `next-hop-address`, or a link-local unicast gateway
+(IPv6 `fe80::/10` or IPv4 `169.254.0.0/16`), on-link by definition, is untouched; an on-link route to
 another gateway outside the prefix is not admitted.
 
 The fully composed NMState map is internal compiler evidence. Canonical

@@ -186,12 +186,8 @@ The operator chooses the catalog tag or digest, the channel and the CSV; the
 registry holds no pairing between them (D163), and the operator reads the
 channel's CSV from the PackageManifest `odf-operator` in `openshift-marketplace`
 of the catalog it chose
-([knowledge](../.agents/knowledge/fusion-data-foundation-catalog.md)). IBM's catalog serves the package `odf-operator`;
-naming `redhat-operators` as `subscription.source` is expected to install Red
-Hat OpenShift Data Foundation, but that `redhat-operators` serves the same
-package name, namespace and objects is unverified and is re-verified by
-[B761](milestones/m4.md#b761) with `oc get packagemanifest odf-operator -n
-openshift-marketplace` on a Red Hat catalog. The cluster's install pull secret carries `cp.icr.io` with
+([knowledge](../.agents/knowledge/fusion-data-foundation-catalog.md)). The catalog `subscription.source` names serves the package `odf-operator`
+([package fdf](api/addons.md#package-fdf)). The cluster's install pull secret carries `cp.icr.io` with
 user `cp` and the IBM entitlement key, and the Red Hat registries the selected
 bundle's images name; Bootwright never merges a registry credential into a
 running cluster (Q33). v1 observed NooBaa failing with `x509` against a

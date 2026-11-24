@@ -31,12 +31,16 @@ does not descend into a non-root dot-prefixed directory or a non-root directory
 whose basename is exactly `vendor`, `node_modules`, `playbooks`, `roles`,
 `collections`, `manifests`, or `secrets`. The last five names are fixed payload
 roots and are never desired-state inputs.
-Directory symlinks are not followed, and a discovered YAML symlink is an input
-error. Every discovered YAML candidate and add-on marker is a regular file with
+Directory symlinks are not followed, and a discovered YAML symlink refuses with
+`input.symlink`. Every discovered YAML candidate and add-on marker is a regular file with
 exactly one link; a hard-linked one refuses with `input.symlink`, as a symbolic
 link does. Paths are cleaned to absolute paths and ordered lexically. A missing
-source refuses with `input.not-found`; an unreadable, wrong-type, or symlink
-source is an input error. An empty source universe reaches graph validation and
+source refuses with `input.not-found`; a symlinked source refuses with
+`input.symlink`; a directory-required source that is not a directory refuses
+with `input.not-directory`; an unreadable source, a file source that is not a
+regular `.yaml` or `.yml` file and any other wrong-type source refuse with
+`input.read`
+(`TestDiscoveredYAMLSymlinkIsRejected` holds the symlink case). An empty source universe reaches graph validation and
 fails because it has no `Environment`.
 
 Discovery opens every directory it walks, each ancestor of a source, a
@@ -57,8 +61,8 @@ sets the complete desired-state scope:
    `Environment`; always select its declaring file. Validate its authored kind
    defaults and apply `defaults.Environment` once before checking its required
    spec fields and selections. Envelope identity fields cannot be defaulted.
-2. Select every discovered file: the Environment's directory is the scope, and
-   authored YAML never widens filesystem authority.
+2. Select every file of the discovered source universe; authored YAML never
+   widens filesystem authority.
    [Environment selection](environment.md#cluster-selection) owns the cluster
    root closure, the only narrowing.
 3. Strictly decode selected files in lexical path/document order and follow
@@ -172,7 +176,12 @@ directive; a `%YAML 1.2` directive is rejected. Bootwright applies the
 directive-free and accepted-directive streams.
 
 A syntax failure names the parser's reason and line, and is reported
-separately from invalid UTF-8. The line is the authored 1-based line where the
+separately from invalid UTF-8. The reason is cut to `syntaxReasonBytes` and each
+byte outside printable ASCII is written as `\xNN`; a reason that would repeat
+authored text, such as the name of an undefined anchor, is replaced by a fixed
+message, under the [no-authored-scalar rule](../api.md#yaml-streams-and-decoding)
+(`TestSyntaxReasonDropsPrefixesBoundsAndEscapes`,
+`TestParserNeverDisclosesSourceInSyntaxDiagnostics`). The line is the authored 1-based line where the
 parser locates the failure: for a parser-stage failure, the start of its
 enclosing block when the parser names one, otherwise the offending token; a
 scanner or parser failure the parser reports without a line lies on the first

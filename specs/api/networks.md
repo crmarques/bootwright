@@ -87,7 +87,11 @@ network defined on a provider's host. Its fields, in emitted order:
 The host block of the provider `providerRef` names defines the network
 ([provider host realization](../substrates.md#provider-host-realization)) as
 `bootwright-<context>-<name>` with `hostAddress` and its CIDR's prefix; its
-`mtu` is emitted only when it is not 1500. The Network is a
+`mtu` is emitted only when it is not 1500. A Network that declares both
+families realizes, claims and checks for overlap on the host only the prefix of
+its `hostAddress` family (`substrate.HostAddress`,
+`TestADualFamilyManagedNetworkRealizesOnlyItsHostAddressFamily`); the other
+family's CIDR is not realized on the host. The Network is a
 [segment](machines.md#machine-profiles-and-segments) of that provider under its
 own name, carrying itself untagged and `taggedNetworkRefs` tagged: a Machine
 NIC's `segmentRef` names it, and a provider segment of the same name refuses at

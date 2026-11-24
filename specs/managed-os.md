@@ -2132,10 +2132,13 @@ update receipt. The update block's removal has no inverse host effect.
 ### Selection
 
 Every provided Machine (`spec.os.provided`) that is not the Environment's
-controller Machine, declares a network address named `fqdn` and has pinned
-lifecycle SSH (`machine.PlacementFor` succeeds) has its hostname set during
-apply. No authored field selects it: the declared `fqdn` address is the
-hostname. A provided Machine without an `fqdn` address or without pinned
+controller Machine, has an effective `fqdn` address (authored, or derived as
+`<name>.<domain>` by [normalization](api/machines.md#addresses-and-access)) and
+has pinned lifecycle SSH (`machine.PlacementFor` succeeds) has its hostname set
+during apply (`machine.ProvidedHostname`,
+`TestProvidedHostnameSelectsARemotePinnedProvidedMachineWithAnFQDN`). No
+authored field selects it: the effective `fqdn` address is the
+hostname. A provided Machine without an effective `fqdn` address or without pinned
 lifecycle SSH is skipped without a block. A Bootwright-installed Machine is out
 of scope: its kickstart already sets `--hostname` to the same address. The
 controller Machine keeps its own hostname.
@@ -2177,7 +2180,7 @@ display name it registered the host under until the owner runs
 
 | Input or observation | Remedy |
 | --- | --- |
-| No `fqdn` address, no pinned lifecycle SSH, or the controller Machine | No block is planned; declare an `fqdn` address and pinned lifecycle SSH on a remote provided Machine to have its hostname set. |
+| No effective `fqdn` address, no pinned lifecycle SSH, or the controller Machine | No block is planned; declare an `fqdn` address and pinned lifecycle SSH on a remote provided Machine to have its hostname set. |
 | `hostname-write`: `hostnamectl set-hostname` failed | Check that the lifecycle login can run `hostnamectl` as root and that the host's hostname policy permits a change, then repeat apply. |
 | `hostname-unproved`: after the write the kernel or static hostname still differs, such as when cloud-init or a configuration-management agent rewrites it | Stop what rewrites the hostname, or configure it to keep the declared `fqdn`, then repeat apply. |
 

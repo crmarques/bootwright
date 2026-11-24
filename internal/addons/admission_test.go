@@ -222,6 +222,9 @@ func TestExecutableOLMShapeAdmitsAndRefusesEachRule(t *testing.T) {
 		}},
 		{"fast catalog polling", "api.value", "spec.olm.catalogSource.pollInterval", func(v api.Value) api.Value { return v.WithPath(s("59s"), "olm", "catalogSource", "pollInterval") }},
 		{"default catalog name", "api.invariant", "spec.olm.catalogSource.name", func(v api.Value) api.Value { return v.WithPath(s("redhat-operators"), "olm", "catalogSource", "name") }},
+		{"source other than the shipped catalog", "api.invariant", "spec.olm.subscription.source", func(v api.Value) api.Value {
+			return v.WithPath(s("other-catalog"), "olm", "subscription", "source")
+		}},
 		{"foreign source namespace", "api.invariant", "spec.olm.subscription.sourceNamespace", func(v api.Value) api.Value {
 			return v.WithPath(s("example-operator"), "olm", "subscription", "sourceNamespace")
 		}},

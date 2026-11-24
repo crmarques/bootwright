@@ -482,8 +482,9 @@ substituted by the attempt. A managed proxy uses its effective listener port.
 An external TLS-only proxy leaves `httpProxy` absent. The HTTP destination
 field accepts an `http://` endpoint. A lone `*` bypasses all addresses. Other
 bypass lists contain the translated authored entries followed by every
-`networking.machineNetwork` CIDR and the cluster's own domain. An authored
-port-qualified bypass refuses at its entry. A proxy's trust bundle must be
+`networking.machineNetwork` CIDR and the cluster's own domain. A port-qualified
+bypass entry refuses as the [API page](api/openshift-clusters.md#installation-network-services)
+states. A proxy's trust bundle must be
 one the cluster selects. The image build reaches the release payload through the
 controller Machine's own proxy choice.
 
@@ -657,7 +658,8 @@ embeds, and on vSphere the vCenter password when the cluster declares one,
 until that node's media is released, and on KubeVirt until the node's
 VirtualMachine next stops after that release
 ([security](security.md#network-remote-systems-and-privilege)). A push-only cluster that selects
-`agent.redfishVirtualMedia` refuses at admission, naming the field to remove.
+`agent.redfishVirtualMedia` refuses at admission, naming the field to remove
+(`TestKubeVirtClusterRefusesFetchSelectionAndMixedArms`).
 
 **Reservations.** `path:` for the work area and `path:` for the private
 publication subtree, so a second context refuses rather than taking either.

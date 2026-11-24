@@ -151,7 +151,7 @@ func TestABondSplitThroughControllerOrNestingRefusesOnce(t *testing.T) {
 
 // The install gateway is the next hop of the install interface's default
 // route, so it lies inside the install address's prefix; a Machine with no
-// such route, a route on another interface, or an IPv6 link-local next hop,
+// such route, a route on another interface, or a link-local next hop of either family,
 // which is on-link by definition, is untouched.
 func TestAnInstallGatewayLiesInsideTheInstallPrefix(t *testing.T) {
 	node, catalog := fixture()
@@ -174,6 +174,7 @@ func TestAnInstallGatewayLiesInsideTheInstallPrefix(t *testing.T) {
 		"on another interface": m("destination", "0.0.0.0/0", "next-hop-interface", "eth1", "next-hop-address", "198.51.100.1"),
 		"an absent route":      m("destination", "0.0.0.0/0", "next-hop-interface", "eth0", "next-hop-address", "198.51.100.1", "state", "absent"),
 		"no default route":     m("destination", "198.51.100.0/24", "next-hop-interface", "eth0", "next-hop-address", "198.51.100.1"),
+		"an IPv4 link-local":   m("destination", "0.0.0.0/0", "next-hop-interface", "eth0", "next-hop-address", "169.254.0.1"),
 	} {
 		if issues := routed(route); len(issues) != 0 {
 			t.Fatalf("%s was refused: %v", name, issues)

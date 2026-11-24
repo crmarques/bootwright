@@ -42,6 +42,24 @@ func list(v ...api.Value) api.Value { return api.ListValue(v...) }
 func anaconda() api.Object {
 	return obj(api.MachineInstallProfile, "install", m("os", m("family", "RHEL", "version", "9.6", "architecture", "x86_64"), "installer", m("anaconda", m("imageRef", "image")), "updates", m("policy", "none")))
 }
+func TestAConsumedProfileThatDisablesSSHDRefusesAfterNormalization(t *testing.T) {
+	o := anaconda()
+	o = o.WithSpec(o.Spec().With("customizations", m("services", m("disabled", api.StringList("sshd")))))
+	machine := obj(api.Machine, "node", m("os", m("install", m("profileRef", "install"))))
+	catalog := api.NewCatalog([]api.Object{machine})
+	normalized, issues := Normalize(o, catalog)
+	if len(issues) > 0 {
+		t.Fatal(issues)
+	}
+	if got := normalized.Spec().Get("customizations", "services", "enabled").Strings(); len(got) != 1 || got[0] != "sshd" {
+		t.Fatalf("enabled services = %v", got)
+	}
+	found := issuesAt(Validate(normalized, catalog), "$.spec.customizations.services")
+	if len(found) != 1 || found[0].Code != "api.invariant" || found[0].Message != "a profile a Machine installs keeps sshd enabled" || !strings.Contains(found[0].Remediation, "remove sshd from spec.customizations.services.disabled") {
+		t.Fatalf("issues = %+v", found)
+	}
+}
+
 func TestInstallProfileNormalizationAndCustomization(t *testing.T) {
 	o := anaconda()
 	o = o.WithSpec(o.Spec().With("customizations", m("localization", m("language", "en_US.UTF-8"), "repositories", m("configure", list(m("id", "custom", "baseURL", "https://packages.example.test/repo", "gpgCheck", false))), "security", m("diskEncryption", m("unlock", m("tpm2", m("pcrIds", list(api.IntegerValue("7")))))))))

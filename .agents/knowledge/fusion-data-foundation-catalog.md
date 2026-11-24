@@ -33,7 +33,11 @@ review notes of that branch.
   `cp.icr.io/cp/df`; extra packages in the catalog (`ibm-spectrum-scale-operator`,
   `cnsa-dependencies`). The `ocs-operator` CSV still lists the ODF subscription
   names (R3:C3 and C51, confirmed). The Red Hat package name in
-  `redhat-operators` was not independently confirmed.
+  `redhat-operators` was not independently confirmed; naming `redhat-operators`
+  as `subscription.source` is expected to install Red Hat OpenShift Data
+  Foundation, and [B761](../../specs/milestones/m4.md#b761) verifies it with
+  `oc get packagemanifest odf-operator -n openshift-marketplace` on a Red Hat
+  catalog.
 - One code path can serve both products with a catalog, channel and
   pull-secret variation (R3:C1). IBM's documented install is through IBM
   Fusion's console, and no IBM document describes an OLM-only install of the

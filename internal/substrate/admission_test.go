@@ -316,6 +316,27 @@ func TestProviderVirtualMediaDisableVerificationRefuses(t *testing.T) {
 	}
 }
 
+func TestMediaVerificationDefaultsOffBesideAnUnverifiedBMC(t *testing.T) {
+	for name, test := range map[string]struct {
+		bmc  api.Value
+		want bool
+	}{
+		"no address":        {m(), true},
+		"verified https":    {m("address", "https://bmc.example"), true},
+		"verification none": {m("address", "https://bmc.example", "tls", m("verification", "none")), false},
+		"plain http":        {m("address", "http://bmc.example"), false},
+		"authored false":    {m("address", "https://bmc.example", "virtualMedia", m("tls", m("enableVerification", false))), false},
+	} {
+		tls := NormalizeBMCDefaults(test.bmc).Get("virtualMedia", "tls")
+		if !tls.Has("enableVerification") || tls.Get("enableVerification").Bool() != test.want {
+			t.Fatalf("%s: normalized enableVerification = %v, want %v", name, tls, test.want)
+		}
+		if media := virtualMediaTrust(tls); media.EnableVerification != test.want {
+			t.Fatalf("%s: frozen %+v, want %v", name, media, test.want)
+		}
+	}
+}
+
 // Each settle option is frozen only under the one trust that acts on it:
 // restoring verification only after disabling it, true unless the Machine
 // declares otherwise, and removing a certificate only after importing it.

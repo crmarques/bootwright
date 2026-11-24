@@ -121,3 +121,28 @@ func TestAManagedNetworkIsASegmentOfItsProvider(t *testing.T) {
 		t.Fatal("a managed Network bears no effect")
 	}
 }
+
+func TestADualFamilyManagedNetworkRealizesOnlyItsHostAddressFamily(t *testing.T) {
+	for _, row := range []struct{ name, hostAddress, want string }{
+		{"default", "", "192.0.2.1/24"},
+		{"v4", "192.0.2.5", "192.0.2.5/24"},
+		{"v6", "2001:db8::5", "2001:db8::5/64"},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			arm := m("providerRef", "lab", "bridge", "virbr-dual")
+			if row.hostAddress != "" {
+				arm = arm.With("hostAddress", api.StringValue(row.hostAddress))
+			}
+			dual := obj(api.Network, "dual", m("provided", false, "ipv4", m("cidr", "192.0.2.0/24", "gateway", "192.0.2.1"), "ipv6", m("cidr", "2001:db8::/64", "gateway", "2001:db8::1"), "libvirt", arm))
+			normalized, _ := Normalize(dual, api.Catalog{})
+			address, ok := HostAddress(normalized)
+			if !ok || address.String() != row.want {
+				t.Fatalf("host address = %v (%v), want %s", address, ok, row.want)
+			}
+			managed, _ := ManagedSegmentNetwork(NetworkSegment(normalized))
+			if managed.Prefix != row.want {
+				t.Fatalf("segment prefix = %q, want %s", managed.Prefix, row.want)
+			}
+		})
+	}
+}

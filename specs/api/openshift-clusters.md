@@ -11,8 +11,8 @@ flow reads its node binding through the membership the cluster domain publishes
 (`spec.nodes[].machineRef`), never by naming the kind. Native installer files are
 derived outputs, and [OpenShift clusters](../openshift-clusters.md) owns what
 installing one does. [The compiler boundary](../api.md#compiler-boundary)
-applies; `platform.external` remains inert until validated by a
-release-specific consumer.
+applies; `platform.external` is preserved uninterpreted, and what installing
+one does is owned by [OpenShift clusters](../openshift-clusters.md#refusal-table).
 
 OpenShiftCluster `metadata.name` follows the
 [one name rule](../api.md#object-names).
@@ -75,9 +75,13 @@ claims no renderer support for that release.
 
 The [topology](#topology) rules are the general rule, and the installer judges
 the release (D162). `release.version` keys no specialization. A release pinned
-by image alone declares no minor, so only the release-independent topology
-rules apply to it, and
-[selection](../openshift-clusters.md#selection-and-refusal) refuses it.
+by image alone declares no minor, so admission checks it only for at least one
+`controlPlane` node and for no `worker` or `infra` node beside a single
+`controlPlane` node; the control-plane count rule needs a declared version.
+[Selection](../openshift-clusters.md#selection-and-refusal) refuses it.
+`TestTopologyRefusesComputeBesideOneMaster` and
+`TestTopologyAdmitsAnImageOnlyReleaseWithAnyControlPlaneCount` hold both
+halves.
 
 ## Install selection
 
@@ -87,8 +91,8 @@ rules apply to it, and
 | `spec.install.mode` | string | no | `connected` | `connected` or `disconnected`. |
 | `spec.install.platform` | object | no | derived | Presence union described below. |
 | `spec.install.endpoints` | map | yes | — | Closed keys `api`, `api-int`, and `ingress`; endpoint shape below. |
-| `spec.install.agent.redfishVirtualMedia.artifactServerEndpoint` | object | conditional | — | Required when any bound machine uses bare metal. |
-| `spec.install.agent.bootArtifacts.artifactServerEndpoint` | object | conditional | — | Required in disconnected mode. |
+| `spec.install.agent.redfishVirtualMedia.artifactServerEndpoint` | object | conditional | — | Required when any node's BMC fetches its boot media; refused on a push-only cluster ([boot media](../openshift-clusters.md#boot-media)). |
+| `spec.install.agent.bootArtifacts.artifactServerEndpoint` | object | conditional | — | Required in disconnected mode; refused in connected mode. |
 | `spec.install.proxy` | choice object | no | direct access | Independent Proxy choice for installation and cluster policy. |
 | `spec.install.ntp` | array of selections | no | native OS default | NTPServer selections; an empty list clears inherited selections. |
 | `spec.install.registries` | object | no | — | Cluster-owned mirror selection and image-source policy below. |
@@ -104,14 +108,15 @@ select a relaxed endpoint identity or disable certificate checks. See
 
 Disconnected mode requires `spec.install.registries.mirror`, whose Registry
 declares `trustBundleRef`, and a managed agent boot-artifacts endpoint.
-Connected mode obtains boot artifacts from the release payload and does not
-use an authored boot-artifacts selection.
+Connected mode obtains boot artifacts from the release payload; an authored
+`spec.install.agent.bootArtifacts` refuses `api.invariant` at that path, held by
+`TestReleaseCredentialsSecurityAndPlacement`.
 
 Both consumers use the shared
 [artifact endpoint selection](infrastructure-services.md#artifactserver), and
 require a managed artifact server.
 
-The Redfish endpoint serves virtual media for bare-metal nodes; the boot
+The Redfish endpoint serves virtual media for nodes whose BMC fetches media; the boot
 artifacts endpoint serves rootfs, kernel, and initramfs content. They are
 separate selections even when one component provides both.
 
@@ -125,6 +130,10 @@ uses the shared
 and its omission leaves the native OS default. These fields describe the
 downstream installation and do not mutate or inherit Machine OS installation
 policy.
+
+A port-qualified `spec.install.proxy.noProxy` entry refuses `api.invariant` at
+`$.spec.install.proxy.noProxy[<i>]`, because the installer accepts no port; the
+shared grammar otherwise admits one.
 
 ### Registry policy
 
@@ -200,7 +209,8 @@ Not yet met: the vSphere arm admits no `vcenterCredentials`; tracked as
 
 `spec.install.endpoints` has only the `api`, `api-int`, and `ingress` slots.
 `api` and `ingress` are authored. If `api-int` is omitted, normalization copies
-only `api.address` and `api.source`; an authored `api-int` wins.
+only `api.address` and `api.source`; an authored `api-int` wins where the
+platform admits a distinct address.
 
 Every endpoint has this exact shape:
 
@@ -249,7 +259,10 @@ which deploys its VIP holders whatever the input says (the installer's
 development branch does pass one), and on `vsphere` the agent installer ignores
 `platform.vsphere.loadBalancer`; an external load balancer is declared with
 platform `none`, a modelling choice, not a claim about every
-release. `api-int` resolves the `api` address, and the `api` and
+release. On a multi-node `baremetal` or `vsphere` platform the effective `api-int`
+address equals the effective `api` address, and a different authored `api-int` address is refused
+`api.invariant` at `spec.install.endpoints.api-int.address`
+(`TestInstallerEndpointPlatformOwnership`). The `api` and
 `ingress` addresses differ. API, internal API, ingress, and node IPs obey the
 selected machine-network CIDRs. VIPs do not collide with node install IPs, and
 endpoint/network address families are consistent.
@@ -356,9 +369,8 @@ not create Secret declarations or read certificate material.
 
 This selection does not add controller, Machine OS, SSH, service or ambient
 process trust. Proxy and Registry connection trust, entitlement trust and
-other consumer-specific trust remain on their owning objects. The former
-`Environment.spec.trustedCAs` is rejected; there is no compatibility merge or
-implicit trust inherited from another consumer.
+other consumer-specific trust remain on their owning objects. No trust is
+inherited implicitly from another consumer.
 
 ## Networking
 

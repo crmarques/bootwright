@@ -137,8 +137,8 @@ Composition uses one rule throughout the API:
   `<node.name>.<CephCluster.metadata.name>.<domains.storageClusters>` only when
   that Machine has none ([CephCluster normalization](ceph.md#normalization));
   and
-- a CephCluster's management gateway without an explicit
-  `managementGateway.fqdn` is
+- a CephCluster's management gateway that declares a `mgmt-gateway` service
+  without an explicit `managementGateway.fqdn` is
   `mgr.<CephCluster.metadata.name>.<domains.storageClusters>`
   ([CephCluster normalization](ceph.md#normalization)).
 
@@ -160,9 +160,9 @@ unused declared sites are valid and silent.
 
 ## Cluster selection
 
-The Environment's directory is the scope: every YAML file discovery acquires
-under [the API input rules](input.md#discovery) is selected, and the cluster
-lists below are the only narrowing. For example, an Environment that installs
+The discovered source universe ([discovery](input.md#discovery)) is the scope:
+every YAML file discovery acquires is selected, and the cluster lists below are
+the only narrowing. For example, an Environment that installs
 `ocp-01` and its storage while a second declared cluster waits authors:
 
 ```yaml
@@ -215,7 +215,10 @@ A retained
 `CephReplication` retains both its clusters as full roots, and selecting
 either end of the relationship retains it; this widens nothing else, so a
 `CephCluster` retained only through a `CephConsumer` still keeps its node
-closure alone. A `Machine` or `InfraProvider` not reached by the rules above is
+closure alone. A cluster root retained only through a `CephReplication` end or
+a KubeVirt provider's `hostClusterRef` is retained without the omitted-root
+refusal, and `TestSelectionRetainsExactlyWhatTheClosureTableNames` holds the
+closure. A `Machine` or `InfraProvider` not reached by the rules above is
 excluded; when no excluded cluster root accounts for it as a node, a node's
 provider or a provider host, `validate` warns, naming it and stating that no
 selection field retains it. A reference from any retained object to an excluded
@@ -224,6 +227,10 @@ unresolved-reference error naming the selection field that would retain the
 target: an excluded cluster root names its own list, and any other excluded
 object names the authored lists. Omission of both cluster lists skips this filtering and retains
 every selected object.
+
+Not yet met: a cluster root retained only through a `CephReplication` end or a
+KubeVirt provider's `hostClusterRef` that its authored list omits is refused
+like an attachment; tracked as [B1776](../milestones/m1.md#b1776).
 
 ## Remote-machine access and install defaults
 
@@ -238,14 +245,18 @@ install places its public half in that account.
 The fleet key must differ from every Machine access key and every
 `CephCluster.spec.cephadm.clusterSSH.keyRef`. Each cluster SSH key must
 also differ from every Machine access key, every `os.install.hostKeyRef`,
-and every other cluster SSH key. Validation checks
-reference identity and type, preventing Ceph key reuse for fleet access. The
-fleet key must also differ from every Machine's `os.install.hostKeyRef`; the
+and every other cluster SSH key. Validation compares
+references and types and never reads material, so two distinct references
+to one key pass it. The fleet key must also differ from every Machine's `os.install.hostKeyRef`; the
 Machine [refuses the collision](machines.md#os-lifecycle-and-substrate-invariants).
 A provided Ceph stretch tiebreaker is no exception: Ceph dials it with the
 fleet key while its Machine names only its own operator access
 ([stretch topology](../ceph.md#stretch-topology)), and the refusal of a
 provided Machine that names the fleet key says so.
+
+Not yet met: binding compares the public keys of the fleet, Machine access,
+cluster SSH and host keys and refuses two references that hold one key; tracked as
+[B1777](../milestones/m1.md#b1777).
 
 ## Kind defaults
 
@@ -608,9 +619,9 @@ contains exactly these required fields in order:
 
 The selected artifact server must run on a Machine with `os.provided: {}` so
 it remains reachable after managed machines shut down. Validation checks the
-declaration and its references. No rescue journey exists yet, so admission
+declaration and its references. No rescue journey exists, so admission
 refuses a present `rescue` with `api.invariant` at `spec.lifecycle.rescue`,
-naming that no rescue journey exists yet, with the remedy to remove it
+naming that no rescue journey exists, with the remedy to remove it
 (`TestAdmissionRefusesARescueDeclarationUntilARescueJourneyExists`). The schema
 keeps the field, and the rules above, for a later journey; no lifecycle
 requires or consumes it.

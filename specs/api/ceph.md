@@ -127,16 +127,16 @@ names no native document. It needs a declared `mgmt-gateway` service, so
 what the name changes: the bound certificate it must cover and the URLs
 `cluster info` derives from it. Bootwright publishes no DNS record for it.
 
-Other P2 resource additions remain target contracts, not admitted kinds.
-
 IBM packages use the vendor repository selected by `packageRepository`.
 The optional `distribution.ibm.packages.source` accepts only `vendor`; subscription
-package sources and subscription repository lists are not admitted. Machine
-registration remains the Machine installation profile's responsibility.
+package sources and subscription repository lists are not admitted.
+`CephCluster` registers no Machine; [Ceph package
+sources](../ceph-subscription-dependencies.md) state which registration each
+host's packages come from.
 
-Future storage export feature families are refused by admission. The device
-selector `size` grammar, which no admitted kind owns, lives in
-[field detail](../deferred/ceph-api.md).
+Admission refuses storage export families outside the [kinds table](#kinds);
+their deferred shapes live in [field detail](../deferred/ceph-api.md). The device selector `size` grammar, which no admitted
+kind owns, lives there too.
 
 Operators select IBM Ceph release identifiers, package and tool versions,
 container tags or digests and related service-version coordinates in input.
@@ -153,15 +153,6 @@ mechanics to capabilities the selected artifacts provably have or lack
 ([version specializations](../architecture.md#implementations-and-version-variation));
 that adaptation neither approves nor refuses a selection.
 
-Ordinary apply realizes the core cluster, placement policies, replicated and
-erasure-coded pools, RBD images, CephFS filesystems with their subvolume
-groups, CephFS subvolumes, native `nfs` services, NFS exports of a CephFS
-filesystem, a CephFS subvolume or an object user's buckets, one-way journal
-RBD mirroring of a CephReplication, NVMe-oF subsystems, managed
-CephConsumers and CephClients of an RBD pool, a CephFS filesystem or a
-CephFS subvolume over `verifiedTunnel`; an ingress
-plans once its auxiliary images are authored under `spec.images` and
-refuses at planning without them.
 `distribution` is a [presence union](../api.md#unions) of the arms `oss`,
 `redhat` and `ibm`; omission selects `oss: {}`, which effective output shows.
 The `oss` arm holds the optional community `mirror` and `checksum`, `redhat`
@@ -186,8 +177,8 @@ optional `noProxy`, using the shared proxy-selection grammar. Omission means
 direct; it inherits no controller, Machine or install-profile route. This
 consumer supports only external unauthenticated HTTP CONNECT proxies
 whose `connection.httpsProxy` is a bare `http://` endpoint, with at most 128
-bypass entries and no Proxy `auth`, bound bundle or relaxed TLS policy. Other
-choices refuse at admission. The selected route is frozen for repository
+bypass entries and no Proxy `auth`, bound bundle or relaxed TLS policy; every
+other choice refuses at admission. The selected route is frozen for repository
 metadata, RPMs and the same-origin signing key; hosted DVD fetches remain
 direct. Repository TLS and publisher verification remain independent. See
 [package acquisition](../ceph.md#frozen-release-and-trust).
@@ -237,8 +228,9 @@ The `ibm` arm's `callHome` is required, with no default, and is `enabled` or
 `disabled`. `enabled` keeps the provider's Call Home reporting active after
 bootstrap; `disabled` leaves it inactive. `disabled` runs no Call Home step
 and requires the `call_home_agent` module not enabled: bootstrap passes
-`--disable-ibm-call-home`, except on a build whose Call Home is opt-in, where
-`disabled` is the native default. On that build `enabled` refuses
+`--disable-ibm-call-home`, except on selected IBM artifacts whose Call Home model
+is opt-in ([version specializations](../architecture.md#implementations-and-version-variation)),
+where `disabled` is the native default. On those artifacts `enabled` refuses
 `call-home-unqualified`. The refusal comes before the cluster is claimed but after the ceph-host blocks ran from the
 frozen input, so a corrected `callHome` is an input change: `bootwright
 destroy` takes back what the apply owns, then `context update` and a fresh
@@ -371,19 +363,44 @@ is stated on its field record.
 ## Complete-graph invariants
 
 In addition to the field-local rules of the schema, desired-state validation
-checks:
+checks the following. Each refusal is `api.invariant` at the field named, and a
+missing required field is `api.required`.
 
-- management mode, distribution, entitlement, image, package, bootstrap,
-  topology, network, FIPS, CephX, and cluster-login declarations agree;
+- the declarations of management mode, distribution, entitlement, image, package,
+  bootstrap, FIPS, CephX and cluster SSH hold together:
+  - `distribution.oss` with `security.fips.enabled` refuses at
+    `$.spec.security.fips.enabled`;
+  - `distribution.ibm` or `distribution.redhat` requires an `entitlementRef`
+    naming an `ibmStorageCeph` or `redhatCeph` Entitlement, and `ibm` also
+    requires `packageVersion`, `image`, `cephadm.ansible.packageVersion` and
+    the `base` and `version` of `image` and of each `images.<name>`;
+  - `image.base` and each `images.<name>.base` lie beneath the Entitlement's
+    registry namespace, refused at that `base`;
+  - `packageRepositoryKey` requires `packageRepository` and shares its HTTPS
+    scheme, host and port, and `packageRepositoryTrustBundleRef` requires
+    `packageRepository`;
+  - a FIPS cluster's Bootwright-installed node refuses at its `machineRef` unless
+    the Machine's install profile enables FIPS;
+  - `cephadm.clusterSSH.keyRef`, an access credential, is required unless the
+    user is `root`, and it names a Secret distinct, by reference name, from the
+    fleet key, every Machine access, lifecycle and host key and every other
+    CephCluster's key, refused at that `keyRef`;
+  - `cephadm.bootstrap.nodeRef` names a node the MON service places;
+  - a `CephConsumer`'s `dataFoundation.cephxKeyType` equals the cluster's
+    `security.cephx.keyType` when that is declared;
 - each `topology.nodes[].machineRef` names a Machine, which is a Ceph node
   because the topology names it ([hardware and substrate](machines.md#hardware-and-substrate));
 - on a Bootwright-installed Machine, an authored `topology.nodes[].fqdn` that
   differs from the Machine's effective `fqdn` refuses `api.invariant` at
   `topology.nodes[i].fqdn`, naming both; removing the override gives the
   node its Machine's name;
-- native placement resolves to owned Machines and service counts fit finite
-  candidate sets, with consistent label bindings;
-- OSD selectors are bounded and internally consistent, exclude the Machine's
+- each service `placement` selects at least one declared topology node by
+  at most one of `hosts`, `label` or `host_pattern`, and with none it selects
+  every topology node, where a `label` selects the nodes whose `labels` hold it,
+  and its `count` does not exceed the selected nodes, each refused at the placement field;
+- each OSD device selector names exactly one of `paths`, `all` (data devices
+  only) or a filter, holds clean absolute unique paths beneath `/dev`, keeps its
+  data paths disjoint from its DB and WAL paths, excludes the Machine's
   root device, named by its path, WWN path or serial-number path, from explicit
   data, DB, and WAL paths (a root declared by serial number that a WWN path
   names is refused by host preparation as `device-root`, once the live disk
@@ -391,10 +408,16 @@ checks:
   Bootwright-installed bare-metal Machine that declares that serial as a
   `hardware.dataDisks[].serialNumber` with a non-retain `onRemoval` and no `wwn`;
 - policies, pools, filesystems, gateways, NFS exports, SMB resources, and
-  consumers reference the same cluster under each kind's management-mode constraints and
-  use compatible pool roles and protection modes;
-- addresses, CIDRs, DNS labels, paths, ports, service IDs, VRRP IDs, config
-  ownership, and Secret types do not conflict across the aggregate graph;
+  consumers reference the same cluster under each kind's management-mode constraints;
+- each reference names a pool of the role it requires: a consumer's pool
+  reference the role the consumer needs, a filesystem's, subvolume group's or
+  subvolume's `poolLayoutRef` a `cephfsData` pool attached in `dataPoolRefs`, and `spec.mirroring` a pool of
+  role `rbd`; an effective `replicated.minSize` never exceeds its `size`, and an
+  `erasure` pool carries no non-zero `replicated` value;
+- the ranges of one `networks` list are disjoint, each `service_type.service_id`
+  identity is unique, each `serviceBindings` leaf binds only a Secret of a type
+  its slot accepts, and the [listener registry](#listener-registry), the virtual
+  router IDs and the registered hostnames are held by the bullets below;
 - ingress virtual IPs are `address/prefix` inside a declared public CIDR with
   its prefix length, neither its network nor its broadcast address, and
   equal, after parsing, to no Machine address and no other ingress virtual
@@ -452,8 +475,10 @@ checks:
 - every `networks.publicCIDRs` and `networks.clusterCIDRs` entry contains an
   IP, contact or assignment, a topology Machine declares in
   `network.addresses` (an IP contact of a provided host, such as a stretch
-  tiebreaker, counts; a DNS contact does not), and no `clusterCIDRs` entry
-  overlaps a `publicCIDRs` one, each refused at the entry;
+  tiebreaker, counts; a DNS contact does not), is the CIDR of a declared
+  Network ([cross-kind checks](networks.md#cross-kind-checks)), and no
+  `clusterCIDRs` entry overlaps a `publicCIDRs` one, each refused at the
+  entry;
 - with `networks.clusterCIDRs` declared, every topology node's Machine that
   an `osd` service's placement selects declares an IP address inside
   one of them, a Machine whose addresses are assigned at runtime included,
@@ -495,7 +520,7 @@ placement.
 
 These checks qualify desired intent only. Live capacity, device safety,
 external-cluster identity and native-output interpretation remain gates of
-the owning lifecycle slices. They do not authorize version-combination
+the owning lifecycle sections. They do not authorize version-combination
 screening: native tools determine version availability and compatibility.
 
 ### Listener registry
@@ -554,4 +579,9 @@ and prometheus
 ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/monitoring.py#L591-L596)),
 and every other listener binds all addresses. Two listeners on one port of
 one host refuse unless both bind distinct specific addresses; the refusal
-names the host and the other listener.
+names the host and the other listener. The listeners of one `ingress`,
+`alertmanager`, `loki` or `promtail` service never conflict with each other in
+the registry, so a default `alertmanager`, `loki` or `promtail` service admits
+(`TestListenersOfOneServiceNeverConflict`) and an `ingress` whose own ports
+coincide refuses once, under its own distinct-port rule
+(`TestListenerRegistryCoversIngressPortsOnce`).

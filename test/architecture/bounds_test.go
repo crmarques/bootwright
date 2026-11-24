@@ -57,6 +57,9 @@ func documentedBounds() []documentedBound {
 		mediaStore       = "internal/workspace/contextfs/media_linux_amd64.go"
 		commands         = "specs/cli/commands.md"
 		completion       = "cmd/bootwright/completion_paths.go"
+		input            = "specs/api/input.md"
+		inputCode        = "internal/desiredstate/input.go"
+		parsing          = "internal/cli/parsing.go"
 	)
 	return []documentedBound{
 		{contexts, "| Encoded bytes in one stored lifecycle plan, including metadata | %s |", operations, "MaxPlanBytes", nil, true},
@@ -109,7 +112,34 @@ func documentedBounds() []documentedBound {
 		{commands, "stops once it holds %s candidates", completion, "maxCompletionPaths", nil, false},
 		{commands, "A prefix longer than %s bytes", completion, "maxCompletionPrefix", nil, false},
 		{commands, "an entry whose name is longer than %s bytes", completion, "maxCompletionEntry", nil, false},
-		{"specs/controller.md", "each entry at most %s bytes", "api/v1alpha1/lexical.go", "maxProxyBypassBytes", nil, false},
+		{"specs/api/infrastructure-services.md", "one, in at most %s bytes. An IP or CIDR matches", "api/v1alpha1/lexical.go", "maxProxyBypassBytes", nil, false},
+		{"specs/api/machines.md", "outlives its bound of %s, `remoteSessionBound`,", "internal/machine/account/remote.go", "remoteSessionBound", &application{runner: "run"}, false},
+		{"specs/api/session-access-policy.md", "within `resolveBound`, %s;", "internal/machine/sessionpolicy/service.go", "resolveBound", &application{runner: "Expand"}, false},
+
+		{input, "| Descendant path depth | %s segments below the input root |", inputCode, "MaxPathDepth", nil, false},
+		{input, "| Filesystem entries enumerated | %,s across all visited directories |", inputCode, "MaxEntries", nil, false},
+		{input, "| YAML-suffix candidate paths | %,s |", inputCode, "MaxFiles", nil, false},
+		{input, "| Native add-on marker candidate paths | %,s |", inputCode, "MaxMarkers", nil, false},
+		{input, "| One native add-on marker | %s bytes |", inputCode, "MaxMarkerBytes", nil, false},
+		{input, "| All native add-on markers | %,s bytes (%s) |", inputCode, "MaxAllMarkerBytes", nil, true},
+		{input, "| One YAML file | %,s bytes (%s) |", inputCode, "MaxFileBytes", nil, true},
+		{input, "| All discovered YAML files | %,s bytes (%s) |", inputCode, "MaxAllFileBytes", nil, true},
+		{input, "| YAML stream documents | %s per file and 8,192 in aggregate |", inputCode, "MaxFileDocuments", nil, false},
+		{input, "| YAML stream documents | 256 per file and %,s in aggregate |", inputCode, "MaxDocuments", nil, false},
+		{input, "| YAML representation depth | %s parent-to-child edges below the document node |", inputCode, "MaxDepth", nil, false},
+		{input, "| YAML representation nodes | %,s per document and 1,000,000 in aggregate |", inputCode, "MaxDocumentNodes", nil, false},
+		{input, "| YAML representation nodes | 100,000 per document and %,s in aggregate |", inputCode, "MaxNodes", nil, false},
+		{input, "| Returned diagnostics | %,s total: at most 999 ordinary diagnostics plus one reserved limit diagnostic |", inputCode, "MaxDiagnostics", nil, false},
+		{"specs/cli.md", "| Argument count | %,s |", parsing, "maxArguments", nil, false},
+		{"specs/cli.md", "| Bytes in one argument | %,s |", parsing, "maxArgumentBytes", nil, false},
+		{"specs/cli.md", "| Bytes across all arguments | %,s |", parsing, "maxTotalArgumentBytes", nil, false},
+		{contexts, "Bounds apply before allocation/traversal: registry %s;", store, "maxRegistry", nil, true},
+		{contexts, "registry 8 MiB; manifest %s and", store, "maxManifest", nil, true},
+		{contexts, "%s aggregate referenced manifests", store, "maxAllManifests", nil, true},
+		{contexts, "paths %s bytes;", store, "maxPath", nil, false},
+		{contexts, "%s, with at most 16 abandoned publication stages", store, "maxRecord", nil, true},
+		{contexts, "with at most %s abandoned publication stages", "internal/workspace/contextfs/collection_linux_amd64.go", "maxContextStateStages", nil, false},
+		{contexts, "media records %s;", mediaRecords, "MaxMediaRecord", nil, true},
 	}
 }
 
@@ -129,7 +159,7 @@ func TestDocumentedBoundsMatchCode(t *testing.T) {
 			if duration && bound.size {
 				t.Fatalf("%s: a duration is not a size in bytes", bound.constant)
 			}
-			phrase := fmt.Sprintf(bound.phrase, renderBound(t, value, duration, bound.size))
+			phrase := strings.ReplaceAll(strings.ReplaceAll(bound.phrase, "%,s", groupedBound(t, value)), "%s", renderBound(t, value, duration, bound.size))
 			if count := strings.Count(string(spec), phrase); count != 1 {
 				t.Errorf("%s states %q %d times, want once: %s in %s changed, or the spec did", bound.spec, phrase, count, bound.constant, bound.source)
 			}
@@ -489,6 +519,21 @@ func boundValue(t *testing.T, expression ast.Expr) (constant.Value, bool) {
 	}
 	t.Fatalf("bound expression %T is not a supported constant expression", expression)
 	return nil, false
+}
+
+// groupedBound writes a count with a comma between each group of three
+// digits, as the input and argument tables do.
+func groupedBound(t *testing.T, value constant.Value) string {
+	t.Helper()
+	number, exact := constant.Int64Val(value)
+	if !exact {
+		t.Fatalf("bound %s is not an integer", value)
+	}
+	digits := strconv.FormatInt(number, 10)
+	for i := len(digits) - 3; i > 0; i -= 3 {
+		digits = digits[:i] + "," + digits[i:]
+	}
+	return digits
 }
 
 // renderBound writes a value the way the specs state it: a count in decimal,

@@ -83,8 +83,8 @@ func eraseTrustRefusal(o api.Object, path string) (api.Issue, bool) {
 	if substrate.BMCVerified(bmc) && (trust == "established" || trust == "importCertificate" || trust == "disableVerification") {
 		return api.Issue{}, false
 	}
-	return invariant(path, "physical erase requires verified BMC TLS and a declared media trust policy",
-		"address "+substrate.BMCPath+" at its https:// endpoint with tls.verification absent, full or certificate, and declare "+substrate.BMCPath+".virtualMedia.tls.trust on "+o.Identity()), true
+	return invariant(path, "physical erase requires verified BMC TLS",
+		"address "+substrate.BMCPath+" at its https:// endpoint with tls.verification absent, full or certificate on "+o.Identity()), true
 }
 
 func validateDataDisks(o api.Object, physicalInstall bool) []api.Issue {

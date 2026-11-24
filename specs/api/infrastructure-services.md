@@ -88,8 +88,8 @@ The four managed kinds use these deployment defaults:
 
 An omitted `bindAddress` of a managed service, `ArtifactServer` included, is
 derived: when every endpoint names one IP address on the placement Machine, the
-service binds that address; several IPv6-only addresses derive `::`;
-no endpoints, DNS names or other address sets derive `0.0.0.0`.
+service binds that address; several IPv6-only addresses derive `::`; no
+endpoints, DNS names or other address sets derive `0.0.0.0`.
 DNS names require no lookup. A wildcard reservation collides with any other
 listener on that port, such as another resolver on the host; the apply then
 refuses before starting the service and names the socket under
@@ -111,11 +111,17 @@ configured by address. When `bindAddress` is not a wildcard (`0.0.0.0` or
 on another address; a DNS-name endpoint is not compared, since admission
 performs no lookup. Every IP endpoint must match a wildcard's family: IPv4
 (including mapped IPv6 literals) for `0.0.0.0`, IPv6 for `::`. Mixed families
-refuse at the endpoint field. A wildcard requires an endpoint, because
-readiness probes the service through its endpoint addresses.
-A managed Proxy, DNSServer, NTPServer or Registry bound to a wildcard declares at most 61
-distinct endpoint addresses, its [host reservation's](../infrastructure-services.md#host-reservations)
-bound.
+refuse at the endpoint field.
+
+A managed Proxy, DNSServer, NTPServer or Registry bound to a wildcard declares
+at least one endpoint, because readiness probes the service through its
+endpoint addresses; none refuses `api.invariant` at `$.spec.endpoints`
+(`validateWildcardProbes`, held by
+`TestAWildcardBindWithoutAnEndpointRefusesAtTheEndpointsField`). It
+declares at most 61 distinct endpoint addresses, its
+[host reservation's](../infrastructure-services.md#host-reservations) bound.
+An ArtifactServer states its own rule in the `endpoints` row of the
+[ArtifactServer](#artifactserver) table.
 
 Managed Proxy additionally accepts optional `allowedDestinations[]`, a
 non-empty set of the destinations it admits; absent, it admits every remote
@@ -166,7 +172,7 @@ External forms have these exact connection fields:
 
 | Kind | Fields | Rule |
 | --- | --- | --- |
-| `Proxy` | `connection.httpProxy`, `connection.httpsProxy`, `connection.auth.proxyAuthRef`, `connection.trustBundleRef`, `connection.tlsVerification` | `connection` sets at least one bare HTTP(S) proxy endpoint: at most 4096 ASCII bytes with a host and no userinfo, path, query or fragment, under the [context-free route's grammar](../controller.md#the-context-free-acquisition-route); validate refuses another at that field, naming the field and never the value. Authentication names a `usernamePassword` Secret; trust names a `caBundle` or `trustBundle` Secret. `proxyAuthRef` names an access credential and `trustBundleRef` a trust anchor. |
+| `Proxy` | `connection.httpProxy`, `connection.httpsProxy`, `connection.auth.proxyAuthRef`, `connection.trustBundleRef`, `connection.tlsVerification` | `connection` sets at least one bare HTTP(S) proxy endpoint: at most 4096 ASCII bytes with a host and no userinfo, path, query or fragment; validate refuses another at that field, naming the field and never the value. Authentication names a `usernamePassword` Secret; trust names a `caBundle` or `trustBundle` Secret. `proxyAuthRef` names an access credential and `trustBundleRef` a trust anchor. |
 | `DNSServer` | `address`, optional `additionalIngressHosts[]` | Required resolver IP, canonicalized in effective state. |
 | `NTPServer` | `address` | Required IP or DNS hostname. |
 | `Registry` | `url` | Required registry location without embedded credentials. |
@@ -194,7 +200,7 @@ common deployment fields above it takes:
 | Field | Type | Required | Default or rule |
 | --- | --- | --- | --- |
 | `tls` | object | yes | Forbidden for external. |
-| `tls.secretRef` | string | yes | `tlsCertificate` Secret supplying certificate and key. A [generated](secrets.md#generated-source) Secret derives its `ipAddresses` and `dnsNames` from every endpoint and the `machineRef` Machine's `fqdn`; an authored list names the address of every endpoint, or that endpoint refuses at `$.spec.endpoints[i]` naming the Secret and the address, as an ArtifactServer's HTTPS endpoint does. Effect material: the registry serves it. |
+| `tls.secretRef` | string | yes | `tlsCertificate` Secret supplying certificate and key. A [generated](secrets.md#generated-source) Secret derives its names as that section states; an authored list names the address of every endpoint, or that endpoint refuses at `$.spec.endpoints[i]` naming the Secret and the address. Effect material: the registry serves it. |
 | `tls.minVersion` | string | no | `TLSv1.2` by default, or `TLSv1.3`. |
 | `credentialsRef` | string | yes | A `usernamePassword` Secret: every push and pull authenticates with it, and the controller derives the registry's password file from it. A `dockerConfigJson` Secret, which an external Registry accepts, refuses at `$.spec.credentialsRef`, because no password file can be derived from a registry document. Effect material: the password file is derived from it. |
 
@@ -219,7 +225,7 @@ A managed ArtifactServer accepts these fields after `management`:
 | `bindAddress` | string | no | IP literal; derived as the [deployment defaults](#proxy-dns-ntp-and-registry-deployment) state. |
 | `retention` | string | no | `persistent`, the default and only value: published content is kept until destroy. |
 | `tls` | object | conditional | Required when any effective listener uses HTTPS; forbidden for HTTP-only listeners. |
-| `tls.secretRef` | string | with TLS | `tlsCertificate` Secret supplying certificate and key. A [generated](secrets.md#generated-source) Secret derives its `ipAddresses` and `dnsNames` from these HTTPS endpoints and the `machineRef` Machine's `fqdn`; an authored list names the address of every HTTPS endpoint, or that endpoint refuses at `$.spec.endpoints[i]` naming the Secret and the address. Effect material: the server serves it. |
+| `tls.secretRef` | string | with TLS | `tlsCertificate` Secret supplying certificate and key. A [generated](secrets.md#generated-source) Secret derives its names as that section states; an authored list names the address of every HTTPS endpoint, or that endpoint refuses at `$.spec.endpoints[i]` naming the Secret and the address. Effect material: the server serves it. |
 | `tls.minVersion` | string | no | `TLSv1.2` by default, or `TLSv1.3`. |
 | `listeners` | array | no | Non-empty; defaults to `[{name: https, protocol: https, port: 8443}]`. |
 | `listeners[].name` | string | yes | Unique listener name. |
@@ -238,8 +244,8 @@ endpoint defaults are not inherited across an explicit management change.
 An external ArtifactServer instead requires non-empty `endpoints[]` with
 unique `name` and absolute HTTP(S) `url`. It forbids deployment, retention and
 TLS-serving configuration, and `spec.management: external` is refused at
-admission until a consumer reads one, because every consumer publishes into the
-server it selects.
+admission, `api.invariant` at `$.spec.management`, because every consumer
+publishes into the server it selects.
 
 An `artifactServerEndpoint` consumer has required scalar `serverRef` to an
 ArtifactServer followed by required scalar `endpointRef` to one of its
@@ -285,8 +291,7 @@ trust from the selected object.
 A proxy choice is an atomic closed record with exactly one of scalar
 `proxyRef` to a Proxy or `direct: {}`. The proxy arm also permits optional
 `endpointRef` and ordered unique `noProxy[]` strings. `direct` accepts neither
-field. Empty objects, null, empty references, conflicting choices, and the
-former `none` selector are invalid. Each `noProxy[]` entry is `*`, a host
+field. Empty objects, null, empty references and conflicting choices are invalid. Each `noProxy[]` entry is `*`, a host
 name, a `.domain` or `*.domain` suffix, an IP address or a CIDR block, each
 name or address optionally with `:port` and an IPv6 address bracketed before
 one, in at most 1024 bytes. An IP or CIDR matches an IP literal without

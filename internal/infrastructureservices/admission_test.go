@@ -237,6 +237,24 @@ func TestWildcardBindPreservesEndpointFamilies(t *testing.T) {
 	}
 }
 
+func TestAWildcardBindWithoutAnEndpointRefusesAtTheEndpointsField(t *testing.T) {
+	for _, kind := range []api.Kind{api.Proxy, api.DNSServer, api.NTPServer, api.Registry} {
+		for _, bind := range []string{"0.0.0.0", "::"} {
+			t.Run(string(kind)+"/"+bind, func(t *testing.T) {
+				spec := m("management", "managed", "machineRef", "host", "bindAddress", bind)
+				issues := validateWildcardProbes(kind, spec)
+				if len(issues) != 1 || issues[0].Field != "$.spec.endpoints" || issues[0].Code != "api.invariant" || issues[0].Remediation == "" {
+					t.Fatalf("issues: %v", issues)
+				}
+				withEndpoint := spec.With("endpoints", list(m("name", "a", "addressRef", "a")))
+				if issues := validateWildcardProbes(kind, withEndpoint); len(issues) != 0 {
+					t.Fatalf("an endpoint proves readiness, got %v", issues)
+				}
+			})
+		}
+	}
+}
+
 func TestDerivationReadsAllEndpointsBeforeSelectingFamily(t *testing.T) {
 	host := obj(api.Machine, "host", m("network", m("addresses", list(m("name", "a", "address", "2001:db8::1"), m("name", "b", "address", "2001:db8::2"), m("name", "c", "address", "192.0.2.1"), m("name", "dns", "address", "host.example.test")))))
 	c := api.NewCatalog([]api.Object{host})

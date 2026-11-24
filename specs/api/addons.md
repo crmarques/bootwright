@@ -20,9 +20,9 @@ acceptance implies no execution support; all declarations obey
 
 References are plain scalar names in fixed namespaces: `clusterRef` names a
 `OpenShiftCluster`, `profileRefs` name `ClusterAddonProfile` objects,
-`addonRefs` name `ClusterAddon` objects, and `secretRefs` name
-`Secret` objects, each effect material that a binding places in its cluster as
-an [owned Secret](../add-ons.md#owned-secrets). [Environment kind defaults](environment.md#kind-defaults)
+`addonRefs` name `ClusterAddon` objects, and a step's `secretRefs` name
+`Secret` objects, effect material that no step reads, so they are admitted and
+[inert](#steps). [Environment kind defaults](environment.md#kind-defaults)
 may supply only the fields permitted by that closed contract; this page owns
 their kind-specific validation and built-in defaults.
 
@@ -71,37 +71,33 @@ effective readiness check after the readiness defaults below apply.
 | `namespace.labels` | map of string to string | no | `{}` | Kubernetes label keys and values. |
 | `operatorGroup` | object | no | — | Optional OperatorGroup. |
 | `operatorGroup.name` | string | no | `namespace.name` | Applies only when the OperatorGroup block is present. |
-| `operatorGroup.targetNamespaces` | array of strings | no | `[namespace.name]` | Ordered non-empty namespace strings; an authored list replaces this default. |
+| `operatorGroup.targetNamespaces` | array of strings | no | `[namespace.name]` | Ordered namespace names, each non-empty; an authored list replaces this default. |
 | `catalogSource` | object | no | — | Optional shipped CatalogSource. |
-| `catalogSource.name` | string | conditional | — | Required when the block is present; a DNS label other than `redhat-operators`, `certified-operators`, `community-operators` and `redhat-marketplace`. |
+| `catalogSource.name` | string | conditional | — | Required when the block is present; as the package [`catalogSource.name`](#subscription). |
 | `catalogSource.image` | string | conditional | — | Required when the block is present. |
-| `catalogSource.priority` | integer | conditional | — | Required when the block is present, with the package [Subscription](#subscription) rule; an authored value is below `-100` and within a 32-bit signed integer. |
+| `catalogSource.priority` | integer | conditional | — | Required when the block is present; an authored value is below `-100` and within a 32-bit signed integer, which the package [`catalogSource.priority`](#subscription) does not bound. |
 | `catalogSource.pollInterval` | string | no | — | Go duration of at least `1m`. |
 | `catalogSource.securityContextConfig` | string | no | `restricted` | `legacy` or `restricted`. |
 | `subscription.name` | string | no | `subscription.package` | Kubernetes Subscription name. |
 | `subscription.package` | string | yes | — | OLM package. |
 | `subscription.channel` | string | yes | — | OLM channel. |
-| `subscription.startingCSV` | string | yes | — | The exact CSV installed first, and the only CSV Bootwright approves; a later CSV the owner approves reads complete only through the [replacement chain](../add-ons.md#observation-and-continuation). |
+| `subscription.startingCSV` | string | yes | — | As the package [`startingCSV`](#subscription). |
 | `subscription.source` | string | yes after normalization | `catalogSource.name` when shipped | CatalogSource name. |
-| `subscription.sourceNamespace` | string | yes after normalization | `openshift-marketplace` | CatalogSource namespace; `openshift-marketplace` when `catalogSource` is present. |
+| `subscription.sourceNamespace` | string | yes after normalization | `openshift-marketplace` | As the package [`sourceNamespace`](#subscription). |
 | `customResources` | array of objects | no | `[]` | Ordered `{gate, resource}` entries. |
 | `customResources[].gate` | array of checks | yes | — | Non-empty; each check is one of the [readiness arms](#readiness) and must hold before the resource is created. |
 | `customResources[].resource` | object | yes | — | One raw Kubernetes resource preserved as a structured map. |
 
 An authored `subscription` and `catalogSource` follow the package
-[Subscription](#subscription) rules: Bootwright subscribes `Manual` and
-approves only `startingCSV`. A `customResources` entry is `{gate, resource}`.
-`catalogSource.name` is a DNS label.
+[Subscription](#subscription) rules, with the stricter `priority` and
+`pollInterval` bounds of [Executable OLM add-ons](#executable-olm-add-ons):
+Bootwright subscribes `Manual` and approves only `startingCSV`.
+A `customResources` entry is `{gate, resource}`.
 
 Omitting `operatorGroup` requests no group. `operatorGroup: {}` requests the
 namespace-named group targeting that namespace. An explicit `targetNamespaces`
 list remains as authored, including an empty list. Empty authored names are
 invalid, not a request for a default. `namespace.create` is unknown.
-
-A shipped catalog requires name, image and priority, and subscription source
-must match its name. Bootwright creates the CatalogSource in
-`openshift-marketplace`, so `subscription.sourceNamespace` is
-`openshift-marketplace` when a shipped `catalogSource` is present.
 
 ### Executable OLM add-ons
 
@@ -109,43 +105,37 @@ An `olm` arm of the executable shape installs when a binding selects it, as one
 [instance](../add-ons.md#instances-and-blocks) of the add-on instance
 capability under the same [trust boundary](../add-ons.md#trust-boundary) as a
 built-in package. The shape has a managed namespace, an OperatorGroup targeting
-that namespace or every namespace, a required `startingCSV`, an owned catalog
-with an explicit `priority`, custom resources of its own namespace each behind a
-gate, and no Secret placement, manifest set or step. Every other shape
-validates and is refused at planning. Admission refuses these faults, each at its
-own indexed field:
+that namespace or every namespace, a required `startingCSV`, an optional owned
+catalog that then states an explicit `priority`, custom resources of its own
+namespace each behind a gate, and no Secret placement, manifest set or step.
+An explicit empty `targetNamespaces` requests an AllNamespaces OperatorGroup,
+rendered with no `spec`; a one-entry list equal to `namespace.name` requests
+OwnNamespace; any other list is refused at `plan` ([refusal
+table](../add-ons.md#refusal-table)). Every other shape validates and is
+refused at `plan`. The table below lists the shape rules admission refuses,
+not every refusal of the page.
 
-- `namespace.name` is `default`, `openshift` or begins `openshift-` or `kube-`;
-  `namespace.labels` holds a key whose prefix, the part before `/`, is
-  `bootwright.io`, `openshift.io`, `kubernetes.io` or `k8s.io`, or a subdomain
-  of one of them.
-- `catalogSource.priority` is not below `-100`, the priority of
-  `redhat-operators`, because the catalog serves dependency resolution for every
-  Subscription on the cluster, or does not fit a 32-bit signed integer;
-  `catalogSource.pollInterval` is shorter than `1m`.
-- A custom resource's `metadata` holds a member other than `name`, `namespace`,
-  `labels` and `annotations`, or a `labels` or `annotations` key under
-  `bootwright.io/`.
-- A custom resource lacks `metadata.namespace` or sets one other than
-  `namespace.name`.
-- A custom resource's API group is empty, has no dot, or is, or is a subdomain
-  of, `k8s.io`, `kubernetes.io`, `openshift.io`, `coreos.com`, `bootwright.io`,
-  `open-cluster-management.io`, `cert-manager.io` or `argoproj.io`, compared in
-  lower case.
-- A custom resource is a `Secret`, whatever its letter case: an authored add-on
-  places no Secret.
-- A custom resource fails the content-safety rules of the
-  [cluster object program](../add-ons.md#the-cluster-object-program): a
-  `status`, `managedFields` or owner-mark member, or a template delimiter.
-- A custom resource's gate has no `resourceExists` check of
-  `apiextensions.k8s.io/v1` `CustomResourceDefinition` named `<plural>.<group>`,
-  because Bootwright cannot derive the plural from the kind, or has several, so
-  that no definition is bound to the resource's kind: the gate names exactly
-  one, the definition of the resource's own kind.
+| Fault | Code | Field |
+| --- | --- | --- |
+| `namespace.name` is `default`, `openshift` or begins `openshift-` or `kube-` | `api.invariant` | `spec.olm.namespace.name` |
+| `namespace.labels` holds a key whose prefix, the part before `/`, is `bootwright.io`, `openshift.io`, `kubernetes.io` or `k8s.io`, or a subdomain of one of them | `api.invariant` | `spec.olm.namespace.labels` |
+| `catalogSource.priority` is not below `-100`, the priority of `redhat-operators`, because the catalog serves dependency resolution for every Subscription on the cluster, or does not fit a 32-bit signed integer | `api.value` | `spec.olm.catalogSource.priority` |
+| `catalogSource.pollInterval` is shorter than `1m` | `api.value` | `spec.olm.catalogSource.pollInterval` |
+| With a shipped `catalogSource`, `subscription.source` differs from its name | `api.invariant` | `spec.olm.subscription.source` |
+| With a shipped `catalogSource`, `subscription.sourceNamespace` is not `openshift-marketplace`, where Bootwright creates the CatalogSource | `api.invariant` | `spec.olm.subscription.sourceNamespace` |
+| A custom resource's `metadata` holds a member other than `name`, `namespace`, `labels` and `annotations` | `api.invariant` | `spec.olm.customResources[i].resource.metadata.<member>` |
+| A custom resource's `labels` or `annotations` holds a key under `bootwright.io/` | `api.invariant` | `spec.olm.customResources[i].resource.metadata.labels` or `.annotations` |
+| A custom resource lacks `metadata.namespace` | `api.required` | `spec.olm.customResources[i].resource.metadata.namespace` |
+| A custom resource sets a `metadata.namespace` other than `namespace.name` | `api.invariant` | `spec.olm.customResources[i].resource.metadata.namespace` |
+| A custom resource's API group is empty, has no dot, or is, or is a subdomain of, `k8s.io`, `kubernetes.io`, `openshift.io`, `coreos.com`, `bootwright.io`, `open-cluster-management.io`, `cert-manager.io` or `argoproj.io`, compared in lower case | `api.invariant` | `spec.olm.customResources[i].resource.apiVersion` |
+| A custom resource is a `Secret`, whatever its letter case: an authored add-on places no Secret | `api.invariant` | `spec.olm.customResources[i].resource.kind` |
+| A custom resource fails the content-safety rules of the [cluster object program](../add-ons.md#the-cluster-object-program): a `status`, `managedFields` or owner-mark member, or a template delimiter | `api.invariant` | `spec.olm.customResources[i].resource` |
+| A custom resource's gate has no `resourceExists` check of `apiextensions.k8s.io/v1` `CustomResourceDefinition` named `<plural>.<group>`, because Bootwright cannot derive the plural from the kind, or has several, so that no definition is bound to the resource's kind: the gate names exactly one, the definition of the resource's own kind | `api.invariant` | `spec.olm.customResources[i].gate` |
+| The executable shape's name is longer than `addons.MaxPackageNameBytes`, because an add-on selected as an instance is named like a package | `api.invariant` | `$.metadata.name` |
 
-- The name is longer than `addons.MaxPackageNameBytes`, because an add-on
-  selected as an instance is named like a package. It is reported at
-  `$.metadata.name` for the executable shape only.
+The table names no message. `TestExecutableOLMShapeAdmitsAndRefusesEachRule`
+holds each row but the name bound, which
+`TestAuthoredNameOverTheLimitIsRefusedAtAdmission` holds.
 
 Selection compiles an executable add-on into an instance named after the
 add-on, with the digest of its normalized spec as its descriptor. Its
@@ -324,7 +314,9 @@ duration of at most `5h50m` that is a whole number of seconds and defaults to
 the package's readiness timeout; a fraction of a second is refused at
 `$.spec.packages.<name>.timeout` with `api.value`. A package's own rules check
 its configuration against the bound `OpenShiftCluster` and the effective
-catalog, never a live system.
+catalog, never a live system. A package field that names a `Secret` is effect
+material: the package places that Secret in the cluster as an
+[owned Secret](../add-ons.md#owned-secrets).
 
 Registry construction proves that every provided capability token has a reader or is
 in `DefinedCapabilityTokens`, so adding a token without a reader is an API edit. `NewRegistryWithExamples` accepts explicit
@@ -347,9 +339,13 @@ member:
 | `catalogSource` | object | no | — | A CatalogSource Bootwright creates in `openshift-marketplace`. |
 | `catalogSource.name` | string | yes, in the block | — | DNS label other than `redhat-operators`, `certified-operators`, `community-operators` and `redhat-marketplace`. |
 | `catalogSource.image` | string | yes, in the block | — | Index image reference, by tag or digest as the operator chooses. |
-| `catalogSource.priority` | integer | yes, in the block | — | Stated explicitly, because a catalog without one outranks `redhat-operators`. The catalog serves dependency resolution for every Subscription on the cluster, so a priority above that of `redhat-operators` (-100) lets it supply their dependencies, plans that an operator-managed package approves included. |
+| `catalogSource.priority` | integer | yes, in the block | — | Stated explicitly, because a catalog without one outranks `redhat-operators`; a catalog with a priority of `-100` or above can supply dependencies to every Subscription on the cluster. Package admission sets no bound on it. |
 | `catalogSource.pollInterval` | string | no | — | Positive Go duration. |
 | `catalogSource.securityContextConfig` | string | no | `restricted` | `legacy` or `restricted`. |
+
+Not yet met: a package's `catalogSource.priority` refuses a value of `-100`
+or above, as an authored add-on's does; tracked as
+[B1775](../milestones/m4.md#b1775).
 
 ### Package nmstate
 
@@ -457,12 +453,10 @@ The pool faults are [MetalLB pool admission](#metallb-pool-admission).
 
 IBM Fusion Data Foundation in external mode against a Ceph cluster the
 context manages ([coverage](../add-on-coverage.md#fdf)). It installs the
-operator package `odf-operator`, which IBM's catalog serves. Naming
-`redhat-operators` as `subscription.source` is expected to install Red Hat
-OpenShift Data Foundation; that `redhat-operators` serves the same package
-name, namespace and objects is unverified and is re-verified by
-[B761](../milestones/m4.md#b761) with `oc get packagemanifest odf-operator -n
-openshift-marketplace` on a Red Hat catalog. It provides `dataFoundation`.
+operator package `odf-operator` from the catalog that `subscription.source`
+names, an owned `catalogSource` or a default catalog, `redhat-operators` among
+them, and provides `dataFoundation`. Whether `redhat-operators` serves
+`odf-operator` is verified by [B761](../milestones/m4.md#b761).
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
@@ -481,15 +475,14 @@ Rules, each at its field under `$.spec.packages.fdf`:
 | A TLS object gateway reaches no cluster trust | `api.invariant` | `cephConsumerRef` | `CephConsumer/<consumer> attaches an object gateway over TLS, and OpenShiftCluster/<cluster> adds no trust bundle to its cluster-wide trusted CA` | `add the gateway certificate's issuing CA to spec.install.additionalTrustBundleRefs of <cluster> under additionalTrustBundlePolicy Always` |
 
 The default catalogs are `redhat-operators`, `certified-operators`,
-`community-operators` and `redhat-marketplace`. The trust rule holds when the
-cluster selects at least one additional trust bundle under the effective
-policy `Always`, which [B195](../milestones/delivered.md#b195) defines. It is a
-conservative Bootwright choice, not a native fact: v1 observed NooBaa failing
-with `x509` against a private RGW CA until the issuing CA was in the
-cluster-wide trusted bundle, the trust source in 4.20 to 4.22 is not
-established, and [B761](../milestones/m4.md#b761) re-verifies it. It also
-refuses a gateway whose certificate already chains to a CA in cluster trust,
-because admission cannot see that trust.
+`community-operators` and `redhat-marketplace`. The trust refusal applies
+whenever the cluster selects no additional trust bundle under the effective
+policy `Always`, which [B195](../milestones/delivered.md#b195) defines,
+including for a gateway whose certificate already chains to a CA in cluster
+trust, because admission cannot see that trust. Why: the rule is a conservative choice; the
+[NooBaa certificate lessons](../../.agents/knowledge/data-foundation-external-mode.md#noobaa-and-the-rgw-certificate)
+hold the observation, and [B761](../milestones/m4.md#b761) verifies the trust
+source.
 
 
 ### Package acm
@@ -530,7 +523,7 @@ Red Hat OpenShift GitOps with its default Argo CD instance, a
 | `bootstrap.targetRevision` | string | yes, in the block | — | Branch, tag or commit; non-empty, no whitespace. |
 | `bootstrap.path` | string | yes, in the block | — | Relative path in the repository, `.` for its root; no leading `/` and no `..` segment. |
 | `bootstrap.destinationNamespace` | string | yes, in the block | — | DNS label; the namespace for manifests that name none. Naming `openshift-gitops` lets the repository's unscoped manifests write Argo CD's own namespace, including the placed repository Secret. |
-| `bootstrap.credentialsRef` | string | no | — | Name of a Secret of type `usernamePassword` read by Argo CD for the repository. Effect material: the package places it in the cluster as an [owned Secret](../add-ons.md#owned-secrets). |
+| `bootstrap.credentialsRef` | string | no | — | Name of a Secret of type `usernamePassword` read by Argo CD for the repository. Effect material. |
 | `bootstrap.access.clusterRole` | string | no | — | Name of a ClusterRole granted to the default instance's application controller. |
 | `bootstrap.sync.automated` | boolean | no | `true` | Argo CD synchronizes automatically. |
 | `bootstrap.sync.prune` | boolean | no | `false` | Automated sync deletes what leaves the repository. |
@@ -539,9 +532,9 @@ Red Hat OpenShift GitOps with its default Argo CD instance, a
 
 | Fault | Code | Field | Message | Remedy |
 | --- | --- | --- | --- | --- |
-| The repository URL is not usable | `api.field` | `$.spec.packages.gitops.bootstrap.repoURL` | `bootstrap repoURL of package gitops is not an https URL with a host and no query or fragment` | `set the https URL of the repository` |
-| The repository URL carries credentials | `api.field` | `$.spec.packages.gitops.bootstrap.repoURL` | `bootstrap repoURL of package gitops carries user information` | `remove the user information and name a usernamePassword Secret in bootstrap.credentialsRef` |
-| The path leaves the repository | `api.field` | `$.spec.packages.gitops.bootstrap.path` | `bootstrap path <path> of package gitops leaves the repository` | `set a relative path without .. segments` |
+| The repository URL is not usable | `api.value` | `$.spec.packages.gitops.bootstrap.repoURL` | `bootstrap repoURL of package gitops is not an https URL with a host and no query or fragment` | `set the https URL of the repository` |
+| The repository URL carries credentials | `api.value` | `$.spec.packages.gitops.bootstrap.repoURL` | `bootstrap repoURL of package gitops carries user information` | `remove the user information and name a usernamePassword Secret in bootstrap.credentialsRef` |
+| The path leaves the repository | `api.value` | `$.spec.packages.gitops.bootstrap.path` | `bootstrap path <path> of package gitops leaves the repository` | `set a relative path without .. segments` |
 | Prune or self-heal without automation | `api.invariant` | `$.spec.packages.gitops.bootstrap.sync` | `bootstrap sync prune and selfHeal of package gitops need sync.automated` | `set sync.automated to true, or remove prune and selfHeal` |
 
 Diagnostics never echo a repository URL, which could hold credentials.
@@ -561,28 +554,27 @@ GitLab through the GitLab Operator, requiring `certManager`
 ([coverage](../add-on-coverage.md#gitlab)). GitLab's host names are
 `gitlab.`, `registry.` and `kas.` under the bound cluster's applications
 domain, `apps.<cluster>.<zone>`, which the cluster's wildcard record already
-resolves; no field changes the domain. Every referenced Secret is placed in
-the cluster as an [owned Secret](../add-ons.md#owned-secrets); Bootwright never
-parses, validates or repeats its contents.
+resolves; no field changes the domain. Bootwright never parses, validates or
+repeats the contents of a referenced Secret.
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
 | `subscription` | object | yes | — | The [shared block](#subscription); `source` is required, with no default. |
-| `timeout` | string | no | `1h` | Positive Go duration of at most `5h50m`. |
+| `timeout` | string | no | `1h` | As every package's `timeout`. |
 | `chartVersion` | string | yes | — | Semantic version `<major>.<minor>.<patch>` of the GitLab chart the `GitLab` resource names; the operator chooses one the installed operator release lists. |
-| `rootPasswordRef` | string | yes | — | `token` Secret holding the initial root password; GitLab reads it only when it first initializes its database. Effect material: the package places it in the cluster as an [owned Secret](../add-ons.md#owned-secrets). |
-| `tlsCertificateRef` | string | yes | — | `tlsCertificate` Secret whose certificate covers the three host names, for example a wildcard for the applications domain. Effect material: the package places it in the cluster as an [owned Secret](../add-ons.md#owned-secrets). |
-| `licenseRef` | string | no | — | `opaque` Secret holding an Enterprise Edition license. Effect material: the package places it in the cluster as an [owned Secret](../add-ons.md#owned-secrets). |
+| `rootPasswordRef` | string | yes | — | `token` Secret holding the initial root password; GitLab reads it only when it first initializes its database. Effect material. |
+| `tlsCertificateRef` | string | yes | — | `tlsCertificate` Secret whose certificate covers the three host names, for example a wildcard for the applications domain. Effect material. |
+| `licenseRef` | string | no | — | `opaque` Secret holding an Enterprise Edition license. Effect material. |
 | `database.host` | string | yes | — | DNS name or IP address of a PostgreSQL server reachable from the cluster. |
 | `database.port` | integer | no | `5432` | `1..65535`. |
 | `database.name` | string | no | `gitlabhq_production` | Non-empty name of an existing empty database. |
 | `database.username` | string | yes | — | Non-empty user name with full access to the database. |
-| `database.passwordRef` | string | yes | — | `token` Secret holding that user's password. Effect material: the package places it in the cluster as an [owned Secret](../add-ons.md#owned-secrets). |
+| `database.passwordRef` | string | yes | — | `token` Secret holding that user's password. Effect material. |
 | `redis.host` | string | yes | — | DNS name or IP address of a standalone Redis or Valkey server reachable from the cluster. |
 | `redis.port` | integer | no | `6379` | `1..65535`. |
-| `redis.passwordRef` | string | no | — | `token` Secret; when absent, GitLab connects without authentication. Effect material: the package places it in the cluster as an [owned Secret](../add-ons.md#owned-secrets). |
-| `objectStorage.connectionRef` | string | yes | — | `opaque` Secret whose value is the chart's consolidated object-storage connection document. Effect material: the package places it in the cluster as an [owned Secret](../add-ons.md#owned-secrets). |
-| `objectStorage.registryRef` | string | yes | — | `opaque` Secret whose value is the registry's storage driver document. Effect material: the package places it in the cluster as an [owned Secret](../add-ons.md#owned-secrets). |
+| `redis.passwordRef` | string | no | — | `token` Secret; when absent, GitLab connects without authentication. Effect material. |
+| `objectStorage.connectionRef` | string | yes | — | `opaque` Secret whose value is the chart's consolidated object-storage connection document. Effect material. |
+| `objectStorage.registryRef` | string | yes | — | `opaque` Secret whose value is the registry's storage driver document. Effect material. |
 | `objectStorage.registryBucket` | string | no | `gitlab-registry-storage` | The bucket the registry document names. |
 | `gitaly.storageClass` | string | yes | — | DNS subdomain naming the StorageClass of Gitaly's ReadWriteOnce volume. |
 | `gitaly.size` | string | no | `50Gi` | Kubernetes quantity in `Gi` or `Ti`, at least `1Gi`. |
@@ -639,7 +631,7 @@ a supplied readiness-check list. For a selected package, normalization
 materializes `timeout`, `subscription.source` (except for `fdf` and `gitlab`,
 which require it), `subscription.sourceNamespace` and
 `subscription.catalogSource.securityContextConfig`; for `metallb`, each
-pool's `autoAssign`; for `fdf`, `defaultStorageClass`; for `acm`,
+pool's `autoAssign`; for `fdf`, `defaultStorageClass` and `multiCloudGateway`; for `acm`,
 `mce.source`, `mce.sourceNamespace` and `hub.disableHubSelfManagement`; for
 `gitops` with a `bootstrap`, the three `sync` members; and for `gitlab`, `database.port`, `database.name`, `redis.port`,
 `objectStorage.registryBucket` and `gitaly.size`.

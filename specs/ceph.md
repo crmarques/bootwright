@@ -1327,7 +1327,13 @@ disk its Machine declares as a
 that `serialNumber`, no `wwn` and a non-retain `onRemoval`, whose `sizeBytes` it
 takes, because physical retirement needs that erase target anyway. A serial the
 Machine declares no such entry for, one whose entry declares a `wwn`, and the
-root disk's serial refuse `api.invariant` at the selector. Preparation refuses
+root disk's serial refuse `api.invariant` at the selector. A serial outside the
+selector's grammar, such as one a Machine's `serialNumber` admits that is longer
+than 128 characters or holds `/` or `=`, cannot be named by the serial form and
+refuses `api.invariant` at the selector; select that disk by its
+`/dev/disk/by-id/wwn-0x` path
+(`TestASerialOSDPathNamesOnlyADiskItsInstalledBareMetalMachineDeclaresWithoutWWN`).
+Preparation refuses
 `device-root` a disk reporting a serial-declared root's serial.
 It resolves the serial path on the live host, before the first destructive
 effect, to the one whole disk, a hidden NVMe path node (`hidden` reads `1`)

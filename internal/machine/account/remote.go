@@ -329,6 +329,8 @@ func interrupted(ctx context.Context) bool {
 	}
 }
 
+const remoteSessionBound = 90 * time.Second
+
 const prepareTerminal = `if [ ! -t 0 ] || ! /usr/bin/stty raw -echo; then
 	printf '%s\n' "$1-denied"
 	exit 1
@@ -341,7 +343,7 @@ func (r Remote) run(ctx context.Context, session machine.Session, password []byt
 	if r.Launcher == nil {
 		return nil, fmt.Errorf("SSH launcher unavailable")
 	}
-	bounded, cancel := context.WithTimeout(ctx, 90*time.Second)
+	bounded, cancel := context.WithTimeout(ctx, remoteSessionBound)
 	defer cancel()
 	seen := observation{output: nativeexec.Refusing(64 << 10), report: &sudoReport{line: make([]byte, 0, 256)}}
 	defer seen.report.judge()

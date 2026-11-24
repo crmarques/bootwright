@@ -82,9 +82,11 @@ Parameters are flat and type-scoped:
 A type the [type table](../secrets.md#acquisition-and-commands) does not mark generated cannot use `generated`. A parameter not
 consumed by the selected type is rejected. A generated `tlsCertificate` that
 authors neither `dnsNames` nor `ipAddresses` derives both from what its
-consumers serve it at: every address of an HTTPS endpoint of an
-`ArtifactServer` whose `tls.secretRef` names it, plus the `fqdn` address of
-that server's `machineRef` Machine, and the `bindAddress` of each libvirt
+consumers serve it at: every address of an HTTPS endpoint of a managed
+`ArtifactServer`, or of an endpoint of a managed `Registry`, whose
+`tls.secretRef` names it, plus the `fqdn` address of that server's `machineRef`
+Machine (`CertificateNames`, held for the Registry by
+`TestAManagedRegistryServesHTTPSFromItsCertificateToItsCredential`), and the `bindAddress` of each libvirt
 provider's emulated BMC whose `certificateRef` names it (never the host's
 `fqdn`, since the BMC is dialed at its bind address), each list sorted and
 without repeats; an IP goes to `ipAddresses` and a name to `dnsNames`. Authoring

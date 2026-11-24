@@ -104,7 +104,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	issues = api.AppendIssues(issues, validateCustomizationEntries(custom)...)
 	issues = api.AppendIssues(issues, validateSubscription(s, c)...)
 	issues = api.AppendIssues(issues, validateUpdates(o, c)...)
-	issues = api.AppendIssues(issues, validateServiceChoices(custom)...)
+	issues = api.AppendIssues(issues, validateServiceChoices(custom, len(consumers(o, c)) != 0)...)
 	issues = api.AppendIssues(issues, validateInstallerSources(o, c)...)
 	issues = api.AppendIssues(issues, validateSubscriptionSource(o, c)...)
 	issues = api.AppendIssues(issues, validateServedNames(o, c)...)
@@ -294,11 +294,15 @@ func serviceOverlap() api.Issue {
 		"remove the service from spec.customizations.services.enabled or from spec.customizations.services.disabled")
 }
 
-func validateServiceChoices(custom api.Value) []api.Issue {
+func validateServiceChoices(custom api.Value, consumed bool) []api.Issue {
 	var issues []api.Issue
 	enabled, disabled := custom.Get("services", "enabled").Strings(), custom.Get("services", "disabled").Strings()
 	for _, service := range enabled {
-		if slices.Contains(disabled, service) {
+		switch {
+		case slices.Contains(disabled, service) && service == "sshd" && consumed:
+			issues = api.AppendIssues(issues, issue("$.spec.customizations.services", "a profile a Machine installs keeps sshd enabled",
+				"remove sshd from spec.customizations.services.disabled"))
+		case slices.Contains(disabled, service):
 			issues = api.AppendIssues(issues, serviceOverlap())
 		}
 	}

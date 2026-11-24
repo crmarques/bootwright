@@ -30,6 +30,8 @@ type Grant struct {
 	Shell                              bool
 }
 
+const resolveBound = 15 * time.Second
+
 func (s Service) Validate(ctx context.Context, contextName string, catalog api.Catalog, data []byte) error {
 	_, err := s.Expand(ctx, contextName, catalog, data)
 	return err
@@ -40,7 +42,7 @@ func (s Service) Expand(ctx context.Context, contextName string, catalog api.Cat
 	if err != nil {
 		return nil, invalid(err)
 	}
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, resolveBound)
 	defer cancel()
 	resolved := make(map[api.PolicySubject]uint32)
 	grants := make([]Grant, 0, len(policy.Spec.Grants))
@@ -87,7 +89,7 @@ func (s Service) Permissions(ctx context.Context, principal Principal, contextNa
 	if err != nil {
 		return nil, denied(contextName, "active policy is invalid")
 	}
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, resolveBound)
 	defer cancel()
 	grants := []Grant{}
 	resolved := make(map[api.PolicySubject]uint32)

@@ -95,3 +95,15 @@ func TestB479NetworkBoundListenersCoexistWithAVIP(t *testing.T) {
 		})
 	}
 }
+
+func TestListenersOfOneServiceNeverConflict(t *testing.T) {
+	for _, services := range [][]api.Value{
+		{b479Service("alertmanager")},
+		{b479Service("loki")},
+		{b479Service("loki"), b479Service("promtail")},
+	} {
+		if found := addedServiceIssues(graphIssues(t, services)); len(found) != 0 {
+			t.Fatalf("default %s refused against its own listeners: %#v", services[len(services)-1].Get("service_type").Text(), found)
+		}
+	}
+}

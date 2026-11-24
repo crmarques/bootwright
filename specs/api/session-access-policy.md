@@ -7,7 +7,7 @@ metadata labels. Its name equals the context name. It lives in root-owned
 context state and is removed when that context is deleted. Setting it
 validates the document, subjects and targets before atomically replacing the
 active policy. An empty `spec.grants: []` revokes delegated access for new
-requests. Environment imports have their own input boundary.
+requests.
 
 An administrator manages the policy through its lifecycle with four commands.
 `policy set --check` runs the same validation and writes nothing; either form
@@ -60,7 +60,10 @@ before the session quotes them for the remote shell.
 `rsh: {}` grants an interactive shell as the named remote account.
 The administrator approves the full behavior of each permitted program,
 including any programs it can invoke. The input is one UTF-8 YAML document
-of at most 64 KiB, with at most 128 grants and 64 distinct subjects.
+of at most 64 KiB, with at most 128 grants and 64 distinct subjects. Every
+scalar is a YAML string; aliases, anchors, nulls, unknown fields and duplicate
+fields refuse `access.policy`, held by `TestSessionPolicyRejectsInvalidDocuments`
+and `TestSessionPolicyAcceptsOnlyPlainStringYAML`.
 
 ## Identity and targets
 
@@ -73,6 +76,15 @@ User grants match the UID. Group grants match the primary or supplementary
 GIDs returned for the caller. Directory-side membership and cache freshness
 follow the controller's provider configuration.
 
+Each admission and each `policy permissions` call reads the stored policy and
+resolves every subject of every grant again within `resolveBound`, 15 seconds;
+no ID resolved at installation is reused. A policy that cannot be read or
+decoded, a subject that does not resolve within the bound, or a target absent
+from the effective context graph for a grant that matches the caller refuses
+the whole request with `access.denied`, held by
+`TestPolicyPermissionsRefuseUnusableState` and
+`TestAdmissionResolvesEverySubjectAgainAndAnyFailureDeniesTheRequest`.
+
 A grant applies to the union of its `machineRefs` and the Machines referenced
 by every declared node of its `clusterRefs`. Each cluster reference selects
 an OpenShiftCluster or managed CephCluster in the context. External Ceph
@@ -84,10 +96,11 @@ which nodes an invocation requests, including its default administrator node.
 
 ## Delegated execution
 
-The normal unprivileged CLI relaunches SSH session commands and
-`policy permissions` through the following root-owned installed entry in
-sudoers. Use the actual installed path and the controller's spelling for the
-delegated group. Manage the rule on the controller with `visudo`.
+For SSH session commands and `policy permissions`, a caller that sudo does not
+admit to the ordinary command is relaunched through the delegated entry of the
+root-owned installed executable, which this sudoers rule admits. Use the actual
+installed path and the controller's spelling for the delegated group. Manage
+the rule on the controller with `visudo`.
 
 ```sudoers
 %PLATFORM_SUPPORT ALL=(root) /usr/local/bin/bootwright __bootwright_delegate *
@@ -95,24 +108,32 @@ delegated group. Manage the rule on the controller with `visudo`.
 
 The delegated entry admits `machine exec`, `machine rsh`, `cluster exec`,
 `cluster rsh` and `policy permissions`. Grant wider sudo access only to
-trusted administrators. Before it relaunches, the unprivileged CLI asks sudo
-as the caller, with `sudo -l -u #0 -- <bootwright> <arguments>`, whether the
-same command is permitted through the ordinary entry. Sudo authenticates a
+trusted administrators. The unprivileged CLI chooses the entry once per
+invocation:
+
+| Invocation | Probe | Relaunch |
+| --- | --- | --- |
+| No acquisition-route variables and no enrollment input | `sudo -l -u #0 -- <bootwright> <arguments>`, as the caller, with `-n` when the invocation is unattended | The ordinary command when sudo lists it; the delegated entry when sudo refuses the listing or the listing fails to run |
+| Acquisition-route variables or enrollment input | None | The delegated entry |
+
+Sudo admits, authenticates and logs the ordinary command under its own rule,
+and the session follows the identity rules of the
+[CLI](../cli.md#machine-ssh-sessions) with no grant. Sudo authenticates a
 listing by its `listpw` setting, and the relaunch reuses that credential
 while `timestamp_timeout` keeps it, so the operator normally answers one
-prompt; `-n` keeps the listing from prompting without a terminal, where its
-refusal text is discarded. When sudo lists
-it, the CLI relaunches the ordinary command, which sudo admits, authenticates
-and logs under its own rule, and the session follows the identity rules of
-the [CLI](../cli.md#machine-ssh-sessions) with no grant. Otherwise, including
-an invocation that carries acquisition-route variables, it relaunches the
-delegated entry. An administrator therefore types the same command as
-everyone else. A delegate-only caller's listing is a refused sudo check,
-which sudo may log and, under its mail settings, report.
+prompt; the refusal text of an unattended or quiet listing is discarded. An
+administrator therefore types the same command as everyone else. A
+delegate-only caller's listing is a refused sudo check, which sudo may log and,
+under its mail settings, report. `TestADelegatedCommandTakesTheOrdinaryEntryOnlyWhenSudoListsItForTheCaller`
+and `TestADelegatedCommandKeepsTheDelegatedEntryWhenTheListingCannotAnswer` hold
+the table.
 Administrators manage policy with `bootwright policy set`.
 
 A delegated session needs the configured remote account, key authentication
-and pre-established host trust. The authorized target and the grant come from
+and pre-established host trust: a delegated session never records host trust,
+so a Machine with no declared, installed or recorded host key refuses
+`trust.identity`, and a context administrator enrolls it with `machine trust`.
+The authorized target and the grant come from
 one effective context graph. Each target in a batch needs one complete matching
 grant for the verified caller, Machine, remote account and operation. With
 no grant, Bootwright refuses before lending credentials or opening any

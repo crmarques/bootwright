@@ -269,3 +269,65 @@ func policyCatalog(roster ...string) api.Catalog {
 	}
 	return api.NewCatalog(objects)
 }
+
+func TestAdmissionResolvesEverySubjectAgainAndAnyFailureDeniesTheRequest(t *testing.T) {
+	var lookups int
+	service := testPolicy()
+	inner := service.Lookup
+	service.Lookup = func(ctx context.Context, group bool, name string) (uint32, error) {
+		lookups++
+		return inner(ctx, group, name)
+	}
+	catalog := policyCatalog("worker")
+	caller := Principal{UID: 3000, Groups: []uint32{1001}}
+	for range 2 {
+		before := lookups
+		if _, err := service.Permissions(t.Context(), caller, "lab", catalog); err != nil {
+			t.Fatal(err)
+		}
+		if lookups-before != 4 {
+			t.Fatalf("an admission looked up %d subjects, want all 4 of the policy", lookups-before)
+		}
+	}
+	unmatchedGrantFails := service
+	unmatchedGrantFails.Lookup = func(ctx context.Context, group bool, name string) (uint32, error) {
+		if name == "maintenance" {
+			return 0, errors.New("directory is down")
+		}
+		return inner(ctx, group, name)
+	}
+	if _, err := unmatchedGrantFails.Permissions(t.Context(), caller, "lab", catalog); err == nil ||
+		diagnostics.Of(err)[0].Code != "access.denied" {
+		t.Fatalf("a subject of a grant the caller does not match failed to resolve, error %v, want a denial", err)
+	}
+	if _, err := service.Permissions(t.Context(), caller, "lab", policyCatalog()); err == nil ||
+		diagnostics.Of(err)[0].Code != "access.denied" {
+		t.Fatalf("a matched grant names an absent target, error %v, want a denial", err)
+	}
+}
+
+func TestSessionPolicyAcceptsOnlyPlainStringYAML(t *testing.T) {
+	for name, edit := range map[string]func(string) string{
+		"anchor":         func(p string) string { return strings.Replace(p, "remoteUser: core", "remoteUser: &user core", 1) },
+		"integer scalar": func(p string) string { return strings.Replace(p, "name: shell", "name: 12", 1) },
+		"null":           func(p string) string { return strings.Replace(p, "rsh: {}", "rsh: ~", 1) },
+		"unknown field": func(p string) string {
+			return strings.Replace(p, "remoteUser: core", "remoteUser: core\n      extra: x", 1)
+		},
+		"duplicate field": func(p string) string {
+			return strings.Replace(p, "remoteUser: core", "remoteUser: core\n      remoteUser: core", 1)
+		},
+		"two documents": func(p string) string { return p + "---\n" + p },
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := Decode([]byte(edit(policyFixture)), "lab"); err == nil {
+				t.Fatal("accepted")
+			}
+		})
+	}
+	aliased := strings.Replace(policyFixture, "remoteUser: core\n      exec", "remoteUser: &user core\n      exec", 1)
+	aliased = strings.Replace(aliased, "remoteUser: core\n      rsh", "remoteUser: *user\n      rsh", 1)
+	if _, err := Decode([]byte(aliased), "lab"); err == nil {
+		t.Fatal("accepted an alias")
+	}
+}

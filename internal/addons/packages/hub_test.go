@@ -75,7 +75,7 @@ func TestHubPackageRenderGoldens(t *testing.T) {
 
 func TestGitOpsBootstrapRefusals(t *testing.T) {
 	for _, tc := range []struct{ field, value, code string }{
-		{"repoURL", "http://example.test/repo", "api.field"}, {"repoURL", "https://secret:password@example.test/repo", "api.field"}, {"repoURL", "https://example.test/repo?token=secret", "api.field"}, {"repoURL", "https://example.test/repo#fragment", "api.field"}, {"path", "../repo", "api.field"}, {"path", "/repo", "api.field"}, {"targetRevision", "bad revision", "api.field"},
+		{"repoURL", "http://example.test/repo", "api.value"}, {"repoURL", "https://secret:password@example.test/repo", "api.value"}, {"repoURL", "https://example.test/repo?token=secret", "api.value"}, {"repoURL", "https://example.test/repo#fragment", "api.value"}, {"path", "../repo", "api.value"}, {"path", "/repo", "api.value"}, {"targetRevision", "bad revision", "api.value"},
 	} {
 		t.Run(tc.value, func(t *testing.T) {
 			v := normalizeGitOps(packageTestConfig("gitops").With("bootstrap", bootstrapConfig().With(tc.field, api.StringValue(tc.value))))

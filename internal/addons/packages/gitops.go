@@ -35,9 +35,9 @@ func admitGitOps(i addons.Instance, _ addons.ClusterFacts) []api.Issue {
 	}
 	u, err := url.Parse(b.Get("repoURL").Text())
 	if err == nil && u.User != nil {
-		add("api.field", "repoURL", "bootstrap repoURL of package gitops carries user information", "remove the user information and name a usernamePassword Secret in bootstrap.credentialsRef")
+		add("api.value", "repoURL", "bootstrap repoURL of package gitops carries user information", "remove the user information and name a usernamePassword Secret in bootstrap.credentialsRef")
 	} else if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || strings.Contains(b.Get("repoURL").Text(), "#") {
-		add("api.field", "repoURL", "bootstrap repoURL of package gitops is not an https URL with a host and no query or fragment", "set the https URL of the repository")
+		add("api.value", "repoURL", "bootstrap repoURL of package gitops is not an https URL with a host and no query or fragment", "set the https URL of the repository")
 	}
 	path := b.Get("path").Text()
 	bad := strings.HasPrefix(path, "/")
@@ -45,11 +45,11 @@ func admitGitOps(i addons.Instance, _ addons.ClusterFacts) []api.Issue {
 		bad = bad || s == ".."
 	}
 	if bad {
-		add("api.field", "path", "bootstrap path "+path+" of package gitops leaves the repository", "set a relative path without .. segments")
+		add("api.value", "path", "bootstrap path "+path+" of package gitops leaves the repository", "set a relative path without .. segments")
 	}
 	revision := b.Get("targetRevision").Text()
 	if revision == "" || strings.IndexFunc(revision, unicode.IsSpace) >= 0 {
-		add("api.field", "targetRevision", "bootstrap targetRevision of package gitops must be non-empty without whitespace", "set a branch, tag or commit without whitespace")
+		add("api.value", "targetRevision", "bootstrap targetRevision of package gitops must be non-empty without whitespace", "set a branch, tag or commit without whitespace")
 	}
 	sync := b.Get("sync")
 	if !sync.Get("automated").Bool() && (sync.Get("prune").Bool() || sync.Get("selfHeal").Bool()) {

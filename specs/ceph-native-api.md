@@ -19,7 +19,7 @@ tracked as [B474](milestones/m2.md#b474).
 Not yet met: the tested-journey record of each service is not complete; tracked
 as [B472](milestones/m2.md#b472).
 
-Keep `CephCluster`'s type, management, distribution, exact release/package/
+Keep `CephCluster`'s management, distribution, exact release/package/
 image coordinates, entitlement, bootstrap/SSH, networks, security, native
 cluster config and manager-module fields. Keep topology's Machine bindings,
 hostnames and sites. One native service path replaces daemon-specific helpers:
@@ -180,26 +180,25 @@ it is not a complete cluster document:
 
 ```yaml
 spec:
-  ceph:
-    services:
-      - service_type: mon
-        placement:
-          label: monitors
-          count: 3
+  services:
+    - service_type: mon
+      placement:
+        label: monitors
+        count: 3
 
-      - service_type: mgr
-        placement:
-          label: managers
-          count: 2
+    - service_type: mgr
+      placement:
+        label: managers
+        count: 2
 
-      - service_type: osd
-        service_id: data
-        placement:
-          label: storage
-        spec:
-          data_devices:
-            paths:
-              - /dev/disk/by-id/example-data
+    - service_type: osd
+      service_id: data
+      placement:
+        label: storage
+      spec:
+        data_devices:
+          paths:
+            - /dev/disk/by-id/example-data
 ```
 
 Every selected host in this OSD example must prove that path's distinct,
@@ -869,20 +868,19 @@ native placement or authentication field names:
 
 ```yaml
 spec:
-  ceph:
-    services:
-      - service_type: grafana
-        placement:
-          hosts:
-            - host-a
-        spec:
-          anonymous_access: false
+  services:
+    - service_type: grafana
+      placement:
+        hosts:
+          - host-a
+      spec:
+        anonymous_access: false
 
-    serviceBindings:
-      - serviceRef: grafana
-        secrets:
-          - path: /spec/initial_admin_password
-            secretRef: grafana-admin
+  serviceBindings:
+    - serviceRef: grafana
+      secrets:
+        - path: /spec/initial_admin_password
+          secretRef: grafana-admin
 ```
 
 The [native Grafana leaf](https://docs.ceph.com/en/tentacle/cephadm/services/monitoring/#setting-the-initial-admin-password)

@@ -1554,8 +1554,9 @@ By default, `machine trust` records in the
 [context trust store](contexts.md#storage-locking-and-publication) the host key
 each selected Machine that uses context trust presents: one reached over SSH
 that declares no `access.ssh.knownHostsRef` and that Bootwright did not install.
-It observes each such endpoint exactly once, offering no credential, and
-reports one action for every selected Machine: `add` for a key the context
+It observes each such endpoint exactly once, offering no credential; a
+[delegated session](api/session-access-policy.md#delegated-execution) records no
+trust, so this is how a context administrator enrolls a key for it. It reports one action for every selected Machine: `add` for a key the context
 does not trust yet, `reuse` for the key it already trusts at that endpoint,
 `replace` for a supersede, and `skip`, with its reason, for every other
 Machine, which it never contacts. An `add` or `replace` whose endpoint is held
