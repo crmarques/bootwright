@@ -69,7 +69,7 @@ An *asked* command is one whose cell names a Mutate effect (a planned mutation
 or removal, host packages, a download, SSH, a power operation, a host identity
 rewrite), reveals a secret, or deletes or rotates local state irreversibly
 (`context delete`, `secret delete`, `secret encryption rotate`, `media
-delete`); an agent runs it only when the owner asks, and
+delete`, `policy delete`); an agent runs it only when the owner asks, and
 `TestDocsAskRulesCoverEveryEffectfulCommand` keeps the tracked
 `.claude/settings.json` and `.codex/rules/bootwright.rules` complete against
 these cells.
@@ -96,7 +96,9 @@ by a related noun, and `--short` is the one flag that prints names only.
 | `bootwright context init` | `--check` false; required `--name <name>`; optional `-f, --file <context.yaml>` and `--input-dir <dir>` | initialized context and user selection; optional imported-input summary | local context and keyring creation; with `--check`, bounded admission reads |
 | `bootwright context update` | `--check` false; required `--name <name>`; at least one of `-f, --file <context.yaml>` or `--input-dir <dir>`; `--yes` false | unchanged configuration or imported-input summary | local atomic input replacement; with `--check`, bounded admission reads |
 | `bootwright context use` | required `--name <name>` | selected-current-context summary | local current-context update |
-| `bootwright policy install` | required `-f, --file <file>` | updated context | atomically replace the context authorization policy |
+| `bootwright policy set` | required `-f, --file <file>`; `--check` false | every grant with its subjects and expanded Machines | atomically replace the context authorization policy; with `--check`, validation only |
+| `bootwright policy show` | none | the installed document | read local state |
+| `bootwright policy delete` | `--yes` false | whether one was deleted | local policy deletion |
 | `bootwright policy permissions` | none | the caller's granted commands and targets | read the selected context and resolve subjects through NSS |
 | `bootwright context list` | none | contexts in canonical name order | read local state |
 | `bootwright context current` | `--short` false | current context details, or only its name with `--short` | read local state |
@@ -193,7 +195,7 @@ Not yet met: `apply --dry-run` defers add-on prerequisite checks to execution; t
 | `bootwright completion fish` | `--no-descriptions` false | Fish completion script | none |
 | `bootwright completion powershell` | `--no-descriptions` false | PowerShell completion script | none |
 
-### Cluster command applicability
+## Cluster command applicability
 
 `--name` selects from the shared OpenShiftCluster/CephCluster name namespace
 in the selected context; that of `cluster info` and `cluster exec` is a
@@ -220,11 +222,12 @@ Applicability does not establish implementation availability, access readiness,
 identity, or ownership. Missing access material on an applicable target is an
 access failure, not a change in applicability.
 
-## Session policy installation
+## Session policy lifecycle
 
-`policy install` replaces the policy of the selected context: `--context`,
-else the current context. See the
-[session policy](../api/session-access-policy.md) for the schema and delegation rules.
+`policy set`, `policy show` and `policy delete` act on the policy of the
+selected context: `--context`, else the current context. The
+[session policy](../api/session-access-policy.md) owns the schema, the
+lifecycle and the delegation rules.
 
 ## Help content
 

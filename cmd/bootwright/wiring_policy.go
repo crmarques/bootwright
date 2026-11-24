@@ -23,37 +23,80 @@ type policyCommands struct {
 	repository interface {
 		View(context.Context) (contexts.Registry, error)
 	}
-	hold    func(context.Context) (func(), error)
-	publish func(context.Context, contexts.Record, []byte) error
+	hold      func(context.Context) (func(), error)
+	publish   func(context.Context, contexts.Record, []byte) error
+	remove    func(context.Context, contexts.Record, []byte) (bool, error)
+	confirmer contexts.Confirmer
 }
 
-func (p policyCommands) Install(ctx context.Context, name, file string) (string, error) {
+func (p policyCommands) selectedRecord(ctx context.Context, name string) (contexts.Record, error) {
 	contextName, err := machine.SelectedContext(ctx, p.selection, name)
 	if err != nil {
-		return "", err
+		return contexts.Record{}, err
 	}
 	registry, err := p.repository.View(ctx)
 	if err != nil {
-		return "", err
+		return contexts.Record{}, err
 	}
 	for _, record := range registry.Contexts {
-		if record.Name != contextName {
-			continue
+		if record.Name == contextName {
+			return record, nil
 		}
-		catalog, err := p.graph.Effective(ctx, contextName)
-		if err != nil {
-			return "", err
-		}
-		data, err := p.files.ReadFile(ctx, file, sessionpolicy.MaxBytes)
-		if err != nil {
-			return "", err
-		}
-		if err := p.service.Validate(ctx, contextName, catalog, data); err != nil {
-			return "", err
-		}
-		return contextName, p.publish(ctx, record, data)
 	}
-	return "", contexts.AbsentContext(contextName)
+	return contexts.Record{}, contexts.AbsentContext(contextName)
+}
+
+func (p policyCommands) Set(ctx context.Context, name, file string, check bool) (string, []sessionpolicy.Grant, error) {
+	record, err := p.selectedRecord(ctx, name)
+	if err != nil {
+		return "", nil, err
+	}
+	catalog, err := p.graph.Effective(ctx, record.Name)
+	if err != nil {
+		return "", nil, err
+	}
+	data, err := p.files.ReadFile(ctx, file, sessionpolicy.MaxBytes)
+	if err != nil {
+		return "", nil, err
+	}
+	grants, err := p.service.Expand(ctx, record.Name, catalog, data)
+	if err != nil {
+		return "", nil, err
+	}
+	if check {
+		return record.Name, grants, nil
+	}
+	return record.Name, grants, p.publish(ctx, record, data)
+}
+
+func (p policyCommands) Show(ctx context.Context, name string) (string, *api.SessionAccessPolicy, []byte, error) {
+	record, err := p.selectedRecord(ctx, name)
+	if err != nil {
+		return "", nil, nil, err
+	}
+	policy, data, err := p.service.Installed(ctx, record.Name)
+	return record.Name, policy, data, err
+}
+
+func (p policyCommands) Delete(ctx context.Context, name string, confirmed bool) (string, bool, error) {
+	record, err := p.selectedRecord(ctx, name)
+	if err != nil {
+		return "", false, err
+	}
+	data, err := p.service.Store.ReadSessionPolicy(ctx, record.Name)
+	if err != nil {
+		return "", false, err
+	}
+	if len(data) == 0 {
+		return record.Name, false, nil
+	}
+	if !confirmed {
+		if err := p.confirmer.Confirm(ctx, "delete session policy", record.Name); err != nil {
+			return "", false, err
+		}
+	}
+	deleted, err := p.remove(ctx, record, data)
+	return record.Name, deleted, err
 }
 
 func (p policyCommands) Permissions(ctx context.Context, contextName string) (string, []sessionpolicy.Grant, error) {

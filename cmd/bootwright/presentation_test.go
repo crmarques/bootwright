@@ -113,7 +113,9 @@ func TestElevationCarriesNoColorWithoutChangingPayload(t *testing.T) {
 func TestDelegatedSudoEntryRefusesOtherOperations(t *testing.T) {
 	boundary := privilegeBoundary{euid: func() int { return 0 }}
 	for _, args := range [][]string{
-		{"policy", "install", "--context", "lab", "--file", "sessions.yaml"},
+		{"policy", "set", "--context", "lab", "--file", "sessions.yaml"},
+		{"policy", "show", "--context", "lab"},
+		{"policy", "delete", "--context", "lab", "--yes"},
 		{"secret", "show", "--name", "key"},
 		{"machine", "cp", "--name", "node", "remote:source", "local:dest"},
 		{"context", "update", "--name", "lab", "--input-dir", "."},

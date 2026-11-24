@@ -127,6 +127,9 @@ func confirmationOf(action, name string) confirmation {
 	case "trust":
 		return confirmation{code: "trust.identity", label: "trust", review: "the plan", scope: name,
 			prompt: "Confirm trust for context " + shown + "? [y/N] "}
+	case "delete session policy":
+		return confirmation{code: "access.policy", label: "policy deletion", review: "it with bootwright policy show", scope: name,
+			prompt: "Confirm deletion of the session access policy of context " + shown + "? [y/N] "}
 	case "rotate secret encryption":
 		return confirmation{code: "secret.store.conflict", label: "key rotation", review: "it", scope: name,
 			prompt: "Confirm rotation of the secret encryption key of context " + shown + "? [y/N] "}

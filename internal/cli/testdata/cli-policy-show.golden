@@ -1,0 +1,27 @@
+apiVersion: bootwright.io/v1alpha1
+kind: SessionAccessPolicy
+metadata:
+  name: lab
+spec:
+  grants:
+    - name: diagnostics
+      subjects:
+        - group: PLATFORM_SUPPORT
+        - user: analyst
+      targets:
+        machineRefs:
+          - gateway
+        clusterRefs:
+          - apps
+      remoteUser: core
+      exec:
+        commands:
+          - - /usr/bin/uptime
+    - name: support
+      subjects:
+        - user: analyst
+      targets:
+        machineRefs:
+          - worker
+      remoteUser: core
+      rsh: {}

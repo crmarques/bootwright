@@ -31,24 +31,48 @@ type Grant struct {
 }
 
 func (s Service) Validate(ctx context.Context, contextName string, catalog api.Catalog, data []byte) error {
+	_, err := s.Expand(ctx, contextName, catalog, data)
+	return err
+}
+
+func (s Service) Expand(ctx context.Context, contextName string, catalog api.Catalog, data []byte) ([]Grant, error) {
 	policy, err := Decode(data, contextName)
 	if err != nil {
-		return invalid(err)
+		return nil, invalid(err)
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	resolved := make(map[api.PolicySubject]uint32)
+	grants := make([]Grant, 0, len(policy.Spec.Grants))
 	for _, grant := range policy.Spec.Grants {
-		if _, err := s.machines(grant.Targets, catalog); err != nil {
-			return invalid(err)
+		machines, err := s.machines(grant.Targets, catalog)
+		if err != nil {
+			return nil, invalid(err)
 		}
 		for _, subject := range grant.Subjects {
 			if _, err := s.subject(ctx, resolved, subject); err != nil {
-				return invalid(fmt.Errorf("grant %s has an unresolved user or group", grant.Name))
+				return nil, invalid(fmt.Errorf("grant %s has an unresolved user or group", grant.Name))
 			}
 		}
+		grants = append(grants, expanded(grant, grant.Subjects, machines))
 	}
-	return ctx.Err()
+	return grants, ctx.Err()
+}
+
+func (s Service) Installed(ctx context.Context, contextName string) (*api.SessionAccessPolicy, []byte, error) {
+	data, err := s.Store.ReadSessionPolicy(ctx, contextName)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(data) == 0 {
+		return nil, nil, nil
+	}
+	policy, err := Decode(data, contextName)
+	if err != nil {
+		return nil, nil, diagnostics.NewFailureWithRemediation("access.policy", "the installed session access policy of context "+contextName+" is invalid: "+err.Error(), "",
+			"install a corrected policy with bootwright policy set, or remove it with bootwright policy delete")
+	}
+	return &policy, data, nil
 }
 
 func (s Service) Permissions(ctx context.Context, principal Principal, contextName string, catalog api.Catalog) ([]Grant, error) {
@@ -85,14 +109,18 @@ func (s Service) Permissions(ctx context.Context, principal Principal, contextNa
 		if err != nil {
 			return nil, denied(contextName, err.Error())
 		}
-		entry := Grant{Name: grant.Name, Subjects: matched, RemoteUser: grant.RemoteUser, MachineRefs: grant.Targets.MachineRefs,
-			ClusterRefs: grant.Targets.ClusterRefs, Machines: machines, Shell: grant.Rsh != nil}
-		if grant.Exec != nil {
-			entry.Commands = grant.Exec.Commands
-		}
-		grants = append(grants, entry)
+		grants = append(grants, expanded(grant, matched, machines))
 	}
 	return grants, nil
+}
+
+func expanded(grant api.SessionGrant, subjects []api.PolicySubject, machines []string) Grant {
+	entry := Grant{Name: grant.Name, Subjects: subjects, RemoteUser: grant.RemoteUser, MachineRefs: grant.Targets.MachineRefs,
+		ClusterRefs: grant.Targets.ClusterRefs, Machines: machines, Shell: grant.Rsh != nil}
+	if grant.Exec != nil {
+		entry.Commands = grant.Exec.Commands
+	}
+	return entry
 }
 
 func (s Service) Authorize(ctx context.Context, principal Principal, contextName string, catalog api.Catalog, targets []machine.SessionTarget, argv []string) error {
@@ -167,7 +195,7 @@ func (s Service) machines(targets api.SessionTargets, catalog api.Catalog) ([]st
 }
 
 func invalid(err error) error {
-	return diagnostics.NewFailureWithRemediation("access.policy", err.Error(), "", "correct the policy and run bootwright policy install again")
+	return diagnostics.NewFailureWithRemediation("access.policy", err.Error(), "", "correct the policy and run bootwright policy set again, or check it with --check")
 }
 
 func denied(contextName, reason string) error {

@@ -6,8 +6,10 @@
 
   Commands
   COMMAND       PURPOSE
-  install       Install a context's session access policy
+  delete        Delete a context's session access policy
   permissions   Show your delegated session grants
+  set           Set a context's session access policy
+  show          Show a context's installed session access policy
 
   Common flags
       --ascii       Use ASCII status markers

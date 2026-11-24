@@ -75,6 +75,7 @@ type serviceDependencies struct {
 	PolicyStore        sessionpolicy.Store
 	HoldPolicy         func(context.Context) (func(), error)
 	PublishPolicy      func(context.Context, contexts.Record, []byte) error
+	RemovePolicy       func(context.Context, contexts.Record, []byte) (bool, error)
 	PolicyAccount      accountResolver
 	LookupSubject      func(context.Context, bool, string) (uint32, error)
 	Delegated          bool
@@ -122,7 +123,7 @@ func localServiceDependencies(process processDependencies) (serviceDependencies,
 	controllerPorts, release := localControllerDependencies(repository, process)
 	return serviceDependencies{
 		Repository:  repository,
-		PolicyStore: repository, PolicyAccount: account.resolver, LookupSubject: privilege.Resolver{}.LookupSubject, Delegated: process.Delegated, HoldPolicy: repository.HoldSessionAdmission, PublishPolicy: repository.ReplaceSessionPolicy,
+		PolicyStore: repository, PolicyAccount: account.resolver, LookupSubject: privilege.Resolver{}.LookupSubject, Delegated: process.Delegated, HoldPolicy: repository.HoldSessionAdmission, PublishPolicy: repository.ReplaceSessionPolicy, RemovePolicy: repository.RemoveSessionPolicy,
 		Workspace:          repository,
 		Trust:              repository,
 		SessionConfirmer:   process.SessionConfirmer,
@@ -179,7 +180,7 @@ func assembleServices(deps serviceDependencies) cli.Services {
 	policy := policyCommands{
 		service: sessionpolicy.Service{Store: deps.PolicyStore, Members: policyRoster(), Lookup: deps.LookupSubject},
 		account: deps.PolicyAccount, delegated: deps.Delegated, graph: effectiveGraph{state: services.DesiredState}, selection: currentSelection(deps.Selection),
-		files: inputReader(deps.Files), repository: deps.Repository, hold: deps.HoldPolicy, publish: deps.PublishPolicy,
+		files: inputReader(deps.Files), repository: deps.Repository, hold: deps.HoldPolicy, publish: deps.PublishPolicy, remove: deps.RemovePolicy, confirmer: deps.Confirmer,
 	}
 	if deps.PolicyStore != nil {
 		services.Policy = policy

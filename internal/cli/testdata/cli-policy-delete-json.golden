@@ -1,10 +1,11 @@
 {
   "schemaVersion": "v1alpha1",
-  "command": "policy install",
+  "command": "policy delete",
   "ok": true,
   "exitCode": 0,
   "result": {
-    "context": "lab"
+    "context": "lab",
+    "deleted": true
   },
   "diagnostics": [],
   "logs": []

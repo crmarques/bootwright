@@ -90,7 +90,7 @@ func lookupPolicyGroup(t *testing.T) func(context.Context, bool, string) (uint32
 	}
 }
 
-func TestPolicyInstallPublishesOnlyValidatedBytesForTheSelectedRecord(t *testing.T) {
+func TestPolicySetPublishesOnlyValidatedBytesForTheSelectedRecord(t *testing.T) {
 	failure := errors.New("storage failed")
 	selected := contexts.Record{Name: "lab", Revision: "test-revision"}
 	for _, test := range []struct {
@@ -98,6 +98,7 @@ func TestPolicyInstallPublishesOnlyValidatedBytesForTheSelectedRecord(t *testing
 		data              string
 		registry          contexts.Registry
 		name              string
+		check             bool
 		selection         error
 		view, render      error
 		publish, want     error
@@ -106,6 +107,7 @@ func TestPolicyInstallPublishesOnlyValidatedBytesForTheSelectedRecord(t *testing
 	}{
 		{test: "success", name: "lab", data: sessionPolicyYAML, wantPublish: true},
 		{test: "current context", data: sessionPolicyYAML, wantPublish: true},
+		{test: "check publishes nothing", name: "lab", data: sessionPolicyYAML, check: true},
 		{test: "selection error", selection: failure, data: sessionPolicyYAML, want: failure},
 		{test: "publication error", name: "lab", data: sessionPolicyYAML, publish: failure, want: failure, wantPublish: true},
 		{test: "registry error", name: "lab", view: failure, want: failure},
@@ -113,6 +115,7 @@ func TestPolicyInstallPublishesOnlyValidatedBytesForTheSelectedRecord(t *testing
 		{test: "render error", name: "lab", render: failure, want: failure},
 		{test: "missing input", name: "lab"},
 		{test: "invalid policy", name: "lab", data: "invalid", wantPolicyRefusal: true},
+		{test: "invalid policy under check", name: "lab", data: "invalid", check: true, wantPolicyRefusal: true},
 	} {
 		t.Run(test.test, func(t *testing.T) {
 			file := filepath.Join(t.TempDir(), "policy.yaml")
@@ -139,20 +142,122 @@ func TestPolicyInstallPublishesOnlyValidatedBytesForTheSelectedRecord(t *testing
 					return test.publish
 				},
 			}
-			name, err := commands.Install(t.Context(), test.name, file)
-			if published != test.wantPublish || (name == "lab") != test.wantPublish {
+			name, grants, err := commands.Set(t.Context(), test.name, file, test.check)
+			if published != test.wantPublish {
 				t.Fatalf("context %q, published %t, error %v", name, published, err)
 			}
 			switch {
-			case test.want != nil || test.wantPublish:
+			case test.want != nil:
 				if !errors.Is(err, test.want) {
 					t.Fatalf("got %v, want %v", err, test.want)
 				}
 			case test.wantPolicyRefusal:
 				requirePolicyDiagnostic(t, err, "access.policy")
+			case test.wantPublish || test.check:
+				if err != nil || name != "lab" || len(grants) != 1 || !slices.Equal(grants[0].Machines, []string{"node"}) ||
+					!slices.Equal(grants[0].Subjects, []api.PolicySubject{{Group: "support"}}) {
+					t.Fatalf("set %q: %+v, %v", name, grants, err)
+				}
 			default:
 				if err == nil {
-					t.Fatal("install accepted an absent context or input file")
+					t.Fatal("set accepted an absent context or input file")
+				}
+			}
+		})
+	}
+}
+
+func TestPolicyShowReadsTheInstalledDocumentWithoutExpandingTargets(t *testing.T) {
+	failure := errors.New("storage failed")
+	commands := func(data string, read error) policyCommands {
+		return policyCommands{
+			repository: policyRegistry(func(context.Context) (contexts.Registry, error) {
+				return contexts.Registry{Contexts: []contexts.Record{{Name: "lab"}}}, nil
+			}),
+			selection: func(context.Context) (string, error) { return "lab", nil },
+			service: sessionpolicy.Service{Store: policyStore(func(context.Context, string) ([]byte, error) {
+				return []byte(data), read
+			})},
+		}
+	}
+	name, policy, data, err := commands(sessionPolicyYAML, nil).Show(t.Context(), "")
+	if err != nil || name != "lab" || policy == nil || policy.Metadata.Name != "lab" || len(policy.Spec.Grants) != 1 || string(data) != sessionPolicyYAML {
+		t.Fatalf("show %q: %+v %q, %v", name, policy, data, err)
+	}
+	if _, policy, data, err = commands("", nil).Show(t.Context(), "lab"); err != nil || policy != nil || data != nil {
+		t.Fatalf("show of no policy: %+v %q, %v", policy, data, err)
+	}
+	_, _, _, err = commands("invalid", nil).Show(t.Context(), "lab")
+	requirePolicyDiagnostic(t, err, "access.policy")
+	if _, _, _, err = commands(sessionPolicyYAML, failure).Show(t.Context(), "lab"); !errors.Is(err, failure) {
+		t.Fatalf("got %v, want %v", err, failure)
+	}
+}
+
+type policyConfirmer func(context.Context, string, string) error
+
+func (confirm policyConfirmer) Confirm(ctx context.Context, action, name string) error {
+	return confirm(ctx, action, name)
+}
+
+func TestPolicyDeleteTakesEffectForPermissionsAfterConfirmation(t *testing.T) {
+	failure := errors.New("storage failed")
+	selected := contexts.Record{Name: "lab", Revision: "test-revision"}
+	for _, test := range []struct {
+		name                          string
+		installed                     string
+		confirmed                     bool
+		decline, read, remove         error
+		wantAsked, wantRemoved, wantD bool
+		want                          error
+	}{
+		{name: "deleted after confirmation", installed: sessionPolicyYAML, wantAsked: true, wantRemoved: true, wantD: true},
+		{name: "deleted with yes", installed: sessionPolicyYAML, confirmed: true, wantRemoved: true, wantD: true},
+		{name: "nothing installed", installed: ""},
+		{name: "declined", installed: sessionPolicyYAML, decline: failure, wantAsked: true, want: failure},
+		{name: "unreadable", installed: sessionPolicyYAML, read: failure, want: failure},
+		{name: "removal error", installed: sessionPolicyYAML, confirmed: true, remove: failure, wantRemoved: true, want: failure},
+		{name: "undecodable policy still deletes", installed: "invalid", confirmed: true, wantRemoved: true, wantD: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			installed, asked, removed := test.installed, false, false
+			commands := policyCommands{
+				repository: policyRegistry(func(context.Context) (contexts.Registry, error) {
+					return contexts.Registry{Contexts: []contexts.Record{{Name: "other"}, selected}}, nil
+				}),
+				selection: func(context.Context) (string, error) { return "lab", nil },
+				graph:     testPolicyGraph(t, nil),
+				service: sessionpolicy.Service{Lookup: lookupPolicyGroup(t), Store: policyStore(func(context.Context, string) ([]byte, error) {
+					return []byte(installed), test.read
+				})},
+				confirmer: policyConfirmer(func(_ context.Context, action, name string) error {
+					asked = true
+					if action != "delete session policy" || name != "lab" {
+						t.Fatalf("confirmed %q for %q", action, name)
+					}
+					return test.decline
+				}),
+				remove: func(_ context.Context, record contexts.Record, confirmed []byte) (bool, error) {
+					removed = true
+					if record != selected || string(confirmed) != test.installed {
+						t.Fatalf("removed record %+v against %q", record, confirmed)
+					}
+					installed = ""
+					return true, test.remove
+				},
+				hold: func(context.Context) (func(), error) { return func() {}, nil },
+				account: policyAccount(func(context.Context) (privilege.Account, error) {
+					return privilege.Account{UID: 1001, SudoParentPID: 42, Groups: []uint32{2001}}, nil
+				}),
+			}
+			name, deleted, err := commands.Delete(t.Context(), "", test.confirmed)
+			if asked != test.wantAsked || removed != test.wantRemoved || !errors.Is(err, test.want) || (test.want == nil && (name != "lab" || deleted != test.wantD)) {
+				t.Fatalf("asked=%t removed=%t deleted=%t name=%q, error %v", asked, removed, deleted, name, err)
+			}
+			if test.want == nil && removed {
+				_, grants, err := commands.Permissions(t.Context(), "lab")
+				if err != nil || len(grants) != 0 {
+					t.Fatalf("permissions after deletion: %+v, %v", grants, err)
 				}
 			}
 		})

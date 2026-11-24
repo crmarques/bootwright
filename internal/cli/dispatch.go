@@ -30,7 +30,10 @@ var errMissingService = errors.New("application service is not configured")
 // commandResult is the closed set of successful application results understood
 // by this executable. Unavailable error-only ports return its zero value.
 type commandResult struct {
-	policyInstall     *policyInstallation
+	policySet         *policySet
+	policyShow        *policyShown
+	policyDocument    []byte
+	policyDelete      *policyDeletion
 	policyPermissions *policyPermissions
 	addOns            *addoncatalog.ListResult
 	addOnInfo         *addoncatalog.DescribeResult

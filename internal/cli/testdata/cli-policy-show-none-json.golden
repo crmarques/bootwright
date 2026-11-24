@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "policy show",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": "lab",
+    "installed": false
+  },
+  "diagnostics": [],
+  "logs": []
+}

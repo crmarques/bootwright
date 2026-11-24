@@ -141,6 +141,44 @@ func TestAContextThatTrustsAHostKeyStaysUsableAndDeletable(t *testing.T) {
 	}
 }
 
+func TestSessionPolicyRemovalReportsWhetherOneExistedAndIsBoundToTheContextAndConfirmedBytes(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	store, record := lifecycleFixture(t)
+	if removed, err := store.RemoveSessionPolicy(ctx, record, nil); err != nil || removed {
+		t.Fatalf("removing an absent policy: %t, %v", removed, err)
+	}
+	if err := store.ReplaceSessionPolicy(ctx, record, []byte("previous policy")); err != nil {
+		t.Fatal(err)
+	}
+	changed := record
+	changed.DirectoryInode++
+	if removed, err := store.RemoveSessionPolicy(ctx, changed, []byte("previous policy")); err == nil || removed {
+		t.Fatalf("removed a policy against a changed context: %t, %v", removed, err)
+	}
+	if current, err := store.ReadSessionPolicy(ctx, record.Name); err != nil || string(current) != "previous policy" {
+		t.Fatalf("policy = %q, error %v", current, err)
+	}
+	if removed, err := store.RemoveSessionPolicy(ctx, record, []byte("a policy set since confirmation")); err == nil || removed {
+		t.Fatalf("removed a policy other than the confirmed one: %t, %v", removed, err)
+	}
+	if current, err := store.ReadSessionPolicy(ctx, record.Name); err != nil || string(current) != "previous policy" {
+		t.Fatalf("policy after a mismatched removal = %q, error %v", current, err)
+	}
+	if removed, err := store.RemoveSessionPolicy(ctx, record, []byte("previous policy")); err != nil || !removed {
+		t.Fatalf("removing the policy: %t, %v", removed, err)
+	}
+	if current, err := store.ReadSessionPolicy(ctx, record.Name); err != nil || len(current) != 0 {
+		t.Fatalf("policy after removal = %q, error %v", current, err)
+	}
+	if removed, err := store.RemoveSessionPolicy(ctx, record, []byte("previous policy")); err != nil || removed {
+		t.Fatalf("removing a removed policy: %t, %v", removed, err)
+	}
+	if err := store.ReplaceSessionPolicy(ctx, record, []byte("replacement policy")); err != nil {
+		t.Fatalf("publishing after removal: %v", err)
+	}
+}
+
 func TestSessionPolicyPublicationIsBoundToTheValidatedContext(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()

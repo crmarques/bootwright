@@ -428,15 +428,69 @@ func (s environmentSpy) UpdateAdminCredentials(ctx context.Context, request life
 
 type policySpy struct{ record *dispatchRecord }
 
-func (p policySpy) Install(ctx context.Context, name, file string) (string, error) {
-	return name, p.record.called(ctx, "policy install", file)
+func policyGrants() []sessionpolicy.Grant {
+	return []sessionpolicy.Grant{
+		{Name: "diagnostics", Subjects: []api.PolicySubject{{Group: "PLATFORM_SUPPORT"}, {User: "analyst"}}, ClusterRefs: []string{"apps"}, MachineRefs: []string{"gateway"}, Machines: []string{"gateway", "worker"}, RemoteUser: "core", Commands: [][]string{{"/usr/bin/uptime"}}},
+		{Name: "support", Subjects: []api.PolicySubject{{User: "analyst"}}, Machines: []string{"worker"}, RemoteUser: "core", Shell: true},
+	}
+}
+
+const installedPolicyYAML = `apiVersion: bootwright.io/v1alpha1
+kind: SessionAccessPolicy
+metadata:
+  name: lab
+spec:
+  grants:
+    - name: diagnostics
+      subjects:
+        - group: PLATFORM_SUPPORT
+        - user: analyst
+      targets:
+        machineRefs:
+          - gateway
+        clusterRefs:
+          - apps
+      remoteUser: core
+      exec:
+        commands:
+          - - /usr/bin/uptime
+    - name: support
+      subjects:
+        - user: analyst
+      targets:
+        machineRefs:
+          - worker
+      remoteUser: core
+      rsh: {}
+`
+
+type policySetRequest struct {
+	file  string
+	check bool
+}
+
+func (p policySpy) Set(ctx context.Context, name, file string, check bool) (string, []sessionpolicy.Grant, error) {
+	return name, policyGrants(), p.record.called(ctx, "policy set", policySetRequest{file: file, check: check})
+}
+
+func (p policySpy) Show(ctx context.Context, name string) (string, *api.SessionAccessPolicy, []byte, error) {
+	document := p.record.result.policyDocument
+	if len(document) == 0 {
+		return name, nil, nil, p.record.called(ctx, "policy show", name)
+	}
+	policy, err := sessionpolicy.Decode(document, name)
+	if err != nil {
+		return "", nil, nil, err
+	}
+	return name, &policy, document, p.record.called(ctx, "policy show", name)
+}
+
+func (p policySpy) Delete(ctx context.Context, name string, confirmed bool) (string, bool, error) {
+	return name, p.record.result.policyDelete != nil && p.record.result.policyDelete.Deleted, p.record.called(ctx, "policy delete", confirmed)
 }
 
 func (p policySpy) Permissions(ctx context.Context, name string) (string, []sessionpolicy.Grant, error) {
-	return name, []sessionpolicy.Grant{
-		{Name: "diagnostics", Subjects: []api.PolicySubject{{Group: "PLATFORM_SUPPORT"}, {User: "analyst"}}, ClusterRefs: []string{"apps"}, MachineRefs: []string{"gateway"}, Machines: []string{"gateway", "worker"}, RemoteUser: "core", Commands: [][]string{{"/usr/bin/uptime"}}},
-		{Name: "support", Subjects: []api.PolicySubject{{User: "analyst"}}, Machines: []string{"worker"}, RemoteUser: "core", Shell: true},
-	}, p.record.called(ctx, "policy permissions", name)
+	return name, policyGrants(), p.record.called(ctx, "policy permissions", name)
 }
 
 func (s lifecycleSpy) Prepare(ctx context.Context, request lifecycle.PrepareRequest) (*lifecycle.OperationResult, error) {

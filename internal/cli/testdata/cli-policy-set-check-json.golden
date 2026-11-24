@@ -1,0 +1,55 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "policy set",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": "lab",
+    "checked": true,
+    "grants": [
+      {
+        "name": "diagnostics",
+        "subjects": [
+          {
+            "group": "PLATFORM_SUPPORT"
+          },
+          {
+            "user": "analyst"
+          }
+        ],
+        "remoteUser": "core",
+        "machineRefs": [
+          "gateway"
+        ],
+        "clusterRefs": [
+          "apps"
+        ],
+        "machines": [
+          "gateway",
+          "worker"
+        ],
+        "commands": [
+          [
+            "/usr/bin/uptime"
+          ]
+        ],
+        "shell": false
+      },
+      {
+        "name": "support",
+        "subjects": [
+          {
+            "user": "analyst"
+          }
+        ],
+        "remoteUser": "core",
+        "machines": [
+          "worker"
+        ],
+        "shell": true
+      }
+    ]
+  },
+  "diagnostics": [],
+  "logs": []
+}

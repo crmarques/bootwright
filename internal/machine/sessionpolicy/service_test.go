@@ -118,6 +118,67 @@ func TestSessionPolicyUsesCurrentRosterAndRequiresCompleteGrants(t *testing.T) {
 	}
 }
 
+func TestExpandListsEveryGrantWithAllSubjectsAndExpandedMachines(t *testing.T) {
+	s := testPolicy()
+	grants, err := s.Expand(t.Context(), "lab", policyCatalog("worker", "worker-b"), []byte(policyFixture))
+	if err != nil || len(grants) != 2 {
+		t.Fatalf("expanded %+v, %v", grants, err)
+	}
+	if grants[0].Name != "diagnostics" || !slices.Equal(grants[0].Machines, []string{"gateway", "worker", "worker-b"}) ||
+		!slices.Equal(grants[0].Subjects, []api.PolicySubject{{Group: "PLATFORM_SUPPORT"}, {User: "analyst@example.test"}}) ||
+		!slices.Equal(grants[0].ClusterRefs, []string{"apps"}) || !slices.Equal(grants[0].MachineRefs, []string{"gateway"}) ||
+		len(grants[0].Commands) != 1 || grants[0].Shell {
+		t.Fatalf("exec grant %+v", grants[0])
+	}
+	if grants[1].Name != "shell" || !grants[1].Shell || !slices.Equal(grants[1].Machines, []string{"worker"}) ||
+		!slices.Equal(grants[1].Subjects, []api.PolicySubject{{Group: "platform-oncall@example.test"}, {User: "maintenance"}}) {
+		t.Fatalf("shell grant %+v", grants[1])
+	}
+	empty, err := s.Expand(t.Context(), "lab", policyCatalog(), []byte(strings.Split(policyFixture, "  grants:")[0]+"  grants: []\n"))
+	if err != nil || empty == nil || len(empty) != 0 {
+		t.Fatalf("empty policy expanded to %+v, %v", empty, err)
+	}
+	for name, test := range map[string]struct {
+		catalog api.Catalog
+		lookup  func(context.Context, bool, string) (uint32, error)
+		data    string
+	}{
+		"absent target":      {catalog: policyCatalog("missing"), data: policyFixture},
+		"unresolved subject": {catalog: policyCatalog("worker"), data: policyFixture, lookup: func(context.Context, bool, string) (uint32, error) { return 0, errors.New("directory is down") }},
+		"invalid document":   {catalog: policyCatalog("worker"), data: "invalid"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			service := testPolicy()
+			if test.lookup != nil {
+				service.Lookup = test.lookup
+			}
+			grants, err := service.Expand(t.Context(), "lab", test.catalog, []byte(test.data))
+			if got := diagnostics.Of(err); grants != nil || len(got) != 1 || got[0].Code != "access.policy" ||
+				!strings.Contains(got[0].Remediation, "bootwright policy set") {
+				t.Fatalf("expanded %+v, diagnostics %+v", grants, got)
+			}
+		})
+	}
+}
+
+func TestInstalledDecodesWithoutExpandingTargets(t *testing.T) {
+	service := Service{Store: policyBytes(policyFixture)}
+	policy, data, err := service.Installed(t.Context(), "lab")
+	if err != nil || policy == nil || len(policy.Spec.Grants) != 2 || string(data) != policyFixture {
+		t.Fatalf("installed %+v %q, %v", policy, data, err)
+	}
+	if policy, data, err = (Service{Store: policyBytes("")}).Installed(t.Context(), "lab"); policy != nil || data != nil || err != nil {
+		t.Fatalf("no policy reported %+v %q, %v", policy, data, err)
+	}
+	_, _, err = Service{Store: policyBytes("invalid")}.Installed(t.Context(), "lab")
+	if got := diagnostics.Of(err); len(got) != 1 || got[0].Code != "access.policy" || !strings.Contains(got[0].Message, "context lab") {
+		t.Fatalf("invalid installed policy diagnostics %+v", got)
+	}
+	if _, _, err = (Service{Store: unreadablePolicy{}}).Installed(t.Context(), "lab"); err == nil {
+		t.Fatal("an unreadable policy was reported as absent")
+	}
+}
+
 func TestSessionPolicyRejectsInvalidDocuments(t *testing.T) {
 	for _, replacement := range []string{"rsh: null", "rsh: {unknown: word}", "rsh: {}\n      exec: {}", "rsH: {}"} {
 		if _, err := Decode([]byte(strings.Replace(policyFixture, "rsh: {}", replacement, 1)), "lab"); err == nil {

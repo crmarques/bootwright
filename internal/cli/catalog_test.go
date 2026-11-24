@@ -42,7 +42,7 @@ func TestPublicCatalog(t *testing.T) {
 		"machine list": "clusters power-status short", "machine info": "name", "machine rsh": "name", "machine cp": "name overwrite",
 		"machine exec": "name", "machine discover": "dry-run name stage yes", "machine enroll": "dry-run name yes", "machine inventory": "name", "machine start": "name", "machine stop": "force name yes", "machine restart": "force name yes", "machine media eject": "name yes", "machine media status": "name", "machine trust": "dry-run expect host-public-key-file name referenced-secret replace yes", "install": "check dry-run yes", "rebind-host": "machine-id product-uuid recorded-host-retired root-uuid yes", "uninstall": "discard-unreadable dry-run keep-packages yes",
 		"cluster update-admin-creds": "login name yes", "cluster list": "", "cluster info": "name object-user secrets", "cluster rsh": "name node", "cluster exec": "name node", "cluster oc": "name", "cluster kubectl": "name", "cluster kubeconfig": "name", "cluster keyring": "client name",
-		"policy install": "file", "policy permissions": "",
+		"policy set": "check file", "policy show": "", "policy delete": "yes", "policy permissions": "",
 		"version": "", "catalog schema": "format", "sbom": "format", "explain": "code", "help": "", "completion bash": "no-descriptions", "completion zsh": "no-descriptions", "completion fish": "no-descriptions", "completion powershell": "no-descriptions",
 	}
 	root, err := newCommandTree(New(Config{}))

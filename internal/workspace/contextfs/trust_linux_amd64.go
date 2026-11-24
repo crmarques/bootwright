@@ -3,6 +3,7 @@
 package contextfs
 
 import (
+	"bytes"
 	"context"
 	"sync"
 	"syscall"
@@ -80,7 +81,7 @@ func (t trustStore) withTrustArea(ctx context.Context, name string, mutation boo
 			return err
 		}
 		if expected != nil && record != *expected {
-			return state("the context changed during policy validation; repeat policy install")
+			return state("the context changed during the policy command; repeat it")
 		}
 		container, dir, err := openContext(root, record)
 		if err != nil {
@@ -121,6 +122,25 @@ func (s *Store) ReplaceSessionPolicy(ctx context.Context, expected contexts.Reco
 		}
 		return area.Replace(ctx, sessionPolicyFile, data, expected)
 	})
+}
+
+func (s *Store) RemoveSessionPolicy(ctx context.Context, expected contexts.Record, confirmed []byte) (bool, error) {
+	removed := false
+	err := (trustStore{s}).withTrustArea(ctx, expected.Name, true, &expected, func(area *operationArea) error {
+		current, found, err := area.Read(ctx, sessionPolicyFile, maxOperationRecord)
+		if err != nil || !found {
+			return err
+		}
+		if !bytes.Equal(current, confirmed) {
+			return state("the session access policy changed after it was confirmed; repeat policy delete")
+		}
+		if err := area.RemoveRecord(ctx, sessionPolicyFile, current); err != nil {
+			return state("the session access policy could not be removed; repeat policy delete")
+		}
+		removed = true
+		return nil
+	})
+	return removed, err
 }
 
 // HoldSessionAdmission pins the context mapping until SSH material is ready.

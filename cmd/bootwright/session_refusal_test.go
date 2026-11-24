@@ -214,7 +214,9 @@ func TestDelegatedEntryRefusesAdministrativeCommandsAndUnprivilegedCallers(t *te
 		args        []string
 		uid, status int
 	}{
-		{"policy install", []string{"policy", "install", "--context", "lab", "--file", "policy.yaml"}, 0, 1},
+		{"policy set", []string{"policy", "set", "--context", "lab", "--file", "policy.yaml"}, 0, 1},
+		{"policy show", []string{"policy", "show", "--context", "lab"}, 0, 1},
+		{"policy delete", []string{"policy", "delete", "--context", "lab", "--yes"}, 0, 1},
 		{"read-only command", []string{"version"}, 0, 1},
 		{"unprivileged session", []string{"machine", "exec", "--name", "node", "uptime"}, 1001, 255},
 	} {

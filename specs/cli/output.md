@@ -323,7 +323,7 @@ and their output goldens:
 | `cluster kubectl`, `cluster oc` | `context`, `cluster`, `client`, `arguments`, `kubeconfigCommand`, `instructions` |
 | `cluster list` | `context`, `clusters` |
 | `cluster update-admin-creds` | `context`, `cluster`, `logins` |
-| `context current`, `context use`, `policy install` | `context` |
+| `context current`, `context use` | `context` |
 | `context delete` | `name`, `outcome`, `currentCleared`, `orphansAbandoned`, `releasedReservations` |
 | `context init`, `context update` | `context`, `counts`, `filesCopied`, `inputChanged`, optional `checked` |
 | `context list` | `contexts` |
@@ -339,7 +339,10 @@ and their output goldens:
 | `machine media eject`, `machine restart`, `machine start`, `machine stop` | `context`, `verb`, `machines` |
 | `machine media status` | `context`, `machines` |
 | `machine trust` | `context`, `dryRun`, `pending`, `recorded`, `hosts` |
+| `policy delete` | `context`, `deleted` |
 | `policy permissions` | `context`, `grants` |
+| `policy set` | `context`, `checked`, `grants` |
+| `policy show` | `context`, `installed`, optional `policy` |
 | `rebind-host` | `outcome`, `bindings`, `reservations` |
 | `render acquisitions` | `acquisitions` |
 | `render effective` | optional `counts`, optional `effectiveState`, optional `origins`, optional `inputDir`, optional `outputDir`, optional `effectiveStatePath`, optional `objects` |
@@ -1228,7 +1231,7 @@ it to a variable.
 | `substrate.lend-not-revoked` | A warning a block's attempt reports when the return of a KubeVirt host access it was lent could not delete the per-lend Secret its token is bound to; it names the host cluster, the Secret and the lifetime that still bounds the token, and a later lend sweeps the Secret once that lifetime has passed ([lent KubeVirt access revocation](../substrates.md#lent-kubevirt-access-revocation)). Never a refusal, and it changes no block's state. |
 | `trust.identity` | SSH identity is missing, changed, contradictory, or not authorized. |
 | `access.denied` | Delegated session admission could not prove a matching grant or the required access boundary. |
-| `access.policy` | A session access policy failed installation validation. |
+| `access.policy` | A session access policy failed validation, the installed document is invalid, or its deletion was not confirmed. |
 | `access.unavailable` | An applicable access request lacks required local access metadata or an available credential artifact. |
 | `access.unproved` | A revealed credential was kept from an effect never proved complete, so the access it grants was not proved; a warning. |
 | `access.target` | Explicit access cannot resolve one exact authorized target. |

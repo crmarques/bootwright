@@ -125,6 +125,10 @@ func (*Store) ReplaceSessionPolicy(ctx context.Context, _ contexts.Record, _ []b
 	return unsupported(ctx)
 }
 
+func (*Store) RemoveSessionPolicy(ctx context.Context, _ contexts.Record, _ []byte) (bool, error) {
+	return false, unsupported(ctx)
+}
+
 func (*Store) HoldSessionAdmission(ctx context.Context) (func(), error) {
 	return nil, unsupported(ctx)
 }

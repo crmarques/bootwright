@@ -1,13 +1,24 @@
 # Session access policy
 
-An administrator installs one standalone `SessionAccessPolicy` per context
-with `bootwright policy install --context lab --file sessions.yaml`.
+An administrator sets one standalone `SessionAccessPolicy` per context
+with `bootwright policy set --context lab --file sessions.yaml`.
 The policy uses the `bootwright.io/v1alpha1` envelope, including optional
 metadata labels. Its name equals the context name. It lives in root-owned
-context state and is removed when that context is deleted. Installation
+context state and is removed when that context is deleted. Setting it
 validates the document, subjects and targets before atomically replacing the
 active policy. An empty `spec.grants: []` revokes delegated access for new
 requests. Environment imports have their own input boundary.
+
+An administrator manages the policy through its lifecycle with four commands.
+`policy set --check` runs the same validation and writes nothing; either form
+prints every grant of the document with all its subjects and expanded
+Machines. `policy show` prints the installed document verbatim, or says that
+none is installed, and does not expand targets, so a stale target cannot break
+it. `policy delete` removes the installed document after confirmation, or
+succeeds without a prompt when none is installed; for new admissions it is
+equivalent to an empty grants list, and running sessions are unaffected.
+`policy permissions` lists the caller's own grants. Only `policy permissions`
+is reachable through the delegated entry.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -97,7 +108,7 @@ an invocation that carries acquisition-route variables, it relaunches the
 delegated entry. An administrator therefore types the same command as
 everyone else. A delegate-only caller's listing is a refused sudo check,
 which sudo may log and, under its mail settings, report.
-Administrators install policy with `bootwright policy install`.
+Administrators manage policy with `bootwright policy set`.
 
 A delegated session needs the configured remote account, key authentication
 and pre-established host trust. The authorized target and the grant come from
