@@ -142,6 +142,74 @@ def route_present(request, recorded, remove=False):
         return False
 
 
+ROTATION_LIMIT = 64
+
+
+def custody_record(value, intent, pending=False):
+    require(isinstance(value, dict) and set(value) == {"intent", "metadata"} and value["intent"] == intent, "registry-ownership")
+    registry_metadata_record(value["metadata"], pending=pending)
+    return value
+
+
+def rotation_stage(intent):
+    """The one name a rotation links its new authfile inode at before it renames it over the authfile."""
+    return intent["anchor"] + "-rotation"
+
+
+def inode_info(directory, name):
+    """The metadata of the inode a name holds, read through a path descriptor that never opens its contents; None when absent."""
+    try:
+        descriptor = os.open(name, os.O_PATH | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=directory)
+    except FileNotFoundError:
+        return None
+    try:
+        return os.fstat(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def names_inode(directory, name, metadata):
+    """Whether the name holds the inode that pending-form metadata records."""
+    info = inode_info(directory, name)
+    return info is not None and registry_metadata(info, pending=True) == metadata
+
+
+def current_authfile(directory, record, pending, flight):
+    """The authfile's (info, bytes) under its committed custody, or under the rotation in flight when that rotation's rename already named
+    its new inode; an abandoned rotation, whose inode never got the name, leaves the committed custody in force."""
+    if flight is not None and names_inode(directory, REGISTRY_NAME, flight[1]["metadata"]):
+        return registry_read(directory, REGISTRY_NAME, flight[1]["metadata"], pending=True)
+    item = registry_read(directory, REGISTRY_NAME, record["metadata"])
+    require(item is None or registry_metadata(item[0], pending=True) == pending["metadata"], "registry-ownership")
+    return item
+
+
+def committed(markers, intent):
+    """The current authfile's custody after every recorded rotation.
+
+    Returns its pending and published records, the next rotation index and the
+    rotation an interrupted attempt left in flight, as (index, record), or None.
+    Each rotation records its new inode before its rename and its published
+    metadata after it; a rotation with no published record is in flight only
+    while no later rotation exists, otherwise it was abandoned unnamed."""
+    pending, record = markers.read("registry-pending.json"), markers.read("registry-file.json")
+    last = None
+    for index in range(1, ROTATION_LIMIT + 2):
+        rotating, rotated = markers.read("registry-rotating-" + str(index) + ".json"), markers.read("registry-rotated-" + str(index) + ".json")
+        if rotating is None:
+            require(rotated is None, "registry-ownership")
+            break
+        require(record is not None and index <= ROTATION_LIMIT, "registry-ownership")
+        custody_record(rotating, intent, pending=True)
+        if rotated is not None:
+            custody_record(rotated, intent)
+            require({key: value for key, value in rotated["metadata"].items() if key != "ctimeNS"} == rotating["metadata"], "registry-ownership")
+            pending, record = rotating, rotated
+        last = (index, rotating, rotated)
+    flight = (last[0], last[1]) if last is not None and last[2] is None else None
+    return pending, record, (last[0] + 1 if last is not None else 1), flight
+
+
 def inode_record(metadata):
     return "registry-inode-" + hashlib.sha256(canonical(metadata)).hexdigest() + ".json"
 
@@ -210,8 +278,12 @@ class Registry:
                         "registry-ownership")
                 if record is not None:
                     registry_metadata_record(record["metadata"], pending=is_pending)
-            if pending is not None:
-                final = registry_read(directory, REGISTRY_NAME, (ready if ready is not None else pending)["metadata"], pending=ready is None)
+            if ready is not None:
+                pending, ready, unused, flight = committed(self.worker.markers, intent)
+                final = current_authfile(directory, ready, pending, flight)
+                require(final is not None and final[1] == wanted, "registry-ownership")
+            elif pending is not None:
+                final = registry_read(directory, REGISTRY_NAME, pending["metadata"], pending=True)
                 require(final is not None and registry_metadata(final[0], pending=True) == pending["metadata"] and final[1] == wanted, "registry-ownership")
         return intent, pending, ready
 
@@ -220,7 +292,8 @@ class Registry:
         intent, pending, ready = self.worker.registry_preflight(wanted)
         if ready is not None:
             self.worker.prove_registry(wanted)
-            self.worker.markers.write_anonymous("registry-file.json", ready)
+            if self.worker.markers.read("registry-file.json") == ready:
+                self.worker.markers.write_anonymous("registry-file.json", ready)
             return False
         self.worker.markers.write_anonymous("registry-intent.json", intent)
         with registry_directory(create=True) as directory:
@@ -241,20 +314,90 @@ class Registry:
         require(self.worker.markers.owned(), "ownership")
         intent = self.worker.registry_intent()
         require(self.worker.markers.read("registry-intent.json") == intent and self.worker.markers.read("registry-removed.json") is None, "registry-ownership")
-        record = self.worker.markers.read("registry-file.json")
-        pending = self.worker.markers.read("registry-pending.json")
+        pending, record, unused_next, flight = committed(self.worker.markers, intent)
         require(isinstance(record, dict) and set(record) == {"intent", "metadata"} and record["intent"] == intent, "registry-ownership")
         require(isinstance(pending, dict) and set(pending) == {"intent", "metadata"} and pending["intent"] == intent, "registry-ownership")
         registry_metadata_record(record["metadata"])
         registry_metadata_record(pending["metadata"], pending=True)
         with registry_directory() as directory:
             require(not registry_exists(directory, intent["anchor"]), "registry-ownership")
-            item = registry_read(directory, REGISTRY_NAME, record["metadata"])
+            item = current_authfile(directory, record, pending, flight)
             require(item is not None, "registry-ownership")
-            require(registry_metadata(item[0]) == record["metadata"] and registry_metadata(item[0], pending=True) == pending["metadata"], "registry-ownership")
             registry_scope(self.worker.request, item[1])
             require(wanted is None or item[1] == wanted, "registry-ownership")
         self.prove_route()
+
+    def refresh_registry(self, wanted):
+        """Write the bound registry login into the retained authfile again when a rebind changed it, before any native pull reads it.
+
+        Only an authfile the authorization published is rewritten, under the same
+        custody proof; a host whose authorization has not published one gets the
+        bound login from that authorization instead."""
+        markers = self.worker.markers
+        if not markers.owned() or markers.read("registry-file.json") is None:
+            return False
+        registry_scope(self.worker.request, wanted)
+        intent = self.worker.registry_intent()
+        require(markers.read("registry-removal.json") is None and markers.read("registry-removed.json") is None, "registry-ownership")
+        pending, record, following, flight = committed(markers, intent)
+        changed = False
+        if flight is not None:
+            with registry_directory() as directory:
+                changed = self.settle(directory, intent, record, flight) is not None
+            pending, record, following, flight = committed(markers, intent)
+        self.worker.prove_registry()
+        with registry_directory() as directory:
+            item = registry_read(directory, REGISTRY_NAME, record["metadata"])
+            require(item is not None and pending is not None, "registry-ownership")
+            if item[1] == wanted:
+                return changed
+            require(following <= ROTATION_LIMIT, "registry-ownership")
+            self.rotate(directory, intent, following, wanted)
+        self.worker.prove_registry(wanted)
+        return True
+
+    def rotate(self, directory, intent, index, wanted):
+        """Replace the authfile by a new inode: its record is durable before it is named, and the rename publishes it whole."""
+        stage = rotation_stage(intent)
+        require(not registry_exists(directory, stage) and not registry_exists(directory, intent["anchor"]), "registry-ownership")
+        descriptor = os.open(".", os.O_TMPFILE | os.O_RDWR | os.O_CLOEXEC, 0o600, dir_fd=directory)
+        with os.fdopen(descriptor, "wb") as stream:
+            os.fchmod(descriptor, 0o600)
+            os.fchown(descriptor, 0, 0)
+            stream.write(wanted)
+            stream.flush()
+            os.fsync(descriptor)
+            metadata = registry_metadata(os.fstat(descriptor), pending=True)
+            registry_metadata_record(metadata, pending=True)
+            self.worker.markers.write_anonymous("registry-rotating-" + str(index) + ".json", {"intent": intent, "metadata": metadata})
+            os.link("/proc/self/fd/" + str(descriptor), stage, dst_dir_fd=directory, follow_symlinks=True)
+        os.rename(stage, REGISTRY_NAME, src_dir_fd=directory, dst_dir_fd=directory)
+        os.fsync(directory)
+        self.publish_rotation(directory, intent, index, metadata)
+
+    def publish_rotation(self, directory, intent, index, metadata):
+        final = registry_read(directory, REGISTRY_NAME, metadata, pending=True)
+        require(final is not None, "registry-ownership")
+        rotated = {"intent": intent, "metadata": registry_metadata(final[0])}
+        self.worker.markers.write_anonymous("registry-rotated-" + str(index) + ".json", rotated)
+        return rotated
+
+    def settle(self, directory, intent, record, flight):
+        """Finish the rotation an interrupted attempt left, or report it abandoned (None) when its inode never got a name."""
+        index, rotating = flight
+        stage = rotation_stage(intent)
+        info = inode_info(directory, REGISTRY_NAME)
+        require(info is not None, "registry-ownership")
+        if registry_metadata(info, pending=True) != rotating["metadata"]:
+            require(registry_metadata(info) == record["metadata"], "registry-ownership")
+            staged = inode_info(directory, stage)
+            if staged is None:
+                return None
+            require(stat.S_ISREG(staged.st_mode) and staged.st_nlink == 1 and registry_metadata(staged, pending=True) == rotating["metadata"],
+                    "registry-ownership")
+            os.rename(stage, REGISTRY_NAME, src_dir_fd=directory, dst_dir_fd=directory)
+            os.fsync(directory)
+        return rotating, self.publish_rotation(directory, intent, index, rotating["metadata"])
 
     def prepare_route(self):
         """Publish this host's podman engine route before any native pull can need it; a name this cluster's record does not bind refuses.
@@ -302,10 +445,16 @@ class Registry:
         teardown = self.worker.markers.read("native-teardown.json")
         require(self.worker.markers.owned() and isinstance(teardown, dict) and teardown == proof and type(teardown.get("removed")) is bool
                 and not self.worker.daemons(), "registry-teardown-unproved")
-        record = self.worker.markers.read("registry-file.json")
-        require(isinstance(record, dict) and set(record) == {"intent", "metadata"} and record["intent"] == self.worker.registry_intent(), "registry-ownership")
+        intent = self.worker.registry_intent()
+        pending, record, unused, flight = committed(self.worker.markers, intent)
+        require(isinstance(record, dict) and set(record) == {"intent", "metadata"} and record["intent"] == intent, "registry-ownership")
         registry_metadata_record(record["metadata"])
-        pending = self.worker.markers.read("registry-pending.json")
+        if flight is not None and self.worker.markers.read("registry-removal.json") is None:
+            # A rotation's new inode is named only by this custody: it is finished, then removed with the authfile, and never left behind.
+            with registry_directory() as directory:
+                settled = self.settle(directory, intent, record, flight)
+            if settled is not None:
+                pending, record = settled
         require(self.worker.markers.read("registry-intent.json") == record["intent"] and isinstance(pending, dict) and set(pending) == {"intent", "metadata"}
                 and pending["intent"] == record["intent"], "registry-ownership")
         registry_metadata_record(pending["metadata"], pending=True)

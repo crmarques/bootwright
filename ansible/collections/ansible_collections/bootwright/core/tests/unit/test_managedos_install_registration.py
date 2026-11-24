@@ -174,6 +174,16 @@ def test_apply_publishes_the_marker_proof_before_registering():
             if (task.get(PROTOCOL) or {}).get("phase") == "prepared"] == ["apply.yml"]
 
 
+def test_apply_records_the_marker_proof_before_network_convergence():
+    # A subscription package source registers in the installer; a removal reads
+    # the guest once this proof is recorded, so it precedes every later step
+    # that can end the apply before registration.
+    applied = flattened("apply.yml")
+    prepared = only(applied, lambda task: (task.get(PROTOCOL) or {}).get("phase") == "prepared", "publish the marker proof")
+    for name in ("network.yml", "root_encryption.yml", "host_security.yml", "register.yml"):
+        assert prepared < only(applied, included(name), "include " + name)
+
+
 def test_register_material_never_enters_a_task_variable():
     carriers = []
     for name in task_files():

@@ -480,6 +480,17 @@ def enroll_hosts(request, bootstrap, transport):
     raise ceph_native.Refusal("enrollment-budget")
 
 
+def authorize_hosts(request, transport, stages, private):
+    """Authorize each host not yet prepared; every other host's retained authfile gets the registry login this run bound, before any
+    native pull, since a rebind may have changed it after that host's authorization."""
+    authorization = {name: private[name] for name in ("clusterPublicKey", "registryJSON", "clusterPrivateKey", "knownHosts")}
+    authorized = host_round(transport, [host for host in request["hosts"] if stages[host["name"]] in ("unclaimed", "claimed")],
+                            "authorize", authorization)
+    refreshed = host_round(transport, [host for host in request["hosts"] if stages[host["name"]] not in ("unclaimed", "claimed")],
+                           "registry_refresh", {"registryJSON": private["registryJSON"]})
+    return any(value["changed"] for value in authorized + refreshed)
+
+
 def apply_tunnel_cluster(request, bootstrap, transport, state, preparations):
     """Resume only exact owned native transitions with their retained intents."""
     stage = ceph_tunnel_staging.prove_recovery_record(request, bootstrap["name"], state, evidence=True)
@@ -501,10 +512,7 @@ def apply_tunnel_cluster(request, bootstrap, transport, state, preparations):
                            and stages[host["name"]] in ("unclaimed", "claimed")], "tunnel_preflight", {"knownHosts": private["knownHosts"]})
     claimed = host_round(transport, [host for host in request["hosts"] if stages[host["name"]] == "unclaimed"], "claim")
     changed = any(value["changed"] for value in claimed) or changed
-    authorization = {name: private[name] for name in ("clusterPublicKey", "registryJSON", "clusterPrivateKey", "knownHosts")}
-    authorized = host_round(transport, [host for host in request["hosts"] if stages[host["name"]] in ("unclaimed", "claimed")],
-                            "authorize", authorization)
-    changed = any(value["changed"] for value in authorized) or changed
+    changed = authorize_hosts(request, transport, stages, private) or changed
     ssh = {name: private[name] for name in ("clusterPrivateKey", "clusterPublicKey", "knownHosts")}
     if fresh:
         changed = transport.call(bootstrap, "bootstrap", ssh)["changed"] or changed

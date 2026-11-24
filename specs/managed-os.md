@@ -1103,8 +1103,8 @@ as `{"marker":<marker>}`, the [before-state](#unknown-resolution), through the
 acknowledged `prepared` record of
 [the adapter result protocol](architecture.md#the-adapter-result-protocol). The
 capability accepts exactly that one member naming the frozen marker, and the
-worker registers only after the runner has recorded it, so an apply whose
-records hold no such preparation never registered. The marker is public, and
+worker registers only after the runner has recorded it, so the worker never
+registers for an apply whose records hold none. The marker is public, and
 the preparation carries nothing else. A preparation naming anything else is
 never acknowledged, so the worker never registers, and the attempt fails
 `install.evidence-invalid` with `the installation's automation published a
@@ -1203,9 +1203,11 @@ unregister" setting, which Bootwright neither reads nor changes; the CA file
 and `rhsm.conf` leave with the Machine's disks. The capability
 decides whether the removal reads the guest at all, and tells the automation
 `guest` or `skip`; an automation told neither refuses before any effect. An
-installation whose apply records hold no preparation naming its marker never
-registered, so its removal is `skip`: it never reads, connects to or names the
-guest, records an empty `registration` and withdraws the published content. A
+installation whose apply records hold no preparation naming its marker has no
+proved marker, so its removal is `skip`: it never reads, connects to or names the
+guest, records an empty `registration` and withdraws the published content.
+Without `registration.installSource` it never registered; with it, the
+installer's consumer stays ([Failure](managed-os-subscription-source.md#failure)). A
 preparation this executable cannot read refuses `install.records-missing`, `the apply
 records of Machine/<machine> hold a before-state this executable cannot read`,
 before the adapter runs. A removal that reads the guest completes only with
@@ -2470,11 +2472,23 @@ applies to the machine's system sshd and refuses socket activation. SSH port
 changes must be coordinated with the filter. Firewalld and other listeners
 continue to apply their own rules.
 
-Apply checks the connected peer against the candidate before publishing the
-filter. Installed-host apply verifies the policy again through a fresh pinned
-session. Observation checks the persistent files, startup enablement and actual
-kernel chain. Removal deletes only this operation's owned filter and startup
-files.
+Apply checks the connected peer against the candidate before it changes the
+filter. A peer outside the candidate, socket activation, an sshd listener on a
+port its configuration does not name, a chain that does not prove after
+publication, and a fresh session that does not confirm the policy each refuse
+`host-firewall-failed` with cause `ssh-admission`, whose message and remedy are
+the SSH source row of the refusal table below. A filter whose chain does not
+prove after its file and unit are published is withdrawn before apply refuses:
+the earlier file, unit, enablement and chain return, or none where there were
+none. Installed-host apply alone verifies the policy again: it loads only the
+chain, under a timer of `WITHDRAW_SECONDS` that restores the earlier chain, and
+a fresh pinned session checks its own peer, stops that timer and publishes the
+file and unit. Without that confirmation apply waits until the timer has
+restored the earlier chain, then refuses, so access returns to what it was.
+Provided-host apply opens no fresh session. `test_managedos_firewall_ssh.py`
+holds the peer check, the withdrawal and the confirmation. Observation checks the
+persistent files, startup enablement and actual kernel chain. Removal deletes
+only this operation's owned filter and startup files.
 
 ### Implementations
 
@@ -2588,6 +2602,7 @@ are partial; a foreign file, or a membership without its file, is unknown.
 | `host-firewall-no-interface` | `Machine/<machine> has no interface whose network holds <networks>, which firewalld service <service> admits traffic on` | `give Machine/<machine> the declared listener address or required network in its network configuration, then run bootwright <verb> --context <context> again` |
 | `host-firewall-inactive` | `firewalld is not running on Machine/<machine>, whose install profile enables it` | `start firewalld on Machine/<machine> with systemctl enable --now firewalld, then run bootwright <verb> --context <context> again` |
 | `host-firewall-failed` | `firewalld refused a change on Machine/<machine>: <cause>` | `read the firewalld journal on Machine/<machine>, correct it, then run bootwright <verb> --context <context> again` |
+| `host-firewall-failed`, cause `ssh-admission` on a Machine with an SSH source policy | `SSH source admission on Machine/<machine> could not be proved` | `verify the connected peer is in spec.firewall.ssh.allowedSources and check the system sshd listeners and the SSH ingress unit journal on Machine/<machine>, then run bootwright <verb> --context <context> again` |
 
 `<networks>` is the requirement's networks joined by ` or is `, `<address>` its
 first, `<verb>` is `destroy` for a removal and `apply` otherwise, and `<cause>` is `tooling`, `reload`, `zone`, `write`, `address`, `runtime-drift`, `enable` or `ssh-admission`, else

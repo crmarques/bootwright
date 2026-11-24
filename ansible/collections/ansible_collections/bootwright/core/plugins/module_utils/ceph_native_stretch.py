@@ -698,7 +698,14 @@ class TiebreakerRemoval:
             require(record is None or isinstance(record, dict) and set(record) == {"intent", "metadata"} and record["intent"] == intent,
                     "tiebreaker-foreign")
         if ready is not None:
-            return intent, ((REGISTRY_NAME, ready["metadata"], False, (1,)), (intent["anchor"], None, False, ()))
+            unused_pending, ready, unused_next, flight = ceph_native_registry.committed(self.markers, intent)
+            stage = (ceph_native_registry.rotation_stage(intent), None, False, ())
+            if flight is not None:
+                # An interrupted rotation's new inode is this host's credential too, whether its rename happened or not.
+                stage = (stage[0], flight[1]["metadata"], True, (1,))
+                if ceph_native_registry.names_inode(directory, REGISTRY_NAME, flight[1]["metadata"]):
+                    return intent, ((REGISTRY_NAME, flight[1]["metadata"], True, (1,)), stage, (intent["anchor"], None, False, ()))
+            return intent, ((REGISTRY_NAME, ready["metadata"], False, (1,)), stage, (intent["anchor"], None, False, ()))
         if pending is not None:
             return intent, ((REGISTRY_NAME, pending["metadata"], True, (1,)), (intent["anchor"], None, False, ()))
         return intent, ((REGISTRY_NAME, None, False, ()), (intent["anchor"], None, False, ()))

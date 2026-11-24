@@ -628,3 +628,20 @@ func TestSSHSourcesPlanAFilterWithoutListenerGrants(t *testing.T) {
 		}
 	}
 }
+
+func TestAnUnprovedSSHSourceAdmissionNamesItsOwnMessageAndRemedy(t *testing.T) {
+	block := firewallBlock(t)
+	request, _ := DecodeFirewallRequest(block.Request)
+	type detailed interface{ WithDetail(string) error }
+	request.SSHSources = []string{"192.0.2.0/24"}
+	reported := diagnostics.Of(firewallRefusals(testContext, request, false)["host-firewall-failed"].(detailed).WithDetail("ssh-admission"))[0]
+	machine := "Machine/" + request.Identity.Object
+	if reported.Message != "SSH source admission on "+machine+" could not be proved" ||
+		reported.Remediation != "verify the connected peer is in spec.firewall.ssh.allowedSources and check the system sshd listeners and the SSH ingress unit journal on "+machine+", then run bootwright apply --context "+testContext+" again" {
+		t.Fatalf("ssh-admission = %#v", reported)
+	}
+	request.SSHSources = nil
+	if message := diagnostics.Of(firewallRefusals(testContext, request, false)["host-firewall-failed"].(detailed).WithDetail("ssh-admission"))[0].Message; message != "firewalld refused a change on "+machine+": ssh-admission" {
+		t.Fatalf("ssh-admission without SSH sources = %s", message)
+	}
+}

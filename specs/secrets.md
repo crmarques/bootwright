@@ -620,7 +620,9 @@ material an installer keeps in its [work area](openshift-clusters.md#boot-media)
 are retained this way, each where its owning page places it. The Ceph registry
 login, an access credential, is also retained native-side: each Ceph host
 keeps it in cephadm's registry login file `/etc/ceph/podman-auth.json`, which
-cephadm reads for its own image pulls.
+cephadm reads for its own image pulls, and a rebind writes it there again as
+the [access-credential rebind](state-reconciliation.md#access-credential-rebind)
+states.
 
 Each retained file is private under the
 [filesystem rules](security.md#filesystem-and-artifact-safety), lies beneath a

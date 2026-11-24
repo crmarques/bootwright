@@ -494,3 +494,22 @@ func TestASubscriptionSourceLendsItsRegistrationMaterialToApplyAlone(t *testing.
 		}
 	}
 }
+
+// The installer registers before any apply proves the marker; a removal reads
+// the guest exactly when the apply recorded that proof, as for any consumer.
+func TestASubscriptionSourceRemovalReadsTheGuestOnlyAfterItsMarkerProof(t *testing.T) {
+	request := pinnedRequest(t, subscriptionSourceCatalog())
+	if request.Registration == nil || !request.Registration.InstallSource {
+		t.Fatalf("registration = %+v", request.Registration)
+	}
+	skipped := removalRunner(t, RegistrationEvidence{})
+	if _, err := New(skipped).Destroy(context.Background(), encryptionExecution(t, request, nil)); err != nil ||
+		len(skipped.requests) != 1 || skipped.requests[0].MaterialValues["unregister"] != "skip" {
+		t.Fatalf("an unproved subscription-sourced destroy = %v, adapter %+v", diagnostics.Of(err), skipped.requests)
+	}
+	read := removalRunner(t, RegistrationEvidence{Consumer: ownedConsumer, State: "unregistered"})
+	if _, err := New(read).Destroy(context.Background(), proving(t, encryptionExecution(t, request, nil), request)); err != nil ||
+		len(read.requests) != 1 || read.requests[0].MaterialValues["unregister"] != "guest" {
+		t.Fatalf("a proved subscription-sourced destroy = %v, adapter %+v", diagnostics.Of(err), read.requests)
+	}
+}

@@ -29,6 +29,11 @@ description:
     C(mark) inside its description, or the service has no such interface.
   - C(remove) takes the service out of every permanent zone, deletes an owned
     file and reloads. C(inspect) reads and changes nothing.
+  - With C(ssh_sources), C(apply) loads only the SSH source chain, under a
+    timer that puts the earlier chain back, and a second, fresh session
+    confirms it from this controller and publishes its file and unit. Without
+    that confirmation the module waits for the withdrawal and returns
+    C(host-firewall-failed) with C(ssh-admission).
   - Returns closed reasons only.
   - C(host-firewall-foreign) a service file of that name is not owned; C(detail)
     names the service and nothing was changed.
@@ -190,6 +195,7 @@ evidence:
 
 import inspect
 import json
+import time
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.bootwright.core.plugins.module_utils import managedos_firewall_worker as worker, managedos_guest_ssh, remote_command
@@ -304,8 +310,13 @@ def interpret(operation, names, outcome):
     return refusal(value["reason"], value.get("cause"), value.get("detail"))
 
 
-def execute(params, run=managedos_guest_ssh.run):
-    """The module result; only the operation, the mark and the services reach the worker."""
+def execute(params, run=managedos_guest_ssh.run, now=time.monotonic, sleep=time.sleep):
+    """The module result; only the operation, the mark and the services reach the worker.
+
+    An apply with SSH sources loads only the new chain under the worker's armed
+    withdrawal; a second, fresh session proves the policy from this controller
+    and publishes it. Without that confirmation the result waits until the
+    withdrawal has put the earlier chain back, then refuses ssh-admission."""
     check_arguments(params)
     names = [service["name"] for service in params["services"]]
     services = [dict({key: value for key, value in service.items() if key != "addresses" or value is not None}, networks=list(service["networks"] or []))
@@ -314,6 +325,8 @@ def execute(params, run=managedos_guest_ssh.run):
     sources = params.get("ssh_sources", [])
     if sources:
         payload["sshSources"] = sources
+        if params["operation"] == "apply":
+            payload["confirm"] = True
     remote_argv = remote_command.fixed_worker_argv(worker_source())
     try:
         argv = managedos_guest_ssh.guest_argv(
@@ -322,12 +335,41 @@ def execute(params, run=managedos_guest_ssh.run):
             identity=params["identity"], user=params["user"], address=params["address"], remote_argv=remote_argv)
     except managedos_guest_ssh.SessionError as error:
         return refusal("transport", "session", str(error))
+    arming = bool(sources) and params["operation"] == "apply"
+    armed = now()
+
+    def withdrawn():
+        """Wait until any withdrawal this apply armed has fired: from before the call that may have armed it."""
+        remaining = armed + worker.WITHDRAW_SECONDS + worker.WITHDRAW_MARGIN - now()
+        if remaining > 0:
+            sleep(remaining)
+
     outcome = interpret(params["operation"], names, run(argv, canonical(payload), params["timeout"]))
-    if sources and params["operation"] == "apply" and outcome["ok"]:
-        probe = dict(payload, operation="inspect")
-        verified = interpret("inspect", names, run(argv, canonical(probe), params["timeout"]))
-        if not verified["ok"] or verified["evidence"].get("sshPolicy") != "ready":
+    if not arming:
+        if outcome["ok"] and outcome["evidence"].get("sshPolicy") == "pending":
+            return refusal("transport", "answer")
+        return outcome
+    if not outcome["ok"]:
+        # A lost answer may hide a loaded candidate under its armed withdrawal.
+        withdrawn()
+        return outcome
+    inspection = canonical(dict({key: value for key, value in payload.items() if key != "confirm"}, operation="inspect"))
+    if outcome["evidence"].get("sshPolicy") != "pending":
+        verified = interpret("inspect", names, run(argv, inspection, params["timeout"]))
+        if verified["ok"] and verified["evidence"].get("sshPolicy") == "ready":
+            return outcome
+        return refusal("host-firewall-failed", "ssh-admission")
+    confirmation = canonical(dict({key: value for key, value in payload.items() if key != "confirm"}, operation="confirm"))
+    verified = interpret("confirm", names, run(argv, confirmation, min(params["timeout"], worker.WITHDRAW_SECONDS)))
+    if not (verified["ok"] and verified["evidence"].get("sshPolicy") == "ready"):
+        withdrawn()
+        if verified.get("reason") != "transport":
             return refusal("host-firewall-failed", "ssh-admission")
+        # The confirmation's answer was lost: only a later reading proves whether it published.
+        verified = interpret("inspect", names, run(argv, inspection, params["timeout"]))
+        if not (verified["ok"] and verified["evidence"].get("sshPolicy") == "ready"):
+            return refusal("host-firewall-failed", "ssh-admission")
+    outcome["evidence"]["sshPolicy"] = "ready"
     return outcome
 
 

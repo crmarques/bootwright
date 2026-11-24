@@ -532,7 +532,7 @@ def test_lost_mount_reply_is_finalized_by_coordinator_before_enrollment_without_
             if phase == "enroll":
                 assert native.markers.read("tunnel-mounted.json") is not None
                 return native.enroll()
-            assert phase in ("devices", "license", "services", "osd_prepare")
+            assert phase in ("devices", "registry_refresh", "license", "services", "osd_prepare")
             return {"changed": False}
 
     ceph_core.apply_tunnel_cluster(native.request, native.host, Transport(), state, preparations)

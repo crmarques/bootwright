@@ -127,6 +127,24 @@ Satellite that no record on the Machine names; it is removed with the
 Satellite's own tools before the next apply, which would otherwise meet it as
 that last cause.
 
+The apply records its marker proof, the
+[before-state](managed-os.md#unknown-resolution), when the installed system
+first answers with this installation's marker, before network convergence,
+the FIPS and encryption proofs and the registration, so a destroy after that
+point unregisters the installer's consumer as any owned one. A destroy whose
+apply never recorded that proof, such as one ended or cancelled while the
+installer ran or before the installed system answered through its identity
+channel, skips the guest under the
+[removal rule](managed-os.md#registration) and leaves the consumer the
+installer registered on the Satellite; it is removed with the Satellite's own
+tools before the next apply, as above. `TestASubscriptionSourceRemovalReadsTheGuestOnlyAfterItsMarkerProof`
+and `test_apply_records_the_marker_proof_before_network_convergence` hold this.
+
+Not yet met: a destroy does not read the guest of a subscription-sourced
+installation whose apply was cut short before its marker proof, so the consumer
+its installer registered stays on the Satellite; tracked as
+[B1724](milestones/m1.md#b1724).
+
 ## Sources and qualification
 
 [RHEL 9 Kickstart `rhsm`](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/automatically_installing_rhel/kickstart-commands-and-options-reference_rhel-installer),

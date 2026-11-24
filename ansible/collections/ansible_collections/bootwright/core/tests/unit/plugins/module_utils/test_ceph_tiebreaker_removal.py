@@ -633,3 +633,18 @@ def test_ambiguous_default_config_refuses_before_cleanup(tiebreaker, contents):
         removal(tiebreaker).remove()
     assert not tiebreaker.commands
     assert stretch.REMOVAL_ATTEMPT not in tiebreaker.markers.records
+
+
+@pytest.mark.parametrize("renamed", [False, True])
+def test_a_rotation_an_interrupted_rebind_left_is_removed_with_the_tiebreaker_credential(tiebreaker, renamed):
+    root, intent = tiebreaker.root, tiebreaker.registry_intent()
+    stage = os.path.join(root, "etc/ceph", intent["anchor"] + "-rotation")
+    write(stage, b'{"auths":{}}\n', 0o600)
+    info = os.stat(stage)
+    metadata = {"dev": info.st_dev, "inode": info.st_ino, "uid": 0, "gid": 0, "mode": 0o600, "mtimeNS": info.st_mtime_ns}
+    tiebreaker.markers.records["registry-rotating-1.json"] = {"intent": intent, "metadata": metadata}
+    if renamed:
+        os.rename(stage, os.path.join(root, "etc/ceph/podman-auth.json"))
+    assert removal(tiebreaker).remove() == {"changed": True, "removed": True, "attempted": True}
+    assert_absent(tiebreaker)
+    assert not os.path.lexists(stage)

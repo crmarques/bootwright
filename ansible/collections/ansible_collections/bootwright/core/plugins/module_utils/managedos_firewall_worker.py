@@ -58,7 +58,7 @@ MAX_ADDRESSES = 64
 MAX_ZONES = 64
 MAX_MEMBERSHIPS = 4096
 MAX_MARK = 256
-OPERATIONS = ("apply", "inspect", "remove")
+OPERATIONS = ("apply", "inspect", "remove", "confirm")
 STATES = ("owned", "absent", "foreign")
 REASONS = ("host-firewall-foreign", "host-firewall-no-interface", "host-firewall-inactive", "host-firewall-failed", "transport")
 CAUSES = {"host-firewall-failed": ("tooling", "reload", "zone", "write", "address", "runtime-drift", "enable", "ssh-admission")}
@@ -627,7 +627,14 @@ SSH_UNIT = "bw-ssh-ingress.service"
 SSH_CONFIG = "/etc/" + SSH_TABLE + ".nft"
 SSH_UNIT_PATH = "/etc/systemd/system/" + SSH_UNIT
 SSH_LOCK = "/run/" + SSH_TABLE + ".lock"
-SSH_STATES = ("absent", "drifted", "ready")
+SSH_CANDIDATES = "/run"
+SSH_STATES = ("absent", "drifted", "ready", "pending")
+SYSTEMD_RUN = "/usr/bin/systemd-run"
+WITHDRAW_UNIT = "bw-ssh-ingress-withdraw"
+WITHDRAW_TIMER = WITHDRAW_UNIT + ".timer"
+WITHDRAW_SERVICE = WITHDRAW_UNIT + ".service"
+WITHDRAW_SECONDS = 90
+WITHDRAW_MARGIN = 15
 
 
 def valid_ssh_sources(sources):
@@ -823,15 +830,155 @@ def ssh_command(guest, *arguments):
         raise failed("ssh-admission")
 
 
+def ssh_restore_path():
+    return os.path.join(SSH_CANDIDATES, SSH_TABLE + ".restore")
+
+
+def ssh_restore_argv():
+    """Load the kernel chain this apply found, as staged before any change: the chain it listed, or none."""
+    return [NFT, "-f", ssh_restore_path()]
+
+
+def ssh_stage_restore(guest, runtime):
+    """Stage, in a private run file, the chain the kernel holds before anything changes it; an absent chain stages its absence."""
+    identity = "inet " + SSH_TABLE
+    data = ("add table " + identity + "\ndelete table " + identity + "\n").encode("ascii")
+    if runtime is not None:
+        code, listing = guest.run([NFT, "list", "table", "inet", SSH_TABLE])
+        if code or not listing:
+            raise failed("ssh-admission")
+        data += listing
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=SSH_CANDIDATES, delete=False) as file:
+            temporary = file.name
+            os.fchmod(file.fileno(), 0o600)
+            file.write(data)
+            file.flush()
+            os.fsync(file.fileno())
+        os.replace(temporary, ssh_restore_path())
+        temporary = None
+    except OSError:
+        raise failed("ssh-admission") from None
+    finally:
+        if temporary is not None:
+            os.unlink(temporary)
+    # A restore that would not reload never guards a candidate.
+    ssh_command(guest, NFT, "-c", "-f", ssh_restore_path())
+
+
+def ssh_attempt(step):
+    try:
+        step()
+        return True
+    except Refused:
+        return False
+
+
+def ssh_withdraw(guest, mark, prior):
+    """Put the filter, its unit, its enablement and its chain back as this apply found them.
+
+    Every step runs even when an earlier one fails, so the most of the earlier
+    access returns; the caller refuses ssh-admission either way. The chain is
+    the staged one, never a file: when an earlier file cannot be put back the
+    unit is left disabled, so no boot loads the candidate either."""
+    config, unit, enabled = prior
+    ssh_attempt(lambda: ssh_command(guest, SYSTEMCTL, "disable", SSH_UNIT)
+                if guest.run([SYSTEMCTL, "is-enabled", SSH_UNIT])[1] == b"enabled\n" and not enabled else None)
+    if unit is None:
+        guest.run([SYSTEMCTL, "stop", SSH_UNIT])
+    restored = all([
+        ssh_attempt(lambda: publish_ssh_file(SSH_CONFIG, config) if ssh_file(SSH_CONFIG, mark) != config else None),
+        ssh_attempt(lambda: publish_ssh_file(SSH_UNIT_PATH, unit) if ssh_file(SSH_UNIT_PATH, mark) != unit else None),
+    ])
+    ssh_attempt(lambda: ssh_command(guest, SYSTEMCTL, "daemon-reload"))
+    if enabled and restored:
+        ssh_attempt(lambda: ssh_command(guest, SYSTEMCTL, "enable", SSH_UNIT))
+    elif enabled:
+        ssh_attempt(lambda: ssh_command(guest, SYSTEMCTL, "disable", SSH_UNIT))
+    ssh_attempt(lambda: ssh_command(guest, *ssh_restore_argv()))
+
+
+def ssh_publish(guest, mark, prior, wanted_config, wanted_unit, wanted_runtime):
+    """Publish the filter and its unit and prove the chain they load; the caller withdraws them on any refusal."""
+    config, unit, _enabled = prior
+    if config != wanted_config:
+        publish_ssh_file(SSH_CONFIG, wanted_config)
+    if unit != wanted_unit:
+        publish_ssh_file(SSH_UNIT_PATH, wanted_unit)
+    ssh_command(guest, SYSTEMCTL, "daemon-reload")
+    code, properties = guest.run([SYSTEMCTL, "show", "--property=FragmentPath,DropInPaths", SSH_UNIT])
+    expected = {("FragmentPath=" + SSH_UNIT_PATH).encode("ascii"), b"DropInPaths="}
+    if code or set(properties.splitlines()) != expected:
+        raise failed("ssh-admission")
+    ssh_command(guest, SYSTEMCTL, "enable", SSH_UNIT)
+    ssh_command(guest, SYSTEMCTL, "reload-or-restart", SSH_UNIT)
+    if ssh_runtime(guest, mark) != wanted_runtime:
+        raise failed("ssh-admission")
+
+
+def ssh_candidate(guest, wanted_config, *argv):
+    """Run the nft argv on the candidate configuration staged in a private run file."""
+    with tempfile.NamedTemporaryFile(dir=SSH_CANDIDATES) as candidate:
+        candidate.write(wanted_config)
+        candidate.flush()
+        ssh_command(guest, *argv, candidate.name)
+
+
+def ssh_arm(guest, mark, wanted_config, wanted_runtime):
+    """Load only the candidate chain, after a timer that puts the earlier chain back unless a fresh session confirms it."""
+    if guest.run([SYSTEMCTL, "is-active", WITHDRAW_TIMER])[0] == 0:
+        # An earlier arm no session confirmed: its staged chain is the one this apply found.
+        ssh_command(guest, *ssh_restore_argv())
+    guest.run([SYSTEMCTL, "stop", WITHDRAW_TIMER, WITHDRAW_SERVICE])
+    guest.run([SYSTEMCTL, "reset-failed", WITHDRAW_TIMER, WITHDRAW_SERVICE])
+    ssh_stage_restore(guest, ssh_runtime(guest, mark))
+    try:
+        ssh_command(guest, SYSTEMD_RUN, "--unit=" + WITHDRAW_UNIT, "--collect", "--on-active=" + str(WITHDRAW_SECONDS),
+                    "--timer-property=AccuracySec=1s", *ssh_restore_argv())
+        ssh_candidate(guest, wanted_config, NFT, "-f")
+        if ssh_runtime(guest, mark) != wanted_runtime:
+            raise failed("ssh-admission")
+    except Refused:
+        # The timer stays armed unless this restore proved the earlier chain back.
+        if guest.run(ssh_restore_argv())[0] == 0:
+            guest.run([SYSTEMCTL, "stop", WITHDRAW_TIMER])
+        raise failed("ssh-admission") from None
+
+
+def ssh_confirm(guest, payload, config, unit, wanted_unit):
+    """A fresh session's confirmation: stop the withdrawal, prove it never started and that the chain the apply loaded is the one this
+    session came through, then publish its file and unit; any refusal after the stop withdraws everything first."""
+    mark = payload["mark"]
+    prior = (config, unit, guest.run([SYSTEMCTL, "is-enabled", SSH_UNIT])[1] == b"enabled\n")
+    guest.run([SYSTEMCTL, "stop", WITHDRAW_TIMER, WITHDRAW_SERVICE])
+    try:
+        if guest.run([SYSTEMCTL, "is-active", WITHDRAW_TIMER])[0] == 0:
+            raise failed("ssh-admission")
+        code, started = guest.run([SYSTEMCTL, "show", "--property=ExecMainStartTimestampMonotonic", WITHDRAW_SERVICE])
+        if code or started.strip() != b"ExecMainStartTimestampMonotonic=0":
+            raise failed("ssh-admission")
+        wanted_config, wanted_runtime = ssh_rules(payload["sshSources"], ssh_ports(guest), mark)
+        if ssh_runtime(guest, mark) != wanted_runtime:
+            raise failed("ssh-admission")
+        ssh_publish(guest, mark, prior, wanted_config, wanted_unit, wanted_runtime)
+    except Refused:
+        ssh_withdraw(guest, mark, prior)
+        raise failed("ssh-admission") from None
+    return "ready", True
+
+
 def ssh_policy(guest, payload):
     sources = payload["sshSources"]
     mark = payload["mark"]
     operation = payload["operation"]
     config, unit = ssh_file(SSH_CONFIG, mark), ssh_file(SSH_UNIT_PATH, mark)
-    runtime = ssh_runtime(guest, mark)
     wanted_unit = ssh_unit(mark)
     if unit is not None and unit != wanted_unit:
         raise failed("ssh-admission")
+    if operation == "confirm":
+        return ssh_confirm(guest, payload, config, unit, wanted_unit)
+    runtime = ssh_runtime(guest, mark)
     if operation == "remove":
         if unit is not None:
             ssh_command(guest, SYSTEMCTL, "disable", SSH_UNIT)
@@ -856,24 +1003,18 @@ def ssh_policy(guest, payload):
         return "ready", False
     if operation == "inspect":
         return "drifted", False
-    # Test the full atomic replacement before writing persistent state.
-    with tempfile.NamedTemporaryFile(dir="/run") as candidate:
-        candidate.write(wanted_config)
-        candidate.flush()
-        ssh_command(guest, NFT, "-c", "-f", candidate.name)
-    if config != wanted_config:
-        publish_ssh_file(SSH_CONFIG, wanted_config)
-    if unit != wanted_unit:
-        publish_ssh_file(SSH_UNIT_PATH, wanted_unit)
-    ssh_command(guest, SYSTEMCTL, "daemon-reload")
-    code, properties = guest.run([SYSTEMCTL, "show", "--property=FragmentPath,DropInPaths", SSH_UNIT])
-    expected = {("FragmentPath=" + SSH_UNIT_PATH).encode("ascii"), b"DropInPaths="}
-    if code or set(properties.splitlines()) != expected:
-        raise failed("ssh-admission")
-    ssh_command(guest, SYSTEMCTL, "enable", SSH_UNIT)
-    ssh_command(guest, SYSTEMCTL, "reload-or-restart", SSH_UNIT)
-    if ssh_runtime(guest, mark) != wanted_runtime:
-        raise failed("ssh-admission")
+    # Test the full atomic replacement before writing anything.
+    ssh_candidate(guest, wanted_config, NFT, "-c", "-f")
+    if payload.get("confirm"):
+        ssh_arm(guest, mark, wanted_config, wanted_runtime)
+        return "pending", True
+    prior = (config, unit, enabled)
+    ssh_stage_restore(guest, runtime)
+    try:
+        ssh_publish(guest, mark, prior, wanted_config, wanted_unit, wanted_runtime)
+    except Refused:
+        ssh_withdraw(guest, mark, prior)
+        raise failed("ssh-admission") from None
     return "ready", True
 
 
@@ -881,8 +1022,8 @@ def converge(guest, payload, remote=True):
     if "sshSources" not in payload:
         return HANDLERS[payload["operation"]](guest, payload)
     operation = payload["operation"]
-    if operation == "apply":
-        require_ssh_peer(payload["sshSources"], ssh_ports(guest), remote)
+    if operation in ("apply", "confirm"):
+        require_ssh_peer(payload["sshSources"], ssh_ports(guest), remote or operation == "confirm")
     if operation == "inspect":
         return converge_ssh(guest, payload)
     try:
@@ -964,7 +1105,7 @@ def inspect_operation(guest, payload):
     return {"changed": False, "services": guest.evidence(payload)}
 
 
-HANDLERS = {"apply": apply_operation, "inspect": inspect_operation, "remove": remove_operation}
+HANDLERS = {"apply": apply_operation, "inspect": inspect_operation, "remove": remove_operation, "confirm": inspect_operation}
 
 
 def parse_request(data):
@@ -975,7 +1116,12 @@ def parse_request(data):
         payload = json.loads(data.decode("utf-8"))
     except (ValueError, UnicodeError):
         raise Refused("transport") from None
-    if not isinstance(payload, dict) or not KEYS <= set(payload) <= KEYS | {"sshSources"} or payload["operation"] not in OPERATIONS:
+    if not isinstance(payload, dict) or not KEYS <= set(payload) <= KEYS | {"sshSources", "confirm"} or payload["operation"] not in OPERATIONS:
+        raise Refused("transport")
+    # Only an installed host's apply arms a withdrawal, and only its fresh session confirms it.
+    if "confirm" in payload and (payload["confirm"] is not True or payload["operation"] != "apply" or "sshSources" not in payload):
+        raise Refused("transport")
+    if payload["operation"] == "confirm" and "sshSources" not in payload:
         raise Refused("transport")
     if not valid_mark(payload["mark"]) or not valid_services(payload["services"]):
         raise Refused("transport")

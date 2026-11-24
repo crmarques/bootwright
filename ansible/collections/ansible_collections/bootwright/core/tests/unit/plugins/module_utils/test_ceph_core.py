@@ -1848,7 +1848,8 @@ class ReadinessTransport:
             return {"name": host["name"], "owned": True, "exists": True}
         if phase == "dashboard":
             return {"changed": True, "private": PASSWORD}
-        assert phase in ("devices", "tunnel_preflight", "claim", "authorize", "bootstrap", "cache", "enroll", "license", "services", "osd_prepare")
+        assert phase in ("devices", "tunnel_preflight", "claim", "authorize", "registry_refresh", "bootstrap", "cache", "enroll", "license", "services",
+                         "osd_prepare")
         return {"changed": phase not in ("devices", "tunnel_preflight")}
 
 
@@ -1909,6 +1910,35 @@ def test_registry_material_only_reaches_each_hosts_authorization(core_request, t
         elif phase != "authorize":
             assert phase in ("bootstrap", "tunnel_configure")
             assert set(material) == {"clusterPrivateKey", "clusterPublicKey", "knownHosts"}
+
+
+def test_a_resumed_cluster_writes_its_bound_registry_login_on_every_authorized_host_before_any_native_pull(core_request, monkeypatch):
+    package_intent(core_request)
+    bootstrap = core_request["hosts"][0]
+    private_calls = []
+
+    class ProjectionTransport(ReadinessTransport):
+        def call(self, host, phase, private=None, *, timeout=None, devices=None, service=None):
+            if private is not None:
+                private_calls.append((host["name"], phase, dict(private)))
+            return super().call(host, phase, private, timeout=timeout, devices=devices, service=service)
+
+    def stage(request, name, value, evidence=False):
+        del request, value
+        return "mounted" if evidence else "complete" if name == bootstrap["name"] else "prepared"
+
+    monkeypatch.setattr(ceph_tunnel_staging, "prove_recovery_record", stage)
+    preparations = [{"name": host["name"], "owned": True, "exists": host == bootstrap, "recovery": None} for host in core_request["hosts"]]
+    transport = ProjectionTransport(core_request, ReadinessClock())
+    ceph_core.apply_tunnel_cluster(core_request, bootstrap, transport, None, preparations)
+    calls = [(host, phase) for host, phase, unused in transport.calls]
+    refreshed = [index for index, (unused, phase) in enumerate(calls) if phase == "registry_refresh"]
+    assert sorted(calls[index][0] for index in refreshed) == [host["name"] for host in core_request["hosts"]]
+    pulls = [index for index, (unused, phase) in enumerate(calls) if phase in ("cache", "enroll", "license", "services")]
+    assert pulls and max(refreshed) < min(pulls)
+    assert not [phase for unused, phase in calls if phase in ("claim", "authorize", "bootstrap")]
+    assert [material for unused, phase, material in private_calls if phase == "registry_refresh"] == [
+        {"registryJSON": "protected-registry-material"}] * 3
 
 
 @pytest.mark.parametrize("failure,reason", [("unknown", "native-command"), ("malformed", "evidence"), ("unowned", "not-ready"), ("slow", "not-ready")])

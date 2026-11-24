@@ -163,8 +163,10 @@ minimal run is recorded in
 core/promotion gates stay on M2.
 
 Host preparation uses the invocation-local [registry broker](ceph.md) with
-an empty authfile and ephemeral mutual TLS. Bootstrap and native registry
-login never receive entitlement credentials. Core authorization reserves an
+an empty authfile and ephemeral mutual TLS. Bootstrap never receives the
+registry login, and cephadm's own registry login, which would store it in the
+cluster's configuration, never runs: each host's retained authfile is its only
+native copy ([native-side retention](secrets.md#native-side-retention)). Core authorization reserves an
 anonymous inode and durably binds it to the frozen scope before linking the
 protected guest authfile. A crash before linking leaves no named credential.
 After linking, recovery and removal prove the descriptor against that record.

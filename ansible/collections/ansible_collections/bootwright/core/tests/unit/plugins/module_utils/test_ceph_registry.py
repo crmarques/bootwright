@@ -83,7 +83,7 @@ def registry(cluster_request, tmp_path, monkeypatch):
 
     def stat_file(path, *args, **kwargs):
         actual = original_stat(path, *args, **kwargs)
-        if path == ceph_native.REGISTRY_NAME and kwargs.get("dir_fd") is not None:
+        if kwargs.get("dir_fd") is not None and (path == ceph_native.REGISTRY_NAME or str(path).startswith(".bootwright-registry-")):
             return simulated_owner(actual)
         return actual
 
@@ -602,3 +602,145 @@ def test_recovery_syncs_a_single_link_registry_marker_after_lost_acknowledgment(
     assert list(directory.iterdir()) == [directory / name]
     markers.write_anonymous(name, record)
     assert len(synced) == 2
+
+
+def rotated_login(native, password="rotated-password"):
+    return ceph_native.registry_material(native.request, json.dumps({"url": native.request["registry"], "username": "synthetic-user",
+                                                                     "password": password}))
+
+
+def test_a_rebound_registry_login_is_written_again_into_the_retained_authfile(registry):
+    native, directory, material = registry
+    native.prepare_registry(material)
+    rebound = rotated_login(native)
+    assert native.refresh_registry(rebound)
+    assert (directory / ceph_native.REGISTRY_NAME).read_bytes() == rebound
+    assert (directory / ceph_native.REGISTRY_NAME).stat().st_mode & 0o777 == 0o600
+    native.prove_registry(rebound)
+    assert not native.prepare_registry(rebound) and not native.refresh_registry(rebound)
+    with pytest.raises(ceph_native.Refusal, match="^registry-ownership$"):
+        native.prove_registry(material)
+    assert sorted(name for name in native.markers.records if "rotat" in name) == ["registry-rotated-1.json", "registry-rotating-1.json"]
+    assert [path.name for path in directory.iterdir()] == [ceph_native.REGISTRY_NAME]
+    records = json.dumps(native.markers.records)
+    assert "rotated-password" not in records and "synthetic-password" not in records and "auths" not in records
+    assert native.refresh_registry(rotated_login(native, "third-password")) and "registry-rotated-2.json" in native.markers.records
+    teardown(native)
+    assert native.remove_registry() and list(directory.iterdir()) == []
+
+
+def test_a_refresh_before_any_published_authfile_writes_nothing(registry):
+    native, directory, material = registry
+    assert not native.refresh_registry(material)
+    assert native.markers.writes == [] and not directory.exists() or list(directory.iterdir()) == []
+    native.prepare_registry(material)
+    writes = list(native.markers.writes)
+    assert not native.refresh_registry(material) and native.markers.writes == writes
+
+
+@pytest.mark.parametrize("cut", ["before-link", "before-rename", "before-record"])
+def test_an_interrupted_rotation_is_finished_by_the_next_refresh_and_never_strands_the_login(registry, monkeypatch, cut):
+    native, directory, material = registry
+    native.prepare_registry(material)
+    rebound = rotated_login(native)
+    link, rename = os.link, os.rename
+
+    def interrupt_link(source, target, **kwargs):
+        if cut == "before-link" and target.endswith("-rotation"):
+            raise OSError("synthetic interruption")
+        return link(source, target, **kwargs)
+
+    def interrupt_rename(source, target, **kwargs):
+        if cut == "before-rename":
+            raise OSError("synthetic interruption")
+        return rename(source, target, **kwargs)
+
+    def interrupt_record(name, value):
+        del value
+        if cut == "before-record" and name.startswith("registry-rotated-"):
+            raise OSError("synthetic interruption")
+
+    monkeypatch.setattr(ceph_native.os, "link", interrupt_link)
+    monkeypatch.setattr(ceph_native.os, "rename", interrupt_rename)
+    native.markers.before = interrupt_record
+    with pytest.raises(OSError):
+        native.refresh_registry(rebound)
+    monkeypatch.setattr(ceph_native.os, "link", link)
+    monkeypatch.setattr(ceph_native.os, "rename", rename)
+    native.markers.before = lambda name, value: None
+    assert native.refresh_registry(rebound)
+    native.prove_registry(rebound)
+    assert [path.name for path in directory.iterdir()] == [ceph_native.REGISTRY_NAME]
+
+
+def test_a_removal_after_an_interrupted_rotation_leaves_no_credential(registry, monkeypatch):
+    native, directory, material = registry
+    native.prepare_registry(material)
+    rename = os.rename
+
+    def interrupted(*args, **kwargs):
+        del args, kwargs
+        raise OSError("synthetic interruption")
+
+    monkeypatch.setattr(ceph_native.os, "rename", interrupted)
+    with pytest.raises(OSError):
+        native.refresh_registry(rotated_login(native))
+    monkeypatch.setattr(ceph_native.os, "rename", rename)
+    assert len(list(directory.iterdir())) == 2
+    teardown(native)
+    assert native.remove_registry() and list(directory.iterdir()) == []
+
+
+def test_a_refresh_never_rewrites_an_authfile_whose_custody_drifted(registry):
+    native, directory, material = registry
+    native.prepare_registry(material)
+    target = directory / ceph_native.REGISTRY_NAME
+    target.write_bytes(material + b" ")
+    with pytest.raises(ceph_native.Refusal, match="^registry-ownership$"):
+        native.refresh_registry(rotated_login(native))
+    assert target.read_bytes() == material + b" "
+
+
+def cut_rotation(native, monkeypatch, cut):
+    """A rebind's rotation an interruption stopped at `cut`: before its stage link, or after its rename before its published record."""
+    link = os.link
+
+    def interrupt_link(source, target, **kwargs):
+        if cut == "before-link" and target.endswith("-rotation"):
+            raise OSError("synthetic interruption")
+        return link(source, target, **kwargs)
+
+    def interrupt_record(name, value):
+        del value
+        if cut == "before-record" and name.startswith("registry-rotated-"):
+            raise OSError("synthetic interruption")
+
+    monkeypatch.setattr(ceph_native.os, "link", interrupt_link)
+    native.markers.before = interrupt_record
+    with pytest.raises(OSError):
+        native.refresh_registry(rotated_login(native))
+    monkeypatch.setattr(ceph_native.os, "link", link)
+    native.markers.before = lambda name, value: None
+
+
+def test_a_rotation_cut_after_its_rename_still_proves_before_the_next_refresh(registry, monkeypatch):
+    native, unused_directory, unused_material = registry
+    native.prepare_registry(unused_material)
+    cut_rotation(native, monkeypatch, "before-record")
+    rebound = rotated_login(native)
+    native.prove_registry(rebound)
+    reach_devices(native)
+    with pytest.raises(DeviceRead):
+        native.devices()
+    assert not native.prepare_registry(rebound)
+    assert native.refresh_registry(rebound) and "registry-rotated-1.json" in native.markers.records
+
+
+def test_an_abandoned_rotation_never_blocks_the_authorization_or_a_later_rotation(registry, monkeypatch):
+    native, directory, material = registry
+    native.prepare_registry(material)
+    cut_rotation(native, monkeypatch, "before-link")
+    assert [path.name for path in directory.iterdir()] == [ceph_native.REGISTRY_NAME]
+    native.prove_registry(material)
+    assert not native.prepare_registry(material)
+    assert native.refresh_registry(rotated_login(native)) and "registry-rotated-2.json" in native.markers.records

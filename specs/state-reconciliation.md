@@ -3187,3 +3187,20 @@ is released, and a rebind whose fresh removal provably did not register is
 released at once. Every ownership proof the plan runs is unchanged: the
 rebound credential only reaches the endpoint, and what the block proves it
 owns is proved as before.
+
+A rebound credential that an effect also keeps
+[native-side](secrets.md#native-side-retention) reaches that copy before the
+endpoint reads it. A Ceph cluster block's continuation that rebinds the
+registry login writes it into the retained `/etc/ceph/podman-auth.json` of
+each host an earlier attempt authorized, in a round after the authorization
+round and before the first native pull. The rewrite replaces the file by a new
+inode under the file's own custody proof, recorded before its rename and after
+it, so an interrupted rewrite finishes on the next attempt or removal and leaves
+no second credential file. `test_a_rebound_registry_login_is_written_again_into_the_retained_authfile`
+and `test_a_resumed_cluster_writes_its_bound_registry_login_on_every_authorized_host_before_any_native_pull`
+hold it.
+
+Not yet met: a service, object gateway or NVMe-oF block that a continuation
+runs after its cluster block completed writes no authfile again, so the
+manager's pulls for it on each host present the login that host's
+authorization retained; tracked as [B1735](milestones/m2.md#b1735).

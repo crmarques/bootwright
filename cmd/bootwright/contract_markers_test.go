@@ -71,7 +71,7 @@ func cephMarkerNames() []string {
 		"osd-device-", "osd-device-intent.json", "owner.json", "physical-device-binding.json", "podman-auth.json",
 		"policy-", "policy-attempt-", "policy-id-", "policy.json", "pool-", "pull-attempt-%d.json", "pulled.json", "rbd-",
 		"rbd-attempt.", "rbd-id.", "registry-file.json", "registry-inode-", "registry-intent.json", "registry-pending.json",
-		"registry-removal.json", "registry-removed.json", "replication-", "rgw-root.json", "route.json",
+		"registry-removal.json", "registry-removed.json", "registry-rotated-", "registry-rotating-", "replication-", "rgw-root.json", "route.json",
 		"runtime-profile.json", "scope.json", "service-", "service-inputs.json", "setting-", "smb-applied.", "smb-attempt.",
 		"ssh-authorization.json", "sshd-policy.json", "stretch-", "subvolume-", "subvolume-attempt.", "subvolume-path.",
 		"synthetic.json", "tiebreaker-removal-attempt.json", "tiebreaker-removal-complete.json", "transport-directory.json", "transport-file-ready-", "transport-file-relabeled-",

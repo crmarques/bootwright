@@ -81,7 +81,8 @@ RBD_IMAGE_ID = re.compile(r"[0-9a-f]{1,14}\Z")
 SUBVOLUME_UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")
 SUBVOLUME_PATH = re.compile(r"/volumes/(?:_nogroup|[A-Za-z0-9][A-Za-z0-9_.-]{0,127})/[a-z0-9](?:[-a-z0-9]{0,46}[a-z0-9])?/"
                             r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\Z")
-CORE_PHASES = frozenset(("prerequisites", "claim", "devices", "osd_prepare", "tunnel_preflight", "authorize", "bootstrap", "tunnel_configure", "tunnel_mount",
+CORE_PHASES = frozenset(("prerequisites", "claim", "devices", "osd_prepare", "tunnel_preflight", "authorize", "registry_refresh", "bootstrap",
+                         "tunnel_configure", "tunnel_mount",
                          "cache", "enroll", "license", "services", "stretch_locate", "stretch_enable", "dashboard", "dashboard_read", "dashboard_present",
                          "observe", "unrecorded_observe", "bootstrap_state", "host_state", "destroy", "tiebreaker_observe", "tiebreaker_remove",
                          "physical_host_observe", "physical_host_remove"))
@@ -1901,6 +1902,15 @@ class Worker:
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_registry
         return ceph_native_registry.Registry(self).prove_registry(wanted)
 
+    def refresh_registry(self, wanted):
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_registry
+        return ceph_native_registry.Registry(self).refresh_registry(wanted)
+
+    def registry_refresh(self, private):
+        """The registry login this run bound, written again into an authfile an earlier authorization published, before any native pull."""
+        require(isinstance(private, dict) and set(private) == {"registryJSON"}, "material")
+        return {"changed": self.refresh_registry(registry_material(self.request, private["registryJSON"]))}
+
     def prepare_route(self):
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_registry
         return ceph_native_registry.Registry(self).prepare_route()
@@ -2966,7 +2976,7 @@ class PhysicalHostRemovalWorker(Worker):
         return ceph_native_stretch.PhysicalHostRemoval(self).remove()
 
 
-PRIVATE_PHASES = ("tunnel_preflight", "bootstrap", "authorize", "tunnel_configure")
+PRIVATE_PHASES = ("tunnel_preflight", "bootstrap", "authorize", "registry_refresh", "tunnel_configure")
 SERVICES_OPTIONS = ("devices", "service", "orphans")
 PHYSICAL_PHASES = ("physical_host_observe", "physical_host_remove")
 
@@ -3093,7 +3103,7 @@ def dispatch(envelope):
     require(phase in CORE_PHASES or phase in phases)
     if phase not in read_only_phases():
         require(supported_transport(worker.request), "unsupported-release")
-    if bind is not None:
+    if bind is not None and phase != "registry_refresh":
         bind(worker, phase, envelope["private"])
     result = PHASE_RUNNERS.get(phase, run_plain)(worker, phase, envelope, options)
     APPLIED[:] = sorted(worker.selection.applied)
