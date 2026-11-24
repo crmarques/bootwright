@@ -34,9 +34,12 @@ var (
 	hardwareAddressesTooMany = diagnostics.Stop{Code: "hardware.addresses-too-many", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyPossible,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
 		Meaning: "a Machine's host reports more permanent hardware addresses than one claim holds", Remedy: "place the work on a Machine whose host reports fewer physical network interfaces"}
+	hardwareAddressesNone = diagnostics.Stop{Code: "hardware.addresses-none", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyPossible,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
+		Meaning: "a Machine's host reports no permanent hardware address, so no claim serializes it against a context that drives it by its BMC", Remedy: "place the work on a Machine whose host has a device-backed Ethernet interface not on USB"}
 )
 
 var stops = []diagnostics.Stop{hardwareDesiredStateMissing, hardwareRequestInvalid, hardwareRequestMismatch, hardwareUnconfigured, hardwareEvidenceMalformed,
-	hardwareEvidenceIncomplete, hardwareUnproved, hardwareRemovalEvidenceUnencoded, hardwareAddressesTooMany}
+	hardwareEvidenceIncomplete, hardwareUnproved, hardwareRemovalEvidenceUnencoded, hardwareAddressesTooMany, hardwareAddressesNone}
 
 func Stops() []diagnostics.Stop { return slices.Clone(stops) }

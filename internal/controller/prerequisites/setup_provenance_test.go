@@ -270,3 +270,104 @@ func TestAResumedTransactionWindowEndsAtTheInstallDeadline(t *testing.T) {
 		t.Fatalf("resumed added = %q (%v)", added, err)
 	}
 }
+
+// A resumed install refuses when the packages in its window come from more
+// than one rpm transaction, because it cannot tell the interrupted
+// transaction's packages from those another tool installed before the resume.
+func TestAResumedTransactionRefusesAnotherTransactionsPackages(t *testing.T) {
+	f := newSetupFixture(t)
+	f.packages.present["openssh-clients"] = false
+	f.packages.broken = errors.New("injected crash after dnf")
+	if _, err := f.service.Setup(context.Background(), SetupRequest{}); !errors.Is(err, f.packages.broken) {
+		t.Fatalf("setup = %v", err)
+	}
+	start := f.store.view.State.Pending.Transaction.Start
+	f.packages.broken = nil
+	f.packages.present["toolbox"] = true
+	f.packages.times["toolbox"] = start + 60
+	f.service.options.Now = func() time.Time { return time.Unix(start, 0).Add(10 * time.Minute) }
+	_, err := f.service.Setup(context.Background(), SetupRequest{})
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "controller.install" || !strings.Contains(reported[0].Message, "toolbox") || !strings.Contains(reported[0].Remediation, "uninstall --keep-packages") {
+		t.Fatalf("mixed window = %#v (%v)", reported, err)
+	}
+	if pending := f.store.view.State.Pending; pending == nil || pending.Transaction == nil || slices.ContainsFunc(pending.Added, func(item InstalledPackage) bool { return strings.HasPrefix(item.NEVRA, "toolbox-") }) {
+		t.Fatalf("pending intent = %+v", pending)
+	}
+}
+
+// A resumed install whose own requested packages are still missing proves its
+// interrupted transaction installed nothing, since an rpm transaction is all
+// or nothing, so one other transaction in its window refuses rather than
+// counting as its own.
+func TestAResumedTransactionThatNeverRanRefusesAnotherTransactionsPackages(t *testing.T) {
+	f := newSetupFixture(t)
+	f.packages.present["openssh-clients"] = false
+	f.packages.broken = errors.New("injected crash after dnf")
+	if _, err := f.service.Setup(context.Background(), SetupRequest{}); !errors.Is(err, f.packages.broken) {
+		t.Fatalf("setup = %v", err)
+	}
+	start := f.store.view.State.Pending.Transaction.Start
+	f.packages.broken = nil
+	f.packages.present["openssh-clients"] = false
+	f.packages.present["toolbox"] = true
+	f.packages.times = map[string]int64{"toolbox": start + 60}
+	f.service.options.Now = func() time.Time { return time.Unix(start, 0).Add(10 * time.Minute) }
+	_, err := f.service.Setup(context.Background(), SetupRequest{})
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "controller.install" || !strings.Contains(reported[0].Message, "toolbox") {
+		t.Fatalf("a foreign transaction alone = %#v (%v)", reported, err)
+	}
+	if pending := f.store.view.State.Pending; pending == nil || pending.Transaction == nil {
+		t.Fatalf("pending intent = %+v", pending)
+	}
+}
+
+// The refusal of a window it cannot attribute names at most a bounded number
+// of packages and counts them all.
+func TestAnUnattributedWindowNamesABoundedList(t *testing.T) {
+	after := []InstalledPackage{}
+	for index := range maxNamedPackages + 3 {
+		after = append(after, InstalledPackage{NEVRA: provider(fmt.Sprintf("extra%03d", index)), InstallTime: 100, Transaction: int64(100 + index%2)})
+	}
+	_, err := OwnTransactionAdded(PendingTransaction{Start: 50, Held: []string{}}, 200, after, false)
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || !strings.Contains(reported[0].Message, fmt.Sprintf("%d packages", maxNamedPackages+3)) ||
+		strings.Count(reported[0].Message, "extra") != maxNamedPackages || !strings.Contains(reported[0].Remediation, "context delete") {
+		t.Fatalf("refusal = %#v", reported)
+	}
+}
+
+// An uninterrupted install counts a requirement and the dependency it pulled
+// in, installed at different seconds, as one rpm transaction's packages.
+func TestAnInstallCountsOneTransactionInstalledAcrossSeconds(t *testing.T) {
+	f := newSetupFixture(t)
+	f.packages.present["openssh-clients"] = false
+	f.packages.pulls = map[string][]string{"openssh-clients": {"libfido2"}}
+	f.packages.stagger = 1
+	tick := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
+	f.service.options.Now = func() time.Time { tick = tick.Add(time.Second); return tick }
+	if _, err := f.service.Setup(context.Background(), SetupRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	added, err := addedNames(f.store.view)
+	if err != nil || !slices.Equal(added, []string{"libfido2", "openssh-clients"}) {
+		t.Fatalf("added = %q (%v)", added, err)
+	}
+}
+
+// An uninterrupted install whose window also holds another rpm transaction's
+// package refuses and keeps its pending intent, counting nothing as added.
+func TestAnInstallWithAnotherTransactionInItsWindowRefuses(t *testing.T) {
+	f := newSetupFixture(t)
+	f.packages.present["openssh-clients"] = false
+	f.packages.during = []string{"toolbox"}
+	_, err := f.service.Setup(context.Background(), SetupRequest{})
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "controller.install" || !strings.Contains(reported[0].Message, "toolbox") {
+		t.Fatalf("a second transaction = %#v (%v)", reported, err)
+	}
+	if pending := f.store.view.State.Pending; pending == nil || pending.Transaction == nil || len(pending.Added) != 0 || f.store.view.State.Receipt != nil {
+		t.Fatalf("state = %+v", f.store.view.State)
+	}
+}

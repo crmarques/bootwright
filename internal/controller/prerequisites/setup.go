@@ -195,8 +195,9 @@ func (s Service) apply(ctx context.Context, tx SetupTransaction, current *inspec
 	started := s.now()
 	var added []InstalledPackage
 	var transaction *PendingTransaction
+	var interrupted []string
 	if state.Pending != nil {
-		id, started, added, transaction = state.Pending.ID, state.Pending.StartedAt, state.Pending.Added, state.Pending.Transaction
+		id, started, added, transaction, interrupted = state.Pending.ID, state.Pending.StartedAt, state.Pending.Added, state.Pending.Transaction, slices.Clone(state.Pending.Requested)
 		requested = append(requested, state.Pending.Requested...)
 	}
 	slices.Sort(requested)
@@ -211,7 +212,7 @@ func (s Service) apply(ctx context.Context, tx SetupTransaction, current *inspec
 		return err
 	}
 	if state.Pending.Transaction != nil {
-		if err := s.settleTransaction(ctx, tx, &state); err != nil {
+		if err := s.settleTransaction(ctx, tx, &state, interrupted); err != nil {
 			return err
 		}
 	}
@@ -287,23 +288,35 @@ func (s Service) install(ctx context.Context, tx SetupTransaction, current *insp
 	if err != nil {
 		return nil, err
 	}
-	return evidence, closeTransaction(state.Pending, end, after)
+	own, err := OwnTransactionAdded(*state.Pending.Transaction, end, after, false)
+	if err != nil {
+		return nil, err
+	}
+	return evidence, closeTransaction(state.Pending, own)
 }
 
-func (s Service) settleTransaction(ctx context.Context, tx SetupTransaction, state *SetupState) error {
+func (s Service) settleTransaction(ctx context.Context, tx SetupTransaction, state *SetupState, requested []string) error {
 	end := min(s.clock().Unix(), state.Pending.Transaction.Start+int64(InstallDeadline/time.Second))
 	after, err := s.ports.Packages.Snapshot(ctx)
 	if err != nil {
 		return err
 	}
-	if err := closeTransaction(state.Pending, end, after); err != nil {
+	missing, err := s.ports.Packages.Missing(ctx, requested)
+	if err != nil {
+		return err
+	}
+	resumed, err := OwnTransactionAdded(*state.Pending.Transaction, end, after, len(missing) != 0)
+	if err != nil {
+		return err
+	}
+	if err := closeTransaction(state.Pending, resumed); err != nil {
 		return err
 	}
 	return tx.Record(ctx, *state)
 }
 
-func closeTransaction(pending *PendingSetup, end int64, after []InstalledPackage) error {
-	added := MergeAdded(TransactionAdded(*pending.Transaction, end, after), pending.Added)
+func closeTransaction(pending *PendingSetup, transaction []InstalledPackage) error {
+	added := MergeAdded(transaction, pending.Added)
 	if err := addedBound(added); err != nil {
 		return err
 	}

@@ -119,13 +119,8 @@ func (c Capability) Apply(ctx context.Context, execution lifecycle.Execution) (l
 	if _, err := presence(result.Evidence, execution.Block.RequestDigest); err != nil {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, err
 	}
-	claimed, err := claim(execution.Context, request, result.Evidence)
-	if err != nil {
+	if _, err := claim(execution.Context, request, result.Evidence); err != nil {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
-	}
-	if len(claimed.Keys) == 0 {
-		lifecycle.ReportWarning(ctx, execution, UnclaimedServer, "Machine/"+request.Identity.Object+
-			" reports no permanent hardware address, so the server behind it is not claimed and a context that drives it by its BMC is not refused")
 	}
 	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil
 }
@@ -242,6 +237,11 @@ func claim(contextName string, request Request, data []byte) (infrastructureserv
 	}
 	if evidence.Absent || !evidence.Postcondition {
 		return infrastructureservices.HostReservation{}, hardwareEvidenceIncomplete.Fail("the machine hardware evidence proves no read of its host", "")
+	}
+	if len(evidence.Addresses) == 0 {
+		return infrastructureservices.HostReservation{}, hardwareAddressesNone.Fail(
+			"Machine/"+request.Identity.Object+" reports no permanent hardware address, so the server behind it cannot be claimed against a context that drives it by its BMC",
+			"place the work on a Machine whose host has a device-backed Ethernet interface not on USB")
 	}
 	if len(evidence.Addresses) > infrastructureservices.MaxReservationKeys {
 		return infrastructureservices.HostReservation{}, hardwareAddressesTooMany.Fail(

@@ -198,6 +198,9 @@ func TestEachConfirmationNamesItsObjectAndContextAndKeepsItsConsumersCode(t *tes
 	}{
 		{action: "install", object: "this host", prompt: "Confirm install on this host? [y/N] ", args: []string{"install"},
 			code: "controller.install", label: "install", remedy: "review the plan, then repeat bootwright install with --yes"},
+		{action: "discard unreadable store", object: "this host",
+			prompt: "Confirm the discard on this host, abandoning every context the unreadable store holds, whose objects and custodied access nothing names afterwards? [y/N] ",
+			args:   []string{"uninstall", "--discard-unreadable"}, code: "controller.uninstall", label: "uninstall", remedy: "review the plan, then repeat bootwright uninstall --discard-unreadable with --yes"},
 		{action: "media replace", object: "rhel.iso", prompt: "Confirm replace of stored media rhel.iso? [y/N] ",
 			args: []string{"catalog", "media", "add", "--name", "rhel.iso", "--from-file", "/srv/rhel.iso"},
 			code: "media.store", label: "media", remedy: "review it, then repeat bootwright catalog media add --from-file /srv/rhel.iso --name rhel.iso with --yes"},

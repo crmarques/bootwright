@@ -308,7 +308,7 @@ refreshes; the install's output and the recorded NEVRAs are the truth.
 
 **The transaction's added set.** Under `controller/install/lock`, the install
 lists every installed package with `rpm -qa` and its `NAME`, `EPOCHNUM`,
-`VERSION`, `RELEASE`, `ARCH` and `INSTALLTIME` before and after the dnf
+`VERSION`, `RELEASE`, `ARCH`, `INSTALLTIME` and `INSTALLTID` before and after the dnf
 transaction (an imported `gpg-pubkey` is no package and is skipped). Before dnf
 runs, the pending intent records the transaction's start second and the name
 and architecture of every package held before it, at most 16384, or the
@@ -324,9 +324,19 @@ identities leaves them in the pending intent, and the next install, before
 any other step, lists the packages again and records what the transaction
 added against them; the window then ends at that listing or at the start
 plus dnf's one-hour install deadline, whichever is earlier, so a package
-another tool installed later is not counted
+another tool installs after the window ends is not counted
 (`TestASetupThatFailsAfterDnfResumesWithItsAddedSet`,
-`TestAResumedTransactionWindowEndsAtTheInstallDeadline`). The receipt carries
+`TestAResumedTransactionWindowEndsAtTheInstallDeadline`).
+An install counts the packages in its window only when they share one rpm
+transaction (`INSTALLTID`), and a resumed one only when the packages its
+interrupted step requested are installed, since an rpm transaction installs
+all of its packages or none. Otherwise it refuses `controller.install`,
+counting the packages and naming at most 16, the pending intent stays, and the
+remedy is `uninstall --keep-packages`, then `install` again; because
+uninstall refuses while a context exists, the remedy first names destroying
+each environment and deleting each context (`OwnTransactionAdded`,
+`TestAResumedTransactionRefusesAnotherTransactionsPackages`,
+`TestAResumedTransactionThatNeverRanRefusesAnotherTransactionsPackages`). The receipt carries
 forward every earlier install's set beside this one's, keeping only the
 members a fresh listing still reports with the recorded install time, so a
 package removed, or removed and installed again, drops out
@@ -334,8 +344,8 @@ package removed, or removed and installed again, drops out
 past it the install refuses `controller.install` with the remedy of running
 `uninstall --keep-packages`, which leaves every host package and
 works while a pending intent remains, then `install` again (`TestTheAddedSetBoundNamesARemedy`).
-A package another tool installs during the dnf transaction is
-indistinguishable from the transaction's own and counts as added. The set is never read from dnf's output.
+A package another tool installs in its own rpm transaction during the dnf
+transaction therefore refuses the install rather than counting as added. The set is never read from dnf's output.
 
 `rpm` and `dnf` get a clean environment, `LC_ALL=C` and
 `PATH=/usr/sbin:/usr/bin`, stdin from `/dev/null`, a bounded run time and
@@ -578,7 +588,13 @@ The plan names each action in order, then what stays:
 - `discard`, in place of `remove-state` with `--discard-unreadable`, "Discard
   what this build cannot read or attribute, with everything beneath it:",
   naming the same roots, the store with its own refusal when this build cannot
-  read it, and the image prefix with each guest disk entry;
+  read it, and the image prefix with each guest disk entry; over a store this
+  build cannot read it also states that the discard
+  [abandons](contexts.md#permanent-deletion) every context that store holds,
+  that their objects outside this host and their custodied access, such as an
+  administrator kubeconfig, cannot be listed, and that nothing names them
+  afterwards, and the confirmation asks to abandon them
+  (`TestADiscardOfAnUnreadableStoreNamesWhatItAbandons`);
 - `finish-removal`, when an interrupted uninstall left renamed trees, naming
   them;
 - what stays: each package marked `present before bootwright`, and, with

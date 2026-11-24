@@ -24,13 +24,13 @@ func uninstallMessage(t *testing.T, err error) (string, string) {
 }
 
 // The snapshot is rpm's listing of every installed package with its install
-// time; the imported signing keys are no package, and a line outside the
-// format makes the whole listing unreadable.
+// time and rpm transaction; the imported signing keys are no package, and a
+// line outside the format makes the whole listing unreadable.
 func TestASnapshotListsEveryInstalledPackageWithItsInstallTime(t *testing.T) {
-	listing := "podman\t5:5.6.1-1.fc44\tx86_64\t1762790000\ngpg-pubkey\t0:105ef944-65ca83d1\t(none)\t1700000000\nlibnet\t0:1.3-5.fc44\tx86_64\t1700000001\n"
+	listing := "podman\t5:5.6.1-1.fc44\tx86_64\t1762790000\t1762789990\ngpg-pubkey\t0:105ef944-65ca83d1\t(none)\t1700000000\t1700000000\nlibnet\t0:1.3-5.fc44\tx86_64\t1700000001\t1699999990\n"
 	p, double := packagesWith(t, func(command) reply { return reply{stdout: listing} })
 	installed, err := p.Snapshot(context.Background())
-	want := []prerequisites.InstalledPackage{{NEVRA: "podman-5:5.6.1-1.fc44.x86_64", InstallTime: 1762790000}, {NEVRA: "libnet-0:1.3-5.fc44.x86_64", InstallTime: 1700000001}}
+	want := []prerequisites.InstalledPackage{{NEVRA: "podman-5:5.6.1-1.fc44.x86_64", InstallTime: 1762790000, Transaction: 1762789990}, {NEVRA: "libnet-0:1.3-5.fc44.x86_64", InstallTime: 1700000001, Transaction: 1699999990}}
 	if err != nil || !slices.Equal(installed, want) {
 		t.Fatalf("snapshot = %+v (%v), want %+v", installed, err, want)
 	}
@@ -40,7 +40,7 @@ func TestASnapshotListsEveryInstalledPackageWithItsInstallTime(t *testing.T) {
 	if prerequisites.PackageArgument(installed[0]) != "podman-5.6.1-1.fc44.x86_64" {
 		t.Fatalf("argument = %q", prerequisites.PackageArgument(installed[0]))
 	}
-	for _, broken := range []string{"podman 5.6.1\n", "podman\t5:5.6.1-1.fc44\tx86_64\tsoon\n"} {
+	for _, broken := range []string{"podman 5.6.1\n", "podman\t5:5.6.1-1.fc44\tx86_64\tsoon\t1\n", "podman\t5:5.6.1-1.fc44\tx86_64\t1762790000\n", "podman\t5:5.6.1-1.fc44\tx86_64\t1762790000\t0\n"} {
 		unreadable, _ := packagesWith(t, func(command) reply { return reply{stdout: broken} })
 		if _, err := unreadable.Snapshot(context.Background()); err == nil {
 			t.Errorf("listing %q was read", broken)

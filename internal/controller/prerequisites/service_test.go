@@ -121,6 +121,9 @@ type hostPackages struct {
 	preview string
 	pulls   map[string][]string
 	times   map[string]int64
+	tids    map[string]int64
+	stagger int64
+	during  []string
 	broken  error
 }
 
@@ -177,7 +180,8 @@ func (p *hostPackages) Snapshot(context.Context) ([]InstalledPackage, error) {
 	installed := []InstalledPackage{}
 	for requirement, present := range p.present {
 		if present {
-			installed = append(installed, InstalledPackage{NEVRA: provider(requirement), InstallTime: cmp.Or(p.times[requirement], 1750000000)})
+			installTime := cmp.Or(p.times[requirement], 1750000000)
+			installed = append(installed, InstalledPackage{NEVRA: provider(requirement), InstallTime: installTime, Transaction: cmp.Or(p.tids[requirement], installTime)})
 		}
 	}
 	return installed, nil
@@ -189,12 +193,19 @@ func (p *hostPackages) Install(_ context.Context, missing []string, _ RunOutput)
 	if p.times == nil {
 		p.times = map[string]int64{}
 	}
+	if p.tids == nil {
+		p.tids = map[string]int64{}
+	}
+	transaction := p.owner.service.clock().Unix()
+	for _, other := range p.during {
+		p.present[other], p.times[other], p.tids[other] = true, transaction, transaction+1
+	}
 	for _, requirement := range missing {
 		p.present[requirement] = true
-		p.times[requirement] = p.owner.service.clock().Unix()
+		p.times[requirement], p.tids[requirement] = transaction, transaction
 		for _, dependency := range p.pulls[requirement] {
 			p.present[dependency] = true
-			p.times[dependency] = p.owner.service.clock().Unix()
+			p.times[dependency], p.tids[dependency] = transaction+p.stagger, transaction
 		}
 		evidence = append(evidence, HostPackageEvidence{Requirement: requirement, Package: provider(requirement), Repository: "fedora"})
 	}

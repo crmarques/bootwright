@@ -577,3 +577,34 @@ func TestAnUninstallLeavesAPackageInstalledAgain(t *testing.T) {
 		t.Fatalf("removed %q, still installed %q, kept %q", f.removed, f.installed, result.Kept)
 	}
 }
+
+// A discard of a store this build cannot read states in its plan, and asks in
+// its confirmation, that every context that store holds is abandoned, with
+// its objects outside this host and its custodied access, which nothing names
+// afterwards; a discard of a readable store abandons no context.
+func TestADiscardOfAnUnreadableStoreNamesWhatItAbandons(t *testing.T) {
+	f := &uninstallFixture{views: []UninstallView{unreadableView()}}
+	service := New(f, nil, nil, Ports{Owned: f}, Options{Confirmer: f, Presenter: uninstallPresenter{f: f}})
+	if _, err := service.Uninstall(context.Background(), UninstallRequest{DiscardUnreadable: true}); err != nil {
+		t.Fatalf("the discard failed: %#v", diagnostics.Of(err))
+	}
+	text := f.plan.Actions[0].Text
+	for _, want := range []string{"abandons every context it holds", "cannot be listed", "nothing names them afterwards", "custodied access"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("plan %q lacks %q", text, want)
+		}
+	}
+	if f.asked != "discard unreadable store" {
+		t.Fatalf("confirmation = %q", f.asked)
+	}
+	readable := everyRootView()
+	readable.Setup = SetupView{}
+	f = &uninstallFixture{views: []UninstallView{readable}}
+	service = New(f, nil, nil, Ports{Owned: f}, Options{Confirmer: f, Presenter: uninstallPresenter{f: f}})
+	if _, err := service.Uninstall(context.Background(), UninstallRequest{DiscardUnreadable: true}); err != nil {
+		t.Fatalf("the discard failed: %#v", diagnostics.Of(err))
+	}
+	if strings.Contains(f.plan.Actions[0].Text, "abandons") || f.asked != "uninstall" {
+		t.Fatalf("readable discard plan %q, confirmation %q", f.plan.Actions[0].Text, f.asked)
+	}
+}

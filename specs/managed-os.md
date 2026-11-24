@@ -1140,10 +1140,13 @@ and [subscription-manager(8)](https://www.mankier.com/8/subscription-manager).
 **Ownership.** A registration is this installation's when the CN of the
 consumer certificate `/etc/pki/consumer/cert.pem` equals the consumer the
 root-only 0600 record `/etc/bootwright/registration.json` names and that record
-names this request's digest. With no registration the worker registers,
-writing the record `pending` before the call, so a lost reply reads `pending`;
-a `pending` registration is adopted; an owned one is left unchanged; any other
-registration is foreign, refuses `registration-foreign` and is left registered.
+names this request's digest. A record of this digest naming no consumer is
+`pending`, written by the Kickstart after the installer registered; the worker
+adopts its certificate's CN. Before its own call it writes the record
+`registering`, which proves no consumer, and names the consumer once the call
+answers; a lost reply or a kill first leaves a foreign consumer to
+unregister by hand. An owned one stays unchanged; any other is foreign,
+refuses `registration-foreign` and stays registered, destroy too.
 
 **Repositories.** The worker applies the repositories, when the request names any, in one
 `subscription-manager repos` call, every `--disable` first, then every
@@ -1190,10 +1193,12 @@ with `Machine <machine> was not registered with its subscription service:
 is resolved by observation. Nothing is installed again on a retry: the
 registration is all the next apply repeats.
 
+#### Registration removal
+
 **Removal.** Destroy unregisters before withdrawal as the [inverse](#inverse) requires; no organization or
 activation key is lent to it or to any observation. The worker's `unregister`
-operation removes only a consumer this installation's record names, owned or
-`pending`, with `subscription-manager unregister`, proves the consumer
+operation removes only an owned consumer, or the certificate's consumer under
+a `pending` record, with `subscription-manager unregister`, proves the consumer
 certificate gone and removes the record, which the evidence records as
 `unregistered` with the consumer UUID; a certificate with another record or
 none is left registered and recorded `retained`; no certificate is `absent`.

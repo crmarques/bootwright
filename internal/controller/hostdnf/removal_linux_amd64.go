@@ -16,7 +16,7 @@ import (
 
 const (
 	uninstallCode  = "controller.uninstall"
-	snapshotFormat = `%{NAME}\t%{EPOCHNUM}:%{VERSION}-%{RELEASE}\t%{ARCH}\t%{INSTALLTIME}\n`
+	snapshotFormat = `%{NAME}\t%{EPOCHNUM}:%{VERSION}-%{RELEASE}\t%{ARCH}\t%{INSTALLTIME}\t%{INSTALLTID}\n`
 	snapshotLimit  = 8 << 20
 	maxSnapshot    = 65536
 	maxRemovals    = prerequisites.MaxAddedPackages
@@ -50,15 +50,16 @@ func (p *Packages) Snapshot(ctx context.Context) ([]prerequisites.InstalledPacka
 	installed := []prerequisites.InstalledPackage{}
 	for _, line := range strings.Split(strings.TrimSuffix(stdout.String(), "\n"), "\n") {
 		fields := strings.Split(line, "\t")
-		if len(fields) != 4 || len(installed) == maxSnapshot {
+		if len(fields) != 5 || len(installed) == maxSnapshot {
 			return nil, unreadable
 		}
 		if fields[0] == "gpg-pubkey" && fields[2] == "(none)" {
 			continue
 		}
-		installTime, err := strconv.ParseInt(fields[3], 10, 64)
-		item := prerequisites.InstalledPackage{NEVRA: fields[0] + "-" + fields[1] + "." + fields[2], InstallTime: installTime}
-		if err != nil || !prerequisites.ValidInstalledPackage(item) {
+		installTime, timeErr := strconv.ParseInt(fields[3], 10, 64)
+		transaction, transactionErr := strconv.ParseInt(fields[4], 10, 64)
+		item := prerequisites.InstalledPackage{NEVRA: fields[0] + "-" + fields[1] + "." + fields[2], InstallTime: installTime, Transaction: transaction}
+		if timeErr != nil || transactionErr != nil || transaction <= 0 || !prerequisites.ValidInstalledPackage(item) {
 			return nil, unreadable
 		}
 		installed = append(installed, item)

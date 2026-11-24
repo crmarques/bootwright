@@ -299,7 +299,7 @@ var stops = []diagnostics.Stop{engineRecordsFull, engineRecordsReadOnly, engineR
 	planControllerOrder, planReservationKeyTooLong, planHostKeyUnreadable, planSocketConflict, planTemplateValue, planObjectUnsupported,
 	planConsumerOutlivesDestroy, storageHealth, storageNotReady, substrateShadowedRoute, controllerOutdatedClient}
 
-var relayedWarnings = []string{storageHealth.Code, storageNotReady.Code, substrateShadowedRoute.Code, "substrate.lend-not-revoked", "substrate.unclaimed-server"}
+var relayedWarnings = []string{storageHealth.Code, storageNotReady.Code, substrateShadowedRoute.Code, "substrate.lend-not-revoked"}
 
 func Stops() []diagnostics.Stop { return slices.Clone(stops) }
 

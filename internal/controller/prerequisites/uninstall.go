@@ -133,7 +133,11 @@ func (s Service) Uninstall(ctx context.Context, request UninstallRequest) (*Unin
 		if s.options.Confirmer == nil {
 			return nil, failure(uninstallCode, "uninstall requires confirmation", "review the plan and repeat with --yes")
 		}
-		if err := s.options.Confirmer.Confirm(ctx, "uninstall", "this host"); err != nil {
+		action := "uninstall"
+		if planned.discard && planned.view.Unreadable != nil {
+			action = "discard unreadable store"
+		}
+		if err := s.options.Confirmer.Confirm(ctx, action, "this host"); err != nil {
 			return nil, err
 		}
 	}
@@ -369,7 +373,8 @@ func (i uninstallInspection) plan() UninstallPlan {
 	}
 	store := " (the install record, runtimes, wheel cache, controller record and tools)"
 	if v.Unreadable != nil {
-		store = " (a store this build cannot read: " + refusalText(v.Unreadable) + ")"
+		store = " (a store this build cannot read: " + refusalText(v.Unreadable) + "; the discard abandons every context it holds: their objects outside this host, " +
+			"such as SSH placement hosts, physical machines and remote clusters, and their custodied access, such as administrator kubeconfigs, cannot be listed, and nothing names them afterwards)"
 	}
 	add(v.RootExists, v.Root, store)
 	add(v.StagingSeen, v.Staging, "")

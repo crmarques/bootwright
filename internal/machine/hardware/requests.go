@@ -16,7 +16,6 @@ const (
 	AddressRule     = "permanent-hardware-address-v1"
 	ClaimRule       = "unqualified-bmc-mac-claim"
 	MaxAddresses    = 256
-	UnclaimedServer = "substrate.unclaimed-server"
 	variable        = "bootwright_machine_hardware"
 )
 

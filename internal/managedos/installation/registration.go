@@ -251,8 +251,8 @@ func registrationRefusals(contextName string, request Request) map[string]error 
 	}
 	refusals := map[string]error{
 		"registration-input": machineRefusal(request, installRegistrationRejected)(input, inputRemedy+again),
-		"registration-foreign": machineRefusal(request, installForeignRecord)(machine+" is registered with a subscription consumer this installation did not create, and it was left registered",
-			"unregister "+machine+" from its subscription service yourself, "+again+", or take this context back with bootwright destroy --context "+contextName),
+		"registration-foreign": machineRefusal(request, installForeignRecord)(machine+" is registered with a subscription consumer this installation cannot prove it created, and it was left registered",
+			"unregister "+machine+" from its subscription service yourself, "+again+", or take this context back with bootwright destroy --context "+contextName+", which leaves it registered"),
 		"registration-refused": machineRefusal(request, installRegistrationRejected)("the subscription service refused to register "+machine+" with the organization and activation key of "+entitlement,
 			"check the values of "+organization+" and "+key+", which "+entitlement+" names, "+again),
 		"registration-identity-collision": machineRefusal(request, installRegistrationRejected)("the subscription service reports another registered host with the hardware identity of "+machine,

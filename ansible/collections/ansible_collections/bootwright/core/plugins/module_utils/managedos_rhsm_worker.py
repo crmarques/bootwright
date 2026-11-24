@@ -9,9 +9,12 @@ runs subscription-manager register, clean or --force.
 
 A registration this installation made is proved by the consumer certificate's
 CN together with a root-only record keyed by the installation request's digest.
-The record is written pending before the service is asked, so a reply lost
-between the service and the record is adopted by the next run instead of
-looking foreign. Anything else is foreign and left registered.
+The installer's Kickstart writes the record pending, naming no consumer, only
+after its own registration left a certificate, so that certificate is adopted.
+Before its own call the worker writes the record registering, which proves no
+consumer: a certificate present beside it, from a reply that was lost or from
+anyone who registered the machine since, is foreign. Anything else is foreign
+and left registered.
 
 A request naming a Satellite or Capsule carries its hostname, its content
 root and its CA bundle. Before registering or adopting, on every run, the
@@ -363,9 +366,11 @@ class Guest:
             value = json.loads(data.decode("utf-8")) if len(data) <= MAX_RECORD else None
         except (ValueError, UnicodeError):
             return UNREADABLE
-        if not isinstance(value, dict) or set(value) != {"consumer", "request"}:
+        if not isinstance(value, dict) or set(value) - {"registering"} != {"consumer", "request"}:
             return UNREADABLE
         consumer, request = value["consumer"], value["request"]
+        if "registering" in value and (value["registering"] is not True or consumer != ""):
+            return UNREADABLE
         if not isinstance(consumer, str) or not (consumer == "" or UUID.fullmatch(consumer)):
             return UNREADABLE
         if not isinstance(request, str) or not DIGEST.fullmatch(request):
@@ -380,7 +385,7 @@ class Guest:
         if present:
             if common and own and record["consumer"] == common:
                 return "owned", present, common, record
-            if common and own and record["consumer"] == "":
+            if common and own and record["consumer"] == "" and "registering" not in record:
                 return "pending", present, common, record
             return "foreign", present, common, record
         if record is None or own:
@@ -394,10 +399,13 @@ class Guest:
         finally:
             os.close(descriptor)
 
-    def write(self, consumer, request):
+    def write(self, consumer, request, registering=False):
         """Publish the record atomically and durably as root-only canonical JSON."""
         os.makedirs(self.directory, 0o700, exist_ok=True)
-        data = json.dumps({"consumer": consumer, "request": request}, sort_keys=True, separators=(",", ":")).encode("ascii")
+        value = {"consumer": consumer, "request": request}
+        if registering:
+            value["registering"] = True
+        data = json.dumps(value, sort_keys=True, separators=(",", ":")).encode("ascii")
         temporary = os.path.join(self.directory, ".registration.json.tmp")
         descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
         try:
@@ -589,11 +597,12 @@ def register_operation(guest, payload):
     elif kind == "pending":
         state = "adopted"
     else:
-        guest.write("", request)
+        guest.write("", request, registering=True)
         consumer = guest.register(payload["organization"], payload["activationKey"], satellite)
         common = guest.certificate()[1]
         if common != consumer:
             raise Refused("transport")
+        guest.write(common, request)
         state = "registered"
     if satellite is not None and "contentView" in satellite:
         guest.content_selection(satellite, common)

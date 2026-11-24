@@ -1368,8 +1368,10 @@ listing it cannot read in full proves nothing and fails the block. The block's
 proof claims one exclusive, unqualified `bmc-mac:<mac>` key per address, in
 colon-separated lower-case form, before any block placed on the Machine
 starts, and a fresh apply keeps the keys its held claim proved; a host
-reporting no such address claims nothing and warns `substrate.unclaimed-server`
-naming the Machine, and one reporting more than 64 refuses `baremetal.claim-unnameable`. Either context's claim therefore refuses
+reporting no such address refuses `hardware.addresses-none` naming the Machine,
+because an empty set claims nothing and so serializes nothing against a
+context that drives the server by its BMC, as the BMC proof's empty set refuses
+(`TestAHostReportingNoPermanentAddressRefuses`), and one reporting more than 64 refuses `hardware.addresses-too-many`. Either context's claim therefore refuses
 `controller.conflict` while the other holds the server, under any spelling of
 its BMC address or of a declared MAC
 (`TestAnSSHReachedServerAndItsBMCDriverConflictInEitherOrder`). A guest
@@ -1885,7 +1887,11 @@ quiescence under the [removal gate](state-reconciliation.md#quiescence-before-re
 deletes the upload DataVolume and then the VirtualMachine, each with
 `preconditions.uid`; and proves the VirtualMachine, every DataVolume and every
 claim it owned, its persistent TPM state claim included, absent by a positive
-`NotFound` or a listing that answered without them. The upload claim a live
+`NotFound` or a complete listing that answered without them. The claim
+listing is read to its last page, at most `MAX_CLAIM_PAGES` pages of 500; a
+listing that fails or is cut short with a `continue` token left proves no
+absence and leaves the block unknown (`claims`,
+`test_removal_reads_every_claim_page_and_counts_a_truncated_listing_unanswered`). The upload claim a live
 eject left, whose DataVolume is already gone, is read by its name `<vm>-media`
 and counted present while it exists. It consumes `data-loss`,
 because it deletes the disks. The namespace and every network object are the

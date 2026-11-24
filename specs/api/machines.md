@@ -874,7 +874,8 @@ Manager settings may affect other Systems sharing the BMC. Origin-scoped media
 claims serialize Bootwright consumers within and across contexts; they do not
 exclude external BMC users. Read and power commands do not configure these
 settings. With the exception, `restoreVerificationAfterBoot: true` requests
-restoration after release, even after interrupted boot; false keeps it off.
+restoration at the consumer's eject, including an apply that follows an
+interrupted boot ([inverse](../managed-os.md#inverse)); false keeps it off.
 For an explicit persistent opt-out:
 
 ```yaml

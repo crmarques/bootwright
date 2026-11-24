@@ -580,6 +580,7 @@ The Machine hardware capability's stops (`internal/machine/hardware`).
 | `hardware.unproved` | block | unproved | target | - | repeat | the machine hardware adapter ended without proving its postcondition | repeat the operation, which observes the effect before anything else starts |
 | `hardware.removal-evidence-unencoded` | block | none | defect | - | none | the evidence of the machine hardware removal could not be encoded | report the message as a defect |
 | `hardware.addresses-too-many` | block | possible | input | - | change-input | a Machine's host reports more permanent hardware addresses than one claim holds | place the work on a Machine whose host reports fewer physical network interfaces |
+| `hardware.addresses-none` | block | possible | input | - | change-input | a Machine's host reports no permanent hardware address, so no claim serializes it against a context that drives it by its BMC | place the work on a Machine whose host has a device-backed Ethernet interface not on USB |
 
 ## Controller client stops
 

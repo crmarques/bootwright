@@ -4,6 +4,7 @@ import (
 	"errors"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -86,6 +87,7 @@ func StageHostRequirements(selected NativeRequirements) []string {
 type InstalledPackage struct {
 	NEVRA       string `json:"nevra"`
 	InstallTime int64  `json:"installTime"`
+	Transaction int64  `json:"-"`
 }
 
 var installedNEVRA = regexp.MustCompile(`^([A-Za-z0-9][A-Za-z0-9._+-]*)-([0-9]+):([A-Za-z0-9._+~^]+)-([A-Za-z0-9._+~^]+)\.([A-Za-z0-9_]+)$`)
@@ -148,6 +150,25 @@ func TransactionAdded(transaction PendingTransaction, end int64, after []Install
 		}
 	}
 	return MergeAdded(added)
+}
+
+const maxNamedPackages = 16
+
+func OwnTransactionAdded(transaction PendingTransaction, end int64, after []InstalledPackage, ownMissing bool) ([]InstalledPackage, error) {
+	added := TransactionAdded(transaction, end, after)
+	if len(added) == 0 || !ownMissing && !slices.ContainsFunc(added, func(item InstalledPackage) bool { return item.Transaction != added[0].Transaction }) {
+		return added, nil
+	}
+	names := []string{}
+	for _, item := range added[:min(len(added), maxNamedPackages)] {
+		names = append(names, PackageArgument(item))
+	}
+	if len(added) > maxNamedPackages {
+		names = append(names, "and "+strconv.Itoa(len(added)-maxNamedPackages)+" more")
+	}
+	return nil, failure("controller.install", "the "+strconv.Itoa(len(added))+" packages installed since the install began cannot be told apart from another tool's: "+strings.Join(names, ", "),
+		"run bootwright uninstall --keep-packages, which leaves every host package, then run bootwright install again; uninstall refuses while a context exists, "+
+			"so first destroy each environment (bootwright destroy --context <name>) and delete each context (bootwright context delete --name <name> --purge)")
 }
 
 func StillInstalled(added, snapshot []InstalledPackage) []InstalledPackage {

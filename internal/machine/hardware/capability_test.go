@@ -122,19 +122,15 @@ func TestAnOSReadyMachineReachedOverSSHIsClaimedByItsHardware(t *testing.T) {
 }
 
 // The claim is one exclusive, unqualified bmc-mac: key per permanent hardware
-// address the host reported, in canonical form; a host reporting none claims
-// nothing; one reporting more than one reservation holds refuses rather than
-// claim the server by a part of its addresses; and evidence that proves no
-// complete read claims nothing.
+// address the host reported, in canonical form; a host reporting more than one
+// reservation holds refuses rather than claim the server by a part of its
+// addresses; and evidence that proves no complete read claims nothing.
 func TestTheProvedClaimIsOneBMCMACKeyPerPermanentAddress(t *testing.T) {
 	block := servicesBlock(t)
 	claim, found, err := New(nil).ProvedClaim("lab", block, evidenceOf(t, block.RequestDigest, "52:54:00:9a:1b:01", "52:54:00:9a:1b:02"))
 	if err != nil || !found || claim.Context != "lab" || claim.Kind != ClaimKind || claim.Service != "services" || claim.Shared ||
 		!slices.Equal(claim.Keys, []string{"bmc-mac:52:54:00:9a:1b:01", "bmc-mac:52:54:00:9a:1b:02"}) {
 		t.Fatalf("claim = %+v, %v (%v)", claim, found, err)
-	}
-	if _, found, err := New(nil).ProvedClaim("lab", block, evidenceOf(t, block.RequestDigest)); err != nil || found {
-		t.Fatalf("a host with no permanent address claimed %v (%v)", found, err)
 	}
 	many := make([]string, 0, infrastructureservices.MaxReservationKeys+1)
 	for index := range infrastructureservices.MaxReservationKeys + 1 {
@@ -364,9 +360,11 @@ func TestAClusterNodeWhoseOperatingSystemIsNotProvidedPlansNoClaim(t *testing.T)
 	}
 }
 
-// A host that reports no permanent hardware address completes with nothing
-// claimed and warns, naming the Machine, rather than refusing.
-func TestAHostReportingNoPermanentAddressWarns(t *testing.T) {
+// A host that reports no permanent hardware address refuses, naming the
+// Machine, both at its apply and as proved evidence, because an empty set
+// claims nothing and so serializes nothing against a context that drives the
+// server by its BMC.
+func TestAHostReportingNoPermanentAddressRefuses(t *testing.T) {
 	block := servicesBlock(t)
 	var warned []string
 	execution := lifecycle.Execution{Block: block, Context: "lab", Attempt: 1, Warn: func(_ context.Context, warnings []operationstore.Warning) {
@@ -376,12 +374,15 @@ func TestAHostReportingNoPermanentAddressWarns(t *testing.T) {
 	}}
 	runner := &scripted{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: evidenceOf(t, block.RequestDigest)}}
 	result, err := New(runner).Apply(context.Background(), execution)
-	if err != nil || result.Outcome != reconciliation.OutcomeUnchanged || len(warned) != 1 ||
-		!strings.HasPrefix(warned[0], UnclaimedServer+" Machine/services reports no permanent hardware address") {
+	if err == nil || codeOf(t, err) != "hardware.addresses-none" || result.Outcome != reconciliation.OutcomeFailed || len(warned) != 0 ||
+		!strings.Contains(diagnostics.Of(err)[0].Message, "Machine/services reports no permanent hardware address") {
 		t.Fatalf("apply = %+v (%v), warned %v", result, err, warned)
 	}
+	if _, found, err := New(nil).ProvedClaim("lab", block, evidenceOf(t, block.RequestDigest)); err == nil || found || codeOf(t, err) != "hardware.addresses-none" {
+		t.Fatalf("an empty proved claim = %v (%v)", found, err)
+	}
 	runner.result = lifecycle.RunResult{Outcome: "unchanged", Evidence: evidenceOf(t, block.RequestDigest, "52:54:00:9a:1b:01")}
-	if _, err := New(runner).Apply(context.Background(), execution); err != nil || len(warned) != 1 {
+	if _, err := New(runner).Apply(context.Background(), execution); err != nil || len(warned) != 0 {
 		t.Fatalf("a claimed host warned %v (%v)", warned, err)
 	}
 }

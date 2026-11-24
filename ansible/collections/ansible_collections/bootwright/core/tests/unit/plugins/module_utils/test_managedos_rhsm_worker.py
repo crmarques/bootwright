@@ -201,13 +201,17 @@ def canonical(consumer, request=DIGEST):
     return json.dumps({"consumer": consumer, "request": request}, sort_keys=True, separators=(",", ":")).encode()
 
 
+def registering(request=DIGEST):
+    return json.dumps({"consumer": "", "registering": True, "request": request}, sort_keys=True, separators=(",", ":")).encode()
+
+
 def test_registers_once_and_records_the_consumer(tmp_path):
     seen = []
     setup = Setup(tmp_path, observe=lambda: seen.append(setup.record_bytes()))
     answer = setup.call("register")[0]
     assert answer == {"ok": True, "result": {"changed": True, "consumer": UNEW, "owned": True, "release": "",
                                              "repositories": {"disable": [], "enable": []}, "state": "registered"}}
-    assert seen == [canonical("")]
+    assert seen == [registering()]
     assert setup.bus.registrations() == [("Register", ORG, [KEY], "s", {}, "sv", {}, "sv", "", worker.REGISTER_CEILING)]
     starts = [call for call in setup.bus.calls if call[0] in ("Start", "Stop")]
     assert starts == [("Start", "", worker.REGISTER_CEILING), ("Stop", "", worker.REGISTER_CEILING)]
@@ -291,12 +295,31 @@ def test_registers_again_when_its_record_survives_without_identity(tmp_path):
     assert setup.bus.calls == [] and setup.record_bytes() == canonical(U1)
 
 
+def test_a_certificate_after_its_own_unanswered_register_call_is_never_adopted(tmp_path):
+    """The record the worker writes before its own call proves no consumer: one that appears after the call
+    failed, whoever made it, is refused and left registered, and destroy never unregisters it."""
+    setup = Setup(tmp_path, error=DBusException("no reply", name="org.freedesktop.DBus.Error.NoReply"))
+    assert setup.call("register")[0]["ok"] is False
+    setup.with_cert(U2)
+    setup.bus.error = None
+    before, registrations = setup.record_bytes(), len(setup.bus.registrations())
+    answer = setup.call("register")[0]
+    assert answer == {"ok": False, "reason": "registration-foreign"}
+    assert len(setup.bus.registrations()) == registrations and setup.record_bytes() == before
+    answer = setup.call("unregister")[0]
+    assert answer["ok"] is True and answer["result"]["state"] == "retained" and answer["result"]["consumer"] == ""
+    assert setup.run.calls == [] and setup.guest.certificate() == (True, U2)
+    for raw in ({"consumer": U2, "registering": True, "request": DIGEST}, {"consumer": "", "registering": False, "request": DIGEST}):
+        setup.with_record("", raw=json.dumps(raw).encode())
+        assert setup.guest.read_record() is worker.UNREADABLE and setup.guest.state(DIGEST)[0] == "foreign"
+
+
 def test_a_reply_that_disagrees_with_the_certificate_stays_pending(tmp_path):
     setup = Setup(tmp_path)
     setup.bus.register = lambda *arguments, **options: json.dumps({"uuid": U2})
     answer = setup.call("register")[0]
     assert answer == {"ok": False, "reason": "transport"}
-    assert setup.record_bytes() == canonical("")
+    assert setup.record_bytes() == registering()
 
 
 def test_unregisters_only_its_own_consumer_and_proves_absence(tmp_path):
@@ -369,7 +392,7 @@ def test_classifies_a_dmi_uuid_collision_without_reflecting_server_text(tmp_path
     for leaked in ("AAAAAAAA", "host-a.example.test", "DMI", "Invalid credentials", "unreachable", "already"):
         assert leaked not in text
     assert ("Stop", "", worker.REGISTER_CEILING) in setup.bus.calls
-    assert setup.record_bytes() == canonical("")
+    assert setup.record_bytes() == registering()
 
 
 def test_repository_changes_disable_before_enable_and_purge_on_star(tmp_path):
@@ -821,7 +844,7 @@ def test_live_selection_is_proved_before_adoption_repositories_or_release(tmp_pa
     if reason:
         assert answer["ok"] is False and answer["reason"] == reason
         assert setup.run.calls == [config_call(setup)]
-        assert setup.record_bytes() == (canonical("") if state == "new" else before)
+        assert setup.record_bytes() == (canonical(UNEW) if state == "new" else before)
     else:
         assert answer["ok"] is True
         assert setup.run.calls == [config_call(setup), ([SM, "release", "--set=9.8"], worker.RELEASE_CEILING),

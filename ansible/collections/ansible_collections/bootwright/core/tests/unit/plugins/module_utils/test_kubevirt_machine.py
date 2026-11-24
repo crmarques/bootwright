@@ -32,6 +32,7 @@ class FakeAPI:
         self.objects, self.requests, self.counter = {}, [], 0
         self.unanswered, self.lose_create_reply, self.status = set(), False, None
         self.started, self.over_final, self.blocked = {"phase": "Running"}, "replace", set()
+        self.claim_page, self.endless_claims = None, False
         self.put("/version", {"gitVersion": "v1.34.2"})
         self.put("/apis/subresources.kubevirt.io/v1/version", {"gitVersion": "v1.6.0"})
         self.put("/api/v1/namespaces/kube-system", self.meta("kube-system", uid="cluster-1"))
@@ -57,8 +58,11 @@ class FakeAPI:
         body = json.loads(payload) if payload else None
         if method == "GET":
             if path.endswith("/persistentvolumeclaims"):
-                items = [o for p, o in self.objects.items() if p.startswith(path + "/")]
-                return 200, json.dumps({"items": items, "metadata": {}}).encode()
+                items = sorted((o for p, o in self.objects.items() if p.startswith(path + "/")), key=lambda o: o["metadata"]["name"])
+                offset = int(query.partition("continue=")[2] or 0)
+                size = self.claim_page or len(items) or 1
+                following = str(offset + size) if self.endless_claims or offset + size < len(items) else ""
+                return 200, json.dumps({"items": items[offset:offset + size], "metadata": {"continue": following}}).encode()
             if path in self.objects:
                 return 200, json.dumps(self.objects[path]).encode()
             return 404, b'{"kind":"Status","reason":"NotFound"}'
@@ -332,6 +336,22 @@ def test_removal_proves_every_owned_object_and_claim_absent():
     stuck.collect = lambda uid: None
     ignored_changed, evidence = arm.destroy(host(stuck), request(), context(applied["receipts"]))
     assert not evidence["absent"] and [v["name"] for v in evidence["volumes"] if v["present"]] == [VM + "-root", VM + "-root"]
+
+
+def test_removal_reads_every_claim_page_and_counts_a_truncated_listing_unanswered():
+    api = FakeAPI()
+    ignored_changed, applied = arm.apply(host(api), request(), context())
+    api.put(CLAIMS + "persistent-state-for-" + VM + "-x1",
+            {"metadata": {"name": "persistent-state-for-" + VM + "-x1", "uid": "s1", "ownerReferences": [{"uid": api.objects[VM_PATH]["metadata"]["uid"]}]}})
+    api.put(CLAIMS + "aaa-other", {"metadata": {"name": "aaa-other", "uid": "o1"}})
+    api.claim_page = 1
+    evidence = arm.observe(host(api), request(), context(applied["receipts"]))
+    assert evidence["answered"] and "persistent-state-for-" + VM + "-x1" in [v["name"] for v in evidence["volumes"] if v["present"]]
+    api.endless_claims = True
+    evidence = arm.observe(host(api), request(), context(applied["receipts"]))
+    assert not evidence["answered"] and not evidence["absent"]
+    pages = [p for m, p in api.requests if m == "GET" and p.endswith("/persistentvolumeclaims")]
+    assert len(pages) >= arm.MAX_CLAIM_PAGES
 
 
 def test_removal_refuses_a_running_machine():
