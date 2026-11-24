@@ -1955,11 +1955,69 @@ def test_readiness_does_not_retry_unknown_unowned_or_late_proofs(core_request, f
 def test_readiness_timeout_never_repeats_an_effect_or_exceeds_the_budget(core_request):
     clock = ReadinessClock()
     transport = ReadinessTransport(core_request, clock, ready_after=100)
-    with pytest.raises(ceph_native.Refusal, match="^native-timeout$"):
+    with pytest.raises(ceph_core.ReadinessRefusal, match="^not-ready$"):
         ceph_core.wait_ready(core_request, "d" * 64, core_request["hosts"][0], transport, clock.now, clock.pause)
     assert transport.polls == 6 and clock.value <= ceph_core.READINESS_TIMEOUT
     assert all(phase in ("observe", "host_state") for unused, phase, unused in transport.calls)
     assert all(0 < timeout <= 660 for unused, unused, timeout in transport.calls)
+
+
+class DeadlineCutTransport:
+    """Observations that stay partial with a blocking check; a read whose budget the wait's deadline shortened runs out, as the
+    remote worker's bare timeout or the local transport bound reports it."""
+
+    def __init__(self, request, clock, failure):
+        self.request, self.clock, self.failure, self.calls = request, clock, failure, []
+
+    def call(self, host, phase, *, timeout):
+        self.calls.append((host["name"], phase, timeout))
+        if timeout < 660 and phase == "observe":
+            self.clock.value += timeout
+            raise self.failure
+        self.clock.value += 100
+        if phase == "observe":
+            value = observation(self.request, ready=True)
+            value.update(ready=False, partial=True, blocking=["OSD_DOWN"])
+            return value
+        return {"name": host["name"], "owned": True, "exists": True}
+
+
+@pytest.mark.parametrize("failure", [ceph_native.RemoteRefusal("native-timeout"), ceph_native.Refusal("native-timeout")])
+def test_a_read_the_readiness_deadline_cuts_short_is_the_readiness_timeout_naming_what_blocks(core_request, failure):
+    clock = ReadinessClock()
+    transport = DeadlineCutTransport(core_request, clock, failure)
+    with pytest.raises(ceph_core.ReadinessRefusal, match="^not-ready$") as refused:
+        ceph_core.wait_ready(core_request, "d" * 64, core_request["hosts"][0], transport, clock.now, clock.pause)
+    assert refused.value.checks == ["OSD_DOWN"]
+    assert ceph_core.refusal(refused.value, ceph_core.CLUSTER_REASONS) == ("not-ready", "not-ready:OSD_DOWN")
+    assert transport.calls[-1][1] == "observe" and transport.calls[-1][2] < 660
+    assert all(phase in ("observe", "host_state") for unused, phase, unused in transport.calls)
+
+
+@pytest.mark.parametrize("failure", [ceph_native.RemoteRefusal("native-timeout"), ceph_native.Refusal("native-timeout")])
+def test_a_read_that_spends_its_whole_budget_keeps_its_timeout(core_request, failure):
+    clock = ReadinessClock()
+
+    class WholeBudget(DeadlineCutTransport):
+        def call(self, host, phase, *, timeout):
+            if phase == "observe":
+                assert timeout == 660
+                self.clock.value += timeout
+                raise self.failure
+            return super().call(host, phase, timeout=timeout)
+
+    with pytest.raises(ceph_native.Refusal) as refused:
+        ceph_core.wait_ready(core_request, "d" * 64, core_request["hosts"][0], WholeBudget(core_request, clock, failure), clock.now, clock.pause)
+    assert refused.value is failure
+
+
+def test_a_cut_read_whose_worker_names_a_timed_out_command_keeps_that_cause(core_request):
+    failure = ceph_native.RemoteRefusal("native-refusal:native-timeout@ceph_native.bounded_command:528")
+    clock = ReadinessClock()
+    with pytest.raises(ceph_native.Refusal) as refused:
+        ceph_core.wait_ready(core_request, "d" * 64, core_request["hosts"][0], DeadlineCutTransport(core_request, clock, failure), clock.now,
+                             clock.pause)
+    assert refused.value is failure
 
 
 def test_fast_partial_observations_remain_rate_limited_until_deadline(core_request):

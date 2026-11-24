@@ -551,6 +551,30 @@ def test_activation_is_not_pending_while_a_host_has_not_joined():
     assert pending == [True]
 
 
+def test_osd_creation_past_the_activation_wait_is_its_readiness_timeout_never_an_unknown_effect():
+    """op-b63a749c: cephadm still created OSDs when the wait before activation ended; the worker of its last observation, given only the
+    wait's remaining seconds, returned a bare timeout."""
+    value = request()
+    clock = core.ReadinessClock()
+
+    class Converging(ActivationTransport):
+        def call(self, host, phase, private=None, *, timeout=None, devices=None, service=None):
+            if phase == "observe" and timeout is not None:
+                self.calls.append((host["name"], phase, timeout))
+                if timeout < 660:
+                    self.clock.value += timeout
+                    raise ceph_native.RemoteRefusal("native-timeout")
+                self.clock.value += 120
+                return dict(self.observed(before=True), blocking=["OSD_DOWN"])
+            return super().call(host, phase, private, timeout=timeout, devices=devices, service=service)
+
+    transport = Converging(value, clock, "complete")
+    with pytest.raises(ceph_core.ReadinessRefusal, match="^not-ready$") as refused:
+        ceph_core.activate_stretch(value, "d" * 64, value["hosts"][0], transport, clock.now, clock.pause)
+    assert refused.value.checks == ["OSD_DOWN"] and clock.value <= ceph_core.READINESS_TIMEOUT
+    assert not {"stretch_locate", "stretch_enable"} & {phase for unused, phase, unused in transport.calls}
+
+
 DOMAIN = ".lab.example.test"
 
 

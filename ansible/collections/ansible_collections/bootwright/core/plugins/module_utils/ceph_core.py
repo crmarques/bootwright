@@ -21,6 +21,8 @@ from ansible_collections.bootwright.core.plugins.module_utils import (
 
 READINESS_TIMEOUT = 900
 READINESS_INTERVAL = 5
+# One bounded read of a wait: the transport's ordinary call bound around a 640 s worker.
+READ_BUDGET = 660
 # Each ingress host's read-only firewall check: every host in one concurrent round, within one native call of the block's Go deadline.
 FIREWALL_CALL = 120
 HOLDER_CALL = 60
@@ -111,6 +113,23 @@ class UnsettledRefusal(ceph_native.RemoteRefusal):
     def __init__(self, detail, host):
         super().__init__(detail)
         self.host = host
+
+
+def deadline_cut(error, budget):
+    """A bare timeout, the worker's or the transport's own, of a read whose budget a wait's deadline shortened below a whole read's: the
+    wait ran out. A timeout whose worker names the timed-out command, or a read that had its whole budget, keeps its own reason."""
+    timeout = error.detail if isinstance(error, ceph_native.RemoteRefusal) else str(error) if type(error) is ceph_native.Refusal else None
+    return budget is not None and budget < READ_BUDGET and timeout == "native-timeout"
+
+
+def read_refusal(error, budget, host):
+    """The refusal one read of a wait raises: a host's unsettled snapshot, the wait's own end for a read its deadline cut short, or the
+    read's own refusal unchanged."""
+    if unsettled(error):
+        return UnsettledRefusal(error.detail, host["name"])
+    if deadline_cut(error, budget):
+        return ceph_native.Refusal("not-ready")
+    return error
 
 
 def unsettled(error):
@@ -311,20 +330,23 @@ def observe_state(request, request_digest, bootstrap, transport, deadline=None, 
                   unrecorded=False, shared=None):
     """One validated snapshot; an optional deadline bounds all of its probes, an optional list receives the health check
     codes that kept readiness unproved, and another whether only a stretch cluster's activation is still missing. A shared host
-    reading, admitted against this request, stands in for each host's own state read."""
+    reading, admitted against this request, stands in for each host's own state read. A read-only probe whose budget the
+    deadline shortened and that then runs out is the deadline's own end, never an unknown effect."""
     def read(host, phase):
+        budget = None
         try:
             if deadline is None:
                 return host_state(transport, host) if phase == "host_state" else transport.call(host, phase)
             started = now()
             remaining = deadline - started
             ceph_native.require(remaining > 0, "not-ready")
-            budget = min(660, remaining)
+            budget = min(READ_BUDGET, remaining)
             result = host_state(transport, host, timeout=budget) if phase == "host_state" else transport.call(host, phase, timeout=budget)
-        except ceph_native.RemoteRefusal as error:
-            if unsettled(error):
-                raise UnsettledRefusal(error.detail, host["name"]) from None
-            raise
+        except ceph_native.Refusal as error:
+            refusal = read_refusal(error, budget, host)
+            if refusal is error:
+                raise
+            raise refusal from None
         ceph_native.require(now() < min(deadline, started + budget), "not-ready")
         return result
 
