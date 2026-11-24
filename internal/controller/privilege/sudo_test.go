@@ -404,3 +404,101 @@ func TestAnInputLoggingRefusalNamesTheInputItWouldLog(t *testing.T) {
 		}
 	}
 }
+
+func TestADelegatedCommandTakesTheOrdinaryEntryOnlyWhenSudoListsItForTheCaller(t *testing.T) {
+	args := []string{"machine", "rsh", "--name", "vrt3068"}
+	for _, test := range []struct {
+		name           string
+		noninteractive bool
+		assignments    []string
+		listed         int
+		wantListing    []string
+		wantChild      []string
+	}{
+		{name: "permitted", listed: 0, wantListing: []string{"-l", "-u", "#0", "--", "/opt/bootwright", "machine", "rsh", "--name", "vrt3068"},
+			wantChild: []string{"-u", "#0", "--", "/opt/bootwright", "machine", "rsh", "--name", "vrt3068"}},
+		{name: "refused", listed: 1, wantListing: []string{"-l", "-u", "#0", "--", "/opt/bootwright", "machine", "rsh", "--name", "vrt3068"},
+			wantChild: []string{"-u", "#0", "--", "/opt/bootwright", "__delegate", "machine", "rsh", "--name", "vrt3068"}},
+		{name: "unattended", noninteractive: true, listed: 0, wantListing: []string{"-n", "-l", "-u", "#0", "--", "/opt/bootwright", "machine", "rsh", "--name", "vrt3068"},
+			wantChild: []string{"-u", "#0", "-n", "--", "/opt/bootwright", "machine", "rsh", "--name", "vrt3068"}},
+		{name: "route assignments", assignments: []string{"HTTPS_PROXY=http://proxy:3128"},
+			wantChild: []string{"-u", "#0", "HTTPS_PROXY=http://proxy:3128", "--", "/opt/bootwright", "__delegate", "machine", "rsh", "--name", "vrt3068"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var listing, child []string
+			executor := executorFunc(func(_ context.Context, c Command) (int, error) {
+				switch {
+				case reflect.DeepEqual(c.Arguments, []string{"-n", "-ll"}):
+					return 1, nil
+				case slices.Contains(c.Arguments, "-l"):
+					if listing != nil || c.Input != nil || c.Output != io.Discard || c.Elevated {
+						t.Fatalf("listing ran as %+v", c)
+					}
+					listing = c.Arguments
+					return test.listed, nil
+				}
+				child = c.Arguments
+				return 0, nil
+			})
+			delay := delayFunc(func(ctx context.Context, _ time.Duration) error { <-ctx.Done(); return ctx.Err() })
+			options := SudoOptions{Executable: "/opt/bootwright", Sudo: "/usr/bin/sudo", Executor: executor, Delay: delay, NonInteractive: test.noninteractive,
+				Assignments: test.assignments, DelegatedEntry: "__delegate", Output: io.Discard, Error: io.Discard}
+			if code, err := NewSupervisor(options).Run(t.Context(), args); err != nil || code != 0 {
+				t.Fatal(code, err)
+			}
+			if !slices.Equal(listing, test.wantListing) || !slices.Equal(child, test.wantChild) {
+				t.Fatalf("listing %q, child %q; want %q and %q", listing, child, test.wantListing, test.wantChild)
+			}
+		})
+	}
+}
+
+func TestADelegatedCommandKeepsTheDelegatedEntryWhenTheListingCannotAnswer(t *testing.T) {
+	args := []string{"machine", "exec", "--name", "vrt3068", "uptime"}
+	for _, test := range []struct {
+		name       string
+		enrollment bool
+		listing    func(context.CancelFunc) (int, error)
+		wantListed bool
+		wantChild  []string
+		wantErr    bool
+	}{
+		{name: "listing failed to run", listing: func(context.CancelFunc) (int, error) { return 0, errors.New("sudo vanished") }, wantListed: true,
+			wantChild: []string{"-u", "#0", "-n", "--", "/opt/bootwright", "__delegate", "machine", "exec", "--name", "vrt3068", "uptime"}},
+		{name: "enrollment input", enrollment: true,
+			wantChild: []string{"-u", "#0", "-n", "--", "/opt/bootwright", "__delegate", "machine", "exec", "--name", "vrt3068", "uptime"}},
+		{name: "interrupted at the prompt", listing: func(cancel context.CancelFunc) (int, error) { cancel(); return 1, nil }, wantListed: true, wantErr: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			var listed bool
+			var child []string
+			var stderr bytes.Buffer
+			executor := executorFunc(func(_ context.Context, c Command) (int, error) {
+				switch {
+				case reflect.DeepEqual(c.Arguments, []string{"-n", "-ll"}), reflect.DeepEqual(c.Arguments, []string{"-u", "#0", "-v"}):
+					return 1, nil
+				case slices.Contains(c.Arguments, "-l"):
+					listed = true
+					if c.Error != io.Discard {
+						c.Error.Write([]byte("sudo: a password is required\n"))
+					}
+					return test.listing(cancel)
+				}
+				child = c.Arguments
+				return 0, nil
+			})
+			delay := delayFunc(func(ctx context.Context, _ time.Duration) error { <-ctx.Done(); return ctx.Err() })
+			options := SudoOptions{Executable: "/opt/bootwright", Sudo: "/usr/bin/sudo", Executor: executor, Delay: delay, NonInteractive: true,
+				EnrollmentInput: test.enrollment, DelegatedEntry: "__delegate", Output: io.Discard, Error: &stderr}
+			_, err := NewSupervisor(options).Run(ctx, args)
+			if (err != nil) != test.wantErr || listed != test.wantListed || !slices.Equal(child, test.wantChild) {
+				t.Fatalf("error %v, listed %t, child %q; want child %q", err, listed, child, test.wantChild)
+			}
+			if stderr.Len() != 0 {
+				t.Fatalf("an unattended listing wrote %q to the operator", stderr.String())
+			}
+		})
+	}
+}

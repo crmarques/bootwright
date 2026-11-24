@@ -32,6 +32,7 @@ type Invocation struct {
 	// SecretStdin names the Secret a secret set reads from standard input.
 	SecretStdin     string
 	EnrollmentInput bool
+	DelegatedEntry  string
 }
 
 // Elevator relaunches one invocation as root through the qualified sudo and
@@ -69,7 +70,7 @@ func (e Elevator) Run(ctx context.Context, invocation Invocation) Outcome {
 	// Without a terminal sudo cannot prompt, so its refusal text carries no
 	// operator action until the child proves it started.
 	errorStream := newStartFilter(invocation.Error, invocation.JSON, noninteractive)
-	options := SudoOptions{Executable: executable, Sudo: sudo, Executor: e.Executor, Delay: e.Delay, NonInteractive: noninteractive, Quiet: invocation.JSON, Assignments: RouteAssignments(invocation.Route), SecretStdin: invocation.SecretStdin, EnrollmentInput: invocation.EnrollmentInput, Input: invocation.Input, Output: output, Error: errorStream}
+	options := SudoOptions{Executable: executable, Sudo: sudo, Executor: e.Executor, Delay: e.Delay, NonInteractive: noninteractive, Quiet: invocation.JSON, Assignments: RouteAssignments(invocation.Route), SecretStdin: invocation.SecretStdin, EnrollmentInput: invocation.EnrollmentInput, DelegatedEntry: invocation.DelegatedEntry, Input: invocation.Input, Output: output, Error: errorStream}
 	if interactive {
 		// Sudo relays the terminal only while the child inherits it on stdin
 		// and stdout; behind a pipe it parks the child in the background of a

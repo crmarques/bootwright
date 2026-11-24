@@ -64,6 +64,7 @@ type SudoOptions struct {
 	// from standard input, which sudo's I/O log would record.
 	SecretStdin     string
 	EnrollmentInput bool
+	DelegatedEntry  string
 	Input           io.Reader
 	Output, Error   io.Writer
 }
@@ -154,21 +155,14 @@ func (s *Supervisor) Run(ctx context.Context, args []string) (int, error) {
 		}
 		interval = refreshInterval(policy.data)
 	}
-	childArgs := []string{"-u", "#0"}
-	if options.NonInteractive {
-		childArgs = append(childArgs, "-n")
+	args = options.entry(ctx, environment, args)
+	if err := ctx.Err(); err != nil {
+		return 1, err
 	}
-	for _, assignment := range options.Assignments {
-		if !safeAssignment(assignment) {
-			return 1, errors.New("acquisition route assignment is outside its allowed vocabulary")
-		}
-		childArgs = append(childArgs, assignment)
+	childArgs, err := options.childArguments(readable && inputLogging(policy.data) == "", args)
+	if err != nil {
+		return 1, err
 	}
-	childArgs = append(childArgs, "--", options.Executable)
-	if options.EnrollmentInput && !options.NonInteractive && readable && inputLogging(policy.data) == "" {
-		childArgs = append(childArgs, VerifiedEnrollmentInput)
-	}
-	childArgs = append(childArgs, args...)
 	refreshCtx, stopRefresh := context.WithCancel(ctx)
 	finished := make(chan struct{})
 	refreshed, refreshStopped := false, false
@@ -403,4 +397,43 @@ func (w synchronizedWriter) Write(data []byte) (int, error) {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 	return w.writer.Write(data)
+}
+
+func (o SudoOptions) childArguments(verifiedInput bool, args []string) ([]string, error) {
+	childArgs := []string{"-u", "#0"}
+	if o.NonInteractive {
+		childArgs = append(childArgs, "-n")
+	}
+	for _, assignment := range o.Assignments {
+		if !safeAssignment(assignment) {
+			return nil, errors.New("acquisition route assignment is outside its allowed vocabulary")
+		}
+		childArgs = append(childArgs, assignment)
+	}
+	childArgs = append(childArgs, "--", o.Executable)
+	if o.EnrollmentInput && !o.NonInteractive && verifiedInput {
+		childArgs = append(childArgs, VerifiedEnrollmentInput)
+	}
+	return append(childArgs, args...), nil
+}
+
+func (o SudoOptions) entry(ctx context.Context, environment, args []string) []string {
+	if o.DelegatedEntry == "" {
+		return args
+	}
+	if len(o.Assignments) == 0 && !o.EnrollmentInput {
+		listing := append([]string{"-l", "-u", "#0", "--", o.Executable}, args...)
+		if o.NonInteractive {
+			listing = append([]string{"-n"}, listing...)
+		}
+		refusal := o.Error
+		if o.NonInteractive || o.Quiet {
+			refusal = io.Discard
+		}
+		code, err := o.Executor.Run(ctx, Command{Executable: o.Sudo, Arguments: listing, Environment: append([]string(nil), environment...), Output: io.Discard, Error: refusal})
+		if err == nil && code == 0 {
+			return args
+		}
+	}
+	return append([]string{o.DelegatedEntry}, args...)
 }

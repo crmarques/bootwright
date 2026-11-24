@@ -439,6 +439,8 @@ func TestSudoRunsOnlyTheSupervisorsInvocations(t *testing.T) {
 		{"-n", "-u", "#0", "-v"},
 		{"-u", "#0", "--", self},
 		{"-u", "#0", "-n", "HTTPS_PROXY=http://proxy:3128", "--", self, "apply", "--", "x"},
+		{"-l", "-u", "#0", "--", self, "machine", "rsh"},
+		{"-n", "-l", "-u", "#0", "--", self, "machine", "rsh"},
 	} {
 		if !admittedInvocation(args, reexecution) {
 			t.Errorf("the supervisor's invocation %q was refused", args)
@@ -457,6 +459,10 @@ func TestSudoRunsOnlyTheSupervisorsInvocations(t *testing.T) {
 		{"--", self},
 		{"-u", "#0", "LD_PRELOAD=/tmp/x.so", "--", self},
 		{"-u", "#0", "HTTPS_PROXY=http://a b", "--", self},
+		{"-l", "-u", "#0", "--", "/bin/sh"},
+		{"-l", "-n", "-u", "#0", "--", self},
+		{"-l", "-u", "#0", "HTTPS_PROXY=http://proxy:3128", "--", self},
+		{"-l", "-U", "root", "-u", "#0", "--", self},
 	} {
 		if admittedInvocation(args, reexecution) {
 			t.Errorf("the invocation %q was admitted", args)

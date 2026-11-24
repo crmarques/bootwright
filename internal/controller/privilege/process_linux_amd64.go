@@ -261,6 +261,9 @@ func admittedInvocation(args []string, reexecution func() (string, error)) bool 
 			slices.Equal(args, []string{"-n", "-u", "#0", "-v"})
 	}
 	options := args[:separator]
+	if slices.Equal(options, []string{"-l", "-u", "#0"}) || slices.Equal(options, []string{"-n", "-l", "-u", "#0"}) {
+		options = options[len(options)-2:]
+	}
 	if len(options) < 2 || options[0] != "-u" || options[1] != "#0" {
 		return false
 	}

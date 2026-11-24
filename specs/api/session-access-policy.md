@@ -83,9 +83,21 @@ delegated group. Manage the rule on the controller with `visudo`.
 
 The delegated entry admits `machine exec`, `machine rsh`, `cluster exec`,
 `cluster rsh` and `policy permissions`. Grant wider sudo access only to
-trusted administrators. Administrators with sudo authority for the ordinary
-entry can run administrative sessions with `sudo bootwright machine exec`
-and install policy with `sudo bootwright policy install`.
+trusted administrators. Before it relaunches, the unprivileged CLI asks sudo
+as the caller, with `sudo -l -u #0 -- <bootwright> <arguments>`, whether the
+same command is permitted through the ordinary entry. Sudo authenticates a
+listing by its `listpw` setting, and the relaunch reuses that credential
+while `timestamp_timeout` keeps it, so the operator normally answers one
+prompt; `-n` keeps the listing from prompting without a terminal, where its
+refusal text is discarded. When sudo lists
+it, the CLI relaunches the ordinary command, which sudo admits, authenticates
+and logs under its own rule, and the session follows the identity rules of
+the [CLI](../cli.md#machine-ssh-sessions) with no grant. Otherwise, including
+an invocation that carries acquisition-route variables, it relaunches the
+delegated entry. An administrator therefore types the same command as
+everyone else. A delegate-only caller's listing is a refused sudo check,
+which sudo may log and, under its mail settings, report.
+Administrators install policy with `bootwright policy install`.
 
 A delegated session needs the configured remote account, key authentication
 and pre-established host trust. The authorized target and the grant come from

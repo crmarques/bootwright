@@ -149,7 +149,7 @@ func elevationInvocation(classification cli.InvocationClass, args []string, rout
 		invocation.SecretStdin = privilege.SSHPasswordInput
 	}
 	if delegatedCommand(classification) {
-		invocation.Arguments = append([]string{delegatedSessionEntry}, invocation.Arguments...)
+		invocation.DelegatedEntry = delegatedSessionEntry
 	}
 	if file, ok := terminalFile(stdout); ok {
 		invocation.OutputTerminal = file

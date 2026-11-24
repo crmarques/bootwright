@@ -92,10 +92,10 @@ func TestElevationCarriesNoColorWithoutChangingPayload(t *testing.T) {
 	for _, color := range []string{"auto", "always", "never"} {
 		args := []string{"machine", "exec", "--name", "example", "--color", color, "--", "printf", "--color", "always"}
 		invocation := elevationInvocation(cli.ClassifyInvocation(args), args, controller.Route{}, &bytes.Buffer{}, &bytes.Buffer{})
-		if invocation.Arguments[0] != delegatedSessionEntry {
-			t.Fatalf("missing delegated sudo entry: %q", invocation.Arguments)
+		if invocation.DelegatedEntry != delegatedSessionEntry || invocation.Arguments[0] != "machine" {
+			t.Fatalf("delegated sudo entry %q for %q", invocation.DelegatedEntry, invocation.Arguments)
 		}
-		options := cli.ResolvePresentation(invocation.Arguments[1:], cli.PresentationOptions{})
+		options := cli.ResolvePresentation(invocation.Arguments, cli.PresentationOptions{})
 		want := color
 		if want == "auto" {
 			want = "never"
