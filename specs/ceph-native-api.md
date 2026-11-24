@@ -1,20 +1,23 @@
 # Native Ceph service input
 
-This page owns the M2 target for the native service model approved in D133.
-[Storage admission](api/ceph.md) and the closed schemas own current accepted
-input. M2b implements the common native path and strict MON/MGR/OSD admission;
-[B492](milestones/m2.md#b492) adds the MDS family.
-[B477](milestones/m2.md#b477) and [B478](milestones/m2.md#b478) add the RGW,
-ingress and NFS records; the core request lists their services for core
-observation, and planning refuses an ingress until its auxiliary images can be
-selected.
-Complete native projection, additional families and protected leaf registries
-remain gated by [B472](milestones/m2.md#b472), [B474](milestones/m2.md#b474)
-and each [service item](ceph-coverage.md#feature-matrix).
+This page owns the target for the native service model approved in D133.
+[Storage admission](api/ceph.md) and the closed schemas own accepted
+input. The common native path admits strict MON/MGR/OSD input, and the MDS,
+RGW, ingress and NFS families extend it; the core request lists their services
+for core observation, and planning refuses an ingress while its auxiliary
+images cannot be selected.
+
 Examples covering later families remain target documents. The [review](storage-api-review.md)
 records the approved before/after decision.
 
 ## Cluster and service ownership
+
+Not yet met: native projection, the additional families and protected leaf
+registries are not complete for each [service](ceph-coverage.md#feature-matrix);
+tracked as [B474](milestones/m2.md#b474).
+
+Not yet met: the tested-journey record of each service is not complete; tracked
+as [B472](milestones/m2.md#b472).
 
 Keep `CephCluster`'s type, management, distribution, exact release/package/
 image coordinates, entitlement, bootstrap/SSH, networks, security, native
@@ -157,10 +160,7 @@ configuration. That probe does not prove the complete MGR lifecycle or the
 guest sshd policy. Correct/wrong-key behavior through actual manager
 connections, actual MGR UID/permissions/SELinux, reconnection,
 restart/failover, interrupted-state recovery and removal remain
-[B472/B79/B80](milestones/m2.md#m2b) promotion evidence. B476's accepted
-minimal run is recorded in
-[X94](milestones/delivered.md#x94--post-destroy-cluster-inspection); remaining
-core/promotion gates stay on M2.
+[B472/B79/B80](milestones/m2.md#m2b) promotion evidence.
 
 Host preparation uses the invocation-local [registry broker](ceph.md) with
 an empty authfile and ephemeral mutual TLS. Bootstrap never receives the

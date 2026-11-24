@@ -186,7 +186,7 @@ location. It does not redeclare daemon placement. Explicit MON/MGR services
 and qualified bootstrap defaults must cover the minimal cluster without a
 second role-inference system.
 
-The migration covers `monitoring`, `mgmtGateway`, ingress helper objects,
+P1 replaces `monitoring`, `mgmtGateway`, ingress helper objects,
 OSD helper objects, and the daemon portions of filesystem/RGW/NFS resources.
 It does not remove resource kinds merely because their daemon configuration
 has moved. In particular, an object gateway's logical endpoint and object
@@ -213,11 +213,9 @@ prohibitions in the [input grammar](api.md) remain unless separately approved;
 native fidelity here describes the qualified subset, not arbitrary YAML.
 
 This is an approved breaking v1alpha1 authoring change. B474 updates schema,
-admission, effective state, diagnostics, examples and migration guidance
-together. It explicitly rejects retired helpers rather than silently ignoring
-them, translating both competing shapes, or rewriting operator files.
-Existing realized storage operations do not exist, but existing authored
-declarations still need a documented migration.
+admission, effective state, diagnostics and examples together. It explicitly
+rejects retired helpers rather than silently ignoring them, translating both competing shapes, or rewriting operator files.
+Existing realized storage operations do not exist.
 
 Alternative considered: keep all helper shapes and add a native escape hatch
 to each. This preserves old syntax but creates multiple default/placement

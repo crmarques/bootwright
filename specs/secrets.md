@@ -344,8 +344,9 @@ Client `tlsVerification`, BMC `tls.verification`, and Ceph repository
 | `certificate` | Require an explicit bundle with exactly one non-CA server certificate, optionally beside CA certificates. Only that server certificate anchors this connection; compare the peer's exact DER before sending HTTP or credentials. Check dates, server purpose and TLS crypto policy; omit hostname matching. |
 | `none` | Explicitly skip certificate and hostname checks on this connection. A trust-bundle reference is contradictory and refused. Encryption alone supplies no endpoint identity. |
 
-Only an individual Machine's BMC currently realizes all three modes; provider
-and kind defaults cannot select a non-full mode. Other connections refuse
+Only an individual Machine's BMC accepts all three modes; provider
+and kind defaults cannot select a non-full mode, and a non-full mode is
+recorded in effective state. Other connections refuse
 non-full policies during validation, naming the field and supported remedy;
 they never translate certificate identity into an insecure native-tool flag.
 Native Satellite registration requires CA anchors even inside a `trustBundle`;

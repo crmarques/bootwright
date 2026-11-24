@@ -871,17 +871,17 @@ the document and the marker only on standard input. In order:
    ([systemd-run(1)](https://www.freedesktop.org/software/systemd/man/latest/systemd-run.html));
    the unit's wrapper keeps nmstatectl's output, errors and exit status. The
    adapter waits for the unit within `networkApply` and, when the connection
-   dropped, within `networkReconnect`. A connection still lost then waits
-   `checkpointSeconds + 30` seconds: NetworkManager rolls an uncommitted
-   checkpoint back in the daemon when its timeout ends, whatever happens to the
-   connection (`CheckpointCreate` `rollback_timeout`, the
+   dropped, within `networkReconnect`. If the connection stays lost, the
+   adapter waits `checkpointSeconds + 30` seconds: NetworkManager rolls an uncommitted
+   checkpoint back in the daemon when its timeout ends
+   (`CheckpointCreate` `rollback_timeout`, the
    [NetworkManager D-Bus API](https://networkmanager.dev/docs/api/latest/gdbus-org.freedesktop.NetworkManager.html)).
-   It reads the state again; an exit status other than 0 is NetworkManager's
+   The adapter reads the state again; an exit status other than 0 is NetworkManager's
    refusal, and nmstate verifies the applied state and rolls back a mismatch
    ([nmstatectl(8)](https://www.mankier.com/8/nmstatectl)); a checkpoint
    NetworkManager no longer lists was rolled back by its timeout, whether or
    not the controller saw its connection drop, and the commit is never tried
-   on it. Otherwise it runs
+   on it. Otherwise the adapter runs
    `nmstatectl commit` on the checkpoint and writes the marker
    `{"bootId":"<boot ID>","request":"<digest>"}`, mode `0644`, atomically to
    `/etc/bootwright/network-marker.json`. Nothing is written under
@@ -2060,7 +2060,7 @@ them.
 | Satellite, release offered | The release is set, as on the hosted service, and the content view serves that minor; the evidence pin is `release`. |
 | Satellite, release not offered | The release is unset and the selected content view (explicit or inherited from the activation key) is the pin; the evidence pin is `contentView`. A newer minor in the view stops the update at `update-release-drift`. |
 | Configured repositories beside a Satellite | No release variable is written, so `$releasever` expands to the major; a minor is written literally in `baseURL`. |
-| `templateClone` qcow2 | Refused today ([B99](milestones/m1.md#b99)); steps 2 to 6 read no installer media. |
+| `templateClone` qcow2 | Refused; steps 2 to 6 read no installer media ([template-clone installer arm](deferred/machine-arms.md#template-clone-installer-arm)). |
 | Provided Machine | [Provided OS updates](#provided-os-updates) use the host’s existing OS and repositories. |
 
 ## Provided OS updates
@@ -2435,13 +2435,6 @@ and do not strand teardown. Contradictory evidence remains unknown. The empty
 profile directory is removed without recursively deleting unrelated siblings.
 Removal consumes no data-loss authorization. Its
 quiescence follows the consumers under the lifecycle removal gate.
-
-The new block, installation request version and libvirt path versions change
-frozen plans. Retire live contexts with the build that applied them before
-`install` with this build, then start fresh. An old incomplete apply cannot
-silently continue across these changes. A moved automation digest alone
-freezes no block differently, so an apply continues across it once `install` has
-run ([dependency safety](state-reconciliation.md#dependency-safety-during-recovery)).
 
 ## Host firewall requirements
 

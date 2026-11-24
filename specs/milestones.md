@@ -38,8 +38,11 @@ Slices with an item `in progress`.
 ## Scope rules
 
 - Implement only the prompt-authorized outcome: an active slice's open work,
-  or an explicitly requested slice or item, which authorizes only itself. No
-  spec, page, item or decision authorizes implementation or effect.
+  or an explicit request, which authorizes only the outcome it names. No
+  spec, page, item or decision authorizes implementation or effect. A request
+  for an outcome no item holds is first recorded as an item on the page of the
+  earliest milestone not done whose scope covers it, or as a parked item, and
+  its slice takes the next X.
 - A slice is **active** only while its [row](#active-slices) reads
   `in progress`; milestones are never active. The WIP limit is at most two
   active slices per program, the slices one owner decision or request
@@ -94,7 +97,7 @@ Slices with an item `in progress`.
   commit that sets its Status Delivery to `done` and writes
   `Done <date> at <commit>` on its page. A done milestone takes no new item.
   Otherwise its Delivery is `in progress` once any of its items has started
-  and `not started` before; D158 reopens M1 with its accepted baseline. A
+  and `not started` before. A
   completed item has left its page, whose opening links the record of a
   slice delivered toward it.
 
@@ -116,10 +119,10 @@ Slices with an item `in progress`.
   owner decided, delegated or has yet to review it.
 - **Q\<n\>, OD\<n\>, owner question.** A row of an open-decision table
   (`ID | Question | Options | Recommendation | Blocks | Status`) whose Status
-  is open or names the answering D; Q1 to Q118 and OD1 to OD31 stay fixed,
-  and a new Q takes the next number. Other numberings, such as an
-  audit's finding IDs, are local to their record.
-- **Alias.** Each item row keeps its pre-2026-09-28 IDs and its dated move and
+  is open or names the answering D; a number never changes, and a new Q or
+  OD takes one above the highest under `specs/milestones/`. Other
+  numberings, such as an audit's finding IDs, are local to their record.
+- **Alias.** Each item row keeps its former IDs and its dated move and
   split notes; an old ID found nowhere else is in the backlog's
   Retired table.
 - A milestone page opens with its scope, Requires, Exit tier and Open
@@ -131,8 +134,7 @@ Slices with an item `in progress`.
   per-page cards.
 - A moved item keeps its ID, and its row and section move with a dated Alias
   note. A split keeps the ID on the part that stays and gives each part split
-  out a new B whose Alias names its source and date (a split made by the
-  2026-09-28 reorganization names its source only); no B carries a qualifier
+  out a new B whose Alias names its source and date; no B carries a qualifier
   such as "(rest)". A partly delivered item keeps its ID and states what
   remains. A dropped item is retired with reason and date. A completed item
   leaves its page for the record of the slice that delivered it.

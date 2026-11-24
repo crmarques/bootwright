@@ -142,11 +142,9 @@ provider segment or another provider's Network naming a trunk is refused at
 (`TestATrunkRefusesAnUntaggedOwnerOrAProviderSegment`). Each is
 `api.invariant`, as are these refusals of a tagged managed Network:
 
-- `spec.ipv6`, at `$.spec.ipv6`: a leg holds one IPv4 address; IPv6 on a leg is
-  not yet admitted ([B1284](../milestones/backlog.md#b1284)).
+- `spec.ipv6`, at `$.spec.ipv6`: a leg holds one IPv4 address.
 - An `mtu` other than 1500, at `$.spec.mtu`, or on a Network its
-  `taggedNetworkRefs` name, at that entry: not yet admitted on a trunk or leg
-  ([B1285](../milestones/backlog.md#b1285))
+  `taggedNetworkRefs` name, at that entry
   (`TestATaggedManagedNetworkRefusesIPv6AndAnMTUOtherThan1500`).
 - A leg device `<bridge>.<vlan>` longer than the 15 bytes of a Linux interface
   name, at `$.spec.libvirt.bridge`, naming the longest bridge that fits
@@ -160,17 +158,25 @@ provider segment or another provider's Network naming a trunk is refused at
   `bootwright-<context>-<provider>-trunk-<bridge>`, name and UUID alike
   (`TestALegConnectionNeverTakesATrunksName`).
 
+Not yet met: a tagged managed Network admits no IPv6 on a leg; tracked as
+[B1284](../milestones/backlog.md#b1284).
+
+Not yet met: a tagged managed Network admits no `mtu` other than 1500 on a
+trunk or leg; tracked as [B1285](../milestones/backlog.md#b1285).
+
 The host routes between two legs only when one names the other in
 `routedNetworkRefs`, one side being enough, and masquerades a leg whose
 `forward` is `nat` to every interface outside the provider's trunks, legs and
 managed bridges; every other pair stays refused
 ([routing table](../substrates.md#routing-table)). Each entry is
 refused `api.invariant` at its index when it names the Network itself, or a
-Network that is not a tagged managed Network of the same provider; routing to
-an untagged libvirt network or across providers is not yet admitted
-([B1287](../milestones/backlog.md#b1287)), and `routedNetworkRefs` on an
-untagged managed Network is refused at the field
+Network that is not a tagged managed Network of the same provider, so routing
+to an untagged libvirt network or across providers is refused, and
+`routedNetworkRefs` on an untagged managed Network is refused at the field
 (`TestRoutedNetworkRefsNameTaggedManagedNetworksOfTheSameProvider`).
+
+Not yet met: the host routes neither to an untagged libvirt network nor across
+providers; tracked as [B1287](../milestones/backlog.md#b1287).
 
 ## Cross-kind checks
 

@@ -1,7 +1,6 @@
 # Normative pages that cite a decision whose status token is session-pending: page D<n>. The list only shrinks; a decision the owner reviews leaves it.
 specs/add-on-coverage.md D193
 specs/add-on-coverage.md D202
-specs/add-ons.md D173
 specs/api/ceph.md D159
 specs/api/machines.md D197
 specs/api/machines.md D240
@@ -21,8 +20,6 @@ specs/milestones.md D159
 specs/milestones.md D172
 specs/milestones.md D173
 specs/openshift-clusters.md D199
-specs/project.md D173
-specs/state-reconciliation.md D173
 specs/substrates.md D202
 specs/substrates.md D207
 specs/substrates.md D234

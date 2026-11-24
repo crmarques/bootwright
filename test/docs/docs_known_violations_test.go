@@ -210,9 +210,10 @@ func TestDocsUnheldInventoryViolations(t *testing.T) {
 }
 
 // availabilityPhrase matches the words that state a rule as unmet or as
-// available in time. A rule that is not met belongs in a Not yet met paragraph,
-// which names its item; a rule that holds states no time.
-var availabilityPhrase = regexp.MustCompile(`(?i)\b(?:refused until|is parked|currently|today|not yet)\b`)
+// available in time, among them "until" before an item id. A rule that is not
+// met belongs in a Not yet met paragraph, which names its item; a rule that
+// holds states no time.
+var availabilityPhrase = regexp.MustCompile(`(?i)\b(?:refused until|is parked|currently|today|not yet|until \[?B[0-9]+)\b`)
 
 // availabilityPhraseCounts counts, for each normative page, the availability
 // phrases outside code spans and outside a paragraph that opens "Not yet met:".
@@ -290,19 +291,19 @@ func TestDocsAvailabilityPhrasesOnlyFall(t *testing.T) {
 
 func TestDocsAvailabilityPhraseViolations(t *testing.T) {
 	files := []markdownFile{
-		{path: "specs/a.md", lines: []string{"# A", "It is CURRENTLY so and refused until later; `today` is code.", "", "Not yet met: this is not yet built; tracked as [B1](milestones/m1.md#b1).", "", "```", "today", "```", "Nothing is parked, but X is parked today."}},
+		{path: "specs/a.md", lines: []string{"# A", "It is CURRENTLY so and refused until later, and waits until [B2](milestones/m1.md#b2); `today` is code.", "", "Not yet met: this is not yet built; tracked as [B1](milestones/m1.md#b1).", "", "```", "today", "```", "Nothing is parked, but X is parked today."}},
 		{path: "specs/b.md", lines: []string{"Not yet at all."}},
 		{path: "specs/milestones/m1.md", lines: []string{"currently today"}},
 		{path: "specs/deferred/d.md", lines: []string{"currently"}},
 		{path: "specs/c.md", lines: []string{"A clean page."}},
 	}
 	found := availabilityPhraseCounts(files)
-	if want := map[string]int{"specs/a.md": 5, "specs/b.md": 1}; !maps.Equal(found, want) {
+	if want := map[string]int{"specs/a.md": 6, "specs/b.md": 1}; !maps.Equal(found, want) {
 		t.Fatalf("counts = %v, want %v", found, want)
 	}
-	got := countViolations(found, map[string]int{"specs/a.md": 6, "specs/b.md": 1, "specs/gone.md": 2}, "list.txt")
+	got := countViolations(found, map[string]int{"specs/a.md": 7, "specs/b.md": 1, "specs/gone.md": 2}, "list.txt")
 	want := []string{
-		"specs/a.md holds 5 availability phrases, below its allowance of 6; lower testdata/list.txt",
+		"specs/a.md holds 6 availability phrases, below its allowance of 7; lower testdata/list.txt",
 		"specs/gone.md holds 0 availability phrases, below its allowance of 2; lower testdata/list.txt",
 	}
 	if !slices.Equal(got, want) {

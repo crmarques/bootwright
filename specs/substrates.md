@@ -84,11 +84,11 @@ kubeconfig. The other facts follow the record above.
 A Bootwright-installed Machine on either arm refuses before
 registration, because the arm defines no identity channel for it.
 
-Not yet met: a vSphere provider and its Machines refuse before registration;
-tracked as [B99](milestones/m1.md#b99).
+Not yet met: the vSphere arm provisions no Machine; tracked as
+[B99](milestones/m1.md#b99).
 
-Not yet met: a Bootwright-installed Machine on KubeVirt refuses before
-registration; tracked as [B905](milestones/m1.md#b905).
+Not yet met: the KubeVirt arm defines no identity channel for a
+Bootwright-installed Machine; tracked as [B905](milestones/m1.md#b905).
 
 The libvirt provider host is the Machine `spec.libvirt.machineRef` names. It
 must be OS-ready and reachable through one of the
@@ -770,7 +770,7 @@ reload load the same ruleset file, so a reload replaces the table in place,
 and the listing after each load fails the start or reload when `nft` exited 0
 having loaded no table. Forwarding is the
 one host setting outside its NetworkManager connections and table that
-Bootwright sets, as libvirt's network driver does, and it is never reset.
+Bootwright sets, and it is never reset.
 
 #### Routing ruleset file
 
@@ -784,7 +784,8 @@ does, which that domain reads. The file is created through a hidden stage in
 its own directory and renamed into place, so it takes the directory's default
 type when created and Bootwright never relabels anything. It is a regular
 root file of mode 0644 with one link whose first line is the mark; anything
-else at the path is foreign and refuses apply and destroy before any effect.
+else at the path is foreign, and apply and destroy refuse it before any effect
+with [`runner.task-failed`](cli/stops.md#adapter-run-stops).
 `/etc/bootwright` and `/etc/bootwright/routing` are root's directories of
 mode 0755, created when absent, and must be real directories owned by root
 and writable by no one else, or the observation refuses unread. The ruleset
@@ -952,8 +953,10 @@ start or a power cycle through its BMC; nothing refuses it. Every device is one 
 QEMU core builds in, so the host's emulator is `qemu-kvm-core` with no display,
 audio or block module package ([D247](milestones/backlog.md#d247)). Provider media and machine
 disks occupy separate `providers` and `machines` subtrees, including when a
-provider and Machine share a name. X48 retires the former name-collision
-refusal with tests proving disjoint ownership and cleanup. Host and Machine
+provider and Machine share a name
+(`TestHostRequestFreezesTheNetworksAndPoolItOwns` and
+`TestMachineRequestDerivesTheDomainDisksAndController` hold the two paths).
+Host and Machine
 requests each carry a contract version, which `hostRequestVersion` and
 `machineRequestVersion` in `internal/substrate/libvirt/catalog.go` own.
 The root disk remains virtio-blk `vda`; unmarked data disks preserve successive
@@ -1793,8 +1796,7 @@ firmware, TPM, interfaces and their MACs, spread, root size and class) differ fr
 request refuses in both apply and observation, because the arm never rewrites
 them. Both paths prove the owned root DataVolume is `Succeeded` before
 reporting completion; a Pending or otherwise unfinished root never completes. A vTPM's state claim is
-placed on the host's VM state class, which this arm neither sets nor proves
-migratable.
+placed on the host's VM state class.
 
 Not yet met: the vTPM state class is neither set nor proved migratable;
 tracked as [B906](milestones/backlog.md#b906).
@@ -2143,18 +2145,15 @@ is to act on the machine through that context or destroy it first
 (`TestAPowerCommandRefusesAServerAnotherContextReserves`).
 The [CLI journey](cli.md#machine-power-operations) owns the rest.
 
-Every BMC leg carries the trust its declaration sets. The
-controller-to-BMC leg follows `bmc.tls.verification` and, when the Machine declares
-`bmc.tls.trustBundleRef`, verifies against that bundle alone and never against
-the system trust store beside it. A physical BMC whose certificate an
-internal authority issued is therefore verified against that authority, and an
-opt-out is endpoint-scoped, recorded in effective state and never a global
-default. A certificate the declared trust refuses fails the operation at once,
-as an answer rather than a BMC that did not answer. The emulated
+Every BMC leg carries the trust its declaration sets. The controller-to-BMC
+leg follows `bmc.tls.verification` and `bmc.tls.trustBundleRef` as
+[Machine BMC trust](api/machines.md#bmc) and
+[client TLS trust](secrets.md#client-tls-trust) own them. A certificate the
+declared trust refuses fails the operation at once, as an answer rather than a
+BMC that did not answer. The emulated
 BMC serves HTTPS; all consumers pin the provider's serving certificate.
 Its private key is bound only for emulator apply. This does not expand the
-authored physical `caBundle` contract to accept a non-CA serving leaf; B446
-and B73 retain that rehearsal gate.
+authored physical `caBundle` contract to accept a non-CA serving leaf.
 
 The BMC-to-artifact-server leg follows the realized target's frozen
 `bmc.virtualMedia.tls` policy under the

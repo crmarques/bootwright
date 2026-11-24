@@ -723,7 +723,7 @@ The operation then takes the state its blocks give it under
 [precedence](#operation-state-precedence), and a block resolved `failed` is
 retried by a new attempt, which converges it. The continuation that resolved it
 makes that attempt itself once every unproved effect is resolved, under the
-rules of any retry, so one invocation recovers what took two before (D146); a
+rules of any retry; a
 fresh `destroy`'s resolutions retry nothing of the apply they read. The
 diagnostic of a block a
 resolution leaves `unknown`, and the `unresolved` remedy `status` names for a
@@ -2424,7 +2424,7 @@ taken back by a removal. A comparison restores no data: an object's contents,
 such as a pool's objects, are never part of either side.
 
 An object an abandoned context of the same name left on a host reads as this
-context's, because no native identity yet distinguishes the two, the known
+context's, because no native identity distinguishes the two, the known
 exception [mutation safety](#mutation-safety) names.
 
 ### Observable fields by implementation
@@ -2470,8 +2470,7 @@ A [GitOps bootstrap object](add-ons.md#the-gitops-bootstrap-object) is an
 owned object of the apply, created after the blocks the
 [last-package rule](add-ons.md#built-in-packages-and-selection) names. It hands that cluster to GitOps without waiting for the predicate
 over the whole environment, as the
-[project's handoff paragraph](project.md#lifecycle-and-handoff) allows
-(pending the owner's Q60 under [D173](milestones/backlog.md#d173)), and
+[project's handoff paragraph](project.md#lifecycle-and-handoff) states, and
 transfers no ownership.
 
 `status` reports the predicate as its handoff section: ready, or each reason it
@@ -2511,13 +2510,12 @@ unchanged input performs before it reports; `status` never clears it.
 A name still proves ownership in one known case: a libvirt domain, an emulated
 BMC unit, a managed-service unit and an artifact-server path derive their
 identity from the context and Machine names, so an object an abandoned context
-of the same name left reads as this context's own.
-[B568](milestones/backlog.md#b568) gives each context a persistent incarnation
-that tells the two apart; until it lands, the objects an orphan-acknowledged
-deletion abandons are removed by hand before the same name is initialized
-again.
+of the same name left reads as this context's own. The objects an
+orphan-acknowledged deletion abandons are removed by hand before the same name
+is initialized again.
 
-Not yet met: name-derived identity proves ownership in that case; tracked as
+Not yet met: a context has no persistent incarnation that tells its own objects
+from those an abandoned context of the same name left; tracked as
 [B568](milestones/backlog.md#b568).
 
 Lost-reply adoption is the one case where a record and a shape together prove

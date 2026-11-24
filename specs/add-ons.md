@@ -637,8 +637,7 @@ is a last package, the object is created only after the other blocks it waits
 for are complete ([last package](#built-in-packages-and-selection)); Argo CD
 may then act on that cluster
 before the [handoff predicate](state-reconciliation.md#bootstrap-completion-and-gitops-readiness)
-holds for the whole environment, pending the owner's
-[Q60](milestones/m4.md#m4a-open-decisions) under D173, and still owns nothing
+holds for the whole environment, and still owns nothing
 Bootwright created. The object is retired with its cluster and keeps working on a
 physical cluster that outlives its context. Bootwright publishes no
 application or fleet GitOps content: it creates one pointer to content the

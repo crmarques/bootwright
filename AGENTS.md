@@ -17,9 +17,8 @@ the [development policy](specs/project.md#design-priorities-and-non-goals).
 Specs own behavior; milestones own delivery and deferred work; knowledge owns
 lessons; skills own procedure. Keep one owner per fact and link to it.
 
-Implement only authorized work: an active slice's open work or an explicit
-request. With no active slice, a tracked edit needs an explicit request; specs
-and backlog entries authorize none. Record
+Implement only the outcome the [scope rules](specs/milestones.md#scope-rules)
+authorize. With no active slice, a tracked edit needs an explicit request. Record
 other discovered work as an item of the earliest fitting milestone, or parked,
 instead of doing it. Report a pre-existing defect you find; fix one that
 blocks the authorized outcome or its gates only in its own commit, after

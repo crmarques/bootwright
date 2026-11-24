@@ -1,14 +1,11 @@
 # Add-ons design
 
-[B90](../milestones/m4.md#b90) revives this design with a declarative
-custom-package lifecycle. The [add-on lifecycle](../add-ons.md) owns the
-built-in packages M4 implements, their instances and blocks, the cluster
-object program, readiness and retirement, and the
-[add-on API](../api/addons.md) owns admission. Nothing here is implemented
-except the step shape recorded under [Steps](#steps), which admission enforces
-without the future `fromInput` target.
-B90's first slice takes only the normalized definition and the instance
-identity from this design; the rest stays here.
+The [add-on lifecycle](../add-ons.md) owns the built-in packages, the authored
+add-on's `descriptor`, instances and blocks, the cluster object program,
+readiness and retirement, and the [add-on API](../api/addons.md) owns
+admission. [B90](../milestones/m4.md#b90) revives the sections below as a
+declarative custom-package lifecycle. Only the step shape recorded under
+[Steps](#steps) is admitted, without the future `fromInput` target.
 
 A custom package adds the sections below to the built-in lifecycle.
 
@@ -82,8 +79,7 @@ Each entry is:
 
 Names do not determine input types or effects. `resourceKind: Secret` is
 invalid; Secret inputs use `secretType`, and a bound Secret input is effect
-material its binding places. The former `resourceRef` and `secretRef` input declaration
-fields are unknown.
+material its binding places.
 
 Effects declare how a supplied input is consumed. Their names belong to a
 closed vocabulary, unlike input names. Each effect entry sets exactly one
@@ -92,7 +88,7 @@ known arm:
 | Arm | Shape | Rule |
 | --- | --- | --- |
 | `cephConsumerAttachment` | `{}` | Input is `resourceKind: CephConsumer` and the add-on provides `dataFoundation`; the bound consumer supplies storage integration for the binding's cluster. |
-| `globalPullSecretMerge` | `{registry, username}` | Input is `secretType: token`; both strings are non-empty. The token supplies credentials for that registry and username in the binding's cluster global pull secret. |
+| `globalPullSecretMerge` | `{registry, username}` | Input is `secretType: token`; both strings are non-empty. The token supplies credentials for that registry and username in the binding's cluster global pull secret. Refused ([refusal table](../add-ons.md#refusal-table)); [B773](../milestones/backlog.md#b773) revives it. |
 
 A future binding's `spec.addonConfigs` is a set keyed by `addonRef`. Each
 entry supplies inputs to an already selected add-on; it selects none. Each
@@ -142,8 +138,8 @@ Each catalog record and driver names one exact host-interface revision and
 supported package/API/driver/target combinations. The first executable journey
 must define closed request, result, failure and evidence schemas and
 conformance vectors before assigning a public revision. Changes to meaning,
-effects, evidence or compatibility require a deliberate owning-contract version
-and migration decision; compatibility is never inferred.
+effects, evidence or compatibility change the revision a catalog record and
+driver name; compatibility is never inferred.
 
 The host resolver selects the package and driver from trusted metadata before
 invocation. Drivers do not receive the registry or select themselves. They

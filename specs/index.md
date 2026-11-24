@@ -3,8 +3,7 @@
 Start with [project intent](project.md) when scope matters. Read the
 [milestones](milestones.md) Status and Scope rules and, on the authorized
 milestone page, only the parts [AGENTS.md](../AGENTS.md) names, then open only
-the owning section below. A specified capability is not necessarily
-implemented or authorized.
+the owning section below.
 
 | Read when the task touches | Owner |
 | --- | --- |
@@ -48,10 +47,12 @@ implemented or authorized.
 
 ## Conventions
 
-Each requirement has one owner; other pages link to it. Specs state target
-invariants in the present tense and claim no availability. An unmet rule has
-one paragraph, `Not yet met: ...; tracked as B<n>`, ending at its open item's
-link on a milestone page or the backlog. Moving the item to
+Each requirement has one owning section; other pages link to it. Specs state target
+invariants in the present tense, name each rule's actor and claim no
+availability. An unmet rule has one paragraph, `Not yet met: ...;
+tracked as B<n>`, ending at its open item's link on a milestone page or the
+backlog; a B link states availability nowhere else, except in a refusal
+table's lifting list. Moving the item to
 `awaiting operator acceptance` deletes or re-scopes the paragraph.
 Delivery state lives in milestones, lessons in
 [knowledge](../.agents/knowledge/index.md), procedure in skills. Add detail

@@ -206,7 +206,7 @@ the authority that signed `tls.secretRef`.
 
 Registry `tlsVerification` and Proxy `connection.tlsVerification` select
 [client TLS trust](../secrets.md#client-tls-trust), defaulting to `full`;
-these native consumers currently refuse other modes. Registry `tls` still
+these native consumers refuse other modes. Registry `tls` still
 configures the serving certificate, independently of client verification.
 
 ## ArtifactServer

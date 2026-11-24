@@ -38,6 +38,10 @@ Delete the paragraph, or re-scope it to the part still undone, in the commit tha
 moves its item to `awaiting operator acceptance`: the item's in-tree code is
 delivered, and the operator residue stays on the item. `make docs-check` fails
 a paragraph whose item is `completed` or awaiting acceptance.
+When an item's outcome makes a present-tense rule of its linked spec section
+false, add the paragraph to that section in the commit that opens the item. The
+item's section links that spec section, and `make docs-check` holds that link
+for each paragraph.
 
 ## Decisions and delivered records
 

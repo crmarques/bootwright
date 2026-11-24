@@ -479,7 +479,7 @@ file and restarting the service is therefore completed by its next attempt.
 Everything it owns carries the context in its name, so a same-name object
 another live context created cannot occur without a reservation conflict
 refusing first. An object an abandoned context of the same name left on the
-host reads as this context's, because no native identity yet distinguishes the
+host reads as this context's, because no native identity distinguishes the
 two.
 
 Not yet met: a context incarnation enters no ownership marker; tracked as

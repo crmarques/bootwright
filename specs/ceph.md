@@ -755,8 +755,7 @@ topology; this section owns what the plan derives and realizes (D196).
   SMB, consumer and replication blocks prove the same bootstrap scope.
 
 The JSON keys the stages read that no cited page fixes are recorded as
-unverified in the [stretch native facts](../.agents/knowledge/ceph-stretch-native-facts.md)
-until B488's rehearsal reads them from the selected build.
+unverified in the [stretch native facts](../.agents/knowledge/ceph-stretch-native-facts.md).
 
 Not yet met: an interrupted stretch stage has no forward exit short of
 retiring the whole cluster; tracked as [B920](milestones/m2.md#b920).
@@ -1096,21 +1095,26 @@ measured OSD convergence time; a shortfall there is its own item.
 | before the bootstrap call | continues each host from its `unclaimed`, `claimed` or `prepared` stage |
 | inside bootstrap, tunnel configuration or tunnel mount | continues from the seed stages of the [verified transport](ceph-native-api.md#verified-native-orchestration-transport) |
 | inside enrollment, devices, host device identities, OSD preparation or the services calls, before any non-bootstrap host carries a daemon | continues from `enrolling`, every other host `prepared` |
-| after a non-bootstrap host carries a daemon, the cluster not ready | refuses `partial-cluster` until [B659](milestones/m2.md#b659) defines its recovery |
+| after a non-bootstrap host carries a daemon, the cluster not ready | refuses `partial-cluster` |
 | in a readiness wait | continues once cephadm has converged, as above |
 
-Neither `partial-cluster` nor the partial DB/WAL refusal of
-[devices](#devices-and-destructive-ownership) has a forward exit until its item
-defines recovery. On Bootwright-owned virtual hosts, `machine stop` and a
+On Bootwright-owned virtual hosts, `machine stop` and a
 destroy that retires the cluster with its hosts
 ([removal](#removal-and-concurrency)), then a fresh apply, leave either
 refusal. On physical hosts the only retirement is the erase-backed
 [physical retirement](#devices-and-destructive-ownership), which needs each
 Machine's original erase policy to cover every selected
-data, DB and WAL disk. Without that policy an interrupted physical deployment
-has no forward or retirement exit today: only the orphan-acknowledged
-[context deletion](contexts.md#permanent-deletion) remains, and it abandons
-the hosts, their daemons, the claimed disks and their data.
+data, DB and WAL disk. Without that policy, only the orphan-acknowledged
+[context deletion](contexts.md#permanent-deletion) leaves an interrupted
+physical deployment, and it abandons the hosts, their daemons, the claimed
+disks and their data.
+
+Not yet met: `partial-cluster` has no forward exit; tracked as
+[B659](milestones/m2.md#b659).
+
+Not yet met: the partial DB/WAL refusal of
+[devices](#devices-and-destructive-ownership) has no forward exit; tracked as
+[B1084](milestones/m2.md#b1084).
 
 The budget changes no `partial-cluster` refusal. Observation, destruction,
 child blocks, host blocks and service units keep their deadlines; the ones that
@@ -2292,7 +2296,7 @@ test never deletes it by name or repeats a write whose completion is
 ambiguous. Bootwright creates no test data, and read-only readiness,
 preflight, status, health and unknown-effect resolution never do. Passing
 native readiness does not claim the client-data acceptance gate passed; that
-gate is the owner-accepted run of [B476](milestones/delivered.md#x94--post-destroy-cluster-inspection).
+gate is the owner-accepted run that [M2b](milestones/m2.md#m2b) requires.
 
 ## Scoped health checks
 
@@ -2587,7 +2591,7 @@ and needs neither the bootstrap host nor MON quorum.
   cluster left, cephadm's `ceph.target`, its logrotate file and its
   `cephadm.log` files; and, when `/etc/ceph/ceph.conf` names the FSID, that
   file, `ceph.pub` and the admin keyring. Its exact footprint on the selected
-  build is unverified until [B488](milestones/m2.md#b488) reads it.
+  build is unverified.
   Packages, images, firewall openings, users, disks, the OS and Bootwright's
   own records under `/var/lib/bootwright/ceph*/<fsid>` stay.
 - **Absence.** The inventory lists no daemon of the FSID, no unit file
@@ -2821,8 +2825,8 @@ owned/existing/ready flags and the ordered image IDs and synchronization flags.
 
 ## RGW multisite blocker
 
-B483's required native `ceph rgw zone create` route cannot currently satisfy
-the no-argv/no-log credential boundary. Ceph's
+The native `ceph rgw zone create` route cannot satisfy the no-argv/no-log
+credential boundary. Ceph's
 [RGW manager](https://github.com/ceph/ceph/blob/v20.2.2/src/pybind/mgr/rgw/module.py)
 accepts a token on stdin, but its
 [RGWAM implementation](https://github.com/ceph/ceph/blob/v20.2.2/src/python-common/ceph/rgw/rgwam_core.py)
@@ -2834,6 +2838,8 @@ config credential route. JSON realm/zone imports do not provide a period
 import: realm creation resets current-period identity, so they cannot safely
 bootstrap authenticated pulls from stored zone credentials. Bootwright does
 not clone upstream behavior with internal RADOS writes or accept an input
-that can only refuse at execution. Existing multisite refusals remain;
-B483 and P7 qualification remain open pending a native secret-safe interface
-and empirical initial-sync/failover evidence.
+that can only refuse at execution. Existing multisite refusals hold.
+
+Not yet met: no native secret-safe interface and no empirical
+initial-sync/failover evidence qualify RGW multisite; tracked as
+[B483](milestones/m2.md#b483).

@@ -48,7 +48,7 @@ attribute, such as a role task that failed without naming a declared reason.
 
 ## Catalog
 
-Each section below holds the stops one package declares.
+Each section below holds the stops one Go package declares.
 
 ## Adapter run stops
 

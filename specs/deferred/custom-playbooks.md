@@ -30,8 +30,6 @@ written.
 | `spec.timeout` | string | no | `10m` | Positive Go duration. |
 | `spec.enabled` | boolean | no | `true` | Controls declaration ordering/no-work semantics; it does not expose execution. |
 
-The retired `run` and `onFailure` fields are unknown and rejected.
-
 ### Anchors and ordering
 
 `gates` and `follows` accept `fabric`, `machines`, `deps`, `base` or `addOns`.

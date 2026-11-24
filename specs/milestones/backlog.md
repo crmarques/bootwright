@@ -3250,6 +3250,8 @@ Network carries one IPv6 prefix on its leg, as an untagged managed Network does
 admission test of a tagged Network with an IPv6 prefix and a ruleset test of
 its IPv6 pairs.
 
+Owning spec section: [tagged managed Networks](../api/networks.md#tagged-managed-networks).
+
 ### B1285
 
 **Owner:** Substrate. **Kind:** product. **Requires:** none. **Definition:**
@@ -3260,6 +3262,8 @@ sets an MTU on a bridge and a VLAN leg is unproved
 leg take the MTU their Networks declare, with a guest's MTU still authored, never
 derived. **Exit evidence:** a request test of a leg and trunk MTU and a
 live run that shows the link MTU.
+
+Owning spec section: [tagged managed Networks](../api/networks.md#tagged-managed-networks).
 
 ### B1287
 
@@ -3274,6 +3278,8 @@ hand-built `br-nv` trunk
 of another provider, and lab-network-variants declares its networks as managed
 Networks on a trunk Bootwright owns. **Exit evidence:** a ruleset test of each
 admitted pair and an owner-accepted run of the migrated case.
+
+Owning spec section: [tagged managed Networks](../api/networks.md#tagged-managed-networks).
 
 ### B1302
 

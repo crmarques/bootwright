@@ -698,8 +698,7 @@ plan will first realize their managed firewall prerequisite. Live admission is
 then rechecked before a listener or dependent consumer starts; inspection
 changes no firewall rules. The
 [controller contract](controller.md#results-and-qualification) owns the bounded
-firewalld query and manual remedy. [B318](milestones/delivered.md#x62--controller-listener-firewall-inspection)
-records its in-tree evidence; B78 retains real-hardware qualification.
+firewalld query and manual remedy.
 
 Not yet met: the emulated BMC does not refuse a non-loopback bind and has no
 confined SELinux type; tracked as [B334](milestones/backlog.md#b334).

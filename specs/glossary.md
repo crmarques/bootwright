@@ -1,6 +1,6 @@
 # Glossary
 
-Each term has one meaning and one owner page. A word marked "qualified" takes
+Each term has one meaning and one owning page. A word marked "qualified" takes
 its modifier wherever two of its senses can meet; elsewhere context decides. A new term enters this page with its owner link in the same change.
 
 ## Core terms
@@ -36,6 +36,13 @@ its modifier wherever two of its senses can meet; elsewhere context decides. A n
   name ([controller](controller.md#the-controller-runtime)).
 - **Acceptance**: an operator-run gate recorded in the
   [ledger](../docs/acceptance.md); in-tree gates are tests.
+- **Owner**: the repository owner, who alone promotes work, accepts an
+  operator-run gate row and answers an owner question
+  ([scope rules](milestones.md#scope-rules)). The page that states a
+  requirement is its owning page, and an object Bootwright owns is one the
+  [lifecycle unit](state-reconciliation.md#lifecycle-unit) records as owned.
+- **Operator**: the person who runs lifecycle commands and supplies their
+  confirmations and authorizations ([project](project.md)).
 
 ## Qualified terms
 
@@ -65,11 +72,12 @@ its modifier wherever two of its senses can meet; elsewhere context decides. A n
   ([machines](api/machines.md#machine-profiles-and-segments)); a `Network` is
   one layer-2 network with its VLAN and subnets ([networks](api/networks.md)).
   "Attachment" names neither.
-- **Profile**: always a machine profile, install profile
+- **Profile**: a machine profile, install profile
   ([`MachineInstallProfile`](api/machines.md#machineinstallprofile)), add-on
   profile ([`ClusterAddonProfile`](api/addons.md#clusteraddonprofile)) or
   acceptance profile (a row of a coverage page, such as the
-  [Ceph profile catalog](ceph-coverage.md#profile-catalog)).
+  [Ceph profile catalog](ceph-coverage.md#profile-catalog)). Another profile
+  is written with its qualifier, such as a trust profile or a runtime profile.
 - **Add-on**: what a `ClusterAddonBinding` attaches to a cluster: a built-in
   **package** or an **authored add-on**, never both senses at once
   ([add-ons](add-ons.md)).
@@ -100,12 +108,17 @@ its modifier wherever two of its senses can meet; elsewhere context decides. A n
   seam's declared cases and a condition over facts
   ([architecture](architecture.md#implementations-and-version-variation)).
   Its alternatives are cases, never variants.
-- **Evidence**: always context mutation evidence
+- **Evidence**: a durable record of what a block or the context observed or
+  did. Its kinds are written with their qualifier, such as context mutation
+  evidence
   ([state reconciliation](state-reconciliation.md#context-mutation-evidence)),
-  block evidence ([transitions](state-reconciliation.md#block-transitions)) or
+  block evidence ([transitions](state-reconciliation.md#block-transitions)),
   completion evidence
-  ([handoff](state-reconciliation.md#bootstrap-completion-and-gitops-readiness)).
-- **Receipt**: always the lifecycle receipt, the four final lines of an
-  operation ([cli](cli.md#lifecycle-receipt)), or the setup receipt, which
-  names the interpreter setup prepared
-  ([controller](controller.md#the-controller-runtime)).
+  ([handoff](state-reconciliation.md#bootstrap-completion-and-gitops-readiness))
+  or ownership evidence.
+- **Receipt**: an acknowledged durable record that an effect step completed.
+  Its kinds are written with their qualifier, such as the lifecycle receipt,
+  the four final lines of an operation ([cli](cli.md#lifecycle-receipt)), the
+  setup receipt, which names the interpreter setup prepared
+  ([controller](controller.md#the-controller-runtime)), or an
+  [ownership receipt](add-ons.md#ownership-receipts).

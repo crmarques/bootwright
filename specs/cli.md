@@ -546,7 +546,7 @@ empty, and names the operating-system error
 `TestRenderRefusesAnInputThatIsTheFileItWouldWrite`). `--clusters` and the installer and
 storage members of the manifest return with B52 and
 [B55](milestones/m7.md#b55). What those two renderers write, and the Environment
-preflight families' dry-run and host-key detail, are
+preflight families' dry-run detail, are
 [deferred](deferred/cli-access-and-rendering.md).
 Without `--output-dir`, `render effective` is read-only: text mode emits canonical
 effective YAML, and either structured mode places the complete canonical effective-state

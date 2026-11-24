@@ -134,9 +134,9 @@ The optional `distribution.ibm.packages.source` accepts only `vendor`; subscript
 package sources and subscription repository lists are not admitted. Machine
 registration remains the Machine installation profile's responsibility.
 
-Future storage export feature families are refused by current pure
-admission. Their shared shapes in [field detail](../deferred/ceph-api.md) are
-retained only for the later owning slices.
+Future storage export feature families are refused by admission. The device
+selector `size` grammar, which no admitted kind owns, lives in
+[field detail](../deferred/ceph-api.md).
 
 Operators select IBM Ceph release identifiers, package and tool versions,
 container tags or digests and related service-version coordinates in input.
@@ -184,7 +184,7 @@ required for its selected RPMs.
 `packageRepositoryProxy` optionally selects `direct: {}` or a `proxyRef` with
 optional `noProxy`, using the shared proxy-selection grammar. Omission means
 direct; it inherits no controller, Machine or install-profile route. This
-consumer currently supports only external unauthenticated HTTP CONNECT proxies
+consumer supports only external unauthenticated HTTP CONNECT proxies
 whose `connection.httpsProxy` is a bare `http://` endpoint, with at most 128
 bypass entries and no Proxy `auth`, bound bundle or relaxed TLS policy. Other
 choices refuse at admission. The selected route is frozen for repository
@@ -207,7 +207,7 @@ controller's image resolution keeps the controller's own route.
 
 `packageRepositoryTLSVerification` selects
 [client TLS trust](../secrets.md#client-tls-trust), defaulting to `full`;
-non-full policies currently refuse before package acquisition.
+non-full policies refuse before package acquisition.
 
 `packageRepositoryTrustBundleRef` optionally names a `caBundle` or `trustBundle` Secret,
 a trust anchor, that is the only TLS trust anchor for the authored `packageRepository`:

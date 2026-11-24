@@ -1,6 +1,6 @@
 # Managed Ceph coverage and qualification
 
-This page owns the M2 provider coverage requirements. [Storage](ceph.md)
+This page owns the Ceph provider qualification requirements. [Storage](ceph.md)
 owns lifecycle behavior, [storage admission](api/ceph.md) owns public
 intent, and [M2](milestones/m2.md) owns delivery and sequencing. Each row below
 is a capability Bootwright realizes; a feature Bootwright does not realize is
@@ -20,19 +20,17 @@ is a reference for operators, not a Bootwright catalog. The
 delegation of compatibility and installation failures to native tools (D157).
 Bootwright does not register this table or maintain per-release profiles.
 
-B472 records the artifacts, host/runtime, native schemas, defaults and observed
-constraints of tested adapter and feature journeys. These records establish
+A tested adapter or feature journey records its artifacts, host/runtime,
+native schemas, defaults and observed constraints. These records establish
 the scope of that evidence; they do not approve version combinations or gate
 an authored selection. The
 [version-specialization catalog](../.agents/knowledge/version-specializations.md)
 records the mechanics each tested build needed and the evidence for them; its
-rows are tested scope, not approved versions. B476's accepted minimal journey is recorded in its
-owner-accepted ledger row; it certifies no other version or feature.
+rows are tested scope, not approved versions. The minimal Ceph journey that M2b requires is
+recorded in its owner-accepted ledger row; it certifies no other version or
+feature.
 
-Authored versions now select native acquisition without release/artifact pins.
-[B615](milestones/delivered.md#b615)'s separate operator journey is accepted;
-[X99](milestones/delivered.md#x99--operator-selected-ceph-artifacts-and-m2b-completion)
-closes M2b's exit.
+Authored versions select native acquisition without release/artifact pins.
 
 Native manager-to-host SSH must enforce pinned host keys, including a negative
 wrong-key test through actual manager connection, reconnect and failover paths.
@@ -108,7 +106,7 @@ The attempt records and adoption rules of pools, placement policies, images,
 filesystems and subvolumes belong to
 [storage](ceph.md#resources-readiness-and-access).
 
-For every matrix row, B472's record names the Bootwright input owner, native
+For every matrix row, the qualification record names the Bootwright input owner, native
 projection, prerequisites, readiness probe, ownership/removal proof, tests and
 operator acceptance profiles, each with the source it came from. Each row has
 an implementation owner below. A feature Bootwright does not realize records
@@ -116,9 +114,9 @@ its pre-effect refusal; moving a row to deferred requires an explicit scope
 decision. A newly realized service gets a bounded item before M2 completes.
 
 M2 supports every cluster size the selected native tools accept for the
-deployment mode (D130). B472 records the minima, maxima, per-site and per-role
-counts, failure-domain rules and resource needs the tested journeys observed,
-as evidence. Lab profiles do not define an allowed-size list or a product
+deployment mode (D130). The qualification record holds the minima, maxima,
+per-site and per-role counts, failure-domain rules and resource needs the
+tested journeys observed, as evidence. Lab profiles do not define an allowed-size list or a product
 ceiling. Whether a declared cluster can carry a feature is the native tools'
 judgement, reported through `nativeError`; for a feature's own prerequisites,
 Bootwright adds a pre-effect refusal only for a feature it does not realize or
@@ -168,7 +166,7 @@ do not restrict supported initial cluster sizes. Coverage includes minimum
 supported shapes, representative larger shapes, feature-specific thresholds
 and documented upper boundaries. In-tree tests exercise boundaries and
 size-independent planning; operator rows identify the sizes actually run.
-B474/B79/B490 review input, request, evidence and inventory bounds, batching,
+Qualification reviews input, request, evidence and inventory bounds, batching,
 concurrency and deadlines against that range. A conflicting
 Bootwright limit needs a bounded backlog item and qualification before M2
 completion; lab capacity does not justify a narrower product limit.
@@ -384,7 +382,7 @@ own proof.
 ## Other native restrictions to freeze
 
 [Native OSD specifications](https://docs.ceph.com/en/tentacle/cephadm/services/osd/#multiple-osd-specs-for-a-single-host)
-allow multiple drive groups on one host. B472/B475 qualify each supported
+allow multiple drive groups on one host. Qualification covers each supported
 layout through resolved device identities, non-conflicting allocations and
 owned cleanup; whole-host exclusivity is not a native requirement. Dynamic
 selectors also need a qualified boundary for later matching devices, because
@@ -393,8 +391,8 @@ cephadm retains their declarative intent after the initial apply.
 [IBM's multi-active NFS mode](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=servers-configure-multi-active-nfs-gateway)
 requires explicit placement counts; client-IP restrictions need compatible
 forwarding through ingress. It warns that backend failure can leave client I/O
-hung and require unmount/remount. B478 qualifies ingress and session behavior
-per mode, including the required recovery action; it does not infer seamless
+hung and require unmount/remount. Qualification covers ingress and session
+behavior per mode, including the required recovery action; it does not infer seamless
 failover from a VIP.
 
 Guest firewalls: when `firewalld.service` is enabled and running, upstream
@@ -435,7 +433,7 @@ through `nativeError`. The plugin defaults to `isa`; `isa` and `jerasure` with
 technique `reed_sol_van` are what Bootwright realizes, and `clay`, `lrc` and
 `shec` refuse as not realized. FastEC (`allow_ec_optimizations`) is not
 exposed; its native default is false (upstream `global.yaml.in` at v20.2.1,
-unverified for the IBM image until B472). Site and rack failure domains and CRUSH roots other than `default` are
+unverified for the IBM image). Site and rack failure domains and CRUSH roots other than `default` are
 parked (D160, OD25). The [admission contract](ceph-resources.md#cephpool)
 owns the rules.
 

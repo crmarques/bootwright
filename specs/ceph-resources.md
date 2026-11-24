@@ -6,7 +6,7 @@ This page owns the target resource contract approved through P2 in the
 and their bindings; [Storage](ceph.md) owns lifecycle, device safety and
 custody. [Provider coverage](ceph-coverage.md) owns release qualification.
 
-**Current:** `CephPlacementPolicy`, `CephPool`, `CephRBDImage`,
+`CephPlacementPolicy`, `CephPool`, `CephRBDImage`,
 `CephFilesystem`, `CephSubvolume`, `CephClient`,
 `CephObjectUser`, under its [field record](#cephobjectuser-field-record),
 `CephObjectBucket`, under its [field record](#cephobjectbucket-field-record),
@@ -509,8 +509,7 @@ spec:
 
 ### Promotion record
 
-Upstream facts are Ceph v20.2.1 and stay unverified for the IBM image
-until [B472](milestones/m2.md#b472) or the owner's run confirms them.
+Upstream facts are Ceph v20.2.1 and stay unverified for the IBM image.
 
 | Field | Grammar and rule | Native projection |
 | --- | --- | --- |
@@ -781,8 +780,7 @@ depends on the cluster and image blocks.
 
 ### Promotion record
 
-Upstream facts are Ceph v20.2.1 and stay unverified for the IBM image
-until [B472](milestones/m2.md#b472) or the owner's run confirms them.
+Upstream facts are Ceph v20.2.1 and stay unverified for the IBM image.
 
 | Field | Frozen value | Native projection |
 | --- | --- | --- |
@@ -914,8 +912,7 @@ Admission refuses with `api.invariant`, before any effect:
 
 ### Promotion record
 
-Upstream facts are Ceph v20.2.1 and stay unverified for the IBM image
-until [B472](milestones/m2.md#b472) or the owner's run confirms them. The
+Upstream facts are Ceph v20.2.1 and stay unverified for the IBM image. The
 block is `ceph-subvolume-<name>`, and `metadata.name` follows the
 [one name rule](api.md#object-names). It requires its CephFilesystem and depends by ID on its
 cluster's core and image blocks, never through `Requires CephCluster`

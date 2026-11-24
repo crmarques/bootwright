@@ -1,11 +1,17 @@
 # Controlled network supply
 
 A named slice revives this design when the owner promotes the items
-[D250](../milestones/backlog.md#d250) parked. Until then only what
-[acquisition origins](../security.md#acquisition-origins) states exists in
-code. The design lets each estate choose how far its Machines reach: from
-direct access to every origin, as today, to a network where the controller and
-every Machine it builds reach only their own package repositories, the vendor
+[D250](../milestones/backlog.md#d250) parked. The mirror declaration, its fill
+and the build are specified by their owners: the
+[artifact mirror](../api/environment.md#artifact-mirror), the
+[image mirror](../api/environment.md#image-mirror), the
+[mirror host](../infrastructure-services.md#mirror-host) and
+[the tool table](../controller.md#the-tool-table). This page keeps only what is
+unpromoted: the [B1250](../milestones/backlog.md#b1250) proof, the "No route at
+all" profile and the [B1322](../milestones/backlog.md#b1322) newer-release
+exception. The design lets each estate choose how far its Machines reach: from
+direct access to every origin to a network where the controller and every
+Machine it builds reach only their own package repositories, the vendor
 origins and one mirror host.
 
 ## The rule
@@ -17,21 +23,15 @@ only the absent route protects the Machine. In a controlled network:
 
 - every RPM keeps coming from the host's own repositories;
 - a vendor origin stays direct, from the controller and from every Machine;
-- every public-origin artifact comes from the mirror host, and the context
-  neither dials a public origin nor hands one to a Machine.
+- every public-origin artifact comes from the mirror host, and, outside the
+  mirror host's own bootstrap (see [declaration](#declaration-and-refusal)), the
+  context neither dials a public origin nor hands one to a Machine.
 
-The class follows the serving host, never the content's author. OpenShift's
-release payload is published on `quay.io`, on which any account publishes, so
-it goes through the mirror. IBM's `icr.io`, where the Data Foundation catalog
-and operator images live and where IBM's cloud customers also publish, stays a
-direct vendor origin by the owner's choice, so that a cluster keeps taking
-Data Foundation's later updates from it; a firewall that admits it admits that
-whole host. Red Hat's registries' shared blob delivery hosts are admitted as
-[fetch-only vendor-delivery exceptions](../security.md#acquisition-origins),
-without admitting public registry or upload endpoints
-([D251](../milestones/backlog.md#d251) (41)). A vendor host that accepts
-uploads, such as a telemetry or support endpoint, is no acquisition origin, so a firewall that serves this rule admits
-the content hosts alone. Time and name service follow the rule through fields
+The class follows the serving host, never the content's author, as each
+artifact's route in [acquisition origins](../security.md#acquisition-origins)
+states. A firewall that serves this rule admits the content hosts alone: a
+vendor host that accepts uploads, such as a telemetry or support endpoint, is
+no acquisition origin. Time and name service follow the rule through fields
 that already exist: a Machine or cluster with no NTP selection keeps its
 operating system's public pool, so a controlled network declares one. A
 cluster's selection is added beside its nodes' default pool, and under the
@@ -45,7 +45,7 @@ is one Environment's declaration of the same product:
 
 | Choice | Declaration | Which Machines reach a public origin |
 | --- | --- | --- |
-| Direct | No mirror; each Machine's own proxy choice, direct or an external Proxy | Every Machine that acquires something, as today |
+| Direct | No mirror; each Machine's own proxy choice, direct or an external Proxy | Every Machine that acquires something |
 | Mirror on the controller | The mirror's `Registry` and `ArtifactServer` placed on the controller Machine | The controller alone; nodes and hosts read the controller |
 | Mirror on its own Machine | The mirror's services placed on another Machine | That Machine alone |
 | The enterprise's mirror | An external `Registry` and file server the operator fills | None |
@@ -96,24 +96,18 @@ declares them external, and its operator fills them from the acquisition list.
 
 ## Declaration and refusal
 
-The Environment names the mirror once, a `Registry` and an artifact server
-endpoint, instead of one override on each consumer. Bootwright derives every
-location from it under a fixed layout, `<registry>/<origin host>/<repository>`
-for an image and `<endpoint>/<kind>/<version>/<file>` for a tool:
+The Environment names the mirror once, instead of one override on each
+consumer. The [artifact mirror](../api/environment.md#artifact-mirror) and the
+[image mirror](../api/environment.md#image-mirror) own the declaration, the
+derived layout and the refusals, and the
+[mirror host](../infrastructure-services.md#mirror-host) owns its fill.
 
-| Consumer | Today's route | With the declaration |
-| --- | --- | --- |
-| Controller stage tools | The publisher's pinned release or metadata | Every public-origin tool from the artifact server |
-| Managed service image | `spec.image.local` on each service | Derived, with the Registry's credential and trust |
-| Emulated BMC image | The host's own container configuration | Derived |
-| Cluster release images | Authored `imageDigestSources` | Derived for the release repositories |
-
-With the declaration present no public origin is dialed: an artifact the
-mirror does not hold refuses in preflight, naming it and the command that
-fills the mirror. Vendor origins stay direct. Without it, every consumer keeps
-its own route, as today. The emulated BMC and managed servers an installed
-mirror host's installation waits for still pull their images from their
-origins.
+With the declaration present, no consumer other than the mirror host, and the
+services its installation waits for before the mirror exists, dials a public
+origin. The emulated BMC and managed servers an installed mirror host's
+installation waits for still pull their images from their origins. Vendor
+origins stay direct. Without the declaration, every consumer keeps its own
+route.
 
 ## Filling the mirror
 

@@ -2,17 +2,15 @@
 
 A named slice revives this design when an operator asks for one more apply
 scenario over a completed apply. Its first step is
-[B575](../milestones/delivered.md#x234--additive-apply-of-add-on-instances), and decision D153 accepts the rule
-that each new scenario is its own slice. Until then
+the [additive apply](../state-reconciliation.md#additive-apply), and decision
+D153 accepts the rule that each new scenario is its own slice. Until then
 [state reconciliation](../state-reconciliation.md) owns what `apply` admits,
 [day-2 operations stay outside scope](../project.md#design-priorities-and-non-goals),
 and every changed input over a completed apply refuses, except the
 [additive apply](../state-reconciliation.md#additive-apply) of add-on
 instances (D211), the first scenario this design produced. `Compare`, the
-changed-input branch, the scenario guard and the admission port exist; the
-union plan, which the additive apply replaced with a second operation naming
-the first as its predecessor, and every other admission described below do
-not.
+changed-input branch, the scenario guard and the `DeltaAdmitter` admission port
+exist; every other scenario described below does not.
 
 ## The admitted scenarios
 
@@ -34,7 +32,7 @@ settled apply proves nothing about the host.
 ## The seam a scenario plugs into
 
 The seam lets a new scenario change one branch, one table row, one guard and
-one optional port. Nothing below admits anything.
+one optional port.
 
 - **Delta.** `Compare` in `internal/reconciliation/delta.go` classifies each
   block of a frozen plan against a freshly compiled one as same, added,
@@ -44,24 +42,19 @@ one optional port. Nothing below admits anything.
   objects through a catalog comparison, `objectChanges`, and decides nothing
   from it.
 - **One changed-input branch.** `settleApply` in
-  `internal/reconciliation/lifecycle/execution.go` holds the only path where a
-  completed apply meets a changed input. Today it names the change and refuses.
-  A scenario adds its admission before that refusal and keeps the refusal as
-  the default.
+  `internal/reconciliation/lifecycle/decision.go` holds the only path where a
+  completed apply meets a changed input. A scenario adds its admission before
+  the changed-input refusal and keeps the refusal as the default.
 - **Optional admission port.** A capability opts in to an added object by
-  implementing an optional port, resolved the way `UnsupportedReporter` is.
-  A capability without it refuses:
-
-  ```go
-  type DeltaAdmitter interface {
-      AdmitAdded(frozen reconciliation.Plan, added reconciliation.Block) error
-  }
-  ```
-
-- **Union plan.** An admitted delta registers one apply over the union of the
-  frozen plan and the added blocks. Carried blocks enter as `done` through a
-  carried record naming the prior operation's record digest. Destroy stays one
-  inversion of the plan the index names as current.
+  implementing `DeltaAdmitter` (`internal/reconciliation/lifecycle/contracts.go`),
+  resolved the way `UnsupportedReporter` is, as the add-on instance does
+  ([additive apply](../state-reconciliation.md#additive-apply)). A capability
+  without it refuses.
+- **Lineage.** An admitted delta registers an apply whose plan holds only the
+  added blocks, with their edges into the lineage frozen as `prerequisites` and
+  its record naming the completed apply as its `predecessor`. One destroy
+  takes the whole lineage back
+  ([removal over a lineage](../state-reconciliation.md#removal-over-a-lineage)).
 - **Guard.** `TestApplyAdmitsOnlyTheFourScenarios` in
   `internal/reconciliation/lifecycle/transitions_spec_test.go` pins where each
   apply decision may appear: `fresh apply` only with no operation or a
@@ -90,60 +83,36 @@ cluster and its pools, and the operator adds one `CephPool`.
    - Pool and client requests stop embedding the cluster request
      ([B577](../milestones/backlog.md#b577)), so `Compare` reports exactly
      one added block and every other block the same.
-   - The Ceph refusal table is pinned by a test
-     (B595).
-   - Pool `size` and `min_size` drift is refused or reported, not silently
-     converged (B587).
-   - One pure classifier replaces the parallel transition derivations
-     ([B575](../milestones/delivered.md#x234--additive-apply-of-add-on-instances)); it is the slice's first step.
-   - A retention rule bounds the operations a union lineage keeps
+   - A retention rule bounds the operations a lineage keeps
      ([B258](../milestones/backlog.md#b258)).
 3. **Spec.** Add one row to the
    [state machine](../state-reconciliation.md#state-machine): a completed
    apply under a changed input whose delta adds only admitted objects
-   registers a delta apply over the union plan. Add the matching
+   registers an additive apply over the lineage. Add the matching
    `stateMachineRows` case and the guard placement in the same commit as the
    code.
-4. **Code at the one branch.** In the changed-input path of `settleApply`,
-   before the refusal:
-
-   ```go
-   delta := reconciliation.Compare(frozen, fresh)
-   if s.admitted(delta, frozen, fresh) {
-       return s.extend(ctx, view, operation, frozen, fresh)
-   }
-   ```
-
-   `admitted` requires every object change to be same, except added objects
-   whose capability implements `DeltaAdmitter` and admits them. `extend`
-   registers the union-plan apply.
-5. **Durable format.** The carried record is the first durable-format move:
-   the operation store version rises, `FirstPassEntries` counts the carried
-   record, and the contract guard goldens move with them. A build reads only
-   the version it writes and refuses another by name; another build continues an
-   operation only where re-planning gives the same blocks
-   ([dependency safety](../state-reconciliation.md#dependency-safety-during-recovery)).
-6. **Proof.** Before admitting, the slice may require `diff --observe` to read
-   the pool's cluster blocks present on the host. Records alone never prove
-   the cluster is still the one the frozen plan realized.
-7. **Diff.** No change: `diff` already reports the new pool as `plan: added`.
+4. **Code at the one branch.** The scenario extends the additive admission
+   path in `decision.go` and `additive.go`: it admits an added object only
+   when its capability implements `DeltaAdmitter`, and it edits
+   `TestApplyAdmitsOnlyTheFourScenarios`.
+5. **Proof.** Before admitting, the slice requires `diff --observe` to read the
+   pool's cluster blocks present on the host; records alone never prove the
+   cluster is still the one the frozen plan realized.
+6. **Diff.** No change: `diff` already reports the new pool as `plan: added`.
 
 ## Design rules
 
-Each rule is an acceptance clause for any scenario slice.
+Each rule becomes a test the reviving slice names.
 
-1. **Identity is lineage-stable.** Ceph owner and FSID come from the owning
-   apply's id (`internal/storage/ceph/capability.go`,
-   `internal/storage/ceph/host.go`), and evidence binds to the request digest
-   (`internal/storage/ceph/evidence.go`). Every admitted transition keeps that
-   id stable today. A scenario that registers a second apply over realized
-   state first moves identity to a lineage id
-   ([bootstrap identity](../ceph.md#bootstrap-identity-and-continuation)).
-2. **Requests embed only what gates them.** Pool and client requests embed
-   the cluster request (`internal/storage/ceph/requests.go`). Adding one pool
-   moves no sibling's digest, but editing the cluster moves every pool's. Part
-   of the embedding is load-bearing: the OSD host count gates the pool size.
-   A scenario that edits a shared parent first narrows the embedding.
+1. **Identity is lineage-stable.** A scenario that registers a second apply
+   over realized Ceph state first derives the Ceph owner and FSID from a
+   lineage id
+   ([bootstrap identity](../ceph.md#bootstrap-identity-and-continuation)); until
+   then that scenario is refused.
+2. **Requests embed only what gates them.** Adding one pool moves no sibling's
+   digest, and editing the cluster moves every pool's. Part of the embedding is
+   load-bearing: the OSD host count gates the pool size. A scenario that edits
+   a shared parent first narrows the embedding.
 3. **Evidence stays proof-shaped.** Observation for comparison uses its own
    read-only projection port, with its own version and bound, outside every
    effect content digest. Widening proof evidence moves digests and turns
@@ -160,15 +129,13 @@ Each rule is an acceptance clause for any scenario slice.
 6. **Secrets render as references.** Each kind projects through an
    allow-list, and open maps keep only declared keys
    ([sensitive material](../security.md#sensitive-material)).
-7. **Reads refuse while an apply runs.** A comparison read takes the lock
-   rule of
-   [storage, locking and publication](../contexts.md#storage-locking-and-publication),
-   so it refuses `context.busy` for the whole run. The lock narrows only
-   with [B18](../milestones/delivered.md#b18).
+7. **Reads follow the lock rule.** A comparison read takes the shared reader
+   hold of
+   [storage, locking and publication](../contexts.md#storage-locking-and-publication).
 8. **Seams need a present consumer.** Build a seam only where a consumer exists
-   now: `diff` consumes `Compare`. Admission, `DeltaAdmitter` and the union
-   plan stay on this page until a named slice and a decision promote one
-   scenario.
+   now: `diff` consumes `Compare`, and the additive apply consumes admission
+   through `DeltaAdmitter`. Any further scenario stays on this page until a
+   named slice and a decision promote it.
 9. **Realized but undeclared objects stay visible.** A changed input over a
    completed apply can leave realized objects no longer declared. `diff`
    lists them; `status` builds its rows from the compiled catalog only
@@ -195,4 +162,4 @@ Each rule is an acceptance clause for any scenario slice.
   and names the remedy; it adds no compatibility reader.
 - **No widening of the default.** A capability without `DeltaAdmitter`, an
   object change other than an admitted addition, and any input that no
-  longer compiles keep today's refusal.
+  longer compiles keep the changed-input refusal.

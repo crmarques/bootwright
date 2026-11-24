@@ -523,7 +523,7 @@ installation method touches only this list:
    [the identity guard](../test/architecture/implementation_identity_test.go)
    own the permitted file set, rather than a copy here.
 
-It answers, from their owners, what it converges
+A new implementation answers, from their owners, what it converges
 ([converging an effect](state-reconciliation.md#converging-an-effect)), when
 an attempt is `unknown` rather than `failed`
 ([attempts](state-reconciliation.md#attempts-and-unknown-outcomes)), how it

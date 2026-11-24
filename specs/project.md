@@ -57,12 +57,15 @@ nodes, the secondary networks of a cluster, and the managed infrastructure
 services. It only verifies, and never changes, the physical fabric (switches,
 VLAN trunking and routing), an external bridge, the host firewall's
 configuration beyond the trusted-zone membership of a managed network's bridge
-and of its own NetworkManager connections and its own nftables table,
+and of its own NetworkManager connections and its own nftables table, except on
+a Machine whose firewall policy it manages
+([host firewall](managed-os.md#host-firewall-requirements)),
 and an external DHCP or DNS service; a provider's
 [segment](api/machines.md#machine-profiles-and-segments) still names its
-existing bridge ([substrates](substrates.md#provider-host-realization)). DNS and
-artifact serving are each a managed service or an external endpoint, as the
-Environment selects.
+existing bridge ([substrates](substrates.md#provider-host-realization)). DNS is
+a managed service or an external endpoint, as the Environment selects; artifact
+serving is always managed
+([ArtifactServer](api/infrastructure-services.md#artifactserver)).
 
 Bootwright provisions and sets up only what GitOps cannot do or would have to
 undo, and GitOps configures the rest on the operators Bootwright installs
@@ -76,8 +79,8 @@ GitOps attaches workloads to is still declared as a `Network`. Workload
 networks and their segregation, ingress shards, egress addresses and network
 policy are GitOps configuration. A cluster's secondary networks and MetalLB
 pools are provisioning features an estate may select, never a segregation
-guarantee; control passes to GitOps when the operator configures the
-[GitOps bootstrap object](add-ons.md#the-gitops-bootstrap-object).
+guarantee. GitOps takes control of the downstream day-2 resources at the
+[GitOps handoff](#lifecycle-and-handoff).
 
 ## Lifecycle and handoff
 
@@ -103,14 +106,8 @@ a change to it is a destroy followed by a fresh apply
 operator subscription stays the owner's, and the
 [replacement chain rule](add-ons.md#observation-and-continuation) bounds when an
 upgrade the owner approves reads complete. An optional
-[GitOps bootstrap object](add-ons.md#the-gitops-bootstrap-object) hands one
-cluster to GitOps earlier, once every other block of the `add-ons` stage that
-requires that cluster's installation block, its other add-on instances and
-its cluster network block included, is complete; a block of another stage
-that reaches the cluster's API is not waited for
-([last packages](add-ons.md#built-in-packages-and-selection)). It hands off
-under the same ownership rule; this early handoff is
-pending the owner's [Q60](milestones/m4.md#m4a-open-decisions) under D173.
+[GitOps bootstrap object](add-ons.md#the-gitops-bootstrap-object) may hand one
+cluster to GitOps earlier, under the same ownership rule.
 
 ## Implementation and extension model
 
@@ -123,11 +120,11 @@ Bootwright coordinates and verifies them under the
 
 Built-in [add-on](add-ons.md) packages are reviewed Go code in the executable
 that renders a closed cluster object program, run by one qualified
-Bootwright-owned adapter; authored (custom) packages are declarative data
-refused until [B90](milestones/m4.md#b90), which will compile them into the
-same program under the same trust contract. They configure cluster-bound
-capabilities; underlying cluster, storage and substrate invariants retain
-their domain owners.
+Bootwright-owned adapter; authored (custom) packages of the executable OLM
+shape compile into the same program under the same trust contract; other
+authored shapes refuse ([trust boundary](add-ons.md#trust-boundary)). They
+configure cluster-bound capabilities; underlying cluster, storage and
+substrate invariants retain their domain owners.
 There is no ambient plugin path or dynamic native-code loading.
 
 `CustomPlaybook` is a reserved authoring shape, with no execution authority.
@@ -177,20 +174,19 @@ ownership evidence or operate on hosts merely to reset a version. Production
 upgrade, migration and backward-compatibility support require the owner's
 explicit authorization after production readiness.
 
-Day-2 operations are outside the current scope, including ongoing drift repair
-and publication of application or fleet GitOps content. Bootwright's lifecycle
-remains limited to bootstrap, exact continuation and removal of recorded owned
-state. Selected day-2 operations may be added in the future when requested and
-explicitly defined. The first selected one is the additive apply of add-on
-instances (D211).
+Bootwright's lifecycle is the operation modes that
+[state reconciliation](state-reconciliation.md#lifecycle-unit) lists: bootstrap,
+the [additive apply](state-reconciliation.md#additive-apply) of add-on
+instances, exact continuation and removal of recorded owned state. Other day-2
+operations, including ongoing drift repair and publication of application or
+fleet GitOps content, are non-goals; adding one needs the owner's request and
+its own specification ([D211](milestones/backlog.md#d211)).
 
-The admitted operator utilities are the exception: `machine start`, `stop` and
-`restart`; `rsh` and `exec` sessions on Machines and clusters; `machine trust`;
-`diff`; `status`; the `info` commands; `cluster oc` and `cluster kubectl`; and
-the `cluster kubeconfig`, `cluster keyring` and `secret show` disclosures. Each
-registers no lifecycle operation, publishes no ownership and never repairs
-drift ([commands](cli/commands.md#command-and-flag-catalog),
-[power operations](cli.md#machine-power-operations)).
+The commands of the
+[command catalog](cli/commands.md#command-and-flag-catalog) outside apply and
+destroy are the exception to that non-goal; the catalog states each one's
+effect, and none repairs drift of a lifecycle-owned resource or publishes ownership of a realized resource
+([power operations](cli.md#machine-power-operations)).
 
 Bootwright is not a general workflow or configuration-management engine, a
 runner of operator-authored code inside a lifecycle operation, or a
