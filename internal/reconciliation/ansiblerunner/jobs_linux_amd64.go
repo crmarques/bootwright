@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -145,16 +146,15 @@ func publishRecord(job string, record jobRecord) error {
 // go only once no process holds the lock: an adapter descendant that still runs
 // keeps them, with the material in them, the next run of this context refuses,
 // and the first run after the last holder ends removes them. The holder goes
-// after the lock and any fork that copied it, so no sweep advises ending the
-// processes that hold a job while this invocation is still one of them.
+// once the lock settles, so no sweep calls a live invocation's tree left over.
 func (r Runner) release(job, scratch string, lock, holder *os.File) {
+	held, statErr := lock.Stat()
+	r.settle(job, lock, held)
 	if r.invocation != nil {
 		r.invocation.mu.Lock()
 		defer r.invocation.mu.Unlock()
 		delete(r.invocation.jobs, job)
 	}
-	held, statErr := lock.Stat()
-	closeOutsideForks(lock)
 	unlockAndClose(holder)
 	if scratch == "" {
 		r.scratchParent = r.jobParent
@@ -169,6 +169,33 @@ func (r Runner) release(job, scratch string, lock, holder *os.File) {
 		paired = []string{filepath.Base(scratch)}
 	}
 	_, _, _ = dirs.reap(filepath.Base(job), paired, held)
+}
+
+const settlePoll = 10 * time.Millisecond
+
+// settle closes the lock and waits, at most the drain, for exiting processes.
+func (r Runner) settle(job string, lock *os.File, held os.FileInfo) {
+	probe, err := os.OpenFile(filepath.Join(job, lockName), os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	closeOutsideForks(lock)
+	if err != nil {
+		return
+	}
+	defer unlockAndClose(probe)
+	if opened, err := probe.Stat(); err != nil || held == nil || !os.SameFile(held, opened) {
+		return
+	}
+	bound := r.drain
+	if bound <= 0 {
+		bound = resultDrain
+	}
+	deadline := time.Now().Add(bound)
+	for {
+		free, err := lockShared(probe)
+		if free || err != nil || !time.Now().Before(deadline) {
+			return
+		}
+		time.Sleep(settlePoll)
+	}
 }
 
 // sweep refuses an unowned held job of contextName, or any unattributed job,

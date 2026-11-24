@@ -363,8 +363,14 @@ and starts nothing, only while a job of its own context holds its lock, except
 for its own live sibling adapters. That exemption requires the private
 [invocation scope](state-reconciliation.md#stages-and-the-pause-boundary)
 to prove the exact original lock and holder file identities; context,
-operation and attribution bytes alone never authorize it. A released job
-whose descendants still hold the lock loses the exemption. The runs of one
+operation and attribution bytes alone never authorize it. An invocation
+whose run ended closes its lock, then waits, at most the result drain, for
+the lock to come free before it frees its holder, so adapter processes still
+exiting stay its live sibling meanwhile
+(`TestReleaseWaitsForAnExitingDescendantAndReapsTheJob`,
+`TestTheNextRunStartsAfterADescendantOutlivesItsRunByAMoment`). A released
+job whose descendants still hold the lock after that wait loses the
+exemption. The runs of one
 [power batch](cli.md#machine-power-operations) share one such scope and are each
 other's live siblings. While
 the invocation that started that job still holds its holder, the refusal names
