@@ -28,10 +28,9 @@ M7's standalone renderer or operator scripts. Native inputs are frozen data;
 native orchestration deploys daemons within the authorized request, while
 Bootwright owns the plan, target proof and interpretation of its result.
 
-B472 records tested artifact/schema coordinates, the complete provider feature
-matrix and new typed API fields before their consuming implementation is
-promoted. Tested coordinates do not restrict the operator's
-[version selection](api/ceph.md). Each feature maps to
+Tested artifact and schema coordinates do not restrict the operator's
+[version selection](api/ceph.md); the [coverage page](ceph-coverage.md) owns
+the provider feature matrix and the tested-journey records. Each feature maps to
 intent, projection, effects, readiness, access, continuation and removal gates.
 Missing intent receives a deliberate API extension. Admission of other
 distributions or external clusters does not select an M2 implementation.
@@ -45,8 +44,7 @@ native-generated children cannot duplicate ownership. Unknown service types,
 incompatible fields and unsafe options refuse before registration. Native
 maps do not override proved identity, versions, credentials, dependency edges
 or safety policy. Arguments and custom configuration remain data, never shell
-programs or Ansible templates. B474 owns the common authoring migration;
-consuming items qualify their native fields and resource lifecycles.
+programs or Ansible templates.
 
 Projection preserves authored native values unless an explicit API rule
 normalizes them; it never silently drops a field or replaces it with a default.
@@ -79,8 +77,7 @@ re-proves all four profile options in the configuration database. A conflicting
 scope, mask or value refuses `config-drift`; it is never silently repaired.
 Normal multi-host admission and disk identity/erase proofs remain unchanged.
 `TestSingleHostTestClusterFreezesIntentAndDiskReplication` and the native
-single-host tests cover the boundary. Live qualification belongs to
-[B1420](milestones/m4.md#b1420).
+single-host tests cover the boundary.
 
 ## Frozen release and trust
 
@@ -113,8 +110,11 @@ proof; a mismatch or an unreadable file refuses `fips-not-enabled`, naming the
 Machine, and the cluster block requires that evidence. Its pinned host key
 must be ECDSA or RSA of at least 2048 bits. Bootwright never switches a
 host's FIPS mode; FIPS mode at installation, disk encryption and patching of
-a provided host stay the operator's. Ed25519 cluster SSH keys refuse
-before host preparation. Synthetic route keys use ECDSA on an observed FIPS
+a provided host stay the operator's. Under a FIPS Ceph request, an Ed25519
+cluster SSH key refuses `api.value`: at plan when its Secret generates Ed25519,
+the default included, and before host preparation when the bound public key is
+Ed25519 (`TestFIPSPlanningFreezesPolicyAndRefusesUnsafeInputs`,
+`TestFIPSImportedEd25519RefusesBeforeHostPreparation`). Synthetic route keys use ECDSA on an observed FIPS
 kernel.
 
 `spec.security.cephx.keyType` is a proof of the native outcome, never cipher
@@ -254,8 +254,13 @@ provider's license record exceeds the MON's default config-key entry bound
 while its store write reports success, so before acceptance the license call
 raises the cluster's `mon_config_key_max_entry_size` to `LICENSE_STORE_FLOOR`
 only while the persisted value is lower, never lowering it, and proves the
-persisted and each quorum MON's running value within one manager wait
-([D219](milestones/backlog.md#d219)); the value leaves with the cluster.
+persisted and each quorum MON's running value within one manager wait,
+refusing `not-ready` when the persisted readback stays lower or the wait
+expires. A replay or an observation writes nothing once the bound holds, and
+the value leaves with the cluster
+([D219](milestones/backlog.md#d219)). Held by
+`test_a_bound_already_at_or_above_the_floor_is_never_written_or_lowered` and
+`test_a_running_mon_that_never_holds_the_bound_refuses_before_acceptance`.
 Before provider host preparation, read-only checks prove it will neither
 install packages through ambient repositories outside that frozen decision nor
 enable or start a time service. Only then may the selected native host check
@@ -266,8 +271,7 @@ After the closure verifies in a scratch keyring, the host's RPM database gains
 the pinned key of each signer the decision names, Red Hat's from the OS's own
 key file and IBM's from the acquired one, before the transaction checks them.
 Cluster removal retains shared host packages, publisher keys and the pulled
-image. Actual installation and interruption qualification remains
-[B79](milestones/m2.md#b79) work.
+image.
 
 Each host-preparation block derives account, code and crypto-policy facts from
 the exact immutable image pulled with the original registry binding. Its
@@ -307,8 +311,7 @@ running MGR restart/failover.
 Probe cleanup proves each returned original container ID absent; a lost
 creation reply retains uncertainty, without adopting a matching label or name.
 Implementation is `ceph_host_runtime.py`, a session-free module the worker
-ships; the complete live consumer and qualification remain
-[B79](milestones/m2.md#b79) and [B80](milestones/m2.md#b80).
+ships.
 
 The package phase authenticates inherited crypto-policies roots from the
 frozen RHEL source and lends completed original generator/profile facts to a
@@ -362,9 +365,10 @@ lists the requirements each storage family emits:
 - A service-unit block `ceph-service-<cluster>-<type>[-<id>]` (Kind
   CephCluster, claims per [removal and concurrency](#claims-and-throttle)) applies the native documents of
   one unit type (for NFS, one `nfs` service with the ingress that fronts it)
-  and depends on the cluster, image and settings blocks by ID plus any blocks
-  its type names; its deadline is fixed per type and does not grow with the
-  host count. For monitoring, every declared `prometheus`, `alertmanager`,
+  and depends on the cluster and image blocks by ID, on the settings block when
+  one is planned, and on any blocks its type names; its deadline is fixed per
+  type and does not grow with the host count, except the `nvmeof` unit's, which
+  [NVMe-oF subsystems](#nvme-of-subsystems) derives from its placement. For monitoring, every declared `prometheus`, `alertmanager`,
   `grafana`, `node-exporter`, `ceph-exporter`, `snmp-gateway`, `loki`,
   `alloy` and `promtail` service forms one `ceph-service-<cluster>-monitoring` block, whose deadline is apply
   2280 s, observe 720 s, destroy 1380 s; its singleton documents carry no
@@ -417,10 +421,11 @@ lists the requirements each storage family emits:
   must name the gateway's `virtual_ip` (an IP address entry) or, without one,
   every host of its placement (a DNS name or a matching wildcard), and also
   the frozen `service.endpoint` when there is one, or the apply refuses naming
-  the Secret; no certificate byte enters the refusal. A missing
-  `service.endpoint`, also when a storage domain derives it, refuses with the
-  remedy to reissue the certificate with it as a DNS name (or a matching
-  wildcard), or to author a `managementGateway.fqdn` it holds. The readiness proof
+  the Secret; no certificate byte enters the refusal. A certificate that does
+  not name the frozen `service.endpoint`, including one a storage domain
+  derived, refuses with the remedy to reissue it with that name as a DNS entry
+  (or a matching wildcard), or to author a `managementGateway.fqdn` the
+  certificate already holds. The readiness proof
   still connects to the virtual IP or the hosts.
   For RBD mirroring, a declared `rbd-mirror` service forms one
   `ceph-service-<cluster>-rbd-mirror` block whose one singleton document
@@ -431,8 +436,7 @@ lists the requirements each storage family emits:
   whether or not it declares a service: its one singleton `crash` document
   carries no `service_id`, `spec` or `networks` and places every cluster host
   in name order; it runs the Ceph image, needs no auxiliary image, depends on
-  the cluster and image blocks (and the settings block when one is planned),
-  and its deadline is apply 2280 s, observe 720 s, destroy 1380 s. It is ready when every placed host
+  the cluster and image blocks, and its deadline is apply 2280 s, observe 720 s, destroy 1380 s. It is ready when every placed host
   runs one crash daemon on the frozen Ceph image. It retires with its cluster;
   removing it alone is [B491](milestones/m2.md#b491)'s.
 - A gateway block `ceph-gateway-<gateway>` (Kind CephObjectGateway,
@@ -521,9 +525,9 @@ Storage accepts any selected time source that answers
 and requires no proof of its upstream synchronization; Ceph's own `MON_CLOCK_SKEW` health check, which
 the readiness set below does not tolerate, reports MON clocks that disagree.
 
-B472 fixes provider-specific ordering and forbids cycles. Storage never installs
-another domain's prerequisites itself. Preflight names unmet prerequisites and
-their owners; [B490](milestones/m2.md#b490) qualifies host and capacity proofs.
+Provider-specific ordering forbids cycles: a storage dependency edge that
+closes one refuses planning. Storage installs no other domain's prerequisite;
+preflight names each unmet prerequisite and its owner.
 
 Topology placement binds nodes to proved Machines, which are Ceph nodes because
 the topology names them ([hardware and substrate](api/machines.md#hardware-and-substrate),
@@ -532,7 +536,8 @@ judge ([release qualification](ceph-coverage.md#release-qualification));
 acceptance-profile sizes impose no additional restriction. Native stretch mode
 requires the complete two-data-site topology and an independent
 third-site monitor-only tiebreaker, which [stretch topology](#stretch-topology)
-owns. [B487](milestones/m2.md#b487) owns its service/endpoint restrictions and
+owns. [Stretch services and front doors](#stretch-services-and-front-doors)
+owns its service and endpoint restrictions, and
 [B488](milestones/m2.md#b488) its failure and recovery acceptance.
 
 A compiled graph resolves every reference field, so the plan looks up only
@@ -594,20 +599,19 @@ group.
 Each row is one refusal of the Ceph capability, and
 `TestCephRefusalTableMatchesUnsupported` holds its `Unsupported` to it before
 operation registration and secret custody. Its reason and remedy are the
-refusal's reason and remediation. The capability refuses the CephCluster
-and every CephPlacementPolicy, CephPool and CephClient whose
+refusal's reason and remediation. A row's Path cell names the CephCluster; the
+capability refuses it and every CephPlacementPolicy, CephPool and CephClient whose
 `clusterRef` names it, each with the same row. [Unsupported combinations](ceph-coverage.md#unsupported-combinations)
 links each matrix combination that this table refuses.
 
 | Refusal | Path | Reason | Remedy |
 | --- | --- | --- | --- |
-| Incomplete or unsafe Ceph coordinates or transport | a CephCluster, or a CephPlacementPolicy, CephPool or CephClient whose `clusterRef` names it, declaring an empty `release`, `packageVersion`, `cephadm.ansible.packageVersion` or `image.version`, an empty `image.base`, or a `cephadm.clusterSSH.transport` other than `verifiedTunnel` in an effective state that admission did not refuse (an omitted transport normalizes to `verifiedTunnel`, and `validate` refuses `native`) | `the selected Ceph coordinates or cluster SSH transport are incomplete or unsafe` | `declare bounded version strings, an image repository and verifiedTunnel transport; native transport is refused and host-key verification cannot be disabled` |
-| A native service whose auxiliary image is not selected | a CephCluster, or a CephPlacementPolicy, CephPool or CephClient whose `clusterRef` names it, declaring in `services` a service whose type needs an auxiliary image (an `alertmanager`, `alloy`, `grafana`, `ingress`, `loki`, `mgmt-gateway`, `node-exporter`, `nvmeof`, `oauth2-proxy`, `prometheus`, `promtail`, `smb` or `snmp-gateway` service) that `images` does not set; `<service>` is the first such service's qualified name in name order, `<family>` its `service_type`, `<name>` the first image it needs in name order that `images` does not set (only `keepalived` for an `ingress` with `spec.keepalive_only`) and `<cluster>` the CephCluster | `the <family> service <service> needs cephadm's container_image_<name>, and spec.images.<name> is not set; Bootwright keeps no default` | `set spec.images.<name> of CephCluster <cluster> to an image beneath its Entitlement registry, or remove <service> from its spec.services, together with its spec.serviceBindings entries` |
-| CephSMBResource objects whose samba images are not selected | a CephCluster, or a CephPlacementPolicy, CephPool or CephClient whose `clusterRef` names it, that a CephSMBResource of any resource type names in its `clusterRef` while `images` does not set both `samba` and `samba_metrics`, and that the native-service row does not refuse; `<smb>` is the first such CephSMBResource in name order, `<name>` is `samba` unless `images` sets it, else `samba_metrics`, and `<cluster>` the CephCluster | `CephSMBResource <smb> needs cephadm's container_image_<name>, and spec.images.<name> is not set; Bootwright keeps no default` | `set spec.images.<name> of CephCluster <cluster> to an image beneath its Entitlement registry, or remove every CephSMBResource whose spec.clusterRef is <cluster> from the selected Environment` |
-| An auxiliary image that no declared service needs | a CephCluster, or a CephPlacementPolicy, CephPool or CephClient whose `clusterRef` names it, setting `images.<name>` for an image that no service in `services` and no CephSMBResource naming it needs (per the auxiliary image table, with `samba` and `samba_metrics` for a CephSMBResource) and that neither the native-service nor the CephSMBResource row refuses; `<name>` is the first such name in name order and `<cluster>` the CephCluster | `spec.images.<name> is set, but no declared service or CephSMBResource of CephCluster <cluster> needs cephadm's container_image_<name>` | `remove spec.images.<name> from CephCluster <cluster>` |
-| More Ceph hosts than the cluster run deadline admits | a CephCluster without `topology.stretch`, or a CephPlacementPolicy, CephPool or CephClient naming it, whose topology declares more nodes than the [cluster execution budget](#cluster-execution-budget) fits under the run ceiling; `<deadline>` is that budget's apply deadline for `<hosts>` hosts and `<most>` the largest host count it admits | `CephCluster <cluster> declares <hosts> Ceph hosts, whose cluster run deadline of <deadline> is past the 6h0m0s every adapter run is held to` | `declare at most <most> entries in spec.topology.nodes of CephCluster <cluster>; B1183 tracks larger clusters` |
-| More hosts than a stretch cluster's run deadline admits | a CephCluster declaring `topology.stretch`, or a CephPlacementPolicy, CephPool or CephClient naming it, whose topology declares more nodes than the [cluster execution budget](#cluster-execution-budget) with its stretch activation fits under the run ceiling; `<deadline>` is that budget's apply deadline for `<hosts>` hosts and `<most>` the largest host count it admits | `CephCluster <cluster> declares <hosts> Ceph hosts, whose cluster run deadline of <deadline> is past the 6h0m0s every adapter run is held to` | `declare at most <most> entries in spec.topology.nodes of CephCluster <cluster>; B1183 tracks larger clusters` |
-| A distribution that core Ceph does not realize | a CephCluster, or a CephPlacementPolicy, CephPool or CephClient whose `clusterRef` names it, whose `distribution` selects the `oss` or `redhat` arm, an omitted `distribution` included, because omission selects `oss` ([distribution](api/ceph.md#cephcluster)) | `core Ceph realizes only the IBM Storage Ceph distribution` | `select spec.distribution.ibm` |
+| Incomplete or unsafe Ceph coordinates or transport | a CephCluster declaring an empty `release`, `packageVersion`, `cephadm.ansible.packageVersion` or `image.version`, an empty `image.base`, or a `cephadm.clusterSSH.transport` other than `verifiedTunnel` in an effective state that admission did not refuse (an omitted transport normalizes to `verifiedTunnel`, and `validate` refuses `native`) | `the selected Ceph coordinates or cluster SSH transport are incomplete or unsafe` | `declare bounded version strings, an image repository and verifiedTunnel transport; native transport is refused and host-key verification cannot be disabled` |
+| A native service whose auxiliary image is not selected | a CephCluster declaring in `services` a service whose type needs an auxiliary image (an `alertmanager`, `alloy`, `grafana`, `ingress`, `loki`, `mgmt-gateway`, `node-exporter`, `nvmeof`, `oauth2-proxy`, `prometheus`, `promtail`, `smb` or `snmp-gateway` service) that `images` does not set; `<service>` is the first such service's qualified name in name order, `<family>` its `service_type`, `<name>` the first image it needs in name order that `images` does not set (only `keepalived` for an `ingress` with `spec.keepalive_only`) and `<cluster>` the CephCluster | `the <family> service <service> needs cephadm's container_image_<name>, and spec.images.<name> is not set; Bootwright keeps no default` | `set spec.images.<name> of CephCluster <cluster> to an image beneath its Entitlement registry, or remove <service> from its spec.services, together with its spec.serviceBindings entries` |
+| CephSMBResource objects whose samba images are not selected | a CephCluster that a CephSMBResource of any resource type names in its `clusterRef` while `images` does not set both `samba` and `samba_metrics`, and that the native-service row does not refuse; `<smb>` is the first such CephSMBResource in name order, `<name>` is `samba` unless `images` sets it, else `samba_metrics`, and `<cluster>` the CephCluster | `CephSMBResource <smb> needs cephadm's container_image_<name>, and spec.images.<name> is not set; Bootwright keeps no default` | `set spec.images.<name> of CephCluster <cluster> to an image beneath its Entitlement registry, or remove every CephSMBResource whose spec.clusterRef is <cluster> from the selected Environment` |
+| An auxiliary image that no declared service needs | a CephCluster setting `images.<name>` for an image that no service in `services` and no CephSMBResource naming it needs (per the auxiliary image table, with `samba` and `samba_metrics` for a CephSMBResource) and that neither the native-service nor the CephSMBResource row refuses; `<name>` is the first such name in name order and `<cluster>` the CephCluster | `spec.images.<name> is set, but no declared service or CephSMBResource of CephCluster <cluster> needs cephadm's container_image_<name>` | `remove spec.images.<name> from CephCluster <cluster>` |
+| More Ceph hosts than the cluster run deadline admits | a CephCluster whose topology declares more nodes than the [cluster execution budget](#cluster-execution-budget) fits under the run ceiling, with its stretch activation when it declares `topology.stretch`; `<deadline>` is that budget's apply deadline for `<hosts>` hosts and `<most>` the largest host count it admits | `CephCluster <cluster> declares <hosts> Ceph hosts, whose cluster run deadline of <deadline> is past the 6h0m0s bound Ceph holds its derived deadlines to` | `declare at most <most> entries in spec.topology.nodes of CephCluster <cluster>; B1183 tracks larger clusters` |
+| A distribution that core Ceph does not realize | a CephCluster whose `distribution` selects the `oss` or `redhat` arm, an omitted `distribution` included, because omission selects `oss` ([distribution](api/ceph.md#cephcluster)) | `core Ceph realizes only the IBM Storage Ceph distribution` | `select spec.distribution.ibm` |
 
 The [`clusterSSH.transport` field rule](api/ceph.md) states what omission
 selects and that `validate` refuses `native`, so the transport part of this
@@ -650,8 +654,7 @@ topology; this section owns what the plan derives and realizes (D196).
   key declared, refuses at plan. Fresh apply proves the bound pin for its
   exact endpoint, including the full public key and applicable FIPS key
   constraints, before registration. It holds no device and no erase claim, needs
-  no Machine block, and takes its OS dependency packages from the source
-  its bootstrap host's install profile selects, as
+  no Machine block, and takes its OS dependency packages as
   [selection and request](ceph-subscription-dependencies.md#selection-and-request)
   states; a hosted tree that cannot serve the host's release fails the native
   package resolution. Its FIPS proof is
@@ -754,8 +757,10 @@ topology; this section owns what the plan derives and realizes (D196).
   Every block's frozen cluster scope carries the stretch block, so host,
   SMB, consumer and replication blocks prove the same bootstrap scope.
 
-The JSON keys the stages read that no cited page fixes are recorded as
-unverified in the [stretch native facts](../.agents/knowledge/ceph-stretch-native-facts.md).
+Not yet met: the JSON keys the stretch stages read that no cited page fixes are
+unverified against the selected build ([stretch native
+facts](../.agents/knowledge/ceph-stretch-native-facts.md)); tracked as
+[B488](milestones/m2.md#b488).
 
 Not yet met: an interrupted stretch stage has no forward exit short of
 retiring the whole cluster; tracked as [B920](milestones/m2.md#b920).
@@ -837,9 +842,8 @@ A cluster receives one stable FSID UUID, durably bound to its context, owning
 operation incarnation and frozen bootstrap request before the first remote
 effect. Its identity never derives from the context or object name alone:
 recreating a name cannot address a previous cluster. Continuation, observation
-and removal use the recorded FSID and the same proved Machines. B79 fixes UUID
-allocation, publication and request-binding semantics while preserving pure,
-deterministic plan previews. A lost response never allocates a replacement;
+and removal use the recorded FSID and the same proved Machines. Plan previews
+stay pure and deterministic. A lost response never allocates a replacement;
 unknown or contradictory identity records refuse before another bootstrap.
 
 Before bootstrap, positive absence is proved on the exact target. Where a
@@ -888,8 +892,11 @@ identities, pull journals, and the ephemeral broker material a killed pull can
 leave) and the `ceph-packages/<fsid>` package journal are retained too; they
 hold no credential. The [registry broker](#registry-broker) owns guest pulls.
 
-Each bootstrap, enrollment, service and resource attempt observes first and
-defines partial-completion evidence and safe retry, except two states that
+Each bootstrap, enrollment, service and resource attempt observes first; the
+[interruption table](#cluster-execution-budget) states the cluster's
+partial-completion evidence and safe retry, and
+[Resources, readiness and access](#resources-readiness-and-access) states each
+resource's, except two states that
 refuse until their recovery is defined: a cluster that is not ready after a
 non-bootstrap host carries a daemon refuses `partial-cluster`
 ([B659](milestones/m2.md#b659)), and a nonempty or partial DB/WAL device
@@ -943,8 +950,7 @@ that exact owned pool; an application flag alone proves no completed init.
 
 Cancellation, lost response, unavailable evidence and contradictory native
 state follow [unknown-effect recovery](state-reconciliation.md#converging-an-effect).
-Read-only resolution proves the exact frozen apply or removal outcome before
-any new effect. Unknown results never permit blind retries or force. Unsupported
+Unsupported
 changes refuse with the object, observed difference and safe next action.
 
 A host or cluster block that refuses publishes a
@@ -988,16 +994,13 @@ ends the attempt.
 The CephCluster's cluster block, the verifiedTunnel apply that bootstraps,
 enrolls and deploys the cluster, covers every host count in
 `spec.topology.nodes` that the selected native tools accept (D130), within
-the deadline bound below. Fewer than three hosts keep their existing refusal.
-The deadline below is the only host bound: no fixed host count is added to it.
+the deadline bound below. The [host floor](api/ceph.md#host-floor) bounds the
+count from below. The deadline below is the only host bound: no fixed host count is added to it.
 A host count whose cluster deadline passes the run ceiling refuses before
 operation registration and secret custody, as a row of the
 [refusal table](#refusal-table) for the CephCluster and every
 CephPlacementPolicy, CephPool and CephClient naming it, and request planning
 and every block's deadline refuse it with the same reason and remedy.
-
-Not yet met: clusters of more hosts than the run ceiling fits under this
-budget refuse; tracked as [B1183](milestones/m2.md#b1183).
 
 The cluster block's deadline is at least the sum of the ceilings of the longest
 call sequence its run can make: every 660 s native call, the 1860 s bootstrap
@@ -1078,7 +1081,7 @@ the 21600 s ceiling fits, and twelve would need 22200 s. The services call's
 documents do not enter the formula, so a host-specific OSD specification per
 selected disk keeps it. Neither does a host's device count: each per-host call
 proves, binds or prepares all of its host's selected disks, so more disks lengthen
-calls, not the call sequence. The six-hour adapter ceiling, per-call budgets, input
+calls, not the call sequence. Ceph's six-hour bound (`lifecycle.MaxDeadline`), per-call budgets, input
 bounds and readiness proofs remain unchanged. A request whose deadline exceeds
 the ceiling refuses at planning, coded `ceph.budget-exceeded`, with the
 [refusal table](#refusal-table)'s row for more Ceph hosts than the cluster run
@@ -1086,34 +1089,34 @@ deadline admits.
 
 Both readiness waits stay 900 s. A readiness timeout after the services call
 is recoverable: once cephadm has converged, the next apply observes a ready
-cluster, every host's stage is complete, and the apply passes. The six-host
-live runs of the [virtual provider matrix](milestones/m2.md#b484) record the
-measured OSD convergence time; a shortfall there is its own item.
+cluster, every host's stage is complete, and the apply passes.
 
 | An apply that stops | The next apply |
 | --- | --- |
 | before the bootstrap call | continues each host from its `unclaimed`, `claimed` or `prepared` stage |
 | inside bootstrap, tunnel configuration or tunnel mount | continues from the seed stages of the [verified transport](ceph-native-api.md#verified-native-orchestration-transport) |
 | inside enrollment, devices, host device identities, OSD preparation or the services calls, before any non-bootstrap host carries a daemon | continues from `enrolling`, every other host `prepared` |
-| after a non-bootstrap host carries a daemon, the cluster not ready | refuses `partial-cluster` |
-| in a readiness wait | continues once cephadm has converged, as above |
+| after a non-bootstrap host is past `prepared`, with the cluster observed ready | passes, every host's stage complete |
+| after a non-bootstrap host is past `prepared`, with the cluster observed not ready | refuses `partial-cluster` |
 
-On Bootwright-owned virtual hosts, `machine stop` and a
+The next apply raises `partial-cluster` from the host stages it reads again
+and the cluster it observes again, never from a stored stop. On Bootwright-owned virtual hosts, `machine stop` and a
 destroy that retires the cluster with its hosts
 ([removal](#removal-and-concurrency)), then a fresh apply, leave either
 refusal. On physical hosts the only retirement is the erase-backed
 [physical retirement](#devices-and-destructive-ownership), which needs each
 Machine's original erase policy to cover every selected
-data, DB and WAL disk. Without that policy, only the orphan-acknowledged
-[context deletion](contexts.md#permanent-deletion) leaves an interrupted
-physical deployment, and it abandons the hosts, their daemons, the claimed
-disks and their data.
+data, DB and WAL disk. Context deletion with orphan acknowledgement
+([context deletion](contexts.md#permanent-deletion)) abandons the hosts, their
+daemons, the claimed disks and their data.
 
-Not yet met: `partial-cluster` has no forward exit; tracked as
+Not yet met: a cluster that refuses `partial-cluster` has no forward exit, and an
+interrupted physical deployment whose Machines lack the original erase policy has
+no retirement exit short of orphan-acknowledged context deletion; tracked as
 [B659](milestones/m2.md#b659).
 
-Not yet met: the partial DB/WAL refusal of
-[devices](#devices-and-destructive-ownership) has no forward exit; tracked as
+Not yet met: a nonempty or partial DB/WAL device of [devices](#devices-and-destructive-ownership)
+refuses before submission and has no recovery; tracked as
 [B1084](milestones/m2.md#b1084).
 
 The budget changes no `partial-cluster` refusal. Observation, destruction,
@@ -1126,7 +1129,7 @@ per subvolume group to its 2n + 3 and one more readiness wait when it declares
 a group, so at eleven hosts it fits six data pools without groups, or four
 pools and groups together. One past that refuses at planning, coded
 `ceph.budget-exceeded`, with reason
-`CephFilesystem <filesystem> needs a run deadline of <deadline>, past the 6h0m0s every adapter run is held to: two native calls for each of the <hosts> Ceph hosts of CephCluster <cluster> and one for each of its <pools> data pools and <groups> subvolume groups`
+`CephFilesystem <filesystem> needs a run deadline of <deadline>, past the 6h0m0s bound Ceph holds its derived deadlines to: two native calls for each of the <hosts> Ceph hosts of CephCluster <cluster> and one for each of its <pools> data pools and <groups> subvolume groups`
 and remedy
 `declare fewer spec.dataPoolRefs or spec.subvolumeGroups on CephFilesystem <filesystem>, or fewer entries in spec.topology.nodes of CephCluster <cluster>`.
 Every enrollment call admits at least one host within its worker budget, so n
@@ -1146,10 +1149,6 @@ frozen request and the ready cluster evidence stay well inside the 256 KiB
 request and 60 KiB evidence bounds, and the physical retirement policy admits
 the same host count as the cluster.
 
-The concurrent rounds are implemented under [B688](milestones/m2.md#b688), and
-the deadline as the only host bound under [B890](milestones/m2.md#b890); the
-live qualification of both remains outstanding.
-
 ## Registry broker
 
 Guest pull credentials enter only the invocation-local
@@ -1164,8 +1163,8 @@ Ceph image and every auxiliary image. A connection that does not verify fails
 the pull, and its native error names the registry authority and the anchor,
 never a credential, token or delivery location. A frozen
 [`registryProxy`](api/ceph.md#cephcluster) tunnels each upstream connection
-through HTTP CONNECT before TLS, resolving only the proxy; no ambient route is
-read. A connection that does not open fails the pull, and its native error
+through HTTP CONNECT before TLS; the connection resolves only the proxy, apart
+from the delivery hop's validation below, and no ambient route is read. A connection that does not open fails the pull, and its native error
 names the registry authority or "its blob delivery endpoint", the route and a
 fixed reason;
 foreign token realms and manifest redirects refuse. The broker admits only
@@ -1183,7 +1182,11 @@ HTTPS on port 443, without userinfo or a fragment. Every resolved address must
 be public unicast; a private, reserved, mixed, scoped, IPv4-mapped or IPv6
 tunneling answer refuses the complete result. Connections use only those validated
 numeric addresses, or a tunnel to the validated hostname through the proxy,
-and verify TLS against that hostname with the same anchor.
+and verify TLS against that hostname with the same anchor. Through a
+`registryProxy`, the broker still resolves and validates the redirect hostname
+before it opens the tunnel; the proxy resolves the name itself, so the address
+check does not bind the address the proxy dials, and TLS against the hostname
+with the anchor is the remaining guarantee.
 Redirect URLs, including signed queries, remain invocation-local private data.
 Delivery requests contain no registry authorization, cookie, proxy credential
 or Referer. A delivery authentication challenge or further redirect refuses
@@ -1228,17 +1231,37 @@ Bootwright Ceph route, including on a host with a direct selection.
 ## Named refusal outcomes
 
 A named refusal of a Ceph block ends the attempt with its entry's code. An
-entry whose stop is unproved leaves the block's attempt outcome unknown, so
+entry is one token of the refusal map of the block that raised it, and that map
+owns the token with its code, reason and remedy; the certainty column of the
+[stop catalog](cli/stops.md) gives each code's certainty. The maps in
+`internal/storage/ceph` are `adapterRefusals`, `loginRefusals` and
+`consumerRefusals` (cluster adapter, login rotation and consumer), `hostRefusals`
+with `packageRefusals`, `sshPolicyRefusals`, `serialDeviceRefusals` and
+`rootDeviceRefusals` (host block), `osdDeviceRefusals`, `stretchRefusals`,
+`imageRefusals`, `smbRefusals`, `replicationRefusals` and the map in
+`tiebreaker_removal.go`. An entry whose stop's certainty is
+`diagnostics.CertaintyUnproved` leaves the block's attempt outcome unknown, so
 the next apply observes that block first and resolves it from the observed
-evidence, a host block through its preparation evidence. Only the entries
-of stops that are not unproved (`unsupported-release`, `package-license`,
-`package-platform`, `dashboard-verify`, `client-quiescence-unqualified`,
-`call-home-unqualified`, `native-option-undeclared`,
-`ssh-policy-host-excluded`, `ssh-policy-unavailable`,
-`tunnel-host-key-excluded`, `device-not-empty`, `foreign-osd`,
-`device-serial-absent`, `device-serial-ambiguous`, `device-serial-mismatch`,
-`device-alias`, `device-root`) leave it failed. A censored failure that names
-no refusal stays the generic adapter failure, failing the attempt.
+evidence, a host block through its preparation evidence. Every other entry
+leaves the attempt failed. A censored failure that names no refusal stays the
+generic adapter failure, failing the attempt.
+
+A token's stop depends on the block that raises it:
+
+- `package-license` refuses `ceph.license-unaccepted` (failed) from a host block
+  when the IBM package transaction lacks the accepted provider license, and
+  `ceph.boundary-unproved` (unknown) from the cluster adapter.
+- `package-platform` refuses `ceph.package-source-unsupported` (failed) from a
+  host block when the host lacks RHEL x86_64 package tooling, and
+  `ceph.boundary-unproved` (unknown) from the cluster adapter.
+- `dashboard-verify` refuses `ceph.unqualified` (failed) from the cluster adapter
+  when the bootstrap host cannot verify the dashboard password hash; the check is
+  never skipped.
+- `client-quiescence-unqualified` refuses `ceph.unqualified` (failed) from the
+  cluster adapter, because no client quiescence proof exists for online removal.
+- `native-option-undeclared` refuses `ceph.unqualified` (failed) from the cluster
+  adapter when the selected cephadm package does not declare a bootstrap option,
+  and `ceph.boundary-unproved` (unknown) from a host block for a cleanup option.
 
 ## Devices and destructive ownership
 
@@ -1250,8 +1273,8 @@ entry, sshd drop-in and bound registry credential without disk zap, each as
 removes it. It records native absence before proving the Machine off. A retry with the durable receipt
 finishes the shutdown without another guest cleanup. The terminal retirement
 checks that receipt for each retained root, including an installed host with
-no selected Ceph disks or erase targets, and checks verified erase receipts
-for every selected data, DB and WAL disk. An installed host whose Ceph host
+no selected Ceph disks or erase targets, and checks the
+physical retirement proof below for every physical host. An installed host whose Ceph host
 preparation and core cluster blocks are both positively unstarted needs no
 native cleanup receipt. Its disk policy still applies. Foreign state or an interrupted unproved
 cleanup refuses or remains partial. Generic online removal remains closed by
@@ -1264,10 +1287,11 @@ stderr. Both raw command streams remain private.
 Protected Bootwright recovery/custody and retry journals and the managed OS's
 own SSH policy remain on the retained OS; native absence is not whole-filesystem
 cleanup or sanitization. Reinstallation overwrites the independently selected
-root, and explicit root erasure keeps its existing whole-disk semantics.
+root, and an explicit root erasure applies its declared `rootDisk.onRemoval`
+method ([erase methods](state-reconciliation.md#erase-methods-and-coverage));
+only `logicalOverwrite` overwrites every byte.
 
-Physical retirement requires explicit original erase authority for every
-selected data, DB and WAL disk, and for the root only when the policy names it
+The root is covered only when the original erase policy names it
 ([disk actions](api/machines.md#data-disks-and-disk-actions)); an omitted root
 is retained. Machine removal erases only its frozen explicit targets; an
 OS reinstall still overwrites its independently selected root volume.
@@ -1376,7 +1400,8 @@ or capacity, or a serial selection's serial and size from its Machine.
 A fresh installation of a managed physical host can clear declared OSD disks
 that a destroyed or abandoned cluster left, through its Machine's
 [`onInstall: metadataClear`](managed-os.md#physical-data-disk-clear) data disks; nothing
-here clears a disk.
+else here clears a disk but the bounded owned clear of an interrupted OSD
+creation, stated below.
 
 Not yet met: a host's device-identity, device-proof, OSD-preparation (its
 owned clears included) and device-readback calls, and the cluster observation's per-OSD configuration
@@ -1404,7 +1429,6 @@ device numbers, rejects read-only/removable disks and ambiguous aliases, and
 re-proves the same facts on read-only host readiness. A replay cannot extend
 or replace the bound disk set. See the
 [physical example](../examples/ceph-clusters/physical-3-nodes-ceph/README.md).
-This code path has synthetic coverage; live physical acceptance remains unrun.
 
 Physical retirement requires the original opt-in
 [erase policy](state-reconciliation.md#opt-in-physical-logical-overwrite), with
@@ -1437,7 +1461,7 @@ observed OSD binding;
 the original sealed dependency scope must prove that unstarted state. Missing
 evidence cannot substitute for it. Every started core block requires its
 completed original host binding. A partial or lost erase receipt leaves the
-removal incomplete and resumes through B70's original receipt protocol.
+removal incomplete and resumes through the [receipt protocol](state-reconciliation.md#physical-disk-safety).
 
 If both the original core cluster and every physical OS installation are
 positively unstarted, terminal verification may instead prove retaining cleanup
@@ -1528,8 +1552,9 @@ volume, and a killed creation skips its rollback, so the cleared volume's OSD
 fsid may still name an OSD in the map that no disk will ever start, while the
 OSD service already submitted can create the disk's OSD again. Cluster
 observation, including the bootstrap state an apply reads before any host's
-OSD preparation, therefore counts an OSD whose metadata names no device and
-whose map entry never booted against no declared disk instead of refusing
+OSD preparation, therefore counts an OSD whose metadata names no device, whose
+map entry never booted and whose fsid a recorded clear intent of this cluster
+names against no declared disk instead of refusing
 `foreign-osd`, and such an OSD keeps the cluster unready, named in the
 not-ready detail as `unbooted@osd.<id>.<osd fsid>`, so the apply goes on
 to OSD preparation and the services call; every other OSD beyond the declared
@@ -1552,22 +1577,25 @@ longer hold it, or the call refuses `osd-orphan-unproved`; an OSD of that fsid
 that booted refuses `osd-orphan-booted` with no purge. Both are coded
 `ceph.osd-unproved`. Since every OSD preparation reports every completed
 clear, a purge that an interrupted, lost or refused services call left
-undone is finished by the next apply. The devices file's
-interaction, the clear and the purge are unqualified on a live RHEL host.
+undone is finished by the next apply.
+
+Not yet met: an unbooted OSD whose metadata names no device and whose fsid no
+recorded clear intent of this cluster names refuses `foreign-osd`; every such OSD
+is tolerated and kept unready as `unbooted@osd.<id>.<osd fsid>`; tracked as
+[B1790](milestones/m2.md#b1790).
 
 Provisioning records the relation between cluster FSID, OSD identity, Machine,
 physical device identity and DB/WAL allocation. Existing owned OSDs are reused
-only on exact proof. Erase, zap, signature clearing and destructive replacement
-are separate effects with explicit impacts, authorization and proof; an OSD
+only on exact proof. Erase, signature clearing, destructive replacement and any
+zap other than the bounded owned clear of an interrupted OSD creation are
+separate effects with explicit impacts, authorization and proof; an OSD
 selector or permission to bootstrap does not authorize them.
 
 Physical erase remains governed by
 [physical disk safety](state-reconciliation.md#physical-disk-safety) and
 [B70](milestones/m1.md#b70). Storage planning cannot authorize erase implicitly.
-B79 and B80 define which device preparation can be proved within apply; any
-path requiring physical erase remains subject to that contract and qualification.
-[B475](milestones/m2.md#b475) qualifies OSD identity, ownership and write/erase
-safety; virtual-disk ownership never establishes physical-disk safety.
+Any path requiring physical erase remains subject to that contract.
+Virtual-disk ownership never establishes physical-disk safety.
 
 ## Resources, readiness and access
 
@@ -1579,8 +1607,7 @@ include [CephFS/MDS](milestones/m2.md#b492), [RGW](milestones/m2.md#b477),
 [NVMe](milestones/m2.md#b480),
 [SMB](milestones/m2.md#b482), [multi-cluster/mirroring](milestones/m2.md#b483)
 and [client handoff](milestones/m2.md#b489). The iSCSI gateway is not a family: admission refuses
-`service_type: iscsi` ([B481](milestones/delivered.md#x58--iscsi-refusal)). B472 records the tested
-native behavior and typed gaps. Observation proves usability, not just object existence.
+`service_type: iscsi` ([B481](milestones/delivered.md#x58--iscsi-refusal)). Observation proves usability, not just object existence.
 The [API ownership rules](api/ceph.md) prevent one resource from implicitly
 creating or deleting another resource's pools, services or credentials.
 
@@ -1589,8 +1616,7 @@ native immutable identity where the provider supplies one. Native-created
 children have a named owner, creation boundary, dependency edges and qualified
 absence/removal proof; they cannot become unrecorded side effects or acquire
 ownership merely by matching a name. A service may not adopt another object's
-pool or credential as its generated child. B472 and each resource item settle
-native identity and child-resource gaps before promotion.
+pool or credential as its generated child.
 
 A placement policy and a pool each write their attempt record
 (`ceph-policy-attempt-v1` before `osd crush rule create-replicated`, and
@@ -1685,7 +1711,7 @@ phase proves,
 before any write: the cluster's ownership record and FSID; the `nfs` manager
 module the settings block enabled (`nfs-module-disabled` when it is off; the
 unit never enables a module); the shared `.nfs` pool, which may exist only
-under the claim this operation's NFS units recorded and, once recorded, only
+under the claim every NFS unit of the cluster shares and, once recorded, only
 under its recorded ID (`nfs-pool-foreign`; it is never adopted, rewritten or
 deleted); and, with an ingress, the frozen `container_image_keepalived`
 setting and, unless the ingress is keepalive-only, `container_image_haproxy`
@@ -1818,11 +1844,10 @@ readiness on the bootstrap host, `orch <service> get-credentials` over the
 verified administrative channel for those services only, because that command
 stores the default `admin`/`admin` for a service cephadm holds no login for.
 A recorded, non-removal observation proving the unit ready asks only when
-`orch ps` shows a daemon proving cephadm already stores each login (v20.2.1
-stores both before it configures a Prometheus daemon, Prometheus's before a
-Grafana daemon); otherwise it reads and recaptures none. Residual: a cluster
-an older build realized may hold the default; `cluster update-admin-creds --login
-prometheus,alertmanager` replaces it. A `user` or
+`orch ps` shows a daemon proving cephadm already stores each login; otherwise
+it reads and recaptures none. A login that still holds cephadm's default is
+replaced with `bootwright cluster update-admin-creds --name <cluster> --login
+prometheus,alertmanager`. A `user` or
 `password` that is not a nonempty string, or an empty answer (security off),
 refuses `material`; one outside 1 to 128 visible ASCII characters other than
 `&`, `<` and `>` refuses `monitoring-login-unsupported`, naming the service and
@@ -2075,7 +2100,8 @@ configuration store creates the shared `.rgw.root` pool when it is absent, so
 `gateway_zone` first proves the cluster's ownership record and FSID and
 `radosgw-admin` itself (the verified `ceph-common` package and the hash its
 record holds, `artifact` when it changes), then proves `.rgw.root` absent or
-under the claim this operation's gateways share through monitor commands only,
+under the cluster's `.rgw.root` claim (owner and FSID), which every gateway of
+the cluster shares, through monitor commands only,
 and writes that claim before any `radosgw-admin` call; while `.rgw.root` is
 absent no `radosgw-admin` call runs before every name proof passes. A realm,
 zone group or zone of the gateway's names without its creation record, a
@@ -2132,10 +2158,9 @@ state, expected daemons, OSD membership, placement/capacity, pool protection,
 filesystem/MDS state and declared service endpoints as applicable. Waits bound
 time, polling, response size, cancellation and any native asynchronous work.
 Timeout reports unfinished or unknown according to evidence.
-B472 fixes predicates, limits and explicitly tolerated warnings/transitions;
-blanket warning acceptance cannot claim readiness. The core profile requires
+Blanket warning acceptance cannot claim readiness. The core profile requires
 `HEALTH_OK`, or a health whose every check is in a closed tolerated set or is a
-[scoped check](#scoped-health-checks) naming nothing the block owns. The
+[scoped check](#scoped-health-checks) naming nothing that holds the block. The
 tolerated set holds only `CHA_ERROR_SENDING_REPORT`: IBM Call Home's egress is
 the operator's network, not the cluster's state. A readiness timeout names the
 checks still blocking in its refusal detail. A read-only observation that is
@@ -2197,7 +2222,6 @@ partial bootstrap may continue only through its separately journaled recovery
 protocol: exact frozen scope, original private output custody and proved native
 postconditions select the next transition. An attempted effect with no proved
 result is unknown; absence does not permit repeating bootstrap or a setter.
-[B80](milestones/m2.md#b80) owns qualification and operator acceptance.
 
 Status and health use domain-owned read-only inspection. They distinguish
 proved completion, current readiness, degradation, unreachable targets and
@@ -2206,7 +2230,6 @@ implicitly. Remote probes receive only needed bound credentials through
 custody. Access resolves the selected owned cluster, native tool and trust under
 [the access contract](cli.md#resource-inspection-and-explicit-access). Health
 inspection never mutates or reveals keys.
-Unavailable commands remain unavailable until their slice delivers them.
 
 ## Monitoring scrape templates
 
@@ -2249,10 +2272,9 @@ also refuses; it must not mask a changed native template on upgrade.
 Native config-key provides no compare-and-set contract; concurrent external
 administrators must not edit this key during the operation.
 
-This moves the core request `Version` in `internal/storage/ceph/requests.go`
-and its content digest.
-Operations admitted by an earlier build require their original executable for
-continuation or removal. A separate operator repair of an existing cluster
+The core request `Version` in `internal/storage/ceph/requests.go` is part of
+its content digest, so an operation admitted by an earlier build requires its
+original executable for continuation or removal. A separate operator repair of an existing cluster
 must retain its own scoped evidence, preserve lifecycle records, reconfigure
 Prometheus and verify active scrape health. Stored template readback alone
 proves no daemon has reloaded. Inactive alert rules are definitions, not
@@ -2335,7 +2357,8 @@ cluster health. A request names only declared objects, so a check naming only
 pools or filesystems no applied object declares holds no block. A scoped check keeps every block
 from ready, as any other check does, when the detail omits it, when one of its
 lines matches none of its patterns, or when it names a system pool (a name
-starting with `.`) other than `.rgw.root`. Every other check, `MON_DOWN` and
+starting with `.`) other than `.rgw.root`. Every other check outside the core
+profile's [tolerated set](#resources-readiness-and-access), `MON_DOWN` and
 `MDS_INSUFFICIENT_STANDBY` included, keeps every block of the cluster from
 ready.
 
@@ -2386,7 +2409,9 @@ TCP port or port range, a service without a destination that grants them
 other forms, source-bound zones, policies and direct rules are not evaluated,
 so a permit given only that way refuses. An inactive or failed
 `firewalld.service` passes, and an unsettled one refuses `ingress-firewall`
-naming its state; a host with no such interface passes, because cephadm reports
+naming its state. A read that fails, times out or prints an unexpected form
+refuses `native-command` or `native-output`, naming the host and the read, and
+never passes. A host with no such interface passes, because cephadm reports
 that itself. cephadm opens a deployed daemon's TCP ports only in the default
 zone, after this check, and never opens VRRP, so the check assumes neither.
 It changes no firewall ([D220](milestones/backlog.md#d220)) and runs on every
@@ -2420,7 +2445,8 @@ what each zone does not permit with both remedies. Every `firewall-cmd` read
 runs as root, through `sudo -n` when the access user is not root and the
 `host.privilege` probe proved `sudo -n` yields root, because firewalld on a
 managed guest admits its reads only to an administrator. A read that fails or
-prints an unexpected form leaves the row unknown, never passed.
+prints an unexpected form leaves the row unknown, never passed, where an apply
+refuses it as stated above.
 
 The virtual IP holder proof: a service unit's or gateway's readiness wait
 proves, once its own observation is ready and within the same wait window, that
@@ -2493,10 +2519,10 @@ probes establish complete cleanup.
 
 The target removal has two phases: prove storage clients quiescent and remove
 owned services/resources while administrative hosts remain reachable; then
-require explicit host shutdown and prove Machine quiescence before any Machine
-or disk destruction. Dependencies preserve administrative access until online
-teardown completes. Neither phase authorizes powering off hosts implicitly.
-Read-only unknown-effect resolution precedes either phase, and a partial
+prove Machine quiescence before any Machine or disk destruction; power changes
+during removal follow [quiescence before
+removal](state-reconciliation.md#quiescence-before-removal). Dependencies
+preserve administrative access until online teardown completes. Read-only unknown-effect resolution precedes either phase, and a partial
 teardown keeps the bindings needed to resume.
 
 A managed cluster whose hosts are all Bootwright-owned virtual Machines that
@@ -2507,19 +2533,20 @@ domain and disks, including every OSD disk. The hosts' stop proof stands in
 for client quiescence only when no declared consumer of the cluster survives
 the removal; the [CephConsumer](ceph-resources.md#cephconsumer) record
 states that condition and its refusal for a consuming container cluster. A
-surviving host keeps the refusal below, and a bare-metal one retires only
+surviving host refuses [`ceph.hosts-survive`](cli/stops.md) with no effect
+(`TestACephClusterWhoseHostsSurviveNamesItsOwnRemedy`), and a bare-metal one retires only
 through the erase-backed
 [physical retirement](#devices-and-destructive-ownership). Retirement is
 recorded as durable evidence, so continuation never contacts the stopped hosts.
 
-Not yet met: removal while hosts survive, including storage-native consumer
-quiescence and complete owned cleanup; tracked as
-[B491](milestones/m2.md#b491).
+Not yet met: the online removal that the opening paragraphs of this section
+state, while hosts survive, including storage-native consumer quiescence and
+complete owned cleanup; tracked as [B491](milestones/m2.md#b491).
 
-The engine supports
-the [online ordering](state-reconciliation.md#quiescence-before-removal), but
-candidate Ceph capabilities refuse removal until their native proofs and
-inverses are qualified. Native principal or pool absence alone cannot prove
+Not yet met: a provided tiebreaker's `rm-cluster` footprint is unverified on
+the selected build; tracked as [B488](milestones/m2.md#b488).
+
+Native principal or pool absence alone cannot prove
 withdrawal of retained confidential material or sessions. B70 owns offline
 physical erase; removing services or releasing claims proves no erasure.
 
@@ -2556,8 +2583,8 @@ and needs neither the bootstrap host nor MON quorum.
   refused at the host prerequisites, holds no owner marker: with no record
   in that marker directory but a marker write's `.ownership-` stage name (a
   claim writes the marker first), no `authorized_keys` line of the cluster
-  SSH user tagged `bootwright:<owner>`, no sshd drop-in of this cluster, and
-  none of the FSID's own layout, which is
+  SSH user tagged `bootwright:<owner>`, no sshd drop-in and no podman engine
+  drop-in of this cluster, and none of the FSID's own layout, which is
   `/var/lib/ceph/<fsid>` (where cephadm keeps each of the FSID's daemons),
   `/var/log/ceph/<fsid>`, the FSID's logrotate file, a `ceph-<fsid>` unit
   file in `/etc/systemd/system` or its `ceph.target.wants`, and an
@@ -2572,7 +2599,8 @@ and needs neither the bootstrap host nor MON quorum.
   indistinguishable from an unclaimed one and is proved the same way, with
   no confirmation. Anything
   else, an FSID-scoped part on an unclaimed host among it, refuses
-  `tiebreaker-foreign` with no effect. The
+  `tiebreaker-foreign` with no effect; it and `tiebreaker-unreachable`
+  are reasons of the stop [`ceph.tiebreaker-unproved`](cli/stops.md). The
   inventory is the bounded read of cephadm's own layout every Ceph phase
   uses in place of `cephadm ls`, whose logging start writes host files
   ([cleanup facts](../.agents/knowledge/ibm-ceph-cleanup.md)).
@@ -2588,7 +2616,9 @@ and needs neither the bootstrap host nor MON quorum.
   sshd.service` applies it, and a second record says it reloaded;
   the registry
   credential `/etc/ceph/podman-auth.json`, removed under its recorded
-  descriptor metadata; and, while any native part remains, the package
+  descriptor metadata; the cluster's podman engine drop-in of the
+  [native pull route](#native-pull-route), removed under its record after the
+  credential; and, while any native part remains, the package
   cephadm binary's `rm-cluster --fsid <fsid> --force`, never `--zap-osds`,
   never the copy under `/var/lib/ceph/<fsid>`, the binary's package proof
   and its parser's declaration of every option passed both read before the
@@ -2596,8 +2626,7 @@ and needs neither the bootstrap host nor MON quorum.
   run and temporary directories, logrotate and sysctl files; with no Ceph
   cluster left, cephadm's `ceph.target`, its logrotate file and its
   `cephadm.log` files; and, when `/etc/ceph/ceph.conf` names the FSID, that
-  file, `ceph.pub` and the admin keyring. Its exact footprint on the selected
-  build is unverified.
+  file, `ceph.pub` and the admin keyring.
   Packages, images, firewall openings, users, disks, the OS and Bootwright's
   own records under `/var/lib/bootwright/ceph*/<fsid>` stay.
 - **Absence.** The inventory lists no daemon of the FSID, no unit file
@@ -2606,15 +2635,20 @@ and needs neither the bootstrap host nor MON quorum.
   `/var/log/ceph/<fsid>` nor the FSID's logrotate file exists,
   `/etc/ceph/ceph.conf` does not name the FSID, and neither the recorded
   `authorized_keys` line, this cluster's sshd drop-in, an owed sshd reload
-  nor the credential remains, the files read without following links. The FSID's systemd units, Podman objects, socket and temporary
+  nor the credential nor the podman engine drop-in remains, the files read
+  without following links. The FSID's systemd units, Podman objects, socket and temporary
   directories and sysctl fragments are absent. When
   removal attributed the default configuration to this FSID, the default
   public key and admin keyring are independently absent. Only then is the
   completion recorded beside the attempt and the
-  cluster's retirement evidence names the tiebreaker as cleaned.
-- **Recovery.** A lost reply leaves the effect unknown: the next attempt
-  observes first, completes without a command when absence is proved, and
-  otherwise repeats each removal under its attempt record. A reload owed
+  cluster's retirement evidence names the tiebreaker as cleaned. A part still
+  present after the effect refuses `not-removed` (`ceph.boundary-unproved`),
+  leaving the outcome unknown; the next destroy observes, then retries. A
+  residue with no part for `rm-cluster` refuses it before the attempt record.
+- **Recovery.** A lost reply leaves the effect unknown: the next invocation's
+  [resolution](state-reconciliation.md#resolution-outcomes) observes the
+  tiebreaker first and completes without a command when absence is proved;
+  otherwise a retry repeats each removal under its attempt record. A reload owed
   and not recorded done counts as part of the footprint, so a failed
   `sshd -t` or a lost reply after the unlink repeats the check and the
   reload, never the unlink, before completion. The removal
@@ -2653,8 +2687,7 @@ manager, the settings block (`mgr module enable`) and the monitoring unit
 (cephadm's derived `prometheus` module), and by every block that also holds
 `ceph/<cluster>`: the cluster block, NVMe-oF subsystems and their unit, the
 `rbd-mirror` unit, CephConsumers and CephReplications (on both of their
-clusters), whose manager use is not yet qualified beside a restart or
-another orchestrator writer. `ceph-rgw/<cluster>` is held by gateways and
+clusters). `ceph-rgw/<cluster>` is held by gateways and
 RGW-backed NFS exports, which write the cluster's `.rgw.root` and default
 realm. Every other block claims nothing: the other service units, CephFS-backed
 NFS exports, CephSMBResources, placement policies, pools (declared and a
@@ -2678,20 +2711,24 @@ that deadline. Each native SSH effect holds the published cephadm cache
 file's exact inode and metadata and the FSID directory's device, inode and
 mode, refusing `cache-unproved` when any of them moved; the directory's owner
 is proved only when the hold starts, because cephadm, as root, reassigns it
-to each daemon it deploys, a sibling block's included. A failure is the
-command's own answer, and refuses as before,
-only when the available manager it was sent to still holds one interval
-later, its orchestrator answers with cephadm, and the declaring `nfs`, `smb`
-or `dashboard` module answers a read-only command. A concurrent manager
-restart therefore never fails an unclaimed block. Readiness stays cluster-wide
+to each daemon it deploys, a sibling block's included.
+
+A failure of a manager-served declaration is the command's own answer, and
+refuses, only when the available manager it was sent to still holds one manager
+interval (`MANAGER_INTERVAL`) later, its orchestrator answers with cephadm, and
+the declaring `nfs`, `smb` or `dashboard` module answers a read-only command;
+otherwise the declaration is made again until the manager wait ends. A
+concurrent manager restart therefore never fails an unclaimed block. Readiness stays cluster-wide
 except for the [scoped checks](#scoped-health-checks), which keep from
 ready only the blocks owning the pools or filesystems they name: a sibling's
 transient health check delays, and never fails, a block before its readiness
 deadline.
 Per-invocation scratch is private. Reservations prevent conflicting local
 contexts from claiming the same target; a native name, process-local mutex or
-context lease alone cannot coordinate another controller. B79 qualifies the
-supported coordination scope and refuses unproved exclusivity before effects.
+context lease alone cannot coordinate another controller.
+
+Not yet met: refusal of unproved cross-controller exclusivity before effects;
+tracked as [B79](milestones/m2.md#b79).
 
 ### Shared host readings
 
@@ -2760,8 +2797,7 @@ claim. The request-derived deadline includes preparation, bounded resource
 creation, separate cluster and resource observation, and the readiness retry
 window; Go freezes it, the two phase budgets and the observation window as the
 request's `budgets`, and the worker uses them without deriving them; the
-gateway service unit freezes its observer's read bound as `observeBudget`. B491 continues to refuse online individual removal; whole-owned-cluster
-retirement remains supported.
+gateway service unit freezes its observer's read bound as `observeBudget`. A subsystem retires with its cluster.
 
 `nvmeof-native` names unavailable/refused qualified native commands;
 `nvmeof-identity` names a changed backing, gateway, authorization or native
@@ -2806,7 +2842,6 @@ refusals, never native stdout/stderr. This boundary follows Ceph's
 and [stdin token import](https://github.com/ceph/ceph/blob/v20.2.2/src/tools/rbd/action/MirrorPool.cc).
 Journal readiness follows native
 [image mirroring status](https://github.com/ceph/ceph/blob/v20.2.2/src/tools/rbd/action/MirrorImage.cc).
-Live qualification of the selected IBM build remains unrun.
 
 For `i` images (1–3), apply makes `8+3*i` bounded calls: prepare both pools,
 create/import token, enable each source image, observe both pools and each
@@ -2844,8 +2879,8 @@ config credential route. JSON realm/zone imports do not provide a period
 import: realm creation resets current-period identity, so they cannot safely
 bootstrap authenticated pulls from stored zone credentials. Bootwright does
 not clone upstream behavior with internal RADOS writes or accept an input
-that can only refuse at execution. Existing multisite refusals hold.
+that can only refuse at execution. Multisite refusals stay in force.
 
-Not yet met: no native secret-safe interface and no empirical
-initial-sync/failover evidence qualify RGW multisite; tracked as
+Not yet met: RGW multisite through a native secret-safe interface, with
+initial-sync and failover evidence; tracked as
 [B483](milestones/m2.md#b483).

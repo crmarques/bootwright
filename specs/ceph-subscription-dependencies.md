@@ -32,11 +32,15 @@ registration converged. A subscription host holding no repository the
 `packages`, its remedy naming the Machine, the Satellite and
 `spec.os.provided.subscription`. A subscription
 profile whose Entitlement is external, or declares no `spec.rhsm.satellite`
-with its `trustBundleRef`, refuses at plan. A `hostedTree` profile updating
-within its release from the CDN, an external registration or a configured
-repository keeps its hosted DVD, and one updating from a managed Satellite and
-a configured repository takes the Satellite alone
-([B1552](milestones/backlog.md#b1552)).
+with its `trustBundleRef`, refuses at plan. A `hostedTree` profile updating within its release from the CDN, an external
+registration or a configured repository keeps its hosted DVD, and one updating
+from a managed Satellite and a configured repository takes the Satellite alone;
+a host holding a newer package than its DVD fails `package-resolution` on a
+downgrade at host preparation.
+
+Not yet met: a `hostedTree` host updated within its release takes its RHEL
+dependencies from the source that updated it, or refuses at plan before any
+effect; tracked as [B1552](milestones/backlog.md#b1552).
 
 The frozen source of a subscription host carries its host, its profile (a
 provided host's names the bootstrap Machine's profile), the

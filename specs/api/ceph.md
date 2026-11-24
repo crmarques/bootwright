@@ -305,6 +305,19 @@ Omission or an empty map preserves provider defaults. This best-effort target
 is neither a process memory cap nor qualification of a reduced host budget;
 provider sizing and measured resource acceptance remain separate.
 
+### Host floor
+
+A managed cluster declares at least three hosts in `spec.topology.nodes`,
+except exactly one under `cephadm.bootstrap.singleHostDefaults: true`
+([Single-host testing](#single-host-testing)). `singleHostDefaults: true` with
+a node count other than one refuses at admission; fewer than three nodes
+without it refuses `ceph.unsupported-topology` at plan, naming the three-host
+requirement. Beyond
+that floor the native tools judge host counts and the
+[cluster execution budget](../ceph.md#cluster-execution-budget) bounds the
+deadline. `TestSingleHostTestClusterRequiresExplicitOptInAndTwoDisks` holds the
+single-host side.
+
 ### Single-host testing
 
 `cephadm.bootstrap.singleHostDefaults: true` selects an explicit test profile:

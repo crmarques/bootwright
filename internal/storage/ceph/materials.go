@@ -245,7 +245,7 @@ func cephDeadline(r Request, operation string) (time.Duration, error) {
 	}
 	deadline := time.Duration(nativeCalls*nativeCall+waits+60) * time.Second
 	if deadline > lifecycle.MaxDeadline && r.Action == "filesystem" && r.Filesystem != nil {
-		return 0, cephBudgetExceeded.Fail(fmt.Sprintf("CephFilesystem %s needs a run deadline of %s, past the %s every adapter run is held to: two native calls for each of the %d Ceph hosts of CephCluster %s and one for each of its %d data pools and %d subvolume groups", r.Filesystem.Name, deadline, lifecycle.MaxDeadline, len(r.Hosts), r.Cluster, len(r.Filesystem.DataPools), len(r.Filesystem.Groups)),
+		return 0, cephBudgetExceeded.Fail(fmt.Sprintf("CephFilesystem %s needs a run deadline of %s, past the %s bound Ceph holds its derived deadlines to: two native calls for each of the %d Ceph hosts of CephCluster %s and one for each of its %d data pools and %d subvolume groups", r.Filesystem.Name, deadline, lifecycle.MaxDeadline, len(r.Hosts), r.Cluster, len(r.Filesystem.DataPools), len(r.Filesystem.Groups)),
 			fmt.Sprintf("declare fewer spec.dataPoolRefs or spec.subvolumeGroups on CephFilesystem %s, or fewer entries in spec.topology.nodes of CephCluster %s", r.Filesystem.Name, r.Cluster))
 	}
 	if deadline > lifecycle.MaxDeadline {
@@ -437,6 +437,6 @@ func adapterRefusals() map[string]error {
 }
 
 func clusterHostBudget(cluster string, hosts int, stretch bool) (string, string) {
-	return fmt.Sprintf("CephCluster %s declares %d Ceph hosts, whose cluster run deadline of %s is past the %s every adapter run is held to", cluster, hosts, applyDeadline(hosts, stretch), lifecycle.MaxDeadline),
+	return fmt.Sprintf("CephCluster %s declares %d Ceph hosts, whose cluster run deadline of %s is past the %s bound Ceph holds its derived deadlines to", cluster, hosts, applyDeadline(hosts, stretch), lifecycle.MaxDeadline),
 		fmt.Sprintf("declare at most %d entries in spec.topology.nodes of CephCluster %s; B1183 tracks larger clusters", hostBound(stretch), cluster)
 }

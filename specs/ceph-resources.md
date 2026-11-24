@@ -6,28 +6,9 @@ This page owns the target resource contract approved through P2 in the
 and their bindings; [Storage](ceph.md) owns lifecycle, device safety and
 custody. [Provider coverage](ceph-coverage.md) owns release qualification.
 
-`CephPlacementPolicy`, `CephPool`, `CephRBDImage`,
-`CephFilesystem`, `CephSubvolume`, `CephClient`,
-`CephObjectUser`, under its [field record](#cephobjectuser-field-record),
-`CephObjectBucket`, under its [field record](#cephobjectbucket-field-record),
-`CephReplication` for one-way journal RBD mirroring,
-and `CephNFSExport`, under its [field record](#cephnfsexport), are
-admitted and realized. `CephSMBResource` is admitted under its
-[field record](#cephsmbresource) and realized by its SMB block once its
-samba images are authored under `spec.images` of its CephCluster
-([refusal table](ceph.md#refusal-table)). `CephNVMeoFSubsystem` is
-realized under its [field record](#cephnvmeofsubsystem), and a managed
-`CephConsumer` by its consumer block under its [field record](#cephconsumer).
-Native effects remain artifact-gated. [Storage admission](api/ceph.md)
-states current refusals.
-The target additions and migrations below belong to
-[B80](milestones/m2.md#b80), [B81](milestones/m2.md#b81),
-[B477](milestones/m2.md#b477) to
-[B483](milestones/m2.md#b483), [B489](milestones/m2.md#b489) and
-[B492](milestones/m2.md#b492), with schema/projection work in
-[B474](milestones/m2.md#b474). Approval defines the direction and resource
-model; it does not implement new kinds or authorize native execution. Examples
-are synthetic target documents, not runnable current-version examples.
+Native projections cite Ceph v20.2.1; [Provider coverage](ceph-coverage.md#release-qualification)
+qualifies the IBM image. [Storage admission](api/ceph.md) states the refusals,
+and the [milestones](milestones.md) own delivery state.
 
 ## Shared resource contract
 
@@ -88,6 +69,9 @@ Numeric limits and graph capacity are checked before effects; the native
 tools judge their own limits and report a refusal through `nativeError`. No
 new field inherits an undocumented default from another resource.
 
+Removal of a resource while its cluster remains refuses; a resource retires with
+its cluster's hosts, as [removal](ceph.md#removal-and-concurrency) states.
+
 ## Retained resource owners
 
 | Resource | Retained responsibility | Relationship to native services |
@@ -95,7 +79,7 @@ new field inherits an undocumented default from another resource.
 | `CephPlacementPolicy` | Reusable CRUSH placement and pool protection policy. | OSD topology supplies its proved failure domains; policy does not deploy OSDs. |
 | `CephPool` | Pool identity, replicated/EC protection, application, PG/autoscaler, quota, compression and supported mirroring intent. EC `rbd`/`cephfsData` pools derive irreversible overwrite enablement; mirroring is [B483](milestones/m2.md#b483)'s. | Services and resources reference owned pools; native auto-created pools require an explicitly recorded derived owner. |
 | `CephFilesystem` | Metadata/data-pool composition, default/layout, active ranks and standby/replay resource policy, declared subvolume groups; several filesystems per cluster. | `spec.mdsServiceRef` binds one declared MDS service whose `service_id` is the filesystem name; placement and container configuration belong to that service. One `ceph fs new` creates the native filesystem. |
-| `CephObjectGateway` | The realm, zone group and zone it creates (never with `--default`; only an export of one of its users makes them the defaults, under [CephNFSExport](#cephnfsexport)), its zone placement binding, its derived zone pools and its endpoint identity. | `spec.serviceRef` binds exactly one declared rgw service by full native identity; the gateway executes that service and the ingress whose `spec.backend_service` is it. It embeds no daemon placement, frontend, configuration or ingress specification. |
+| `CephObjectGateway` | The realm, zone group and zone it creates (never with `--default`; only an export of one of its users makes them the defaults, under [CephNFSExport](#cephnfsexport)), its zone placement binding, its derived zone pools and its endpoint identity. | `spec.serviceRef` binds exactly one declared rgw service by full native identity, as the [field record](#cephobjectgateway-field-record) states; the gateway embeds no daemon placement, frontend, configuration or ingress specification. |
 | `CephConsumer` | Managed Data Foundation handoff with per-consumer principals and private external-cluster details. The external-details arm remains refused under parked [B107](milestones/backlog.md#b107). | It waits for the resources and access material it describes; it neither creates an add-on nor becomes a general native-command resource. |
 
 Their non-daemon fields remain unless an owning approved change alters them. A
@@ -105,19 +89,14 @@ Group layout must select an attached eligible data pool, not merely any pool
 in the cluster. Multiple data pools require one default; the sole-pool
 normalization is recorded under [CephFilesystem](#cephfilesystem).
 
-`CephFilesystem.spec.mdsServiceRef` names its full native MDS service and is
-derived as `mds.<filesystem>` when omitted;
-`CephObjectGateway.spec.serviceRef` names its full native RGW service and is
-required. Both are current. The MDS `service_id` agrees with the native filesystem name.
-The rgw document's `rgw_realm`, `rgw_zonegroup` and `rgw_zone`, when present,
-agree with the gateway's `realm`, `zoneGroup` and `zone`. Canonical service
-identities are looked up in the qualified identity table, not recovered by
-naively splitting on dots. The gateway's endpoint is terminated by the declared
-ingress whose backend is that RGW service, else by the RGW service; the
-endpoint does not create another daemon owner.
+`CephFilesystem.spec.mdsServiceRef` and `CephObjectGateway.spec.serviceRef`
+name their full native services; [CephFilesystem](#cephfilesystem) and the
+[gateway field record](#cephobjectgateway-field-record) own how each resolves.
+Canonical service identities are looked up in the qualified identity table,
+not recovered by naively splitting on dots.
 
-Provider-created internal pools need not all be hand-authored. B477 records a
-derived owner, effective pool map, native identity and protection for every
+Provider-created internal pools need not all be hand-authored. The gateway
+records a derived owner, effective pool map, native identity and protection for every
 such pool before gateway readiness. A separately declared CephPool remains
 its own owner and cannot also be claimed as generated. Failure to determine
 the effective map or prove compatible protection prevents readiness and any
@@ -134,11 +113,11 @@ and no creation is ever forced.
 
 ### CephObjectGateway field record
 
-[B477](milestones/m2.md#b477) owns this record. Admission is current; the
-[gateway block](ceph.md#resources-readiness-and-access) realizes the realm,
+The [gateway block](ceph.md#resources-readiness-and-access) realizes the realm,
 zone group, zone, zone placement, its rgw service with or without TLS and the
-ingress that fronts it, which plans once its auxiliary images are authored;
-per-resource removal is [B491](milestones/m2.md#b491)'s.
+ingress that fronts it; planning refuses an ingress whose auxiliary image
+`spec.images` of its CephCluster does not set, as the
+[refusal table](ceph.md#refusal-table) states.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -178,8 +157,8 @@ same domain that derives node FQDNs.
 
 The gateway owns derived children it never declares as objects: the zone pools
 `<zone>.rgw.meta`, `.control`, `.log`, `.otp` and `.dedup` and every omitted
-placement pool, the shared `.rgw.root`, which the first gateway that proves it
-absent claims and its sibling gateways share, the per-realm `dashboard` system user
+placement pool, the shared `.rgw.root`, whose claim every gateway of the cluster shares
+([gateway block](ceph.md#resources-readiness-and-access)), the per-realm `dashboard` system user
 that the mgr dashboard module creates (never read for keys) and the
 ingress passwords cephadm generates. No declared CephPool can carry a
 derived pool name, because a CephPool name is a DNS label without `.`.
@@ -217,11 +196,8 @@ bindings ([native services](ceph-native-api.md)). A terminating service with
 TLS needs `spec.endpoint`: the certificate must name its FQDN, and readiness
 proves the served leaf by SHA-256 with that FQDN as SNI.
 
-The gateway's daemon placement and frontend port belong to the bound rgw
-service (`placement`, `spec.rgw_frontend_port`), its endpoint is the FQDN, and
-scheme, port and TLS belong to an ingress service whose `spec.backend_service`
-is the bound rgw service, with its TLS bindings. The gateway has no
-per-service RGW configuration options: they have no qualified effect contract.
+The gateway has no per-service RGW configuration options, because they have
+no qualified effect contract.
 
 Admission refuses, before any effect: a `serviceRef` that resolves to no
 declared service, names a non-rgw service or is bound by another gateway; a
@@ -290,6 +266,8 @@ values qualify validation but remain native or policy defaults unless an owning
 normalization rule explicitly materializes them; the pool and placement-policy
 requests the plan builds carry the same default for a size they leave unset.
 
+Not yet met: the gateway's derived zone pools and its placement-group budget take their size from `zonePoolReplicas` in `internal/storage/ceph/gateway.go`, which yields `4/2` under stretch, `2/2` under `singleHostDefaults` or a declared global `osd_pool_default_size` of 2, and `3/2` otherwise, so a declared pair of another value never reaches them; tracked as [B1789](milestones/m2.md#b1789).
+
 The [single-host test profile](api/ceph.md#single-host-testing) places a pool
 without a policy, and gateway-derived pools, across explicitly selected OSD
 disks instead of hosts. The selected disk count must be at least its replica
@@ -340,15 +318,12 @@ A pool requires `spec.role` at plan; the role derives the application
 (`rbd`, `cephfs` for both CephFS roles, `rgw`), and an authored
 `spec.application` must equal it. A replicated pool uses its policy's rule, or
 `replicated_rule` without one, and takes `replicated` values from the pool,
-then the policy, then 3/2. A policy and an erasure-coded pool are exclusive:
+then the policy, then the [cluster default pair](#replicated-protection). A policy and an erasure-coded pool are exclusive:
 an erasure-coded pool places itself through `spec.erasure.crushDeviceClass`.
 
 Pool intent, attempt, native ID and setting records use disjoint keys for
-each record type and native name. The worker records the native ID only
-after the monitor reports creation and the pool reads back with the frozen
-creation shape. An already-existing reply, or a same-name pool after a lost
-reply without a completed ID record, leaves the pool unproved and untouched.
-The attempt record alone grants no authority to change its settings.
+each record type and native name. Pool attempt, ID and adoption follow
+[resources, readiness and access](ceph.md#resources-readiness-and-access).
 
 ### Erasure coding
 
@@ -388,9 +363,9 @@ mutually exclusive, and zero or omission leaves the ratio unspecified.
 fraction. The PG bounds are non-negative, the minimum does not exceed the
 maximum when both are positive.
 
-Quota contains presence-sensitive integers `maxBytes` and `maxObjects` from 0
-to 9223372036854775807; an explicit zero is the native no-limit value and
-stays explicit, while omission means unspecified. Compression contains `mode`
+Quota contains integers `maxBytes` and `maxObjects` from 0
+to 9223372036854775807; an explicit zero and omission both freeze as `0`, the
+native no-limit value, which the worker sets and readiness observes. Compression contains `mode`
 (`none`, `passive`, `aggressive` or `force`), `algorithm` (empty, `lz4`,
 `snappy`, `zlib` or `zstd`), `requiredRatio` (a finite number, zero or omitted
 or within `(0,1]`) and the blob sizes `minBlobSize` and `maxBlobSize`
@@ -413,14 +388,12 @@ pool declares no PG bounds: `ceph fs new` sets its `pg_num_min`.
 Before any effect, a plan refuses a pool whose CRUSH rule would exceed the
 monitor's per-OSD placement-group bound: the sum of `pgNum × width` over the
 cluster's pools on the rule (width is the replica size, or `k+m`; a
-`cephfsMetadata` pool counts at least 16), plus one `.mgr` placement group
-times the effective default size (2 with the global 2/2 pair, else 3) and,
-on the cluster's pool rule, 32 placement groups times the zone pool size for
-each zone pool a CephObjectGateway of the cluster derives, plus 32
-placement groups times that size once for the shared `.rgw.root` when the
-cluster has a CephObjectGateway. The zone pool size is the effective default
-size on `replicated_rule`, and 4 on the rule of a
-[stretch cluster](ceph.md#stretch-topology). The sum must not
+`cephfsMetadata` pool counts at least 16), and, on the cluster's pool rule only, one
+`.mgr` placement group, 32 placement groups for each zone pool a
+CephObjectGateway of the cluster derives and 32 placement groups once for the
+shared `.rgw.root` when the cluster has a CephObjectGateway, each times the
+zone pool size. The zone pool size is the size of the
+[cluster default pair](#replicated-protection). The sum must not
 exceed 250 times the selected OSD count, at least
 3, or 3 for a rule restricted to a device class.
 
@@ -461,8 +434,7 @@ apply identity; no bootstrap credential or peer token is produced material.
 The [lifecycle owner](ceph.md#rbd-replication) defines custody and budgets.
 Removal retires only with all installed Machines of both clusters, a
 [provided stretch tiebreaker](ceph.md#a-provided-tiebreakers-removal) left to
-its cluster block; removal while either cluster survives refuses under
-[B491](milestones/m2.md#b491).
+its cluster block; removal while either cluster survives refuses.
 
 RGW multisite and its secondary gateway reference remain unimplemented because
 of the [native credential-interface blocker](ceph.md#rgw-multisite-blocker).
@@ -470,8 +442,7 @@ This record admits no RGW arm. CephFS snapshot mirroring continues to refuse.
 
 ## CephRBDImage
 
-One object declares one image. [B81](milestones/m2.md#b81) owns its schema,
-native identity and lifecycle; gateway items consume it rather than creating
+One object declares one image. Gateway items consume it rather than creating
 untracked images. The
 [native RBD interface](https://docs.ceph.com/en/tentacle/rbd/rados-rbd-cmds/)
 creates images in initialized pools; Bootwright always supplies the pool
@@ -485,15 +456,11 @@ explicitly and does not rely on the CLI's default pool or administrator user.
 | `dataPoolRef` | Optional same-cluster qualified RBD data pool. Omission uses the image pool; EC requires the provider's overwrite and workload prerequisites. |
 | `features` | Optional set of native image-feature names. Omission freezes qualified creation defaults; explicit empty means no optional features and must pass provider/client requirements. |
 
-The initial native image name is `metadata.name`. Non-default RBD namespaces,
-striping, encryption and other supported creation options need a source-backed
-field record in B81 before promotion; they are neither guessed nor hidden in
-an arbitrary parameter map. Existing images with matching names remain foreign
+The initial native image name is `metadata.name`. Creation options outside
+the promotion record are refused as unknown fields ([Not admitted](#cephrbdimage)).
+Existing images with matching names remain foreign
 unless recorded ownership and native identity agree. Readiness verifies size,
-pool/data pool, native image ID and effective features. Online removal, with
-its snapshot, clone and watcher proof, belongs to
-[B491](milestones/m2.md#b491) (D160, OD2); an image retires with its cluster's
-hosts.
+pool/data pool, native image ID and effective features. An image retires with its cluster's hosts.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -508,8 +475,6 @@ spec:
 ```
 
 ### Promotion record
-
-Upstream facts are Ceph v20.2.1 and stay unverified for the IBM image.
 
 | Field | Grammar and rule | Native projection |
 | --- | --- | --- |
@@ -555,13 +520,10 @@ the features plus the implicit `data-pool`, and that the image is no clone
 ([Info.cc](https://github.com/ceph/ceph/blob/v20.2.1/src/tools/rbd/action/Info.cc#L226-L238)). A consumer's
 snapshot does not make the image unready.
 
-Not admitted, as unknown fields:
+RBD namespaces, striping, object size, encryption and QoS are not fields and
+refuse `api.field`.
 
-- RBD namespaces, parked by D160 (OD26); they also change client cap scope,
-  which [B489](milestones/m2.md#b489) owns;
-- striping and object size, parked by D160 (OD26);
-- encryption, parked by D160 (OD26); it also needs a Secrets binding;
-- QoS.
+Basis: D160 (OD26) for namespaces, striping, object size and encryption.
 
 Image-mode mirroring is declared through an explicit
 [CephReplication](#cephreplication).
@@ -617,12 +579,10 @@ grants inside one cap are separated by a comma and a space; `<profile>` is `rbd`
 | `osd` | `profile <profile> pool=<poolRef>`, then one more `profile <profile> pool=<data pool>` grant for each derived data pool in sorted order |
 
 With no derived data pool the caps name only `poolRef`. The `mgr` cap names
-only `poolRef`: least privilege keeps the data pools off it, and whether a
-consumer needs them there is unverified until the owner's live client row. The
+only `poolRef`: least privilege keeps the data pools off it. The
 worker proves every data pool is owned under its recorded native pool ID
-before it generates a key. A client whose `poolRef` is erasure-coded still
-refuses at plan; an erasure-coded pool reaches a client only as an image's
-data pool. An image later added to or removed from the pool changes the
+before it generates a key. An erasure-coded `poolRef` refuses at plan, as
+[erasure coding](#erasure-coding) states. An image later added to or removed from the pool changes the
 client's frozen request, which follows the destroy/fresh-apply rule of
 [lifecycle and migration gates](#lifecycle-and-migration-gates).
 User-supplied arbitrary capabilities and imported keys are not part of the
@@ -646,7 +606,7 @@ observation and removal binds the path the subvolume's creation evidence
 reports, refusing when that proof is missing or names another filesystem or
 group. Before generating a key the worker proves the filesystem's recorded
 native ID and, for a subvolume, its recorded marker, its recorded path and the
-path `fs subvolume getpath` reports now. A client of a filesystem or subvolume
+path `fs subvolume getpath` reports at that point. A client of a filesystem or subvolume
 plan propagates that resource's plan refusals and orders after its block.
 
 The generated key enters produced-material custody before client readiness,
@@ -780,8 +740,6 @@ depends on the cluster and image blocks.
 
 ### Promotion record
 
-Upstream facts are Ceph v20.2.1 and stay unverified for the IBM image.
-
 | Field | Frozen value | Native projection |
 | --- | --- | --- |
 | `metadata.name` | The filesystem name, under the [one name rule](api.md#object-names); the block is `ceph-filesystem-<name>`. | `<fs>` of `fs new`. |
@@ -821,8 +779,9 @@ FSMap flag and never uses `fs volume`. An attached data pool is never added
 again: the monitor's pool check refuses it before its no-op
 ([FSCommands.cc](https://github.com/ceph/ceph/blob/v20.2.1/src/mon/FSCommands.cc#L1077-L1092)).
 Subvolume groups are created only after every active rank is held, each with
-every attribute explicit; an owned group whose attributes differ is created
-once more, which rewrites them
+every attribute explicit; within the filesystem block's own apply, an owned
+group whose attributes differ is created once more, which rewrites them, and
+inspection never rewrites one
 ([volume.py](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/volumes/fs/volume.py#L1093-L1111)).
 
 Before `fs new` the worker proves, in order: its ownership mark, the pools it
@@ -830,9 +789,8 @@ created under their recorded IDs carrying no other filesystem's key, that no
 filesystem of the name exists without its creation record, that the FSMap
 admits another filesystem when one exists (`enable_multiple`,
 [FSCommands.cc](https://github.com/ceph/ceph/blob/v20.2.1/src/mon/FSCommands.cc#L216-L221)),
-and that enough standby daemons of the bound service are available for the
-active ranks plus the larger of the wanted standbys and one standby-replay
-follower per rank. Its attempt record `ceph-filesystem-attempt-v1` precedes `fs new`, and each
+and that the bound service has at least as many standby daemons as the
+[admission coverage](#cephfilesystem) count. Its attempt record `ceph-filesystem-attempt-v1` precedes `fs new`, and each
 subvolume group's `ceph-subvolume-group-attempt-v1` precedes `fs subvolumegroup
 create`; a lost reply is adopted only with that record and the frozen pools or
 group.
@@ -843,18 +801,18 @@ group.
 | `filesystem-identity` | The declared filesystem differs from the recorded one, the native filesystem ID differs from the recorded one, its pools differ, or a recorded filesystem is gone. |
 | `filesystem-multiple-disabled` | Another filesystem exists and the FSMap disables multiple filesystems. |
 | `foreign-subvolume-group` | A declared group exists that this operation did not create. |
-| `mds-coverage` | Fewer standby daemons of the bound service than the ranks, followers and wanted standbys need. |
+| `mds-coverage` | Fewer standby daemons of the bound service than the [admission coverage](#cephfilesystem) count. |
 
 Readiness proves the recorded filesystem ID, the metadata and data pools by
 their recorded IDs in frozen order, `max_mds`, `allow_standby_replay` and
 `standby_count_wanted`, every rank below `max_mds` held by an `up:active`
 daemon of the bound service, one `up:standby-replay` follower per rank when
-replay is declared, at least the wanted standbys, and every declared group
+replay is declared, its `up:standby-replay` followers plus its `up:standby`
+daemons numbering at least `standbyCountWanted`, and every declared group
 with its owner, mode, layout pool and quota
 ([group.py](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/volumes/fs/operations/group.py#L113-L152)).
 A drifted value is not ready, never a refusal; an undeclared group is not read.
-Online removal moved to [B491](milestones/m2.md#b491) by D160 (OD2 (a)); a
-filesystem retires with its cluster's hosts.
+A filesystem retires with its cluster's hosts.
 
 ## CephSubvolume
 
@@ -876,11 +834,8 @@ constructing the native internal directory layout.
 `metadata.name` is the native subvolume name within its parent scope. A
 positive quota is a limit, not a reservation or guarantee of free capacity.
 Readiness checks the native subvolume identity/path, layout, quota and owner
-metadata. Online removal moved to [B491](milestones/m2.md#b491) by D160
-(OD2 (a)), with the proof that the native `fs subvolume rm`, which moves a
-subvolume to the trash and purges it later, has settled; a subvolume retires
-with its cluster's hosts. This does not introduce snapshot retention or
-cloning by implication.
+metadata. A subvolume retires with its cluster's hosts. This introduces no snapshot
+retention or cloning by implication.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -912,8 +867,7 @@ Admission refuses with `api.invariant`, before any effect:
 
 ### Promotion record
 
-Upstream facts are Ceph v20.2.1 and stay unverified for the IBM image. The
-block is `ceph-subvolume-<name>`, and `metadata.name` follows the
+The block is `ceph-subvolume-<name>`, and `metadata.name` follows the
 [one name rule](api.md#object-names). It requires its CephFilesystem and depends by ID on its
 cluster's core and image blocks, never through `Requires CephCluster`
 (D159 clause 10), so a destroy removes the subvolume before its filesystem and
@@ -950,7 +904,9 @@ It then sets the user metadata `bootwright-owner` to the operation ID
 ([fs-volumes.rst](https://github.com/ceph/ceph/blob/v20.2.1/doc/cephfs/fs-volumes.rst#L572-L575))
 and reads it back with `fs subvolume metadata ls`. A
 [lost reply](state-reconciliation.md#mutation-safety) is adopted only with the
-attempt record and the frozen shape. Bootwright never runs
+attempt record and the frozen shape. Before the path is recorded, an adopted
+subvolume that differs from the frozen shape in mode alone is created once
+more; any other difference refuses `subvolume-identity`. Bootwright never runs
 `fs subvolume rm`, `resize`, `snapshot`, `clone`, `authorize`, `evict`,
 `earmark`, `metadata get` or `fs volume`.
 
@@ -974,9 +930,8 @@ parked by D160 (OD26 (a)); normalization and case sensitivity are
 ## CephNFSExport
 
 One object owns exactly one export of one declared nfs service.
-[B478](milestones/m2.md#b478) owns this record. Admission and execution are
-current; [Storage](ceph.md#resources-readiness-and-access) owns the export
-block, and per-resource removal is [B491](milestones/m2.md#b491)'s. Daemon
+[Storage](ceph.md#resources-readiness-and-access) owns the export
+block. Daemon
 placement, ports and ingress belong to the [native services](ceph-native-api.md).
 
 ```yaml
@@ -1035,7 +990,7 @@ and keeps cephadm's snake_case spelling. Its members are closed:
 | `fsal.name` | Required: `CEPH` with a filesystem or subvolume binding, `RGW` with `objectUserRef`; any other pairing refuses. | None. |
 | `fsal.fs_name` | `CEPH` only: name of the bound filesystem; an authored value must agree with the binding. | The bound filesystem. |
 | `fsal.cmount_path` | `CEPH` only: clean absolute path that is `/`, equal to `path`, or an ancestor directory of `path`. | `/`. |
-| `clients[]` | Each entry requires a non-empty `addresses` set of literal IP addresses or CIDRs, plus `access_type` and `squash` with the export-level tokens. | Addresses take their canonical form (masked prefix or bare address). |
+| `clients[]` | Optional; when omitted, the export serves every address at the export-level `access_type` and `squash`. Each entry requires a non-empty `addresses` set of literal IP addresses or CIDRs, plus `access_type` and `squash` with the export-level tokens. | Addresses take their canonical form (masked prefix or bare address). |
 
 Bootwright narrows native in three explicit restrictions. The cmount rule is
 an ancestor-directory rule, stricter than native's substring test, so a
@@ -1045,7 +1000,8 @@ unique within the export after canonicalization, because NFS-Ganesha applies
 the first client block that matches and a repeat would be a silent no-op.
 Normalization freezes the defaults into effective state, keeps authored
 values and is idempotent; `protocols` and a subvolume binding's `path` are
-never added. Explicit empty `protocols`, `transports` or `sectype` lists refuse.
+never added. The frozen `squash` default is `no_root_squash`, so an export that
+omits `squash` serves client root as root. Explicit empty `protocols`, `transports` or `sectype` lists refuse.
 
 Refused members name the field, the reason and the next step: `export_id`
 (the NFS manager generates the export ID, which Bootwright records),
@@ -1240,17 +1196,11 @@ daemons, the pool `.smb` and the subvolume earmarks `smb.cluster.<cluster_id>`;
 none can be declared: an `smb` service and `smb` in `spec.mgrModules`
 refuse, and no CephPool can be named `.smb`.
 
-Native auth references resolve by native resource type and ID within the
-objects named by `resourceRefs`; unused, ambiguous or foreign references
-refuse. Dependency edges are extracted from the qualified native schema, not
-guessed from strings. Native `linked_to_cluster` records association and
-removal ownership; it does not add a reciprocal creation/readiness dependency
-to the cluster's auth-reference edge. Native generated services, authentication
-children and placement belong to the SMB manager resource that creates them. No competing
-`services` declaration may claim them. Public native input omits secret
-leaves, while the protected execution artifact contains the bound native form.
-Native `intent: removed` is not apply-time destructive authorization; deletion
-is generated only by the authorized removal lifecycle.
+Dependency edges are extracted from the qualified native schema, not guessed
+from strings. Native generated services, authentication children and placement
+belong to the SMB manager resource that creates them. No competing `services`
+declaration may claim them. Public native input omits secret leaves, while the
+protected execution artifact contains the bound native form.
 
 The file-chain example below uses a separate SMB subvolume from NFS; shared
 NFS/SMB exposure remains forbidden. Assume `documents-smb-data` is an owned
@@ -1328,9 +1278,9 @@ spec:
       secretRef: files-smb-user
 ```
 
-CephSMBResource is admitted and realized by its SMB block once the samba
-images of its CephCluster are authored under `spec.images`; until then
-planning refuses it as the [refusal table](ceph.md#refusal-table) states.
+Planning refuses a CephSMBResource whose CephCluster does not set both `samba`
+and `samba_metrics` under `spec.images`, as the
+[refusal table](ceph.md#refusal-table) states.
 
 ## CephNVMeoFSubsystem
 
@@ -1395,8 +1345,7 @@ spec:
 
 ## CephConsumer
 
-A `CephConsumer` is the Ceph side of one downstream consumer, today one Data
-Foundation consumer. Its arm says what it is, so it has no `type`; the
+A `CephConsumer` is the Ceph side of one Data Foundation consumer. Its arm says what it is, so it has no `type`; the
 managed arm names what the consumer attaches, and the consumer block
 `ceph-consumer-<name>` realizes the
 principals and the external-cluster details that a consuming package places
@@ -1422,7 +1371,7 @@ spec:
 | `dataFoundation.rbdPoolRef` | Required replicated CephPool of role `rbd` of the same cluster. |
 | `dataFoundation.filesystemRef` | Required CephFilesystem of the same cluster declaring the subvolume group `csi`. |
 | `dataFoundation.objectGatewayRef` | Optional CephObjectGateway of the same cluster with an endpoint. |
-| `dataFoundation.cephxKeyType` | `aes` (default) or `aes256k`: the type of every key the consumer mints; it must equal a key type its cluster declares ([CephX proof](ceph.md#frozen-release-and-trust)). |
+| `dataFoundation.cephxKeyType` | `aes` (default) or `aes256k`: the type of every key the consumer mints. When its cluster declares `spec.security.cephx.keyType`, it must equal that type ([CephX proof](ceph.md#frozen-release-and-trust)). |
 | `externalDetails.fromSecretRef` | An `opaque` Secret for an external cluster; refused, parked as [B107](milestones/backlog.md#b107). |
 
 Admission also requires a declared prometheus service on the cluster, because
@@ -1443,7 +1392,8 @@ nodes that run it.
 | Direct RGW placement selects fewer daemons than eligible hosts | Planning requires an ingress VIP or a placement whose count covers its selected hosts. |
 | Disallowed key type, missing native prerequisite or mismatched owned identity | Realization refuses before creating credentials; correct the declared prerequisites or restore the original owned state. |
 | Removing a consumer while its hosts survive, or with physical hosts | Removal refuses; consumer retirement requires every installed host to be an owned virtual Machine removed by the same destroy, a [provided stretch tiebreaker](ceph.md#a-provided-tiebreakers-removal) left to its cluster block. |
-| Removing a consumer while a consuming container cluster survives the removal | Removal refuses before registration, naming the consuming cluster and the consumer; retirement also requires every container cluster whose `fdf` package names the consumer to be removed by the same destroy, its nodes owned virtual Machines that destroy stops and deletes. A consumer whose `fdf` block started but never completed still makes the destroy refuse. A surviving consumer waits for [B491](milestones/m2.md#b491)'s consumer quiescence. |
+| Removing a consumer while a consuming container cluster survives the removal | Removal refuses before registration, naming the consuming cluster and the consumer; retirement also requires every container cluster whose `fdf` package names the consumer to be removed by the same destroy, its nodes owned virtual Machines that destroy stops and deletes. A consumer whose `fdf` block started but never completed still makes the destroy refuse. |
+| An external-details check that fails after the credentials exist | The block offers nothing, clears the assembled material and ends with outcome unknown: apply stops `ceph.unproved` and observation stops `ceph.evidence-mismatch`; repeat the operation, which observes the Ceph state again ([Consumer key custody](#consumer-key-custody) lists the checks). |
 
 The consumer block depends on the cluster, the pool, the filesystem, the
 gateway and the monitoring unit, is exclusive on its cluster, and runs on the
@@ -1452,13 +1402,12 @@ FSID, the pool's `rbd` application under its recorded ID, the `csi` group, a
 non-empty `prometheus` endpoint in `ceph mgr services`, the gateway's realm,
 zone group and zone, and that the monitors allow the declared key type; any
 failure refuses, naming the missing prerequisite or the allowed key types.
-It then mints, for this consumer and this apply operation, five CephX
-principals and, with a gateway, one RGW user, each named from a digest of the
-apply operation's identity and the consumer's name. The digest's domain tag
-`bootwright.storage-export.principal-v1`, the ownership mark
-`bootwright-managed-export` and the `/var/lib/bootwright/ceph` layout keep
-the names they had before the kind became `CephConsumer`, so no live
-principal changes name:
+It then mints, for this consumer and the apply operation of the block's
+original attempt, five CephX principals and, with a gateway, one RGW user, each
+named from a digest of that original operation's identity and the consumer's
+name. The digest's domain tag is `bootwright.storage-export.principal-v1`, the
+ownership mark is `bootwright-managed-export` and retained material lives under
+`/var/lib/bootwright/ceph`:
 
 | Principal | `mon` | `mgr` | `osd` | `mds` |
 | --- | --- | --- | --- | --- |
@@ -1468,7 +1417,8 @@ principal changes name:
 | CephFS node | `allow r, allow command 'osd blocklist'` | `allow rw` | `allow rw tag cephfs *=<filesystem>` | `allow rw` |
 | CephFS provisioner | `allow r, allow command 'osd blocklist'` | `allow rw` | `allow rw tag cephfs metadata=<filesystem>` | `allow *` |
 
-These are the exporter's restricted-authorization capabilities, whose
+`exportCaps` in `internal/storage/ceph/export.go` owns the table, which
+`TestConsumerCapsTableMatchesExportCaps` holds equal. These are the exporter's restricted-authorization capabilities, whose
 privileged grants serve ocs-operator's health checks and CSI provisioning.
 Go freezes them as the request's `principals` and judges the created
 principals against them; the worker applies them.
@@ -1488,7 +1438,9 @@ not isolation.
 
 Each CephX key is generated at the declared type and retained under client
 custody ([native-side retention](secrets.md#native-side-retention)) before its
-native add; a lost reply recaptures it and never regenerates. The RGW user is
+native add; a lost reply recaptures it and never regenerates. A continuation
+derives the same names and reuses the retained keys; an apply of a completed
+consumer mints nothing. The RGW user is
 created by `radosgw-admin user create
 --uid=<minted> ... --gen-access-key --gen-secret`, never with
 `--access-key` or `--secret-key` on any argument list; its JSON reply is read
@@ -1532,26 +1484,26 @@ RGW keys are non-empty, and `ceph-rgw-tls-cert` is present exactly when the
 gateway terminates TLS. Its evidence names the principals, their capabilities
 and key type, the RGW user, the recorded leader and the entries by name and
 kind; no key, key digest, certificate private key or detail reaches a
-request, record, evidence, log, diagnostic or output. Observation compares
+request, record, evidence, log, diagnostic or output. A failed check follows
+the external-details row of [Consumer refusals](#consumer-refusals), which
+`TestExportProducedDetailsValidator` holds for the checks. Observation compares
 each principal's key and capabilities privately and never writes.
 
-The consumer block retires with its cluster when every host is a
-Bootwright-owned virtual Machine the same destroy removes and its container
-clusters meet the last refusal above. Only then does the hosts' stop proof stand in for the consumer's quiescence.
+The consumer block retires with its cluster under the two removal rows of
+[Consumer refusals](#consumer-refusals); the hosts' stop proof then stands in
+for the consumer's quiescence.
 A consumer that survives the removal, such as a cluster on physical nodes,
 makes the removal refuse before registration, naming the consuming cluster and
 the consumer, and the cluster's own retirement refuses with it
 (`TestRetirementRefusesBeforeRegistrationWhileAConsumerSurvives`,
-`TestADestroyRefusesWhileAPhysicalCompactConsumerSurvives`), until
-[B491](milestones/m2.md#b491) proves a surviving consumer quiescent. A context
+`TestADestroyRefusesWhileAPhysicalCompactConsumerSurvives`). A context
 whose Ceph is virtual and whose consuming cluster is not therefore has no full
-destroy until then, and `apply --dry-run` says so before the first apply: the apply's
+destroy, and `apply --dry-run` says so before the first apply: the apply's
 plan carries a `plan.consumer-outlives-destroy` warning naming the consuming
 cluster and the consumer, which the removal engine derives from the same decision
 that refuses the destroy
 ([quiescence before removal](state-reconciliation.md#quiescence-before-removal)).
-Otherwise its removal refuses with the cluster's other resources, and revoking
-one consumer while the cluster stays is B491's.
+Otherwise its removal refuses with the cluster's other resources.
 
 ### Attached gateway DNS
 
@@ -1570,8 +1522,7 @@ function, which the add-on consumer facts read through the same attached-gateway
 lookup; no other package reads `objectGatewayRef`. The consumer declaration owns
 the contribution; the DNS
 service owns its frozen publication and inverse, so shared gateway contributions
-are deduplicated and retire with that service. Independent consumer revocation
-while its cluster remains belongs to [B491](milestones/m2.md#b491).
+are deduplicated and retire with that service.
 
 The consumer depends on the managed DNS blocks. Before creating credentials and
 when observing readiness, it checks resolution read-only from the bootstrap
@@ -1584,11 +1535,9 @@ that remains the live [B761](milestones/m4.md#b761) acceptance gate.
 
 ### CephObjectUser field record
 
-[B477](milestones/m2.md#b477) owns this record. One RGW user in the zone of one
-CephObjectGateway, realized by its
+One RGW user in the zone of one CephObjectGateway, realized by its
 [user block](ceph.md#resources-readiness-and-access). Accounts, tenants,
-subusers, Swift keys, capabilities and quotas are not admitted;
-per-resource removal is [B491](milestones/m2.md#b491)'s.
+subusers, Swift keys, capabilities and quotas are not admitted.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -1634,12 +1583,11 @@ refusals.
 
 ### CephObjectBucket field record
 
-[B477](milestones/m2.md#b477) owns this record. One S3 bucket of one
-CephObjectUser in that user's CephObjectGateway, with an optional native
-bucket policy, realized by its
+One S3 bucket of one CephObjectUser in that user's CephObjectGateway, with an
+optional native bucket policy, realized by its
 [bucket block](ceph.md#resources-readiness-and-access). Tenants, versioning,
 object lock, lifecycle, quotas, CORS, website and access-control lists are not
-admitted; per-resource removal is [B491](milestones/m2.md#b491)'s.
+admitted.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -1703,30 +1651,21 @@ the bound gateway's planning refusals.
 
 ## Remaining resource families and consuming gates
 
-These families use the shared resource envelope and explicit dependency model.
-The table fixes their ownership boundaries and native identity tuples. Their
-consuming items publish exact kind/field records for the qualified provider
-before promotion; this page does not fabricate native declarative schemas for
-imperative interfaces or admit arbitrary extension maps. All supported
-provisioning rows remain required by the coverage matrix.
+These families have no kind of their own. Each row states what a declaration
+of the family meets and where to declare the need instead. This page admits no
+arbitrary extension map and no native declarative schema for an imperative
+interface.
 
-| Family and owner | Identity and references that the field record must preserve | Default and lifecycle boundary |
+| Family | Refusal at admission | Next step |
 | --- | --- | --- |
-| Object realm/zonegroup/zone, B477/B483 | Resource identity includes the owned realm/zonegroup/zone IDs and parent references; zone pool layout references owned CephPools. An object gateway binds its zone and native RGW service. | No ambient default realm/zone or untracked pools. One owner publishes shared realm/period state; peers reference it. |
-| Object accounts/users, B477 | Native account/user identity scoped by gateway/realm and tenant where supported; explicit account relationship and principal purpose. Users without tenant or account are current as `CephObjectUser` ([field record](#cephobjectuser-field-record)); accounts and tenants are not. | No implicit administrator or account adoption. Bound or generated keys enter custody once; retries do not rotate them. |
-| Object buckets/policies, B477 | Gateway scope, explicit owning principal/account, native bucket name and recorded native identity; policy principal/resource references resolve declared owners. Buckets of a `CephObjectUser` with a native bucket policy are current as `CephObjectBucket` ([field record](#cephobjectbucket-field-record)), whose policy is the native document with principals RGW resolves, not Bootwright; account-owned buckets and tenants are not. | Supported native policy documents retain their format. No ambient owner, untracked generated user or guessed tenant. Bucket deletion needs data-loss authorization and proved child ownership; foreign objects/dependents prevent unqualified cascade. |
-| CephX/client access, B80/B489 | `CephClient` owns one principal with exactly one scope: an RBD pool with its derived data pools, a CephFilesystem or a CephSubvolume; B489 extends references to gateway resources and explicit access scope. | No default full administrator caps. Qualified caps derive from requested resource access or validated native capability syntax; unrestricted caps need an explicit privileged purpose. Manager-generated NFS/SMB principals are derived children, not duplicate resources. |
-| NVMe-oF gateway resources, B480 ([field record](#cephnvmeofsubsystem)) | Native service/group, subsystem NQN, listener address/transport, namespace ID and `CephRBDImage` reference; initiator NQN/host authorization links to the subsystem. | No automatic unowned image creation or wildcard host access. Defaults and generated IDs are frozen/captured. Listener reachability, ANA/HA and the security modes the native tools accept are qualified together. |
-| iSCSI resources, B481 | Not realized: no iSCSI kind exists, and admission refuses `service_type: iscsi` at that field. | Refused before any effect; block access over the network uses NVMe-oF (B480). No NVMe field substitutes for an iSCSI one. |
-| Replication peers, B483 | Explicit source and destination cluster/resource references, protocol/replication mode, peer identity, endpoint trust and credential ownership. | Both endpoints are declared managed resources. One relationship owner coordinates bootstrap and removal; no ambient peer lookup, context crossing or foreign adoption. |
-| Access material/handoff, B489 | Declared principal/resource set, selected trust/endpoints and produced-material identity; managed `CephConsumer` material (its produced schema, principals and custody) belongs to [B86](milestones/m4.md#b86), which reuses this boundary; `CephConsumer` retains its own consumer shape. | Material is scoped, privately captured and withdrawn through custody. A CephClient's keyring is revealed only through the [client keyring export](cli.md#client-keyring-export), and the dashboard password and object-user key pairs only through [storage dashboard access](cli.md#storage-dashboard-access); no other reveal command exists. |
+| Object realm, zone group and zone | No such kind exists; the realm, zone group and zone are the `realm`, `zoneGroup` and `zone` fields of a CephObjectGateway, and no ambient default realm or zone is used. | Declare a [CephObjectGateway](#cephobjectgateway-field-record). |
+| Object accounts and tenants | Not admitted by [CephObjectUser](#cephobjectuser-field-record) or [CephObjectBucket](#cephobjectbucket-field-record). | Omit them; users and buckets are without tenant or account. |
+| iSCSI | Admission refuses `service_type: iscsi` at that field, and no iSCSI kind exists; no NVMe field substitutes for an iSCSI one. | Use [CephNVMeoFSubsystem](#cephnvmeofsubsystem) for block access over the network. |
+| Replication peers beyond [CephReplication](#cephreplication) | A peer outside the two declared managed clusters, RGW multisite, snapshot-based mirroring and CephFS snapshot mirroring are not realized; no ambient peer lookup, context crossing or foreign adoption. | Declare one CephReplication between two managed clusters. |
+| Access material and handoff beyond [CephClient](#cephclient), [CephObjectUser](#cephobjectuser-field-record) and [CephConsumer](#cephconsumer) | No other reveal command exists: a CephClient's keyring is revealed only through the [client keyring export](cli.md#client-keyring-export), and the dashboard password and object-user key pairs only through [storage dashboard access](cli.md#storage-dashboard-access). Managed `CephConsumer` material (its produced schema, principals and custody) belongs to [B86](milestones/m4.md#b86), which reuses this boundary. | Use the reveal command named in the row. |
 
-A native name in an imperative provider request is always projected from this
-declared identity/reference graph. These records also settle availability of
-native account IDs, bucket IDs, namespace/LUN IDs, quotas, security modes and
-client limits. They cannot silently defer a supported family because its old
-Bootwright wrapper lacked a field. B477/B480/B481/B483/B489 own bounded API
-extensions and qualified projection before their implementation promotion.
+A native name in an imperative provider request is always projected from the
+declared identity/reference graph.
 
 ## Consumer chains and ordering
 
@@ -1775,9 +1714,10 @@ generated identities before dependent effects; ambiguous responses require
 read-only resolution and never a fresh allocation or credential rotation.
 
 Readiness inspects the actual resource and its references against that frozen
-intent. Native asynchronous creation, deletion and initial synchronization
-have bounded waits and explicit unfinished/unknown outcomes. Resources do not
-repair drift or create data during inspection. Client data tests remain
+intent. Each native create, delete and initial synchronization ends ready,
+unfinished or unknown within the bounded wait its block states in
+[Storage](ceph.md#resources-readiness-and-access). Inspection never repairs
+drift and never creates data. Client data tests remain
 operator acceptance. Changes to completed declarations retain the existing
 destroy/fresh-apply rule; this contract introduces no resize, snapshot,
 failover-management or continuous reconciliation API.
@@ -1790,12 +1730,3 @@ withdrawal. A parent delete may remove native-generated children only when its
 qualified effect contract names and proves them. Foreign dependencies,
 unexplained identity changes and unbounded cascades refuse. Cluster teardown
 does not substitute for per-resource absence and ownership evidence.
-
-Each consuming item updates schema, admission, effective state, diagnostics,
-documentation and examples together; input is never silently interpreted through
-two competing models. The **Current** paragraph above states which kinds are realized.
-Provider-specific native leaves, type limits and unsupported combinations are
-closed promotion records, with tests for reference collision, foreign identity,
-secret non-disclosure, ambiguous create/remove, default handling and complete
-dependency ordering. Operator evidence covers every supported resource family
-in the required emulated and physical profiles.

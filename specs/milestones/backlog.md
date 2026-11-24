@@ -3656,7 +3656,7 @@ takes its RHEL dependencies from the
 source that updated it, or is refused at plan before any effect, instead of
 failing `package-resolution` on a downgrade at host preparation.
 **Exit evidence:** a planning test of each source and a resolver test of a host
-holding a newer `podman` than its DVD. Parked because no owner run has met it.
+holding a newer `podman` than its DVD. Parked because no owner run has met it. Its rule is stated in [Selection and request](../ceph-subscription-dependencies.md#selection-and-request).
 
 ### B1555
 
@@ -4031,7 +4031,7 @@ content view at the major path, so a view holding a newer minor installs
 that minor.
 
 **Exit evidence:** a subscription-sourced installation updating `none` whose
-installed system reports another minor refuses with that minor named. Its rule is stated in [Media store](../managed-os.md#media-store).
+installed system reports another minor refuses with that minor named. Its rule is stated in [Media store](../managed-os.md#media-store). Its rule is stated in [Installer](../managed-os-subscription-source.md#installer).
 
 ### B1706
 

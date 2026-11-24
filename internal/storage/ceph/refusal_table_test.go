@@ -42,14 +42,17 @@ func TestCephRefusalTableMatchesUnsupported(t *testing.T) {
 		return func(spec api.Value) api.Value { return spec.WithPath(api.StringValue(value), path...) }
 	}
 	cases := map[string]refusalCase{
-		"More Ceph hosts than the cluster run deadline admits": {edits: map[string]func(api.Value) api.Value{"twelve hosts": func(spec api.Value) api.Value {
-			nodes := spec.Get("topology", "nodes").Items()
-			return spec.WithPath(api.ListValue(slices.Repeat(nodes[:1], 12)...), "topology", "nodes")
-		}}, values: map[string]string{"<cluster>": "example", "<hosts>": "12", "<deadline>": "6h10m0s", "<most>": "11"}},
-		"More hosts than a stretch cluster's run deadline admits": {edits: map[string]func(api.Value) api.Value{"eight stretch hosts": func(spec api.Value) api.Value {
-			nodes := spec.Get("topology", "nodes").Items()
-			return spec.WithPath(api.ListValue(slices.Repeat(nodes[:1], 8)...), "topology", "nodes").WithPath(requestMap("failureDomain", "datacenter"), "topology", "stretch")
-		}}, values: map[string]string{"<cluster>": "example", "<hosts>": "8", "<deadline>": "6h3m0s", "<most>": "7"}},
+		"More Ceph hosts than the cluster run deadline admits": {edits: map[string]func(api.Value) api.Value{
+			"twelve hosts": func(spec api.Value) api.Value {
+				nodes := spec.Get("topology", "nodes").Items()
+				return spec.WithPath(api.ListValue(slices.Repeat(nodes[:1], 12)...), "topology", "nodes")
+			},
+			"eight stretch hosts": func(spec api.Value) api.Value {
+				nodes := spec.Get("topology", "nodes").Items()
+				return spec.WithPath(api.ListValue(slices.Repeat(nodes[:1], 8)...), "topology", "nodes").WithPath(requestMap("failureDomain", "datacenter"), "topology", "stretch")
+			},
+		}, values: map[string]string{"<cluster>": "example", "<hosts>": "12", "<deadline>": "6h10m0s", "<most>": "11"},
+			overrides: map[string]map[string]string{"eight stretch hosts": {"<hosts>": "8", "<deadline>": "6h3m0s", "<most>": "7"}}},
 		"A distribution that core Ceph does not realize": {normalized: []string{"omitted distribution"}, edits: map[string]func(api.Value) api.Value{
 			"omitted distribution": func(spec api.Value) api.Value { return spec.Without("distribution") },
 			"oss arm": func(spec api.Value) api.Value {

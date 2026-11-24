@@ -1,14 +1,17 @@
 # Native Ceph service input
 
 This page owns the target for the native service model approved in D133.
-[Storage admission](api/ceph.md) and the closed schemas own accepted
-input. The common native path admits strict MON/MGR/OSD input, and the MDS,
-RGW, ingress and NFS families extend it; the core request lists their services
-for core observation, and planning refuses an ingress while its auxiliary
-images cannot be selected.
+[Storage admission](api/ceph.md) and the closed schemas own accepted input.
+The core request lists the RGW, ingress and NFS services for core observation,
+and planning refuses an ingress until its auxiliary images can be selected.
+The [feature matrix](ceph-coverage.md#feature-matrix) holds each family's
+status. The [review](storage-api-review.md) records the approved before/after
+decision.
 
-Examples covering later families remain target documents. The [review](storage-api-review.md)
-records the approved before/after decision.
+Admission's closed records are Bootwright's fixed member sets, read from IBM's
+python3-ceph-common 20.2.1-405 ServiceSpec schema. The selected release's
+schema is authoritative for defaults and for acceptance, so a member that
+release lacks or rejects refuses through `nativeError`.
 
 ## Cluster and service ownership
 
@@ -46,7 +49,7 @@ suppresses automatic optional service stacks, then realizes declared services.
 The bootstrap seed MON/MGR are temporary bootstrap-owned state that converges
 to the declared final services; they are not separate permanent owners.
 Any unavoidable native-created helper has a named derived owner and planned
-effects. B80/B479 qualify this control over native bootstrap behavior.
+effects.
 
 ### Verified native orchestration transport
 
@@ -122,7 +125,9 @@ Attempt fences precede native effects; original bootstrap configuration and
 administrator keyring enter protected custody
 ([native-side retention](secrets.md#native-side-retention)) before consumption.
 Lost replies allow only exact-result observation and completion of missing receipts. A
-missing result after an attempt, legacy incomplete ownership, changed scope or
+missing result after an attempt, a host data directory other than the exact
+FSID, a daemon of a legacy layout
+([host directory ownership](#host-directory-ownership)), changed scope or
 foreign daemon refuses, except Call Home initialization: its
 `orch enable-call-home --raise-automation-warning` only sets values and enables
 a module, so when its attempt matches the current intent, no Call Home
@@ -144,35 +149,32 @@ acceptance. Enrollment starts a separate durable fence and, once every host is
 enrolled and labelled, runs `orch accept-license --image` for the selected
 image at the end of the enroll step when the image carries the IBM license
 contract and the provider's MON acceptance entry is absent, then requires that
-entry. The enrolling stage continues enrollment and services while every other
-host has no daemons (`ceph_core.py` `apply_tunnel_cluster`; `ceph_native.py`
-`preparation_state`); once a non-bootstrap host carries a daemon, a cluster
-that is not ready refuses `partial-cluster` (parked B659).
+entry. Enrollment interruption and the `partial-cluster` refusal follow the
+[interruption table](ceph.md#cluster-execution-budget).
 Candidate daemon inventory follows the [host directory ownership](#host-directory-ownership)
-proofs; native runtime qualification remains [B79](milestones/m2.md#b79).
+proofs.
 
-These are approved target requirements. Admission uses the
+Admission uses the
 verifiedTunnel path and authored artifact selection of the [storage API](api/ceph.md): the image digest is
 frozen before any native effect, and each host proves the native SSH class
 route at host preparation, with correct-key forwarding and zero direct contact
 for changed keys, unknown destinations, unavailable proxies and missing native
 configuration. That probe does not prove the complete MGR lifecycle or the
-guest sshd policy. Correct/wrong-key behavior through actual manager
-connections, actual MGR UID/permissions/SELinux, reconnection,
-restart/failover, interrupted-state recovery and removal remain
-[B472/B79/B80](milestones/m2.md#m2b) promotion evidence.
+guest sshd policy: correct and wrong key behavior through actual manager
+connections, actual MGR UID, permissions and SELinux, reconnection, restart and
+failover, interrupted-state recovery and removal.
 
-Host preparation uses the invocation-local [registry broker](ceph.md) with
+Host preparation uses the invocation-local [registry broker](ceph.md#registry-broker) with
 an empty authfile and ephemeral mutual TLS. Bootstrap never receives the
 registry login, and cephadm's own registry login, which would store it in the
 cluster's configuration, never runs: each host's retained authfile is its only
 native copy ([native-side retention](secrets.md#native-side-retention)). Core authorization reserves an
 anonymous inode and durably binds it to the frozen scope before linking the
-protected guest authfile. A crash before linking leaves no named credential.
+host's protected registry login file `/etc/ceph/podman-auth.json`, which
+cephadm reads for its image pulls. A crash before linking leaves no named credential.
 After linking, recovery and removal prove the descriptor against that record.
 Records contain no credential or secret-derived digest. A foreign authfile or
-stored native registry credentials refuse. Guest use and cleanup require
-qualification.
+stored native registry credentials refuse.
 
 For example, this partial cluster declares core services using labels attached
 to its already-declared hosts. It omits provider coordinates and topology, so
@@ -262,8 +264,9 @@ frozen request host; an MDS daemon is admitted only on a host of the one
 declared MDS service its native daemon ID
 `<service_id>.<host short name>.<six lowercase letters>` names
 ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/module.py#L922-L966)).
-An MDS service is ready when its placement count of daemons runs with the
-frozen image; no active rank is required before its filesystem exists.
+An MDS service is ready when as many daemons as its placement `count`, or else
+one per frozen placement host, run with the frozen image; no active rank is
+required before its filesystem exists.
 
 An NFS service and the ingress that fronts it run in one service-unit block;
 RGW and its ingress run in the gateway block. Neither is a block the cluster
@@ -393,7 +396,8 @@ admission claims no lifecycle beyond its owning refusal table.
 ### RGW, ingress and NFS records
 
 Admission accepts `rgw`, `ingress` and `nfs` documents under closed records
-whose members and spelling follow IBM's python3-ceph-common 20.2.1-405 ServiceSpec schema (the source read for these records, not a pinned build). The
+whose members and spelling follow the [ServiceSpec schema](#native-ceph-service-input)
+the page opening names. The
 core request lists each of them by name and hosts
 ([service identity](#service-identity-and-references)). Planning realizes an
 rgw service a CephObjectGateway binds through the gateway block and an nfs
@@ -423,8 +427,8 @@ Every other member of the schema refuses at its own field with an owner:
   `enable_nlm`), Kerberos and ID mapping (`idmap_conf`), NFS over TLS (`ssl`,
   `ssl_*`, `certificate_source`, `custom_sans`, `tls_*`), kmip (`kmip_*`) and
   NFS cluster QoS (`cluster_qos_*`).
-- NFS RDMA (`enable_rdma`, `rdma_port`) refuses: Bootwright does not support
-  it yet (D160, OD27).
+- NFS RDMA (`enable_rdma`, `rdma_port`) refuses at its member: Bootwright
+  realizes no RDMA transport (D160, OD27).
 - RGW multisite (`zone_endpoints`, `rgw_realm_token`, `update_endpoints`,
   `disable_multisite_sync_traffic`) belongs to
   [B483](milestones/m2.md#b483); `data_pool_attributes` belongs to
@@ -546,7 +550,7 @@ the [one name rule](api.md#object-names) whatever services it declares.
 | `group` | Required, `[A-Za-z0-9][A-Za-z0-9_.-]*`: cephadm accepts an empty group, but Bootwright requires a named one. `group` is unique among the cluster's nvmeof services. |
 | `port`, `discovery_port` | Optional, 1-65535; omitted values follow the [listener registry](api/ceph.md#listener-registry). |
 | `transports` | Optional; only `tcp`, the one value the native validation admits. |
-| `enable_auth` | Optional; true requires the five protected gateway mTLS service bindings below. Omitted or false selects native managed certificates through derived `enable_mtls: true`; no plaintext fallback is allowed. |
+| `enable_auth` | Optional; true requires the five gateway mTLS [binding rows](#secret-bindings). Omitted or false selects native managed certificates through derived `enable_mtls: true`; no plaintext fallback is allowed. |
 
 `server_key`, `server_cert`, `client_key`, `client_cert`, `root_ca_cert` and
 `encryption_key` refuse, naming the member, because native documents never
@@ -557,7 +561,7 @@ host's registered address, which its subsystem listeners also use;
 effect contract. Every other `NvmeofServiceSpec` member refuses as a field
 outside the supported schema.
 
-The placement selects at least two hosts, because a group with one gateway
+The placement selects at least two eligible hosts, because a group with one gateway
 raises `NVMEOF_SINGLE_GATEWAY`
 ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/mon/NVMeofGwMap.cc#L1010-L1016))
 and the cluster would never report `HEALTH_OK`. A `count` below the eligible
@@ -581,9 +585,8 @@ its entry ([stretch services](ceph.md#stretch-services-and-front-doors)).
 
 Admission accepts `prometheus`, `alertmanager`, `grafana`, `node-exporter`,
 `ceph-exporter`, `snmp-gateway`, `mgmt-gateway` and `oauth2-proxy` documents
-under closed records whose members and spelling follow IBM's
-python3-ceph-common 20.2.1-405 ServiceSpec schema (the source read for these
-records, not a pinned build). It accepts the log collection types `loki`,
+under closed records that follow the
+[ServiceSpec schema](#native-ceph-service-input). It accepts the log collection types `loki`,
 `alloy` and `promtail` under a `port`-only record: cephadm's `MonitoringSpec`
 takes `port` and `networks` for loki and promtail
 ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/python-common/ceph/deployment/service_spec.py)),
@@ -618,13 +621,12 @@ member of the schema refuses at its own field with an owner:
 - Inline credentials (grafana `initial_admin_password`, snmp-gateway
   `credentials`, oauth2-proxy `client_secret` and `cookie_secret`) and inline
   TLS material (mgmt-gateway and oauth2-proxy `ssl_cert` and `ssl_key`) never
-  appear in a native document; they belong to their
-  [secret binding rows](#secret-bindings).
+  appear in a native document; their [secret binding rows](#secret-bindings) own them.
 - Parked by D160 (OD26): cephadm-signed certificates (`custom_sans`) and the
   management gateway's `certificate_source`.
-- TLS options of the monitoring services and oauth2-proxy (`ssl`,
-  `certificate_source`) are not supported yet; the selected release's native
-  default applies.
+- `ssl` and `certificate_source` refuse on `prometheus`, `alertmanager`,
+  `grafana`, `node-exporter`, `ceph-exporter` and `oauth2-proxy`. Grafana's TLS
+  follows `protocol`; the others serve the selected release's native default.
 - Members with no qualified effect contract refuse: prometheus and
   node-exporter `targets`, `remote_write_url` and
   `remote_write_allowed_metrics`; alertmanager `secure`; ceph-exporter
@@ -770,8 +772,7 @@ which names an Environment site. `location` is admitted only on a stretch
 topology and names only its failure-domain bucket, whose value is the node's
 site ([stretch topology](ceph.md#stretch-topology)); it cannot put the host in
 a second site. The enrollment spec adds `root: default` beside it
-([activation](ceph.md#stretch-topology)); B488's rehearsal qualifies the
-hierarchy it creates.
+([activation](ceph.md#stretch-topology)).
 
 Native service placement is the authority for daemon membership. Node labels retain their native meaning; a label named
 after a daemon is not a second role declaration.
@@ -843,7 +844,7 @@ The core cluster request never carries a binding. Planning routes each
 | `rgw` that a CephObjectGateway binds, and the `ingress` that fronts it | gateway block | its TLS leaves |
 | `grafana`, `snmp-gateway` | monitoring unit | grafana's `/spec/initial_admin_password`; snmp-gateway's `/spec/credentials/` `snmp_community`, `snmp_v3_auth_username`, `snmp_v3_auth_password` and `snmp_v3_priv_password` |
 | `mgmt-gateway`, `oauth2-proxy` | management gateway unit | the gateway's `/spec/ssl_cert` and `/spec/ssl_key`; the proxy's `/spec/client_secret`, `/spec/cookie_secret`, `/spec/ssl_cert`, `/spec/ssl_key` and `/custom_configs/0/content` |
-| `nvmeof` | nvmeof unit | `/spec/root_ca_cert`, `/spec/server_cert`, `/spec/server_key`, `/spec/client_cert` and `/spec/client_key`, each certificate/key pair one `tlsCertificate` Secret as effect material |
+| `nvmeof` | nvmeof unit | the five mTLS leaves of the [rows below](#secret-bindings), as effect material |
 | `nfs`, and the `ingress` that fronts it | none: the entry refuses at validation as well | — |
 
 Any other entry, and an entry naming a leaf its row does not list, refuses at
@@ -893,9 +894,11 @@ The binding registry is fixed per qualified service/resource schema. It names
 accepted Secret types, required parts, native encoding, byte bounds and
 related-field requirements. For example, the qualified RGW leaves
 `/spec/ssl_cert` (the certificate part, chain allowed) and `/spec/ssl_key`
-(the private-key part) consume one `tlsCertificate` Secret together and take
-effect only with `ssl: true`; an ingress whose backend is an RGW service
-takes the same two leaves under the same rules. The legacy
+(the private-key part) consume one `tlsCertificate` Secret together. A binding row with a
+condition is admitted only on a service that meets it: on a service whose `ssl`
+is false or absent, an RGW or RGW-ingress TLS leaf refuses at its `path`, and
+on a service without `enable_auth: true`, an nvmeof leaf refuses at its `path`.
+The legacy
 [`/spec/rgw_frontend_ssl_certificate`](https://docs.ceph.com/en/tentacle/cephadm/services/rgw/#setting-up-https)
 leaf refuses because IBM's python3-ceph-common 20.2.1-405 ServiceSpec schema migrates it into those two leaves. NFS services
 and the ingress that fronts one take no bindings: NFS over TLS and kmip are
@@ -903,12 +906,21 @@ parked by D160 (OD26). The adapter
 never guesses from a field's suffix or permits an operator
 to splice arbitrary secrets into command arguments or custom config.
 
-The observability and management gateway services bind their credentials and
+The services below bind their credentials and
 TLS material through these rows. "Value" means the value part of an `opaque`
 or `token` Secret.
 
 | Service | Path | Secret type and part | Pair | Required | Refused |
 | --- | --- | --- | --- | --- | --- |
+| `rgw` | `/spec/ssl_cert` | `tlsCertificate` certificate (chain allowed) | `/spec/ssl_key` | with `ssl: true`, at `ssl`, unless an ingress fronts the service | unless `ssl: true` |
+| `rgw` | `/spec/ssl_key` | `tlsCertificate` private key | `/spec/ssl_cert` | with its pair | unless `ssl: true` |
+| `ingress` with an RGW backend | `/spec/ssl_cert` | `tlsCertificate` certificate (chain allowed) | `/spec/ssl_key` | with `ssl: true`, at `ssl` | unless `ssl: true` |
+| `ingress` with an RGW backend | `/spec/ssl_key` | `tlsCertificate` private key | `/spec/ssl_cert` | with its pair | unless `ssl: true` |
+| `nvmeof` | `/spec/root_ca_cert` | `caBundle` certificate | | with `enable_auth: true` | unless `enable_auth: true` |
+| `nvmeof` | `/spec/server_cert` | `tlsCertificate` certificate | `/spec/server_key` | with `enable_auth: true` | unless `enable_auth: true` |
+| `nvmeof` | `/spec/server_key` | `tlsCertificate` private key | `/spec/server_cert` | with `enable_auth: true` | unless `enable_auth: true` |
+| `nvmeof` | `/spec/client_cert` | `tlsCertificate` certificate | `/spec/client_key` | with `enable_auth: true` | unless `enable_auth: true` |
+| `nvmeof` | `/spec/client_key` | `tlsCertificate` private key | `/spec/client_cert` | with `enable_auth: true` | unless `enable_auth: true` |
 | `grafana` | `/spec/initial_admin_password` | value | | with `anonymous_access: false`, at that field | |
 | `snmp-gateway` | `/spec/credentials/snmp_community` | value | | with `snmp_version: V2c`, at `snmp_version` | unless `snmp_version: V2c` |
 | `snmp-gateway` | `/spec/credentials/snmp_v3_auth_username` | `usernamePassword` username | `/spec/credentials/snmp_v3_auth_password` | with `snmp_version: V3`, at `snmp_version` | unless `snmp_version: V3` |
@@ -918,9 +930,9 @@ or `token` Secret.
 | `mgmt-gateway` | `/spec/ssl_key` | `tlsCertificate` private key | `/spec/ssl_cert` | with its pair | |
 | `oauth2-proxy` | `/spec/client_secret` | value | | always, at the service | |
 | `oauth2-proxy` | `/spec/cookie_secret` | value | | always, at the service | |
-| `oauth2-proxy` | `/spec/ssl_cert` | `tlsCertificate` certificate | `/spec/ssl_key` | no | |
+| `oauth2-proxy` | `/spec/ssl_cert` | `tlsCertificate` certificate | `/spec/ssl_key` | no: without the pair cephadm signs the certificate | |
 | `oauth2-proxy` | `/spec/ssl_key` | `tlsCertificate` private key | `/spec/ssl_cert` | with its pair | |
-| `oauth2-proxy` | `/custom_configs/0/content` | `caBundle` certificate | | with the `custom_configs` entry, at `custom_configs` | without it |
+| `oauth2-proxy` | `/custom_configs/0/content` | `caBundle` or `trustBundle` certificate | | with the `custom_configs` entry, at `custom_configs` | without it |
 
 cephadm reads these credential keys per SNMP version: V2c needs
 `snmp_community`, V3 needs the two auth keys and, with a `privacy_protocol`,
@@ -988,7 +1000,7 @@ security, native-generated resources or lifecycle before graph conflicts and
 capacity checks. The native schema owns ordinary native defaults; the release
 record freezes the effects they imply. Omission, `false`, explicit zero and
 an empty collection retain their field-specific meanings; there is no global
-"zero means absent" rule. B494 closes the review's effective-value defects.
+"zero means absent" rule.
 
 For every qualified field, B474's ledger identifies one of native preservation,
 reference expansion, frozen default, explicit effect restriction or unsupported
@@ -1038,17 +1050,13 @@ the existing M2b to M2e profiles.
 
 ## NVMe-oF gateway service
 
-The implemented `nvmeof` service requires `service_id`, explicit placement,
-and the [closed record above](#nvme-of-gateway-record). Its frozen native
-document selects exactly one verified management TLS mode. The configuration pool must be declared in the same cluster.
-One gateway runs per selected host; a placement count must match the selected
-hosts, and a `count_per_host` greater than one refuses. The authored
-`images.nvmeof` artifact is required and frozen by digest (OD28).
+An `nvmeof` service follows the [gateway record](#nvme-of-gateway-record),
+which owns its admission rules. Its frozen native document selects exactly one
+verified management TLS mode. The authored `images.nvmeof` artifact is required
+and frozen by digest (OD28).
 
-For `enable_auth`, all five native leaves are mandatory service bindings:
-`/spec/root_ca_cert` from a `caBundle`; `/spec/server_cert` and
-`/spec/server_key` from one `tlsCertificate`; `/spec/client_cert` and
-`/spec/client_key` from one `tlsCertificate`. Only apply borrows these values;
+For `enable_auth`, all five native leaves are mandatory service bindings
+([rows](#secret-bindings)). Only apply borrows these values;
 observation uses the retained native service and its verified manager client.
 Inline values and verification bypasses are forbidden. `enable_mtls` selects
 the native build's managed certificates and takes none of these bindings.

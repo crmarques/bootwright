@@ -38,7 +38,7 @@ const (
 var (
 	cephCombinationColumns = []string{"ID", "Combination", "Source", "Owner", "Owning diagnostic", "Status", "Fixture"}
 	cephCatalogColumns     = []string{"Profile", "Example", "Coverage", "Ceph hosts and daemons", "IBM per guest (GB)", "Other guests", "Networks",
-		"Lab per guest under OD21 (b)", "Guests", "vCPU", "RAM GiB under OD21 (b)", "RAM GiB under OD21 (a)", "Root+data GiB", "External dependencies", "Delivered by"}
+		"Lab per guest", "Guests", "vCPU", "RAM GiB", "Root+data GiB", "External dependencies", "Delivered by"}
 	cephRefusalColumns   = []string{"Refusal", "Path", "Reason", "Remedy"}
 	cephFeatureColumns   = []string{"Family", "Required coverage and qualification boundary", "Work"}
 	cephCorePhrases      = []string{"single public network", "one explicit data disk", "explicit 2/2 replicated pool", "minimal pool client"}
@@ -513,14 +513,8 @@ func TestCephProfileBudgetsMatchExamples(t *testing.T) {
 			if got := catalogInteger(t, profile, "vCPU"); int64(got) != budget.cpu {
 				t.Errorf("%s declares %d vCPU, its example %d", profile.id, got, budget.cpu)
 			}
-			optionB, optionA := catalogInteger(t, profile, "RAM GiB under OD21 (b)"), catalogInteger(t, profile, "RAM GiB under OD21 (a)")
-			switch budget.memoryMiB {
-			case int64(optionB) * 1024:
-				t.Logf("%s declares %d GiB, the OD21 (b) total", profile.id, optionB)
-			case int64(optionA) * 1024:
-				t.Logf("%s declares %d GiB, the OD21 (a) total", profile.id, optionA)
-			default:
-				t.Errorf("%s: its example declares %d MiB, the catalog %d GiB under (b) and %d GiB under (a)", profile.id, budget.memoryMiB, optionB, optionA)
+			if got := catalogInteger(t, profile, "RAM GiB"); int64(got)*1024 != budget.memoryMiB {
+				t.Errorf("%s declares %d GiB RAM, its example %d MiB", profile.id, got, budget.memoryMiB)
 			}
 			if want := fmt.Sprintf("%d+%d", budget.root, budget.data); profile.row["Root+data GiB"] != want {
 				t.Errorf("%s declares %q root+data GiB, its example %q", profile.id, profile.row["Root+data GiB"], want)

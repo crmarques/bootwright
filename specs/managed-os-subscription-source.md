@@ -93,11 +93,15 @@ system's dnf does with a Satellite
 ([release variable](managed-os.md#update-within-release)), unless the
 activation key sets a release, which the subscription service writes into the
 repository URLs literally. The content view is the pin, so a view holding a
-newer minor at the major's path installs that minor, which an updating
-profile refuses at `update-release-mismatch` and a profile updating `none`
-does not prove ([B1698](milestones/backlog.md#b1698)). A view synced only at
+newer minor at the major's path installs that minor, which a profile refuses
+at `update-release-mismatch` when the installed `VERSION_ID` differs from
+`spec.os.version`. A view synced only at
 minor paths, such as `.../rhel9/9.8/...`, serves the installer only through a
 release its activation key sets.
+
+Not yet met: a profile updating `none` does not prove the installed `VERSION_ID`
+against `spec.os.version`, so it keeps a newer minor its content view served;
+tracked as [B1698](milestones/backlog.md#b1698).
 
 ## Installed system
 

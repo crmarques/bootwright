@@ -62,7 +62,7 @@ func TestClusterBudgetPlansThreeHostsThroughTheBoundWithOneServiceSubmission(t *
 }
 
 func TestHostPastTheBoundRefusesClusterAndDependentResources(t *testing.T) {
-	const reason = "CephCluster example declares 12 Ceph hosts, whose cluster run deadline of 6h10m0s is past the 6h0m0s every adapter run is held to"
+	const reason = "CephCluster example declares 12 Ceph hosts, whose cluster run deadline of 6h10m0s is past the 6h0m0s bound Ceph holds its derived deadlines to"
 	const remedy = "declare at most 11 entries in spec.topology.nodes of CephCluster example; B1183 tracks larger clusters"
 	for hosts, refused := range map[int]bool{11: false, 12: true} {
 		catalog := pinnedCatalogOf(t, hosts, nil)
@@ -126,7 +126,7 @@ func TestFilesystemDeadlineAtTheBoundRefusesByItsOwnName(t *testing.T) {
 	request.Filesystem = &Filesystem{Name: "files", DataPools: slices.Repeat([]string{"fs-data"}, 3), Groups: slices.Repeat([]FilesystemGroup{{Name: "csi"}}, 2)}
 	_, err := cephDeadline(request, "apply")
 	refusedStop(t, err, cephBudgetExceeded,
-		"CephFilesystem files needs a run deadline of 6h1m0s, past the 6h0m0s every adapter run is held to: two native calls for each of the 11 Ceph hosts of CephCluster example and one for each of its 3 data pools and 2 subvolume groups",
+		"CephFilesystem files needs a run deadline of 6h1m0s, past the 6h0m0s bound Ceph holds its derived deadlines to: two native calls for each of the 11 Ceph hosts of CephCluster example and one for each of its 3 data pools and 2 subvolume groups",
 		"declare fewer spec.dataPoolRefs or spec.subvolumeGroups on CephFilesystem files, or fewer entries in spec.topology.nodes of CephCluster example")
 }
 

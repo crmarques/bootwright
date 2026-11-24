@@ -281,3 +281,13 @@ live qualification must independently prove the exact selected image and
 package combination, SSH behavior, bootstrap, continuation and removal. Do not
 promote historical observations or a passing synthetic probe to that evidence,
 and do not generalize one downstream version's behavior to another.
+
+## Monitoring logins before the daemon
+
+The monitoring unit's apply asks cephadm for a Prometheus or Alertmanager login
+(`orch <service> get-credentials`) only when `orch ps` shows a daemon proving
+cephadm already stores that login: `20.2.1` stores both before it configures a
+Prometheus daemon, and Prometheus's before a Grafana daemon. A cluster realized
+by an earlier build may hold the default login; `cluster update-admin-creds`
+replaces it. [Storage](../../specs/ceph.md#resources-readiness-and-access) owns
+the rule.

@@ -63,7 +63,7 @@ var (
 		Meaning: "the package source a Ceph host selects is not one the core adapter can acquire packages from", Remedy: "select the hosted DVD or subscription profile used to install each Ceph Machine"}
 	cephBudgetExceeded = diagnostics.Stop{Code: "ceph.budget-exceeded", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseBound, Recovery: diagnostics.RecoveryChangeInput,
-		Meaning: "a Ceph operation needs a run deadline past the bound every adapter run is held to, so no adapter ran", Remedy: "declare fewer hosts, namespaces or initiator hosts"}
+		Meaning: "a Ceph operation needs a run deadline past the bound Ceph holds its derived deadlines to, so no adapter ran", Remedy: "declare fewer hosts, namespaces or initiator hosts"}
 	cephRetirementUnavailable = diagnostics.Stop{Code: "ceph.retirement-unavailable", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
 		Meaning: "the planned Ceph cluster would refuse automatic retirement", Remedy: "review the original erase policy and cluster consumers before apply"}
