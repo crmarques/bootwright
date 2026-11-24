@@ -70,7 +70,8 @@ certificate verified. It then:
    place of an install source.
 
 The two values exist only in shell variables and that file, both in the
-installer's memory. The `%pre` uses only the tools the installer environment
+installer's memory, and the Kickstart's `%post` removes every retained copy of
+the Kickstart ([derived installation](managed-os.md#derived-installation)). The `%pre` uses only the tools the installer environment
 holds.
 
 **No Satellite provisioning script.** Given a plain server host name, Anaconda
@@ -115,17 +116,31 @@ consumer.
 
 ## Failure
 
-A registration the Satellite refuses, a certificate the CA bundle does not
-verify, a Satellite the install network cannot resolve or reach, a content
-view serving no repository at the [release path](#installer), which Anaconda
-reports as `Error setting up software source` at its menu, and a Satellite already
-holding a host with the Machine's hardware identity each stop the installer on
-the Machine's console, so the apply fails when the
-[installer budget](managed-os.md#budgets) ends, and its message names those
-causes. An installer that registered and then failed leaves a host on the
-Satellite that no record on the Machine names; it is removed with the
-Satellite's own tools before the next apply, which would otherwise meet it as
-that last cause.
+Each of these stops the installer on the Machine's console:
+
+- a registration the Satellite refuses;
+- a certificate the CA bundle does not verify;
+- a Satellite the install network cannot resolve or reach;
+- a content view serving no repository at the [release path](#installer), which
+  Anaconda reports as `Error setting up software source` at its menu;
+- a Satellite already holding a host with the Machine's hardware identity.
+
+The `%pre`, which runs with `--erroronfail`, also stops the installer before it
+registers when it cannot fetch one of its three files, cannot prove that each
+of its four settings reads back, or refuses an organization or activation key.
+An installer that stops never powers the Machine off, so the apply fails when
+the [installer budget](managed-os.md#budgets) ends, reported as
+`runner.task-failed`, and its message names every cause above and the
+`%pre` stops.
+
+Not yet met: the message of an installer that ends its budget names the five
+Satellite causes and not the `%pre`'s own stops, whose reason shows on the
+Machine's console only; tracked as [B1788](milestones/m1.md#b1788).
+
+An installer that registered and then failed leaves a host on the Satellite that
+no record on the Machine names; the operator removes it with the Satellite's own
+tools before the next apply, which would otherwise meet it as the last cause
+above.
 
 The apply records its marker proof, the
 [before-state](managed-os.md#unknown-resolution), when the installed system

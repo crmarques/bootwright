@@ -38,7 +38,7 @@ specs/security.md ## Listener exposure
 specs/controller.md ## The controller stage
 specs/controller.md ## Controller prerequisites and setup
 specs/cli/output.md ## Human diagnostics
-specs/managed-os.md:refusal-table
-specs/managed-os.md:refusal-table-1
-specs/managed-os.md:refusal-table-2
-specs/managed-os.md:refusal-table-3
+specs/managed-os.md:update-refusals
+specs/managed-os.md:hostname-refusals
+specs/managed-os.md:registration-refusals
+specs/managed-os.md:time-synchronization-refusals

@@ -185,7 +185,6 @@ var docsLeafExceptions = map[string]docsSectionException{
 	"specs/cli.md ### Local privilege and user identity":                        {ceiling: 10666, since: "2026-10-29"},
 	"specs/managed-os.md ### Derived installation":                              {ceiling: 11761, since: "2026-10-29"},
 	"specs/managed-os.md ### Network convergence":                               {ceiling: 16633, since: "2026-10-29"},
-	"specs/managed-os.md ### Registration":                                      {ceiling: 8429, since: "2026-10-29"},
 	"specs/openshift-clusters.md ### Refusal table":                             {ceiling: 8901, since: "2026-10-29"},
 	"specs/state-reconciliation.md ### Continuation and removal":                {ceiling: 20636, since: "2026-10-29"},
 	"specs/state-reconciliation.md ### Converging an effect":                    {ceiling: 10414, since: "2026-10-29"},

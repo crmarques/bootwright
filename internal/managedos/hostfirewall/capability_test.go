@@ -498,6 +498,53 @@ func TestAFirewallRefusalNamesTheServiceItsDetailNames(t *testing.T) {
 	}
 }
 
+func TestTheSSHPolicyStateDecidesTheEffectOfAnSSHOnlyBlock(t *testing.T) {
+	request := FirewallRequest{SSHSources: []string{"192.0.2.0/24"}}
+	for _, tc := range []struct {
+		policy  string
+		removal bool
+		want    reconciliation.EffectState
+	}{
+		{"ready", false, reconciliation.EffectCompleted},
+		{"absent", false, reconciliation.EffectNoEffect},
+		{"drifted", false, reconciliation.EffectPartial},
+		{"", false, reconciliation.EffectUnknown},
+		{"ready", true, reconciliation.EffectNoEffect},
+		{"absent", true, reconciliation.EffectCompleted},
+		{"drifted", true, reconciliation.EffectPartial},
+		{"", true, reconciliation.EffectUnknown},
+	} {
+		evidence := FirewallEvidence{Ready: true, SSHPolicy: tc.policy}
+		if got := firewallEffect(evidence, request, nil, tc.removal); got != tc.want {
+			t.Errorf("sshPolicy %q, removal %v: %v, want %v", tc.policy, tc.removal, got, tc.want)
+		}
+	}
+	if got := firewallEffect(FirewallEvidence{Ready: true, SSHPolicy: "ready"}, FirewallRequest{}, nil, false); got != reconciliation.EffectUnknown {
+		t.Errorf("a policy state with no frozen sources: %v, want unknown", got)
+	}
+}
+
+func TestAFirewallRefusalReasonRaisesItsStopCode(t *testing.T) {
+	block := firewallBlock(t)
+	request, _ := DecodeFirewallRequest(block.Request)
+	refusals := firewallRefusals(testContext, request, false)
+	type detailed interface{ WithDetail(string) error }
+	for reason, code := range map[string]string{
+		"host-firewall-foreign":      "firewall.foreign-service",
+		"host-firewall-no-interface": "firewall.no-interface",
+		"host-firewall-inactive":     "firewall.inactive",
+		"host-firewall-failed":       "firewall.change-refused",
+	} {
+		refused := refusals[reason]
+		if with, ok := refused.(detailed); ok {
+			refused = with.WithDetail("bootwright-lab-ceph-ingress-rgw")
+		}
+		if got := diagnostics.Of(refused)[0].Code; got != code {
+			t.Errorf("%s raises %s, want %s", reason, got, code)
+		}
+	}
+}
+
 func TestAFirewallRemovalRefusalNamesDestroyAsItsRemedy(t *testing.T) {
 	block := firewallBlock(t)
 	request, _ := DecodeFirewallRequest(block.Request)

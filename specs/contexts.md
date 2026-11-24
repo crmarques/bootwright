@@ -615,7 +615,7 @@ Secrets limits additionally bound their trees.
 | Operation log directories one context's [log area](#log-root) keeps | 64 | `maxOperationLogs` in `internal/workspace/contextfs/logs_linux_amd64.go` |
 | Bytes one context's operation log area holds before an attempt's retained output is cut short | 256 MiB | `MaxContextLogBytes` in `internal/reconciliation/operationstore/logs.go` |
 | One lifecycle adapter invocation whose request states no deadline | 2 hours | `invocationTimeout` in `internal/reconciliation/ansiblerunner/process_linux_amd64.go` |
-| The longest deadline a fixed-budget lifecycle request may state | 6 hours | `MaxDeadline` in `internal/reconciliation/lifecycle/invocation.go` |
+| The longest deadline an add-on, networking or Ceph request derives, refusing more; a mirror fill caps at it; the runner clamps none | 6 hours | `MaxDeadline` in `internal/reconciliation/lifecycle/invocation.go` |
 | One controller Ansible run: the base of a controller-stage tool publication | 10 minutes | `runTimeout` in `internal/controller/ansiblelocal/runner_linux_amd64.go` |
 | The longest deadline a controller-stage client installation may run under | 2 hours | `clientStageCeiling` in `internal/controller/ansiblelocal/runner_linux_amd64.go` |
 | Bytes one client source declares | 1 GiB | `maxToolSourceBytes` in `internal/controller/bundlelocal/tools.go` |

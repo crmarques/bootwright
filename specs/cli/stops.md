@@ -46,6 +46,11 @@ declared stops.
 `unclassified` is the cause of a stop the code that raises it cannot yet
 attribute, such as a role task that failed without naming a declared reason.
 
+An adapter-run stop a declared reason raises is selected by that reason, and an
+optional detail, a closed token, only fills its message; neither is the stop's
+Cause. For managed-OS installation and the host firewall,
+`installation.DetailRefusal` renders the detail.
+
 ## Catalog
 
 Each section below holds the stops one Go package declares.

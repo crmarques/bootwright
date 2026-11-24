@@ -4031,7 +4031,7 @@ content view at the major path, so a view holding a newer minor installs
 that minor.
 
 **Exit evidence:** a subscription-sourced installation updating `none` whose
-installed system reports another minor refuses with that minor named.
+installed system reports another minor refuses with that minor named. Its rule is stated in [Media store](../managed-os.md#media-store).
 
 ### B1706
 

@@ -3046,11 +3046,16 @@ the targets, such as an auto-activated ceph-volume LV
 or LUKS mapping: only when every holder, recursively, is a device-mapper node
 each of whose slaves is a declared target, a partition of one or another such
 node, none is mounted in any mount namespace, no swap is active and each
-node's open count is 0, it removes them deepest first with
-`/usr/sbin/dmsetup remove` under a bounded timeout, then re-reads the holders.
+node's open count is 0, it records each holder by its device-mapper name and
+device number. Deepest first, it reads each one again and refuses `disk-in-use`
+when its name or device number changed or it gained a holder, requires
+`dmsetup info` to report open count 0 and removes it with
+`/usr/sbin/dmsetup remove`, addressing it by `-j <major> -m <minor>` alone,
+each command under a bounded timeout. It then re-reads the holders.
 Any remaining holder, any other holder (md, bcache, a device-mapper node with
 an undeclared slave) or a failed command refuses `disk-in-use`, so nothing
-spanning an undeclared disk is removed.
+spanning an undeclared disk is removed. `HolderReleaseTests` in `test_physical_erase_holders.py` holds
+the release.
 
 ## Confirmation and authorization
 

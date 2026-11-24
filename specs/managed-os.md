@@ -157,20 +157,28 @@ profile's `spec.os.version`, `<image> holds release <found> and
 <profile> declares spec.os.version <declared>`, remedied by `set
 spec.os.version on <profile> to <found>, or import the <declared> image`. A
 RHEL boot ISO carries no `.treeinfo` and names its version and arch in its
-`.discinfo`, with no family. A boot image that only boots the installer is
-held to the family refusal only when its release names a family, and to the
-arch and version refusals always; for a release with no family the arch
-message names only `<arch>`. The boot image of a
-[subscription](managed-os-subscription-source.md) profile, from which the
-installation installs nothing, is refused with no `release` as above and then
-held so. A hosted tree's boot image is held so only when its record names a
-release, so a boot image with no release is bounded by its DVD's release and
+`.discinfo`, with no family. Each image role meets the refusals above as this
+table states; for a release with no family the arch message names only
+`<arch>`.
+
+| Image role | Refused with no `release` | Refused with no `family` | Family, arch and version refusals |
+| --- | --- | --- | --- |
+| The image installs packages from: the boot image of a profile with no `packageSource`, a hosted tree's DVD | always | always | always |
+| The boot image of a [subscription](managed-os-subscription-source.md) profile, from which the installation installs nothing | always | never; the family is refused only when it is named | arch and version always, family only when named |
+| The boot image of a hosted-tree profile | never; held only when its record names a release | never | only when its record names a release: arch and version always, family only when named |
+
+A hosted-tree boot image with no release is bounded by its DVD's release and
 the installed system's `VERSION_ID` that
 [update within release](#update-within-release) proves. A plan therefore never
-installs one minor under a profile declaring another, except that a
-subscription source installs what its content view serves at the major path,
-which only an updating profile's `VERSION_ID` proof bounds
-([B1698](milestones/backlog.md#b1698)).
+installs one minor under a profile declaring another.
+`RefusedReleases` holds the table, and
+`TestAHostedTreeBootImageIsComparedOnlyWhenItNamesARelease` and
+`TestASubscriptionSourceBootImageMayNameNoFamily` hold its two boot-image rows.
+
+Not yet met: a subscription source installs what its content view serves at
+the major path, so a subscription installation updating `none` does not prove
+its installed `VERSION_ID` equals `spec.os.version`; tracked as
+[B1698](milestones/backlog.md#b1698).
 
 Each apply attempt reads the size and SHA-256
 again before the image's first use and refuses a changed entry through a named
@@ -251,16 +259,14 @@ and `fromMedia` name entries of the media store as `local-media:<name>`, and
 validate refuses any other source, naming the import that fixes it. The
 profile an installed Machine selects names its `redfishVirtualMedia`
 endpoint, on every substrate, because the installer image is always booted
-through it. A profile selecting
-`templateClone` refuses before registration ([B99](milestones/m1.md#b99)).
-A profile selecting `subscription` with a `managed` `redhatRhel`
+through it. A profile selecting `subscription` with a `managed` `redhatRhel`
 Entitlement is admitted on virtual and physical Machines, as
 [Registration](#registration) states. FIPS and root-disk encryption are admitted on virtual
 and physical Machines under the key and disk boundaries in
 [FIPS mode](#fips-mode) and [Root-disk encryption](#root-disk-encryption).
-Every installation installs the profile's exact `spec.os.version`, which each
-image it boots or installs from names ([media store](#media-store)), and, by
-default, updates it within that release, as
+Every installation installs the profile's `spec.os.version` as the
+[media store](#media-store) bounds it and, by default, updates it within that
+release, as
 [Update within release](#update-within-release) states. An installed system
 sets no password and admits no SSH password authentication. A Machine whose
 profile configures a repository refuses while its effective proxy names a
@@ -281,14 +287,14 @@ its ejects after the installer's power-off
 declaring any `rootDisk.hints` field refuses before
 registration, naming each, because the Kickstart selects its disk
 by name alone; a libvirt or KubeVirt Machine's disk is `/dev/vda`, and on a bare-metal
-provider the disk is named by its `wwn`, from which the Kickstart derives that name, or by
-`serialNumber` and `sizeBytes` alone, and `serialNumber` and `sizeBytes` may
-stand beside the `wwn` as proofs the installer compares
-([physical installation](#physical-installation)). The installation publishes
+provider the disk is named by one form of the
+[root-disk rule](api/machines.md#root-disk), which the
+[physical installation](#physical-installation) proves. The installation publishes
 through artifact servers placed on the controller, where the installer image
 is built and the package tree extracted, so an image or tree server placed on
-any other Machine refuses before registration. A virtual Machine also requires
-its libvirt provider on that host for the guest-agent identity channel.
+any other Machine refuses before registration. A libvirt Machine that omits `os.install.hostKeyRef` also requires
+its libvirt provider on that host for the guest-agent identity channel;
+[delivered identity](#delivered-identity-off-the-hypervisor) needs none.
 The network the Kickstart carries is one static IPv4 install
 address on its install interface, its default route and the selected name
 servers, as the [derived installation](#derived-installation) states;
@@ -301,10 +307,12 @@ Kickstart names their private URL travels with them, only through the
 [private path](#physical-private-publication); every other secret-bearing arm
 stays refused until it is separately specified.
 
+Not yet met: a profile selecting `templateClone` refuses before registration;
+tracked as [B99](milestones/m1.md#b99).
+
 The Environment's
 [rescue declaration](api/environment.md#lifecycle-rescue-declaration) is
-refused at admission, because no rescue journey exists yet; the schema keeps
-it for a later one, and no lifecycle requires or consumes it.
+refused at admission; no lifecycle requires or consumes it.
 
 ### Derived installation
 
@@ -335,8 +343,11 @@ writes the regional formats, the configured repositories and, for a profile
 updating `withinRelease` that registers with no Satellite, the release
 variable ([Update within release](#update-within-release)), writes the
 sudoers and SSH daemon drop-ins, and removes every retained copy of the
-Kickstart, preceded, for an encrypted root disk, by a second `%post` that binds
-it to the TPM2. The marker is
+Kickstart. For an encrypted root disk a second `%post` binds it to the TPM2
+first. The removal is the `%post`'s last step and deletes
+`/root/anaconda-ks.cfg`, `/root/original-ks.cfg` and `/run/install/ks.cfg`, so
+no included file's content stays on the installed disk
+(`TestThePostSectionLeavesTheProofAndNoCopyOfItself`). The marker is
 bounded JSON naming the context, Machine, profile, boot image name and the
 request digest, which covers the frozen size and SHA-256 of every image, and
 its content is frozen with the plan.
@@ -419,8 +430,6 @@ Sources:
 [Anaconda installation.py](https://raw.githubusercontent.com/rhinstaller/anaconda/rhel-9/pyanaconda/modules/network/installation.py),
 [lorax mkksiso](https://raw.githubusercontent.com/weldr/lorax/rhel9-branch/src/bin/mkksiso)
 and [dracut.cmdline(7)](https://man7.org/linux/man-pages/man7/dracut.cmdline.7.html).
-VLAN over bond and the `.link` persistence on the RHEL 9.8 build are proved by
-the owner's emulated rehearsal, not in-tree.
 
 A selected install address that is not an IPv4 assignment in a Network, and
 an install interface the line cannot configure, refuse before
@@ -428,8 +437,7 @@ registration, naming the Machine, as the [refusal table](#refusal-table)
 lists. The line carries nothing else the Machine declares: other
 interface-assigned addresses, other interfaces, MTUs, routes other than its
 default route and the resolver's search list are applied after the
-installation by [network convergence](#network-convergence)
-([B326](milestones/m1.md#b326)).
+installation by [network convergence](#network-convergence).
 
 What the `%post` does about the host key follows the
 [identity channel](substrates.md#identity-and-power-operations). For the guest
@@ -561,7 +569,11 @@ seconds apart), `networkApply` (24 retries 5 seconds apart),
 `networkReconnect` (12 retries 5 seconds apart) and `reboot` (60 retries 10
 seconds apart), which bounds each of the restart's two waits: 8,880 seconds of
 pauses in all, the restart's budget counted twice. A read the BMC does not answer spends one
-retry of the installer wait rather than ending it. Every run of the block is
+retry of the installer wait rather than ending it. An installer that has not
+powered the Machine off when its budget ends fails the block's role task, which
+the runner reports as `runner.task-failed`, with a message naming the Machine,
+its budget and the power state its management controller last answered
+(`test_an_installer_that_never_finishes_names_what_its_satellite_decides`). Every run of the block is
 bounded by a [deadline](architecture.md#the-adapter-result-protocol) derived
 from the budgets it froze: their pauses back to back, the network checkpoint's
 rollback time and 30 seconds, 330 seconds, one hour for the rest of
@@ -591,7 +603,7 @@ counts, are not budgets: they are part of each call's bound. Nor is the single
 retry, one second later, of an observation's reachability check, which is part
 of the reads that hour allows for.
 
-A physical installation whose deadline passes `MaxDeadline` runs to it.
+A physical installation's deadline is its own derivation and may exceed `MaxDeadline`; the runner clamps none.
 
 The request freezes each worker session's timeout, an observation's
 `inspection` too, in `budgets.sessions` from the registration and update bounds.
@@ -622,7 +634,7 @@ digest, the host public key, the address, whether that connection was accepted,
 the network result, `fips`, whether the installed system proved FIPS mode,
 `rootEncryption`, whether it proved its root disk encrypted, `rootWWN`, and
 `registration`, the consumer and the ownership state the worker read, and
-`context update`, what the update did; a later consumer that
+`update`, what the update did; a later consumer that
 connects to the Machine binds that key, never a first-use answer from the
 network. An observation proves completion the same way, because it is what
 resolves an interrupted apply: an observation that proves the marker and the
@@ -640,22 +652,29 @@ boots no installer but still converges its
 [network](#network-convergence) and, when the request registers, its
 [registration](#registration), and resumes an
 [update](#update-within-release) its record names unfinished; it reports `completed` with the same
-evidence, and outcome `unchanged` only when the network marker names this
-request from an earlier boot, the running network matches its declaration and
-the registration worker reported its registration unchanged.
+evidence, and outcome `unchanged` only when all of these hold:
+
+1. The network marker names this request from an earlier boot and the running
+   network matches its declaration.
+2. When the request registers, the registration worker reported its
+   registration unchanged.
+3. When the request updates, the update worker reported no change.
+
 An apply that booted the installer, that applied, rolled back or restarted
 the network, that registered or adopted a registration, or that ran or
 resumed an update, reports `changed`. The installer answer is
 the first identity read's, frozen before the boot, never the marker the
 installer has written by completion. The only
 differences it converges are its own published content, an ejection it did
-not complete, the Machine's declared network and its registration, each performed again for a
+not complete, the Machine's declared network, its registration and an update
+its record names unfinished, each performed again for a
 guest already holding that marker. A
 guest that
 answers with a different marker, or a powered-on guest with none, refuses:
 there is no reinstall path, and a fresh installation requires the Machine's
 realization to be destroyed and applied again. A powered-off Machine with no
-marker installs. A positively answered foreign marker publishes the typed
+marker installs unless its apply recorded the before-state of
+[Unknown resolution](#unknown-resolution), which boots its disk instead. A positively answered foreign marker publishes the typed
 `foreign-installation` refusal for the Machine before any boot. The marker
 bytes remain private; the diagnostic names the refused installation and the
 supported declaration-correction path.
@@ -669,7 +688,7 @@ inverse dependencies remove that publication only after every installation
 consumer has been removed, and before the artifact server is removed.
 The installed system leaves
 the host with the Machine's disks, so this block consumes no authorization of
-its own on removal. Destroy touches no management controller: a virtual-media
+its own on removal. Destroy changes no virtual-media trust setting: a virtual-media
 trust an interrupted attempt left set, a certificate imported or verification
 turned off, is settled by the next apply's eject, which converges to the
 frozen target rather than undoing its own writes.
@@ -718,10 +737,10 @@ second may be running the installer now. As soon as an attempt proves that
 the installed Machine holds this installation's marker, and before it ejects
 the media, withdraws the work area or any private material, or powers the
 Machine off, it durably records, as the before-state its apply's records keep,
-that this installation's marker is proved and its disk boot intended (Q66,
-D183). That is its one recording point, and an attempt records it once. That
+that this installation's marker is proved and its disk boot intended.
+That is its one recording point, and an attempt records it once. That
 before-state is the marker proof a registering apply requires before it
-registers ([Proof before registration](#registration)), so a removal of a
+registers ([Proof before subscription registration](#registration)), so a removal of a
 registering installation whose apply proved its marker reads the guest's
 registration. An apply whose records hold that
 intent never reads positive no effect: a powered-off Machine whose identity
@@ -770,8 +789,8 @@ attempt becomes unknown and is resolved from the marker.
 
 **Scope.** Every installed `anaconda` Machine converges its declared network
 once, inside its `os-install-<machine>` block, after its completion is
-otherwise verified (D159 clause 11 in the [backlog](milestones/backlog.md),
-and OD24 (A) among [M2c's open decisions](milestones/m2.md#m2c-open-decisions)). Every consumer that requires
+otherwise verified, on one code path: a declaration that already holds is
+inspected and left alone. Every consumer that requires
 `Machine/<m>`, a Ceph host or an agent installation, waits for it.
 
 **Document.** The request freezes the NMState document the installed system
@@ -799,7 +818,7 @@ rules applied in this order:
    composed order, followed by every composed route in declared order. An
    absent route entry deletes every route it matches, so the routes the
    running system holds on those interfaces are replaced by the declared
-   ones; that both behave within one apply is proved only on a live run.
+   ones.
 
 The document, encoded as JSON, longer than 32 KiB refuses with `api.value`,
 `the composed network of <machine> exceeds 32 KiB, which its installation
@@ -827,12 +846,6 @@ apply and reconnect pauses plus 60 seconds, 240 seconds, so NetworkManager
 never rolls back a change the adapter is still proving. The Kickstart
 installs the `nmstate` package with the profile's packages, once even when
 the profile names it ([NMState install](https://nmstate.io/user/install.html)).
-
-Every installed Machine converges to its declared network after its
-installation is proved, on one code path: a declaration that already holds is
-inspected and left alone. The request, the document and the budgets are
-frozen with the installation; this section states what the adapter does with
-them.
 
 **Protocol.** The phase runs under its own group `converge-network`, which
 starts once `verify-installation` completes, after the fleet
@@ -919,6 +932,12 @@ off from its management controller so the next apply installs it again` on
 `baremetal` with retaining removal. With opt-in erase, `<recovery>` instead names
 `run bootwright destroy --authorize data-loss=<digest apply|destroy --dry-run prints>, which overwrites the declared
 disks of Machine <m> and removes its installed system before releasing it`.
+Every `bootwright destroy` and `bootwright apply` these texts name carries
+`--context <context>`, and on `baremetal` the closing apply also carries
+`--authorize data-loss=<digest apply|destroy --dry-run prints>`, because a
+[physical installation consumes `data-loss` on apply](#physical-installation),
+as the [remedy rule](cli.md#ordinary-confirmation) requires.
+
 A Machine without nmstatectl ends with `<recovery>, then apply
 with an install source that carries the nmstate package`. A refusal that may
 be transient (NetworkManager refused the document or
@@ -946,6 +965,11 @@ unknown: repeat bootwright apply, and if <m> stays unreachable, restore its
 network from its console`. A failed connection, commit, marker write or
 power-off request, a power-off the BMC never reports and a guest that
 did not restart end with `repeat bootwright apply`.
+
+Not yet met: the remedy texts of the network convergence role name
+`bootwright destroy` and `bootwright apply` with no `--context` and, on
+`baremetal`, an apply with no `data-loss` authorization; tracked as
+[B1784](milestones/m1.md#b1784).
 
 **Interruption.** The guest's state decides the next attempt's step:
 
@@ -982,29 +1006,22 @@ next-hop address, `metric` when declared and `table-id` (the main table when
 not declared). The resolver's `server` and `search` lists are equal in order
 when declared. At most 16 differences of at most 200 printable bytes are named.
 
-**Observation and drift.** The observation (D153's settle rule) reads, over the same pinned
+**Observation and drift.** The observation reads, over the same pinned
 connection and only when the fleet account answered, the state of step 1 and
-`nmstatectl show --json`, and compares them; it applies, rolls back, commits,
-powers and restarts nothing. Its evidence carries `network`, true only when
-the marker names this request and the comparison matches; `networkReboot`,
-true when the marker names this request from an earlier boot; and
-`networkDifferences`. A completion proves its postcondition only with both
-booleans true, so a Machine whose network drifted reads as a positive partial
-realization in `bootwright diff --observe`. Nothing is repaired.
+`nmstatectl show --json`, changes nothing and reports the evidence below. A
+Machine whose network drifted reads as a positive partial realization in
+`bootwright diff --observe`. Nothing is repaired.
 
 **Evidence.** `network` is true only when the marker names this request and
-the comparison matched; `networkReboot` is true when the marker's boot ID
-differs from the current one; `networkDifferences` holds at most 16 entries of
-at most 200 printable bytes each. Presence requires both booleans and no
-difference, and otherwise refuses `the installed machine's network does not
+the comparison matched; `networkReboot` is true only when the marker names this
+request and its boot ID differs from the current one; `networkDifferences`
+holds at most 16 entries of at most 200 printable bytes each. A completion
+proves its postcondition only with both booleans true and no difference, and
+otherwise refuses `the installed machine's network does not
 match its declaration after a reboot`.
 
 **Plan.** The plan shows the group `converge-network` and the impacts
 `configure-network <m>` and `restart <m>`.
-
-**Unverified until the owner's run.** A reboot with a pending checkpoint;
-Anaconda's connection profiles beside NMState's; the NMState version RHEL 9.8
-ships; and RHEL-29001.
 
 ### FIPS mode
 
@@ -1043,7 +1060,6 @@ path and physical target proofs. Admission refuses a generated Ed25519 host
 key as well as an Ed25519 fleet key; execution checks both bound public keys
 before publication or boot, requiring ECDSA or RSA, whose size
 [Secret admission](secrets.md#acquisition-and-commands) bounds.
-Real-hardware qualification remains [B78](milestones/m1.md#b78).
 
 **Proof.** After the installed system's network converged, an apply reads
 `/proc/sys/crypto/fips_enabled` and `/etc/crypto-policies/state/current` over
@@ -1098,7 +1114,7 @@ IDs are its repository labels: Red Hat's, or a custom product's
 changes the request and so the marker, so it is another installation: the
 context is taken back with `bootwright destroy` and applied again.
 
-**Proof before registration.** After the installed system's network converged
+**Proof before subscription registration.** After the installed system's network converged
 and its FIPS and root-encryption proofs passed, the apply proves anew that the
 machine holds this installation's marker, whose proof the attempt recorded
 as `{"marker":<marker>}`, the [before-state](#unknown-resolution), through the
@@ -1123,7 +1139,7 @@ empty connection options, never `subscription-manager register`,
 `clean` or `--force`. With a Satellite, before it registers or adopts and on
 every apply, the worker writes the CA bundle to
 `/etc/rhsm/ca/bootwright-satellite.pem`, root:root 0644, staged and renamed
-through its directory, refusing `registration-unavailable` and changing
+through its directory, refusing `registration-trust-path` and changing
 nothing unless that directory is root's and writable by root alone and the
 path holds no link or other non-regular file, and runs `subscription-manager config
 --server.hostname=<hostname> --server.port=443 --server.prefix=/rhsm
@@ -1149,6 +1165,10 @@ adopts its certificate's CN. Before its own call it writes the record
 answers; a lost reply or a kill first leaves a foreign consumer to
 unregister by hand. An owned one stays unchanged; any other is foreign,
 refuses `registration-foreign` and stays registered, destroy too.
+With no certificate, a
+record naming this request's digest, or no record, reads `absent`, and a record
+naming another request reads `foreign`
+(`test_unregisters_only_its_own_consumer_and_proves_absence`).
 
 **Repositories.** The worker applies the repositories, when the request names any, in one
 `subscription-manager repos` call, every `--disable` first, then every
@@ -1171,6 +1191,8 @@ They and the CA bundle are lent to the apply alone, as material files only the
 controller module reads, and reach the machine only on the worker's standard
 input, as the [adapter boundary](#adapter-boundary) states.
 
+#### Registration outcomes
+
 **Evidence and completion.** The evidence records `registration.consumer` and
 `registration.state`; a registering installation completes only with an
 `owned` registration. An observation reads the registration the same way,
@@ -1188,7 +1210,17 @@ a certificate that the CA bundle of Secret/<bundle> does not verify`,
 remedied by `set Secret/<bundle> to the CA that signs the certificate of
 <hostname>, such as the Satellite's katello-server-ca.crt, then run bootwright
 apply --context <context> again`; any other failure to reach it is
-`registration-unavailable`. A worker that
+`registration-unavailable`. An unsafe CA directory or path refuses
+`registration-trust-path`: `the CA trust path of Machine/<machine> is not safe:
+<path> is <found>`, remedied by restoring `/etc/rhsm/ca` as a root-owned directory writable by
+root alone, with no link or non-regular file at `bootwright-satellite.pem`, then
+applying again.
+
+Not yet met: the installed and provided workers raise `registration-unavailable`
+for an unsafe CA directory or path instead of `registration-trust-path`; tracked as
+[B1785](milestones/m1.md#b1785).
+
+A worker that
 did not answer over its connection, or a session that failed, fails the apply
 with `Machine <machine> was not registered with its subscription service:
 <reason>`, the worker's closed reason and cause and nothing else, and the effect
@@ -1234,7 +1266,14 @@ remedied by `restore the route from Machine/<machine> to the subscription
 service, then run bootwright destroy --context <context> again`. Either leaves
 the published content in place, so the next destroy repeats the removal.
 
-**Rerun after manual unregistration.** `bootwright destroy --context <context>
+**Bound.** Registration adds 15 minutes to the request deadline. Its worker
+session is 630 seconds, plus 120 for release pinning, 60 for Satellite
+configuration and 60 for explicit content selection's identity proof.
+Unregistration's session is 330 seconds.
+
+### Rerun after manual unregistration
+
+`bootwright destroy --context <context>
 --unregistered <machine>` states that the operator removed the Machine's
 consumer with the subscription service's own tools. On that invocation
 Bootwright neither reads nor unregisters that Machine's guest, records an empty
@@ -1246,11 +1285,6 @@ any other name refuses `authorize.unneeded` before confirmation, as
 only: nothing persists it, and no next step names it except the authorization
 refusal of that invocation, whose command keeps it beside the tokens the plan
 requires, as [the command contract](cli/commands.md) states.
-
-**Bound.** Registration adds 15 minutes to the request deadline. Its worker
-session is 630 seconds, plus 120 for release pinning, 60 for Satellite
-configuration and 60 for explicit content selection's identity proof.
-Unregistration's session is 330 seconds.
 
 ### Physical removal
 
@@ -1269,13 +1303,11 @@ with the root's frozen identity and, for a root declared by serial number, the
 WWN it reported, [recorded](#physical-installation) in the installation's
 evidence.
 
-The installation request version freezes the optional
+The installation request freezes the optional
 erase-on-removal Boolean so recovery guidance agrees with the separate policy.
 An erasing recovery names data-loss authorization and the overwritten disks;
-a retaining recovery continues to name the retained installed system. Version
-changes refuse earlier frozen requests rather than silently reinterpret them.
-Source and host-independent tests do not qualify any physical model; B70's
-real-hardware identity, interruption and cache/readback gates remain unrun.
+a retaining recovery continues to name the retained installed system.
+Source and host-independent tests qualify no physical model.
 
 **Retirement port.** A physical installation and its erase policy wait for
 every retirement the bound implementations name. Managed OS owns that port,
@@ -1295,9 +1327,8 @@ over `https` with its certificate verified: `tls.verification` not `none`, and a
 `tls.trustBundleRef` naming the authority when the system trust store does not
 hold it.
 
-This arm is proved in-tree only. The emulated rehearsal, B73's operator gate,
-and an installation on real hardware ([B78](milestones/m1.md#b78)) have not
-run, so no firmware is claimed supported.
+No firmware is claimed supported until a
+[qualification](#physical-host-qualification) records it.
 
 Installing a physical server differs from installing a virtual one in three
 ways, each following from the machine existing before Bootwright and outliving
@@ -1440,8 +1471,8 @@ same verified-fetch proof as physical installation.
 
 Physical FIPS and TPM2 root encryption use this private delivered-key path
 and its pinned identity and completion proofs. Managed registration uses the
-[pinned registration session](#registration). Their real-hardware qualification remains
-[B78](milestones/m1.md#b78); in-tree delivery does not qualify a physical host.
+[pinned registration session](#registration). [Physical host qualification](#physical-host-qualification) records
+their real-hardware evidence; in-tree delivery does not qualify a physical host.
 
 ### Physical data-disk clear
 
@@ -1452,7 +1483,7 @@ A physical Machine may declare `onInstall: metadataClear` on 1 to 15
 `wwn` derives when it declares one
 ([field rules](api/machines.md#data-disks-and-disk-actions)); an entry that is
 the root disk by WWN or serial number refuses at admission. Like the
-rest of this arm it is proved in-tree only. The request freezes the targets
+rest of this arm it is held by source tests. The request freezes the targets
 without `deviceName` first in `serialNumber` order, then the others in
 `deviceName` order, each with its metadata-clear intervals, and the plan shows
 one `clear-disk <machine> <wwn>` impact per target, or `clear-disk <machine>
@@ -1510,8 +1541,8 @@ only by the installer budget.
 
 ### Physical host qualification
 
-[B78](milestones/m1.md#b78) qualifies the shared host contract on real hardware.
-The reference input uses RHEL 9.8 x86_64 Anaconda media; the operator freezes
+Qualification of the shared host contract on real hardware records the
+evidence below. The reference input uses RHEL 9.8 x86_64 Anaconda media; the operator freezes
 the selected boot and package-media digests before the run. Each qualification
 records its exact OS release, architecture, kernel, image digests, BMC firmware
 and Redfish behavior, system firmware, boot mode and Secure Boot state, NIC and
@@ -1527,12 +1558,11 @@ archive. A changed coordinate needs the applicable rows repeated.
 | Registration | Managed RHSM registration, interruption and continuation, package access, replay and owned unregistration. |
 | Root encryption | The declared root disk alone receives TPM2 enrollment; normal reboot unlock, private recovery unlock and cleanup, plus refusal when another disk or ambiguous ancestry is present. |
 | Failure and recovery | Wrong UUID or NIC set, untrusted media/BMC, blocked or unknown required controller listener, interrupted publication/install/network convergence and exact continuation. No refusal counts as a completed install. |
-| Removal | Retention when erase is omitted; separately authorized B70 erase of every explicit target by its frozen method, complete readback and durable receipt, interrupted write/readback/receipt acknowledgement, media cleanup and claim release ordering. |
+| Removal | Retention when erase is omitted; separately authorized erase of every explicit target by its frozen method, complete readback and durable receipt, interrupted write/readback/receipt acknowledgement, media cleanup and claim release ordering. |
 
 The [physical acceptance template](../docs/acceptance.md#physical-qualification-row)
 records each arm's result on a registered clean build. Host qualification and
-B70 erase evidence feed [B485](milestones/m2.md#b485)'s complete physical Ceph
-matrix; each retains its own operator exit.
+erase evidence feed the complete physical Ceph matrix.
 
 ## Delivered identity off the hypervisor
 
@@ -1545,8 +1575,7 @@ and power operations. A libvirt installation omitting the key retains its
 guest-agent channel and colocation requirement. The substrate's two arms share
 one pinned-SSH identity procedure; an arm publishes its own port result.
 `TestLibvirtExplicitHostKeySelectsDeliveredIdentity` and the case's planning
-check cover selection; live acceptance belongs to
-[B1421](milestones/m1.md#b1421).
+check cover selection.
 
 ## Automatic root-disk discovery
 
@@ -1816,7 +1845,8 @@ replacing the Secret, since a continued apply reads the bound version, and
 again in `%pre`. The passphrase is fetched by `%pre` and
 `%post` into a shell variable, written only to the installer's storage file and
 given to clevis on standard input; it never reaches a request, evidence, a
-log, an argv or the installed disk.
+log or an argv, and the [`%post`](#derived-installation) removes every
+retained Kickstart copy, so it never reaches the installed disk.
 
 **Custody.** The Secret version bound to the installation is the disk's
 recovery secret. An apply never re-keys an installed disk and does not detect
@@ -1850,8 +1880,7 @@ refuses before the first bind; other disks are never scanned for binding.
 The TPM must already be available to the installer; Bootwright never clears
 a physical TPM. Only an apply that boots the installer writes
 [firmware](substrates.md#physical-firmware), before clevis seals, so no later
-apply moves a sealed disk's PCRs; reboot unlock and console recovery remain
-[B78](milestones/m1.md#b78) qualification.
+apply moves a sealed disk's PCRs.
 
 **Proof.** After the installed system's network converged, an apply reads,
 over the pinned fleet connection with root from the Kickstart's sudoers entry,
@@ -1909,7 +1938,7 @@ after the update's reboot`, remedied by `remove 4, 8 and 9 from
 spec.customizations.security.diskEncryption.unlock.tpm2.pcrIds on <profile>,
 or set spec.updates.policy to none on <profile>`.
 
-**Frozen request.** The installation request freezes `context update`, `{policy,
+**Frozen request.** The installation request freezes `update`, `{policy,
 release}`, omitted for `none`; its version stays fixed under the
 [development policy](project.md#design-priorities-and-non-goals). A change
 of either changes the request and so the marker, so it is another
@@ -1947,8 +1976,12 @@ worker is:
    Satellite, is not a refusal: `subscription-manager release --unset` clears
    any release the activation key carries, such as 9.6 under a profile
    declaring 9.8, and the selected content view (explicit or inherited from the
-   activation key) is the pin; an
-   unreachable Satellite fails that call and refuses as before.
+   activation key) is the pin. A `release --list` that times out refuses
+   `registration-unavailable`, and so does a `release --set` or `release
+   --unset` that times out or exits non-zero.
+   `test_a_release_the_service_does_not_offer_or_set_refuses_before_the_repositories`
+   and `test_a_release_list_that_fails_on_a_satellite_unsets_the_release` hold
+   these.
 2. It proves that `VERSION_ID` in the installed system's `/etc/os-release`
    equals the release, else refuses `update-release-mismatch`.
 3. It resolves, and downloads, with the guest's own dnf and without applying
@@ -1959,7 +1992,9 @@ worker is:
    the repository that offers it.
 4. It runs `dnf upgrade --refresh --assumeyes
    --comment=bootwright:<request digest>`.
-5. When the transaction changed at least one package, the installation asks
+5. When the transaction, the newest dnf history transaction carrying
+   `bootwright:<request digest>` whichever run made it, changed at least one
+   package, the installation asks
    the installed system to power off over the pinned connection and boots its
    installed disk through the substrate, as the
    [network restart](#network-convergence) does, waits for its identity
@@ -1979,8 +2014,10 @@ subscription repositories stay direct-only.
 transaction once there is one, and a state: `pending`, written before the
 upgrade; `upgraded`, once dnf succeeded; `complete`, after the reboot and the
 proofs. A retry resumes from the state it reads: `pending` runs the upgrade
-again, `upgraded` reboots when the transaction changed a package and proves,
-and `complete` does nothing. A record naming another request digest, or one that
+again, which finds the transaction a lost reply left, `upgraded` reboots when
+the transaction changed a package and proves, and `complete` does nothing.
+`test_a_pending_record_upgrades_again_and_finds_the_transaction_a_lost_reply_ran`
+holds it. A record naming another request digest, or one that
 is not a root-only regular file of that closed form, refuses `update-foreign`
 and changes nothing. An observation reads the record,
 `VERSION_ID` and the history transaction carrying the comment, changing
@@ -2003,7 +2040,7 @@ Satellite, `variable` without registration); one with `none` records state
 
 **Refusals.** The worker names each refusal to the runner, which reports it
 with the message and remedy Go owns, `<release>` being the frozen release and
-`<cause>` the worker's closed reason, `metadata`, `download` or `timeout` for
+`<detail>` the worker's closed detail, `metadata`, `download` or `timeout` for
 `update-unavailable` and `resolution`, `transaction`, `timeout`, `history` or
 `tooling` for `update-failed`, never a URL or a repository credential:
 
@@ -2014,8 +2051,8 @@ with the message and remedy Go owns, `<release>` being the frozen release and
 | `update-release-drift` | `the update of Machine/<machine> would move redhat-release to <found> from repository <repository>, outside release <release>` | `pin repository <repository> of <profile> to release <release> or disable it, then run bootwright destroy --context <context> and apply again` |
 | `update-no-repository` | `Machine/<machine> has no enabled repository to update release <release> from` | `enable a repository for <profile> or set spec.updates.policy to none, then run bootwright destroy --context <context> and apply again` |
 | `update-foreign` | `Machine/<machine> holds an update record of another installation` | `run bootwright destroy --context <context> and apply again` |
-| `update-unavailable` | `a repository did not answer while Machine/<machine> updated within release <release>: <cause>` | `restore the route from Machine/<machine> to its update sources, then run bootwright apply --context <context> again` |
-| `update-failed` | `the package transaction of Machine/<machine> failed while it updated within release <release>: <cause>` | `run bootwright apply --context <context> again once the update sources of <profile> offer a consistent transaction, or run bootwright destroy --context <context> and set spec.updates.policy to none` |
+| `update-unavailable` | `a repository did not answer while Machine/<machine> updated within release <release>: <detail>` | `restore the route from Machine/<machine> to its update sources, then run bootwright apply --context <context> again` |
+| `update-failed` | `the package transaction of Machine/<machine> failed while it updated within release <release>: <detail>` | `run bootwright apply --context <context> again once the update sources of <profile> offer a consistent transaction, or run bootwright destroy --context <context> and set spec.updates.policy to none` |
 
 A worker that did not answer over its connection, or a session that failed,
 fails the apply with `Machine <machine> was not updated within its release:
@@ -2025,12 +2062,12 @@ fails the apply with `Machine <machine> was not updated within its release:
 ([Budgets](#budgets)), the worker's whole session being bounded at 1800
 seconds and the reboot's return, from the power-off request until the
 installed system answers again, at 600 seconds, a quarter of the frozen reboot
-budget for the power-off and the rest for the answer; they also cover the 120
-seconds the registration worker's session gains to set the release, the
+budget for the power-off and the rest for the answer; they also cover a
+120-second read of the guest after the reboot (`updateGuestRead`), the
 completion step's 120-second session and the marker's second read. The
 deadline adds the bound of the reboot's disk boot as well. The worker starts the
 upgrade only with at least 900 seconds of its session left, else it refuses
-`update-unavailable` with cause `timeout`, nothing started and the record
+`update-unavailable` with detail `timeout`, nothing started and the record
 unchanged.
 
 **Removal.** Nothing beyond the [inverse](#inverse): the updated packages leave
@@ -2065,6 +2102,39 @@ them.
 | `templateClone` qcow2 | Refused; steps 2 to 6 read no installer media ([template-clone installer arm](deferred/machine-arms.md#template-clone-installer-arm)). |
 | Provided Machine | [Provided OS updates](#provided-os-updates) use the host’s existing OS and repositories. |
 
+## Provided block waits
+
+One remote provided Machine's blocks wait for each other as this table states,
+beyond the waits each block's own section names; no two rows wait for each
+other.
+
+| Block | Also waits for |
+| --- | --- |
+| [Provided hostname](#provided-hostname) | none of these |
+| [Provided registration](#provided-registration) | the hostname |
+| [Provided time synchronization](#provided-time-synchronization) | the hostname and the registration |
+| [Provided OS updates](#provided-os-updates) | the registration and the time synchronization |
+| The managed firewall and the managed lifecycle enrollment | none of these |
+| Any other block that waits for the Machine's hardware claim, such as a Ceph host or an add-on | the update and the registration, and, in the machines stage or a later one, the hostname and the time synchronization |
+
+The update, hostname, time synchronization and managed firewall blocks of one
+Machine share the exclusive key `provided-os/<machine>` whenever the Machine has
+an update, hostname or time synchronization block, so they never overlap, because
+the update reboots the host; the registration block holds no exclusive key.
+`dependOnProvidedUpdates` plans the waits, and
+`TestProvidedUpdateWaitsForEnrollmentAndGatesMachineConsumers`,
+`TestProvidedHostnameGatesMachineConsumersAndSharesTheHostExclusion`,
+`TestProvidedHostnameAndUpdateOfOneMachineNeverOverlap`,
+`TestProvidedRegistrationPrecedesTheUpdateAndEveryMachineConsumer`,
+`TestProvidedRegistrationFollowsTheHostnameAndPrecedesTheUpdate` and
+`TestProvidedTimeFollowsTheHostnameAndRegistrationAndPrecedesEveryMachineConsumer`
+hold them.
+
+Not yet met: no example plans `os-provided-registration` or `os-provided-update`,
+so the [reference-edge catalog](state-reconciliation.md#reference-edges) holds no
+row for the `Machine` from `machine-hardware` each requires; tracked as
+[B1786](milestones/m1.md#b1786).
+
 ## Provided OS updates
 
 ### Selection
@@ -2079,9 +2149,9 @@ boot, registration, repository configuration and signing keys.
 
 `providedupdate.Capability` freezes the policy, the declared minor and the
 pinned placement in an `os-update-<machine>` block in the machines stage. It waits for the
-hardware claim and any managed lifecycle enrollment. Consumers of that claim
-wait for the update before setup on the host. Managed firewall blocks and the
-update are serialized on the same Machine. The firewall can run as a
+hardware claim and any managed lifecycle enrollment, and the blocks that wait
+for it are the [wait table](#provided-block-waits)'s, so a Machine's consumers
+start on the updated host. The firewall can run as a
 controller-stage prerequisite.
 
 The worker proves `ID=rhel` and the target's `VERSION_ID` before its
@@ -2117,15 +2187,30 @@ the receipt and DNF history before resuming. An already completed apply runs
 no new update. Destroy retains the provided Machine, updated packages and
 update receipt. The update block's removal has no inverse host effect.
 
-### Refusal table
+Each original apply owns its own receipt, in one of three states: `pending`,
+written before the transaction; `upgraded`, once the transaction is recorded;
+and `complete`, once the new boot ID and the release are proved. A resume reads
+the state. `pending` runs the update again, which finds a transaction the
+DNF history already holds. `upgraded` and `complete` prove the release, the FIPS
+state and the history, and an `upgraded` receipt completes once the boot ID
+differs from the recorded one. A receipt that destroy retained belongs to its
+earlier apply, and a later apply neither reads nor replaces it. A receipt
+directory or file that is not root-only, or a receipt of the same apply naming
+another request digest, refuses `update-foreign`.
 
-| Input or observation | Remedy |
-| --- | --- |
-| Controller Machine or missing pinned lifecycle SSH | Maintain the controller separately or supply pinned lifecycle SSH on a remote Machine. |
-| A different operating system, another major, a later minor, or under `withinRelease` an earlier minor | Supply a host on the declared RHEL release, or set `toRelease` to move a host from an earlier minor of the same major. |
-| `toRelease` from an earlier minor whose repositories offer no `redhat-release` of the declared minor | Make the host's repositories serve the declared minor, for example by setting or clearing its sticky `subscription-manager release` or by selecting a content view that holds it, and repeat apply. |
-| No enabled update source, unusable repository or release drift in the transaction | Enable reachable repositories serving the declared minor and repeat apply. |
-| An unresolved package transaction or unproved reboot | Check DNF history and unattended boot on the host, resolve the reported problem and repeat apply. |
+### Update refusals
+
+| Reason | Input or observation | Remedy |
+| --- | --- | --- |
+| `machine.placement-no-access`, `machine.placement-key-missing`, `machine.placement-host-key-missing` or another `machine.placement-*` stop, raised by `machine.PlacementFor` at plan | Missing pinned lifecycle SSH | Maintain the controller separately or supply pinned lifecycle SSH on a remote Machine. |
+| `update-release-mismatch` | A different operating system, another major, a later minor, or under `withinRelease` an earlier minor | Supply a host on the declared RHEL release, or set `toRelease` to move a host from an earlier minor of the same major. |
+| `update-release-unavailable` | `toRelease` from an earlier minor whose repositories offer no `redhat-release` of the declared minor | Make the host's repositories serve the declared minor, for example by setting or clearing its sticky `subscription-manager release` or by selecting a content view that holds it, and repeat apply. |
+| `update-no-repository` | No enabled update source | Enable reachable repositories serving the declared minor and repeat apply. |
+| `update-release-drift` | A release drift in the transaction | Enable reachable repositories serving the declared minor and repeat apply. |
+| `update-unavailable` | A repository whose metadata or packages the host cannot read, with the detail `metadata@<repository id>` or `download`, or the host-wide update lock held by another apply, with the detail `busy` | Restore the host's route to its repositories, or wait for the other apply, and repeat apply. |
+| `update-foreign` | A receipt directory or file the update cannot attribute to this apply | Inspect the receipt under `/etc/bootwright/provided-updates` on the host and correct its owner, mode or content by hand, because Bootwright never replaces a receipt it cannot attribute, and repeat apply. |
+| `update-failed` | An unresolved package transaction | Check DNF history on the host, resolve the reported problem and repeat apply. |
+| `update-reboot` | An unproved reboot, with the detail `boot-proof`, or a changed FIPS state, with the detail `fips` | Check unattended boot on the host, resolve the reported problem and repeat apply. |
 
 ## Provided hostname
 
@@ -2154,13 +2239,10 @@ pending, not as a failure.
 
 `providedhostname.Capability` freezes the `fqdn` address and the pinned
 placement in an `os-hostname-<machine>` block in the machines stage. It waits
-for the hardware claim and any managed lifecycle enrollment. Every other block
-in the machines stage or a later one that waits for the Machine's hardware
-claim also waits for the hostname, so Ceph hosts and add-ons start on the new
-name; a controller-stage or earlier block does not. The hostname, update and
-managed firewall blocks of one Machine share the exclusive key
-`provided-os/<machine>` whenever the Machine has an update or a hostname block,
-because the update reboots the host.
+for the hardware claim and any managed lifecycle enrollment. The blocks that
+wait for the hostname are the [wait table](#provided-block-waits)'s, so Ceph
+hosts and add-ons start on the new name; a controller-stage or earlier block
+does not.
 
 The worker runs as root through the pinned placement. It reads the kernel
 nodename and the static hostname (`hostnamectl --static`). When both equal the
@@ -2176,7 +2258,7 @@ Bootwright never re-registers a provided Machine, so Satellite keeps the
 display name it registered the host under until the owner runs
 `subscription-manager facts --update`.
 
-### Refusal table
+### Hostname refusals
 
 | Input or observation | Remedy |
 | --- | --- |
@@ -2205,9 +2287,8 @@ managed `redhatRhel` Entitlement declaring `spec.rhsm.satellite` with its
 Satellite's `hostname`, `contentBaseURL` and `trustBundleRef` and the pinned
 placement in an `os-registration-<machine>` block in the machines stage. It
 waits for the hardware claim, any managed lifecycle enrollment and the
-Machine's [provided hostname](#provided-hostname). Every other block that
-waits for that Machine's hardware claim, except its managed firewall, its
-enrollment and its hostname, also waits for the registration, so a provided
+Machine's [provided hostname](#provided-hostname). The blocks that wait for the
+registration are the [wait table](#provided-block-waits)'s, so a provided
 update and a Ceph host read converged repositories. The block's CA bundle is a
 trust anchor that names no credential; its certificate part reaches the host
 as module input, as a Ceph host's package trust does.
@@ -2224,9 +2305,9 @@ The worker runs as root on the pinned host:
    and the CA file's prior bytes or its absence, naming the request digest
    for the operator alone, in the root-only `/etc/bootwright/provided-registration.json`, written
    0600 through a staged rename and synced with its directory. A prior CA
-   file that is a link, not a regular file or larger than a bundle, and a
-   record that cannot be read, refuse `registration-unavailable` before
-   any change. A record an earlier apply left outstanding is the rollback
+   file that is a link, not a regular file or larger than a bundle, refuses
+   `registration-trust-path`, and a record that cannot be read refuses
+   `registration-unavailable`, each before any change. A record an earlier apply left outstanding is the rollback
    target, whatever changed on the host since, and is never recorded
    again. It then publishes the bundle there
    under the [registration](#registration) rules and runs the same
@@ -2255,21 +2336,29 @@ settled an outstanding record, and `unchanged` otherwise. It never
 registers, unregisters, runs `subscription-manager clean` or `--force`, or
 changes the release or the enabled repositories. An observation reads the
 record, the certificate, the CA file, `rhsm.conf` and `redhat.repo` without
-changing them: an outstanding or unreadable record reads `diverged`, a
+changing them: an outstanding record reads `diverged`, a
 partial effect when the certificate names a consumer and an unknown one
-otherwise, a converged host proves completion, a registered one that is not converged a
+otherwise; an unreadable record stays unknown
+([resolution outcomes](state-reconciliation.md#resolution-outcomes)), and the
+`registration-unavailable` remedy restores it by hand; a converged host proves
+completion, a registered one that is not converged a
 partial effect the next apply converges, and one without a consumer
 certificate no effect. Destroy
 retains the registration and its configuration, which name the declared
 Satellite; the block's removal has no host effect.
 
-### Refusal table
+Not yet met: an unreadable rollback record reads `diverged`, a partial effect,
+when the certificate names a consumer, where an unreadable observation stays
+unknown; tracked as [B1787](milestones/m1.md#b1787).
+
+### Registration refusals
 
 | Reason | Remedy |
 | --- | --- |
 | `registration-absent` | Register the Machine with the declared Satellite, under any of its names, and repeat apply. |
 | `registration-foreign` | Register the Machine with the declared Satellite, or name the Entitlement of the Satellite it is registered with, and repeat apply. |
 | `registration-trust` | Set the Entitlement's CA bundle Secret to the CA that signs the Satellite's certificate, and repeat apply. |
+| `registration-trust-path` | Restore `/etc/rhsm/ca` as a root-owned directory writable by root alone, with no link or other non-regular file at `bootwright-satellite.pem`, and repeat apply. |
 | `registration-unavailable` | Restore the Machine's route to the Satellite and its subscription tooling, or, when the record `/etc/bootwright/provided-registration.json` is unreadable, restore its settings by hand and remove it, and repeat apply. |
 | `registration-content-root` | Make the Satellite serve the host's repositories beneath the declared `contentBaseURL`, or correct it, and repeat apply. |
 
@@ -2296,11 +2385,9 @@ placement in an `os-time-<machine>` block in the machines stage. It waits for
 the hardware claim, any managed lifecycle enrollment, the Machine's
 [provided hostname](#provided-hostname) and
 [registration](#provided-registration), and the service block of each managed
-`NTPServer` it selects. Every other block that waits for that Machine's
-hardware claim, except its managed firewall, its enrollment, its hostname and
-its registration, also waits for it, so a Ceph host reads a synchronized
-clock. It shares the `provided-os/<machine>` exclusion with the Machine's
-other provided blocks.
+`NTPServer` it selects. The blocks that wait for it are the
+[wait table](#provided-block-waits)'s, so a Ceph host reads a synchronized
+clock; it shares the exclusion that table states.
 
 The worker runs as root on the pinned host:
 
@@ -2352,7 +2439,7 @@ The storage preflight reports its `host.time` probe on such a Machine as
 pending, not failed, because the machines stage synchronizes the clock before
 any Ceph block runs.
 
-### Refusal table
+### Time synchronization refusals
 
 | Reason | Remedy |
 | --- | --- |
@@ -2471,15 +2558,18 @@ The host firewall block realizes it with an owned nftables input chain and a
 systemd unit ordered before sshd. Traffic to the system sshd ports from
 unlisted sources drops in that chain, even if a separate firewall chain admits
 the service. Existing sessions and loopback traffic continue. The policy
-applies to the machine's system sshd and refuses socket activation. SSH port
-changes must be coordinated with the filter. Firewalld and other listeners
+applies to the machine's system sshd and refuses socket activation. The filter
+covers the ports a running sshd reports (`sshd -T`) at apply; observation reports
+the policy `drifted` when that set differs from the published chain, and apply
+replaces the chain. `test_a_changed_sshd_port_set_reads_drifted_on_inspection`
+holds the observation. Firewalld and other listeners
 continue to apply their own rules.
 
 Apply checks the connected peer against the candidate before it changes the
 filter. A peer outside the candidate, socket activation, an sshd listener on a
 port its configuration does not name, a chain that does not prove after
 publication, and a fresh session that does not confirm the policy each refuse
-`host-firewall-failed` with cause `ssh-admission`, whose message and remedy are
+`host-firewall-failed` with detail `ssh-admission`, whose message and remedy are
 the SSH source row of the refusal table below. A filter whose chain does not
 prove after its file and unit are published is withdrawn before apply refuses:
 the earlier file, unit, enablement and chain return, or none where there were
@@ -2495,10 +2585,10 @@ only this operation's owned filter and startup files.
 
 ### Implementations
 
-`installation.FirewallImplementation`, family `os-host-firewall`, realizes
+`hostfirewall.FirewallImplementation`, family `os-host-firewall`, realizes
 a daemon-preparation block per explicitly managed provided host, including
 one with no listener, and a grant block `os-firewall-<machine>` per host
-holding requirements. Each publisher
+holding requirements or an SSH source policy. Each publisher
 becomes one owned firewalld service with exactly its protocols and ports.
 The request freezes its worker session's timeout as `budgets.session`, from
 the constant its run deadline is derived from, and an observation's session as
@@ -2528,25 +2618,29 @@ other than one that only accepts ICMPv6 can override that admission and
 refuses, as does another zone that binds an interface carrying SSH. A rich rule refuses only in a zone that carries the proved SSH
 traffic, so one in an unused zone, such as the `nm-shared` zone RHEL 9
 ships, does not.
-Ambiguous or unproved access refuses with `ssh-admission`. Destroy retains the shared package and daemon enablement.
+Ambiguous or unproved access refuses `host-firewall-failed` with detail `ssh-admission`. Destroy retains the shared package and daemon enablement.
 Preflight, plan and observation never prepare a daemon or change a rule.
 
-The frozen `installation.FirewallRequest` carries either direct local or
+The frozen `hostfirewall.FirewallRequest` carries either direct local or
 pinned lifecycle SSH placement, or the installation's fleet session reached
 through its original placement and pinned host-key proof. It freezes the
 context, Machine, publisher identities, selectors, protocols and ports.
 Removal waits for consumers, deletes only owned service memberships and
-files, and runs before the installation or Machine is removed. An unreachable
-retained host keeps removal incomplete. A host deleted or erased by the same
+files, and runs before the installation or Machine is removed. A provided host is
+never powered, and an unreachable one keeps removal incomplete. A host deleted or erased by the same
 removal takes its services with its disks and needs no contact.
 
 A provided host's reload compares complete runtime and permanent zones,
 policies, direct rules and chains, and service, ICMP, helper and IP-set
 definitions first, excluding only this block's service grants
 and interface bindings which firewalld preserves across reload. A difference
-refuses `host-firewall-failed` with cause `runtime-drift`; it never overwrites
+refuses `host-firewall-failed` with detail `runtime-drift`; it never overwrites
 permanent configuration with runtime state. A retry completes owned partial
-work after the operator resolves that difference. Other contexts' persistent
+work after the operator resolves that difference.
+`test_provided_host_refuses_to_reload_away_a_foreign_runtime_port_and_can_resume`
+holds the guard. An installed Machine's reload compares no runtime state, so
+runtime-only firewalld changes there are discarded (`Guest.preserve_runtime`,
+held by `test_an_installed_host_reload_does_not_compare_runtime_state`). Other contexts' persistent
 grants and operator policy remain intact. The reload behavior follows the
 [firewalld runtime/permanent contract](https://firewalld.org/documentation/configuration/runtime-versus-permanent.html).
 
@@ -2577,18 +2671,24 @@ no other file; a missing membership is added. The mark makes a file written by
 an attempt that ended before its record provably this operation's own, so a
 retry completes it. A same-named file without the mark, or not a regular
 root-owned file, refuses `host-firewall-foreign` before any service of the block
-changes. Removal deletes each service's memberships from every zone that lists
-it and its file only when it bears the mark, then reloads; it also reloads
-while any zone still lists a service at runtime, so a removal that ended
+changes. For each service whose file bears the mark, removal deletes its
+memberships from every zone that lists it, then its file, then reloads; a
+service whose same-named file is foreign refuses `host-firewall-foreign` before
+any service of the block changes, and a membership without its file stays
+unchanged
+(`test_destroy_keeps_a_foreign_file_and_changes_nothing_for_the_others`).
+Removal also
+reloads while any zone still lists a service at runtime, so a removal that ended
 between its delete and its reload completes on retry. A Machine the same
 removal deletes or erases takes its services with its disks, so the block is
-retired with it without contacting the guest. On a retained Machine the removal
-starts the stopped guest through its identified power path, removes the
+retired with it without contacting the guest. On a retained Bootwright-installed Machine the removal
+starts the stopped guest through its
+[identified power path](substrates.md#identity-and-power-operations), removes the
 services, records its receipt and stops the guest again, so a retry after the
 receipt only stops it; an unreachable guest fails it and keeps the Machine's
 removal waiting, as an installation's unregistration does.
 
-**Evidence.** `installation.FirewallEvidence` proves current daemon readiness and lists, per service in request
+**Evidence.** `hostfirewall.FirewallEvidence` proves current daemon readiness and lists, per service in request
 order, its name, its state (`owned`, `absent` or `foreign`), the SHA-256 of the
 file's bytes, its `{interface, zone}` memberships, each a zone that lists it
 permanently or at runtime, and whether every selected interface's zone holds
@@ -2596,19 +2696,26 @@ it in both; Go compares the digest with the content it renders. Every
 service owned with the frozen content and covered is completion; nothing
 present is no effect for an apply and completion for a removal; owned remnants
 are partial; a foreign file, or a membership without its file, is unknown.
+When the request freezes SSH sources, the evidence also reports `sshPolicy`,
+which is `ready`, `absent` or `drifted`. An apply completes only with `ready`
+beside its owned services, a removal completes only with `absent` beside its
+absent services, `drifted` is a partial effect, and any other value, or a value
+with no frozen sources, is unknown.
+`TestTheSSHPolicyStateDecidesTheEffectOfAnSSHOnlyBlock` holds it.
 
-### Refusal table
+### Host firewall refusals
 
-| Refusal | Message | Remedy |
-| --- | --- | --- |
-| `host-firewall-foreign` | `Machine/<machine> holds a firewalld service <service> this context did not write, so its firewall was left unchanged` | `remove /etc/firewalld/services/<service>.xml and its zone memberships from Machine/<machine> after confirming nothing else uses it, then run bootwright <verb> --context <context> again` |
-| `host-firewall-no-interface` | `Machine/<machine> has no interface whose network holds <networks>, which firewalld service <service> admits traffic on` | `give Machine/<machine> the declared listener address or required network in its network configuration, then run bootwright <verb> --context <context> again` |
-| `host-firewall-inactive` | `firewalld is not running on Machine/<machine>, whose install profile enables it` | `start firewalld on Machine/<machine> with systemctl enable --now firewalld, then run bootwright <verb> --context <context> again` |
-| `host-firewall-failed` | `firewalld refused a change on Machine/<machine>: <cause>` | `read the firewalld journal on Machine/<machine>, correct it, then run bootwright <verb> --context <context> again` |
-| `host-firewall-failed`, cause `ssh-admission` on a Machine with an SSH source policy | `SSH source admission on Machine/<machine> could not be proved` | `verify the connected peer is in spec.firewall.ssh.allowedSources and check the system sshd listeners and the SSH ingress unit journal on Machine/<machine>, then run bootwright <verb> --context <context> again` |
+| Refusal | Stop code | Message | Remedy |
+| --- | --- | --- | --- |
+| `host-firewall-foreign` | `firewall.foreign-service` | `Machine/<machine> holds a firewalld service <service> this context did not write, so its firewall was left unchanged` | `remove /etc/firewalld/services/<service>.xml and its zone memberships from Machine/<machine> after confirming nothing else uses it, then run bootwright <verb> --context <context> again` |
+| `host-firewall-no-interface` | `firewall.no-interface` | `Machine/<machine> has no interface whose network holds <networks>, which firewalld service <service> admits traffic on` | `give Machine/<machine> the declared listener address or required network in its network configuration, then run bootwright <verb> --context <context> again` |
+| `host-firewall-inactive` | `firewall.inactive` | `firewalld is not running on Machine/<machine>, whose install profile enables it` | `start firewalld on Machine/<machine> with systemctl enable --now firewalld, then run bootwright <verb> --context <context> again` |
+| `host-firewall-failed` | `firewall.change-refused` | `firewalld refused a change on Machine/<machine>: <detail>` | `read the firewalld journal on Machine/<machine>, correct it, then run bootwright <verb> --context <context> again` |
+| `host-firewall-failed`, detail `ssh-admission` on a Machine with an SSH source policy | `firewall.change-refused` | `SSH source admission on Machine/<machine> could not be proved` | `verify the connected peer is in spec.firewall.ssh.allowedSources and check the system sshd listeners and the SSH ingress unit journal on Machine/<machine>, then run bootwright <verb> --context <context> again` |
 
+`TestAFirewallRefusalReasonRaisesItsStopCode` holds the stop codes.
 `<networks>` is the requirement's networks joined by ` or is `, `<address>` its
-first, `<verb>` is `destroy` for a removal and `apply` otherwise, and `<cause>` is `tooling`, `reload`, `zone`, `write`, `address`, `runtime-drift`, `enable` or `ssh-admission`, else
+first, `<verb>` is `destroy` for a removal and `apply` otherwise, and `<detail>` is `tooling`, `reload`, `zone`, `write`, `address`, `runtime-drift`, `enable` or `ssh-admission`, else
 `unknown`. `apply --dry-run` and `destroy --dry-run` report one `host-port` row per requirement and reads no
 host: on a realizing Machine, that the managed OS realizes it before the
 clusters stage; on any other host, the ports and protocols to permit in the
@@ -2669,7 +2776,7 @@ the length of that many bytes in base64url without padding.
 | An install interface of another type | an install interface, named by the selected install address, that is a composed interface whose `type` is not `ethernet`, `bond` or `vlan`, such as a `linux-bridge`; admission refuses it first, so no validated graph reaches this row | `the installer configures only an ethernet, bond or VLAN install interface, and the install interface <interface> of <machine> is of type <type>` | `assign the install address of <machine> to an ethernet, bond or VLAN interface` |
 | A bond install interface without its ports | the install interface, or the base of a `vlan` install interface, is a `bond` whose `link-aggregation.port` is absent or empty, or names a port that is not an available composed `ethernet` interface, or one whose `controller` names another interface | `the installer configures a bonded install interface from its named ports, and bond <bond> of <machine> names no port, or a port that is not an available ethernet interface aggregated by it` | `list the ethernet interfaces bond <bond> aggregates in its link-aggregation.port in the network of <machine>` |
 | A bond install interface without a carried mode | that bond's `link-aggregation.mode` absent or not one of `balance-rr`, `active-backup`, `balance-xor`, `broadcast`, `802.3ad`, `balance-tlb`, `balance-alb` | `the installer configures a bond only by its full mode name, and bond <bond> of <machine> declares <declared mode>` | `set link-aggregation.mode of <bond> to one of balance-rr, active-backup, balance-xor, broadcast, 802.3ad, balance-tlb or balance-alb in the network of <machine>` |
-| A bond mode the libvirt substrate does not qualify | on a `libvirt` provider, that bond's `link-aggregation.mode` other than `active-backup`; the API and a `baremetal` provider admit all seven modes | `a libvirt bridge qualifies only active-backup bonding, and bond <bond> of <machine> declares mode <mode>` | `set link-aggregation.mode of <bond> on <machine> to active-backup; the other modes are qualified on physical hosts (B78)` |
+| A bond mode the libvirt substrate does not qualify | on a `libvirt` provider, that bond's `link-aggregation.mode` other than `active-backup`; the API and a `baremetal` provider admit all seven modes | `a libvirt bridge qualifies only active-backup bonding, and bond <bond> of <machine> declares mode <mode>` | `set link-aggregation.mode of <bond> on <machine> to active-backup; the other modes are qualified on physical hosts` |
 | A bond option the installer cannot carry | that bond's `link-aggregation.options` not a mapping, or an option named `mode` or not matching `[a-z0-9_]+`, or whose value is not a string, integer, number or boolean or holds `;`, `=`, whitespace, a quote, a backslash or `#` | `the installer receives bond options as one option list, and link-aggregation.options.<option> of <bond> on <machine> cannot be written into it` | `remove link-aggregation.options.<option> from <bond> in the network of <machine>, or give it a plain value` |
 | A VLAN install interface the installer cannot carry | a `vlan` install interface whose `vlan.base-iface` is not an available `ethernet` or `bond` interface, whose `vlan.id` is not 1 to 4094, whose `vlan.protocol` is not absent or `802.1q`, or whose name starts with `vlan` but is not `vlan<id>`, or holds a `.` but is not a prefix, one `.` and the id | `the installer configures a VLAN install interface only as an 802.1Q VLAN with an id from 1 to 4094 over an available ethernet or bond interface, named vlan and its id, a prefix, a dot and its id, or a name with no dot that does not start with vlan, and <interface> of <machine> is not one` | `declare <interface> in the network of <machine> with vlan.base-iface an available ethernet or bond interface, vlan.id from 1 to 4094, no vlan.protocol other than 802.1q, and a name of one of those forms` |
 | A VLAN install interface on a managed libvirt network | on a `libvirt` provider, a `vlan` install interface whose NICs select a managed `Network` without `vlan` | `a managed libvirt network gives its host an untagged address on <bridge>, so the controller cannot reach the VLAN install address of <machine>` | `attach <machine> to an existing-bridge segment whose host carries VLAN <id>, or install over an untagged interface` |

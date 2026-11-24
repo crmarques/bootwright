@@ -137,6 +137,17 @@ def earlier_filter(guest):
     guest.runtime = EARLIER[1]
 
 
+def test_a_changed_sshd_port_set_reads_drifted_on_inspection(guest, monkeypatch):
+    ready = worker.ssh_rules(SOURCES, [22], MARK)
+    guest.files = {worker.SSH_CONFIG: ready[0], worker.SSH_UNIT_PATH: worker.ssh_unit(MARK)}
+    guest.enabled = True
+    guest.runtime = ready[1]
+    assert worker.ssh_policy(guest, payload("inspect")) == ("ready", False)
+    monkeypatch.setattr(worker, "ssh_ports", lambda _guest: [22, 2222])
+    assert worker.ssh_policy(guest, payload("inspect")) == ("drifted", False)
+    assert guest.files == {worker.SSH_CONFIG: ready[0], worker.SSH_UNIT_PATH: worker.ssh_unit(MARK)} and guest.runtime == ready[1]
+
+
 def test_a_published_filter_whose_chain_does_not_verify_is_withdrawn_before_the_refusal(guest):
     guest.loaded = worker.ssh_rules(["203.0.113.0/24"], [22], MARK)[1]
     with pytest.raises(worker.Refused) as err:

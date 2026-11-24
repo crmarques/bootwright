@@ -60,6 +60,14 @@ its modifier wherever two of its senses can meet; elsewhere context decides. A n
   `network.interfaceMatches` matches an ethernet interface to a NIC, never
   "binds" it, since KubeVirt's interface binding is another thing
   ([machines](api/machines.md#network-configuration)).
+- **Registration**: bare, as in "refuses before registration", the lifecycle
+  operation's registration, which freezes its plan and records the operation; a
+  refusal before it emits no receipt
+  ([state reconciliation](state-reconciliation.md#plan-and-execution),
+  [CLI](cli.md#lifecycle-behavior)). An installed system's registration with the
+  Red Hat subscription service or a Satellite is written *subscription
+  registration* wherever the two senses meet
+  ([managed OS](managed-os.md#registration)).
 - **Interface**, **NIC** and **vNIC**: an interface is an OS netdev, such as an
   NMState `interfaces[]` entry or a `network.addresses[].interface`; a NIC is
   one MAC-bearing port or function, `hardware.nics[]`, hardware or virtual
@@ -70,6 +78,8 @@ its modifier wherever two of its senses can meet; elsewhere context decides. A n
   TCP or UDP service port.
 - **Stop**: a declared way an `apply` or `destroy` ends without completing its
   verb, with one code, its certainty and its recovery ([stop catalog](cli/stops.md)).
+  A worker's reason and detail are not a stop's Cause
+  ([adapter-run stops](cli/stops.md#stop-vocabulary)).
 - **Segment** and **Network**: a segment is one provider network a NIC is
   cabled to, an `InfraProvider` `segments[]` entry or a managed `Network` of
   that provider, carrying its Networks untagged or tagged with an MTU capacity

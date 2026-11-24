@@ -95,7 +95,7 @@ func documentedBounds() []documentedBound {
 		{logRootSpec, "area holds %s, measured", "internal/reconciliation/operationstore/logs.go", "MaxContextLogBytes", nil, true},
 		{contexts, "fresh apply needs %s of them free", operations, "ReservedBytes", nil, true},
 		{contexts, "| One lifecycle adapter invocation whose request states no deadline | %s |", lifecycleRun, "invocationTimeout", &application{runner: "execute"}, false},
-		{contexts, "| The longest deadline a fixed-budget lifecycle request may state | %s |", lifecycleRequest, "MaxDeadline", &application{runner: "execute", source: lifecycleRun, budget: true}, false},
+		{contexts, "| The longest deadline an add-on, networking or Ceph request derives, refusing more; a mirror fill caps at it; the runner clamps none | %s |", lifecycleRequest, "MaxDeadline", &application{runner: "execute", source: lifecycleRun, budget: true}, false},
 		{contexts, "| One controller Ansible run: the base of a controller-stage tool publication | %s |", setupRun, "runTimeout", &application{runner: "runProcess"}, false},
 		{contexts, "| The longest deadline a controller-stage client installation may run under | %s |", setupRun, "clientStageCeiling", &application{runner: "runProcess", ceiling: true}, false},
 		{"specs/openshift-clusters.md", "whose `minSizeGigabytes` exceeds %s", "internal/containercluster/agentinstall/selection.go", "maxInstallerRootDeviceGigabytes", nil, false},

@@ -1026,6 +1026,16 @@ def test_provided_host_refuses_to_reload_away_a_foreign_runtime_port_and_can_res
     assert provided(host)["ok"]
 
 
+def test_an_installed_host_reload_does_not_compare_runtime_state(directory):
+    from ansible_collections.bootwright.core.plugins.modules import managedos_host_firewall as direct
+    host = ProvidedFirewalld(directory, running=True)
+    host.runtime_ports = "9999/tcp"
+    wanted = dict(service(), networks=[], addresses=["192.0.2.10"])
+    params_ = {"operation": "apply", "mark": MARK, "services": [wanted], "ssh_address": "", "ssh_port": 0}
+    answer_ = direct.execute(params_, worker.Guest(run=host, directory=str(host.directory), owner=os.getuid(), preserve_runtime=False))
+    assert answer_["ok"] and "--reload" in host.verbs()
+
+
 def test_provided_host_repairs_its_lost_runtime_grant_without_discarding_foreign_grants(directory):
     host = ProvidedFirewalld(directory, running=True)
     assert provided(host)["ok"]

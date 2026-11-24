@@ -15,7 +15,6 @@ specs/ceph.md D203
 specs/ceph.md D204
 specs/ceph.md D206
 specs/infrastructure-services.md D240
-specs/managed-os.md D159
 specs/milestones.md D159
 specs/milestones.md D172
 specs/milestones.md D173

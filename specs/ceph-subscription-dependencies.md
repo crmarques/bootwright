@@ -76,9 +76,16 @@ opener that verifies the Satellite's certificate and host name against the
 lent CA bundle alone, without system roots, presents that repository's
 entitlement certificate and key, which only the TLS library opens by path,
 follows no redirect, uses no proxy and requires TLS 1.2 or later.
-`packageRepositoryProxy` stays the IBM repository's route alone. The metadata
-size bounds admit a subscription repository that serves every package of its
-release since GA, whose metadata is many times a DVD's. A download
+`packageRepositoryProxy` stays the IBM repository's route alone. Repository
+metadata is bounded by `METADATA_MEMBER_BYTES` stored per member,
+`METADATA_OPEN_MEMBER_BYTES` decompressed per member and `METADATA_OPEN_BYTES`
+decompressed in total (`ceph_package_sources`), sized for a full-history
+BaseOS and AppStream pair of one release. A member whose declared stored size
+passes the first refuses `packages`; a member or total passing either of the
+others refuses with the token `package-limit`.
+`test_a_full_history_subscription_repository_pair_is_within_the_metadata_bounds`
+and `test_the_open_bound_admits_the_full_history_pair_and_refuses_past_it` hold
+the bounds. A download
 admits only a URL under one of the two repositories, the IBM repository or its
 publisher key. A lost connection is retried as the
 [acquisition classification](ceph.md#frozen-release-and-trust) says. A
