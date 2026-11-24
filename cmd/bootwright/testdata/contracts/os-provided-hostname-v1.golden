@@ -1,0 +1,38 @@
+implementation: os-provided-hostname-v1
+content-digest: 030299f00c5d2d4bc7b7f83c4c04ff2d8987c2122061c1c84c6f8bb4d5c28175
+request-version: provided-os-hostname-request-v1
+automation-formats: none
+mark-formats: none
+proof-ids: none
+fixed-places: none
+effect-pins:
+  static-and-kernel-hostname-proof-v1
+request-identity:
+  identity.context
+  identity.object
+  identity.block
+  placement.machine
+  hostname
+request-schema:
+  hostname string
+  identity struct providedhostname.Identity
+  identity.block string
+  identity.context string
+  identity.object string
+  placement struct machine.Placement
+  placement.address string omitempty
+  placement.connection string
+  placement.knownHostsRef string omitempty
+  placement.machine string
+  placement.port int omitempty
+  placement.privateKeyRef string omitempty
+  placement.privilege string omitempty
+  placement.user string omitempty
+  version string
+evidence-schema:
+  changed bool
+  hostname string
+  postcondition bool
+  request string
+  state string
+  version string

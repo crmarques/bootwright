@@ -59,7 +59,7 @@ func LifecyclePlacement(o api.Object, c api.Catalog) (Placement, bool) {
 	if _, managed := BootstrapOf(o); !managed && !placementHost(o, c) {
 		return Placement{}, false
 	}
-	controller := controllerForPlacement(c)
+	controller := ControllerName(c)
 	if providerHost(o, c) {
 		placement, err := PlacementFor(o, controller)
 		return placement, err == nil
@@ -195,7 +195,7 @@ func validatePlacementHost(o api.Object, c api.Catalog) []api.Issue {
 	ssh := o.Spec().Get("access", "ssh")
 	if login := o.Spec().Get("access", "lifecycle"); login.Present() {
 		bootstrap, enroll := BootstrapOf(o)
-		if !api.MachineProvided(o) || !ssh.Present() || (!enroll && !placementHost(o, c)) || o.Name() == controllerForPlacement(c) {
+		if !api.MachineProvided(o) || !ssh.Present() || (!enroll && !placementHost(o, c)) || o.Name() == ControllerName(c) {
 			return []api.Issue{invariant("$.spec.access.lifecycle", "a dedicated lifecycle login requires a remote provided placement host",
 				"select a provided placement host reached over SSH or remove spec.access.lifecycle")}
 		}
@@ -219,7 +219,7 @@ func validatePlacementHost(o api.Object, c api.Catalog) []api.Issue {
 	return issues
 }
 
-func controllerForPlacement(c api.Catalog) string {
+func ControllerName(c api.Catalog) string {
 	if environments := c.OfKind(api.Environment); len(environments) == 1 {
 		return environments[0].Spec().Get("controller", "machineRef").Text()
 	}
@@ -228,7 +228,7 @@ func controllerForPlacement(c api.Catalog) string {
 
 // placementHost reports whether a managed capability places lifecycle effects on the Machine.
 func placementHost(o api.Object, c api.Catalog) bool {
-	if o.Spec().Get("firewall", "management").Text() == "managed" || ProvidedUpdateRelease(o) != "" {
+	if o.Spec().Get("firewall", "management").Text() == "managed" || ProvidedUpdateRelease(o) != "" || ProvidedHostname(o, ControllerName(c)) != "" {
 		return true
 	}
 	for _, candidate := range c.Objects() {

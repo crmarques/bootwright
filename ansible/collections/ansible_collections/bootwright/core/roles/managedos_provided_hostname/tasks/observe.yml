@@ -1,0 +1,41 @@
+---
+- name: Validate the frozen provided hostname request
+  ansible.builtin.assert:
+    that:
+      - bootwright_provided_hostname_request.version == 'provided-os-hostname-request-v1'
+      - bootwright_provided_hostname_request.placement.connection == 'ssh'
+      - bootwright_provided_hostname_request.hostname is string
+      - bootwright_provided_hostname_request.hostname | length <= 253
+      - bootwright_provided_hostname_request.hostname is match('(?i)^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?([.][a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$(?!\n)')
+      - bootwright_provided_hostname_digest is match('^[0-9a-f]{64}$(?!\n)')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.managedos_provided_hostname_protocol:
+    phase: loaded
+
+- name: Observe the static and kernel hostname
+  bootwright.core.managedos_provided_hostname:
+    operation: observe
+    request: '{{ bootwright_provided_hostname_digest }}'
+    hostname: '{{ bootwright_provided_hostname_request.hostname }}'
+  register: managedos_provided_hostname_observed
+  failed_when: false
+  timeout: 90
+  no_log: true
+
+- name: Resolve a bounded observation refusal
+  ansible.builtin.import_tasks: refused.yml
+  vars:
+    managedos_provided_hostname_answer: '{{ managedos_provided_hostname_observed }}'
+
+- name: Publish observed provided hostname evidence
+  bootwright.core.managedos_provided_hostname_protocol:
+    phase: completed
+    digest: '{{ bootwright_provided_hostname_digest }}'
+    hostname: '{{ bootwright_provided_hostname_request.hostname }}'
+    answer: '{{ managedos_provided_hostname_observed }}'
+    observed: true
+    outcome: unchanged
+  no_log: true

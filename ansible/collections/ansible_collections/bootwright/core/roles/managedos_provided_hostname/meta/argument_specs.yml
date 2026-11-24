@@ -1,0 +1,39 @@
+argument_specs:
+  apply:
+    short_description: Set the hostname of a provided RHEL host and prove it.
+    options: &request
+      bootwright_provided_hostname_request:
+        type: dict
+        required: true
+        options:
+          version:
+            type: str
+            required: true
+            choices:
+              - provided-os-hostname-request-v1
+          identity:
+            type: dict
+            required: true
+          placement:
+            type: dict
+            required: true
+          hostname:
+            type: str
+            required: true
+      bootwright_provided_hostname_digest:
+        type: str
+        required: true
+      bootwright_provided_hostname_material:
+        type: dict
+        required: true
+        options:
+          identity:
+            type: str
+            required: true
+          knownHosts:
+            type: str
+            required: true
+
+  observe:
+    short_description: Read the hostname of a provided RHEL host.
+    options: *request

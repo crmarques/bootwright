@@ -17,7 +17,7 @@ func validateProvidedUpdate(object api.Object, catalog api.Catalog) []api.Issue 
 		return nil
 	}
 	const field = "$.spec.os.provided.updates"
-	controller := controllerForPlacement(catalog)
+	controller := ControllerName(catalog)
 	if object.Name() == controller {
 		return []api.Issue{invariant(field, "provided OS updates can reboot a remote Machine but cannot reboot the controller", "remove the Machine's update policy and maintain the controller separately")}
 	}

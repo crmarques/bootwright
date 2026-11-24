@@ -50,6 +50,7 @@ import (
 	"github.com/crmarques/bootwright/internal/managedos/hostfirewall"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/managedos/physicalerase"
+	"github.com/crmarques/bootwright/internal/managedos/providedhostname"
 	"github.com/crmarques/bootwright/internal/managedos/providedupdate"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -224,6 +225,12 @@ func contractRows() []contractRow {
 			noEffect:               map[string]any{"version": providedupdate.EvidenceVersion, "state": "absent", "release": "9.8"},
 			removalObservesNothing: "specs/managed-os.md, Provided OS updates: removal retains the Machine and its packages without contacting it",
 			drift:                  map[string]any{"release": "9.9"}},
+		{kind: installation.Kind, implementation: providedhostname.Implementation, example: "lab-rhel+provided-hostname",
+			retains: true, retirementOnly: true, indivisible: true, presence: contractProvidedHostnamePresence,
+			absence:                map[string]any{"version": providedhostname.EvidenceVersion, "state": "retained"},
+			noEffect:               map[string]any{"version": providedhostname.EvidenceVersion, "state": "absent", "hostname": "witness.example.test"},
+			removalObservesNothing: "specs/managed-os.md, Provided hostname: removal retains the Machine and its hostname without contacting it",
+			drift:                  map[string]any{"hostname": "other.example.test"}},
 		{kind: installation.Kind, implementation: hostfirewall.FirewallImplementation, example: "lab-rhel+firewall",
 			completedFrom: "specs/managed-os.md, Host firewall requirements: each run pins the guest key its original apply's installation proved, and marks its services with that apply operation"},
 		{kind: installation.Kind, implementation: diskdiscovery.DiscoveryImplementation, example: "lab-baremetal+discovery", completedFrom: "specs/managed-os.md, Automatic root-disk discovery: each inventory boot requires the original physical UUID/MAC proof and durable attempt binding"},
@@ -268,6 +275,11 @@ func contractRows() []contractRow {
 
 const cephHostCompletedFrom = "specs/ceph.md, Frozen release and trust: each host preparation pulls exactly the digest the image block froze, under the original apply's owner and FSID"
 
+func contractProvidedHostnamePresence(_ *testing.T, _ lifecycle.Execution) map[string]any {
+	return map[string]any{"postcondition": true, "version": providedhostname.EvidenceVersion, "state": "complete",
+		"hostname": "witness.example.test", "changed": true}
+}
+
 const cephSMBCompletedFrom = "specs/ceph.md, SMB resources: an SMB request takes its owner, FSID, bootstrap host, cluster scope and resolved samba images from the original apply's core cluster and image proofs"
 
 // contractOverlays names each example the suite composes from a tracked
@@ -277,6 +289,7 @@ var contractOverlays = map[string][2]string{
 	"lab-baremetal+discovery":            {"lab-baremetal", filepath.Join("testdata", "capability-overlays", "disk-discovery")},
 	"lab-baremetal+erase":                {"lab-baremetal", filepath.Join("testdata", "capability-overlays", "physical-erase")},
 	"lab-rhel+provided-update":           {"lab-rhel", filepath.Join("testdata", "capability-overlays", "provided-update")},
+	"lab-rhel+provided-hostname":         {"lab-rhel", filepath.Join("testdata", "capability-overlays", "provided-hostname")},
 	"lab-rhel+firewall":                  {"lab-rhel", filepath.Join("testdata", "capability-overlays", "host-firewall")},
 	"lab-rhel+enrollment":                {"lab-rhel", filepath.Join("testdata", "capability-overlays", "machine-enrollment")},
 	"lab-rhel+registry":                  {"lab-rhel", filepath.Join("testdata", "capability-overlays", "managed-registry")},

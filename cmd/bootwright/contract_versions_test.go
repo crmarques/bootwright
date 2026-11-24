@@ -34,6 +34,7 @@ import (
 	"github.com/crmarques/bootwright/internal/managedos/hostfirewall"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/managedos/physicalerase"
+	"github.com/crmarques/bootwright/internal/managedos/providedhostname"
 	"github.com/crmarques/bootwright/internal/managedos/providedupdate"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/storage/ceph"
@@ -65,6 +66,7 @@ func contractVersions() []contractVersion {
 		{diskdiscovery.DiscoveryImplementation, diskdiscovery.DiscoveryContentDigest(), reflect.TypeFor[diskdiscovery.DiscoveryRequest](), reflect.TypeFor[diskdiscovery.DiscoveryEvidence]()},
 		{physicalerase.EraseImplementation, physicalerase.EraseContentDigest(), reflect.TypeFor[physicalerase.EraseRequest](), reflect.TypeFor[physicalerase.EraseEvidence]()},
 		{providedupdate.Implementation, providedupdate.ContentDigest(), reflect.TypeFor[providedupdate.Request](), reflect.TypeFor[providedupdate.Evidence]()},
+		{providedhostname.Implementation, providedhostname.ContentDigest(), reflect.TypeFor[providedhostname.Request](), reflect.TypeFor[providedhostname.Evidence]()},
 		{hostfirewall.FirewallImplementation, hostfirewall.FirewallContentDigest(), reflect.TypeFor[hostfirewall.FirewallRequest](), reflect.TypeFor[hostfirewall.FirewallEvidence]()},
 		{installation.Implementation, installation.ContentDigest(), reflect.TypeFor[installation.Request](), reflect.TypeFor[installation.Evidence]()},
 		{agentinstall.MediaImplementation, agentinstall.MediaContentDigest(), reflect.TypeFor[agentinstall.MediaRequest](), reflect.TypeFor[agentinstall.MediaEvidence]()},
@@ -162,13 +164,15 @@ func validated(reason string) automationFormat {
 func automationFormats() map[string]automationFormat {
 	host, core := persistedBy(ceph.HostImplementation), persistedBy(ceph.Implementation)
 	formats := map[string]automationFormat{
-		"addon-instance-request-v1":    {class: formatMirrored},
-		"ceph-export-request-v1":       {class: formatMirrored},
-		"ceph-export-evidence-v1":      {class: formatMirrored},
-		"cluster-network-request-v1":   {class: formatMirrored},
-		providedupdate.Version:         {class: formatMirrored},
-		providedupdate.EvidenceVersion: {class: formatMirrored},
-		"cluster-objects-v1":           {class: formatMirrored},
+		"addon-instance-request-v1":      {class: formatMirrored},
+		"ceph-export-request-v1":         {class: formatMirrored},
+		"ceph-export-evidence-v1":        {class: formatMirrored},
+		"cluster-network-request-v1":     {class: formatMirrored},
+		providedupdate.Version:           {class: formatMirrored},
+		providedupdate.EvidenceVersion:   {class: formatMirrored},
+		providedhostname.Version:         {class: formatMirrored},
+		providedhostname.EvidenceVersion: {class: formatMirrored},
+		"cluster-objects-v1":             {class: formatMirrored},
 		// The host block writes them; the core block's workers read them back
 		// for the manager account, the cephadm cache and the OSD identities.
 		"ceph-runtime-profile-v1":         persistedBy(ceph.HostImplementation, ceph.Implementation),

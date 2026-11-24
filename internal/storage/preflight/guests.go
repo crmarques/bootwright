@@ -73,7 +73,12 @@ func (g GuestChecks) CheckGuest(ctx context.Context, contextName string, host ap
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		checks = append(checks, probeCheck(probe, host.Name(), data, err))
+		check := probeCheck(probe, host.Name(), data, err)
+		if probe.id == "host.identity" && check.Status == capacity.Failed && err == nil && requirements.AppliedHostname == hostname {
+			check.Status, check.Reason = capacity.Pending, "apply sets the hostname to "+hostname
+			check.Next = "run bootwright apply --context " + contextName + " --stage machines"
+		}
+		checks = append(checks, check)
 		clear(data)
 	}
 	if requirements.Peers != nil {

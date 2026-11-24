@@ -746,17 +746,20 @@ func dependOnEnrollment(definitions []reconciliation.BlockDefinition) []reconcil
 }
 
 func dependOnProvidedUpdates(definitions []reconciliation.BlockDefinition) []reconciliation.BlockDefinition {
-	updates := map[string]bool{}
+	updates, hostnames := map[string]bool{}, map[string]bool{}
 	for _, definition := range definitions {
-		if definition.Family == machine.ProvidedUpdateFamily {
+		switch definition.Family {
+		case machine.ProvidedUpdateFamily:
 			updates[definition.Object] = true
+		case machine.ProvidedHostnameFamily:
+			hostnames[definition.Object] = true
 		}
 	}
 	for index := range definitions {
 		d := &definitions[index]
 		switch d.Family {
-		case machine.ProvidedUpdateFamily, machine.FirewallFamily:
-			if updates[d.Object] {
+		case machine.ProvidedUpdateFamily, machine.ProvidedHostnameFamily, machine.FirewallFamily:
+			if updates[d.Object] || hostnames[d.Object] {
 				d.Exclusive = append(d.Exclusive, "provided-os/"+d.Object)
 				slices.Sort(d.Exclusive)
 				d.Exclusive = slices.Compact(d.Exclusive)
@@ -764,11 +767,22 @@ func dependOnProvidedUpdates(definitions []reconciliation.BlockDefinition) []rec
 		case machine.EnrollmentFamily:
 		default:
 			for _, ref := range d.Requires {
-				if ref.Kind == string(api.Machine) && ref.Family == machine.HardwareFamily && updates[ref.Object] {
+				if ref.Kind != string(api.Machine) || ref.Family != machine.HardwareFamily {
+					continue
+				}
+				if updates[ref.Object] {
 					d.Requires = append(d.Requires, reconciliation.ObjectRef{Kind: string(api.Machine), Object: ref.Object, Family: machine.ProvidedUpdateFamily})
+				}
+				if hostnames[ref.Object] && machinesStageOrLater(d.Stage) {
+					d.Requires = append(d.Requires, reconciliation.ObjectRef{Kind: string(api.Machine), Object: ref.Object, Family: machine.ProvidedHostnameFamily})
 				}
 			}
 		}
 	}
 	return definitions
+}
+
+func machinesStageOrLater(stage reconciliation.Stage) bool {
+	stages := reconciliation.Stages()
+	return slices.Index(stages, stage) >= slices.Index(stages, reconciliation.StageMachines)
 }

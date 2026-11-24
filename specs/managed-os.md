@@ -2116,6 +2116,60 @@ update receipt. The update block's removal has no inverse host effect.
 | No enabled update source, unusable repository or release drift in the transaction | Enable reachable repositories serving the declared minor and repeat apply. |
 | An unresolved package transaction or unproved reboot | Check DNF history and unattended boot on the host, resolve the reported problem and repeat apply. |
 
+## Provided hostname
+
+### Selection
+
+Every provided Machine (`spec.os.provided`) that is not the Environment's
+controller Machine, declares a network address named `fqdn` and has pinned
+lifecycle SSH (`machine.PlacementFor` succeeds) has its hostname set during
+apply. No authored field selects it: the declared `fqdn` address is the
+hostname. A provided Machine without an `fqdn` address or without pinned
+lifecycle SSH is skipped without a block. A Bootwright-installed Machine is out
+of scope: its kickstart already sets `--hostname` to the same address. The
+controller Machine keeps its own hostname.
+
+cephadm admits a host only under its kernel hostname, and the storage
+preflight's `host.identity` probe compares that hostname with the Machine's
+`fqdn`. Setting it in apply makes both agree before a Ceph block reads the host
+([hostname refusal](ceph-native-api.md#hosts-placement-and-crush)); the
+preflight reports a mismatch on a Machine whose hostname apply will set as
+pending, not as a failure.
+
+### Implementations
+
+`providedhostname.Capability` freezes the `fqdn` address and the pinned
+placement in an `os-hostname-<machine>` block in the machines stage. It waits
+for the hardware claim and any managed lifecycle enrollment. Every other block
+in the machines stage or a later one that waits for the Machine's hardware
+claim also waits for the hostname, so Ceph hosts and add-ons start on the new
+name; a controller-stage or earlier block does not. The hostname, update and
+managed firewall blocks of one Machine share the exclusive key
+`provided-os/<machine>` whenever the Machine has an update or a hostname block,
+because the update reboots the host.
+
+The worker runs as root through the pinned placement. It reads the kernel
+nodename and the static hostname (`hostnamectl --static`). When both equal the
+declared name, it changes nothing. Otherwise it runs
+`hostnamectl set-hostname <fqdn>` and reads both names again; the apply
+completes only when both equal the declared name. The write is idempotent and
+observable, so it keeps no receipt or marker on the host. An observation reads
+both names and never writes: both equal reports the hostname set, otherwise it
+reports the effect absent. Destroy retains the provided Machine and its
+hostname; the block's removal has no inverse host effect.
+
+Bootwright never re-registers a provided Machine, so Satellite keeps the
+display name it registered the host under until the owner runs
+`subscription-manager facts --update`.
+
+### Refusal table
+
+| Input or observation | Remedy |
+| --- | --- |
+| No `fqdn` address, no pinned lifecycle SSH, or the controller Machine | No block is planned; declare an `fqdn` address and pinned lifecycle SSH on a remote provided Machine to have its hostname set. |
+| `hostname-write`: `hostnamectl set-hostname` failed | Check that the lifecycle login can run `hostnamectl` as root and that the host's hostname policy permits a change, then repeat apply. |
+| `hostname-unproved`: after the write the kernel or static hostname still differs, such as when cloud-init or a configuration-management agent rewrites it | Stop what rewrites the hostname, or configure it to keep the declared `fqdn`, then repeat apply. |
+
 ## Shared package-tree publication
 
 For a hosted package source, Managed OS plans one block per context and

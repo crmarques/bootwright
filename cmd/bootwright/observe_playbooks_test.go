@@ -84,6 +84,15 @@ func observeAllowlist() map[observeTaskKey]observeAllowance {
 	} {
 		add(role, "observe.yml", "ansible.builtin.assert", "validates the frozen request in memory", read)
 	}
+	const hostname = "managedos_provided_hostname"
+	const hostnameProtocol = observeCollection + "managedos_provided_hostname_protocol"
+	add(hostname, "observe.yml", observeCollection+hostname, "reads the static and kernel hostname without writing it", observeIs("operation", "observe"))
+	add(hostname, "observe.yml", hostnameProtocol, "publishes read-only hostname evidence", func(params, _ map[string]any) bool {
+		return params["phase"] == "loaded" || params["phase"] == "completed" && params["observed"] == true
+	})
+	add(hostname, "observe.yml", "ansible.builtin.assert", "validates the frozen request in memory", read)
+	add(hostname, "refused.yml", hostnameProtocol, "publishes a bounded read-only refusal", observeIs("phase", "refused"))
+	add(hostname, "refused.yml", "ansible.builtin.fail", "reports a failed read without touching the host", read)
 	const update = "managedos_provided_update"
 	const updateProtocol = observeCollection + "managedos_provided_update_protocol"
 	add(update, "observe.yml", observeCollection+update, "reads the provided update receipt and OS state", observeIs("operation", "observe"))

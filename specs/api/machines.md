@@ -301,7 +301,9 @@ OS lifecycle:
 
 - `provided: {}` is OS-ready. `os.install`, `os.clusterInstalled`, and network
   configuration are absent; `network.addresses` may declare contacts. Access
-  is operator-authored or defaults to SSH operator identity.
+  is operator-authored or defaults to SSH operator identity. Apply sets a
+  remote provided Machine's hostname to its `fqdn` address when it has pinned
+  lifecycle SSH ([provided hostname](../managed-os.md#provided-hostname)).
 - `install` is Bootwright-installed. Its required `profileRef` references a
   `MachineInstallProfile`; the Machine must not author `access`, and effective
   access is derived.

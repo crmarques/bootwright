@@ -411,6 +411,16 @@ Stops for [provided OS updates](../managed-os.md#provided-os-updates).
 | `osupdate.refused` | adapter-run | possible | target | - | fix-then-repeat | the Machine or its update source did not satisfy the provided OS update policy | check the Machine's OS release, update repositories and lifecycle access, then repeat the operation |
 | `osupdate.unproved` | block | unproved | target | - | repeat | the provided OS update adapter ended without proving the update | repeat the operation to observe the Machine before resuming the update |
 
+## Provided OS hostname stops
+
+Stops for the [provided hostname](../managed-os.md#provided-hostname).
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `oshostname.request-invalid` | block | none | defect | - | none | the provided OS hostname request is invalid, so no adapter ran | report the message as a defect |
+| `oshostname.refused` | adapter-run | possible | target | - | fix-then-repeat | the Machine did not accept the declared hostname | check what manages the Machine's hostname and its lifecycle access, then repeat the operation |
+| `oshostname.unproved` | block | unproved | target | - | repeat | the provided OS hostname adapter ended without proving the hostname | repeat the operation to observe the Machine before resuming the hostname |
+
 ## Managed OS installation stops
 
 The managed OS installation capability's stops (`internal/managedos/installation`).

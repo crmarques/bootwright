@@ -54,7 +54,7 @@ func validateFirewall(machine api.Object, catalog api.Catalog) []api.Issue {
 		return nil
 	}
 	if api.MachineProvided(machine) {
-		if _, err := PlacementFor(machine, controllerForPlacement(catalog)); err != nil {
+		if _, err := PlacementFor(machine, ControllerName(catalog)); err != nil {
 			return []api.Issue{invariant("$.spec.firewall.management", "managed firewall preparation on a remote host requires pinned lifecycle SSH access", "author spec.access.lifecycle or a pinned root login in spec.access.ssh")}
 		}
 	}

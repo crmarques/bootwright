@@ -1060,6 +1060,7 @@ one a row's field path names on its object while a block realizes the target.
 | `managed-service` `ArtifactServer`, `DNSServer`, `NTPServer`, `Proxy` | `InfraProvider` | the provider whose libvirt bridge carries the service's address |
 | `managed-service` `ArtifactServer` | `Machine` from `os-install` | `spec.machineRef`, if installed |
 | `managed-service` `ArtifactServer`, `Registry` | `Machine` from `machine-hardware` | `spec.machineRef`, over SSH |
+| `os-provided-hostname` `Machine` | `Machine` from `machine-hardware` | the Machine itself, reached over SSH |
 | `managed-service` `DNSServer`, `NTPServer`, `Proxy` | `Registry` | the managed image mirror it pulls through |
 | `mirror-fill` `ArtifactServer` | `ArtifactServer` from `managed-service` | the mirror it fills |
 | `mirror-fill` `ArtifactServer` | `Machine` from `os-install` | `spec.machineRef`, if installed |

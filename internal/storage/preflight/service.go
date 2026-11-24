@@ -147,7 +147,7 @@ func (s Service) Check(ctx context.Context, request PreflightRequest) (*Report, 
 	}
 	guests := fanout.Run(ctx, fanout.Options[string, []Check]{Limit: capacity.ProbeConcurrency}, hostNames, func(ctx context.Context, name string) ([]Check, error) {
 		ports := slices.DeleteFunc(slices.Clone(published), func(requirement HostPortRequirement) bool { return requirement.Machine != name })
-		return s.guestChecks(ctx, selected, catalog, name, owned, HostRequirements{Ports: ports, Fleet: fleet[name], Peers: peers[name]}, request)
+		return s.guestChecks(ctx, selected, catalog, name, owned, HostRequirements{Ports: ports, Fleet: fleet[name], Peers: peers[name], AppliedHostname: appliedHostname(catalog, name)}, request)
 	})
 	if err := fanout.FirstError(guests); err != nil {
 		return nil, err
@@ -166,6 +166,14 @@ func (s Service) Check(ctx context.Context, request PreflightRequest) (*Report, 
 		return result, diagnostics.NewFailureWithRemediation(code, "storage readiness is not proved; inspect the failed, unknown and pending checks", "", "resolve the reported prerequisites and repeat bootwright apply --dry-run --stage clusters")
 	}
 	return result, nil
+}
+
+func appliedHostname(catalog api.Catalog, name string) string {
+	host, found := catalog.Find(api.Machine, name)
+	if !found {
+		return ""
+	}
+	return machine.ProvidedHostname(host, machine.ControllerName(catalog))
 }
 
 var nameAddressingServices = []string{"alertmanager", "alloy", "grafana", "loki", "mgmt-gateway", "prometheus", "promtail"}

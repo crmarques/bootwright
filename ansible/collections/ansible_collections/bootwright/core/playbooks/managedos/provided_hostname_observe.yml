@@ -1,0 +1,13 @@
+---
+- name: Execute one provided operating system hostname capability
+  hosts: bootwright_target
+  gather_facts: false
+  any_errors_fatal: true
+  serial: 1
+  strategy: ansible.builtin.linear
+
+  tasks:
+    - name: Execute the provided operating system hostname observe
+      ansible.builtin.import_role:
+        name: bootwright.core.managedos_provided_hostname
+        tasks_from: observe

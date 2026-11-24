@@ -745,6 +745,8 @@ node ([normalization](api/ceph.md#normalization)). The cluster block and
 each resource block read every host's hostname before any effect of their
 own; a host that reports another hostname refuses `hostname-mismatch`, whose
 native error names the Machine, the reported hostname and the registered one.
+Apply sets a provided Machine's hostname first
+([provided hostname](managed-os.md#provided-hostname)).
 The generated native HostSpec is visible as non-secret plan intent. A raw
 `service_type: host` entry in `services` refuses because it would create a
 second infrastructure owner.

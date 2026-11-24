@@ -233,6 +233,7 @@ lab-rhel-mirror-host:
   machine-rhel-01
   mirror-images-lab-rhel-mirror-host
   ntp-lab-ntp
+  os-hostname-mirror
   os-install-rhel-01
   os-package-tree-rhel-9-8
   proxy-lab-proxy
@@ -304,6 +305,7 @@ lab-sno-mirror-host:
   machine-sno-01
   mirror-files-lab-sno-mirror-host
   ntp-lab-ntp
+  os-hostname-mirror
   proxy-lab-proxy
   substrate-host-lab-libvirt
 lab-sno-nmstate:
@@ -343,6 +345,7 @@ lab-sno-release-mirror:
   mirror-images-lab-sno-release-mirror
   mirror-release-sno
   ntp-lab-ntp
+  os-hostname-mirror
   proxy-lab-proxy
   registry-mirror-registry
   substrate-host-lab-libvirt

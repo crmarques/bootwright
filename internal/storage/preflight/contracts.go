@@ -19,9 +19,10 @@ type GuestObserver interface {
 }
 
 type HostRequirements struct {
-	Ports []HostPortRequirement
-	Fleet *FleetAccess
-	Peers *PeerNames
+	Ports           []HostPortRequirement
+	Fleet           *FleetAccess
+	Peers           *PeerNames
+	AppliedHostname string
 }
 
 type PeerNames struct{ Services, Names []string }

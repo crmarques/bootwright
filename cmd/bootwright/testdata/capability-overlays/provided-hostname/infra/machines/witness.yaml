@@ -1,0 +1,22 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: witness
+
+spec:
+  os:
+    provided: {}
+
+  network:
+    addresses:
+      - name: ssh
+        address: 192.0.2.234
+      - name: fqdn
+        address: witness.example.test
+
+  access:
+    ssh:
+      knownHostsRef: witness-host-key
+
+      auth:
+        privateKeyRef: witness-admin

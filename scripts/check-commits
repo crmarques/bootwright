@@ -42,6 +42,7 @@ internal/managedos/diskdiscovery/
 internal/managedos/hostfirewall/
 internal/managedos/installation/
 internal/managedos/physicalerase/
+internal/managedos/providedhostname/
 internal/managedos/providedupdate/
 internal/storage/ceph/
 internal/substrate/

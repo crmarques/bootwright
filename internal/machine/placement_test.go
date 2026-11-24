@@ -56,8 +56,12 @@ func TestDedicatedLifecycleLoginPreservesSessionAccess(t *testing.T) {
 	if issues := validatePlacementHost(refused, placementCatalog(refused)); len(issues) != 1 || issues[0].Field != "$.spec.access.lifecycle" {
 		t.Fatalf("validation accepted an invalid lifecycle privilege: %v", issues)
 	}
-	if issues := validatePlacementHost(normalized, api.NewCatalog([]api.Object{normalized})); len(issues) != 1 {
+	unused := normalized.WithSpec(normalized.Spec().WithPath(list(m("name", "ssh", "address", "192.0.2.10")), "network", "addresses"))
+	if issues := validatePlacementHost(unused, api.NewCatalog([]api.Object{unused})); len(issues) != 1 {
 		t.Fatalf("validation accepted an unused lifecycle login: %v", issues)
+	}
+	if issues := validatePlacementHost(normalized, api.NewCatalog([]api.Object{normalized})); len(issues) != 0 {
+		t.Fatalf("validation refused a lifecycle login that sets the hostname: %v", issues)
 	}
 	if got, ok := LifecyclePlacement(normalized, placementCatalog(normalized)); !ok || got != place {
 		t.Fatalf("inspect placement = %+v; want %+v", got, place)

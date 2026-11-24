@@ -96,3 +96,36 @@ func TestUnknownHostKeyObservationNeverContinuesWithCredentials(t *testing.T) {
 		}
 	}
 }
+
+func TestAHostnameApplySetsIsPendingNotFailed(t *testing.T) {
+	host := api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue(api.FieldValue{Name: "network", Value: api.MapValue(api.FieldValue{Name: "addresses", Value: api.ListValue(api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue("fqdn")}, api.FieldValue{Name: "address", Value: api.StringValue("guest.example.test")}))})}))
+	checker := GuestChecks{Commands: CommandFunc(func(_ context.Context, request CommandRequest) ([]byte, error) {
+		answers := map[string]string{"/usr/bin/hostname": "other\n", "/usr/bin/uname": "kernel\n", "/usr/bin/cat": "ID=rhel\n", "/usr/bin/timedatectl": "yes\n", "/usr/bin/id": "0\n", "/usr/bin/getent": "192.0.2.1 STREAM guest.example.test\n"}
+		return []byte(answers[request.Argv[0]]), nil
+	})}
+	for _, test := range []struct {
+		name    string
+		applied string
+		want    string
+	}{
+		{"apply sets the declared name", "guest.example.test", capacity.Pending},
+		{"apply sets no name", "", capacity.Failed},
+	} {
+		rows, err := checker.CheckGuest(context.Background(), "synthetic", host, HostRequirements{AppliedHostname: test.applied}, PreflightRequest{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, row := range rows {
+			want := capacity.Passed
+			if row.ID == "host.identity" {
+				want = test.want
+			}
+			if row.Status != want {
+				t.Fatalf("%s: %+v, want %s", test.name, row, want)
+			}
+			if row.ID == "host.identity" && test.want == capacity.Pending && (row.Reason != "apply sets the hostname to guest.example.test" || !strings.Contains(row.Next, "--stage machines")) {
+				t.Fatalf("%s: %+v", test.name, row)
+			}
+		}
+	}
+}

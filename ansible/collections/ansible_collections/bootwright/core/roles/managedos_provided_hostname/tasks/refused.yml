@@ -1,0 +1,14 @@
+---
+- name: Publish a bounded provided hostname refusal
+  bootwright.core.managedos_provided_hostname_protocol:
+    phase: refused
+    reason: '{{ managedos_provided_hostname_answer.reason }}'
+  when:
+    - managedos_provided_hostname_answer.ok | default(false) is not true
+    - managedos_provided_hostname_answer.reason is defined
+  no_log: true
+
+- name: Refuse a provided hostname that did not provide success evidence
+  ansible.builtin.fail:
+    msg: 'The provided operating system hostname did not return success evidence'
+  when: managedos_provided_hostname_answer.ok | default(false) is not true
