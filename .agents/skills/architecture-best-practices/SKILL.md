@@ -18,6 +18,9 @@ its [conventions](../../../specs/index.md#conventions) own placement.
   [knowledge](../../knowledge/index.md). Find the owning section through the
   index and read that section, not the page. Search for the rule's other
   statements; keep one and replace each copy with a link.
+- New and touched spec text follows the [spec form](references/spec-form.md):
+  one rule per sentence, an actor and an observable outcome, failure behavior
+  for an effect, and the code and tests that hold it.
 - Specs state target invariants in the present tense. A rule the code does not
   yet meet carries one Not yet met line in the conventions' form, linking the
   open item that will close it; nothing else in a spec claims availability.
