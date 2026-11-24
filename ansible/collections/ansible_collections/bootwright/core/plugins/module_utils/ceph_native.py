@@ -1800,8 +1800,7 @@ class Worker:
         self.verify_tool()
         for executable in ("/usr/bin/ceph", "/usr/bin/rbd", "/usr/bin/rados", "/usr/bin/podman", "/usr/sbin/lvm", "/usr/bin/systemctl"):
             require(os.path.isfile(executable) and os.access(executable, os.X_OK), "host-prerequisite")
-        synchronized = self.command(["/usr/bin/timedatectl", "show", "--property=NTPSynchronized", "--value"], json_result=False)
-        require(synchronized.strip() == b"yes", "host-time")
+        self.prove_time_synchronized()
         result = {"name": self.host["name"], "owned": self.markers.owned(), "exists": bool(self.daemons())}
         if self.request["action"] == "cluster":
             result["recovery"] = self.preparation_state()
@@ -1814,6 +1813,14 @@ class Worker:
             raise NativeFailure("hostname-mismatch", "hostname of Ceph host " + self.host["machine"],
                                 b"the host reports the hostname " + (reported or b"(none)") + b", and the cluster registers it as "
                                 + self.host["name"].encode("ascii"))
+
+    def prove_time_synchronized(self):
+        """A host whose clock systemd does not report synchronized refuses, naming the Machine and what it reported."""
+        reported = self.command(["/usr/bin/timedatectl", "show", "--property=NTPSynchronized", "--value"], json_result=False).strip()
+        if reported != b"yes":
+            raise NativeFailure("time-unsynchronized", "time synchronization of Ceph host " + self.host["machine"],
+                                b"timedatectl reports NTPSynchronized=" + (reported or b"(none)")
+                                + b", so the host's clock is not synchronized to a time source")
 
     def claim(self):
         prove_fips(self.request)

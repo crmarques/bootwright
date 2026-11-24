@@ -57,7 +57,7 @@ CLUSTER_REASONS = (
     "unsupported-release", "runtime-profile", "device-identity", "cache-unproved", "enrollment-budget",
     "dashboard-identity", "dashboard-tls-identity", "monitoring-template-identity", "dashboard-drift", "dashboard-policy",
     "dashboard-verify", "pool-identity", "pool-drift", "client-quiescence-unqualified", "native-option-undeclared", "call-home-unqualified",
-    "dashboard-manager", "hostname-mismatch",
+    "dashboard-manager", "hostname-mismatch", "time-unsynchronized",
     "request", "artifact", "ownership", "evidence", "material", "packages", "package-artifact", "package-drift", "package-journal", "package-license",
     "package-limit", "package-timeout", "package-platform", "package-host", "call-home-drift", "config-drift", "partial-cluster", "not-ready",
     "not-removed", "cluster-unavailable", "device", "foreign-cluster", "native-command", "native-timeout", "native-output", "unknown", "transport",

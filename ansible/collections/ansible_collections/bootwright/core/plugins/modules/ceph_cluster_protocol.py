@@ -82,6 +82,7 @@ options:
       - device
       - dashboard-manager
       - hostname-mismatch
+      - time-unsynchronized
       - foreign-client
       - foreign-pool
       - foreign-profile

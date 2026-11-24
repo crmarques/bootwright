@@ -1629,6 +1629,25 @@ def test_a_host_answering_to_its_registered_hostname_passes(core_request):
     native.prove_hostname()
 
 
+TIMEDATECTL = ("/usr/bin/timedatectl", "show", "--property=NTPSynchronized", "--value")
+
+
+@pytest.mark.parametrize("reported", [b"no\n", b"\n"])
+def test_a_host_whose_clock_is_not_synchronized_refuses_naming_it(core_request, reported):
+    native, calls = worker(core_request, {TIMEDATECTL: (0, reported)})
+    with pytest.raises(ceph_native.NativeFailure, match="^time-unsynchronized$") as refused:
+        native.prove_time_synchronized()
+    cause = refused.value.native_error["cause"]
+    assert native.host["machine"] in refused.value.native_error["coordinate"]
+    assert "NTPSynchronized=" + (reported.strip().decode() or "(none)") in cause
+    assert calls == [list(TIMEDATECTL)] and native.markers.writes == []
+
+
+def test_a_host_whose_clock_is_synchronized_passes(core_request):
+    native, unused = worker(core_request, {TIMEDATECTL: (0, b"yes\n")})
+    native.prove_time_synchronized()
+
+
 @pytest.mark.parametrize("pending", ["down", "out", "starting", "missing-cache", "missing-image"])
 def test_starting_osd_does_not_request_an_unavailable_effective_config(core_request, pending):
     core_request["config"] = memory_config()

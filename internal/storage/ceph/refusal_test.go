@@ -465,6 +465,16 @@ func TestAHostnameMismatchNamesTheHostnameToSet(t *testing.T) {
 	}
 }
 
+func TestAnUnsynchronizedClockNamesTheTimeSourceToCheck(t *testing.T) {
+	refused := adapterRefusals()["time-unsynchronized"]
+	d := diagnostics.Of(refused)
+	const message = "a Ceph host's clock is not synchronized to a time source: timedatectl does not report NTPSynchronized=yes there, and Ceph monitors need clocks that agree"
+	const remedy = "the native error names the Machine and what timedatectl reported; on that host, chronyc sources must show a reachable source selected with *; a Bootwright-installed Machine takes its servers from its install profile's ntp selections, a provided Machine from its own chrony configuration; once timedatectl reports NTPSynchronized=yes there, apply again; the block changed nothing on any Ceph host before the check"
+	if len(d) != 1 || d[0].Code != cephPrerequisite.Code || d[0].Message != message || d[0].Remediation != remedy || !diagnostics.Unproved(refused) {
+		t.Fatalf("a time-unsynchronized refusal reached the operator as %+v", d)
+	}
+}
+
 func TestAPoolDriftRefusalNamesTheSettingsAndBothRemedies(t *testing.T) {
 	d := diagnostics.Of(adapterRefusals()["pool-drift"])
 	const message = "a setting this operation completed on the Ceph pool (size, min_size, a quota, a compression option, erasure-coded overwrites or its application) no longer has the value its CephPool or CephObjectGateway froze"

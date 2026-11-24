@@ -40,6 +40,7 @@ options:
       - call-home-unqualified
       - dashboard-manager
       - hostname-mismatch
+      - time-unsynchronized
       - request
       - artifact
       - ownership
