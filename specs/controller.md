@@ -816,9 +816,9 @@ diagnostic and remedy, naming the source's host, and for `storage` the tool
 area that source was being written into; `internal`, a class without the
 source, and a source the run is not installing keep the
 generic adapter failure or break the protocol. A run that failed after
-announcing its sources but before Go acknowledged the tools installed nothing
-and is failed; once that acknowledgement may have been delivered, it is
-unknown (`protocolRun.unauthorized`,
+announcing its sources but before Go delivered the `continue` acknowledgement,
+which authorizes every frozen tool, installed nothing and is failed; once that
+acknowledgement may have been delivered, it is unknown (`protocolRun.unauthorized`,
 `TestAClientInstallationThatFailsBeforeAnyAcknowledgementIsFailed`,
 `TestAClientInstallationAfterAnAcknowledgedToolStaysUnknown`).
 
@@ -873,8 +873,8 @@ stage never installs it, publishes a binding, or claims another context's
 resources.
 
 A failure this stage meets in an adapter it shares with setup (the tool
-catalog, its publisher metadata, transport, acquisition or trust, the host's
-dnf, or the controller Ansible run) keeps its own diagnostic code and names
+catalog, its publisher metadata, transport, acquisition or trust, or the host's
+dnf), or in this stage's own Ansible run, keeps its own diagnostic code and names
 this stage's own `bootwright apply --stage controller --context <name>` as
 what settles it, never `install`, which installs nothing a context selects.
 `apply --dry-run --stage controller --context <name>` names the same command for the same

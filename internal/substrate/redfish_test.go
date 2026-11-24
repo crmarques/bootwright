@@ -128,9 +128,9 @@ func secondsText(duration time.Duration) string {
 }
 
 // Each bound is its pauses and every request outside its polls at the
-// request timeout, so an arithmetic slip in a derivation shows as a figure the
-// specifications do not state.
-func TestTheControllerBoundsAreTheFiguresTheSpecificationsState(t *testing.T) {
+// request timeout, so an arithmetic slip in a derivation shows as a bound
+// that differs from the figure its derivation yields.
+func TestTheControllerBoundsAreTheirDerivedFigures(t *testing.T) {
 	for name, test := range map[string]struct {
 		bound time.Duration
 		want  string

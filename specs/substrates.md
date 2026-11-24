@@ -21,7 +21,9 @@ per substrate arm, so a block resolves by kind and implementation together.
 
 ### Selection
 
-This contract realizes the libvirt, bare-metal and KubeVirt arms. The arm an
+This contract realizes the libvirt, bare-metal and KubeVirt arms; the vSphere
+arm is specified under [vSphere machine realization](#vsphere-machine-realization)
+and is not realized. The arm an
 `InfraProvider` declares is the selector: `libvirt` selects the implementation
 identities `substrate-host-libvirt-v1` and `machine-libvirt-v1`, `baremetal`
 selects `machine-baremetal-v1`, and `kubevirt` selects
@@ -81,14 +83,8 @@ with `os.clusterInstalled`, as
 management-controller slot holds the arm's management API endpoint and
 credential instead of a BMC: for KubeVirt, `kubevirt:<namespace>/<vm>` and its
 kubeconfig. The other facts follow the record above.
-A Bootwright-installed Machine on either arm refuses before
-registration, because the arm defines no identity channel for it.
-
-Not yet met: the vSphere arm provisions no Machine; tracked as
-[B99](milestones/m1.md#b99).
-
-Not yet met: the KubeVirt arm defines no identity channel for a
-Bootwright-installed Machine; tracked as [B905](milestones/m1.md#b905).
+A Bootwright-installed Machine (`os.install`) on either arm refuses before
+registration as the [refusal table](#refusal-table) states.
 
 The libvirt provider host is the Machine `spec.libvirt.machineRef` names. It
 must be OS-ready and reachable through one of the
@@ -145,7 +141,7 @@ The vSphere arm is not realized and has no row.
 
 | Arm | Management controller | Operator gates | Ledger rows |
 | --- | --- | --- | --- |
-| `libvirt` | emulated Redfish service (sushy-tools) | [B74](milestones/m1.md#b74), [B75](milestones/m1.md#b75), [B76](milestones/m1.md#b76), [B326](milestones/m1.md#b326), [B346](milestones/m1.md#b346), [B703](milestones/m1.md#b703) | 2026-09-17 (`lab-rhel`, observation); 2026-10-05 (B49, B72); 2026-10-15 (B19, B20, B270, B276, B277, B339); 2026-10-15 (concurrent installations, observation); 2026-10-16 (B476); 2026-10-16 (B466, B608); 2026-10-17 (B615, M2b); 2026-10-31 ([B77](../docs/acceptance.md#ledger), B876, B978, B979; bounded managed-OS) |
+| `libvirt` | emulated Redfish service (sushy-tools) | [B74](milestones/m1.md#b74), [B75](milestones/m1.md#b75), [B76](milestones/m1.md#b76), [B326](milestones/m1.md#b326), [B346](milestones/m1.md#b346), [B703](milestones/m1.md#b703) | [the ledger](../docs/acceptance.md#ledger)'s rows whose example runs a libvirt provider |
 | `baremetal` | physical Redfish BMC | [B70](milestones/m1.md#b70), [B73](milestones/m1.md#b73), [B78](milestones/m1.md#b78), [B305](milestones/m1.md#b305), [B319](milestones/m1.md#b319) | `unrun` |
 | `kubevirt` | the host cluster's Kubernetes API (OpenShift Virtualization) | [B731](milestones/m3.md#b731), [B732](milestones/m3.md#b732), [B883](milestones/m4.md#b883), [B88](milestones/m3.md#b88) | `unrun` |
 
@@ -249,8 +245,8 @@ whose subnet the host holds no address in (a managed Network of a provider on
 that host has its own connected route, and an address the host Machine declares
 inside the subnet is one), the request freezes the subnet in `refusedPrefixes`,
 canonical and in order, once however many bridges carry it; more than 64
-refuse `api.invariant` at `$.spec.libvirt.taggedNetworkRefs` of the provider
-when the request is planned. The host holds an
+refuse `api.invariant` at the provider, with no field path, when the request
+is planned; the message names the managed Networks' `spec.libvirt.taggedNetworkRefs`. The host holds an
 `unreachable` route for each, so the guest is refused with an ICMP unreachable
 and nothing leaves through the uplink. libvirt's network XML cannot express it:
 its `<route>` element needs a gateway and adds a route through that gateway,
@@ -266,8 +262,10 @@ return after a restart, and its file names each route as `ip route add
 unreachable <subnet> proto 251 metric <metric>`, deleted by the same key when
 the unit stops, also after a failed start. Ownership is the unit: a regular
 root-owned file of mode 0644 that starts with the mark line naming its own
-name, a symbolic enablement link pointing at it, no drop-in directory and no
-unit-specific override; anything else of that name refuses, naming it, on apply
+name (mark `# Bootwright owned VLAN refusal: <unit>`, held by
+`test_a_foreign_unit_refuses_before_mutation`), a symbolic enablement link pointing at it, no
+`<unit>.d` drop-in directory and no override beyond
+[owned unit drop-ins](#owned-unit-drop-ins) allows; anything else of that name refuses, naming it, on apply
 and on destroy before an effect. A route's identity is its `unreachable` type,
 protocol 251, the main table and the unit's metric: 2^30 plus the first four
 bytes of the SHA-256 of the unit name, big-endian, modulo 2^30. The kernel keys
@@ -342,13 +340,8 @@ refuses with a remedy; it is never inferred from systemd's active state alone.
 An external-only provider creates no readiness unit.
 
 The unit and enablement link must match this provider's exact frozen ownership;
-unknown files, different enablement targets and unit-specific or administrative
-overrides refuse before replacement or removal. The qualified operating system's
-vendor-wide defaults are trusted only for regular `.conf` files directly under
-`/usr/lib/systemd/system/service.d`, with root ownership, no group/world write
-and no symbolic links in either file or directory ancestry. These
-[type-wide drop-ins](https://github.com/systemd/systemd/blob/main/man/systemd.unit.xml)
-remain outside Bootwright ownership and are never changed or removed. A loaded
+unknown files and different enablement targets refuse before replacement or
+removal, and overrides follow [owned unit drop-ins](#owned-unit-drop-ins). A loaded
 barrier must still prove effective `Type=oneshot`, `RemainAfterExit=yes`, its
 75-second start timeout and the required firewall-before-driver ordering;
 incompatible defaults refuse. Host completion proves its
@@ -509,6 +502,24 @@ The readiness unit's active state is no part of positive no effect: a unit that
 failed at boot but is still owned and enabled is held, so the removal has taken
 nothing back.
 
+## Owned unit drop-ins
+
+The readiness unit, the [VLAN refusal](#provider-host-realization) unit and the
+[routing](#routing-table) unit share one drop-in rule. A unit-specific or
+administrative override of any of them refuses before replacement or removal.
+The qualified operating system's vendor-wide defaults are trusted only for
+regular `.conf` files directly under `/usr/lib/systemd/system/service.d`, with
+root ownership, no group/world write and no symbolic links in either file or
+directory ancestry. These
+[type-wide drop-ins](https://github.com/systemd/systemd/blob/main/man/systemd.unit.xml)
+remain outside Bootwright ownership and are never changed or removed.
+
+Code: `vendor_dropins` in the collection's `libvirt_firewall_ready` module
+utility, which the three units call.
+Held by: `test_malformed_specific_or_unproved_dropins_refuse`,
+`test_vendor_provenance_rejects_unsafe_files_and_ancestors` and the `dropin`
+collision cases of the VLAN refusal and routing unit tests.
+
 ## Provider host trunks and routing
 
 The [provider host block](#provider-host-realization) realizes its tagged
@@ -557,7 +568,8 @@ that directory, synced, then renamed) and loaded with `nmcli connection load
 `<device>`, `autoconnect=true`, `zone=trusted`; for a trunk `[bridge]`
 `mac-address=<mac in uppercase>`, `stp=false`, `vlan-filtering=false` and
 `[ipv4]` `method=disabled`; for a leg `[vlan]` `id=<vlan>`, `parent=<trunk>`
-and `[ipv4]` `address1=<address>`, `method=manual`, `never-default=true`; then
+and `[ipv4]` `address1=<address>`, `method=manual`, `never-default=true`, or,
+for an addressless leg, `[ipv4]` `method=disabled`; then
 `[ipv6]` `method=disabled`; and `[user]` with exactly the four keys, sorted,
 `bootwright.io.context` (the context), `bootwright.io.network` (a leg's Network,
 a trunk's bridge), `bootwright.io.provider` (the provider) and
@@ -740,8 +752,8 @@ no element can carry a quote or a statement
 
 The unit holds the table as the VLAN refusal unit holds its routes, with the
 same ownership mark rule (mark `# Bootwright owned routing: <unit>`),
-enablement under `multi-user.target.wants`, drop-in and override refusals and
-removal. Its file is exactly:
+enablement under `multi-user.target.wants`, the [drop-in rule](#owned-unit-drop-ins)
+and removal. Its file is exactly:
 
 ```text
 # Bootwright owned routing: <unit>
@@ -845,23 +857,28 @@ by libvirt.
 
 The chains judge routed traffic. Bootwright assumes `br_netfilter` does not
 pass bridged frames to the inet hooks, as on a host where libvirt's bridges
-carry guest traffic, and it neither loads nor configures that module; where it
-does pass them, a frame bridged between two ports of one trunk meets these
-chains with the trunk as its interfaces, which no in-tree test proves.
+carry guest traffic, and it neither loads nor configures that module.
+
+Not yet met: the host's `br_netfilter` setting is neither observed nor refused,
+so where the module passes bridged frames, a frame bridged between two ports of
+one trunk meets these chains with the trunk as its interfaces and no in-tree
+test proves the outcome; tracked as [B1778](milestones/m1.md#b1778).
 
 #### Routing apply, removal and observation
 
-Before any effect, on apply and on destroy, a table of the name while the unit
-is not owned and running, and an `nft` read that does not answer, refuse
-`runner.task-failed`; `/usr/sbin/nft` must be present. An apply writes the
+Before any effect, on apply and on destroy, a table of the name while its unit
+is not both owned and active, and an `nft` read that does not answer, refuse
+`runner.task-failed`; `/usr/sbin/nft` must be present. The refusal for a table
+left without its unit names the table, says nothing proves it this provider's,
+and tells the operator to delete it with `nft delete table inet <table>`. Bootwright never
+deletes a table because its comment matches, since any tool can write a comment
+(`test_a_foreign_table_of_the_units_name_refuses_before_any_effect`). An apply writes the
 ruleset file when its content differs, then rewrites the unit when its content
 differs and reloads systemd, as it also does while systemd reports the unit
 needs a daemon reload, starts the unit while it does not run, and
 otherwise reloads it while either file differed, its loaded table differs or,
 with `forwarding`, `net.ipv4.ip_forward` is not 1; it never restarts or stops
-it, because only a stop deletes the table. An earlier build's unit that fed
-the ruleset as standard input, active with no table, is owned by its mark and
-converges this way by a reload
+it, because only a stop deletes the table. An owned unit that is active with no loaded table converges by a reload
 (`test_a_host_holding_the_earlier_standard_input_unit_with_no_table_converges_by_reloading`).
 `nft -f` applies the ruleset in one transaction, so a ruleset it refuses on a
 reload leaves the table it would replace loaded and the unit active, and the
@@ -902,7 +919,7 @@ removal took nothing back while the unit is owned and enabled; and a table or
 unit of the name without this provider's ownership is foreign
 (`TestTheRoutingTableIsProvedOwnedLoadedAndForwarding`).
 
-### Refusing routes left behind
+## Refusing routes left behind
 
 The removal of a [VLAN refusal unit](#provider-host-realization) deletes by its
 full key (type, subnet, protocol, metric and table) every refusing route still
@@ -970,9 +987,7 @@ disk serial before accepting ownership; positive explicit-media disk evidence
 carries the actual bus, target and rotation rate. The pinned sushy emulator places
 optical media on `sdx` and a free SCSI unit, avoiding the data units.
 Virtual media type proves guest presentation rather than physical storage
-performance. The explicit-media semantic change is included in the automation
-digest;
-old applied requests are never reinterpreted. The root carries no WWN or serial
+performance. The root carries no WWN or serial
 for a [root-disk hint](api/machines.md#root-disk) to match; the installer
 uses `/dev/vda`, derived.
 Each interface carries the
@@ -1155,7 +1170,9 @@ state, including paused and suspended, still holds the memory and disks a
 removal would delete. A hypervisor that will not answer is never read as a
 domain that is not defined: the management controller's power state is then
 the second opinion, `Off` quiescent, `On` in use and anything else unproved,
-and a Machine neither can account for is treated as in use. The refusal names
+and a Machine neither can account for is treated as in use. The second opinion
+decides only the stop proof before registration; the inverse still requires a
+hypervisor answer ([Hypervisor answer](#machine-realization)) and refuses without one. The refusal names
 `bootwright machine stop --context <context> --name <machine>`, and the inverse refuses a domain
 that is not shut off rather than forcing it, under the
 [removal gate](state-reconciliation.md#quiescence-before-removal).
@@ -1175,8 +1192,7 @@ is not gated, and [container-cluster preflight](openshift-clusters.md#preflight)
 and storage preflight report the same checks.
 
 Each backing filesystem's disk check also counts what the apply itself writes
-there beside the guests' disks ([D242](milestones/backlog.md#d242), pending the
-owner's review): each hosted package tree publication path, once, while its
+there beside the guests' disks ([D242](milestones/backlog.md#d242)): each hosted package tree publication path, once, while its
 tree block may still start, and, for each Bootwright-installed Machine whose
 installation block may still start, its installer image as the artifact server
 publishes it and, on a libvirt provider, the copy its emulated controller
@@ -1391,9 +1407,11 @@ object.
 credential, its recorded identity, a complete inventory reporting exactly the
 declared MAC set, and a reported power state. An apply that proves the machine reports `completed` with no
 change, the first proof included, and so does a resolution that proves it,
-because its observation repeats that proof: the claim the block contributes is
-taken as the operation's reservation when the operation registers, not by the
-adapter, and the block realizes nothing that could drift. The differences it
+because its observation repeats that proof: the `bmc:` key is taken as the
+operation's reservation when the operation registers, not by the adapter; the
+`bmc-system:` and `bmc-mac:` keys its proof adds are written to the same
+controller record before any media is inserted, and neither counts as a change;
+and the block realizes nothing that could drift. The differences it
 converges are none: hardware is not converged, and a machine whose MAC set no
 longer matches fails naming what it lacks rather than adopting the new
 hardware. The adapter task that publishes a proof or an observation reads no
@@ -1558,7 +1576,8 @@ differently; the consumed `data-loss` acknowledges that.
 [unknown](state-reconciliation.md#attempts-and-unknown-outcomes). A
 continuing apply reads and compares first, so an unproved write converges and
 is never repeated blind. A refusal after the setup override leaves the
-machine off with that one-time override, and any pending SettingsObject the
+machine off when the `ForceOff` poll proved it off, and otherwise unproved,
+with that one-time override, and any pending SettingsObject the
 step wrote, in place: both apply at the machine's next boot, whoever starts it.
 
 These rules are proved in-tree; no BMC's firmware behavior is claimed, and
@@ -1592,7 +1611,7 @@ username or password, or a second credential refuses, naming the Secret.
 
 **A host this context builds.** A provider may instead name, through
 `spec.kubevirt.hostClusterRef`, an `OpenShiftCluster` of the same context
-([B732](milestones/m3.md#b732), [D202](milestones/backlog.md#d202)). Its
+([D202](milestones/backlog.md#d202)). Its
 namespace, ServiceAccount and access are then the host's
 [`kubevirt` instance's](api/addons.md#package-kubevirt), which owns one
 Namespace per hosted provider namespace, labelled with the union of the
@@ -1606,11 +1625,10 @@ management is `Disabled`, the default); a hosted segment's capacity is the
 `mtu` of the host network it names (1500 when that declares none), and a
 guest interface above it refuses as on every substrate
 ([segments](api/machines.md#machine-profiles-and-segments)); and
-planning refuses a segment that names no `ClusterUserDefinedNetwork` among
-the host's `secondaryNetworks`, and a host on which no add-on instance
-provides `kubevirt`, or on which only an authored `ClusterAddon` that declares
-`provides: [kubevirt]` does, because only the built-in package renders the
-Namespace, ServiceAccount and roles ([refusal table](#refusal-table)). The provider proof
+planning refuses, as the [refusal table](#refusal-table) rows state, a host
+without the built-in `kubevirt` package and a segment on no host secondary
+network, because only the built-in package renders the Namespace,
+ServiceAccount and roles. The provider proof
 requires the host's installation, every add-on instance on it but a
 [last package's](add-ons.md#built-in-packages-and-selection) and its
 [cluster network block](openshift-clusters.md#post-installation-network-configuration)
@@ -1651,9 +1669,15 @@ token is never evidence,
 custody, a record or a log, and every continuation, observation, probe and
 removal that reaches the host mints again, the proof's removal reaching
 nothing; the evidence (`substrate-access-kubevirt-evidence-v1`)
-names the server, the per-lend Secret and the granted lifetime. The [initial power check](state-reconciliation.md#power-before-a-new-apply-or-destroy) must leave the host unchanged. A hosted Machine requiring this lend therefore refuses new lifecycle work before registration. A host the
+names the server, the per-lend Secret and the granted lifetime. A host the
 lend cannot reach leaves
-the block unknown, never absent, as every unanswered host does.
+the block unknown, never absent, as every unanswered host does. A hosted
+Machine's entry [power check](state-reconciliation.md#power-before-a-new-apply-or-destroy)
+would mint a token on the host, so a new apply or destroy of a context with a
+hosted KubeVirt Machine refuses `lifecycle.start-power` before registration.
+
+Not yet met: a hosted KubeVirt Machine cannot be proved off or absent without
+creating access on its host; tracked as [B1622](milestones/backlog.md#b1622).
 
 A [power command or the power reading](#identity-and-power-operations) on
 such a Machine runs outside any operation, so it takes its access the same
@@ -1673,13 +1697,10 @@ is the arm's power bound plus two state reads and 300 s for the run itself
 (1260 s), and a reading's one state read per Machine and the same 300 s; a
 reading runs and lends once per host namespace, and a lend that fails, or a
 run that ends unanswered, leaves that namespace's Machines `unknown`, never
-absent, without denying any other reading. Every verb, `--force` included, is held to the pin
-below. While a destroy is current, that pin is the one the apply it takes
-back recorded, so a Machine whose VirtualMachine it has not yet removed is
-still stopped, started and read through its port, as stopping every hosted
-Machine before the destroy needs, and one whose machine block it proved gone
-is [removed](#identity-and-power-operations)
-([D234](milestones/backlog.md#d234) (1)).
+absent, without denying any other reading. Every verb, `--force` included, is
+held to the pin of the current operation as
+[Machine power commands](#identity-and-power-operations) states, including
+which Machines a current destroy has removed.
 
 **Provider proof.** The block `substrate-host-<provider>`, implementation
 `substrate-host-kubevirt-v1`, proves the host before any Machine of the
@@ -1728,7 +1749,7 @@ where the credential may read it. Where it may, it reads
 KubeMacPool's range and records the pinned MACs as inside, outside or unknown
 of it, refusing nothing. Its evidence records the server, the `kube-system`
 UID, the upload proxy and each answer. A check it cannot read is unknown and
-fails the block, so no machine effect follows.
+fails the block as `kubevirt.host-unproved`, so no machine effect follows.
 
 **Names and ownership.** The VirtualMachine is `<machine>-<digits>`: the
 Machine name cut to 48 bytes, without a trailing `-`, and the first 8
@@ -1747,12 +1768,12 @@ block records each API-returned UID as a receipt in its evidence: a recorded
 UID proves ownership outright, and an object whose create reply was lost is
 this block's only when its mark names this operation and block and its
 `creationTimestamp` is not earlier than the operation's registration. A
-same-named object without them, or with another UID, is foreign and refuses.
+same-named object without them, or with another UID, is foreign and refuses `kubevirt.machine-foreign`.
 The root DataVolume and every claim are the VirtualMachine's when their
 controller owner reference names its recorded UID. Each machine block reads
 the `kube-system` UID and refuses when it differs from the provider proof's
-apply record or its own, so a kubeconfig that now reaches another cluster
-never acts there. Each VirtualMachine claims
+apply record or its own, as `kubevirt.host-changed`, so a kubeconfig that now reaches another
+cluster never acts there. Each VirtualMachine claims
 `kubevirt-vm:<server>/<namespace>/<name>` once its block proves it, so two
 contexts of one controller store never realize one VirtualMachine.
 
@@ -1770,7 +1791,7 @@ NUL and the node's role, and a preferred pod anti-affinity of weight 100
 on `kubernetes.io/hostname` for that label, so the nodes of one role prefer
 distinct host nodes; it is never required, because a required rule on a host
 with fewer nodes than the role would leave a node unscheduled and block a
-host drain ([B908](milestones/m3.md#b908)). Its
+host drain. Its
 root DataVolume template is requested through `spec.storage` with the root
 class the proof read, naming neither access mode nor volume mode so the
 class's StorageProfile decides them, at the profile's `diskGiB`, blank, and
@@ -1798,11 +1819,10 @@ them. Both paths prove the owned root DataVolume is `Succeeded` before
 reporting completion; a Pending or otherwise unfinished root never completes. A vTPM's state claim is
 placed on the host's VM state class.
 
-Not yet met: the vTPM state class is neither set nor proved migratable;
-tracked as [B906](milestones/backlog.md#b906).
-
-Not yet met: KubeVirt Machines boot with `secureBoot: false`; tracked as
-[B907](milestones/backlog.md#b907).
+Not yet met: a Bootwright-installed Machine on KubeVirt is realized with the
+delivered host key as its identity channel; until then it refuses as the
+[refusal table](#refusal-table) states; tracked as
+[B905](milestones/m1.md#b905).
 
 Not yet met: a KubeVirt interface on a namespaced `UserDefinedNetwork`
 refuses; tracked as [B909](milestones/backlog.md#b909).
@@ -1828,7 +1848,7 @@ through it.
 The live power read (`machine_power_read`) passes the same pin: each read
 target of a pinned port names the values that carry its own Machine's pin,
 so the read reports the power of a Machine whose block recorded one, and
-reads `unknown` for one that recorded none or whose pin the host refuses. The machine must be off before any media write: its
+reads `unknown` for one that recorded none or whose pin the host refuses. The machine must be off before `media_insert` writes: its
 VirtualMachineInstance absent by a positive `NotFound` or in a final phase
 (`Succeeded` or `Failed`), which every entry point, the removal and the
 quiescence read as stopped. `media_insert` takes the
@@ -1842,16 +1862,14 @@ identity, waits until it is `UploadReady`, runs `virtctl image-upload dv
 left, verifying the upload proxy the provider proof read against the ingress
 certificate authority the host publishes in ConfigMap
 `openshift-config-managed/default-ingress-cert` read through the verified API
-(as the process's only trust anchor, never with `--insecure`; a v1
-observation re-verified by M3e's first run), waits until it has `Succeeded`, and
+(as the process's only trust anchor, never with `--insecure`), waits until it has `Succeeded`, and
 then adds the volume to the stopped VirtualMachine as a SATA `cdrom` with
 `bootOrder: 2`. An upload DataVolume already present is reused when it is
 this Machine's with the same media identity and `Succeeded`, and is otherwise
 ejected first, or refuses as foreign. The persistent boot order sends a blank
-disk to the image and an installed disk to itself, so no boot selection is ever
-made (an inference; re-verified by M3e's first run). `boot_media` starts the
+disk to the image and an installed disk to itself, so the arm makes no boot selection. `boot_media` starts the
 VirtualMachine through its `start` subresource and polls until its
-VirtualMachineInstance exists and runs. `media_eject` removes the volume from
+VirtualMachineInstance exists and runs. `media_eject` runs at either power state; it removes the volume from
 the VirtualMachine and deletes the upload DataVolume with its UID as
 precondition and background propagation, waiting only for its absence; the claim stays bound under `kubernetes.io/pvc-protection` until
 the instance next stops, and the state read reports the media the
@@ -1872,8 +1890,8 @@ presents a persistent vTPM; it applies no firmware settings and refuses a
 non-empty firmware declaration. `identity_read` answers that the arm has no
 identity channel.
 
-**Bounds.** The arm publishes, with every request bounded at 30 seconds and
-B731's phase durations to correct them: state read 120 s, power read 60 s,
+**Bounds.** The arm publishes, with every request bounded at 30 seconds:
+state read 120 s, power read 60 s,
 pre-boot 120 s, media insert 1800 s (a 1200 s upload and the DataVolume's
 readiness waits), media eject 420 s, power 720 s, media boot and disk boot
 360 s each, a per-node margin of 1020 s (two state reads, an eject and a disk boot), a boot allowance of 2400 s and a
@@ -1925,8 +1943,11 @@ refuses.
 A revoke that fails changes no run's result. A block's attempt reports it as
 the warning `substrate.lend-not-revoked`, naming the Secret and the lifetime
 that still bounds the token, which then expires at that lifetime as an
-unbound token would; a power command or reading, which has no warning channel,
-leaves it in the revoke run's retained adapter output.
+unbound token would. A power command, which has no warning channel, leaves it
+in the revoke run's retained adapter output
+([bounded run output](cli/output.md#bounded-run-output)); a reading keeps no
+retained output and reports it nowhere, so only the token's labelled lifetime
+and a later recorded lend's sweep bound the token.
 
 A Secret a crashed controller or a failed revoke left behind is found by its
 mark. A lend whose request sets `sweep`, which only a recorded attempt that
@@ -1972,18 +1993,28 @@ fields, reads `unknown`, never absent.
 
 Pushed media: `media_insert` uploads the image to
 `[<staging datastore>] <staging folder>/<context>/<cluster>/<machine>-<media identity>.iso`
-and attaches it to the Machine's CD-ROM, connected, while the Machine is off.
-`boot_media` powers the Machine off by force if it is on, then on, because a
+and attaches it to the Machine's CD-ROM, connected, while the Machine is off;
+when the upload completes, the block records the staged file's datastore
+identity and path. `boot_media` powers the Machine off by force if it is on, then on, because a
 power-on request to a running machine changes nothing. `media_eject`
-disconnects the CD-ROM and deletes the staged file, and a refused delete
-fails rather than leaking the image. `boot_disk` makes no request unless
-asked to power on. Removal requires the Machine off, destroys it with its
-disks by managed-object reference, proves it and its staged files absent, and
-consumes `data-loss`. Volumes a cluster's storage driver created are not the
-Machine's and are retained.
+disconnects the CD-ROM and deletes the staged file it recorded, and a refused
+delete fails rather than leaking the image. Eject and removal delete, and prove
+absent, only that recorded file: a staged path with no record is not deleted, a
+recorded file whose datastore identity differs is foreign and refuses, and a
+datastore read that does not answer reads `unknown`, never absent. `boot_disk` makes no request unless
+asked to power on. The block records the device key and backing file of the
+root disk it created. Removal requires the Machine off and the disk list read
+in full, else it refuses. It detaches, without deleting, every attached disk
+but the recorded root disk, destroys the Machine with that disk by
+managed-object reference, proves the Machine, the recorded root disk and its
+staged files absent, and consumes `data-loss`. Volumes a cluster's storage
+driver created are not the Machine's and are retained.
 
 Not yet met: nothing realizes a vSphere Machine; tracked as
 [B99](milestones/m1.md#b99).
+
+Not yet met: the ownership marker and the staging path carry no context
+incarnation; tracked as [B568](milestones/backlog.md#b568).
 
 ## Identity and power operations
 
@@ -2053,14 +2084,15 @@ Each call's worst case follows from the Redfish client's fixed bounds, and a
 consumer's run [deadline](architecture.md#the-adapter-result-protocol) allows
 every call it makes that bound: every pause the call's polls may take, and
 every request outside those polls at its full timeout, 5 minutes for an attach
-and 30 seconds for any other. A power read is bounded by 30 seconds; a media
-read by 2 minutes, the four requests the pinned emulator takes to report its
-power and find its device; an insert by 39 minutes 20 seconds, the release of
-any other media before its first attach, three attaches with their polls and
-the release and pause between each two, and the security service a private
-delivery reads; an eject by 4 minutes 30 seconds; a boot selection by 2
-minutes 30 seconds; and a power
-operation, polling 60 times, by 3 minutes 30 seconds. A BMC that needs
+and 30 seconds for any other. The bounds are `ControllerPowerReadBound`, `ControllerMediaReadBound`,
+`ControllerInsertBound`, `ControllerEjectBound`, `ControllerBootSelectionBound`
+and `ControllerPowerBound` in `internal/substrate/redfish.go`, held by
+`TestTheControllerBoundsAreTheirDerivedFigures`. A media read is
+the four requests the pinned emulator takes to report its power and find its
+device. An insert is the certificate import, the release of any other media
+before its first attach, three attaches with their polls and the release and
+pause between each two, and the security service a private delivery reads. A
+power operation polls 60 times. A BMC that needs
 more requests to find its device takes longer, and one whose polled reads also
 run to their timeout can take up to the second bound the client documents; a
 run that reaches its deadline then leaves its attempt unknown.
@@ -2145,20 +2177,23 @@ is to act on the machine through that context or destroy it first
 (`TestAPowerCommandRefusesAServerAnotherContextReserves`).
 The [CLI journey](cli.md#machine-power-operations) owns the rest.
 
-Every BMC leg carries the trust its declaration sets. The controller-to-BMC
-leg follows `bmc.tls.verification` and `bmc.tls.trustBundleRef` as
-[Machine BMC trust](api/machines.md#bmc) and
-[client TLS trust](secrets.md#client-tls-trust) own them. A certificate the
-declared trust refuses fails the operation at once, as an answer rather than a
-BMC that did not answer. The emulated
+Every BMC leg carries the trust its declaration sets. The
+controller-to-BMC leg follows `bmc.tls.verification` and verifies against its
+effective `bmc.tls.trustBundleRef` as [Machine BMC trust](api/machines.md#bmc) and
+[client TLS trust](secrets.md#client-tls-trust) own them. A physical BMC whose certificate an
+internal authority issued is therefore verified against that authority, and an
+opt-out is endpoint-scoped, recorded in effective state and never a global
+default. A certificate the declared trust refuses fails the operation at once,
+as an answer rather than a BMC that did not answer. The emulated
 BMC serves HTTPS; all consumers pin the provider's serving certificate.
 Its private key is bound only for emulator apply. This does not expand the
 authored physical `caBundle` contract to accept a non-CA serving leaf.
 
 The BMC-to-artifact-server leg follows the realized target's frozen
 `bmc.virtualMedia.tls` policy under the
-[Machine contract](api/machines.md#bmc). Its default
-imports trust and enables the deciding verification setting. Device collections
+[media transport trust](api/machines.md#media-transport-trust), which defines
+the deciding verification setting. Its default
+imports trust and enables that setting. Device collections
 use the serving leaf; a qualified discovered SecurityService imports the
 chain's terminal issuer. `established` imports no trust. The explicit
 per-Machine `disableVerification` exception instead proves verification off,
@@ -2166,35 +2201,34 @@ including for private media, with its weaker bootstrap provenance recorded.
 It never changes BMC-management or controller-listener verification.
 
 Configuration discovers and deduplicates every linked SecurityService,
-bounded to four. Declaring manager switches decide instead of the device flag;
-only without any manager switch does the device flag decide. Preflight requires
-strict booleans and an observed usable ETag for every property that must change
-before the first write. Changes use that ETag, never a wildcard retry, and
-read-back must prove the requested state before insertion. Partial changes
-remain attributable; retry reads current state and converges. A firmware HTTP
+bounded to four; which setting decides, the ETag preflight, the conditional
+writes and the read-back are those of
+[media transport trust](api/machines.md#media-transport-trust). A firmware HTTP
 400 privilege MessageId is a privilege denial. Shared origin-scoped
 [media reservations](infrastructure-services.md#host-reservations) serialize
 physical-media consumers even when enabling is omitted.
 
 The deciding state is reproved before returning for already attached media
-and before each managed attach attempt. A normal enable is persistent. Under
+and before each managed attach attempt. Successful enables remain enabled after
+eject and destroy. Under
 the disabling exception, `restoreVerificationAfterBoot` determines whether
 cleanup enables it after proving media empty, including interrupted insertion;
 false causes no cleanup enable. Manager restoration uses the same conditional
 write/read-back path. Read and power entry points never configure verification.
 
-The B447 tests
+These tests prove the manager-over-device decision and the disable proof
+in-tree:
 `test_private_delivery_accepts_the_manager_switch_with_a_false_readonly_device`,
 `test_private_delivery_refuses_a_manager_that_does_not_verify`,
 `test_private_import_cannot_bypass_a_manager_whose_verification_is_off`,
 `test_import_uses_an_authoritative_manager_without_patching_the_device` and
 `test_disable_verification_proves_authoritative_state_or_refuses_before_writing`
 in the
-[Redfish client tests](../ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/modules/test_redfish_boot.py)
-prove it in-tree; a physical capture of the device flag stays
+[Redfish client tests](../ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/modules/test_redfish_boot.py);
+a physical capture of the device flag stays
 [B305](milestones/m1.md#b305)'s observation. Before the trust is set, a device presenting other
-media is released and proved empty. Each is set once, before the first attach
-and never inside its retry; under `importCertificate` decided by the device
+media is released and proved empty. The imported trust and the deciding setting
+are each set once, before the first attach attempt and never inside its retry; under `importCertificate` decided by the device
 flag, each retry first reads that flag and refuses before attaching when it
 no longer reads `true`, as a controller that restarted between attempts may
 (`test_an_import_retry_refuses_once_the_device_stopped_verifying`). Nothing
@@ -2328,39 +2362,26 @@ its failed check makes in a fact of its own role, cleared before the proof and
 once it holds, and the consumer names that refusal to its runner under the
 [adapter result protocol](architecture.md#the-adapter-result-protocol) before
 its run fails, a cluster under the node's position in its frozen request. The
-operator then receives the installation's diagnostic under the `preboot.` code of
-the reason, whose object is the Machine, instead of the adapter's failure: `hardware-mismatch`,
-a physical machine whose declaration names no MAC, whose complete inventory
-lacks a declared MAC, reports one it does not declare or reports no system
-identity, whose complete Storage inventory does not show exactly one Drive
-matching its frozen root proof, or whose inventory was not
-read in full, remedied by running the refusing apply's continuation once
-the machine reports the declared hardware in full or, to correct the
-declaration instead, by taking the context back with
-`bootwright destroy --context <context>`, correcting
-`spec.hardware.bmc.address`, `spec.hardware.nics` or `spec.hardware.rootDisk`, importing that
-input with `bootwright context update --name <context> --input-dir <directory>`
-and running `bootwright apply --context <context>`; `identity-mismatch`, a
-physical machine answering as another system than its pin, remedied by the same
-destroy, correcting that address if it names another BMC, the same
-update and apply, so the machine is proved again; and
-`machine-running`, on either arm, remedied by stopping it with
-`bootwright machine stop --context <context> --name <machine>`, then running
-the refusing apply's continuation; `firmware-setting-mismatch`, a
-`mode: prove` [firmware block](#physical-firmware) the machine does not match,
-remedied by setting the declared values through the BMC, then running the
-continuation or, to have Bootwright set them, by the same destroy, setting
-`firmware.mode: enforce`, the same update and apply; and
-`firmware-setting-not-applied`, an `enforce` block the BMC refused or did not
-apply, remedied by reading the BMC's message in the attempt's retained output
-and correcting the cause through the BMC, then running the continuation or, to
-correct the declaration instead, by the same destroy, update and
-apply. That continuation is the exact command the
+operator then receives the installation's diagnostic under the code
+[the stop catalog](cli/stops.md) lists for each reason, whose object is the
+Machine, instead of the adapter's failure. The reasons each arm may refuse, the
+object refused and the remedy are those of `PreBootRefusals` in
+`internal/substrate/preboot.go`, held by
+`TestEachPreBootRefusalNamesTheMachineWhatWasRefusedAndTheRemedy` and
+`TestEachPreBootRefusalReasonKeepsItsCodeAndCertainty`; the libvirt arm refuses
+only `machine-running`. A reason's code is `preboot.` and the reason, except
+`firmware-setting-mismatch`, which is `preboot.firmware-mismatch`, and
+`firmware-setting-not-applied`, which is `preboot.firmware-not-applied`. A remedy
+that corrects the declaration names `bootwright destroy --context <context>`,
+the corrected field, `bootwright context update --name <context> --input-dir
+<directory>` and the plain apply. The KubeVirt `identity-mismatch` remedy
+restores the Secret `spec.kubevirt.kubeconfigRef` names and continues with
+`--authorize rebind=<Secret>`. A `firmware-setting-not-applied` remedy first
+names `bootwright machine stop --context <context> --name <machine> --force`
+when the machine was not proved off. Every remedy that continues names the exact command the
 lifecycle hands the attempt, `bootwright apply --context <context>` with every
 `--authorize` token its frozen plan consumes, and the plain apply when the
-attempt carries none; the apply after a destroy plans anew and names its own
-(`TestEachPreBootRefusalNamesTheMachineWhatWasRefusedAndTheRemedy`; the
-root-disk case by `test_a_physical_proof_names_the_refusal_its_failed_check_makes`). A read the
+attempt carries none; the apply after a destroy plans anew and names its own. A read the
 BMC did not answer names `target-unanswered` and remains unknown; the BMC's
 bounded, sanitized cause in the retained output is the reason, rather than a
 hardware mismatch.

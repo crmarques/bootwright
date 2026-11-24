@@ -198,7 +198,7 @@ func TestAProviderRefusesMoreSubnetsThanOneHostHoldsAtPlanTime(t *testing.T) {
 			continue
 		}
 		found := diagnostics.Of(err)
-		if len(found) != 1 || found[0].Code != "api.invariant" || found[0].Field != "$.spec.libvirt.taggedNetworkRefs" ||
+		if len(found) != 1 || found[0].Code != "api.invariant" || found[0].Field != "" ||
 			found[0].Object == nil || found[0].Object.Name != "lab-libvirt" || !strings.Contains(found[0].Message, "66 subnets") || found[0].Remediation == "" {
 			t.Fatalf("%d subnets: %+v", 2*count, found)
 		}

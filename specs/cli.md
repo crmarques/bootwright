@@ -421,6 +421,10 @@ remedy. The input directory and Context file, a media source file, secret
 files, a key offered with `--ssh-id-file` and the selection files are opened
 with the invoking account's credentials: a bounded helper passes each
 descriptor to root, which keeps every type, stability and ownership proof.
+Each helper request is bounded by `invokerfs.requestDeadline`; a helper that
+fails, exits early or passes the deadline fails the command before root opens
+that name, with the message `the invoking account's file helper failed`
+(`TestAStalledOrCancelledHelperEndsTheSession`).
 Root identity governs only root-owned runtime storage and the Bootwright
 executable, which root must be able to execute; sudo runs it by its proved
 root-owned path, which the elevated child confirms is the file it runs, or
@@ -439,6 +443,8 @@ root and names the file or directory and its owner or write bits, with the
 remedy `sudo install -m 0755 <path> /usr/local/bin/bootwright`. The invoking
 account's own build output, such as `bin/bootwright` at mode `0755` beneath its
 home, stays allowed.
+
+#### Usage failures under a structured output
 
 After raw bounds pass, a valid final inherited `--output json` or `--output
 yaml` selects the corresponding single-document envelope for usage failures,

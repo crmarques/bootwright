@@ -33,12 +33,9 @@ its [conventions](../../../specs/index.md#conventions) own placement.
   literal drifts when the version moves. Literals already quoted give way to a
   code reference when their page is next edited.
 - A domain page whose capability has implementations states their selection
-  under three headings, adopted on the page's next edit: Selection (the
-  selector its implementations claim objects by, as
+  under the three headings of the
   [implementation selection](../../../specs/architecture.md#implementation-selection)
-  requires), Implementations (each identity and the block families it
-  realizes) and Refusal table (each shape no implementation realizes, with its
-  reason and remedy).
+  template, adopted on the page's next edit.
 - Describe the smallest authorized slice through its observable outcome, owner,
   changed boundary and failure behavior. Add an interface or variation only at
   its first concrete consumer. Follow the

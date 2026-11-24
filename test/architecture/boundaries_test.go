@@ -529,6 +529,32 @@ func TestDocsPackageTableNamesEveryTestOnlyPackage(t *testing.T) {
 	}
 }
 
+// Every technical package is one the dependency rules treat apart from the
+// templated rows of the specs/architecture.md package table, so the table
+// names each by its path.
+func TestDocsPackageTableNamesEveryTechnicalPackage(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "specs", "architecture.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, table, found := strings.Cut(string(data), "\n| Kind | Path | Owns | Role |\n")
+	table, _, _ = strings.Cut(table, "\n\n")
+	if !found {
+		t.Fatal("the specs/architecture.md package table is missing")
+	}
+	named := map[string]bool{}
+	for index, part := range strings.Split(table, "`") {
+		if index%2 == 1 {
+			named[part] = true
+		}
+	}
+	for path, role := range packageRoles() {
+		if role == technicalRole && !named[path] && !named[strings.TrimPrefix(path, "internal/")] {
+			t.Errorf("the specs/architecture.md package table does not name the technical package %s", path)
+		}
+	}
+}
+
 // unwiredPackages are packages a slice lands before the one that imports them;
 // each leaves this list in the change that wires it.
 func unwiredPackages() []string { return []string{} }

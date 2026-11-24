@@ -20,4 +20,4 @@ specs/openshift-coverage.md 2
 specs/secrets.md 2
 specs/state-reconciliation.md 11
 specs/storage-api-review.md 2
-specs/substrates.md 4
+specs/substrates.md 3

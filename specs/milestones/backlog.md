@@ -3203,9 +3203,10 @@ managed Network.
 ### B1230
 
 **Owner:** Machine power, with Substrate. **Kind:** product. **Requires:**
-none. **Definition:** Candidate: a power command or reading that lends
-KubeVirt host access reports a failed revoke only in the revoke run's retained
-adapter output, since power results carry no warning
+none. **Definition:** Candidate: a power command that lends KubeVirt host
+access reports a failed revoke only in the revoke run's retained adapter
+output, since power results carry no warning, and a power-status reading
+reports it nowhere
 ([lent KubeVirt access revocation](../substrates.md#lent-kubevirt-access-revocation)).
 **Outcome:** the power result names `substrate.lend-not-revoked`, the Secret
 and the lifetime that still bounds the token. **Exit evidence:** a power
@@ -3960,7 +3961,7 @@ its [hosted access](../substrates.md) creates, so that topology can start an
 apply or destroy again. Until then its reader answers unproved.
 
 **Exit evidence:** a hosted Machine admitted off and absent with the host
-cluster unchanged, and refused live or unread.
+cluster unchanged, and refused live or unread. Its rule is stated in [KubeVirt machine realization](../substrates.md#kubevirt-machine-realization).
 
 ### B1623
 

@@ -786,6 +786,21 @@ cannot cross the process boundary. The session is a waited child whose streams
 and exit status are the operator's; it publishes no operation, ownership,
 evidence or retained output.
 
+The preflight guest checks and the libvirt
+[capacity admission](substrates.md#capacity-admission) read also cross the
+pinned client, as fixed read-only commands with absolute paths whose only
+authored values are declared names passed as argv elements. A command's output
+is bounded by the caller's bound or `preflightlocal.MaxOutput`, and an overflow
+fails the read. The guest checks retry `id -u` and run `firewall-cmd` under
+`/usr/bin/sudo -n` with no shell (`internal/storage/preflight/guests.go`). Under
+a lifecycle login whose `privilege` is `sudo`, only a capacity command runs as
+root through noninteractive `sudo -n`, as one fixed `/bin/sh -c` wrapper that
+receives the probe's argv as positional data (`escalatedCapacityProbe`); a
+login that cannot prove noninteractive sudo fails the read. These reads publish
+no operation, ownership or retained output.
+`TestTheEscalatedCapacityProbeKeepsSudoRefusalApartFromAnAbsentPath` holds the
+wrapper.
+
 ### Explicit file copy safety
 
 [Machine copies](cli/machine-copy.md) extend direct SSH access with one

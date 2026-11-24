@@ -57,7 +57,7 @@ further implementation and any generality beyond that seam.
 | Network | The [network declaration](api/networks.md): subnets, gateways, VLAN, MTU capacity, site scope, and the membership facts other contexts check their addresses, overlays and CIDRs against. | Realizing a network, which the Substrate arm that names it owns, or a host's operating-system network configuration. |
 | Managed OS | Installer media custody, machine images, install profiles, managed-OS entitlement use, installation intent, OS completion evidence, and realizing other capabilities' published host port requirements on the Machines it installs. | Substrate realization, storage-product entitlement policy, or higher-level cluster and storage orchestration. |
 | Infrastructure services | Shared placement, identity, endpoint, and ownership rules for artifact servers, load balancers, proxies, name resolution, time synchronization, and registries. Each service's lifecycle capability owns its specific policy and adapter. | Consumer cluster policy or one generic service workflow. |
-| Container cluster | The container cluster family: release, topology, installer intent, node binding, cluster access, and installation evidence. Its current implementation installs OpenShift and OKD through the agent installer, selected by `spec.distribution.type` and the present `spec.install` arm (`agent`). | Machine, substrate, shared-service, storage, or add-on ownership. |
+| Container cluster | The container cluster family: release, topology, installer intent, node binding, cluster access, and installation evidence. Its current implementation installs OpenShift through the agent installer, selected by `spec.distribution.type` and the present `spec.install` arm (`agent`); the [refusal table](openshift-clusters.md#refusal-table) names the distributions it refuses. | Machine, substrate, shared-service, storage, or add-on ownership. |
 | Storage | The storage cluster family: topology, placement, pools, filesystems, gateways, NFS services, exports, and storage completion evidence. Its current implementation is Ceph, the `CephCluster` kind, managed or external by `spec.management`. | Machine OS installation or downstream cluster-add-on policy. |
 | Add-ons | The [add-on contract](add-ons.md): catalog packages, profiles, bindings, input expansion, package resolution and, for a custom package, [driver](deferred/add-ons-design.md#package-standard) resolution, ordering within the add-on boundary, cluster application, readiness, and add-on records. | Cluster installation, storage invariants, complete-environment state transitions, or a general workflow language. |
 | Acquisition | The list of every origin an environment's graph reaches and the fill sets a managed mirror copies, derived from the effective catalog through what each owner publishes. | Fetching, a mirror's lifecycle, or any owner's selection policy. |
@@ -156,8 +156,12 @@ compensation, crash, and continuation behavior represented rather than hidden.
 
 Each is deliberate and bounded; another like it is a defect.
 
-- **Adapter-to-adapter wiring.** No adapter imports another
-  (`TestPackageDependencyDirection`), but within Controller composition injects
+- **An adapter's own kernel.** An adapter imports the kernel package beneath
+  its own path, the one adapter-to-adapter import (`ownKernel` in
+  `TestPackageDependencyDirection`); `workspace/contextfs` imports
+  `workspace/contextfs/kernel`.
+- **Adapter-to-adapter wiring.** No adapter imports another except its own
+  kernel (`TestPackageDependencyDirection`), but within Controller composition injects
   one adapter's capability into another through a Controller-owned contract:
   `controller/ansiblelocal` and `reconciliation/ansiblerunner` receive the
   `stagelocal` automation stager as a `prerequisites.AutomationStager`.
@@ -180,6 +184,8 @@ Each is deliberate and bounded; another like it is a defect.
   proof and reconciliation owns the receipt. Explicit file copying uses its
   fixed descriptor-relative Python worker through that same pinned session,
   and a credential-dropped local instance for invoking-account file I/O.
+  The preflight guest checks and the libvirt capacity read also cross it, as
+  fixed read-only commands.
   [Direct SSH sessions](security.md#direct-ssh-sessions) owns its security rules.
 - **Composition translation.** Composition decodes what a package reads from
   another it may not import. In `cmd/bootwright/wiring_machine.go`,
@@ -248,7 +254,7 @@ owned behavior or asset is added.
 | `cmd/bootwright/` | Executable composition root and process boundary. |
 | `internal/<context>/` | Private Go domain, application, and adapter packages grouped by bounded context. |
 | `ansible/` | Controlled Ansible configuration, dependency locks, and embedded adapter collection. |
-| `add-ons/` | Reserved; no M4 item creates it: built-in package definitions are Go code under `internal/addons`, and authored payloads are [B90](milestones/m4.md#b90)'s. |
+| `add-ons/` | Reserved; no Bootwright code writes to it. Built-in package definitions are Go code under `internal/addons`. |
 | `scripts/` | Build, generation, packaging, and verification tooling; never product policy. |
 | `test/` | Cross-component and end-to-end fixtures and harnesses; package tests remain beside their Go packages. |
 
@@ -322,17 +328,20 @@ has one kind, and its role in `packageRoles`
 | Cluster object program | `internal/addons/clusterobjects` | Pure cluster object programs, canonical bodies, ownership derivations and evidence evaluators shared by add-on instances and the cluster network capability. | domain |
 | Command service | `internal/<context>/<capability>` | One command family. `service.go` declares `Service`, its constructor and one exported method per command; `requests.go` the request and result types the CLI consumes; `contracts.go` every interface the package consumes. A recognized but unavailable family is a stub, `service.go` alone, listed in `stubCapabilities`. | application |
 | Lifecycle capability | `internal/<context>/<capability>`, such as `managedos/installation`, `managedos/hostfirewall`, `managedos/physicalerase`, `managedos/diskdiscovery`, `containercluster/agentinstall`, `infrastructureservices/managedservice` and `infrastructureservices/artifactserver` | The [`Capability` port](#lifecycle-ports) implementations of one substrate arm, installation method or service, or of the controller stage. `capability.go` declares a capability type and its constructor, `contracts.go` its ports, `requests.go` and `evidence.go` its frozen request and the evidence it proves, and, where it has them, `catalog.go` its kind and implementation identities and `selection.go` the objects it plans. | application |
-| Capability definition | `infrastructureservices/dnsserver`, `ntpserver` and `proxy` | One `managedservice.Definition` the shared capability runs; it consumes no other application package. | application |
+| Capability definition | `infrastructureservices/dnsserver`, `ntpserver`, `proxy` and `registry` | One `managedservice.Definition` the shared capability runs; it consumes no other application package, except that `registry` also consumes `artifactserver`, as `applicationDependencies` records. | application |
 | Acquisition listing | `acquisition/listing` | The pure derivation of the acquisition list and of the managed mirrors' fill sets from the effective catalog, through each owner's published selection. The tool source rules of the controller adapter reach it as functions composition injects, and it reads and fetches nothing; composition only binds `List` and the fill functions. | application |
 | Application store | `reconciliation/operationstore`, `secrets/secretstore` | A durable record format and its consistency over an `Area` a Workspace adapter supplies. `reconciliation/contextguard` likewise implements `workspace/contexts.ContextMutationGuard` for Reconciliation and consumes no port. | application |
 | Port test support | `reconciliation/operationstore/areacontract`, `secrets/secretstore/areacontract`, `reconciliation/lifecycle/workspacecontract`, `managedos/media/storecontract`, `reconciliation/operationstore/areadouble` and `managedos/installationtest` | Each `contract` package, beside the port it exercises, is the shared contract suite `Verify` of one storage port a Workspace adapter implements: every implementation's tests run it, the in-memory doubles included, and it consumes only that port's package, the lifecycle workspace's also the operation areas and controller evidence its views carry and the secret context a transaction lends. The operation area's and lifecycle workspace's suites hold every method of their port to at least one clause. `areadouble.Admit` is what every in-memory operation store `Area` double refuses before it answers and `areadouble.Entries` what it lists; it imports nothing first-party. `installationtest` holds the helpers that derive and pin an installation request for the tests of the capabilities beside installation, over the catalog fixtures of `managedos/installfixtures`, which the installation tests share and which only `installationtest` and tests import. Only tests import these packages. | application |
 | Driven adapter | `internal/<context>/<implementation>`, named by what it binds | One effect behind another package's contract, within what `TestAdmissionEffectBoundary` allows it. `secrets/material` and `controller/privilege` keep their consumed interfaces in `contracts.go`. | adapter |
-| Adapter kernel | `workspace/contextfs/kernel` | The context store's handle-safe file kernel: held directories and their re-verification, opens relative to them, held listings, the absolute walk to the root and the root and context locks, in the store's own words. Only the adapter above it imports it, the one edge between two adapters (`ownKernel`). | adapter |
+| Adapter kernel | `workspace/contextfs/kernel` | The context store's handle-safe file kernel: held directories and their re-verification, opens relative to them, held listings, the absolute walk to the root and the root and context locks, in the store's own words. Only the adapter above it imports it, as [an adapter's own kernel](#named-exceptions) allows. | adapter |
 | Diagnostics | `internal/diagnostics` | The diagnostic and typed-failure vocabulary every layer emits, and the [stop](cli/stops.md) vocabulary; it imports nothing first-party. | technical |
 | Availability | `internal/availability` | The single unavailable-capability sentinel, `ErrNotImplemented`. | technical |
 | Adapter protocol | `internal/adapterprotocol` | The adapter result protocol's one decoder and the one runner core that starts, supervises, cancels and drains every adapter process; each runner adapter supplies its invocation and judges its records. It imports nothing first-party. | technical |
 | Native files | `internal/nativefs` | The one descriptor-relative file kit driven adapters share: an open that follows no link from `/` or beneath a held directory (`openat2`), the one-component open a file session issues, the identity and stable-file comparisons taken before and after an effect, the bounded read, the atomic publish with its directory sync, the verified removal of a private tree, and the one ownership rule (`Ownership`) that an entry, and with `Walk` every directory above it, is owned by a trusted UID and writable by no group or other account under the sticky-directory policy its caller names: refused, admitted when root owns the directory, or admitted when a trusted owner does. Each adapter keeps its own policy (owner, mode, which links it trusts) and its own words; a read-only adapter names none of its mutating members. It imports nothing first-party. | technical |
 | Canonical JSON | `internal/canonicaljson` | The one closed decode, trailing-data rule, re-encode proof, sorted-object proof and encoded-size predictor every record and frozen request uses; each format keeps its bounds, line feed and words; it imports nothing first-party. | technical |
+| Native exec | `internal/nativeexec` | The one bounded process runner kit (`Run`, `Start`) and the executable qualification (`Qualify`) every adapter that starts a process uses; it grants io, os, os/exec and syscall as its effect and imports nothing first-party. | technical |
+| Acquisition transport | `internal/acquisition` | The HTTP transport and destination pinning every acquisition fetch shares (`GuardAcquisitionTransport`), the classified fetch failure and the origin and image-reference rules. It is a technical package, not the Acquisition context's domain root, and holds its network effect grants; the context's pure list derivation is `acquisition/listing`. | technical |
+| Vulnerability exceptions | `internal/vulnerabilityexceptions` | The format, justification vocabulary and validity bound of the reviewed vulnerability-exception document; it imports nothing first-party. | domain |
 | Fan-out | `internal/fanout` | The one bounded fan-out read-only work over independent targets uses (`Run`): a bound on work in flight and an optional one per key, admission in input order where a full key never holds back a later target, no start after cancellation while started work sees it, every started worker joined, a panic reported as that target's error, and one outcome per target in input order; each caller keeps its own words, the order its output names targets in, and whether its first error in input order decides. It imports nothing first-party. | technical |
 
 In an application package no file but `contracts.go` declares an exported
@@ -571,7 +580,7 @@ it, a Context file, a secret file and a media source. `validate --input-dir`,
 `context init` and `context update` therefore read one input directory under
 the same credentials. A process already running as
 that account, direct root included, opens in-process. A root process serving
-another account starts one bounded helper per acquisition: the running binary,
+another account starts one helper per acquisition, bounded as [local privilege](cli.md#local-privilege-and-user-identity) states: the running binary,
 which the child resolves through procfs once it holds that account's
 credentials, killed with its creating thread. The helper opens each name
 without following a link at it and passes the descriptor back; root never
@@ -770,7 +779,8 @@ Bootwright-controlled interaction with managed remote components. Go owns the
 controller's own dependencies: host packages and the controller runtime.
 Remote observation, access, configuration, installation, verification, and
 removal cross an Ansible adapter boundary, apart from
-[Machine's direct SSH sessions](#named-exceptions). Ansible does not infer
+[Machine's direct SSH sessions](#named-exceptions) and the Go contacts named
+below. Ansible does not infer
 desired state, choose product workflow, order cross-domain work, grant
 authorization, own operation state, or format product output.
 
@@ -789,14 +799,15 @@ crosses the fixed Ansible `controller_prerequisites` role through
 [Controller ports](controller.md#egress-and-local-effects). A tool
 contacting a managed remote component belongs inside Ansible. Go reaches a
 network endpoint only when it is no managed component, read-only, bounded and
-through the admitted egress route: target-tool publisher metadata
-(`controller/bundlelocal`), installer media import
-(`managedos/medialocal`) and the controller's own name-service read of a
-cluster name in [cluster preflight](openshift-clusters.md#preflight). Every contact with a managed component, apart from
-[Machine's direct SSH sessions](#named-exceptions) and the read-only preflight
-probe of the [artifact mirror](api/environment.md#artifact-mirror), which a
-managed ArtifactServer may serve, and every target-tool installation runs in an
-adapter.
+through the admitted egress route, and the one exception is the read-only
+preflight probe of the [artifact mirror](api/environment.md#artifact-mirror),
+which a managed ArtifactServer may serve. The named Go contacts are therefore
+target-tool publisher metadata and that probe (`controller/bundlelocal`),
+installer media import (`managedos/medialocal`) and the controller's own
+name-service read of a cluster name in
+[cluster preflight](openshift-clusters.md#preflight). Every contact with a
+managed component, apart from [Machine's direct SSH sessions](#named-exceptions)
+and that probe, and every target-tool installation runs in an Ansible adapter.
 
 Operator-supplied automation and add-on package content are not internal
 adapters. A schema declaration or package origin grants no execution authority.
@@ -810,7 +821,7 @@ New logic goes to the first row whose placement question it answers yes.
 
 | Language | Holds | Never | Placement question |
 | --- | --- | --- | --- |
-| Go | Everything Go owns above, including postcondition judgment, content digests, local runners and the controller's own dependencies. | Contacts a managed component, apart from Machine's direct SSH sessions, or interprets native output beyond an adapter's evidence. | Does it decide what happens, in what order, whether it is allowed, or what a result means? |
+| Go | Everything Go owns above, including postcondition judgment, content digests, local runners and the controller's own dependencies. | Contacts a managed component, apart from [Machine's direct SSH sessions](#named-exceptions) and the [named Go contacts](#go-and-ansible-responsibility-boundary), or interprets native output beyond an adapter's evidence. | Does it decide what happens, in what order, whether it is allowed, or what a result means? |
 | Ansible YAML | One capability's binding: entry-point validation, host targeting, privilege scope, fixed module calls, progress groups, and bounded remote effects and observation under a frozen request. | Chooses a workflow, provider or variant from authored data or gathered facts, orders work across domains, or runs a command through a shell. | Does it bind one fixed capability to hosts, privilege and modules? |
 | Python in the collection | Action plugins, modules and module utilities: protocol publication, native transport, bounded native-API clients, result normalization, evidence fields, shipped fixed workers, and the fixed, spec-owned procedure of one frozen request. | Chooses product workflow, dispatches on authored data, orders work across blocks, authorizes, writes operation state or judges a postcondition; starts a process outside its site's one bounded runner or encodes canonical JSON outside its site's one module; sends a remote command string outside the [process boundary](security.md#process-boundary). | Is it how one already-selected effect is reached and proved on its target? |
 | Shell | Pinned tool wrappers, completion shims and the installer-native sections Go emits. | Holds selection logic, parses repository content, or performs a product effect outside an emitted installer section. | Does it only fix an environment and run a pinned tool, or prove on the installer what its owning domain specifies? |
@@ -858,7 +869,7 @@ needed paths:
 | `ansible/collections/` | The embedded collection; the controller runtime's exact lock is `internal/controller/runtimelock/lock.json`. |
 | Collection `playbooks/<domain>/<capability>_<operation>.yml` | One fixed application-port entrypoint, named for its capability and the Go port operation it binds; a substrate arm's capability carries the arm (`libvirt_machine`), and a capability with one operation, `controller/setup.yml` and `machine/power.yml`, is named for the capability alone; private fragments under its `tasks/`. |
 | Collection `roles/<domain>_[<implementation>_]<capability>/` | One local or remote capability adapter with only applicable standard role directories. |
-| Collection `plugins/` | Capability adapters, named for the implementation whose vocabulary they speak, effect-free product translation/evidence normalization, or the adapter's output callback, which [prints nothing a `no_log` result raised](security.md#logs-output-and-diagnostics); `plugins/doc_fragments/` holds only documentation that several modules repeat word for word. |
+| Collection `plugins/` | Capability adapters, named for the implementation whose vocabulary they speak: an action plugin's name opens with `<domain>_[<implementation>_]` of each role that invokes it, and each such role follows the role pattern above; effect-free product translation/evidence normalization, or the adapter's output callback, which [prints nothing a `no_log` result raised](security.md#logs-output-and-diagnostics); `plugins/doc_fragments/` holds only documentation that several modules repeat word for word. |
 | Collection `tests/unit/` | Collection-owned tests following `ansible-test` discovery. Their `conftest.py` installs the collection loader `ansible-test` would when no runner has, so plain pytest runs the same tests; the `units` suite of `scripts/ansible-check` runs them under `ansible-test` and runs the tests marked `serial`, those that fork or signal their own process, again the plain way, alone in process. |
 
 The first consumer selects package-native or standard lock formats; Bootwright
@@ -880,7 +891,7 @@ Playbooks do not choose workflows or providers from authored data or ambient
 facts, dynamically select another playbook, or coordinate independent domain
 operations. `TestEveryBoundPlaybookIsNamedForItsCapabilityAndOperation` holds
 every binding to that pattern, and `test_collection_names.py` holds role and
-action-plugin names to the [role pattern](#ansible-collection-structure); the
+action-plugin names to the [role and plugin patterns](#ansible-collection-structure); the
 roles and plugins that predate the patterns are an exact allowance in that
 test that only shrinks.
 
@@ -1004,15 +1015,19 @@ They accept these phases, and a lifecycle run [one more](#adapter-stop-records):
 | `group` | lifecycle | adapter → runner | `phase`, `group`, `status`; optionally [`progress` and `detail`](#adapter-warnings-and-group-progress) | none | after `loaded` | Progress only; a settled status advances completion only for a group the frozen block declares. |
 | `completed` | both | adapter → runner | `phase`, `outcome`, `evidence`: an object of at least one member; for a lifecycle run optionally `warnings` | none | last, once | Absent when the channel closes, the run has no result. |
 | `refused` | controller | adapter → runner | `phase`, `reason`: `release-stamp`, an acquisition class with `source`, or `internal` | none | last, once, in place of `completed`: `release-stamp` for the request's `openshift-clients` tool; an acquisition class (`dns`, `certificate`, `timeout`, `unreachable`, `proxy`, `status`, `redirect`, `integrity`, `trust`, `storage`) naming a tool of the request; `internal`, with no `source`, after `loaded` | The run fails with the [release-stamp refusal](controller.md#the-controller-stage), or the diagnostic Go gives the [class](controller.md#the-controller-stage), naming the source's host, instead of the generic adapter failure, even when the adapter's failed exit is read first; `internal` keeps the generic failure. |
-| `refused` | lifecycle | adapter → runner | `phase`, `reason`: one the run's request names, `identity-mismatch` for a [pinned power run](cli.md#machine-power-operations) and each refusal of a [pre-boot proof](substrates.md#adapter-boundary) for an installation's apply; optionally `detail`: at most 160 letters, digits and `_.:@-` naming a closed cause, optionally with the code site that refused, or an exception type and code site, never a value | none | last, once, after `loaded`, in place of `completed` | The run fails with the diagnostic its caller gave that reason, its message followed by any `detail`, instead of the generic adapter failure, even when the adapter's failed exit is read first; the runner closes the acknowledgement channel and kills nothing, so the adapter is left to end on its own. |
+| `refused` | lifecycle | adapter → runner | `phase`, `reason`: one the run's request names, `identity-mismatch` for a [pinned power run](cli.md#machine-power-operations) and each refusal of a [pre-boot proof](substrates.md#adapter-boundary) for an installation's apply; optionally `detail`: at most 160 letters, digits and `_.:@-` naming a closed cause, optionally with the code site that refused, or an exception type and code site, never a value | none | last, once, after `loaded`, in place of `completed` | The run fails with the diagnostic its caller gave that reason, its message followed by any `detail`, instead of the generic adapter failure, even when the adapter's failed exit is read first; the attempt is `failed`, unless the caller's diagnostic marks the effect unproved ([Attempt outcomes](state-reconciliation.md#attempt-outcomes)); the runner closes the acknowledgement channel and kills nothing, so the adapter is left to end on its own. |
 
 Ceph core, host, image, consumer, replication and SMB calls explicitly opt into
 an additional `nativeError` on `refused` only. It has exactly `coordinate` (at
 most 512 UTF-8 bytes) and `cause` (at most 1024), both nonempty printable
-strings. The producer projects
-native output through bounded credential redaction and the controller redacts
-again against its private material before publication. The runner validates
-shape and bounds and appends these values only for an opted-in call. Other
+strings. The producing module
+builds `nativeError` only through `native_diagnostics.error_detail`, which
+redacts known credential forms, and the run's lent private material where the
+caller holds such material, then bounds the result (`test_native_diagnostics.py`).
+A remote worker's `nativeError` is redacted again on the controller, against the
+run's private material, by the Ceph transport before it reaches the runner. The
+Go runner validates shape and bounds, never redacts, and appends them only for
+an opted-in call. Other
 capabilities refuse this member. This leaves the closed `detail` grammar
 unchanged; raw vendor output and exception text never become evidence.
 
@@ -1023,14 +1038,18 @@ names an adapter refusal Go remedies by name; the outcome is still Go's, and
 the diagnostic is the one Go gives that reason, carrying the object, what was
 refused and the remedy.
 
+##### Decoding, refusals and outputs
+
 The one decoder refuses a malformed or oversized record and one that is not
 canonical: a byte outside printable ASCII, whitespace outside a string, or an
 object, at any depth, whose members are out of order or two of them equal
 under case folding. It also refuses a phase carrying any member but its own, a
 `completed` whose evidence is not an object with at least one member, a
 `group` whose status is not one of the four or whose `progress` is not exactly
-two ordered counts, and a phase its runner does not admit. Both runners refuse an unknown, repeated or out-of-order phase, a record
-after `completed`, and more records than their bound: 64 for the lifecycle
+two ordered counts, and a phase its runner does not admit. Both runners refuse an unknown or out-of-order phase, a repeat of a once-only
+phase, any record after `completed` other than a `stopped` record, which
+[adapter stop records](#adapter-stop-records) governs, and more records than
+their bound: 64 for the lifecycle
 runner, 132 for the controller runner (`loaded`, `prepared`, `continue`, and
 `completed` or `refused`). The
 controller runner also refuses a `refused` record with a reason outside its
@@ -1058,8 +1077,9 @@ runner refuses, or a channel that cannot be read, ends the protocol at once:
 the runner closes the acknowledgement channel, so an adapter waiting for one
 fails instead of waiting out the deadline, and the lifecycle runner kills the
 adapter's process group.
-The controller runner kills nothing on a refusal: the adapter fails at its next
-acknowledgement. A
+The controller runner kills nothing on such a breach: before `continue` the
+adapter fails at its next acknowledgement; after it, the adapter may keep
+installing frozen tools until it exits or the run's deadline stops its tree. A
 deadline or a cancellation signals the adapter's supervisor first, which ends
 every descendant, including an Ansible worker in a session of its own that a
 group kill never reaches, then kills the adapter's process group once the
@@ -1080,12 +1100,13 @@ for a controller run. After a zero exit the result is lost too: the run fails
 `runner.no-result` or `controller.unknown`, never with a completed result. A
 failed exit stays the failed exit.
 
-A lifecycle attempt is then `unknown` after a refusal, a deadline, a lost result
-or a zero exit without `completed`; `failed` after a non-zero exit that broke no
+A lifecycle attempt is then `unknown` after the runner refuses a record (a
+protocol breach), after a deadline, a lost result or a zero exit without
+`completed`; `failed` after a non-zero exit that broke no
 protocol rule; and `canceled` when the operator cancels. The controller runner's outcome,
 `failed` or `unknown`, is set as
-[the controller stage](controller.md#the-controller-stage) states. Setup
-runs no Ansible.
+[the controller stage](controller.md#the-controller-stage) states. Setup runs no
+Ansible.
 
 A lifecycle run on the controller may also declare output files: each is a
 named path under a private `outputs/` directory of its job, passed to the
@@ -1275,7 +1296,7 @@ and it resolves from explicit validated state:
 - application and domain policy never branch on concrete implementation
   identity.
 
-Each domain names, in its supported-shape section, the selector its
+Each domain names, in its Selection section, the selector its
 implementations claim objects by: the InfraProvider arm, an OpenShiftCluster's
 `spec.distribution.type` and present `spec.install` arm, the CephCluster kind
 and its `spec.management`, or a service kind with its
@@ -1306,14 +1327,15 @@ arm field path and any other
 package's implementation identity constant or value, except where its exact
 allowlist, which only shrinks, names the item that removes the use.
 
-Each domain's selection section follows one template: Selector, the authored
-values its implementations claim objects by; Implementations, their identity
-and block families; Supported shape; Refusal table; and Test.
-[Substrates](substrates.md#selection-and-refusal),
-[OpenShift clusters](openshift-clusters.md#selection-and-refusal),
+Each domain's selection section follows one template of three headings:
+Selection, the authored values its implementations claim objects by;
+Implementations, their identity and block families; and Refusal table, each
+shape no implementation realizes, whose holding test the table names.
+[Substrates](substrates.md#selection-and-refusal) and
+[OpenShift clusters](openshift-clusters.md#selection-and-refusal) conform;
 [Ceph](ceph.md#selection-and-refusal) and
 [infrastructure services](infrastructure-services.md#selection-and-refusal)
-are written to it.
+adopt it on their next edit.
 
 Each domain contract names the facts and authored arms its implementations
 select on. When an operation is
@@ -1536,9 +1558,9 @@ owning spec, which names the check.
   when it changes. The shared Ansible environment is prepared before the lanes
   start, and a lane that ends without a verdict fails the run.
 
-Unit or fake-adapter success never qualifies a remote implementation. Every
-supported substrate/component/product/version combination needs its named
-real-system acceptance evidence before production use.
+Unit or fake-adapter success never qualifies a remote implementation; each
+implementation needs named real-system acceptance evidence before production
+use.
 
 ### Parallel local integration
 
