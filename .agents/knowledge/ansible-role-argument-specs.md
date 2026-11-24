@@ -60,6 +60,15 @@ checks the real discovery request encoding, and the
 loads each shipped playbook's first Ansible task and validates default/custom
 SSH settings through that task's argument specification.
 
+A field only some operations reach the role with hides longest. An enrolled
+Machine's `machine-hardware-v1` request carries `bootstrap`, but apply and a
+first observe read its addresses through that login without ansible-core, so
+the role first saw the field in a destroy, which failed in
+`Validating arguments against arg spec 'destroy'` after every other cleanup
+step. The contract suite's hardware example has no bootstrap. A
+producer-to-role regression sends each optional request field to every entry
+point, whichever path reaches the role today.
+
 ## What an extra-vars file is trusted with
 
 `--extra-vars @file` is loaded `trusted_as_template=True`

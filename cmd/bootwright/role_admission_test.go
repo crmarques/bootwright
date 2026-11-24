@@ -17,6 +17,7 @@ import (
 
 	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/machine/hardware"
 	"github.com/crmarques/bootwright/internal/machine/power"
 	"github.com/crmarques/bootwright/internal/managedos/diskdiscovery"
 	"github.com/crmarques/bootwright/internal/managedos/hostfirewall"
@@ -349,6 +350,31 @@ func TestTheHostFirewallRoleAdmitsARequestRestrictingSSHSources(t *testing.T) {
 	for _, operation := range []string{"apply", "observe", "destroy"} {
 		run := lifecycle.RunRequest{Implementation: hostfirewall.FirewallImplementation, Operation: operation,
 			Variable: "bootwright_os_firewall", Canonical: wire}
+		for _, problem := range roleRefusals(run) {
+			t.Errorf("%s: %s", operation, problem)
+		}
+	}
+}
+
+// An enrolled Machine's hardware request carries its bootstrap login. Apply
+// and a first observe read the addresses through it without ansible-core, so
+// only a destroy, or a later observe, hands that request to the role.
+func TestTheMachineHardwareRoleAdmitsAnEnrolledMachinesRequest(t *testing.T) {
+	t.Parallel()
+	request := hardware.Request{
+		Bootstrap: &machine.Bootstrap{Auth: "askPassword", Sudo: true, SudoPrompt: true, User: "operator"},
+		Identity:  hardware.Identity{Block: hardware.BlockID("node"), Context: "lab", Object: "node"},
+		Placement: machine.Placement{Machine: "node", Address: "192.0.2.7", Port: 22, Connection: machine.ConnectionSSH,
+			KnownHostsRef: "node-host-key", PrivateKeyRef: "node-key", User: "bootwright"},
+		Version: hardware.Implementation,
+	}
+	wire, err := request.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, operation := range []string{"apply", "observe", "destroy"} {
+		run := lifecycle.RunRequest{Implementation: hardware.Implementation, Operation: operation,
+			Variable: "bootwright_machine_hardware", Canonical: wire}
 		for _, problem := range roleRefusals(run) {
 			t.Errorf("%s: %s", operation, problem)
 		}

@@ -7,6 +7,9 @@ argument_specs:
         type: dict
         required: true
         options:
+          bootstrap:
+            type: dict
+            required: false
           identity:
             type: dict
             required: true
