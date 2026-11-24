@@ -18211,3 +18211,16 @@ commit records the verification results.
 respects a local binding that shadows a package function or variable. X654's
 integration gate exposed the false classification on the destination tree.
 A syntax fixture and the complete docs check exercise the correction.
+
+## X674 — Abandonment test starts both enrollments
+
+**Owner:** Reconciliation. **Item:** B1696 (defect).
+
+**Outcome:** The abandonment test whose second enrollment must stay
+unproved holds each enrollment's attempt until both have started, and
+fails at once when the second never ran. Under load the setup apply could
+stop on the first enrollment's unknown outcome before the second started;
+a block that never ran needs no removal proof, so the partial abandonment
+then completed and the assertion failed. The [abandonment
+rule](../state-reconciliation.md#abandoned-removal) is unchanged.
+X672's integration gate exposed it, and it failed 2 of 10 runs at `main`.

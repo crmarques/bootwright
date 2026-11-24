@@ -6,6 +6,7 @@ import (
 	"errors"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -152,8 +153,20 @@ func TestAnAbandoningDestroyDefersNoOtherEnrollmentProof(t *testing.T) {
 	h.service.capabilities = testResolver{capability: &abandoningTestCapability{testCapability: h.capability, abandonable: map[string]bool{"enrollment": true, "enrollmenttwo": true}}}
 	h.capability.secrets = []string{"lab-bmc-credentials"}
 	h.capability.outcomeFor = map[string]Result{"enrollment": {Outcome: reconciliation.OutcomeUnknown}, "enrollmenttwo": {Outcome: reconciliation.OutcomeUnknown}}
+	var started sync.WaitGroup
+	started.Add(2)
+	h.capability.hold = func(block string) {
+		if strings.HasPrefix(block, "enrollment") {
+			started.Done()
+			started.Wait()
+		}
+	}
 	if _, err := apply(h); err == nil {
 		t.Fatal("the interrupted enrollments completed")
+	}
+	h.capability.hold = nil
+	if calls := blockCalls(h, "enrollmenttwo"); !slices.Equal(calls, []string{"apply:enrollmenttwo"}) {
+		t.Fatalf("the second enrollment never started: %v", calls)
 	}
 	h.capability.observeErr = machine.EnrollmentRefused("Machine/enrollment could not prove first access as operator", "check SSH authentication")
 	request := DestroyRequest{ContextName: testContextName, KeepGoing: true, SkipConfirmation: true}
