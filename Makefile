@@ -243,8 +243,9 @@ ansible-check:
 # proxied network. The tests it runs are the list in $(DOCS_CHECKS), which
 # TestDocsChecksListIsComplete holds complete: every test named TestDocs*, the
 # *RefusalTableMatchesUnsupported and *ObservableFieldTableMatchesProjector
-# tests and the other names that test lists is listed, and every listed test
-# exists. TestDocsCheckRecipeReadsTheList holds this recipe to the list.
+# tests, the other names that test lists and every test that names a path
+# under specs/ is listed, and every listed test exists.
+# TestDocsCheckRecipeReadsTheList holds this recipe to the list.
 DOCS_CHECKS := test/docs/testdata/docs-checks.txt
 docs-check: wheels
 	$(GO) test -count=1 -run '^($(shell awk '{print $$2}' $(DOCS_CHECKS) | paste -sd'|' -))$$' $(shell awk '{print "./" $$1}' $(DOCS_CHECKS) | sort -u)

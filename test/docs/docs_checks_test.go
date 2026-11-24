@@ -94,10 +94,11 @@ func declaredTests(syntax *ast.File) []string {
 }
 
 // testFunctions names the Test functions each package directory declares in
-// its tracked _test.go files.
-func testFunctions(t *testing.T, root string, files []string) map[string][]string {
+// its tracked _test.go files, and those among them that read a page under
+// specs/.
+func testFunctions(t *testing.T, root string, files []string) (declared, readers map[string][]string) {
 	t.Helper()
-	found := map[string][]string{}
+	parsed := map[string][]*ast.File{}
 	for _, name := range files {
 		if !strings.HasSuffix(name, "_test.go") {
 			continue
@@ -106,14 +107,25 @@ func testFunctions(t *testing.T, root string, files []string) map[string][]strin
 		if err != nil {
 			t.Fatal(err)
 		}
-		found[path.Dir(name)] = append(found[path.Dir(name)], declaredTests(syntax)...)
+		parsed[path.Dir(name)] = append(parsed[path.Dir(name)], syntax)
 	}
-	return found
+	declared, readers = map[string][]string{}, map[string][]string{}
+	for directory, syntaxes := range parsed {
+		for _, syntax := range syntaxes {
+			declared[directory] = append(declared[directory], declaredTests(syntax)...)
+		}
+		if found := specReaders(syntaxes); len(found) > 0 {
+			readers[directory] = found
+		}
+	}
+	return declared, readers
 }
 
 // docsCheckViolations compares the list with the tests that exist: a listed
-// test that is not declared, and a test the convention names that the list leaves out.
-func docsCheckViolations(list, declared map[string][]string) []string {
+// test that is not declared, a test the convention names that the list leaves
+// out, and a test that reads a page under specs/ whatever its name that the
+// list leaves out.
+func docsCheckViolations(list, declared, readers map[string][]string, fixtures, outside map[string]string) []string {
 	var violations []string
 	for _, directory := range sortedKeys(list) {
 		for _, name := range list[directory] {
@@ -129,6 +141,30 @@ func docsCheckViolations(list, declared map[string][]string) []string {
 			}
 		}
 	}
+	for _, directory := range sortedKeys(readers) {
+		for _, name := range readers[directory] {
+			_, fixture := fixtures[directory+" "+name]
+			_, apart := outside[directory+" "+name]
+			if !fixture && !apart && !namedForADocsCheck(name) && !slices.Contains(list[directory], name) {
+				violations = append(violations, fmt.Sprintf("%s %s reads a page under specs/ but %s does not list it; add the line", directory, name, docsChecksList))
+			}
+		}
+	}
+	for _, excuse := range []struct {
+		owner   string
+		excuses map[string]string
+	}{{"specFixtureTests", fixtures}, {"specReadersOutsideDocsCheck", outside}} {
+		owner := excuse.owner
+		for _, key := range sortedKeys(excuse.excuses) {
+			directory, name, _ := strings.Cut(key, " ")
+			switch {
+			case !slices.Contains(readers[directory], name):
+				violations = append(violations, fmt.Sprintf("%s excuses %s, which names no path under specs/; remove it", owner, key))
+			case slices.Contains(list[directory], name):
+				violations = append(violations, fmt.Sprintf("%s excuses %s, which %s lists; remove the excuse", owner, key, docsChecksList))
+			}
+		}
+	}
 	return violations
 }
 
@@ -136,7 +172,8 @@ func docsCheckViolations(list, declared map[string][]string) []string {
 // the tests that exist, so a renamed or removed gate fails here instead of
 // quietly leaving the selection.
 func TestDocsChecksListIsComplete(t *testing.T) {
-	for _, violation := range docsCheckViolations(docsCheckList(t), testFunctions(t, filepath.Join("..", ".."), repositoryFiles(t))) {
+	declared, readers := testFunctions(t, filepath.Join("..", ".."), repositoryFiles(t))
+	for _, violation := range docsCheckViolations(docsCheckList(t), declared, readers, specFixtureTests, specReadersOutsideDocsCheck) {
 		t.Error(violation)
 	}
 }
@@ -162,7 +199,7 @@ func TestDocsChecksListRefusesAMissingAndAnUnlistedTest(t *testing.T) {
 	} {
 		want = append(want, "a "+name+" is named for a docs check but testdata/docs-checks.txt does not list it; add the line")
 	}
-	if got := docsCheckViolations(list, declared); !slices.Equal(got, want) {
+	if got := docsCheckViolations(list, declared, nil, nil, nil); !slices.Equal(got, want) {
 		t.Fatalf("violations = %q, want %q", got, want)
 	}
 	for _, bad := range []string{"a\n", "a TestX extra\n", "./a TestX\n", "a notatest\n", "a TestX\na TestX\n"} {

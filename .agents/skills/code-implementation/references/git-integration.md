@@ -98,6 +98,23 @@ a value a content digest hashes: `internal/addons/instance/`,
 `TestCheckCommitsContractPathsCoverEveryImplementation` holds the list to the
 implementations the contract goldens pin.
 
+## Literal line
+
+A commit whose diff touches only normative spec pages (files under `specs/`
+outside `specs/milestones/` and `specs/deferred/`) and documentation
+(`specs/milestones/`, `specs/deferred/`, `audits/`, `.agents/`, `docs/` and any
+`*.md` file) must lose none of the backticked literals or numbers with units of
+the normative pages it changes, such as `secret.store.conflict`, `--yes`,
+`/etc/...`, `64 KiB` or a test name. `scripts/check-commits` runs
+`scripts/tools/spec_literals.py` on it and refuses a literal that occurs fewer
+times in those pages after the commit than before, unless the body carries a
+line `Literal-moved: <literal> -> <where>`, naming the page or anchor that now
+holds it or saying why it went. A page deleted or rewritten as a whole is
+declared once, `Literal-moved: specs/x.md/* -> <where>`. A literal that only
+moves between normative pages needs no line, and a commit that touches any
+other path is not checked. The check reads inline code spans and numbers
+outside fenced code blocks only, so a literal in a fence is not held.
+
 ## Breaking changes
 
 A commit that names a moved contract in its `Contract:` line makes this build

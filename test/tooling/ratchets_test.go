@@ -226,6 +226,15 @@ func TestTheIntegrationGuardUnitsPass(t *testing.T) {
 	}
 }
 
+// The commit check's literal rule has unit tests of its own, run with the
+// offline gates since only Go tests run there.
+func TestTheSpecLiteralUnitsPass(t *testing.T) {
+	command := exec.Command("python3", "-I", "-B", filepath.Join("..", "..", "scripts", "tools", "spec_literals_test.py"))
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("spec_literals_test.py failed: %v\n%s", err, output)
+	}
+}
+
 // make cover alone measures coverage and holds it to its floors, so the gate
 // proves the floor check on planted violations and the recorder on a fixture.
 func TestTheCoverageFloorUnitsPass(t *testing.T) {

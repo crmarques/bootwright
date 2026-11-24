@@ -77,10 +77,22 @@ func TestCheckCommitsRequiresAContractLineWhereAContractCanMove(t *testing.T) {
 	}
 }
 
-// checkCommits runs the commit check over the fixture's last commit.
+// checkCommits runs the commit check, with the literal helper it dispatches
+// to, over the fixture's last commit.
 func checkCommits(t *testing.T, root, script string) (string, error) {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "check-commits")
+	helper, err := os.ReadFile(filepath.Join("..", "..", "scripts", "tools", "spec_literals.py"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory := t.TempDir()
+	if err := os.Mkdir(filepath.Join(directory, "tools"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(directory, "tools", "spec_literals.py"), helper, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(directory, "check-commits")
 	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -89,6 +101,55 @@ func checkCommits(t *testing.T, root, script string) (string, error) {
 	command.Dir = root
 	command.Env = ratchetEnvironment()
 	command.Stderr = &stderr
-	err := command.Run()
+	err = command.Run()
 	return stderr.String(), err
+}
+
+// TestCheckCommitsHoldsATextOnlySpecCommitToItsLiterals holds the commit check
+// to its literal rule: a commit that touches only normative pages and drops a
+// backticked literal or a number with a unit from all of them names where it
+// went, and a commit that also touches code, or a milestone page, is not asked.
+func TestCheckCommitsHoldsATextOnlySpecCommitToItsLiterals(t *testing.T) {
+	root := t.TempDir()
+	script, err := os.ReadFile(filepath.Join("..", "..", "scripts", "check-commits"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ratchetWrite(t, root, "specs/a.md", "# A\n\nThe `kept` and the `gone` rule hold 64 KiB.\n", 0o644)
+	ratchetWrite(t, root, "specs/b.md", "# B\n", 0o644)
+	ratchetGit(t, root, "init", "-q", "-b", "main")
+	ratchetGit(t, root, "add", "-A")
+	ratchetGit(t, root, "commit", "-q", "-m", "docs: start\n\nGates: none.")
+	for _, step := range []struct {
+		name    string
+		files   map[string]string
+		message string
+		refusal string
+	}{
+		{"a dropped literal", map[string]string{"specs/a.md": "# A\n\nThe `kept` rule holds 64 KiB.\n"}, "docs: trim\n\nGates: docs-check passed.",
+			"drops the literal `gone`"},
+		{"a dropped literal moved", map[string]string{"specs/a.md": "# A\n\nThe rule holds 64 KiB.\n"},
+			"docs: trim\n\nGates: docs-check passed.\n\nLiteral-moved: `kept` -> specs/b.md#kept", ""},
+		{"a literal moved to another page", map[string]string{"specs/a.md": "# A\n", "specs/b.md": "# B\n\nThe bound is 64 KiB.\n"},
+			"docs: move\n\nGates: docs-check passed.", ""},
+		{"a dropped number", map[string]string{"specs/b.md": "# B\n"}, "docs: trim\n\nGates: docs-check passed.", "drops the literal `64 KiB`"},
+		{"a literal added", map[string]string{"specs/a.md": "# A\n\nThe `late` rule.\n"}, "docs: add\n\nGates: docs-check passed.", ""},
+		{"a dropped literal beside code", map[string]string{"specs/a.md": "# A\n", "internal/x/x.go": "package x\n"}, "fix(x): code\n\nGates: make focus passed.", ""},
+	} {
+		for file, content := range step.files {
+			ratchetWrite(t, root, file, content, 0o644)
+		}
+		ratchetGit(t, root, "add", "-A")
+		ratchetGit(t, root, "commit", "-q", "-m", step.message)
+		stderr, err := checkCommits(t, root, string(script))
+		if step.refusal == "" {
+			if err != nil || stderr != "" {
+				t.Errorf("%s: refused: %v\n%s", step.name, err, stderr)
+			}
+			continue
+		}
+		if err == nil || !strings.Contains(stderr, step.refusal) {
+			t.Errorf("%s: want a refusal naming %q, got %v\n%s", step.name, step.refusal, err, stderr)
+		}
+	}
 }

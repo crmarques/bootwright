@@ -1438,7 +1438,11 @@ owning spec, which names the check.
   with Docs, CephMatrix or CephProfile after Test, one that ends in
   RefusalTableMatchesUnsupported or ObservableFieldTableMatchesProjector, and
   the diagnostic, bounds, command catalog, transition and unclaimed-object
-  checks by name; `TestDocsCheckRecipeReadsTheList` fails on a Makefile recipe
+  checks by name. It also fails on a test whose source or helpers name a path
+  under `specs/`, whatever its name, that the list omits, unless
+  `specFixtureTests` excuses a fixture or `specReadersOutsideDocsCheck` excuses
+  a reader that would join the working-tree walkers named below.
+  `TestDocsCheckRecipeReadsTheList` fails on a Makefile recipe
   that names a test or does not read the list. The docs checks that list
   production Go source, `TestDocsPackageTableNamesEveryTestOnlyPackage` and
   `TestDiagnosticCodesMatchOutputSpec`, walk the working tree's sources,
