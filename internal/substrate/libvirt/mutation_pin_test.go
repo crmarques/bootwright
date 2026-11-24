@@ -214,6 +214,9 @@ func TestEveryLibvirtMutationRefusesWhatItCannotRead(t *testing.T) {
 				if err == nil || result.Outcome != test.outcome || result.Evidence != nil || test.refusal != "malformed" && described(err) != test.refusal {
 					t.Fatalf("apply = %+v (%s), want %s (%s)", result, described(err), test.outcome, test.refusal)
 				}
+				if result.Outcome == reconciliation.OutcomeUnknown && lifecycle.AttemptOutcome(err) != result.Outcome {
+					t.Fatalf("apply returns unknown with a stop that records its attempt %s: %s", lifecycle.AttemptOutcome(err), described(err))
+				}
 				if name == "runner error" && !errors.Is(err, unreachable) {
 					t.Fatalf("the runner's error was replaced: %v", err)
 				}

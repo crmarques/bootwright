@@ -22,7 +22,7 @@ var (
 	libvirtRecordsMissing = diagnostics.Stop{Code: "libvirt.records-missing", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryAbandonContext,
 		Meaning: "the applied revision places no libvirt profile under a machine whose evidence it holds", Remedy: "restore the context store from a backup"}
-	libvirtOutcomeUnusable = diagnostics.Stop{Code: "libvirt.outcome-unusable", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyPossible,
+	libvirtOutcomeUnusable = diagnostics.Stop{Code: "libvirt.outcome-unusable", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyUnproved,
 		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryRepeat,
 		Meaning: "a libvirt adapter ended without a usable outcome", Remedy: "repeat the operation, which observes the host before anything else starts"}
 	libvirtPostconditionUnproved = diagnostics.Stop{Code: "libvirt.postcondition-unproved", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyPossible,

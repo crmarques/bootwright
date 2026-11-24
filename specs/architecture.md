@@ -999,7 +999,7 @@ They accept these phases, and a lifecycle run [one more](#adapter-stop-records):
 | --- | --- | --- | --- | --- | --- | --- |
 | `loaded` | both | adapter → runner | `phase` | before any effect | first, once | Acknowledgement EOF or another reply fails the adapter before its first effect. |
 | `prepared` | controller | adapter → runner | `phase`, `preparation`: exactly `addedSources`, the sorted source identities of the frozen request's tools | after the runner matches these sources to the frozen request and publishes them durably | once, after `loaded` and before any `continue` | Unmatched, with any other member, or unpublished, it is never acknowledged, so no tool is installed. |
-| `prepared` | lifecycle | adapter → runner | `phase`, `preparation`: an object the run's capability validates | after the capability validates it and the runner records it durably as the running attempt's preparation | once, after `loaded`, only on an apply's own attempt | It is never acknowledged unless validated and recorded, so the effect it precedes never runs: out of bounds or on a read-only run it breaks the protocol; refused by the capability, the run fails with the capability's diagnostic; unrecorded, it fails with the store's diagnostic, or with `runner.preparation-unrecorded` `the attempt's preparation could not be recorded` when the store names none. |
+| `prepared` | lifecycle | adapter → runner | `phase`, `preparation`: an object the run's capability validates | after the capability validates it and the runner records it durably as the running attempt's preparation | once, after `loaded`, only on an attempt, never a resolution ([operation records](state-reconciliation.md#operation-records)) | It is never acknowledged unless validated and recorded, so the effect it precedes never runs: out of bounds or on a read-only run it breaks the protocol; refused by the capability, the run fails with the capability's diagnostic; unrecorded, it fails with the store's diagnostic, or with `runner.preparation-unrecorded` `the attempt's preparation could not be recorded` when the store names none. |
 | `continue` | controller | adapter → runner | `phase` | before any tool installation; it authorizes every frozen tool | once, after `prepared` | Acknowledgement EOF fails the adapter before any tool. |
 | `group` | lifecycle | adapter → runner | `phase`, `group`, `status`; optionally [`progress` and `detail`](#adapter-warnings-and-group-progress) | none | after `loaded` | Progress only; a settled status advances completion only for a group the frozen block declares. |
 | `completed` | both | adapter → runner | `phase`, `outcome`, `evidence`: an object of at least one member; for a lifecycle run optionally `warnings` | none | last, once | Absent when the channel closes, the run has no result. |
@@ -1042,7 +1042,7 @@ adapter's failed exit as if they had read that record first, so a record they
 refuse, or one they cannot read, fails the run as a protocol breach rather than
 as the failed exit, whichever of the two they read first: a lifecycle attempt
 is then `unknown`, and a controller run fails `controller.unknown`, its outcome
-still set by `prepared` as below. A record they accept after the exit leaves
+set as [the controller stage](controller.md#the-controller-stage) states. A record they accept after the exit leaves
 that failure and moves the protocol on, so a later record is judged in its
 place, but nothing is released, published, authorized, acknowledged or
 reported for it, since its adapter is gone. A read that the drain's close ends
@@ -1082,10 +1082,10 @@ failed exit stays the failed exit.
 
 A lifecycle attempt is then `unknown` after a refusal, a deadline, a lost result
 or a zero exit without `completed`; `failed` after a non-zero exit that broke no
-protocol rule; and `canceled` when the operator cancels. The controller runner
-reports `failed` for any failure before `prepared` is published, since no
-host-wide effect was yet permitted, and `unknown` after `prepared` and on
-cancellation. Setup runs no Ansible.
+protocol rule; and `canceled` when the operator cancels. The controller runner's outcome,
+`failed` or `unknown`, is set as
+[the controller stage](controller.md#the-controller-stage) states. Setup
+runs no Ansible.
 
 A lifecycle run on the controller may also declare output files: each is a
 named path under a private `outputs/` directory of its job, passed to the
@@ -1321,9 +1321,9 @@ made immutable, each block freezes its selected implementation identity and
 content digest, and the operation freezes the Python and Ansible
 [execution closure](state-reconciliation.md#dependency-safety-during-recovery)
 it runs in; continuation refuses another implementation or closure rather than
-silently selecting one, and runs another build's automation only where that
-build freezes the same blocks. Recovery follows
-[state reconciliation](state-reconciliation.md#dependency-safety-during-recovery).
+silently selecting one, and runs another build's automation only as
+[dependency safety during recovery](state-reconciliation.md#dependency-safety-during-recovery)
+proves.
 
 For an add-on, one implementation serves every built-in package, and the
 frozen request carries the whole program its package rendered

@@ -32,25 +32,25 @@ var (
 		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryRepeat,
 		Meaning: "the installation evidence does not show the state the check requires", Remedy: "repeat the operation, which observes the installation again"}
 	installForeignState = diagnostics.Stop{Code: "install.foreign-state", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyPossible,
-		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryOtherVerb,
 		Meaning: "the installed machine holds an installation, registration or update record this installation did not create", Remedy: "take the context back with bootwright destroy and apply again"}
-	installNoOutcome = diagnostics.Stop{Code: "install.no-outcome", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyPossible,
+	installNoOutcome = diagnostics.Stop{Code: "install.no-outcome", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyUnproved,
 		Cause: diagnostics.CauseDefect, Recovery: diagnostics.RecoveryRepeat,
 		Meaning: "the installation adapter reported no usable outcome after it ran", Remedy: "repeat the operation, which observes the installation again"}
 	installHostKeyMismatch = diagnostics.Stop{Code: "install.host-key-mismatch", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyNone,
-		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryAbandonContext,
+		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryOtherVerb,
 		Meaning: "the host key type a request froze is not the one the bound Secret or this build delivers", Remedy: "take the context back with bootwright destroy, then plan and apply it again"}
 	installForeignInstallation = diagnostics.Stop{Code: "install.foreign-installation", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyNone,
-		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryAbandonContext,
+		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryChangeInput,
 		Meaning: "the machine answered with another installation's marker, so no installer was booted", Remedy: "verify the declared Machine and its management controller"}
 	installSourceChanged = diagnostics.Stop{Code: "install.source-changed", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyNone,
-		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryAbandonContext,
+		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryOtherVerb,
 		Meaning: "an image or package tree no longer has the size and digest the operation froze, so nothing was published", Remedy: "take the context back with bootwright destroy and import the image again"}
 	installArtifactServerNotApplied = diagnostics.Stop{Code: "install.artifact-server-not-applied", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
 		Meaning: "the artifact server that serves the package tree is not applied on this host, so nothing was published", Remedy: "apply the artifact server, then repeat this apply"}
 	installGuestPolicyUnmet = diagnostics.Stop{Code: "install.guest-policy-unmet", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyPossible,
-		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryAbandonContext,
+		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryOtherVerb,
 		Meaning: "the installed machine lacks the root encryption or FIPS mode its installation set only at install time", Remedy: "take the context back with bootwright destroy, then apply again"}
 	installRegistrationRejected = diagnostics.Stop{Code: "install.registration-rejected", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyPossible,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryFixThenRepeat,
@@ -59,7 +59,7 @@ var (
 		Cause: diagnostics.CauseEnvironment, Fault: diagnostics.FaultUnreachable, Recovery: diagnostics.RecoveryFixThenRepeat,
 		Meaning: "the subscription service, an update repository or the machine's own tooling did not answer", Remedy: "restore the route from the machine to the service, then repeat the operation"}
 	installForeignRecord = diagnostics.Stop{Code: "install.foreign-record", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyPossible,
-		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryOtherVerb,
 		Meaning: "the machine holds a subscription registration or update record of another installation", Remedy: "take the context back with bootwright destroy and apply again"}
 	installUpdateRefused = diagnostics.Stop{Code: "install.update-refused", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyPossible,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryFixThenRepeat,

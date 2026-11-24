@@ -18,9 +18,20 @@ attempt's outcome: `unproved` leaves it `unknown`, every other certainty
 that only shrinks.
 
 A stop may also explicitly attest that a failed removal is confined to its
-target. [Removal admission](../state-reconciliation.md#keep-going-removal)
+target (`diagnostics.Stop.LocalRemovalFailure`). Only a stop of certainty
+`none` and cause `target`, whose firing changed nothing outside its target and
+leaves no shared state in doubt, attests it.
+[Removal admission](../state-reconciliation.md#keep-going-removal)
 uses that attestation after the failure is recorded. Other stop metadata
-cannot establish that independent work may continue.
+cannot establish that independent work may continue. These stops, and no
+other, attest it:
+
+- `erase.machine-running`
+- `firewall.foreign-service`
+- `firewall.inactive`
+
+`TestEveryCatalogedStopIsComposedAndExplained` compares this list with the
+declared stops.
 
 ## Stop vocabulary
 
@@ -30,7 +41,7 @@ cannot establish that independent work may continue.
 | Certainty | `none`: nothing began; `possible`: an effect may be partial and a repeat converges it; `unproved`: the effect must be observed before anything else starts; `owed`: the effect is complete and its bookkeeping is not |
 | Cause | `input`, `environment`, `target`, `concurrency`, `build`, `records`, `bound`, `interrupt`, `deadline`, `defect`, `unclassified` |
 | Fault | for an `environment` cause: `dns`, `unreachable`, `timeout`, `certificate`, `credential`, `proxy`, `storage`, `host-key` |
-| Recovery | `repeat`, `fix-then-repeat`, `change-input`, `other-verb`, `wait`, `authorize`, `registering-build`, `abandon-context`, `none` |
+| Recovery | the operator's next action, and whether the context's records survive it: `repeat`: run the same command again unchanged, and the records survive; `fix-then-repeat`: correct what the remedy names on a target, host or environment without changing the input, then run the command again, adjusted as the remedy names, and the records survive; `change-input`: change the input the remedy names, then run the command again, and the records survive; `other-verb`: first run the other command the remedy names, such as `destroy`, a continuation of another operation or a discovery stage, and the records survive for that command to read; `wait`: run the command again once the other command or process the message names ends, and the records survive; `authorize`: run the command again with the confirmation or authorization the remedy names, and the records survive; `registering-build`: run the command the remedy names with the build that registered or froze the records, and the records survive for that build alone; `abandon-context`: the records cannot continue as they are, so only restoring them from a backup or deleting the context remains; `none`: no Bootwright command recovers the stop, so the operator reports the defect or acts outside Bootwright as the remedy names, and the records survive |
 
 `unclassified` is the cause of a stop the code that raises it cannot yet
 attribute, such as a role task that failed without naming a declared reason.
@@ -119,12 +130,12 @@ refusals of a decision and its plan before any effect.
 | Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `engine.finalization-due` | operation | owed | defect | - | repeat | an operation is due its finalization, which no decision may skip | repeat the command, which finalizes that operation before it decides |
-| `engine.records-contradict` | operation | none | records | - | fix-then-repeat | an incomplete operation holds records that contradict what it started | read the records with bootwright status, then restore them from a backup or delete the context |
+| `engine.records-contradict` | operation | none | records | - | abandon-context | an incomplete operation holds records that contradict what it started | read the records with bootwright status, then restore them from a backup or delete the context |
 | `engine.other-verb-incomplete` | operation | none | input | - | other-verb | an incomplete operation of the other verb must be continued before another operation | continue or replace the incomplete operation the message names |
 | `apply.records-missing` | operation | none | records | - | abandon-context | a completed apply records no completion for blocks it froze, so nothing proves its input applied | restore the context's records, or take back what it owns and apply again |
 | `destroy.records-missing` | operation | none | records | - | abandon-context | a completed destroy records no completion for blocks it froze, so nothing proves their effects removed | restore the context's records, or delete the context with what it may still own |
-| `apply.input-changed` | operation | none | input | - | change-input | the desired state changed after the apply completed, and it is no addition to it | take back what the context owns with destroy, then apply the changed input |
-| `apply.not-an-addition` | operation | none | input | - | change-input | a changed input over a completed apply adds something an additive apply cannot take | take back what the context owns with destroy, then apply the changed input |
+| `apply.input-changed` | operation | none | input | - | other-verb | the desired state changed after the apply completed, and it is no addition to it | take back what the context owns with destroy, then apply the changed input |
+| `apply.not-an-addition` | operation | none | input | - | other-verb | a changed input over a completed apply adds something an additive apply cannot take | take back what the context owns with destroy, then apply the changed input |
 | `apply.prerequisite-lost` | operation | none | records | - | other-verb | a block an addition needs, held by an earlier apply of its lineage, is gone or no longer done | take back what the lineage owns with destroy |
 | `apply.nothing-declared` | operation | none | input | - | change-input | the selected Environment declares nothing this executable would create | declare a managed infrastructure service |
 | `apply.stage-empty` | operation | none | input | - | fix-then-repeat | the selected stages or the --until instance have nothing to start | repeat the apply with a wider selection |
@@ -161,7 +172,7 @@ refusals of a decision and its plan before any effect.
 | `prepare.refused` | operation | none | input | - | fix-then-repeat | a preparation cannot start or advance over the context's current operation or input | finish or take back the current operation, or restore the input the preparation recorded |
 | `prepare.unsupported` | operation | none | build | - | none | this executable registers no preparation for the requested owner | use a build that registers the preparation |
 | `authorize.relaxation-changed` | operation | none | input | - | fix-then-repeat | an operation continues only under the relaxations its plan froze, and the invocation names others | continue it naming the relaxations its plan froze, or replace it with a fresh destroy |
-| `authorize.abandon-unattended` | operation | none | input | - | fix-then-repeat | an unattended destroy names --authorize abandon=<machine>, which only a confirmation an operator answers accepts, so nothing was registered | run the destroy in a terminal without --yes and confirm the plan |
+| `authorize.abandon-unattended` | operation | none | input | - | authorize | an unattended destroy names --authorize abandon=<machine>, which only a confirmation an operator answers accepts, so nothing was registered | run the destroy in a terminal without --yes and confirm the plan |
 | `diff.context-moved` | context | none | concurrency | - | repeat | the context changed while diff read it | repeat the diff |
 | `plan.controller-order` | context | none | input | - | change-input | a block the controller stage waits for runs only after that stage | place the object the message names where the controller stage need not wait for it |
 | `plan.reservation-key-too-long` | context | none | input | - | change-input | a host reservation key would exceed its bound once keyed by the SSH host it is placed on | reach the Machine by a shorter address, or give the reserving service a shorter name |
@@ -226,8 +237,8 @@ The managed OS disk discovery capability's stops (`internal/managedos/diskdiscov
 | `discovery.prerequisites-missing` | context | none | input | - | other-verb | the controller and infrastructure setup a discovery boot needs is not applied | repeat bootwright machine discover with --stage controller to review and confirm controller and infrastructure setup |
 | `discovery.refinement-refused` | context | none | input | - | change-input | a change after preparation reaches beyond the disk-selection fields that may follow it | keep prepared ownership unchanged and update only the disk-selection fields |
 | `discovery.records-missing` | block | none | records | - | abandon-context | the records a disk discovery builds on hold no inventory, proof or identity the block names | restore the context store from a backup |
-| `discovery.records-mismatch` | block | none | records | - | abandon-context | a recorded disk inventory or attempt names another Machine, request or execution than the block froze | retain the original inventory and resolve its ownership before preparing another |
-| `discovery.records-conflict` | block | none | records | - | abandon-context | more than one owned disk inventory competes for one Machine | retain one inventory and resolve the ownership of the others |
+| `discovery.records-mismatch` | block | none | records | - | none | a recorded disk inventory or attempt names another Machine, request or execution than the block froze | retain the original inventory and resolve its ownership before preparing another |
+| `discovery.records-conflict` | block | none | records | - | none | more than one owned disk inventory competes for one Machine | retain one inventory and resolve the ownership of the others |
 | `discovery.inventory-missing` | context | none | input | - | other-verb | the Machine has no completed disk discovery for its current policy and media | run bootwright machine discover with --stage controller |
 | `discovery.inventory-stale` | context | none | input | - | change-input | an owned inventory belongs to a different discovery request | restore the recorded discovery settings or review removal of the current lifecycle ownership before discovering again |
 | `discovery.root-unprovable` | context | none | input | - | change-input | the recorded inventory cannot prove the protected disks and exactly one eligible root | inspect the recorded inventory and correct the protected storage claim or root match named by the refusal, then update the context |
@@ -298,7 +309,7 @@ The KubeVirt substrate's stops (`internal/substrate/kubevirt`).
 | `kubevirt.evidence-unencodable` | block | none | defect | - | none | evidence or a pin the KubeVirt capability composed cannot be encoded | report the message as a defect |
 | `kubevirt.proof-unrecorded` | block | none | records | - | fix-then-repeat | the proof of the host cluster a Machine is realized on is not recorded for the operation, so no adapter ran | run the apply again so the provider's proof precedes its Machines |
 | `kubevirt.host-changed` | block | none | target | - | fix-then-repeat | the host cluster a provider now reaches is not the one its VirtualMachine was realized on, so no adapter ran | restore the host cluster the Machine was realized on, or destroy and apply again |
-| `kubevirt.outcome-unusable` | adapter-run | possible | defect | - | repeat | the KubeVirt adapter reported no outcome the capability can use | repeat the operation, which observes the effect again |
+| `kubevirt.outcome-unusable` | adapter-run | unproved | defect | - | repeat | the KubeVirt adapter reported no outcome the capability can use | repeat the operation, which observes the effect again |
 | `kubevirt.evidence-mismatch` | block | possible | records | - | repeat | the KubeVirt evidence names another request, VirtualMachine or cluster than the block froze | repeat the operation, which observes the effect again |
 | `kubevirt.lend-unproved` | block | possible | target | - | fix-then-repeat | the host access a run was lent did not prove its postcondition on the host cluster | repeat the operation, which lends the access again |
 | `kubevirt.host-unproved` | block | possible | target | - | fix-then-repeat | the KubeVirt provider's proof does not hold the host as OpenShift Virtualization ready for virtual machines | correct the host or spec.kubevirt of the provider, then run the apply again |
@@ -317,7 +328,7 @@ The OpenShift agent-based installation capability's stops (`internal/containercl
 | `openshift.input-unprojectable` | context | none | input | - | change-input | the declared cluster cannot be projected into an installer configuration, so no installation was planned | correct the cluster the message names and plan again |
 | `openshift.selection-unsupported` | context | none | input | - | change-input | the declared cluster selects something this executable does not install, so no installation was planned | remove or change the selection the message names |
 | `openshift.adapter-unconfigured` | block | none | defect | - | none | the OpenShift cluster capability runs without an adapter or reader it needs, so nothing began | report the message as a defect |
-| `openshift.outcome-unusable` | block | possible | defect | - | repeat | an OpenShift cluster adapter ended and reported no outcome the capability can use | repeat the operation, which observes the cluster again |
+| `openshift.outcome-unusable` | block | unproved | defect | - | repeat | an OpenShift cluster adapter ended and reported no outcome the capability can use | repeat the operation, which observes the cluster again |
 | `openshift.request-invalid` | block | none | defect | - | none | the frozen request of an OpenShift cluster block breaks its bounds or its shape, so no adapter ran | report the message as a defect |
 | `openshift.machine-proof-missing` | block | none | records | - | fix-then-repeat | a Machine the cluster installs on has no recorded proof the installation needs, so nothing began | apply the Machine stage, then repeat the operation |
 | `openshift.evidence-invalid` | block | possible | records | - | repeat | the evidence of an OpenShift cluster adapter is incomplete or names another request | repeat the operation, which observes the cluster again |
@@ -337,7 +348,7 @@ The managed infrastructure service capability's stops (`internal/infrastructures
 | `service.egress-unsupported` | operation | none | input | - | change-input | the placement host reaches the network through a proxy this build cannot pull a service image through | select direct access or an external proxy without authentication or private trust on the placement host |
 | `service.unconfigured` | block | none | defect | - | none | the managed service capability runs without an adapter or a certificate check it needs | report the message as a defect |
 | `service.password-file-failed` | block | none | defect | - | none | the password file a service authenticates its clients with could not be derived from its credential | report the message as a defect |
-| `service.outcome-unusable` | block | possible | defect | - | repeat | the managed service adapter ended without an outcome the block can settle on | repeat the operation, which observes the service again |
+| `service.outcome-unusable` | block | unproved | defect | - | repeat | the managed service adapter ended without an outcome the block can settle on | repeat the operation, which observes the service again |
 | `service.evidence-mismatch` | block | possible | records | - | repeat | the evidence a managed service adapter returned names another request or is not a form it may take | repeat the operation, which observes the service again |
 | `service.postcondition-unmet` | block | possible | target | - | repeat | the observed managed service is not in the state the operation leaves it in | repeat the operation, which converges the service |
 | `service.certificate-mismatch` | block | possible | target | - | fix-then-repeat | a listener presented a different certificate than the operation bound | restore the certificate the operation bound, then repeat the operation |
@@ -357,7 +368,7 @@ The bare-metal substrate's stops (`internal/substrate/baremetal`).
 | `baremetal.request-invalid` | operation | none | defect | - | none | a plan reached the physical Machine capability without compiled state, or a request it composed breaks its bounds or its shape, so no adapter ran | report the message as a defect |
 | `baremetal.name-unsafe` | operation | none | input | - | change-input | a physical Machine's name cannot name a host, so no adapter ran | rename the Machine |
 | `baremetal.unconfigured` | block | none | defect | - | none | the physical Machine capability runs without its adapter | report the message as a defect |
-| `baremetal.no-usable-outcome` | block | possible | target | - | repeat | the machine adapter ended without an outcome the block can use | repeat the operation, which observes the machine again |
+| `baremetal.no-usable-outcome` | block | unproved | target | - | repeat | the machine adapter ended without an outcome the block can use | repeat the operation, which observes the machine again |
 | `baremetal.postcondition-unproved` | block | possible | target | - | repeat | the machine adapter ended without proving the postcondition of its verb | repeat the operation, which observes the machine again |
 | `baremetal.controller-report-incomplete` | block | possible | target | - | fix-then-repeat | the management controller reported a fault, or reported no identity or no power state | check the management controller of the Machine, then repeat the operation |
 | `baremetal.inventory-mismatch` | block | possible | target | - | fix-then-repeat | the machine reports an inventory other than the one its Machine declares | check that the machine behind the management controller is the one the Machine declares, then repeat the operation |
@@ -377,7 +388,7 @@ The libvirt substrate's stops (`internal/substrate/libvirt`).
 | `libvirt.frozen-request-invalid` | block | none | records | - | registering-build | a frozen libvirt request holds a media presentation this build cannot run, so no adapter ran | destroy it with the build that applied it |
 | `libvirt.unconfigured` | block | none | defect | - | none | a libvirt capability runs without its adapter | report the message as a defect |
 | `libvirt.records-missing` | block | none | records | - | abandon-context | the applied revision places no libvirt profile under a machine whose evidence it holds | restore the context store from a backup |
-| `libvirt.outcome-unusable` | block | possible | target | - | repeat | a libvirt adapter ended without a usable outcome | repeat the operation, which observes the host before anything else starts |
+| `libvirt.outcome-unusable` | block | unproved | target | - | repeat | a libvirt adapter ended without a usable outcome | repeat the operation, which observes the host before anything else starts |
 | `libvirt.postcondition-unproved` | block | possible | target | - | repeat | a libvirt adapter ended without proving the postcondition of its apply or its removal | repeat the operation, which observes the host before anything else starts |
 | `libvirt.evidence-mismatch` | block | possible | records | - | repeat | libvirt evidence names another request than the block froze, or reports a shape that request does not allow | repeat the operation, which observes the host again |
 | `libvirt.host-drifted` | block | possible | target | - | repeat | the provider host or machine does not hold what the frozen libvirt request declares | repeat the apply, which restores what the request declares |
@@ -455,16 +466,16 @@ The managed OS installation capability's stops (`internal/managedos/installation
 | `install.records-missing` | block | none | records | - | abandon-context | the apply records no longer prove the installation, publication or discovery a later step depends on | restore the original apply records |
 | `install.evidence-invalid` | block | possible | records | - | repeat | the installation evidence is malformed or names another request, address, marker or state than the block froze | repeat the operation, which observes the installation again |
 | `install.postcondition-unmet` | block | possible | target | - | repeat | the installation evidence does not show the state the check requires | repeat the operation, which observes the installation again |
-| `install.foreign-state` | block | possible | target | - | fix-then-repeat | the installed machine holds an installation, registration or update record this installation did not create | take the context back with bootwright destroy and apply again |
-| `install.no-outcome` | block | possible | defect | - | repeat | the installation adapter reported no usable outcome after it ran | repeat the operation, which observes the installation again |
-| `install.host-key-mismatch` | block | none | records | - | abandon-context | the host key type a request froze is not the one the bound Secret or this build delivers | take the context back with bootwright destroy, then plan and apply it again |
-| `install.foreign-installation` | adapter-run | none | target | - | abandon-context | the machine answered with another installation's marker, so no installer was booted | verify the declared Machine and its management controller |
-| `install.source-changed` | adapter-run | none | target | - | abandon-context | an image or package tree no longer has the size and digest the operation froze, so nothing was published | take the context back with bootwright destroy and import the image again |
+| `install.foreign-state` | block | possible | target | - | other-verb | the installed machine holds an installation, registration or update record this installation did not create | take the context back with bootwright destroy and apply again |
+| `install.no-outcome` | block | unproved | defect | - | repeat | the installation adapter reported no usable outcome after it ran | repeat the operation, which observes the installation again |
+| `install.host-key-mismatch` | block | none | records | - | other-verb | the host key type a request froze is not the one the bound Secret or this build delivers | take the context back with bootwright destroy, then plan and apply it again |
+| `install.foreign-installation` | adapter-run | none | target | - | change-input | the machine answered with another installation's marker, so no installer was booted | verify the declared Machine and its management controller |
+| `install.source-changed` | adapter-run | none | target | - | other-verb | an image or package tree no longer has the size and digest the operation froze, so nothing was published | take the context back with bootwright destroy and import the image again |
 | `install.artifact-server-not-applied` | adapter-run | none | target | - | fix-then-repeat | the artifact server that serves the package tree is not applied on this host, so nothing was published | apply the artifact server, then repeat this apply |
-| `install.guest-policy-unmet` | adapter-run | possible | target | - | abandon-context | the installed machine lacks the root encryption or FIPS mode its installation set only at install time | take the context back with bootwright destroy, then apply again |
+| `install.guest-policy-unmet` | adapter-run | possible | target | - | other-verb | the installed machine lacks the root encryption or FIPS mode its installation set only at install time | take the context back with bootwright destroy, then apply again |
 | `install.registration-rejected` | adapter-run | possible | input | - | fix-then-repeat | the subscription service or Satellite did not accept the registration the installation declares | correct the registration declaration, then repeat the operation |
 | `install.service-unavailable` | adapter-run | possible | environment | `unreachable` | fix-then-repeat | the subscription service, an update repository or the machine's own tooling did not answer | restore the route from the machine to the service, then repeat the operation |
-| `install.foreign-record` | adapter-run | possible | target | - | fix-then-repeat | the machine holds a subscription registration or update record of another installation | take the context back with bootwright destroy and apply again |
+| `install.foreign-record` | adapter-run | possible | target | - | other-verb | the machine holds a subscription registration or update record of another installation | take the context back with bootwright destroy and apply again |
 | `install.update-refused` | adapter-run | possible | input | - | fix-then-repeat | the update sources cannot hold the machine within the release its installation declares | correct the update sources of the install profile, then apply again |
 | `install.update-failed` | adapter-run | possible | target | - | fix-then-repeat | the package transaction of the machine's update failed | repeat the operation once the update sources offer a consistent transaction |
 
@@ -545,7 +556,7 @@ The Machine placement and access checks' stops (`internal/machine`).
 
 | Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `machine.enrollment` | operation | none | input | - | repeat | a provided Machine's enrollment could not verify a credential, account, or grant | inspect the named Machine's first-access declaration and retry with its authorized administrator |
+| `machine.enrollment` | operation | none | input | - | fix-then-repeat | a provided Machine's enrollment could not verify a credential, account, or grant | inspect the named Machine's first-access declaration and retry with its authorized administrator |
 | `machine.enrollment-sudo-tty` | block | none | target | - | fix-then-repeat | remote sudo requires a terminal and did not start the enrollment command | have the host administrator authorize sudo without a terminal for this account, then repeat the operation |
 | `machine.placement-no-access` | operation | none | input | - | change-input | a Machine that hosts lifecycle work is neither the controller nor declares SSH access, so no work was placed on it | place the work on the controller Machine, or author access.ssh on the Machine |
 | `machine.placement-auth-unsupported` | operation | none | input | - | change-input | a Machine that hosts lifecycle work authenticates with an operator identity or a password, which a placement does not support | author access.ssh.auth.privateKeyRef on the Machine |
@@ -589,9 +600,9 @@ The substrate pre-boot checks' stops (`internal/substrate`).
 | Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `preboot.unrealized-substrate` | operation | none | input | - | change-input | a Machine is placed on a provider whose substrate this executable does not realize, so nothing was planned | place the Machine on a libvirt, bare-metal or KubeVirt provider |
-| `preboot.target-unanswered` | adapter-run | unproved | environment | `unreachable` | repeat | the management controller did not answer the system read that proves a physical machine, so what it is stays unknown | restore access to the controller, then repeat the apply |
+| `preboot.target-unanswered` | adapter-run | unproved | environment | `unreachable` | fix-then-repeat | the management controller did not answer the system read that proves a physical machine, so what it is stays unknown | restore access to the controller, then repeat the apply |
 | `preboot.hardware-mismatch` | adapter-run | none | target | - | fix-then-repeat | a physical machine does not report exactly the hardware its Machine declares, or its inventory could not be read in full, so no media was inserted | make the machine report the hardware its Machine declares, then continue the apply |
-| `preboot.identity-mismatch` | adapter-run | none | target | - | fix-then-repeat | the system answering for a Machine is not the one the operation proved for it, so no media was inserted | correct the declared address of the Machine, or restore the system it was realized on, then continue the apply |
+| `preboot.identity-mismatch` | adapter-run | none | target | - | change-input | the system answering for a Machine is not the one the operation proved for it, so no media was inserted | correct the declared address of the Machine, or restore the system it was realized on, then continue the apply |
 | `preboot.machine-running` | adapter-run | none | target | - | fix-then-repeat | a machine is running while its installation would write its disk, so no media was inserted | stop the machine, then continue the apply |
 | `preboot.tpm-absent` | adapter-run | none | target | - | fix-then-repeat | an encrypted installation has no positive proof of a TPM 2.0, so no encrypted installer was booted | provide a TPM 2.0 for the machine, then continue the apply |
 | `preboot.firmware-mismatch` | adapter-run | none | target | - | fix-then-repeat | a machine does not report the firmware settings its Machine asks to prove, so no media was inserted | set the declared firmware values through the controller, then continue the apply |

@@ -101,6 +101,36 @@ func TestAnUnresolvedAddedInstanceNamesTheContinuationNotADestroy(t *testing.T) 
 	}
 }
 
+func TestAFailedReadIsObservedAgainNotDestroyed(t *testing.T) {
+	request := fixtureRequest(t)
+	block := fixtureBlock(t, request)
+	capability := New(nil, fixtureRegistry(t), nil)
+	for name, change := range map[string]func(*Evidence){
+		"an object read": func(e *Evidence) { e.Observations[0].Ownership = co.Unknown; e.Unknown = true },
+		"a check read":   func(e *Evidence) { e.Checks[0].Unknown, e.Checks[0].Satisfied, e.Unknown = true, false, true },
+		"a foreign object beside a failed read": func(e *Evidence) {
+			e.Observations[0].Ownership = co.Unknown
+			e.Observations[len(e.Observations)-1].Ownership = co.Foreign
+			e.Unknown = true
+		},
+	} {
+		evidence := fixtureEvidence(t, request, block.RequestDigest)
+		if len(evidence.Observations) < 2 || len(evidence.Checks) == 0 {
+			t.Fatalf("the fixture observes %d objects, want two to read one and find another foreign", len(evidence.Observations))
+		}
+		change(&evidence)
+		foreign := strings.HasPrefix(name, "a foreign")
+		plain, ok := capability.Unresolved(reconciliation.Apply, block, encoded(t, evidence))
+		if !ok || foreign != (plain.Remedy == destroyAndApply) || foreign == (plain.Remedy == readAgain) {
+			t.Errorf("%s: a plain apply's instance is explained %+v", name, plain)
+		}
+		added, ok := capability.UnresolvedAdded(reconciliation.Apply, block, encoded(t, evidence), nil)
+		if !ok || added.Reason != plain.Reason || strings.Contains(added.Remedy, "destroy") || foreign == (added.Remedy == readAgain) {
+			t.Errorf("%s: an added instance is explained %+v", name, added)
+		}
+	}
+}
+
 func TestAnUnresolvedAddedInstanceNeverInvitesDeletingAnObjectAnotherInstanceDeclares(t *testing.T) {
 	request := fixtureRequest(t)
 	block := fixtureBlock(t, request)

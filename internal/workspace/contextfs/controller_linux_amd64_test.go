@@ -765,7 +765,8 @@ func TestAControllerRecordOfAnotherVersionNamesTheFreshInstall(t *testing.T) {
 			reported := diagnostics.Of(operation())
 			want := "controller evidence version " + version + " is unsupported: this build reads version 1 only and converts none"
 			if len(reported) != 1 || reported[0].Code != "context.state" || reported[0].Message != want || reported[0].Remediation != controllerVersionRemedy ||
-				!strings.Contains(reported[0].Remediation, "then run bootwright uninstall --discard-unreadable and bootwright install") {
+				!strings.Contains(reported[0].Remediation, "delete each stored image (bootwright catalog media delete --name <image>); then run bootwright uninstall --discard-unreadable and bootwright install") ||
+				strings.Contains(reported[0].Remediation, "drops") {
 				t.Errorf("version %s, %s refused with %#v, want %q with the fresh install", version, name, reported, want)
 			}
 		}

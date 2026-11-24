@@ -104,6 +104,9 @@ func TestEveryClaimMutationAndResolutionReadsEachObservation(t *testing.T) {
 				if result.Outcome != test.outcome || result.Evidence != nil || described(err) != test.refusal {
 					t.Fatalf("mutation = %+v (%s), want %s (%s)", result, described(err), test.outcome, test.refusal)
 				}
+				if result.Outcome == reconciliation.OutcomeUnknown && lifecycle.AttemptOutcome(err) != result.Outcome {
+					t.Fatalf("mutation returns unknown with a stop that records its attempt %s: %s", lifecycle.AttemptOutcome(err), described(err))
+				}
 			}
 		})
 	}

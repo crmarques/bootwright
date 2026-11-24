@@ -29,10 +29,10 @@ var (
 		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryAbandonContext,
 		Meaning: "the records a disk discovery builds on hold no inventory, proof or identity the block names", Remedy: "restore the context store from a backup"}
 	discoveryRecordsMismatch = diagnostics.Stop{Code: "discovery.records-mismatch", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyNone,
-		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryAbandonContext,
+		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryNone,
 		Meaning: "a recorded disk inventory or attempt names another Machine, request or execution than the block froze", Remedy: "retain the original inventory and resolve its ownership before preparing another"}
 	discoveryRecordsConflict = diagnostics.Stop{Code: "discovery.records-conflict", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyNone,
-		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryAbandonContext,
+		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryNone,
 		Meaning: "more than one owned disk inventory competes for one Machine", Remedy: "retain one inventory and resolve the ownership of the others"}
 	discoveryInventoryMissing = diagnostics.Stop{Code: "discovery.inventory-missing", Level: diagnostics.LevelContext, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryOtherVerb,

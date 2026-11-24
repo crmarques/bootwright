@@ -184,8 +184,9 @@ placements, which every reader of the request takes from it and never from the
 package name, and its produced inputs by producer kind, object and output,
 never their bytes. Apply and observation refuse, before any cluster contact, a
 frozen request whose namespaces differ from this build's registry entry for its
-package; retiring one still works, and another build's continuation is guarded
-by the [block comparison](state-reconciliation.md#continuation-and-removal).
+package; retiring one still works, and another build continues an operation only as
+[dependency safety during recovery](state-reconciliation.md#dependency-safety-during-recovery)
+proves.
 The `descriptor` is empty for a built-in package and, for an authored add-on,
 the 64 lowercase hexadecimal digits of the SHA-256 of its normalized
 definition, so an edited definition changes the request. An authored request
@@ -198,8 +199,10 @@ CatalogSource in `openshift-marketplace`, before any adapter call, while
 retiring it still works.
 The content digest covers the implementation, request, evidence
 and program versions and the ownership and approval rule tags; a change to what
-a package renders changes the request, so another build continues an operation
-only when re-planning yields the same request.
+a package renders changes the request and its content digest; another build
+continues an operation only as
+[dependency safety during recovery](state-reconciliation.md#dependency-safety-during-recovery)
+proves.
 
 An attempt runs under one absolute deadline, its start plus the budget, which
 mutation consumes; the run deadline is the budget plus ten minutes, and
@@ -463,12 +466,17 @@ An authored add-on places no Secret.
 An observation is read-only and reads every program object, the OLM state and
 every check once: every object own and equal with every check holding is
 completion; every object absent is no effect; some own objects with the rest
-absent, not ready or not equal to its declared body is a partial realization; a
-foreign object or a failed read is unknown, whose remedy is to
-destroy and apply again, except for an instance an
-[additive apply](state-reconciliation.md#additive-apply) added, whose remedy
-is to remove or correct the object and repeat `apply`, which observes it again,
-because a `destroy` takes the whole lineage and its cluster back. An installed
+absent, not ready or not equal to its declared body is a partial realization.
+A foreign object is unknown, and its remedy is to destroy and apply again,
+except for an instance an
+[additive apply](state-reconciliation.md#additive-apply) added: its remedy is
+to remove or correct the object and repeat `apply`, which observes it again,
+because a `destroy` takes the whole lineage and its cluster back. When no object
+is foreign and no retention gap is named, a read that failed, of an object or
+a check, is unknown, and its remedy is to let the cluster's API answer and
+repeat the command that observes it again ([resolution outcomes](state-reconciliation.md#resolution-outcomes));
+`instance.Capability.Unresolved` gives it and
+`TestAFailedReadIsObservedAgainNotDestroyed` holds it. An installed
 CSV other than the expected one that no replacement chain reached is unknown
 with the reason and remedy of the chain rule below. An own
 object that differs from its declared body, as when Argo CD or an operator changes a

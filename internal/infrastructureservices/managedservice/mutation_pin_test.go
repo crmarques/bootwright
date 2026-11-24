@@ -216,6 +216,9 @@ func TestEveryManagedServiceMutationRefusesWhatItCannotRead(t *testing.T) {
 				if err == nil || result.Outcome != test.outcome || result.Evidence != nil || test.refusal != "" && described(err) != test.refusal {
 					t.Fatalf("%s = %+v (%s), want %s (%s)", verb, result, described(err), test.outcome, test.refusal)
 				}
+				if result.Outcome == reconciliation.OutcomeUnknown && lifecycle.AttemptOutcome(err) != result.Outcome {
+					t.Fatalf("%s returns unknown with a stop that records its attempt %s: %s", verb, lifecycle.AttemptOutcome(err), described(err))
+				}
 				if name == "runner error" && !errors.Is(err, unreachable) {
 					t.Fatalf("the runner's error was replaced: %v", err)
 				}

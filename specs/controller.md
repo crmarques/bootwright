@@ -802,7 +802,9 @@ source, and a source the run is not installing keep the
 generic adapter failure or break the protocol. A run that failed after
 announcing its sources but before Go acknowledged the tools installed nothing
 and is failed; once that acknowledgement may have been delivered, it is
-unknown.
+unknown (`protocolRun.unauthorized`,
+`TestAClientInstallationThatFailsBeforeAnyAcknowledgementIsFailed`,
+`TestAClientInstallationAfterAnAcknowledgedToolStaysUnknown`).
 
 The adapter alone proves the retained source and member digests and the `oc`
 release stamp before publication. Go verifies the published target inventory

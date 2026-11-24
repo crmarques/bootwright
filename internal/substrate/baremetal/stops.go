@@ -16,7 +16,7 @@ var (
 	baremetalUnconfigured = diagnostics.Stop{Code: "baremetal.unconfigured", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseDefect, Recovery: diagnostics.RecoveryNone,
 		Meaning: "the physical Machine capability runs without its adapter", Remedy: "report the message as a defect"}
-	baremetalNoUsableOutcome = diagnostics.Stop{Code: "baremetal.no-usable-outcome", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyPossible,
+	baremetalNoUsableOutcome = diagnostics.Stop{Code: "baremetal.no-usable-outcome", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyUnproved,
 		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryRepeat,
 		Meaning: "the machine adapter ended without an outcome the block can use", Remedy: "repeat the operation, which observes the machine again"}
 	baremetalPostconditionUnproved = diagnostics.Stop{Code: "baremetal.postcondition-unproved", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyPossible,

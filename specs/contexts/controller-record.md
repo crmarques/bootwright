@@ -112,18 +112,18 @@ version is not read, and no build converts one. A controller read and every
 context transaction refuse with `context.state`, "controller evidence version
 N is unsupported: this build reads version M only and converts none", M being
 `ControllerRecordVersion`, and the fresh-install remedy: with a build that reads the
-record, destroy each environment and delete each context, then run this
+record, destroy each environment, delete each context and delete each stored
+image (`bootwright catalog media delete --name <image>`), then run this
 build's `bootwright uninstall --discard-unreadable` and
 `bootwright install`. Uninstall never reads the controller record,
 so one of another version does not stop it, and the discard is accepted
 because the store is readable and holds no context
 ([uninstall flow](../controller.md#the-uninstall-flow)). No command rebuilds the record alone: it is
 published by the first binding of an apply on a root that holds none, and a
-root holding one never gets a second. The fresh install also drops the host's
-contexts with their Secrets and its stored media, which `bootwright context init`
-and `bootwright catalog media add` recreate from the input directories and images; the
-refusal says so and leaves the record unchanged
-(`TestAControllerRecordOfAnotherVersionNamesTheFreshInstall`).
+root holding one never gets a second. Recreate the contexts and media
+afterwards with `bootwright context init` and `bootwright catalog media add`
+from the input directories and images; the refusal says so and leaves the
+record unchanged (`TestAControllerRecordOfAnotherVersionNamesTheFreshInstall`).
 Workspace stores them and, before it publishes a context's entries, applies
 the conflict relation each key class has under that contract (equal keys,
 a wildcard socket and a socket on its port, overlapping prefixes), which the
@@ -164,10 +164,13 @@ host (`TestAClientAreaAtTheBoundNamesItsRemedy`,
 would pass 4096 refuses with `controller.conflict`, saying that no command of
 this build frees a retained tool source, and names the two exits: run this
 context's controller stage on another controller host, or start this host
-afresh by destroying every environment and deleting every context on it, then
-running `bootwright uninstall --keep-packages` and
+afresh by destroying every environment, deleting every context and deleting
+every stored image (`bootwright catalog media delete --name <image>`) on it,
+then running `bootwright uninstall --keep-packages` and
 `bootwright install`
-(`TestToolSourcesPastTheBoundNameTheFreshStoreExit`).
+(`TestToolSourcesPastTheBoundNameTheFreshStoreExit`). The
+[uninstall flow](../controller.md#the-uninstall-flow) owns what uninstall
+refuses.
 
 A tool area is bounded to 8 GiB total,
 1 GiB per file, 32768 entries and depth 32. Symlinks, hard links, nested

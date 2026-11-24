@@ -89,6 +89,33 @@ func TestDelegatedServicesProjectIntoDelegated(t *testing.T) {
 	}
 }
 
+func TestTheManagementGatewayAndNVMeOFServicesProjectIntoDelegated(t *testing.T) {
+	for name, test := range map[string]struct {
+		catalog api.Catalog
+		want    []string
+	}{
+		"management gateway": {delegatedCatalog(ssoServices(), ssoBindings()), []string{"crash", "ingress.mgmt", "mgmt-gateway", "oauth2-proxy"}},
+		"nvmeof":             {nvmeCatalog(), []string{"crash", "nvmeof.config.primary"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r, err := planned(t, test.catalog, api.CephCluster, "example")
+			if err != nil {
+				t.Fatal(diagnostics.Of(err))
+			}
+			got := []string{}
+			for _, service := range r.Delegated {
+				if len(service.Hosts) == 0 {
+					t.Fatalf("%s lists no eligible host", service.Name)
+				}
+				got = append(got, service.Name)
+			}
+			if !slices.Equal(got, test.want) {
+				t.Fatalf("delegated %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
 func TestClusterRequestRefusesOnlyUnexecutedBindings(t *testing.T) {
 	catalog := gatewayGraph(tlsBinding("rgw.objects", "gateway-tls"), tlsBinding("ingress.rgw.objects", "gateway-tls"))
 	r, err := planned(t, catalog, api.CephCluster, "example")

@@ -125,8 +125,9 @@ unqualified cascading cleanup.
 
 Filesystem creation respects the separate pool and MDS owners. A filesystem
 is created with `ceph fs new <fs> <metadata> <default> set max_mds <n>
-allow_standby_replay <true|false> standby_count_wanted <n>` over its owned
-pools, and further data pools attach with `ceph fs add_data_pool`. The
+standby_count_wanted <n>` over its owned pools, `ceph fs set <fs>
+allow_standby_replay <true|false>` follows whenever the observed flag differs,
+and further data pools attach with `ceph fs add_data_pool`. The
 [native volume interface](https://docs.ceph.com/en/tentacle/cephfs/fs-volumes/),
 which creates and removes pools and orchestrates MDS services, is never used,
 and no creation is ever forced.
@@ -790,7 +791,7 @@ until [B472](milestones/m2.md#b472) or the owner's run confirms them.
 | `metadataPoolRef` | Owned replicated pool of role `cephfsMetadata`. | `<metadata>` of `fs new`. |
 | `dataPoolRefs` | The default pool first, then the others in declared order; the default is replicated. | `<default>` of `fs new`; each other pool through `fs add_data_pool <fs> <pool>`. |
 | `mds.activeCount` | Value, or 1 ([MDSMap.h](https://github.com/ceph/ceph/blob/v20.2.1/src/mds/MDSMap.h#L622)). | `set max_mds <n>`. |
-| `mds.standbyReplay` | Value, or false. | `set allow_standby_replay <true\|false>`. |
+| `mds.standbyReplay` | Value, or false. | `fs set <fs> allow_standby_replay <true\|false>` after `fs new`, when the observed flag differs. |
 | `mds.standbyCountWanted` | Value, or 0. | `set standby_count_wanted <n>`. |
 | `subvolumeGroups[].name` | Sorted by name. | `fs subvolumegroup create <fs> <group>`. |
 | `subvolumeGroups[].poolLayoutRef` | Value, or the default data pool. | `--pool_layout <pool>`. |
@@ -807,10 +808,16 @@ its pools and sets `pg_num_min` 16, `recovery_priority` 5 and
 pool readiness accepts exactly those once the key names the pool's own
 filesystem, and that `pg_num_min` then replaces a frozen one.
 
-`fs new` carries the MDS settings in its creating proposal
+`fs new` carries `max_mds` and `standby_count_wanted` in its creating proposal
 ([FSCommands.cc](https://github.com/ceph/ceph/blob/v20.2.1/src/mon/FSCommands.cc#L251-L307)),
-so no `fs set` follows; `fs set max_mds` refuses while any filesystem health
-warning exists. Bootwright never passes `--force`,
+so no `fs set` of either follows, and `fs set max_mds` refuses while any
+filesystem health warning exists. `allow_standby_replay` is set by a separate
+`fs set` only while the observed flag differs (`fs_new_args`, held by
+`test_fs_new_sets_the_frozen_mds_counts_and_standby_replay_only_after_creation`).
+Why: the v20.2.1 monitor looks that pair's filesystem up before `fs new`
+commits it, and its leader aborts.
+
+Bootwright never passes `--force`,
 `--allow-dangerous-metadata-overlay`, `--fscid` or `--recover`, never sets an
 FSMap flag and never uses `fs volume`. An attached data pool is never added
 again: the monitor's pool check refuses it before its no-op

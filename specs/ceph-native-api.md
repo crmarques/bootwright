@@ -266,50 +266,59 @@ frozen image; no active rank is required before its filesystem exists.
 
 An NFS service and the ingress that fronts it run in one service-unit block;
 RGW and its ingress run in the gateway block. Neither is a block the cluster
-block owns.
-The core request lists each one in its `delegated` member by its qualified
-name and its eligible native hostnames, and carries nothing else of its
-document; the host request never carries the member. In the daemon-type table,
-`rgw`, `haproxy`, `keepalived` and `nfs` daemons (cephadm service types `rgw`,
-`ingress` and `nfs`) are admitted only when their `service_name` is listed in
-`delegated`, names their service type and their host is among that entry's
-hosts; any other is a foreign service. They are never counted toward readiness
-and never compared with the Ceph image; their executing block checks both. In
-the host layout, a listed daemon's directory is admitted on a host of its
+block owns. The core request lists each service another block executes in its
+`delegated` member with its eligible native hostnames, and carries nothing
+else of its document:
+
+- `rgw`, `nfs`, `nvmeof` and every `ingress`, the keepalived-only one that
+  fronts the management gateway included, by its qualified name;
+- each declared monitoring service, `mgmt-gateway`, `oauth2-proxy` and
+  `rbd-mirror` by its singleton service name, its type;
+- `crash` with every host;
+- each declared SMB cluster's `smb.<cluster_id>`, as [the SMB rule](ceph.md#resources-readiness-and-access) lists it.
+
+`delegatedFamilies`, `GatewayTypes`, `MonitoringTypes` and `MirrorTypes`
+select them (`TestDelegatedServicesProjectIntoDelegated`,
+`TestTheManagementGatewayAndNVMeOFServicesProjectIntoDelegated`). A frozen
+host request never carries the member. The removal of a retained-root host,
+and its removal observation, add to its request the original cluster
+request's entries that name the host, each narrowed to it, to prove its daemon
+layout ([devices and destructive ownership](ceph.md#devices-and-destructive-ownership);
+`frozenHostDelegation`,
+`TestRetainedHostDestroyAndReadonlyRemovalUseNativeProof`).
+
+In the daemon-type table, a daemon of a delegated type (`DELEGATED_TYPES`) is
+admitted only when its `service_name` is listed, names its cephadm service
+type (`ingress` for `haproxy` and `keepalived`), equals that type for a
+singleton, and its host is among that entry's hosts; any other is a foreign
+service. A delegated daemon is never counted toward core readiness and never
+compared with the Ceph image there; its executing block checks both
+(`test_gateway_tables_agree`,
+`test_host_layout_types_match_the_daemon_type_table`). `ceph-exporter` keeps
+its cluster row: it runs the Ceph image on any frozen request host. In the host
+layout, a listed daemon's directory is admitted on a host of its
 entry, identified by its `unit.meta` `service_name` or, before unit files
 exist, by the one listed service whose ID prefixes its daemon name
 `<service_id>.[<rank>.<generation>.]<host short name>.<six lowercase letters>`
 ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/module.py#L922-L966));
 none or more than one such service refuses.
 
-The monitoring services run in one service-unit block. The core request lists
-each declared `prometheus`, `alertmanager`, `grafana`, `node-exporter`,
-`ceph-exporter`, `snmp-gateway`, `loki`, `alloy` and `promtail` service in
-`delegated` by its type name, the singleton's service name, with its eligible
-hosts. cephadm names their daemons
+The monitoring services (`prometheus`, `alertmanager`, `grafana`,
+`node-exporter`, `ceph-exporter`, `snmp-gateway`, `loki`, `alloy` and
+`promtail`) run in one service-unit block. cephadm names their daemons
 `<type>.<host short name>` without a random suffix
 ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/module.py#L922-L966)).
-In the daemon-type table, `prometheus`, `alertmanager`, `grafana`,
-`node-exporter`, `snmp-gateway`, `loki`, `alloy` and `promtail` daemons are
-admitted only when their
-`service_name` equals their type, that service is listed and their host is
-among its hosts; like the other delegated daemons they are never counted
-toward readiness or compared with the Ceph image. `ceph-exporter` keeps its
-row: it runs the Ceph image on any frozen request host. Listed auxiliary singletons’ host directories follow the
+Listed auxiliary singletons’ host directories follow the
 [image-user ownership rules](#host-directory-ownership).
 
-The `rbd-mirror` service runs in its own service-unit block. The core request
-lists it in `delegated` by its singleton service name `rbd-mirror` with its
-eligible hosts. Its document carries only placement and optional `networks`:
+The `rbd-mirror` service runs in its own service-unit block. Its document
+carries only placement and optional `networks`:
 cephadm has no `rbd-mirror` ServiceSpec subclass, so the generic ServiceSpec
 takes no `spec` member for it, and it refuses a `service_id` for it. cephadm
 names its daemons `rbd-mirror.<host short name>.<six lowercase letters>`
 ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/module.py#L922-L966)),
-and the daemon binds no listener of its own. In the daemon-type table an
-`rbd-mirror` daemon is admitted only when its `service_name` is `rbd-mirror`,
-that service is listed and its host is among its hosts; it is never counted
-toward readiness or compared with the Ceph image there, and its unit block
-requires it to run the frozen Ceph image. In the host layout it is identified
+and the daemon binds no listener of its own. Its unit block requires it to run
+the frozen Ceph image. In the host layout it is identified
 by that listed singleton, and its directory keeps the root-or-Ceph-user owner
 rule. Bootwright realizes only the daemon: no pool or image mirroring, peer or
 replication relationship comes from this service.
@@ -323,12 +332,8 @@ cluster host's native name in name order, with no `service_id`, `spec`,
 `crash` is not among the types it assigns a `service_id`
 ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/python-common/ceph/deployment/service_spec.py#L801-L813)).
 It is applied through `orch apply -i -` and read back like every unit. The
-core request lists `crash` in `delegated` with every host. In the daemon-type
-table a `crash` daemon is admitted only when its `service_name` is `crash`,
-that service is listed and its host is among its hosts; it is never counted
-toward core readiness or compared with the Ceph image there. The unit block
-requires one crash daemon running the frozen Ceph image on every placed host,
-since cephadm runs crash on the Ceph image
+unit block requires one crash daemon running the frozen Ceph image on every
+placed host, since cephadm runs crash on the Ceph image
 ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/utils.py#L23-L26)).
 In the host layout it is identified by that listed singleton and keeps the
 root-or-Ceph-user owner rule. The bootstrap passes `--skip-ssh`, so cephadm's

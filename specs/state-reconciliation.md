@@ -505,15 +505,18 @@ it. These records never
 restate the request: the request an attempt or resolution acted on is its
 block's in `plan.json`, which the operation's plan digest names and nothing
 replaces. A running attempt may additionally publish one bounded `preparation`
-object: the before-state its capability observed, recorded durably while the attempt is
-still running and before it is permitted to change the host. It is written once
-and never replaced, so a later recovery can tell an attempt that was authorized
-to install from one that never reached that point. A lifecycle attempt publishes
-it through the acknowledged `prepared` record of
+object, recorded durably while the attempt is still running and before it is
+permitted to change the host. An apply attempt's preparation is the
+before-state its capability observed. A destroy attempt's preparation is the
+removal receipt its capability validates (`Execution.PrepareRemoval`, held by
+`TestRemovalReceiptIsDurableBeforeContinuationAndReadOnlyOnResolution`). It is
+written once and never replaced, so a later recovery can tell an attempt that
+was authorized to change the host from one that never reached that point. A
+lifecycle attempt publishes it through the acknowledged `prepared` record of
 [the adapter result protocol](architecture.md#the-adapter-result-protocol): its
 capability validates it, the runner records it, and only then is the adapter
-acknowledged, and only an apply's own attempt may. A resolution observation
-publishes none, because an observation authorizes no effect. An attempt's
+acknowledged. A resolution observation publishes none, because an observation
+authorizes no effect. An attempt's
 record may also carry `warnings`, the bounded advisories its adapter's
 completed result reported, each a `code`, `message` and optional `object` of
 `kind` and `name`; they are written in the same write as its outcome, left out
@@ -853,8 +856,7 @@ returns, never published into custody. A lend creates only the one per-lend
 object its access is bound to, and the `revoke` of the same request deletes
 that object alone, by its UID, once the run returns. So a read-only or
 unrecorded execution may run a lend and take its output, and run that
-revoke, which the runner admits for `substrate-host-kubevirt-v1` alone; it
-refuses every other operation there. A lend deletes the expired leftovers of
+revoke, as the [read-only rule](#attempts-and-unknown-outcomes) admits. A lend deletes the expired leftovers of
 earlier lends only inside a recorded attempt that may change its host, never
 a read-only execution, a resolution or an unrecorded one
 ([lent access revocation](substrates.md#lent-kubevirt-access-revocation)). A
@@ -1128,12 +1130,16 @@ an `add-ons` block when an add-on enables the cluster hosting a provider.
 The `controller` stage is the one exception, owned by the engine.
 A first apply may bind the context to this host when it registers any work.
 That ownership proof runs even when the selected graph has no controller
-prerequisites, or when an explicit selection excludes the controller stage. Once
-requirements resolve, each block depends on each controller block, whose
-clients run its adapters, but what it waits for: a controller block, run
-first, or one its capability runs without them, past the first after an
-earlier one, like a managed [artifact mirror](api/environment.md#artifact-mirror)'s
-blocks; any other refuses with `controller.unsupported`.
+prerequisites, or when an explicit selection excludes the controller stage.
+Once requirements resolve, `lifecycle.DependOnController` chains the
+controller blocks in dependency order. A controller block waits only on blocks
+whose capability precedes the controller (`ControllerPrecursor`), such as an
+[artifact mirror](api/environment.md#artifact-mirror)'s, and, past the
+first, only on one waiting on an earlier controller block; any other
+dependency refuses with [`plan.controller-order`](cli/stops.md#engine-stops).
+Every other block depends on each controller block, except that controller
+block's ancestors and a block whose capability is `ControllerIndependent`
+(`TestAPrecursorOfALaterControllerBlockMustWaitForAnEarlierOne`).
 A context that selects no client or native closure beyond the host baseline
 contributes no controller block, and a plan without one is ordered by its
 capabilities alone.
@@ -1150,7 +1156,8 @@ No block holds or hands over a native package lock: a launch holds only its
 runtime's shared launch lock, which never blocks the host's package manager.
 
 A stage selection is the set of stages an invocation may start; an omitted
-selection admits every stage, and `controller` what its blocks wait for.
+selection admits every stage, and a selection that includes `controller` also
+admits the blocks its controller blocks wait for.
 A block is *ready* when it is `pending` and every dependency is `done`, and
 *startable* when it is ready and admitted. Execution fills the bound from
 startable blocks using [ready-work priority](#ready-work-priority),
@@ -1508,11 +1515,12 @@ lost block record reads: starting over an effect that may have begun would skip
 the observation an unproved effect requires.
 
 An invocation that names no attempt of its own, a resolution, or a keep is
-read-only: the runner refuses any adapter operation there but `observe`, a
-`lend`, and the `revoke` of `substrate-host-kubevirt-v1`, which deletes only
-the object that execution's own lend created
-([produced material custody](#produced-material-custody)), before it creates a
-job. An invocation no operation record names, a quiescence probe
+read-only: before it creates a job, the runner refuses any adapter operation
+there but `observe`, a `lend`, and the read-only operations composition admits
+(`readOnlyOperations`, held by `TestReadOnlyEntrypointsAreExplicit`): a lend's
+[revoke](#produced-material-custody) and an
+[administrator credential update](cli/cluster-admin-credentials.md#administrator-credential-updates)'s
+preparation. An invocation no operation record names, a quiescence probe
 or a comparison, may take over no produced material: the runner refuses one
 whose request declares an output.
 
@@ -2626,8 +2634,14 @@ identity. `ApplyProved` supplies detached frozen blocks and durable completion
 evidence only from the transitive dependency closure of that original apply.
 Every invocation also receives `ApplyPreparations`: the preparations the
 owning apply's own attempts of the same block recorded, in attempt order and
-unread, or none when that apply never started the block. Removal reads them
-through the active operation store, without reopening the workspace lock. Context renames and a new removal identity do not create a new
+unread, or none when that apply never started the block. Every invocation of a
+destroy block also receives `RemovalPreparations`: the preparations its own
+removal's attempts of the block recorded, in attempt order and unread. When
+they recorded none and its capability carries removal preparations
+(`RemovalPreparationCarrier`), it receives instead every attempt's
+preparations of the nearest same-source removal it replaces that froze the
+block with the same request digest and recorded any. Removal reads both through the active operation store, without
+reopening the workspace lock. Context renames and a new removal identity do not create a new
 Ceph incarnation or substitute a currently observed host key. Missing original
 evidence refuses before dependent effects.
 

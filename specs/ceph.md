@@ -785,9 +785,11 @@ stretch behaviour has no qualified profile.
   a gateway's zone pools are created on the rule. `.rgw.root`, which any
   radosgw-admin call would create on the default rule, is created by the
   gateway that claims it, after its claim and before any radosgw-admin call,
-  with `osd pool create .rgw.root 32 32 replicated <ruleName>
-  --autoscale_mode on`, then size 4 and min_size 2 and the `rgw`
-  application. A claimed `.rgw.root` on another
+  with `osd pool create .rgw.root 32 32 replicated --rule <ruleName>
+  --autoscale_mode on --yes-i-really-mean-it`, then size 4 and min_size 2 and
+  the `rgw` application; unconfirmed, the monitor creates no dot-prefixed
+  pool yet answers success
+  (`test_a_stretch_gateway_creates_the_rgw_root_on_the_stretch_rule_before_radosgw_admin`). A claimed `.rgw.root` on another
   rule refuses `stretch-pools`, and the gateway's readiness requires it on
   the rule at 4/2.
 - **Front doors.** An `rgw` service is reached directly, through one ingress
@@ -1634,13 +1636,14 @@ implicit `data-pool`, and a clone is not ready; a native image that drifted
 from them is not ready rather than refused, and a consumer's snapshot does not
 make it unready. No phase removes, resizes, moves or re-features an image.
 
-A CephFS filesystem is created only over pools this operation created and
+A CephFS is created only over pools this operation created and
 still holds under their recorded IDs, and only when no filesystem of its name
 exists. It writes its attempt record before the one `ceph fs new` that also
-sets `max_mds`, `allow_standby_replay` and `standby_count_wanted`, records the
-native filesystem ID after it, and attaches each further data pool not yet
-attached. A retry adopts a same-name filesystem only with that record and the
-frozen metadata and default data pools; the
+sets `max_mds` and `standby_count_wanted`, records the native filesystem ID
+after it, attaches each unattached further data pool, and sets a
+differing `allow_standby_replay` by `fs set`. A retry adopts a same-name
+filesystem only with that record and the frozen metadata and default data
+pools; the
 [refusal table](ceph-resources.md#cephfilesystem) names each other outcome.
 Subvolume groups follow once every active rank is held. Readiness
 compares the pools, the MDS settings, the active ranks, standby-replay

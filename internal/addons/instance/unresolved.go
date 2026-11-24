@@ -2,6 +2,7 @@ package instance
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 
 	co "github.com/crmarques/bootwright/internal/addons/clusterobjects"
@@ -12,6 +13,7 @@ import (
 const (
 	destroyAndApply = "destroy and apply again"
 	removeUnowned   = "remove or correct the object on the cluster if no add-on of this context owns it"
+	readAgain       = "let the cluster's API answer its reads"
 	unprovedChain   = "no Bootwright command changes this; the apply's records prove the pinned CSV's installation and the installed CSV reports Succeeded, so leave the Subscription as it is and let the owner of the upgrade, the GitOps source, verify that the operator reached the installed CSV"
 )
 
@@ -79,14 +81,19 @@ func (c Capability) unresolved(verb reconciliation.Verb, block reconciliation.Bl
 		return lifecycle.Unresolved{}, false
 	}
 	for _, object := range evidence.Observations {
-		if object.Ownership == co.Foreign || object.Ownership == co.Unknown {
-			return lifecycle.Unresolved{Reason: object.Kind + "/" + object.Namespace + "/" + object.Name + " is foreign or could not be read", Remedy: remedy(object.Ref)}, true
+		if object.Ownership == co.Foreign {
+			return lifecycle.Unresolved{Reason: object.Kind + "/" + object.Namespace + "/" + object.Name + " is foreign", Remedy: remedy(object.Ref)}, true
 		}
 	}
 	var gaps []co.RetentionGap
 	other := true
 	if program, err := request.Objects(); err == nil {
 		gaps, other = co.RetentionGaps(program, evidence.Evidence)
+	}
+	if len(gaps) == 0 {
+		if failed, ok := failedRead(evidence.Evidence); ok {
+			return lifecycle.Unresolved{Reason: failed + " of add-on " + request.Package + " on " + request.Cluster + " could not be read", Remedy: readAgain}, true
+		}
 	}
 	gapped, gapReason := map[string]bool{}, ""
 	for _, gap := range gaps {
@@ -111,4 +118,18 @@ func (c Capability) unresolved(verb reconciliation.Verb, block reconciliation.Bl
 		return lifecycle.Unresolved{Reason: "Subscription/" + olm.Namespace + "/" + olm.Subscription + " reports CSV " + olm.InstalledCSV + " without proving the declared installation" + also, Remedy: remedy(subscription)}, true
 	}
 	return lifecycle.Unresolved{Reason: "add-on " + request.Package + " on " + request.Cluster + " did not prove its objects and checks" + also, Remedy: remedy(co.Ref{})}, true
+}
+
+func failedRead(evidence co.Evidence) (string, bool) {
+	for _, object := range evidence.Observations {
+		if object.Ownership == co.Unknown {
+			return object.Kind + "/" + object.Namespace + "/" + object.Name, true
+		}
+	}
+	for _, check := range evidence.Checks {
+		if check.Unknown {
+			return "check " + strconv.Itoa(check.Index), true
+		}
+	}
+	return "", false
 }

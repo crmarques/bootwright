@@ -59,7 +59,7 @@ var (
 		Cause: diagnostics.CauseDefect, Recovery: diagnostics.RecoveryRepeat,
 		Meaning: "an operation is due its finalization, which no decision may skip", Remedy: "repeat the command, which finalizes that operation before it decides"}
 	engineRecordsContradict = diagnostics.Stop{Code: "engine.records-contradict", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
-		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryAbandonContext,
 		Meaning: "an incomplete operation holds records that contradict what it started", Remedy: "read the records with bootwright status, then restore them from a backup or delete the context"}
 	engineOtherVerbIncomplete = diagnostics.Stop{Code: "engine.other-verb-incomplete", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryOtherVerb,
@@ -71,10 +71,10 @@ var (
 		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryAbandonContext,
 		Meaning: "a completed destroy records no completion for blocks it froze, so nothing proves their effects removed", Remedy: "restore the context's records, or delete the context with what it may still own"}
 	applyInputChanged = diagnostics.Stop{Code: "apply.input-changed", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
-		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryOtherVerb,
 		Meaning: "the desired state changed after the apply completed, and it is no addition to it", Remedy: "take back what the context owns with destroy, then apply the changed input"}
 	applyNotAnAddition = diagnostics.Stop{Code: "apply.not-an-addition", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
-		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryOtherVerb,
 		Meaning: "a changed input over a completed apply adds something an additive apply cannot take", Remedy: "take back what the context owns with destroy, then apply the changed input"}
 	applyPrerequisiteLost = diagnostics.Stop{Code: "apply.prerequisite-lost", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryOtherVerb,
@@ -194,7 +194,7 @@ var (
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryFixThenRepeat,
 		Meaning: "an operation continues only under the relaxations its plan froze, and the invocation names others", Remedy: "continue it naming the relaxations its plan froze, or replace it with a fresh destroy"}
 	authorizeAbandonUnattended = diagnostics.Stop{Code: "authorize.abandon-unattended", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
-		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryAuthorize,
 		Meaning: "an unattended destroy names --authorize abandon=<machine>, which only a confirmation an operator answers accepts, so nothing was registered", Remedy: "run the destroy in a terminal without --yes and confirm the plan"}
 	diffContextMoved = diagnostics.Stop{Code: "diff.context-moved", Level: diagnostics.LevelContext, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseConcurrency, Recovery: diagnostics.RecoveryRepeat,

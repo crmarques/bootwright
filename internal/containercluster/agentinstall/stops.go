@@ -19,7 +19,7 @@ var (
 	openshiftAdapterUnconfigured = diagnostics.Stop{Code: "openshift.adapter-unconfigured", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseDefect, Recovery: diagnostics.RecoveryNone,
 		Meaning: "the OpenShift cluster capability runs without an adapter or reader it needs, so nothing began", Remedy: "report the message as a defect"}
-	openshiftOutcomeUnusable = diagnostics.Stop{Code: "openshift.outcome-unusable", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyPossible,
+	openshiftOutcomeUnusable = diagnostics.Stop{Code: "openshift.outcome-unusable", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyUnproved,
 		Cause: diagnostics.CauseDefect, Recovery: diagnostics.RecoveryRepeat,
 		Meaning: "an OpenShift cluster adapter ended and reported no outcome the capability can use", Remedy: "repeat the operation, which observes the cluster again"}
 	openshiftRequestInvalid = diagnostics.Stop{Code: "openshift.request-invalid", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyNone,

@@ -40,7 +40,7 @@ var (
 	kubevirtHostChanged = diagnostics.Stop{Code: "kubevirt.host-changed", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
 		Meaning: "the host cluster a provider now reaches is not the one its VirtualMachine was realized on, so no adapter ran", Remedy: "restore the host cluster the Machine was realized on, or destroy and apply again"}
-	kubevirtOutcomeUnusable = diagnostics.Stop{Code: "kubevirt.outcome-unusable", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyPossible,
+	kubevirtOutcomeUnusable = diagnostics.Stop{Code: "kubevirt.outcome-unusable", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyUnproved,
 		Cause: diagnostics.CauseDefect, Recovery: diagnostics.RecoveryRepeat,
 		Meaning: "the KubeVirt adapter reported no outcome the capability can use", Remedy: "repeat the operation, which observes the effect again"}
 	kubevirtEvidenceMismatch = diagnostics.Stop{Code: "kubevirt.evidence-mismatch", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyPossible,

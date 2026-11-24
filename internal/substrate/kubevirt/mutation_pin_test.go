@@ -232,9 +232,15 @@ func TestEveryKubeVirtMutationRefusesWhatItCannotRead(t *testing.T) {
 				if result.Outcome != test.outcome || result.Evidence != nil || described(err) != test.host {
 					t.Fatalf("host %s = %+v (%s), want %s (%s)", verb, result, described(err), test.outcome, test.host)
 				}
+				if result.Outcome == reconciliation.OutcomeUnknown && lifecycle.AttemptOutcome(err) != result.Outcome {
+					t.Fatalf("host %s returns unknown with a stop that records its attempt %s: %s", verb, lifecycle.AttemptOutcome(err), described(err))
+				}
 				result, err = machineMutate(test.ctx, machineExecution(t))
 				if result.Outcome != test.outcome || result.Evidence != nil || described(err) != test.machine {
 					t.Fatalf("machine %s = %+v (%s), want %s (%s)", verb, result, described(err), test.outcome, test.machine)
+				}
+				if result.Outcome == reconciliation.OutcomeUnknown && lifecycle.AttemptOutcome(err) != result.Outcome {
+					t.Fatalf("machine %s returns unknown with a stop that records its attempt %s: %s", verb, lifecycle.AttemptOutcome(err), described(err))
 				}
 			}
 		})

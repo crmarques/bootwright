@@ -28,7 +28,7 @@ var (
 )
 
 var enrollment = diagnostics.Stop{Code: "machine.enrollment", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
-	Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryRepeat,
+	Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryFixThenRepeat,
 	Meaning: "a provided Machine's enrollment could not verify a credential, account, or grant",
 	Remedy:  "inspect the named Machine's first-access declaration and retry with its authorized administrator"}
 

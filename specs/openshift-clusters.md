@@ -1037,7 +1037,8 @@ declared release, reporting its installation completed and holding every
 declared node, reports `completed` with the same evidence, boots nothing and
 waits for nothing. The only differences it converges are media it did not
 finish releasing and each node's BMC pointed at its installed disk:
-release runs on every apply, so a settled apply selects each node's disk again.
+release runs on each attempt a continuation or a new operation makes, never on
+a [settled apply](state-reconciliation.md#lifecycle-unit).
 The same cluster answering while it does not report its installation
 completed, as an attempt interrupted during the installation wait leaves it, is
 not installed: the next attempt waits for bootstrap and installation completion

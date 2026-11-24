@@ -11,13 +11,13 @@ var (
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
 		Meaning: "a Machine is placed on a provider whose substrate this executable does not realize, so nothing was planned", Remedy: "place the Machine on a libvirt, bare-metal or KubeVirt provider"}
 	prebootTargetUnanswered = diagnostics.Stop{Code: "preboot.target-unanswered", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyUnproved,
-		Cause: diagnostics.CauseEnvironment, Fault: diagnostics.FaultUnreachable, Recovery: diagnostics.RecoveryRepeat,
+		Cause: diagnostics.CauseEnvironment, Fault: diagnostics.FaultUnreachable, Recovery: diagnostics.RecoveryFixThenRepeat,
 		Meaning: "the management controller did not answer the system read that proves a physical machine, so what it is stays unknown", Remedy: "restore access to the controller, then repeat the apply"}
 	prebootHardwareMismatch = diagnostics.Stop{Code: "preboot.hardware-mismatch", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
 		Meaning: "a physical machine does not report exactly the hardware its Machine declares, or its inventory could not be read in full, so no media was inserted", Remedy: "make the machine report the hardware its Machine declares, then continue the apply"}
 	prebootIdentityMismatch = diagnostics.Stop{Code: "preboot.identity-mismatch", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyNone,
-		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryChangeInput,
 		Meaning: "the system answering for a Machine is not the one the operation proved for it, so no media was inserted", Remedy: "correct the declared address of the Machine, or restore the system it was realized on, then continue the apply"}
 	prebootMachineRunning = diagnostics.Stop{Code: "preboot.machine-running", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,

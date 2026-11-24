@@ -22,7 +22,18 @@ func TestEveryCatalogedStopIsComposedAndExplained(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, catalog, _ := strings.Cut(string(data), "\n## Catalog\n")
+	head, catalog, _ := strings.Cut(string(data), "\n## Catalog\n")
+	_, attesting, _ := strings.Cut(head, "and no\nother, attest it:\n")
+	attesting, _, _ = strings.Cut(attesting, "\n`TestEveryCatalogedStopIsComposedAndExplained`")
+	confining := map[string]bool{}
+	for _, line := range strings.Split(strings.TrimSpace(attesting), "\n") {
+		if code, ok := strings.CutPrefix(line, "- `"); ok {
+			confining[strings.TrimSuffix(code, "`")] = true
+		}
+	}
+	if len(confining) == 0 {
+		t.Fatal("specs/cli/stops.md lists no stop that confines a failed removal")
+	}
 	listed := map[string]bool{}
 	rows := map[string][]string{}
 	for _, line := range strings.Split(catalog, "\n") {
@@ -57,6 +68,13 @@ func TestEveryCatalogedStopIsComposedAndExplained(t *testing.T) {
 			!stopCodeShape.MatchString(stop.Code) || len(stop.Code) > 64 {
 			t.Errorf("stop %s is malformed or fires as %+v", stop.Code, failed)
 		}
+		if stop.LocalRemovalFailure != confining[stop.Code] {
+			t.Errorf("stop %s confines a failed removal: declared %t, catalog %t", stop.Code, stop.LocalRemovalFailure, confining[stop.Code])
+		}
+		if stop.LocalRemovalFailure && (stop.Certainty != diagnostics.CertaintyNone || stop.Cause != diagnostics.CauseTarget) {
+			t.Errorf("stop %s confines a failed removal with certainty %s and cause %s", stop.Code, stop.Certainty, stop.Cause)
+		}
+		delete(confining, stop.Code)
 		if seen[stop.Code] {
 			t.Errorf("two packages declare the stop %s", stop.Code)
 		}
@@ -65,5 +83,8 @@ func TestEveryCatalogedStopIsComposedAndExplained(t *testing.T) {
 		if code := cli.New(cli.Config{Out: &out, ErrOut: &errOut, Stops: stopCatalog}).Run(context.Background(), []string{"explain", "--code", stop.Code}); code != 0 || !strings.Contains(strings.Join(strings.Fields(out.String()), " "), stop.Meaning) {
 			t.Errorf("explain --code %s exited %d: %s%s", stop.Code, code, out.String(), errOut.String())
 		}
+	}
+	for code := range confining {
+		t.Errorf("specs/cli/stops.md says %s confines a failed removal, which no composed stop declares", code)
 	}
 }

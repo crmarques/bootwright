@@ -21,16 +21,16 @@ func controllerFailure(code, message, remediation string) error {
 }
 
 const toolSourcesRemedy = "no command of this build frees a retained tool source, because it never retires one; run this context's controller stage on another controller host, " +
-	"or start this host afresh: destroy every environment (bootwright destroy --context <name>) and delete every context (bootwright context delete --name <name> --purge) on it, " +
-	"then run bootwright uninstall --keep-packages and bootwright install"
+	"or start this host afresh: destroy every environment (bootwright destroy --context <name>), delete every context (bootwright context delete --name <name> --purge) " +
+	"and delete every stored image (bootwright catalog media delete --name <image>) on it, then run bootwright uninstall --keep-packages and bootwright install"
 
 // controllerVersionRemedy is the fresh install of a store whose controller
 // record another version wrote. No command rebuilds the record alone, so the
-// whole root goes, and with it the contexts, their Secrets and the stored media.
-const controllerVersionRemedy = "with a build that reads it, destroy each environment (bootwright destroy --context <name>) and delete each context " +
-	"(bootwright context delete --name <name> --purge); then run bootwright uninstall --discard-unreadable and bootwright install " +
-	"with this build, which never reads the controller record. That fresh install also drops this host's contexts with their Secrets and its stored media: " +
-	"recreate them from your input directories with bootwright context init and bootwright catalog media add."
+// whole root goes once the contexts and the stored media it holds are deleted.
+const controllerVersionRemedy = "with a build that reads it, destroy each environment (bootwright destroy --context <name>), delete each context " +
+	"(bootwright context delete --name <name> --purge) and delete each stored image (bootwright catalog media delete --name <image>); " +
+	"then run bootwright uninstall --discard-unreadable and bootwright install with this build, which never reads the controller record. " +
+	"Recreate the contexts and media afterwards from your input directories and images with bootwright context init and bootwright catalog media add."
 
 // ControllerRecordVersion is the private shared-host evidence format. It
 // holds host identity, bindings, tool sources and areas, and reservations,

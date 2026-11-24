@@ -276,7 +276,7 @@ type PreStopRemoval interface {
 	RequiresPreStopRemoval(reconciliation.Block) bool
 }
 
-// RemovalPreparationCarrier inherits the most recent receipt from the same-source, same-request inverse.
+// RemovalPreparationCarrier inherits every attempt's preparation of the nearest replaced same-source, same-request removal that recorded any.
 type RemovalPreparationCarrier interface {
 	CarryRemovalPreparation() bool
 }

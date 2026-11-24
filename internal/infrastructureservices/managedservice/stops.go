@@ -22,7 +22,7 @@ var (
 	servicePasswordFileFailed = diagnostics.Stop{Code: "service.password-file-failed", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseDefect, Recovery: diagnostics.RecoveryNone,
 		Meaning: "the password file a service authenticates its clients with could not be derived from its credential", Remedy: "report the message as a defect"}
-	serviceOutcomeUnusable = diagnostics.Stop{Code: "service.outcome-unusable", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyPossible,
+	serviceOutcomeUnusable = diagnostics.Stop{Code: "service.outcome-unusable", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyUnproved,
 		Cause: diagnostics.CauseDefect, Recovery: diagnostics.RecoveryRepeat,
 		Meaning: "the managed service adapter ended without an outcome the block can settle on", Remedy: "repeat the operation, which observes the service again"}
 	serviceEvidenceMismatch = diagnostics.Stop{Code: "service.evidence-mismatch", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyPossible,
