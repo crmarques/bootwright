@@ -56,7 +56,9 @@ certificate verified. It then:
    service's own configuration interface, the values the installed system's
    [worker](managed-os.md#registration) sets, and proves each reads back, so
    registration reaches the Satellite's subscription API and the package
-   downloads verify the Satellite too;
+   downloads verify the Satellite too. It starts `rhsm.service` itself rather
+   than relying on the start Anaconda runs in parallel, and names the
+   `com.redhat.RHSM1.Config` interface on every call;
 3. refuses an organization or activation key outside 1 to 255 printable ASCII
    characters without space, quote, backslash or `#`;
 4. writes `rhsm --organization=<organization> --activation-key=<key>

@@ -39,6 +39,23 @@ before any live run. Keys set that way survive Anaconda's own `SetAll`, and
 the service verifies its server against every PEM in `/etc/rhsm/ca`. An installer older than this constant has no such
 switch and passes the prefixed string to RHSM as a host name, which fails.
 
+## The RHSM Config proxy
+
+dasbus parses the standard interfaces into every proxy's specification and an
+`ObjectProxy` resolves a member name to them first
+(`dasbus/client/proxy.py`, `ObjectProxy._get_interface`). RHSM's `Config`
+object names `Get`, `GetAll` and `Set` as `org.freedesktop.DBus.Properties`
+does, so `get_proxy(service, path).Get("server.prefix", "")` calls
+`Properties.Get` with `server.prefix` as an interface name and fails, while
+`SetAll`, which no standard interface names, reaches RHSM. Anaconda passes
+`interface_name=` for the same object (`initialization.py`,
+`StartRHSMTask`), which also starts `rhsm.service` in a thread that `%pre`
+does not wait for. The first real installation from a subscription source
+stopped at `Running pre-installation scripts` with Anaconda's `ScriptError`
+([B1693](../../specs/milestones/m1.md#b1693)); the dasbus behavior is read
+from dasbus 1.7, and the live cause is not yet confirmed by the installer's
+log.
+
 ## Order and what reaches the installed system
 
 `anaconda.py` runs the `%pre` scripts, then parses the Kickstart with its

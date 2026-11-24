@@ -144,7 +144,9 @@ func TestTheSubscriptionPreUsesOnlyTheVerifiedPathAndNoSatelliteProvisioning(t *
 		"bootwright_organization=$(curl --fail --silent --show-error --cacert /tmp/bootwright-artifact-ca.pem '" + PrivateURLToken + "/rhsm-organization')",
 		"bootwright_activation_key=$(curl --fail --silent --show-error --cacert /tmp/bootwright-artifact-ca.pem '" + PrivateURLToken + "/rhsm-activation-key')",
 		"curl --fail --silent --show-error --cacert /tmp/bootwright-artifact-ca.pem --output /etc/rhsm/ca/bootwright-satellite.pem '" + PrivateURLToken + "/rhsm-satellite-ca'",
+		"systemctl start rhsm.service",
 		`settings = {"server.prefix": "/rhsm", "server.port": "443", "server.insecure": "0", "rhsm.repo_ca_cert": "/etc/rhsm/ca/bootwright-satellite.pem"}`,
+		`config = SystemMessageBus().get_proxy("com.redhat.RHSM1", "/com/redhat/RHSM1/Config", interface_name="com.redhat.RHSM1.Config")`,
 		`config.SetAll({key: get_variant(Str, value) for key, value in settings.items()}, "")`,
 		"'not-satellite:satellite.example.test' 'https://capsule.example.test/pulp/content' > /tmp/bootwright-rhsm.ks",
 		"unset bootwright_organization bootwright_activation_key",
@@ -217,9 +219,12 @@ type subscriptionPreRun struct {
 }
 
 // runSubscriptionPre executes the actual %pre with an isolated /tmp and CA
-// directory. Only nmcli and curl are replaced, and only tools the installer
-// environment holds are on the path; the embedded Python runs as written
-// against a dasbus double that keeps what the subscription service was given.
+// directory. Only nmcli, curl, systemctl and python3's module path are
+// replaced, and only tools the installer environment holds are on the path;
+// the embedded Python runs as written
+// against a dasbus double that keeps what the subscription service was given
+// and, as dasbus does, binds an object proxy's Get to the standard Properties
+// interface.
 func runSubscriptionPre(t *testing.T, organization, key, failure string) subscriptionPreRun {
 	t.Helper()
 	root := t.TempDir()
@@ -301,10 +306,29 @@ class Config:
             return Variant(json.load(stream).get(key, DEFAULTS[key]))
 
 
+class Properties:
+    def Get(self, interface, name):
+        raise RuntimeError("org.freedesktop.DBus.Error.UnknownInterface: " + interface)
+
+
+class ObjectProxy(Config):
+    Get = Properties.Get
+
+
 class SystemMessageBus:
-    def get_proxy(self, service, path):
+    def get_proxy(self, service, path, interface_name=None):
         assert (service, path) == ("com.redhat.RHSM1", "/com/redhat/RHSM1/Config")
+        assert os.path.exists(os.path.join(os.environ["PRE_ROOT"], "rhsm-started"))
+        if interface_name is None:
+            return ObjectProxy()
+        assert interface_name == "com.redhat.RHSM1.Config"
         return Config()
+`)
+	write("systemctl", `#!/bin/bash
+set -e
+test "$*" = 'start rhsm.service'
+[ "$PRE_FAIL" != rhsm-start ]
+: > "$PRE_ROOT/rhsm-started"
 `)
 	input := physicalInstallation()
 	input.Physical, input.ExpectedMACs, input.RootSerial, input.RootWWN, input.RootSizeBytes = false, nil, "", "", 0
@@ -380,6 +404,7 @@ func TestTheSubscriptionPreRefusesBeforeItWritesTheRegistrationCommand(t *testin
 		"an unfetched organization":  {"Example_Org", "kQ7zX1", "fetch-rhsm-organization"},
 		"an unfetched key":           {"Example_Org", "kQ7zX1", "fetch-rhsm-activation-key"},
 		"an unfetched CA":            {"Example_Org", "kQ7zX1", "fetch-rhsm-satellite-ca"},
+		"an unstarted service":       {"Example_Org", "kQ7zX1", "rhsm-start"},
 		"an unreachable service":     {"Example_Org", "kQ7zX1", "trust"},
 		"an untaken API prefix":      {"Example_Org", "kQ7zX1", "ignored-server.prefix"},
 		"an untaken content CA":      {"Example_Org", "kQ7zX1", "ignored-rhsm.repo_ca_cert"},
