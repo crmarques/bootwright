@@ -103,7 +103,7 @@ its 63-byte identity.
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
 | `spec.baremetal.defaults.bmc.credentialsRef` | string | no | — | Default `usernamePassword` `Secret` reference for a Machine that omits its own BMC credentials. Access credential. |
-| `spec.baremetal.defaults.bmc.tls.trustBundleRef` | string | no | — | Default `caBundle` or `trustBundle` `Secret` reference for a machine BMC that keeps verification; refused beside `tls.verification: none`. Trust anchor. |
+| `spec.baremetal.defaults.bmc.tls.trustBundleRef` | string | no | — | Default `caBundle` or `trustBundle` `Secret` reference for a machine BMC that is a [verified BMC](../secrets.md#client-tls-trust); refused beside `tls.verification: none`. Trust anchor. |
 | `spec.baremetal.defaults.bmc.virtualMedia.tls.trust` | string | no | `importCertificate` | `importCertificate` or `established`. `disableVerification` is refused here: it is a per-Machine exception and never a provider default. |
 | `spec.baremetal.defaults.bmc.virtualMedia.tls.enableVerification` | boolean | no | `true` with verified BMC access | Automatic media-verification setup inherited with the complete virtual-media block; follows the Machine rule below. |
 | `spec.baremetal.defaults.bmc.virtualMedia.tls.restoreVerificationAfterBoot` | boolean | no | — | Refused: it is valid only with `disableVerification`, which a provider never defaults. |
@@ -118,10 +118,11 @@ wins. Missing credentials never select a same-named Secret, another provider,
 or ambient identity; a consuming bare-metal installation requires the
 resolved reference, an access credential, and its `usernamePassword` type.
 
-A provider `tls.trustBundleRef` is inherited only by a machine that keeps
-verification: one that authors `tls.verification: none` inherits no bundle, and a
-machine-local bundle always wins. An Environment kind-default bundle likewise
-never reaches an object that authors `tls.verification: none`. A bundle beside
+A provider `tls.trustBundleRef` is inherited only by a [verified BMC](../secrets.md#client-tls-trust):
+one that authors `tls.verification: none` or has an `http://` address inherits
+no bundle, and a machine-local bundle always wins. An Environment kind-default
+bundle likewise never reaches an object that authors `tls.verification: none`,
+and no kind-default `tls` block reaches an `http://` address. A bundle beside
 verification turned off, whether either half was authored or inherited, fails
 admission at `tls.trustBundleRef`. A bundle replaces the system trust store rather than adding to it. It may
 hold public CA or server certificates, in any order. The
@@ -845,10 +846,10 @@ the block names no protocol.
 | --- | --- | --- | --- | --- |
 | `address` | string | with the BMC block | — | Redfish endpoint naming one exact ComputerSystem, in the one canonical spelling below, on every Machine that authors it. |
 | `credentialsRef` | string | resolved with the BMC block | configured provider default | `usernamePassword` `Secret`; machine-local values take precedence. Access credential. |
-| `tls.verification` | string | no | `full` | `full`, `certificate`, or `none` under [client TLS trust](../secrets.md#client-tls-trust), for the controller-to-BMC TLS leg. Verified means absent, `full` or `certificate`; `none` skips certificate and hostname checks. A non-full value must be authored on this Machine: neither a provider default nor an Environment kind default selects one. |
+| `tls.verification` | string | no | `full` | `full`, `certificate`, or `none` under [client TLS trust](../secrets.md#client-tls-trust), for the controller-to-BMC TLS leg; `none` skips certificate and hostname checks. Only a [verified BMC](../secrets.md#client-tls-trust) satisfies a consumer that requires one, and an `http://` address refuses this field. A non-full value must be authored on this Machine: neither a provider default nor an Environment kind default selects one. |
 | `tls.trustBundleRef` | string | no | configured provider default | `caBundle` or `trustBundle` `Secret`; the one anchor of the controller-to-BMC leg, against which a verified leg checks alone, else against the system trust store. Refused beside `verification: none`. Trust anchor. |
 | `virtualMedia.tls.trust` | string | no | `importCertificate` | How the BMC trusts the artifact server it fetches media from. `importCertificate` uses the device certificate collection or qualified discovered SecurityService [media trust contract](../substrates.md#identity-and-power-operations); `established` imports no certificate; `disableVerification` turns deciding verification off before insertion and is the per-Machine exception below. |
-| `virtualMedia.tls.enableVerification` | boolean | no | `true` with verified BMC access and verified media trust | Authorizes media insertion to enable the deciding verification property with a conditional write and read-back. Requires verified HTTPS BMC access and `importCertificate` or `established`. Explicit `false` requires preconfigured verification. Successful enables remain enabled after cleanup and destroy. |
+| `virtualMedia.tls.enableVerification` | boolean | no | `true` with verified BMC access and verified media trust | Authorizes media insertion to enable the deciding verification property with a conditional write and read-back. Requires a [verified BMC](../secrets.md#client-tls-trust) and `importCertificate` or `established`. Explicit `false` requires preconfigured verification. Successful enables remain enabled after cleanup and destroy. |
 | `virtualMedia.tls.restoreVerificationAfterBoot` | boolean | no | `true` | Only with `disableVerification`; eject restores the deciding manager switches, or the device flag when no manager declares one. Explicit `false` retains the disabled state. |
 | `virtualMedia.tls.removeCertificateAfterBoot` | boolean | no | `false` | Only with `importCertificate`; the eject deletes the imported certificate. |
 
@@ -971,7 +972,7 @@ it rather than restate it.
 | --- | --- | --- |
 | WWN | `rootDisk.wwn`, `0x` followed by 16 or 32 lowercase hexadecimal digits | The one WWN root form ([D253](../milestones/backlog.md#d253)). Each installer derives what it needs: a Bootwright installation writes and proves the disk through `/dev/disk/by-id/wwn-0x<digits>`, and the agent installer takes it as its `wwn` hint. `serialNumber` and `sizeBytes` may stand beside it as proofs. |
 | Serial number | no `wwn`; `rootDisk.serialNumber`, 1 to 256 ASCII letters, digits or `._:+/=-`, and exact `sizeBytes` | For a disk whose WWN cannot be learned before an OS boots or that has none, such as an NVMe disk. |
-| Logical volume | `rootDisk.volumeRef` or `bootVolume` alone, under verified BMC TLS | One [existing logical volume](#existing-logical-root-volumes), proved by its NAA identifier and exact capacity. `bootVolume: {}` is the default on a Machine of a bare-metal provider that an installer writes and that declares no `rootDisk` field. |
+| Logical volume | `rootDisk.volumeRef` or `bootVolume` alone, under a [verified BMC](../secrets.md#client-tls-trust) | One [existing logical volume](#existing-logical-root-volumes), proved by its NAA identifier and exact capacity. `bootVolume: {}` is the default on a Machine of a bare-metal provider that an installer writes and that declares no `rootDisk` field. |
 | Discovery | `rootDisk.discover` alone, on `os.install` only | The [automatic selector](#automatic-root-disk-discovery). |
 
 The installation erases that disk, and a kernel name such as `/dev/sda` moves
@@ -998,7 +999,7 @@ member Drive serials select nothing.
 
 Alternatively `rootDisk.volumeRef: {storageId: <id>, volumeId: <id>}` positively selects
 one existing logical volume. Each ID is 1 to 128 ASCII letters, digits,
-underscores or hyphens. Both selectors require verified BMC TLS, select alone,
+underscores or hyphens. Both selectors require a [verified BMC](../secrets.md#client-tls-trust), select alone,
 and refuse on OS-ready Machines. No controller, array or member disk is
 created, reconfigured or erased by discovery. Unsupported or ambiguous
 correlation refuses with the remedy to declare `volumeRef` or a supported
@@ -1121,7 +1122,7 @@ deadline; a larger one refuses at that disk's `sizeBytes`, with the remedy of
 `metadataClear` or a smaller disk.
 
 An `onRemoval` other than `retain`, on the root or a data disk, also requires
-verified BMC TLS (`bmc.tls.verification` absent, `full` or `certificate`) and a
+a [verified BMC](../secrets.md#client-tls-trust) and a
 declared media trust policy (`virtualMedia.tls.trust` of `importCertificate`,
 `established` or `disableVerification`) on this Machine, else `api.invariant`
 at that `onRemoval`, with the remedy to declare both.

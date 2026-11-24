@@ -133,6 +133,81 @@ func TestExplicitSSHPasswordUsesTheSudoInputGuard(t *testing.T) {
 	}
 }
 
+// Every reveal reaches the sudo output-logging guard, and a reveal from a root
+// session sudo started, whose policy Bootwright cannot list, refuses before
+// any custody read; a command that reveals nothing is not affected.
+func TestARevealUsesTheSudoOutputGuard(t *testing.T) {
+	for _, test := range []struct {
+		args   []string
+		reveal bool
+	}{
+		{[]string{"secret", "show", "--name", "bmc", "--part", "password"}, true},
+		{[]string{"cluster", "kubeconfig", "--name", "ocp"}, true},
+		{[]string{"cluster", "keyring", "--name", "storage", "--client", "vm-disks"}, true},
+		{[]string{"cluster", "info", "--name", "ocp", "--secrets"}, true},
+		{[]string{"cluster", "info", "--name", "storage", "--object-user", "backup"}, true},
+		{[]string{"cluster", "info", "--name", "ocp"}, false},
+		{[]string{"secret", "list"}, false},
+	} {
+		var elevated []privilege.Invocation
+		var stdout, stderr bytes.Buffer
+		boundary := boundaryUnderTest(nil, privilege.Outcome{}, &elevated)
+		if status := boundary.run(context.Background(), test.args, &stdout, &stderr); status != 0 || len(elevated) != 1 || elevated[0].SecretOutput != test.reveal {
+			t.Fatalf("%v: status %d, elevated %+v, %s", test.args, status, elevated, &stderr)
+		}
+		if !test.reveal {
+			continue
+		}
+		boundary.euid = func() int { return 0 }
+		boundary.lookupEnv = func(name string) (string, bool) {
+			if name == "SUDO_COMMAND" {
+				return "/usr/bin/bootwright " + strings.Join(test.args, " "), true
+			}
+			return "", false
+		}
+		stdout.Reset()
+		stderr.Reset()
+		if status := boundary.run(context.Background(), test.args, &stdout, &stderr); status != 1 || len(elevated) != 1 || stdout.Len() != 0 ||
+			!strings.Contains(stderr.String(), "secret.output") || !strings.Contains(stderr.String(), "root login session sudo did not start") {
+			t.Fatalf("%v: a sudo-started root reveal = status %d, stdout %q, stderr %s", test.args, status, &stdout, &stderr)
+		}
+	}
+}
+
+// A root session with a sudo ancestor that is not the Bootwright supervisor is
+// sudo-started even when its environment names no SUDO_COMMAND, as under
+// sudo su -: it refuses a reveal, a standard-input Secret or media URL, and an
+// SSH password prompt before anything is read, each with its own remedy, the
+// first three also naming a root login sudo did not start; a
+// root login sudo did not start is not refused.
+func TestASudoAncestorRefusesUnprovedInputAndOutput(t *testing.T) {
+	for _, test := range []struct {
+		args         []string
+		code, status int
+		want         string
+	}{
+		{[]string{"secret", "show", "--name", "bmc", "--part", "password"}, 0, 1, "secret.output"},
+		{[]string{"secret", "set", "--name", "bmc", "--value-stdin"}, 0, 1, "--value-file <path>"},
+		{[]string{"secret", "set", "--name", "bmc", "--username", "admin", "--password-stdin"}, 0, 1, "--password-file <path>"},
+		{[]string{"catalog", "media", "add", "--name", "rhel.iso", "--from-url-file", "-", "--sha256", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, 0, 1, "--from-url-file <path>"},
+		{[]string{"machine", "rsh", "--name", "node", "--ssh-user", "ops", "--ssh-ask-password"}, 0, 255, "--ssh-id-file"},
+	} {
+		for _, ancestor := range []bool{true, false} {
+			var elevated []privilege.Invocation
+			var stdout, stderr bytes.Buffer
+			boundary := boundaryUnderTest(errors.New("accounts were resolved"), privilege.Outcome{}, &elevated)
+			boundary.euid = func() int { return 0 }
+			boundary.lookupEnv = func(string) (string, bool) { return "", false }
+			boundary.directRoot = func() bool { return !ancestor }
+			status := boundary.run(context.Background(), test.args, &stdout, &stderr)
+			refused := strings.Contains(stderr.String(), test.want) && (test.status == 255 || strings.Contains(stderr.String(), "root login session sudo did not start"))
+			if ancestor && (status != test.status || !refused || len(elevated) != 0) || !ancestor && refused {
+				t.Fatalf("%v (sudo ancestor %v): status %d, stderr %s", test.args, ancestor, status, &stderr)
+			}
+		}
+	}
+}
+
 func TestDelegatedEntryRefusesAdministrativeCommandsAndUnprivilegedCallers(t *testing.T) {
 	for _, test := range []struct {
 		name        string

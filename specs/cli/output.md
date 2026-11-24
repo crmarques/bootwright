@@ -1205,6 +1205,7 @@ it to a variable.
 | `secret.source` | The declared source or its parameters do not permit the operation, or stored material no longer matches the declaration. |
 | `secret.part` | A secret part is missing, not applicable, out of bounds or unusable by its consumer. |
 | `secret.input` | Secret input or material is invalid, or a requested secret, version or binding has no usable material. |
+| `secret.output` | An elevated reveal would write secret material to a standard output that sudo's I/O log records, or that log's policy is unproved. |
 | `secret.store.uninitialized` | The configured secret store is not initialized. |
 | `secret.store.implementation` | The secret store implementation is unconfigured, unavailable or incompatible. |
 | `secret.store.key-unavailable` | The secret store key or unlock session is unavailable. |

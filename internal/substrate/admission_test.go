@@ -2,6 +2,7 @@ package substrate
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -50,7 +51,7 @@ func TestProviderVariantsAndNormalization(t *testing.T) {
 			switch variant {
 			case "baremetal":
 				bmc := o.Spec().Get(variant, "defaults", "bmc")
-				if !BMCVerified(bmc) || bmc.Has("protocol") || bmc.Has("tls", "verify") || bmc.Has("tls", "verification") {
+				if bmc.Has("protocol") || bmc.Has("tls", "verify") || bmc.Has("tls", "verification") {
 					t.Fatalf("a provider default materialized a TLS mode: %v", bmc)
 				}
 				if !bmc.Get("virtualMedia", "tls", "enableVerification").Bool() {
@@ -214,19 +215,39 @@ func TestATrustBundleIsNoSubstrateRefusal(t *testing.T) {
 	}
 }
 
-func TestCertificateVerificationRequiresAnHTTPSControllerEndpoint(t *testing.T) {
-	plain := m("address", "http://bmc.example.test/redfish/v1/Systems/1", "tls", m("verification", "certificate"))
-	if fields := fieldsOf(ValidateBMCDefaults(plain, "$.spec.hardware.bmc", true)); len(fields) != 1 || fields[0] != "$.spec.hardware.bmc.tls.verification" {
-		t.Fatalf("issues at %v", fields)
-	}
-	for _, bmc := range []api.Value{
-		m("address", "https://bmc.example.test/redfish/v1/Systems/1", "tls", m("verification", "certificate")),
-		m("address", "http://bmc.example.test/redfish/v1/Systems/1", "tls", m("verification", "full")),
-		m("address", "http://bmc.example.test/redfish/v1/Systems/1", "tls", m("verification", "none")),
-	} {
-		if issues := ValidateBMCDefaults(bmc, "$.spec.hardware.bmc", true); len(issues) != 0 {
-			t.Fatalf("bmc %v refused: %v", bmc, issues)
+// A plain-HTTP BMC address carries no TLS leg, so any verification mode
+// beside it refuses at that field with the HTTPS remedy, authored or
+// inherited; an HTTPS address admits every mode, and an HTTP one admits none.
+func TestTLSVerificationRefusesAPlainHTTPBMCAddress(t *testing.T) {
+	for _, verification := range []string{"full", "certificate", "none"} {
+		for _, authored := range []bool{true, false} {
+			plain := m("address", "http://bmc.example.test/redfish/v1/Systems/1", "tls", m("verification", verification))
+			issues := ValidateBMCDefaults(plain, "$.spec.hardware.bmc", authored)
+			if len(issues) != 1 || issues[0].Code != "api.invariant" || issues[0].Field != "$.spec.hardware.bmc.tls.verification" || !strings.Contains(issues[0].Remediation, "https://") {
+				t.Fatalf("verification %s (authored %v) on an http address = %+v", verification, authored, issues)
+			}
+			secure := m("address", "https://bmc.example.test/redfish/v1/Systems/1", "tls", m("verification", verification))
+			if issues := ValidateBMCDefaults(secure, "$.spec.hardware.bmc", authored); len(issues) != 0 {
+				t.Fatalf("verification %s on an https address refused: %v", verification, issues)
+			}
 		}
+	}
+	if issues := ValidateBMCDefaults(m("address", "http://bmc.example.test/redfish/v1/Systems/1"), "$.spec.hardware.bmc", true); len(issues) != 0 {
+		t.Fatalf("an http address without verification refused: %v", issues)
+	}
+}
+
+// A trust bundle anchors only a TLS leg, so one beside a plain-HTTP BMC
+// address refuses at that field with the HTTPS remedy.
+func TestATrustBundleRefusesAPlainHTTPBMCAddress(t *testing.T) {
+	plain := m("address", "http://bmc.example.test/redfish/v1/Systems/1", "tls", m("trustBundleRef", "bmc-ca"))
+	issues := ValidateBMCDefaults(plain, "$.spec.hardware.bmc", true)
+	if len(issues) != 1 || issues[0].Code != "api.invariant" || issues[0].Field != "$.spec.hardware.bmc.tls.trustBundleRef" || !strings.Contains(issues[0].Remediation, "https://") {
+		t.Fatalf("a bundle on an http address = %+v", issues)
+	}
+	secure := m("address", "https://bmc.example.test/redfish/v1/Systems/1", "tls", m("trustBundleRef", "bmc-ca"))
+	if issues := ValidateBMCDefaults(secure, "$.spec.hardware.bmc", true); len(issues) != 0 {
+		t.Fatalf("a bundle on an https address refused: %v", issues)
 	}
 }
 

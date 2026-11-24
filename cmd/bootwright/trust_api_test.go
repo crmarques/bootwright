@@ -332,3 +332,28 @@ func TestAKindDefaultTrustBundleSkipsAMachineThatOptsOut(t *testing.T) {
 		t.Fatalf("the verifying Machine's effective controller trust = %v", kept)
 	}
 }
+
+// A plain-HTTP BMC has no TLS leg, so an Environment kind-default TLS block,
+// verification and bundle alike, never reaches it, while an HTTPS Machine
+// beside it keeps both; the Machine compiles with no refusal it cannot follow.
+func TestAKindDefaultTLSBlockSkipsAPlainHTTPBMC(t *testing.T) {
+	t.Parallel()
+	machine := func(name, address, scheme, extra string) string {
+		return "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: " + name + "}\nspec:\n  os: {provided: {}}\n" + extra +
+			"  network:\n    addresses: [{name: service, address: " + address + "}]\n" +
+			"  hardware:\n    providerRef: lab-metal\n    bmc:\n      address: " + scheme + "://" + name + "-bmc.example.test/redfish/v1/Systems/1\n      credentialsRef: bmc\n"
+	}
+	env := serviceEnvironment + "  defaults:\n    Machine:\n      hardware:\n        bmc:\n          tls: {verification: full, trustBundleRef: bmc-ca}\n"
+	content := env + "\n---\n" + machine("service-host", "192.0.2.10", "https", "  access: {local: {}}\n") + "\n---\n" + machine("plain", "192.0.2.11", "http", "") +
+		"\n---\napiVersion: bootwright.io/v1alpha1\nkind: InfraProvider\nmetadata: {name: lab-metal}\nspec:\n  baremetal: {}\n" +
+		"\n---\napiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata: {name: bmc-ca}\nspec: {type: caBundle}\n" +
+		"\n---\napiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata: {name: bmc}\nspec: {type: usernamePassword}\n"
+	state, _ := compileAcceptance(t, desiredstate.Sources{Roots: []string{"/synthetic"}, Files: []desiredstate.SourceFile{desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte(content))}})
+	if tls := requireObject(t, state.Effective(), api.Machine, "plain").Spec().Get("hardware", "bmc", "tls"); tls.Present() {
+		t.Fatalf("the plain-HTTP Machine inherited controller trust %v", tls)
+	}
+	kept := requireObject(t, state.Effective(), api.Machine, "service-host").Spec().Get("hardware", "bmc", "tls")
+	if kept.Get("trustBundleRef").Text() != "bmc-ca" || kept.Get("verification").Text() != "full" {
+		t.Fatalf("the HTTPS Machine's effective controller trust = %v", kept)
+	}
+}

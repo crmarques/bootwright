@@ -110,6 +110,7 @@ func TestAPartialProviderRefusesASegmentOfAnotherArm(t *testing.T) {
 func armDefectIssues() map[Arm][]string {
 	return map[Arm][]string{
 		"baremetal": {
+			"$.spec.baremetal.defaults.bmc.tls.trustBundleRef: a trust bundle anchors only a TLS leg, and a plain-HTTP BMC address has none",
 			"$.spec.baremetal.defaults.bmc.virtualMedia.tls.restoreVerificationAfterBoot: restoring verification requires disableVerification trust",
 			"$.spec.baremetal.defaults.bmc.virtualMedia.tls.enableVerification: enabling media verification requires verified HTTPS BMC access and importCertificate or established trust",
 			"$.spec.segments[0]: segment arm must match its provider substrate",

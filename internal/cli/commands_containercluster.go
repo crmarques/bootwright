@@ -16,7 +16,7 @@ func containerAccessCommands() []commandSpec {
 	return []commandSpec{
 		available(accessCommand(commandSpec{path: "cluster oc", results: []jsonResult{clusterHandoffPresentation{}}, render: renderClusterHandoff(), example: "--context lab --name cluster -- get nodes", invoke: Services.invokeClusterOc, short: "Print an oc access descriptor; do not launch a client or connect", flags: []flagSpec{nameFlag()}, payload: true}, " Applicable to OpenShiftClusters only.")),
 		available(accessCommand(commandSpec{path: "cluster kubectl", results: []jsonResult{clusterHandoffPresentation{}}, render: renderClusterHandoff(), example: "--context lab --name cluster -- get nodes", invoke: Services.invokeClusterKubectl, short: "Print a kubectl access descriptor; do not launch a client or connect", flags: []flagSpec{nameFlag()}, payload: true}, " Applicable to OpenShiftClusters only.")),
-		available(commandSpec{path: "cluster kubeconfig", results: []jsonResult{exportResult{}}, render: renderKubeconfig(), example: "--context lab --name cluster", invoke: Services.invokeClusterKubeconfig, short: "Export raw sensitive kubeconfig bytes to standard output", flags: []flagSpec{nameFlag()}, long: "Export raw sensitive kubeconfig bytes to standard output. Applicable to OpenShiftClusters only."}),
+		available(commandSpec{path: "cluster kubeconfig", classify: classifyRules{secretOutput: reveals}, results: []jsonResult{exportResult{}}, render: renderKubeconfig(), example: "--context lab --name cluster", invoke: Services.invokeClusterKubeconfig, short: "Export raw sensitive kubeconfig bytes to standard output", flags: []flagSpec{nameFlag()}, long: "Export raw sensitive kubeconfig bytes to standard output. Applicable to OpenShiftClusters only."}),
 	}
 }
 

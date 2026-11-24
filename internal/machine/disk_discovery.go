@@ -12,7 +12,7 @@ func validateDiscoveryRoot(o api.Object, variant substrate.Arm) []api.Issue {
 	if variant != substrate.ArmBaremetal || !installed(o) || len(substrate.MachineRootDeviceHints(o).Names()) != 1 {
 		return []api.Issue{invariant(path, "automatic root discovery selects alone on a Bootwright-installed physical RHEL Machine", "declare rootDisk.discover alone and select an Anaconda installation profile")}
 	}
-	if !verifiedHTTPS(substrate.MachineBMC(o)) {
+	if !substrate.BMCVerified(substrate.MachineBMC(o)) {
 		return []api.Issue{invariant(path, "automatic disk discovery requires verified BMC TLS", "select full or certificate verification on the HTTPS BMC connection")}
 	}
 	if _, err := diskselection.PolicyFromValue(root.Get("discover")); err != nil {

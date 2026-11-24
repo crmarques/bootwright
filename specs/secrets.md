@@ -94,23 +94,7 @@ no other command: under a shared read, set refuses an uninitialized store with
 the lease refuses with `secret.store.conflict`, writing nothing, a current
 version another command stored meanwhile unless `--yes` was given. An
 elevated `set` with `--value-stdin` or `--password-stdin` reads nothing until
-the supervisor has read sudo's policy listing (`sudo -n -ll`). A listing that
-sets `log_input`, `log_ttyin` or `log_stdin` refuses with `secret.input`
-before sudo starts the command, whether or not standard input is a terminal,
-since sudo's I/O log would record the value: `log_ttyin` logs the keystrokes
-typed at the terminal, `log_stdin` a standard input that is not the terminal,
-and `log_input` sets both (sudoers(5), I/O LOGGING). When sudo will not
-list its policy without a password, an interactive invocation (not JSON or YAML, with
-standard input a terminal) first validates the credential with `sudo -v`,
-which prompts on the terminal, and reads the listing again. A JSON, YAML or
-non-terminal invocation, a listing still unreadable, one that times out and
-one over 64 KiB each refuse with `secret.input` before sudo starts the
-command, reading nothing. The remedy is `--value-file` or
-`--password-file` in place of the standard-input flag; running the command in
-a root login session sudo did not start (a console or SSH root login, or
-`su -`), since a command run through sudo, even from a `sudo -i` or
-`sudo su -` shell, is still subject to sudo's I/O log; or, for a
-noninteractive invocation, `sudo -v` in the same terminal first. Equal material creates no new version. Multipart versions and generation batches
+the [sudo I/O-log proof](#sudo-io-log-proof) admits its input. Equal material creates no new version. Multipart versions and generation batches
 publish atomically.
 
 When standard input is a terminal, "`--value-stdin` and `--password-stdin` at
@@ -153,7 +137,9 @@ the same CLI-owned metadata row fields as `secret list`.
 `delete --name` removes an active mapping, including orphans, while retaining
 bound versions; existing deletion confirms unless yes, before the lease as a
 file-input replacement does, and refuses with `secret.store.conflict`,
-deleting nothing, when the current version changed meanwhile. A delete of a name with
+deleting nothing, when the current version changed meanwhile. A Secret whose
+current version is [held as effect material](#effect-material-under-a-live-binding)
+is refused. A delete of a name with
 no current version changes nothing, asks nothing, and reports that nothing was
 deleted.
 
@@ -280,6 +266,67 @@ package ([managed registry](infrastructure-services.md#managed-registry)). The
 standard library owns AES-GCM, X.509, key generation and entropy. Do not import
 unrelated x/crypto packages.
 
+### Sudo I/O-log proof
+
+A non-root invocation that [elevates through sudo](cli.md#local-privilege-and-user-identity)
+proves, before sudo starts the command, that sudo's I/O log records neither
+the sensitive input it reads nor the secret material it reveals (sudoers(5),
+I/O LOGGING). Its supervisor reads sudo's policy listing (`sudo -n -ll`) with
+a 2-second timeout and a 64 KiB bound, and reads nothing else first. An option
+counts where the listing sets it: in the Defaults that match the invoking
+user, in a Runas or command-specific Defaults line, or in a rule's Options; a
+negated option sets nothing (`TestInputLoggingIsFoundWhereverSudoListsIt`,
+`TestOutputLoggingIsFoundWhereverSudoListsIt`).
+
+The guarded input is the standard input of `secret set --value-stdin` or
+`--password-stdin`, the media URL of `--from-url-file -` and the login
+password of `--ssh-ask-password`. A listing that sets `log_input`,
+`log_ttyin` or `log_stdin` refuses it with `secret.input`, whether or not
+standard input is a terminal: `log_ttyin` logs the keystrokes typed at the
+terminal, `log_stdin` a standard input that is not the terminal, and
+`log_input` sets both. The remedy names the file flag in place of the
+standard-input flag (`--value-file`, `--password-file`, `--from-url-file
+<path>` or `--ssh-id-file`).
+
+The guarded output is the standard output of every reveal: `secret show`,
+`cluster kubeconfig`, `cluster keyring`, and `cluster info` with `--secrets`
+or `--object-user`. A listing that sets `log_output`, `log_ttyout` or
+`log_stdout` refuses it with `secret.output` before any custody read, in every
+output format; the remedy removes that option from the matching policy
+(`TestElevatedRevealRefusesSudoOutputLogging`).
+
+When sudo will not list its policy without a password, an invocation whose
+standard input is a terminal first validates the credential with `sudo -v`,
+which prompts on the terminal, and reads the listing again; a JSON or YAML
+`secret set` never reads a terminal
+([structured input](cli/output.md#streams-and-exit-status)). A non-terminal
+invocation, a listing still unreadable, one that times out and one over
+64 KiB each refuse the guarded
+input with `secret.input` and the guarded output with `secret.output`, before
+sudo starts the command, with the further remedy of `sudo -v` in the same
+terminal for a noninteractive invocation
+(`TestElevationRefusesAnUnprovenInputLoggingPolicy`,
+`TestElevatedRevealRefusesAnUnreadableSudoListing`). `machine enroll` hands
+its elevated child a password prompt only when the invocation is interactive
+and the listing was read and sets none of the input options; otherwise it
+prompts for no password, and a bootstrap with bound or key credentials still
+proceeds (`TestEnrollmentPasswordsRequireAProvedLocalSudoInputPolicy`).
+
+Every input and output refusal also names a root login session sudo did not
+start (a console or SSH root login, or `su -`): a command run through sudo,
+even from a `sudo -i` or `sudo su -` shell, is still subject to sudo's I/O
+log. Such a session runs the command with no proof. A root invocation that no
+supervisor started is sudo-started when its `SUDO_COMMAND` is set or any
+process above it is sudo, read from `/proc` up to PID 1, an unreadable step
+counting as sudo (`privilege.DirectRootInput`). Because nothing listed its
+policy, it refuses before anything is read: a reveal with `secret.output`,
+guarded input with `secret.input` and its file-flag remedy, and an
+`--ssh-ask-password` prompt with `access.unavailable` and the `--ssh-id-file`
+remedy (`TestARevealUsesTheSudoOutputGuard`,
+`TestASudoAncestorRefusesUnprovedInputAndOutput`,
+`TestDirectRootInputRejectsSudoAncestryWithoutEnvironment`,
+`TestExplicitSSHPasswordUsesTheSudoInputGuard`).
+
 ## Client TLS trust
 
 Trust material and endpoint identity are separate declarations. A verification
@@ -306,9 +353,18 @@ a direct server leaf refuses before its worker runs.
 The installed OpenShift `additionalTrustBundleRefs` carries material, not an
 endpoint policy, and cannot relax name verification across a cluster.
 
-A BMC is verified when its `tls.verification` is absent, `full` or
-`certificate`; `none` is unverified. Physical private installation,
-logical-root proofs and physical erase refuse an unverified BMC. Exact-certificate
+A BMC is verified when its `address` is `https://` and its
+`tls.verification` is absent, `full` or `certificate`; every other BMC is
+unverified (`substrate.BMCVerified`). An `http://` address has no TLS leg, so
+admission refuses an authored `tls.verification` or `tls.trustBundleRef`
+beside it with `api.invariant` at that field and the remedy of the `https://`
+address (`TestTLSVerificationRefusesAPlainHTTPBMCAddress`,
+`TestATrustBundleRefusesAPlainHTTPBMCAddress`); neither an Environment kind
+default's `tls` block nor a provider bundle reaches such a Machine
+(`TestAKindDefaultTLSBlockSkipsAPlainHTTPBMC`). Physical private installation,
+logical-root proofs and physical erase refuse an unverified BMC
+(`TestEraseRefusesAPlainHTTPBMC`), and the frozen controller of a plain-HTTP
+leg verifies nothing (`TestAPlainHTTPControllerLegIsNeverVerified`). Exact-certificate
 identity authenticates that BMC and satisfies verified transport; `none` does
 not. None of these client settings changes the separate BMC-to-media-server
 verification policy.
@@ -430,9 +486,9 @@ While a binding that no completed removal released pins any version of an
 effect-material Secret, nothing replaces the Secret's current version, because
 no command reveals a bound version ([D160](milestones/backlog.md#d160)) and the
 current one is then the only copy the operator can read. `secret generate --renew` or
-a stale regeneration naming the Secret, and a `secret set` replacement,
-refuse with `secret.store.conflict` and write nothing, before any prompt or
-input read and again under the lease. The administrator credential update is the
+a stale regeneration naming the Secret, a `secret set` replacement and a
+`secret delete` of it refuse with `secret.store.conflict` and write nothing,
+before any prompt or input read and again under the lease. The administrator credential update is the
 one writer of a held Secret: inside one lease it writes a new current version in
 one store session, rebinds to it in a second and then names the new binding in
 the operation record; until that record names it, the replaced binding still
@@ -461,6 +517,7 @@ not list it yet as the command read the holds, before any prompt or input
 read, and whenever the lifecycle records cannot be read; beside a context at
 rest it holds nothing
 (`TestRenewRefusesALiveEffectMaterialBinding`,
+`TestDeleteRefusesALiveEffectMaterialBinding`,
 `TestACredentialVersionOverTheRealKeyringIsCurrentPinnedAndHeldInEveryWindow`,
 `TestAnUnnamedBindingHoldsWhileAnApplyRegisters`,
 `TestSecretHoldsNameTheEffectMaterialACompletedApplyBound`,

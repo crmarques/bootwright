@@ -2,6 +2,7 @@ package substrate
 
 import (
 	"strconv"
+	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
@@ -60,7 +61,9 @@ func MachineBMC(machine api.Object) api.Value {
 	return machine.Spec().Get("hardware", "bmc")
 }
 
-func BMCVerified(bmc api.Value) bool { return bmc.Get("tls", "verification").Text() != "none" }
+func BMCVerified(bmc api.Value) bool {
+	return bmc.Present() && strings.HasPrefix(bmc.Get("address").Text(), "https://") && bmc.Get("tls", "verification").Text() != "none"
+}
 
 func MachineRootDisk(machine api.Object) api.Value {
 	return machine.Spec().Get("hardware", "rootDisk")

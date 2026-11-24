@@ -31,6 +31,7 @@ type Invocation struct {
 	Session bool
 	// SecretStdin names the Secret a secret set reads from standard input.
 	SecretStdin     string
+	SecretOutput    bool
 	EnrollmentInput bool
 	DelegatedEntry  string
 }
@@ -70,7 +71,7 @@ func (e Elevator) Run(ctx context.Context, invocation Invocation) Outcome {
 	// Without a terminal sudo cannot prompt, so its refusal text carries no
 	// operator action until the child proves it started.
 	errorStream := newStartFilter(invocation.Error, invocation.JSON, noninteractive)
-	options := SudoOptions{Executable: executable, Sudo: sudo, Executor: e.Executor, Delay: e.Delay, NonInteractive: noninteractive, Quiet: invocation.JSON, Assignments: RouteAssignments(invocation.Route), SecretStdin: invocation.SecretStdin, EnrollmentInput: invocation.EnrollmentInput, DelegatedEntry: invocation.DelegatedEntry, Input: invocation.Input, Output: output, Error: errorStream}
+	options := SudoOptions{Executable: executable, Sudo: sudo, Executor: e.Executor, Delay: e.Delay, NonInteractive: noninteractive, Quiet: invocation.JSON, Assignments: RouteAssignments(invocation.Route), SecretStdin: invocation.SecretStdin, SecretOutput: invocation.SecretOutput, EnrollmentInput: invocation.EnrollmentInput, DelegatedEntry: invocation.DelegatedEntry, Input: invocation.Input, Output: output, Error: errorStream}
 	if interactive {
 		// Sudo relays the terminal only while the child inherits it on stdin
 		// and stdout; behind a pipe it parks the child in the background of a
@@ -94,6 +95,14 @@ func (e Elevator) Run(ctx context.Context, invocation Invocation) Outcome {
 	var unproven *InputUnproven
 	if errors.As(err, &unproven) {
 		return inputUnprovenRefusal(unproven)
+	}
+	var outputLogged *OutputLogged
+	if errors.As(err, &outputLogged) {
+		return outputLoggedRefusal(outputLogged)
+	}
+	var outputUnproven *OutputUnproven
+	if errors.As(err, &outputUnproven) {
+		return outputUnprovenRefusal(outputUnproven)
 	}
 	outcome := conclude(elevationRun{
 		json: invocation.JSON, interactive: interactive, failed: err != nil,
@@ -192,6 +201,22 @@ func UnsupervisedSSHPassword() diagnostics.Diagnostic {
 		Remediation: "run bootwright as the invoking user so Bootwright can check sudo policy, or use --ssh-id-file"}
 }
 
+func UnsupervisedInput(input string) diagnostics.Diagnostic {
+	diagnostic := diagnostics.Diagnostic{Severity: "error", Code: "secret.input",
+		Message:     "this root session was started by sudo, whose I/O logging policy for the value of " + inputSubject(input) + " read from standard input was not verified; nothing was read",
+		Remediation: fileRemedy(input) + "; " + rootSessionRemedy}
+	if api.ValidLexical(api.LexicalName, input) {
+		diagnostic.Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Secret), Name: input}
+	}
+	return diagnostic
+}
+
+func UnsupervisedReveal() diagnostics.Diagnostic {
+	return diagnostics.Diagnostic{Severity: "error", Code: "secret.output",
+		Message:     "this root session was started by sudo, whose I/O logging policy for the secret material this command writes to standard output was not verified; nothing was read",
+		Remediation: "run bootwright as the invoking user, without sudo, so Bootwright checks sudo's policy before it elevates; " + rootSessionRemedy}
+}
+
 func inputSubject(input string) string {
 	if input == MediaURLInput || input == SSHPasswordInput {
 		return input
@@ -242,6 +267,22 @@ func inputUnprovenRefusal(unproven *InputUnproven) Outcome {
 		diagnostic.Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Secret), Name: unproven.Secret}
 	}
 	return Outcome{ExitCode: 1, Diagnostic: &diagnostic}
+}
+
+func outputLoggedRefusal(logged *OutputLogged) Outcome {
+	return Outcome{ExitCode: 1, Diagnostic: &diagnostics.Diagnostic{Severity: "error", Code: "secret.output",
+		Message:     "this host's sudo policy sets " + logged.Option + ", so sudo's I/O log would record the secret material this command writes to standard output; nothing was read",
+		Remediation: "remove " + logged.Option + " from the sudo policy that matches this command; " + rootSessionRemedy}}
+}
+
+func outputUnprovenRefusal(unproven *OutputUnproven) Outcome {
+	remediation := strings.TrimPrefix(rootSessionRemedy, "or ")
+	if !unproven.Validated {
+		remediation = "run sudo -v in this terminal so sudo can list its policy, then repeat the command; " + rootSessionRemedy
+	}
+	return Outcome{ExitCode: 1, Diagnostic: &diagnostics.Diagnostic{Severity: "error", Code: "secret.output",
+		Message:     "sudo did not list its policy, so whether its I/O log would record the secret material this command writes to standard output is unknown; nothing was read",
+		Remediation: remediation}}
 }
 
 func interruption() Outcome {

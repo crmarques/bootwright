@@ -251,3 +251,84 @@ func TestEnrollmentPasswordsRequireAProvedLocalSudoInputPolicy(t *testing.T) {
 		})
 	}
 }
+
+var secretShow = []string{"secret", "show", "--name", "bmc", "--part", "password"}
+
+func listed(defaults string) func(int) (int, []byte) {
+	return func(int) (int, []byte) { return 0, listing(defaults, "", "") }
+}
+
+// A reveal writes secret material to standard output, so a sudo policy that
+// logs output refuses it before the child starts and reads custody, in every
+// output format; a policy that logs only input, or negates output logging,
+// lets it start, and so does a command that reveals nothing.
+func TestElevatedRevealRefusesSudoOutputLogging(t *testing.T) {
+	for _, option := range []string{"log_output", "log_stdout", "log_ttyout"} {
+		for _, json := range []bool{false, true} {
+			script := &policyScript{list: listed("env_reset, " + option)}
+			elevator := scriptedElevator(scriptedChild{}, nil)
+			elevator.Executor = script.executor()
+			var stdout, stderr bytes.Buffer
+			outcome := elevator.Run(context.Background(), Invocation{JSON: json, InputTerminal: true, Arguments: secretShow, Input: strings.NewReader(""), Output: &stdout, Error: &stderr, SecretOutput: true})
+			d := outcome.Diagnostic
+			if outcome.ExitCode != 1 || d == nil || d.Code != "secret.output" || !strings.Contains(d.Message, option) || !strings.Contains(d.Message, "nothing was read") ||
+				!strings.Contains(d.Remediation, "root login session sudo did not start") {
+				t.Fatalf("%s (json %v): outcome = %d %+v", option, json, outcome.ExitCode, d)
+			}
+			if script.child != nil || stdout.Len() != 0 || stderr.Len() != 0 {
+				t.Fatalf("%s (json %v): calls %q, stdout %q, stderr %q", option, json, script.calls, stdout.String(), stderr.String())
+			}
+		}
+	}
+	for _, test := range []struct {
+		defaults string
+		reveal   bool
+	}{{"env_reset, !log_output", true}, {"env_reset, log_input", true}, {"env_reset, log_output", false}} {
+		script := &policyScript{list: listed(test.defaults)}
+		options := SudoOptions{Executable: "/opt/bootwright", Sudo: "/usr/bin/sudo", Executor: script.executor(), Delay: delayFunc(waitForCancel), NonInteractive: true, SecretOutput: test.reveal, Input: strings.NewReader(""), Error: io.Discard}
+		if code, err := NewSupervisor(options).Run(context.Background(), secretShow); code != 0 || err != nil || script.child == nil {
+			t.Fatalf("%q (reveal %v) = %d, %v; calls %q", test.defaults, test.reveal, code, err, script.calls)
+		}
+	}
+}
+
+// A reveal whose sudo policy listing cannot be read refuses before the child
+// starts: a noninteractive or structured invocation at once with the sudo -v
+// remedy, an interactive one after validating the credential once, and an
+// interactive one starts when validation makes a clean listing readable.
+func TestElevatedRevealRefusesAnUnreadableSudoListing(t *testing.T) {
+	for _, test := range []struct {
+		name          string
+		json          bool
+		terminal      bool
+		wantsValidate bool
+	}{
+		{"noninteractive", false, false, true},
+		{"json", true, false, true},
+		{"interactive", false, true, false},
+	} {
+		script := &policyScript{list: refused(1), validate: func(context.Context) int { return 0 }}
+		elevator := scriptedElevator(scriptedChild{}, nil)
+		elevator.Executor = script.executor()
+		var stdout, stderr bytes.Buffer
+		outcome := elevator.Run(context.Background(), Invocation{JSON: test.json, InputTerminal: test.terminal, Arguments: secretShow, Input: strings.NewReader(""), Output: &stdout, Error: &stderr, SecretOutput: true})
+		d := outcome.Diagnostic
+		if outcome.ExitCode != 1 || d == nil || d.Code != "secret.output" || !strings.Contains(d.Message, "unknown") ||
+			strings.Contains(d.Remediation, "sudo -v") != test.wantsValidate || !strings.Contains(d.Remediation, "root login session sudo did not start") {
+			t.Fatalf("%s: outcome = %d %+v", test.name, outcome.ExitCode, d)
+		}
+		if script.child != nil || stdout.Len() != 0 || script.validations() != map[bool]int{true: 1, false: 0}[test.terminal] {
+			t.Fatalf("%s: calls %q, stdout %q", test.name, script.calls, stdout.String())
+		}
+	}
+	script := &policyScript{list: func(call int) (int, []byte) {
+		if call == 1 {
+			return 1, nil
+		}
+		return 0, listing("env_reset", "", "")
+	}, validate: func(context.Context) int { return 0 }}
+	options := SudoOptions{Executable: "/opt/bootwright", Sudo: "/usr/bin/sudo", Executor: script.executor(), Delay: delayFunc(waitForCancel), SecretOutput: true, Input: strings.NewReader(""), Error: io.Discard}
+	if code, err := NewSupervisor(options).Run(context.Background(), secretShow); code != 0 || err != nil || script.child == nil || script.validations() != 1 {
+		t.Fatalf("a validated clean listing = %d, %v; calls %q", code, err, script.calls)
+	}
+}

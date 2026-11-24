@@ -80,11 +80,11 @@ func overwriteBound(disk api.Value, path string) []api.Issue {
 func eraseTrustRefusal(o api.Object, path string) (api.Issue, bool) {
 	bmc := substrate.MachineBMC(o)
 	trust := bmc.Get("virtualMedia", "tls", "trust").Text()
-	if bmc.Present() && substrate.BMCVerified(bmc) && (trust == "established" || trust == "importCertificate" || trust == "disableVerification") {
+	if substrate.BMCVerified(bmc) && (trust == "established" || trust == "importCertificate" || trust == "disableVerification") {
 		return api.Issue{}, false
 	}
 	return invariant(path, "physical erase requires verified BMC TLS and a declared media trust policy",
-		"set "+substrate.BMCPath+".tls.verification to full or certificate and declare "+substrate.BMCPath+".virtualMedia.tls.trust on "+o.Identity()), true
+		"address "+substrate.BMCPath+" at its https:// endpoint with tls.verification absent, full or certificate, and declare "+substrate.BMCPath+".virtualMedia.tls.trust on "+o.Identity()), true
 }
 
 func validateDataDisks(o api.Object, physicalInstall bool) []api.Issue {

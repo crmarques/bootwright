@@ -125,4 +125,8 @@ func TestDirectRootInputRejectsSudoAncestryWithoutEnvironment(t *testing.T) {
 	if directRootInput(proc, 31, sudo) {
 		t.Fatal("unreadable ancestry was admitted")
 	}
+	proc, sudo, _ = procTree(t, process(40, "su", 20), process(20, "sudo", 12), process(12, "bash", 1))
+	if directRootInput(proc, 40, sudo) {
+		t.Fatal("a sudo su - shell, whose environment carries no SUDO_COMMAND, was admitted")
+	}
 }

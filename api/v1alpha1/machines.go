@@ -1,5 +1,7 @@
 package v1alpha1
 
+import "strings"
+
 func init() {
 	register(Machine, machineSchema)
 	register(NetworkConfig, machineNetworkSchema)
@@ -27,7 +29,13 @@ func machineBMCTLSSchema() *Shape {
 }
 
 func machineBMCSchema() *Shape {
-	return record(required("address", nonempty()), field("credentialsRef", secret("usernamePassword")), field("tls", machineBMCTLSSchema()), field("virtualMedia", machineVirtualMediaSchema()))
+	bmc := record(required("address", nonempty()), field("credentialsRef", secret("usernamePassword")), field("tls", machineBMCTLSSchema()), field("virtualMedia", machineVirtualMediaSchema()))
+	bmc.Suppress = []Suppression{{Match: plainHTTPBMC, Fields: []string{"tls"}}}
+	return bmc
+}
+
+func plainHTTPBMC(value, _ Value) bool {
+	return strings.HasPrefix(value.Get("address").Text(), "http://")
 }
 
 func machineFirmwareSchema() *Shape {

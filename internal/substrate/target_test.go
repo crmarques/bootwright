@@ -187,6 +187,21 @@ func TestAnAuthoredControllerAnswersWithoutAProvider(t *testing.T) {
 	}
 }
 
+// A plain-HTTP controller leg has no TLS to verify, so its controller is
+// never reported as verified, while an HTTPS leg keeps its declared mode.
+func TestAPlainHTTPControllerLegIsNeverVerified(t *testing.T) {
+	for address, verified := range map[string]bool{
+		"http://bmc.example.test/redfish/v1/Systems/1":  false,
+		"https://bmc.example.test/redfish/v1/Systems/1": true,
+	} {
+		machine := obj(api.Machine, "server", m("hardware", m("bmc", m("address", address, "credentialsRef", "bmc"))))
+		controller, err := authoredController(machine)
+		if err != nil || controller.TLSVerify != verified || BMCVerified(MachineBMC(machine)) != verified {
+			t.Fatalf("%s: controller = %+v (%v), want verified %v", address, controller, err, verified)
+		}
+	}
+}
+
 // An address that does not name one exact ComputerSystem in its one spelling
 // is refused. It is what a destructive operation is aimed at, so it may never
 // be ambiguous, and nothing rewrites it: what admission reads, what the claim

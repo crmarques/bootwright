@@ -90,6 +90,38 @@ func TestRenewRefusesALiveEffectMaterialBinding(t *testing.T) {
 	}
 }
 
+// A delete of held effect material refuses before any prompt and again under
+// the lease, so a later generation cannot replace the only revealable copy;
+// the access credential beside it still deletes.
+func TestDeleteRefusesALiveEffectMaterialBinding(t *testing.T) {
+	for _, yes := range []bool{true, false} {
+		service, access, confirmer, _ := generatedPair(t)
+		for _, name := range []string{"passphrase", "recovery"} {
+			current, writes, calls := currentOf(access, name), access.session.writes, confirmer.calls
+			_, err := service.Delete(context.Background(), DeleteRequest{Name: name, SkipConfirmation: yes})
+			reported := diagnostics.Of(err)
+			if len(reported) != 1 || reported[0].Code != "secret.store.conflict" || !strings.Contains(reported[0].Message, "Secret "+name+"'s current version is held by the apply op-1 (done)") ||
+				!strings.Contains(reported[0].Remediation, "bootwright destroy --context fixture") || access.session.writes != writes || confirmer.calls != calls || currentOf(access, name) != current {
+				t.Fatalf("a delete of held %s (--yes %v) reported %#v, wrote %d, asked %d", name, yes, reported, access.session.writes-writes, confirmer.calls-calls)
+			}
+		}
+		if result, err := service.Delete(context.Background(), DeleteRequest{Name: "bmc-password", SkipConfirmation: yes}); err != nil || result.Changed != 1 || currentOf(access, "bmc-password") != "" {
+			t.Fatalf("a delete of an access credential (--yes %v) = %+v (%v)", yes, result, err)
+		}
+	}
+	late, access, confirmer, reader := generatedPair(t)
+	reader.holds = Holds{}
+	before := currentOf(access, "bmc-password")
+	confirmer.during = func() {
+		if _, err := late.Bind(context.Background(), BindRequest{Names: []string{"bmc-password"}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := late.Delete(context.Background(), DeleteRequest{Name: "bmc-password"}); err == nil || currentOf(access, "bmc-password") != before {
+		t.Fatal("a binding issued during the delete prompt let its Secret be deleted")
+	}
+}
+
 // A binding no registered operation names holds every Secret it pins while an
 // apply is registering, and when the lifecycle records cannot be read; beside
 // a context at rest it holds nothing.

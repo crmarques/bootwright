@@ -34,7 +34,7 @@ func NormalizeBMCDefaults(bmc api.Value) api.Value {
 		tls = tls.Default("removeCertificateAfterBoot", api.BoolValue(false))
 	}
 	if tls.Get("trust").Text() != TrustDisableVerification {
-		verified := BMCVerified(bmc)
+		verified := !bmc.Has("address") || BMCVerified(bmc)
 		tls = tls.Default("enableVerification", api.BoolValue(verified))
 	}
 	return bmc.With("virtualMedia", media.With("tls", tls))
@@ -67,13 +67,20 @@ func ValidateBMCDefaults(bmc api.Value, path string, authored bool) []api.Issue 
 	return issues
 }
 
-// validateControllerTrust refuses certificate verification on a plain-HTTP
-// controller endpoint.
+// validateControllerTrust refuses any verification mode on a plain-HTTP
+// controller endpoint, which has no TLS leg to verify.
 func validateControllerTrust(bmc api.Value, path string) []api.Issue {
-	tls := bmc.Get("tls")
 	var issues []api.Issue
-	if tls.Get("verification").Text() == "certificate" && bmc.Has("address") && !strings.HasPrefix(bmc.Get("address").Text(), "https://") {
-		issues = append(issues, api.Issue{Code: "api.invariant", Field: path + ".tls.verification", Message: "certificate verification requires an HTTPS controller endpoint", Remediation: "set the BMC address to its HTTPS ComputerSystem endpoint"})
+	if !strings.HasPrefix(bmc.Get("address").Text(), "http://") {
+		return nil
+	}
+	if bmc.Has("tls", "verification") {
+		issues = append(issues, api.Issue{Code: "api.invariant", Field: path + ".tls.verification", Message: "TLS verification applies only to an HTTPS controller endpoint, and a plain-HTTP BMC address has no TLS leg",
+			Remediation: "set the BMC address to its https:// ComputerSystem endpoint, or remove tls.verification"})
+	}
+	if bmc.Has("tls", "trustBundleRef") {
+		issues = append(issues, api.Issue{Code: "api.invariant", Field: path + ".tls.trustBundleRef", Message: "a trust bundle anchors only a TLS leg, and a plain-HTTP BMC address has none",
+			Remediation: "set the BMC address to its https:// ComputerSystem endpoint, or remove tls.trustBundleRef"})
 	}
 	return issues
 }

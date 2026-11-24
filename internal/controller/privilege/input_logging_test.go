@@ -48,3 +48,25 @@ func TestInputLoggingIsFoundWhereverSudoListsIt(t *testing.T) {
 		}
 	}
 }
+
+func TestOutputLoggingIsFoundWhereverSudoListsIt(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		report []byte
+		want   string
+	}{
+		{"matching defaults", listing("env_reset, log_output", "", ""), "log_output"},
+		{"matching defaults stdout", listing("env_reset, log_stdout", "", ""), "log_stdout"},
+		{"runas binding ttyout", listing("env_reset", "Defaults>root log_ttyout", ""), "log_ttyout"},
+		{"command binding with arguments", listing("env_reset", "Defaults!/usr/local/bin/bootwright secret show log_output", ""), "log_output"},
+		{"rule options", listing("env_reset", "", "!authenticate, log_stdout"), "log_stdout"},
+		{"negated", listing("env_reset, !log_output", "", ""), ""},
+		{"input only", listing("env_reset, log_input", "", "log_ttyin"), ""},
+		{"quoted value", listing("env_reset, secure_path=\"/x/log_output\"", "", ""), ""},
+		{"empty", nil, ""},
+	} {
+		if got := outputLogging(test.report); got != test.want {
+			t.Errorf("%s: outputLogging = %q, want %q\n%s", test.name, got, test.want, test.report)
+		}
+	}
+}

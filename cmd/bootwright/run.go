@@ -40,12 +40,13 @@ type privilegeBoundary struct {
 	elevate       func(context.Context, privilege.Invocation) privilege.Outcome
 	inputTerminal func() (bool, error)
 	sudoEnviron   func() *diagnostics.Diagnostic
+	directRoot    func() bool
 }
 
 func processBoundary() privilegeBoundary {
 	elevator := privilege.Elevator{Executable: privilege.ReexecutionPath, Sudo: privilege.QualifiedSudo, Executor: privilege.ProcessExecutor{}, Delay: privilege.Timer{}}
 	return privilegeBoundary{lookupEnv: os.LookupEnv, accounts: privilege.Resolver{}, guard: privilege.GuardParent, euid: os.Geteuid, elevate: elevator.Run, inputTerminal: stdinTerminal,
-		sudoEnviron: privilege.ConfirmSudoEnvironment}
+		sudoEnviron: privilege.ConfirmSudoEnvironment, directRoot: privilege.DirectRootInput}
 }
 
 const delegatedSessionEntry = "__bootwright_delegate"
@@ -89,10 +90,8 @@ func (b privilegeBoundary) run(ctx context.Context, args []string, stdout, stder
 			return refuseAtBoundary(classification, stdout, stderr, *refusal, 1)
 		}
 	}
-	if classification.SSHPassword && b.euid() == 0 && !privilege.SupervisedChild() {
-		if command, set := b.lookupEnv("SUDO_COMMAND"); set && command != "" {
-			return refuseAtBoundary(classification, stdout, stderr, privilege.UnsupervisedSSHPassword(), 255)
-		}
+	if refusal, code, refused := b.unverifiedSudoLogging(classification); refused {
+		return refuseAtBoundary(classification, stdout, stderr, refusal, code)
 	}
 	if classification.RequiresRoot && b.euid() == 0 && privilege.SupervisedChild() {
 		if refusal := privilege.ConfirmElevatedChild(os.Environ()); refusal != nil {
@@ -120,6 +119,37 @@ func (b privilegeBoundary) run(ctx context.Context, args []string, stdout, stder
 	return runServices(ctx, args, stdout, stderr, services, hooks)
 }
 
+func (b privilegeBoundary) unverifiedSudoLogging(classification cli.InvocationClass) (diagnostics.Diagnostic, int, bool) {
+	input := stdinInput(classification)
+	if input == "" && !classification.SecretOutput || b.euid() != 0 || privilege.SupervisedChild() || !b.sudoStarted() {
+		return diagnostics.Diagnostic{}, 0, false
+	}
+	switch {
+	case input == privilege.SSHPasswordInput:
+		return privilege.UnsupervisedSSHPassword(), 255, true
+	case input != "":
+		return privilege.UnsupervisedInput(input), 1, true
+	}
+	return privilege.UnsupervisedReveal(), 1, true
+}
+
+func (b privilegeBoundary) sudoStarted() bool {
+	if command, set := b.lookupEnv("SUDO_COMMAND"); set && command != "" {
+		return true
+	}
+	return b.directRoot != nil && !b.directRoot()
+}
+
+func stdinInput(classification cli.InvocationClass) string {
+	switch {
+	case classification.SSHPassword:
+		return privilege.SSHPasswordInput
+	case classification.URLStdin:
+		return privilege.MediaURLInput
+	}
+	return classification.SecretStdin
+}
+
 // runElevated presents what the privilege boundary reports for the
 // invocation it relaunched as root.
 func (b privilegeBoundary) runElevated(ctx context.Context, classification cli.InvocationClass, args []string, stdout, stderr io.Writer, route controller.Route) int {
@@ -140,13 +170,7 @@ func elevationInvocation(classification cli.InvocationClass, args []string, rout
 	invocation := privilege.Invocation{
 		JSON: classification.JSON, Arguments: cli.CarryPresentation(args, cli.PresentationOptions{NoColor: noColor, Color: "auto"}), Route: route, Terminal: os.Getenv("TERM"),
 		Input: os.Stdin, Output: stdout, Error: stderr, InputTerminal: err == nil && terminal,
-		Session: sessionCommand(classification), SecretStdin: classification.SecretStdin, EnrollmentInput: classification.EnrollmentInput,
-	}
-	if classification.URLStdin {
-		invocation.SecretStdin = privilege.MediaURLInput
-	}
-	if classification.SSHPassword {
-		invocation.SecretStdin = privilege.SSHPasswordInput
+		Session: sessionCommand(classification), SecretStdin: stdinInput(classification), SecretOutput: classification.SecretOutput, EnrollmentInput: classification.EnrollmentInput,
 	}
 	if delegatedCommand(classification) {
 		invocation.DelegatedEntry = delegatedSessionEntry

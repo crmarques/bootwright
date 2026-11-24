@@ -26,9 +26,10 @@ type InvocationClass struct {
 	// SecretStdin names the Secret a secret set reads from standard input,
 	// which a sudo policy that logs input would record; URLStdin marks a media
 	// download reading its signed URL there.
-	SecretStdin string
-	URLStdin    bool
-	SSHPassword bool
+	SecretStdin  string
+	URLStdin     bool
+	SSHPassword  bool
+	SecretOutput bool
 }
 
 func ClassifyInvocation(args []string) InvocationClass {
@@ -72,6 +73,7 @@ func ClassifyInvocation(args []string) InvocationClass {
 		classification.SecretStdin = rules.secretStdin(flags)
 	}
 	classification.URLStdin = rules.urlStdin != nil && rules.urlStdin(flags)
+	classification.SecretOutput = rules.secretOutput != nil && rules.secretOutput(flags)
 	classification.SSHPassword = boolValue(flags, "ssh-ask-password")
 	classification.EnrollmentInput = rules.enrollmentInput && !classification.JSON && !dryRunSelected(flags)
 	return classification
@@ -117,6 +119,12 @@ func mediaAmbient(flags *pflag.FlagSet) bool {
 }
 
 func urlFromStdin(flags *pflag.FlagSet) bool { return stringValue(flags, "from-url-file") == "-" }
+
+func reveals(*pflag.FlagSet) bool { return true }
+
+func clusterInfoReveals(flags *pflag.FlagSet) bool {
+	return boolValue(flags, "secrets") || stringValue(flags, "object-user") != ""
+}
 
 func secretStdin(flags *pflag.FlagSet) string {
 	if boolValue(flags, "value-stdin") || boolValue(flags, "password-stdin") {

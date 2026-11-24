@@ -63,6 +63,7 @@ type SudoOptions struct {
 	// SecretStdin names the Secret whose value the elevated command reads
 	// from standard input, which sudo's I/O log would record.
 	SecretStdin     string
+	SecretOutput    bool
 	EnrollmentInput bool
 	DelegatedEntry  string
 	Input           io.Reader
@@ -89,6 +90,18 @@ type InputUnproven struct {
 
 func (e *InputUnproven) Error() string {
 	return "sudo did not list its policy, so whether it logs the standard input of " + inputSubject(e.Secret) + " is unknown"
+}
+
+type OutputLogged struct{ Option string }
+
+func (e *OutputLogged) Error() string {
+	return "the sudo policy sets " + e.Option + ", which would log the secret material this command writes to standard output"
+}
+
+type OutputUnproven struct{ Validated bool }
+
+func (e *OutputUnproven) Error() string {
+	return "sudo did not list its policy, so whether it logs the secret material this command writes to standard output is unknown"
 }
 
 type Supervisor struct{ options SudoOptions }
@@ -132,7 +145,7 @@ func (s *Supervisor) Run(ctx context.Context, args []string) (int, error) {
 		return 1, err
 	}
 	validated := false
-	if !readable && (options.SecretStdin != "" || options.EnrollmentInput) && !options.NonInteractive {
+	if !readable && (options.SecretStdin != "" || options.SecretOutput || options.EnrollmentInput) && !options.NonInteractive {
 		code, err := options.Executor.Run(ctx, Command{Executable: options.Sudo, Arguments: []string{"-u", "#0", "-v"}, Environment: append([]string(nil), environment...), Output: io.Discard, Error: options.Error})
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return 1, ctxErr
@@ -148,10 +161,16 @@ func (s *Supervisor) Run(ctx context.Context, args []string) (int, error) {
 	if !readable && options.SecretStdin != "" {
 		return 1, &InputUnproven{Secret: options.SecretStdin, Validated: validated}
 	}
+	if !readable && options.SecretOutput {
+		return 1, &OutputUnproven{Validated: validated}
+	}
 	interval := 30 * time.Second
 	if readable {
 		if option := inputLogging(policy.data); option != "" && options.SecretStdin != "" {
 			return 1, &InputLogged{Option: option, Secret: options.SecretStdin}
+		}
+		if option := outputLogging(policy.data); option != "" && options.SecretOutput {
+			return 1, &OutputLogged{Option: option}
 		}
 		interval = refreshInterval(policy.data)
 	}
@@ -295,6 +314,14 @@ func refreshInterval(report []byte) time.Duration {
 // that ends its members, and log_input is log_ttyin plus log_stdin. A negated
 // option, another containing the word and an unbalanced list name nothing.
 func inputLogging(report []byte) string {
+	return loggingOption(report, "log_input", "log_ttyin", "log_stdin")
+}
+
+func outputLogging(report []byte) string {
+	return loggingOption(report, "log_output", "log_ttyout", "log_stdout")
+}
+
+func loggingOption(report []byte, options ...string) string {
 	for _, list := range optionLists(string(report)) {
 		fields, valid := defaultFields(list)
 		if !valid {
@@ -305,7 +332,7 @@ func inputLogging(report []byte) string {
 			if len(words) == 0 {
 				continue
 			}
-			if option := words[len(words)-1]; option == "log_input" || option == "log_ttyin" || option == "log_stdin" {
+			if option := words[len(words)-1]; slices.Contains(options, option) {
 				return option
 			}
 		}

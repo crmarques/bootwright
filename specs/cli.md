@@ -1221,7 +1221,9 @@ only the requested material, and add no status prefix or suffix. A
 `cluster info --secrets` result is instead structured and explicitly sensitive
 over its exact resolved selection; in JSON, values occur only in fields whose
 names end in `Value`. Neither form copies a sensitive value to a diagnostic,
-log, history, cache, terminal title, or second stream. Callers are responsible
+log, history, cache, terminal title, or second stream, and an elevated reveal
+starts only under the [sudo I/O-log proof](secrets.md#sudo-io-log-proof) that
+sudo's I/O log records no output. Callers are responsible
 for a restrictive destination if they redirect an explicit reveal. Help and
 completion never reveal.
 
@@ -1379,8 +1381,8 @@ Bootwright installs, and neither `--ssh-user-for-provisioned` nor
 interactive terminal. It conflicts with `--ssh-id-file`. After host-key
 verification, OpenSSH handles the prompt for the named account. This choice
 uses no password Secret and produces no Secret-reveal advisory. When
-Bootwright elevates through sudo, it requires proof that sudo will not record
-the input.
+Bootwright elevates through sudo, the [sudo I/O-log proof](secrets.md#sudo-io-log-proof)
+admits the prompt.
 
 The host key is proved before any credential is offered, from exactly one
 source in this order: the Machine's `access.ssh.knownHostsRef` `Secret`; for a
@@ -1787,9 +1789,12 @@ work under the verified account. `--dry-run` previews without obtaining
 bootstrap credentials or connecting to the Machine. `--ssh-id-file` supplies
 one key for this Machine's operator-identity bootstrap. Password prompts
 name the Machine, remote account and purpose. They require an interactive
-text terminal and either a root login or verified controller sudo input policy.
-A supervised command whose sudo policy cannot be verified can proceed when its
-bootstrap uses bound or key credentials.
+text terminal and either a root login or the
+[sudo I/O-log proof](secrets.md#sudo-io-log-proof) of the controller's sudo
+policy. An elevated enrollment whose sudo policy that proof does not admit
+prompts for no password and still proceeds when its bootstrap uses the
+[bootstrap record's](api/machines.md#managed-lifecycle-enrollment) declared
+credentials or a key.
 
 ## Enrollment into a host-key Secret
 

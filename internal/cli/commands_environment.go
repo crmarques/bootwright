@@ -13,7 +13,7 @@ import (
 func environmentClusterCommands() []commandSpec {
 	return []commandSpec{
 		available(commandSpec{path: "cluster list", results: []jsonResult{clusterListPresentation{}}, render: renderClusterList(), example: "--context lab", invoke: Services.invokeClusterList, short: "List container and storage clusters", long: "List container and storage clusters in canonical name order. Applicable to all selected OpenShiftClusters and CephClusters, including external storage clusters."}),
-		available(commandSpec{path: "cluster info", results: []jsonResult{clusterInfoPresentation{}}, render: renderClusterInfo(), validate: validateClusterInfo, example: "--context lab --name storage", invoke: Services.invokeClusterInfo, short: "Show cluster details and static access applicability", long: "Show cluster details and static access applicability, readiness and invocation templates from local desired state and evidence, with no host contact." +
+		available(commandSpec{path: "cluster info", classify: classifyRules{secretOutput: clusterInfoReveals}, results: []jsonResult{clusterInfoPresentation{}}, render: renderClusterInfo(), validate: validateClusterInfo, example: "--context lab --name storage", invoke: Services.invokeClusterInfo, short: "Show cluster details and static access applicability", long: "Show cluster details and static access applicability, readiness and invocation templates from local desired state and evidence, with no host contact." +
 			" Applicable to all selected OpenShiftClusters and CephClusters, including external storage clusters." +
 			" A managed CephCluster also reports its release, FSID, frozen image, monitors and administrator command." +
 			" --name takes a comma-separated list." +

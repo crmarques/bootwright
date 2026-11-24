@@ -533,8 +533,9 @@ func (s Service) Delete(ctx context.Context, request DeleteRequest) (*MutationRe
 		return nil, secrets.Refusal("declaration", "secret name is invalid", selected.Name, request.Name, secrets.Command(selected.Name, "list"))
 	}
 	result := &MutationResult{Context: selected, Name: request.Name}
+	held := s.readHolds(ctx, selected)
 	if !request.SkipConfirmation {
-		err = s.deleteConfirmed(ctx, selected, request.Name, result)
+		err = s.deleteConfirmed(ctx, selected, request.Name, held, result)
 	} else {
 		err = s.access.Mutate(ctx, selected, func(session secretstore.StoreSession, _ secretstore.Selection) error {
 			snapshot, err := session.Inspect(ctx)
@@ -544,6 +545,9 @@ func (s Service) Delete(ctx context.Context, request DeleteRequest) (*MutationRe
 			if _, exists := currentVersion(snapshot, request.Name); !exists {
 				result.Unchanged = 1
 				return nil
+			}
+			if err := refuseHeld(held, snapshot, selected.Name, request.Name); err != nil {
+				return err
 			}
 			return deleteCurrent(ctx, session, request.Name, result)
 		})
@@ -558,7 +562,7 @@ func (s Service) Delete(ctx context.Context, request DeleteRequest) (*MutationRe
 // held, then proves under the lease that the version it asked about is still
 // the current one before it deletes. A name with no current version changes
 // nothing and asks nothing.
-func (s Service) deleteConfirmed(ctx context.Context, selected secretstore.Context, name string, result *MutationResult) error {
+func (s Service) deleteConfirmed(ctx context.Context, selected secretstore.Context, name string, held holdIndex, result *MutationResult) error {
 	var seen secretstore.Version
 	existed := false
 	err := s.access.View(ctx, selected, false, func(session secretstore.StoreSession, _ secretstore.Selection) error {
@@ -570,7 +574,7 @@ func (s Service) deleteConfirmed(ctx context.Context, selected secretstore.Conte
 			return err
 		}
 		seen, existed = currentVersion(snapshot, name)
-		return nil
+		return refuseHeld(held, snapshot, selected.Name, name)
 	})
 	if err != nil {
 		return err
@@ -590,6 +594,9 @@ func (s Service) deleteConfirmed(ctx context.Context, selected secretstore.Conte
 		current, exists := currentVersion(snapshot, name)
 		if !exists || current.ID != seen.ID {
 			return changedMeanwhile(selected.Name, name, "deleted")
+		}
+		if err := refuseHeld(held, snapshot, selected.Name, name); err != nil {
+			return err
 		}
 		return deleteCurrent(ctx, session, name, result)
 	})

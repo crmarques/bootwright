@@ -1157,12 +1157,8 @@ func validateVolumeRoot(o api.Object, variant substrate.Arm) []api.Issue {
 	if variant != substrate.ArmBaremetal || api.MachineProvided(o) || !hints.VolumeRef.Valid() || len(hints.Names()) != 1 {
 		return []api.Issue{invariant(path, "volumeRef and bootVolume select an installed physical root alone, and volumeRef uses 1 to 128 ASCII letters, digits, underscores or hyphens for each ID", "declare volumeRef with storageId and volumeId, or bootVolume, and remove other root hints")}
 	}
-	if !verifiedHTTPS(substrate.MachineBMC(o)) {
+	if !substrate.BMCVerified(substrate.MachineBMC(o)) {
 		return []api.Issue{invariant(path, "logical-volume discovery requires verified BMC TLS", "set "+substrate.BMCPath+".tls.verification to full or certificate on an https BMC address, or name the root by "+substrate.RootDiskPath+".wwn or by serialNumber and sizeBytes")}
 	}
 	return nil
-}
-
-func verifiedHTTPS(bmc api.Value) bool {
-	return bmc.Present() && substrate.BMCVerified(bmc) && strings.HasPrefix(bmc.Get("address").Text(), "https://")
 }

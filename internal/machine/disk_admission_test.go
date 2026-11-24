@@ -230,6 +230,22 @@ func TestErasureRequiresVerifiedBMCTLSAndAMediaTrustPolicy(t *testing.T) {
 	diskOneIssue(t, physicalDisks(unverified), "$.spec.hardware.dataDisks[0].onRemoval")
 }
 
+// A plain-HTTP BMC carries no TLS leg, so it is unverified whatever its
+// verification field says, and a physical erase over it refuses.
+func TestEraseRefusesAPlainHTTPBMC(t *testing.T) {
+	for _, trust := range []string{"established", "importCertificate", "disableVerification"} {
+		plain := diskBMC("", trust).With("address", api.StringValue("http://bmc.example.test/redfish/v1/Systems/1"))
+		root := diskSet(diskMachine(diskRoot("logicalOverwrite")), plain, "hardware", "bmc")
+		issue := diskOneIssue(t, physicalDisks(root), "$.spec.hardware.rootDisk.onRemoval")
+		if !strings.Contains(issue.Message, "verified BMC") || !strings.Contains(issue.Remediation, "https://") {
+			t.Fatalf("issue = %+v", issue)
+		}
+		data := diskSet(diskMachine(diskRoot(""), dataDisk("5000000000000001", "DATA-01", "metadataClear")), plain, "hardware", "bmc")
+		diskOneIssue(t, physicalDisks(data), "$.spec.hardware.dataDisks[0].onRemoval")
+		diskNoIssues(t, physicalDisks(diskSet(diskMachine(diskRoot("retain")), plain, "hardware", "bmc")))
+	}
+}
+
 func TestADataDiskSerialNumberIsWithinTheDiskIdentityGrammar(t *testing.T) {
 	for serial, admitted := range map[string]bool{
 		"EXAMPLE-01": true, "Z1.2:3+4/5=6": true, "A": true, strings.Repeat("A", 256): true,

@@ -50,6 +50,7 @@ var defaultRemediations = map[string]string{
 	"secret.source":                "correct the Secret's declared source or parameters",
 	"secret.part":                  "supply the Secret part the message names, or correct its value",
 	"secret.input":                 "supply valid Secret input or material and repeat the command",
+	"secret.output":                "run the reveal in a root login session sudo did not start, or under a sudo policy that logs no output",
 	"secret.store.uninitialized":   "initialize the Secret store with bootwright secret encryption init --context <context>",
 	"secret.store.implementation":  "configure the Secret store implementation the message names",
 	"secret.store.key-unavailable": "make the Secret store key or unlock session available and repeat the command",
