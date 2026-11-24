@@ -191,9 +191,9 @@ func requireRefusal(t *testing.T, journey *lifecycle.CapabilityJourney, adapter 
 	}
 	want := []diagnostics.Diagnostic{
 		{Severity: "error", Code: "engine.outcome-unknown", Message: "the outcome of " + lostMachine + " is still unknown: " + reason,
-			Remediation: remedy + ", then repeat bootwright destroy --context lab --authorize data-loss=<digest bootwright plan prints> to observe it again"},
+			Remediation: remedy + ", then repeat bootwright destroy --context lab --authorize data-loss=<digest apply|destroy --dry-run prints> to observe it again"},
 		{Severity: "error", Code: "destroy.unproved-effects", Message: "this removal cannot prove what these effects left behind, so it registered nothing: " + lostMachine,
-			Remediation: "do what the diagnostic of each reports, then repeat bootwright destroy --context lab --authorize data-loss=<digest bootwright plan prints>"},
+			Remediation: "do what the diagnostic of each reports, then repeat bootwright destroy --context lab --authorize data-loss=<digest apply|destroy --dry-run prints>"},
 	}
 	if got := withoutObjects(diagnostics.Of(err)); !slices.Equal(got, want) {
 		t.Fatalf("the refusal reported %+v, want %+v", got, want)

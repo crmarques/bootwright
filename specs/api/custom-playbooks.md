@@ -35,7 +35,7 @@ declarations enter none. It grants no execution.
 ## Lifecycle refusal
 
 An enabled `CustomPlaybook` is an object no capability realizes, so a fresh
-`plan` and a fresh `apply` refuse it under the
+`apply` and its `--dry-run` preview refuse it under the
 [unrealizable-kind rule](../state-reconciliation.md#stages-and-the-pause-boundary)
 before content access or operation registration, with no authorization bypass,
 and `validate` warns it `api.unrealized`

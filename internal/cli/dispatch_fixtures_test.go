@@ -393,7 +393,7 @@ func dispatchFlags() *pflag.FlagSet {
 	}
 	for _, name := range []string{
 		"yes", "purge", "allow-orphans", "short", "renew", "checksums", "dry-run", "check", "keep-going",
-		"observe-host-keys", "sensitive", "secrets", "power-status",
+		"sensitive", "secrets", "power-status",
 		"ssh-ask-sudo-password", "ssh-user-for-provisioned", "observe", "origins", "overwrite",
 	} {
 		flags.Bool(name, true, "")

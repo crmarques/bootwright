@@ -277,7 +277,7 @@ realize says so and may name its backlog item.
 `TestRefusalsNameNoVendorRelease` check the Go sources and the collection's
 plugins.
 A context-backed next action carries `--context <name>` for the context the
-invocation resolved. The context-free commands (`install`, `media`, `version`, `catalog schema` and the
+invocation resolved. The context-free commands (`install`, `catalog media`, `version`, `catalog schema` and the
 others [listed with the global flags](commands.md#global-flags)) take none and
 refuse `--context`. No diagnostic carries confidential material.
 
@@ -455,11 +455,10 @@ single `host.access` check `unknown` naming the key to authorize
 ([plan and prerequisites](../ceph.md#plan-and-prerequisites)). A host
 prerequisite probe whose command exits nonzero reports its check `failed`,
 and a read that does not complete `unknown`; a `host.peer-names` check lists the Ceph node names a
-host's resolver does not answer. Anonymous key observation under
-`--observe-host-keys` neither enrolls nor accepts a key: a host whose key the
+host's resolver does not answer. The anonymous key observation of `apply --dry-run`
+neither enrolls nor accepts a key: a host whose key the
 context does not trust reports its `host.trust` check `unknown` with the
-observed fingerprint and the `machine trust` request that enrolls it, and
-with `--observe-host-keys=false` the check names no fingerprint.
+observed fingerprint and the `machine trust` request that enrolls it.
 
 Both read-only install modes use the envelope's `command` value `install`.
 When setup inspection yields a result, the preview reports `planned` when
@@ -814,11 +813,11 @@ A managed CephCluster entry adds these fields, in this order, after its
 | CephConsumer | `export of pool <rbdPoolRef>, filesystem <filesystemRef>`, then `, object gateway <objectGatewayRef>` when set, then its grant: `; grants consumer administrators every path of filesystem <filesystemRef>`, with a gateway `; grants consumer administrators every RGW user, bucket and key in the realm of object gateway <objectGatewayRef>`, and `; is not isolated from other exports that share its cluster, filesystem or gateway`; `export` without `dataFoundation` |
 
 A CephConsumer that sets an object gateway or a filesystem also states, in
-`plan` and in these resource rows, what it grants: consumer administrators hold
+the `apply --dry-run` plan and in these resource rows, what it grants: consumer administrators hold
 every RGW user, bucket and key of the gateway's realm and every path of the
 filesystem, and consumers that share a cluster, filesystem or gateway are not
 isolated from each other
-([trust extent](../ceph-resources.md#cephconsumer)). In `plan` the consumer's
+([trust extent](../ceph-resources.md#cephconsumer)). In that plan the consumer's
 apply step carries each grant clause above, without its leading `; `, as an
 impact line after `create per-consumer Ceph principals for <consumer>`.
 

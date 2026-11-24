@@ -565,7 +565,7 @@ states, and the table below lists the controller's.
 
 Each row is one controller shape this executable cannot realize, and
 `TestControllerRefusalTableMatchesUnsupported` holds the controller stage
-capability's `Unsupported` to it. A plan or apply refuses each one before
+capability's `Unsupported` to it. An `apply --dry-run` or `apply` refuses each one before
 registration with `plan.object-unsupported` naming this Environment, and
 controller selection refuses the first one it meets with
 `controller.unsupported` on the declaring object and field. Its reason and

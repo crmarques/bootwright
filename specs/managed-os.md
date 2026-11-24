@@ -917,7 +917,7 @@ Machines this context installed` on `libvirt`, and `run bootwright destroy,
 which releases Machine <m> but keeps the system installed on it, then power <m>
 off from its management controller so the next apply installs it again` on
 `baremetal` with retaining removal. With opt-in erase, `<recovery>` instead names
-`run bootwright destroy --authorize data-loss=<digest bootwright plan prints>, which overwrites the declared
+`run bootwright destroy --authorize data-loss=<digest apply|destroy --dry-run prints>, which overwrites the declared
 disks of Machine <m> and removes its installed system before releasing it`.
 A Machine without nmstatectl ends with `<recovery>, then apply
 with an install source that carries the nmstate package`. A refusal that may
@@ -1717,14 +1717,14 @@ match the authenticated inventory. Unrelated
 input changes refuse. A changed policy creates a new selection proof without
 booting again. The installation freezes one selected proof and
 repeats exact disk identity immediately before its first storage write. A
-missing raw inventory opens an automatic preparation phase. `plan` previews
+missing raw inventory opens an automatic preparation phase. `apply --dry-run` previews
 that complete phase without effects. Controller and infrastructure stage
 selections can prepare prerequisites while leaving inventory pending; only a
 selected machine stage may boot inventory. Interrupted automatic preparation
 continues through `apply` with its frozen target set, while an unfinished manual
 discovery retains its explicit command. After preparation completes, `apply`
 builds and presents the installation plan and requires its own authorization.
-`plan` previews an unfinished manual discovery's frozen scope without converting
+`apply --dry-run` previews an unfinished manual discovery's frozen scope without converting
 it to an automatic preparation or performing its continuation.
 Unused authorization refuses before preparation, so a token for an unresolved
 disk is never carried forward. `--yes` skips ordinary confirmation only.
@@ -2591,7 +2591,7 @@ are partial; a foreign file, or a membership without its file, is unknown.
 
 `<networks>` is the requirement's networks joined by ` or is `, `<address>` its
 first, `<verb>` is `destroy` for a removal and `apply` otherwise, and `<cause>` is `tooling`, `reload`, `zone`, `write`, `address`, `runtime-drift`, `enable` or `ssh-admission`, else
-`unknown`. `plan` reports one `host-port` row per requirement and reads no
+`unknown`. `apply --dry-run` and `destroy --dry-run` report one `host-port` row per requirement and reads no
 host: on a realizing Machine, that the managed OS realizes it before the
 clusters stage; on any other host, the ports and protocols to permit in the
 zone of the interface on its networks, and on a Bootwright-installed Machine

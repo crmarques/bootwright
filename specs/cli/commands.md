@@ -497,8 +497,7 @@ interface for a deliberately changed key, and every replacement name must also
 be in that command's selected Machine set. `--expect` and a `--replace` member
 of the form `<machine>=SHA256:<fingerprint>` name the fingerprint the operator
 verified out of band; a fingerprint that is not `SHA256:` and 43 base64
-characters, or two different fingerprints for one Machine, are usage errors. Preflight's
-`--observe-host-keys` follows the [preflight observation and refusal rule](output.md#preflight).
+characters, or two different fingerprints for one Machine, are usage errors. `apply --dry-run` observes host keys anonymously under the [preflight observation and refusal rule](output.md#preflight).
 
 `--sensitive` authorizes materialization, not disclosure in normal output. It
 applies only to the render rows that list it. Sensitive installer artifacts use

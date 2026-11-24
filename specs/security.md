@@ -297,7 +297,7 @@ ansible-core decodes an object holding a key named exactly `__ansible_unsafe`,
 cannot decode as JSON again as YAML with every string trusted, so a runner
 refuses a document holding such a key; any other key, one that only starts as
 they do included, is ordinary. The frozen request bytes and every digest are
-unchanged. A fresh plan and apply refuse a block whose request holds such a
+unchanged. A fresh `apply` and its `--dry-run` preview refuse a block whose request holds such a
 key, so a request that plans is one its runner can encode, and, as defence in
 depth, one whose request holds `{{`, `{%` or `{#`
 ([plan and execution](state-reconciliation.md#plan-and-execution)).

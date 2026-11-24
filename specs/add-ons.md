@@ -104,7 +104,7 @@ An authored `ClusterAddon` of the executable shape, a managed namespace and an
 OperatorGroup of its own namespace or all, is selected as an instance named
 after the add-on ([instances and blocks](#instances-and-blocks)). A binding that
 selects one of any other shape, directly or through a profile, is refused at
-`plan` and `apply` under the [refusal table](#refusal-table), and
+`apply --dry-run` and `apply` under the [refusal table](#refusal-table), and
 [B90](milestones/m4.md#b90) tracks the rest. `ClusterAddon` and
 `ClusterAddonProfile` are definitions that perform nothing by themselves; a
 binding's selection is what has effects.

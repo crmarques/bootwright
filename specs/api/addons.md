@@ -30,7 +30,7 @@ their kind-specific validation and built-in defaults.
 
 | Kind | Declares |
 | --- | --- |
-| `ClusterAddon` | One authored add-on definition. An `olm` arm of the [executable shape](#executable-olm-add-ons) installs when a binding selects it; every other shape validates and is refused at `plan`. |
+| `ClusterAddon` | One authored add-on definition. An `olm` arm of the [executable shape](#executable-olm-add-ons) installs when a binding selects it; every other shape validates and is refused at planning. |
 | `ClusterAddonProfile` | One reusable selection of add-on configuration bound to clusters. |
 | `ClusterAddonBinding` | The add-ons of one cluster: its built-in packages and authored add-on bindings. |
 
@@ -112,7 +112,7 @@ built-in package. The shape has a managed namespace, an OperatorGroup targeting
 that namespace or every namespace, a required `startingCSV`, an owned catalog
 with an explicit `priority`, custom resources of its own namespace each behind a
 gate, and no Secret placement, manifest set or step. Every other shape
-validates and is refused at `plan`. Admission refuses these faults, each at its
+validates and is refused at planning. Admission refuses these faults, each at its
 own indexed field:
 
 - `namespace.name` is `default`, `openshift` or begins `openshift-` or `kube-`;
@@ -168,7 +168,7 @@ another definition of the group serves, never passes its gate, nothing is
 created, and the attempt fails at its deadline naming the check ([trust boundary](../add-ons.md#trust-boundary)). An add-on of
 the executable shape whose `namespace.name` is a namespace KubeVirt hosts for
 its cluster, a failing synthesis and a program over the bounds are refused at
-`plan` under the [refusal table](../add-ons.md#refusal-table).
+planning under the [refusal table](../add-ons.md#refusal-table).
 
 ### Manifest-set arm
 

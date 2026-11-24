@@ -1548,7 +1548,7 @@ the consumer, and the cluster's own retirement refuses with it
 `TestADestroyRefusesWhileAPhysicalCompactConsumerSurvives`), until
 [B491](milestones/m2.md#b491) proves a surviving consumer quiescent. A context
 whose Ceph is virtual and whose consuming cluster is not therefore has no full
-destroy until then, and `plan` says so before the first apply: the apply's
+destroy until then, and `apply --dry-run` says so before the first apply: the apply's
 plan carries a `plan.consumer-outlives-destroy` warning naming the consuming
 cluster and the consumer, which the removal engine derives from the same decision
 that refuses the destroy

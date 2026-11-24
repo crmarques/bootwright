@@ -73,8 +73,8 @@ func reviewStatus(contextName string) string {
 	return "review its durable state with " + contextCommand(contextName, "status")
 }
 
-// DigestPlaceholder stands for a digest only bootwright plan prints.
-const DigestPlaceholder = "<digest bootwright plan prints>"
+// DigestPlaceholder stands for a digest only a --dry-run preview prints.
+const DigestPlaceholder = "<digest apply|destroy --dry-run prints>"
 
 // authorizing binds each token the plan consumes to its steps' digest (Q117),
 // for a command that authorizes against exactly this plan.

@@ -195,7 +195,7 @@ the completed apply's projection, and that apply stays the current operation.
 
 A continuation of an interrupted additive apply re-proves that every
 prerequisite still reads `done` in its owner's records, and refuses
-`apply.prerequisite-lost` naming one that does not. `plan` previews the additive apply
+`apply.prerequisite-lost` naming one that does not. `apply --dry-run` previews the additive apply
 with the line `adds to operation <id>; runs none of its blocks`, and no
 `--authorize` token is demanded. One `destroy` takes the whole lineage back
 ([removal over a lineage](#removal-over-a-lineage)); no removal takes back an
@@ -1218,17 +1218,17 @@ is no candidate; it is resolved for each invocation and never recorded, so
 the operation holds no selection. When that instance and its prerequisites are
 done the operation pauses as above, and a later `apply`, with or without
 another `--until`, continues the same operation. `--until` composes with
-`--stage`, and `plan --until` previews the same selection.
+`--stage`, and `--dry-run` previews the same selection.
 
-Before any effect, an apply refuses with `lifecycle.stage`:
+Before any effect, an apply refuses:
 
-| Fault | Message | Remedy |
-| --- | --- | --- |
-| The plan has no add-on instance | `the plan has no add-on instance for --until to name` | `repeat bootwright apply --context <context> without --until` |
-| No add-on instance carries the name | `the plan has no add-on instance named by --until` | `name one of: <objects>` (at most eight, then `and <n> more`) |
-| The selected stages admit none of the ready blocks the instance requires | `the selected stages have nothing to start` | the apply with `--stage` widened by the first such block's stage, keeping `--until` and the plan's authorizations |
-| A failed block the instance requires lies outside the selected stages | `the block this operation must retry is outside the selected stages` | the apply with `--stage` widened by the first such block's stage, keeping `--until` and the plan's authorizations |
-| The instance and every block it requires are done, or every block to retry lies outside them | `the add-on instance --until names and the blocks it requires have nothing to start under this selection` | `repeat bootwright apply --context <context> [--stage <list>] [--authorize <tokens>] without --until` |
+| Fault | Code | Message | Remedy |
+| --- | --- | --- | --- |
+| The plan has no add-on instance | `apply.until-unknown` | `the plan has no add-on instance for --until to name` | `repeat bootwright apply --context <context> without --until` |
+| No add-on instance carries the name | `apply.until-unknown` | `the plan has no add-on instance named by --until` | `name one of: <objects>` (at most eight, then `and <n> more`) |
+| The selected stages admit none of the ready blocks the instance requires | `apply.stage-empty` | `the selected stages have nothing to start` | the apply with `--stage` widened by the first such block's stage, keeping `--until` and the plan's authorizations |
+| A failed block the instance requires lies outside the selected stages | `apply.stage-excludes-retry` | `the block this operation must retry is outside the selected stages` | as the row above |
+| The instance and every block it requires are done, or every block to retry lies outside them | `apply.stage-empty` | `the add-on instance --until names and the blocks it requires have nothing to start under this selection` | `repeat bootwright apply --context <context> [--stage <list>] [--authorize <tokens>] without --until` |
 
 Destroy accepts no apply selection.
 
@@ -1244,21 +1244,20 @@ for its retry to complete, as it would for a first attempt. An invocation
 retries a block at most once, and once a block it worked fails, it starts no
 further first attempt, although the failed blocks still waiting are retried.
 A failed block outside the selection is never retried, and when no failed
-block's stage is selected the operation refuses `lifecycle.stage` before any
+block's stage is selected the operation refuses `apply.stage-excludes-retry` before any
 effect, naming the stage of the first. That refusal is decided once, before the
 invocation works any block; once one is worked, admission follows only these
 rules, so what starts never depends on which running block completes first. A selection that admits no startable block also refuses
-`lifecycle.stage` before registration, naming a stage that would unblock work.
+`apply.stage-empty` before registration, naming a stage that would unblock work.
 
-A fresh `plan` and a fresh `apply` refuse, whatever stages are selected and
+A fresh `apply` and its `--dry-run` preview refuse, whatever stages are selected and
 before registration, every selected object this executable cannot realize: an
 effect-bearing object no implementation
 [claims](architecture.md#implementation-selection), such as a managed
 `Registry` or an enabled `CustomPlaybook`, and every shape a capability reports
 unsupported. Each refused object is its own `plan.object-unsupported`
 diagnostic, with the reason its capability gives, or that nothing claims it,
-and the remedy, so `plan` says why as `apply` does; one refused for two
-reasons is two diagnostics. An object two implementations of one family both
+and the remedy; one refused for two reasons is two diagnostics. An object two implementations of one family both
 plan blocks for is refused the same way after planning, naming both, because
 binding order never decides which one realizes it. A frozen plan
 requires a resolved implementation for every block; a removal planned from a
@@ -1294,7 +1293,7 @@ its plan names and before registration, any bound material a capability proves
 unusable, naming the Secret, and it releases the binding it created
 (`TestAFreshApplyRefusesMaterialItsCapabilityRefusesBeforeRegistration`).
 
-A fresh `plan` and a fresh `apply` also refuse, before registration, every
+A fresh `apply` and its preview refuse, before registration, every
 block whose request holds a template delimiter, `{{`, `{%` or `{#`, in a string
 or a mapping key, or a mapping key named exactly `__ansible_unsafe`,
 `__ansible_vault` or `__ansible_type`, whatever the block's stage, the
@@ -1894,7 +1893,7 @@ diagnostic, `bootwright destroy --context <name>` with the removal plan's
 Nothing stands in for a frozen binding. A continuation, or a fresh removal,
 whose operation names a binding the context's keyring no longer lists refuses
 `engine.binding-lost` before it is authorized, presented or confirmed, and before
-it registers, probes, or releases any reservation or binding; a `plan`
+it registers, probes, or releases any reservation or binding; a `--dry-run`
 previewing that verb refuses the same way. A binding whose material the keyring
 cannot read, as a missing or damaged part file leaves it, refuses the same way
 when the verb reopens it, after confirmation and still before any of those: a
@@ -2562,7 +2561,7 @@ consumer of its produced output, or of an effect removed before it, survives
 the removal: each consumer's cluster must leave with owned virtual node
 Machines the same removal deletes, not only erases, or the removal refuses
 before registration, before any quiescence probe and whatever a capability
-would answer, naming the consumer and what it consumes. The apply's `plan`
+would answer, naming the consumer and what it consumes. The apply's `--dry-run` preview
 warns of each such consumer with `plan.consumer-outlives-destroy`, from the
 decision taken over the apply's inverse. It is not an
 online effect, its Machines are `Stop first`, its quiescence derives from
@@ -3097,7 +3096,7 @@ recovery.
 
 An erase relaxation and an [abandonment](#abandoned-removal) are the only
 relaxations an invocation can name, and only a
-`destroy` and the `plan` that previews it name one:
+`destroy` and the `destroy --dry-run` that previews it name one:
 `erase=<machine>:metadataClear` or `erase=<machine>:retain`, in the
 [grammar](cli/commands.md#flag-relationships-and-safeguards), relaxes the
 declared [removal erase](#opt-in-physical-logical-overwrite) of every target
@@ -3134,7 +3133,7 @@ how an operator stops waiting for a long or stuck erase: it supersedes the
 removal as a failed one is superseded, resolving every unproved block of it
 first and refusing, registering nothing, when it cannot, and then removes what
 that removal has not recorded removed under the relaxations it names
-([state machine](#state-machine)). A `plan` naming no relaxation previews that
+([state machine](#state-machine)). A `destroy --dry-run` naming no relaxation previews that
 continuation.
 
 ### Access-credential rebind

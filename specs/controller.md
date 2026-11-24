@@ -1229,7 +1229,7 @@ and `host-packages`; the context checks are `target-tools`, `container-runtime`,
 `libvirt-client`, `hypervisor`, `installer-media`, `image-mirror`, `nmstate`, `iputils`, `controller-binding`
 and one `listener-firewall` row per declared controller socket.
 
-Context preflight and public `plan` inspect the controller's managed DNS
+Context preflight and public `apply --dry-run` inspect the controller's managed DNS
 (TCP and UDP), NTP (UDP), proxy (TCP), artifact listeners (TCP), and locally
 hosted emulated BMC listeners. Loopback listeners require no ingress admission.
 Exact bind addresses, or every declared endpoint of a wildcard listener, must
@@ -1270,7 +1270,7 @@ never inferred safe. On an operator-managed host, the operator must verify the d
 BMC, installer and client, configure the operator-owned firewall, and repeat
 preflight. These rows inspect the local zone, not end-to-end reachability.
 
-Unknown and closed required sockets cannot pass preflight. Public `plan`
+Unknown and closed required sockets cannot pass preflight. Public `apply --dry-run`
 retains its preview and includes the observations and manual remedy. Before
 claims or registration, `apply` checks every starting listener and the
 listeners its starting consumers depend on, including listeners already

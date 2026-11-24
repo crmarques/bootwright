@@ -5,7 +5,7 @@ A named slice revives this design when the owner promotes
 into a document an operator can follow by hand. Until then nothing below
 exists in code. [State reconciliation](../state-reconciliation.md#plan-and-execution)
 owns the operation plan, which the lifecycle already decides for every apply,
-destroy and plan preview and which only its executor consumes. This design
+destroy and dry-run preview and which only its executor consumes. This design
 adds a second consumer of that value; it changes neither the plan nor the
 executor.
 
@@ -18,12 +18,12 @@ installation ships, with the native input files beside it.
 ## The consumer
 
 A `render`-class command, such as `bootwright render procedure --output <dir>`
-or a verb of its own (the owner's call), reads the same inputs as `plan`. It
+or a verb of its own (the owner's call), reads the same inputs as `apply --dry-run`. It
 registers no operation, allocates no run id and writes only its declared
 artifacts, as the [private operation logs rule](../cli/output.md#private-operation-logs) and the
 [extension model](../project.md#implementation-and-extension-model) say of
 generated outputs. It takes the verb, the selection and the context exactly as
-`plan` does, so the document describes the invocation the operator would have
+`apply --dry-run` does, so the document describes the invocation the operator would have
 run.
 
 ## The entry point

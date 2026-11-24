@@ -31,7 +31,7 @@ mode through direct access, whose nodes are Machines on a realized
 substrate with `os.clusterInstalled`. A single-node
 cluster resolves its three endpoint slots from that node; a multi-node cluster
 resolves them from authored or load-balancer addresses. Every other declaration
-refuses before operation registration, in `plan` as in `apply`, with one
+refuses before operation registration, in `apply --dry-run` as in `apply`, with one
 diagnostic whose object is the cluster and which carries why it is refused and
 the remedy, as the [refusal table](#refusal-table) states row by row. A
 multi-node cluster on `baremetal`, on `none` or with no declared platform is
@@ -93,10 +93,10 @@ an agent-install plan; each is inert or refuses at plan, as its row states:
 | `spec.install.endpoints.*.interfaceNetworks` | Refused at plan when authored non-empty; no installer input consumes it. |
 
 Each authored field of this table except `channel` and the four endpoint
-fields refused above makes `validate`, `plan` and `apply` report an
+fields refused above makes `validate` and `apply` report an
 `api.deferred` warning at its path, so an operator learns that it changes
 nothing. An authored endpoint `port`, `scheme`, `prefixLength` or
-`interfaceNetworks` that the installer does not use refuses at `plan`, naming
+`interfaceNetworks` that the installer does not use refuses at planning, naming
 the field, because the installation would not follow the declaration; the
 [refusal table](#refusal-table) holds one row for each.
 
@@ -1291,7 +1291,7 @@ before an adapter runs, and no run carries a placement's identity or host key.
 
 Selected FIPS clusters project `fips: true` and use the exact release's
 publisher-verified RHEL 9 `openshift-install-fips` executable. Controller
-preflight, plan and apply admission require a positive kernel FIPS-mode
+preflight, `apply --dry-run` and `apply` admission require a positive kernel FIPS-mode
 observation and otherwise refuse `controller.unsupported`. Media apply refuses
 an `ssh-ed25519` administration key naming the bound Secret before running the
 installer. These prerequisites make no claim about Bootwright's cryptography.

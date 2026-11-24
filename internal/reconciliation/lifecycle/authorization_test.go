@@ -209,7 +209,7 @@ func TestAnUnattendedAuthorizationIsBoundToTheStepsItAuthorizes(t *testing.T) {
 			t.Fatal("a refused authorization asked, mutated or ran a block")
 		}
 	}
-	review := "review them with bootwright apply --dry-run --context lab, then repeat bootwright apply --context lab --authorize data-loss=<digest bootwright plan prints>"
+	review := "review them with bootwright apply --dry-run --context lab, then repeat bootwright apply --context lab --authorize data-loss=<digest apply|destroy --dry-run prints>"
 	refused(ApplyRequest{ContextName: "lab", Authorizations: []string{"data-loss"}, SkipConfirmation: true, Unattended: true},
 		"an unattended apply must bind --authorize data-loss to the steps it authorizes: step 1 (serve artifacts)", review)
 	stale := "data-loss=0123456789abcdef"

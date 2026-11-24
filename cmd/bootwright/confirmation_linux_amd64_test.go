@@ -39,7 +39,7 @@ func TestAnInteractiveProcessRepeatsItsInvocationWhenItsConfirmationIsRefused(t 
 	helper := exec.Command(os.Args[0], "-test.run=^TestAnInteractiveProcessRepeatsItsInvocationWhenItsConfirmationIsRefused$")
 	helper.Env = append(os.Environ(), "BOOTWRIGHT_CONFIRMATION_HELPER=1")
 	output, err := helper.Output()
-	want := "review the plan, then repeat bootwright apply --context lab --authorize data-loss=<digest bootwright plan prints> --stage infrastructure-services with --yes\n" +
+	want := "review the plan, then repeat bootwright apply --context lab --authorize data-loss=<digest apply|destroy --dry-run prints> --stage infrastructure-services with --yes\n" +
 		"review the plan, then repeat bootwright machine trust --context lab --name rhel-01 --replace rhel-01 with --yes\n"
 	if err != nil || string(output) != want {
 		t.Fatalf("the refused confirmations named %q (%v), want %q", strings.TrimSpace(string(output)), err, want)

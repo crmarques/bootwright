@@ -28,8 +28,8 @@ no filesystem writes, random generation, subprocesses, network or live-target
 access, native rendering or platform mutation. Accepting a declaration claims
 no executable support for its effectful consumer.
 
-An admitted declaration that no capability of this build realizes refuses at
-`plan`, before registration, with `plan.object-unsupported`: that is the default
+An admitted declaration that no capability of this build realizes refuses
+when `apply` plans it, before registration, with `plan.object-unsupported`: that is the default
 refusal point, and each capability's refusal table names its rows. Admission
 refuses a declaration with `api.invariant` instead only when no build of this
 API version has any consumer for it, as it refuses `spec.lifecycle.rescue`
@@ -38,14 +38,14 @@ than restate it.
 
 ### Admitted but unrealized
 
-`validate`, `plan` and `apply` warn `api.unrealized` at the path of each
+`validate` and `apply` (with or without `--dry-run`) warn `api.unrealized` at the path of each
 declaration below, naming the object and the item that tracks its
-realization, so an operator learns before planning that `plan` refuses it.
+realization, so an operator learns before applying that planning refuses it.
 The warning is also in `validate`'s `advisories`
 ([JSON output](cli/output.md#json-output)). The rows are data in
 `api/v1alpha1` (`UnrealizedDeclarations`), and
 `TestUnrealizedTableMatchesUnsupported` holds this table to that data and
-proves each row warned and refused at `plan`.
+proves each row warned and refused at planning.
 
 | Kind | Declaration | Tracked by |
 | --- | --- | --- |
@@ -64,7 +64,7 @@ proves each row warned and refused at `plan`.
 An install-profile row is refused on each Machine that selects the profile.
 A `ClusterAddon` row is refused on each binding that selects it, directly or
 through a profile. The OperatorGroup shapes of a `ClusterAddon` that no
-declaration path names, none and other target namespaces, are refused at `plan`
+declaration path names, none and other target namespaces, are refused at planning
 by the [refusal table](add-ons.md#refusal-table) only. The
 `dependencyVersions.libvirt` row is refused when the controller selects the
 libvirt client.

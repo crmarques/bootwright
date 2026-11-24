@@ -59,7 +59,7 @@ Every invocation admitted by that boundary follows this precedence:
    and flag relationships, and identify missing required inputs;
 5. show help for an incomplete command;
 6. decide whether the resolved use case, or the part of its selection that
-   [preflight --stage](cli/commands.md#flag-relationships-and-safeguards)
+   [apply --dry-run --stage](cli/commands.md#flag-relationships-and-safeguards)
    names, is available.
 
 Explicit help therefore outranks required-value, enum, cardinality, and
@@ -175,8 +175,9 @@ members collapse to their first occurrence. Omission selects all eligible
 objects only where the command row says “default all.” Empty resolved lists
 preserve these command-specific compatibility rules:
 
-- cluster-backed preflight and render treat an empty or whitespace-only value
-  as omission, but reject a nonblank comma-only value;
+- `apply --clusters` and `--machines` follow the
+  [apply rule](cli/commands.md#flag-relationships-and-safeguards), which refuses an
+  empty, whitespace-only or comma-only value;
 - `machine list --clusters` treats an empty or whitespace-only value as
   omission and a comma-only value as an empty result, and a member naming no
   OpenShiftCluster or CephCluster the context selects fails
@@ -286,7 +287,7 @@ current freeze; a bare authorization names no plan, and under that `--yes` an
 the digest of the steps it authorizes
 ([authorization](state-reconciliation.md#confirmation-and-authorization)), so
 the repeated command writes a bare `data-loss` as
-`data-loss=<digest bootwright plan prints>` and never authorizes steps nobody
+`data-loss=<digest apply|destroy --dry-run prints>` and never authorizes steps nobody
 reviewed. Every other remedy that names a command consuming `data-loss` writes
 the bound form too: the digest where the command authorizes exactly the plan
 the code holds (the continuation of a frozen plan), else that placeholder, so a
