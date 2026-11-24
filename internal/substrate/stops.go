@@ -15,7 +15,7 @@ var (
 		Meaning: "the management controller did not answer the system read that proves a physical machine, so what it is stays unknown", Remedy: "restore access to the controller, then repeat the apply"}
 	prebootHardwareMismatch = diagnostics.Stop{Code: "preboot.hardware-mismatch", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
-		Meaning: "a physical machine does not report exactly the hardware its Machine declares, or its inventory could not be read in full, so no media was inserted", Remedy: "make the machine report the hardware its Machine declares, then continue the apply"}
+		Meaning: "a physical machine does not report exactly the hardware its Machine declares, its complete Storage inventory does not show exactly one drive matching its root proof, or its inventory could not be read in full, so no media was inserted", Remedy: "make the machine report the hardware its Machine declares, then continue the apply"}
 	prebootIdentityMismatch = diagnostics.Stop{Code: "preboot.identity-mismatch", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryChangeInput,
 		Meaning: "the system answering for a Machine is not the one the operation proved for it, so no media was inserted", Remedy: "correct the declared address of the Machine, or restore the system it was realized on, then continue the apply"}

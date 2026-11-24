@@ -93,7 +93,7 @@ func renderRequest(cluster api.Object, catalog api.Catalog, controller string, f
 	if err != nil {
 		return Request{}, err
 	}
-	return Request{BudgetSeconds: 1800, Cluster: cluster.Name(), Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: controller}, ProducedInputs: []lifecycle.ProducedInput{{Kind: "OpenShiftCluster", Object: cluster.Name(), Output: "kubeconfig"}}, Program: data, Tool: Tool{Kind: "openshift-clients", Compatibility: "openshift", Version: cluster.Spec().Get("distribution", "release", "version").Text()}, Version: requestVersion}, nil
+	return Request{BudgetSeconds: readinessBudgetSeconds, Cluster: cluster.Name(), Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: controller}, ProducedInputs: []lifecycle.ProducedInput{{Kind: "OpenShiftCluster", Object: cluster.Name(), Output: "kubeconfig"}}, Program: data, Tool: Tool{Kind: "openshift-clients", Compatibility: "openshift", Version: cluster.Spec().Get("distribution", "release", "version").Text()}, Version: requestVersion}, nil
 }
 func (c Capability) Unsupported(state *compilation.State) []lifecycle.Refusal {
 	if state == nil {

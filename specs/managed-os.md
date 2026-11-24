@@ -2701,11 +2701,12 @@ and the [process](security.md#process-boundary) and
 [Secret-material](security.md#sensitive-material) rules, composing the
 substrate's pre-boot, boot, disk-boot and identity entry points by fixed
 qualified name through the substrate's dispatcher. The frozen target's arm
-selects those entry points. An arm the dispatcher has no port for, or an
-identity channel the installation does not read, refuses as soon as the
+selects those entry points. An unknown arm refuses as the
+[machine port](architecture.md#roles) states, and an identity channel the
+installation does not read refuses, as soon as the
 entrypoint has loaded, before the tree, the image or any private material is
-published and before the machine is read, given media or booted, and the
-dispatcher refuses such an arm again at each entry point. The
+published and before the machine is read, given media or booted; the
+dispatcher refuses an unknown arm again at each entry point. The
 adapter renders the frozen Kickstart, invokes `mkksiso` and the archive tooling
 with exact argument vectors, the installer arguments reaching `mkksiso` as one
 `--cmdline` argument, and returns bounded structured evidence. The fleet

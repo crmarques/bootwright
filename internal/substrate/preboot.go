@@ -73,9 +73,9 @@ func PreBootRefusals(arm Arm, contextName, continuation, machine, endpoint strin
 		return map[string]error{
 			RefusalTargetUnanswered: UnansweredTarget(machine, endpoint),
 			RefusalHardwareMismatch: refused(prebootHardwareMismatch, "the machine answering at "+endpoint+" does not report exactly the hardware addresses "+identity+
-				" declares, or its inventory could not be read in full, so no media was inserted into it and it was not booted",
+				" declares, does not show exactly one Drive matching its root proof, or its inventory could not be read in full, so no media was inserted into it and it was not booted",
 				"once the machine reports the hardware "+identity+" declares in full, run "+next+"; to correct that declaration instead, "+destroy+
-					", correct spec.hardware.bmc.address or spec.hardware.nics on "+identity+update+", then run "+apply),
+					", correct spec.hardware.bmc.address, spec.hardware.nics or spec.hardware.rootDisk on "+identity+update+", then run "+apply),
 			RefusalIdentityMismatch: refused(prebootIdentityMismatch, "the management controller at "+endpoint+" answers as another system than the one this operation proved for "+
 				identity+", so no media was inserted into it and it was not booted",
 				destroy+", correct spec.hardware.bmc.address on "+identity+" if it names another BMC"+update+", then run "+apply+

@@ -807,7 +807,10 @@ copy fills, keyed by the installation block and `kubeconfig`. When custody
 holds none, proved or unproved, the capability's read-only observation hands
 the copy over under the same output bounds, the engine publishes it in one
 publication under that entry marked unproved, its completion never proved, and
-only then does the inverse run. A crash between the publication and the
+only then does the inverse run. A kept copy that is present but is not a regular
+file, or exceeds the output bound, fails the observation naming its path, so the
+removal records `failed` and keeps the work area; an absent or empty copy holds
+no access and hands over nothing. A crash between the publication and the
 inverse leaves the copy in custody and the work area both, and the next
 removal finds custody holding it and keeps nothing more; a crash before the
 publication leaves it in the work area alone. An observation or publication
@@ -818,6 +821,10 @@ copy never replaces an entry custody holds, a proved capture of the same entry
 clears the mark, and the entry is withdrawn as every entry is. No record, log,
 evidence or adapter output carries
 the material.
+
+Not yet met: the media block's observation skips a kept copy that is not a
+regular file or exceeds the output bound, so its removal deletes the work area
+while custody holds none; tracked as [B1768](milestones/m3.md#b1768).
 
 A block may name, as a *produced input*, an output another block of its plan,
 or for an additive apply of its lineage, produces, by that block's kind and object and the output's name: today a

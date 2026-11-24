@@ -391,8 +391,8 @@ operator provides, its packages and its operator gate.
   and the registry. A unit or fake success never qualifies a package; its
   submilestone's operator gate does.
 - **Rows.** Each operator gate is an owner-accepted
-  [ledger](../docs/acceptance.md) row from a build that contains its items'
-  slices, recording the build commit, the release minor, every channel, CSV
+  [ledger](../docs/acceptance.md) row that
+  [matches its items](../docs/acceptance.md#row-format), recording the build commit, the release minor, every channel, CSV
   and catalog image chosen, each phase's duration, its interruption drills
   (each continued by repeating `apply` with every object `unchanged`),
   `bootwright diff --observe` reporting no drift, a settled apply that

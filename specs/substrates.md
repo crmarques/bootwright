@@ -44,8 +44,8 @@ states.
 
 Which arm realizes a Machine is settled once from its provider and frozen in
 the realized target. No consumer derives those facts again. Consumers hand
-the frozen arm to the machine port dispatcher, which fails closed on an
-unknown arm before publication, media insertion or boot. Each request that
+the frozen arm to the machine port dispatcher, which refuses an unknown arm
+before the consumer's first effect ([machine port](architecture.md#roles)). Each request that
 reaches a machine port also freezes one `machinePort` object per target from
 the realized target: the controller's endpoint and transport verification, the
 volume a pushed image is written to, and the names of the material variables
@@ -2333,12 +2333,13 @@ operator then receives the installation's diagnostic under the `preboot.` code o
 the reason, whose object is the Machine, instead of the adapter's failure: `hardware-mismatch`,
 a physical machine whose declaration names no MAC, whose complete inventory
 lacks a declared MAC, reports one it does not declare or reports no system
-identity, or whose inventory was not
+identity, whose complete Storage inventory does not show exactly one Drive
+matching its frozen root proof, or whose inventory was not
 read in full, remedied by running the refusing apply's continuation once
 the machine reports the declared hardware in full or, to correct the
 declaration instead, by taking the context back with
 `bootwright destroy --context <context>`, correcting
-`spec.hardware.bmc.address` or `spec.hardware.nics`, importing that
+`spec.hardware.bmc.address`, `spec.hardware.nics` or `spec.hardware.rootDisk`, importing that
 input with `bootwright context update --name <context> --input-dir <directory>`
 and running `bootwright apply --context <context>`; `identity-mismatch`, a
 physical machine answering as another system than its pin, remedied by the same
@@ -2359,7 +2360,8 @@ apply. That continuation is the exact command the
 lifecycle hands the attempt, `bootwright apply --context <context>` with every
 `--authorize` token its frozen plan consumes, and the plain apply when the
 attempt carries none; the apply after a destroy plans anew and names its own
-(`TestEachPreBootRefusalNamesTheMachineWhatWasRefusedAndTheRemedy`). A read the
+(`TestEachPreBootRefusalNamesTheMachineWhatWasRefusedAndTheRemedy`; the
+root-disk case by `test_a_physical_proof_names_the_refusal_its_failed_check_makes`). A read the
 BMC did not answer names `target-unanswered` and remains unknown; the BMC's
 bounded, sanitized cause in the retained output is the reason, rather than a
 hardware mismatch.

@@ -18,8 +18,8 @@ One installation contract covers every substrate, as
 [managed-OS installation](managed-os.md#installation) does. Each node's
 [realized target](substrates.md#realized-target-fields) supplies its frozen
 Machine facts. The installation hands the frozen arm to
-the substrate's machine port dispatcher, which fails closed on an arm it has no
-port for, before any media is inserted.
+the substrate's machine port dispatcher, which refuses an unknown arm before the
+installation's first effect ([machine port](architecture.md#roles)).
 
 ## Selection and refusal
 
@@ -27,13 +27,15 @@ port for, before any media is inserted.
 
 **Supported shape.** An OpenShift cluster declaring an exact
 `distribution.release.version`, installed by the `agent` method in `connected`
-mode through direct access, whose nodes are Machines on a realized
-substrate with `os.clusterInstalled`. A single-node
-cluster resolves its three endpoint slots from that node; a multi-node cluster
-resolves them from authored or load-balancer addresses. Every other declaration
+mode, whose nodes are Machines on a realized
+substrate with `os.clusterInstalled`. Its endpoint slots resolve as
+[endpoints](api/openshift-clusters.md#endpoints) states. Every other declaration
 refuses before operation registration, in `apply --dry-run` as in `apply`, with one
 diagnostic whose object is the cluster and which carries why it is refused and
-the remedy, as the [refusal table](#refusal-table) states row by row. A
+the remedy: at admission as [the API](api/openshift-clusters.md) states, or
+where this page states a rule beside its field, such as those listed under the
+[refusal table](#refusal-table); otherwise as the refusal table states row by
+row. A
 multi-node cluster on `baremetal`, on `none` or with no declared platform is
 accepted. A node whose realized target is physical installs through its
 management controller under the trust its Machine declares, with the
@@ -44,8 +46,9 @@ a physical agent node names its root in one of the forms of the
 a serial number with exact `sizeBytes`; or `volumeRef` or `bootVolume`,
 declared or defaulted, under verified BMC TLS ([D252](milestones/backlog.md#d252)).
 A `hardware.rootDisk.hints.deviceName` refuses there, and each declared selector
-must be valid. A virtual node declares no root disk: its root is `/dev/vda`,
-derived.
+must be valid. A libvirt or KubeVirt node declares no root disk: its root is `/dev/vda`,
+derived; [vSphere machine realization](substrates.md#vsphere-machine-realization)
+owns the presentation of a vSphere node's disk.
 
 The installation freezes each authored WWN or serial-and-exact-size
 selector into its hardware proof. Immediately before media insertion, and
@@ -53,7 +56,8 @@ again after a firmware change, it reads the ComputerSystem's complete Storage
 inventory over verified BMC TLS. A direct drive proof excludes absent bays,
 requires readable presence, and refuses a logical layout. The selected drive
 reports Enabled and no hot-spare assignment. Missing, unreadable, paginated,
-oversized or ambiguous inventory refuses before insertion. A serial must be
+oversized or ambiguous inventory refuses before insertion as the
+[pre-boot refusal](substrates.md#adapter-boundary) `hardware-mismatch`. A serial must be
 unique even if another drive with that serial reports a different size, and the
 selected Drive's exact `CapacityBytes` must match. A WWN must match one
 durable NAA identifier on a SAS or SATA Drive. The authored WWN must be the
@@ -171,6 +175,17 @@ table and its test change in that commit:
 
 Each other row stays until an item names it.
 
+Among the refusals stated beside their rule, at admission unless named
+otherwise, and absent from the table:
+
+- A cluster mixing KubeVirt nodes with nodes of another arm
+  ([nodes on KubeVirt and vSphere](#nodes-on-kubevirt-and-vsphere)).
+- A push-only cluster's `agent.redfishVirtualMedia`
+  ([pushed delivery](#boot-media)).
+- A port-qualified proxy bypass ([installation proxy](#installation-features)).
+- A time server address outside the `host` rule, when the installer inputs are
+  frozen ([install-time manifests](#install-time-manifests)).
+
 ### Boot-media trust
 
 A physical node's BMC imports the artifact server's certificate under
@@ -182,8 +197,9 @@ the restore and removal settings to the insert and the eject. Because the image
 is private, a physical node whose BMC leg is `http` or does not verify refuses
 before registration. Media trust is verified and configured by default; the one
 [unverified-fetch exception](infrastructure-services.md#private-consumer-publication)
-is that contract's. An insert under `established` requires the
-deciding setting on, enabling it by default when permitted.
+is that contract's. The [media transport trust rule](api/machines.md#media-transport-trust)
+owns the trust default and the deciding verification setting; a physical node's
+insert stops wherever that rule stops insertion.
 
 Every emulated BMC freezes automatic verified media trust with certificate
 removal after boot, independent of artifact-server placement. Its insert and
@@ -194,7 +210,7 @@ BMCs. Media sensitivity follows the image's contents on every substrate.
 
 A cluster's size is bounded by no deadline
 ([D235](milestones/backlog.md#d235) (3)): a cluster of any node count its
-providers support plans, and its installation [deadline](#installation) is
+providers support plans, and its installation [deadline](#installation-budgets) is
 derived from that count and its arms' published bounds. Its nodes' per-node
 work runs at a fan-out frozen per provider kind, four nodes at a time behind
 emulated BMCs and on KubeVirt Machines and sixteen behind physical ones, and a
@@ -227,19 +243,21 @@ names its host through `kubeconfigRef` or `hostClusterRef`, or all Machines on
 one vSphere provider, is a shape the product admits. Its nodes take pushed delivery, so the [boot media](#boot-media)
 is built and not published, and the [installation](#installation) boots, reads
 and releases each node through its arm's entry points. A cluster mixing such
-nodes with nodes of another arm refuses.
+nodes with nodes of another arm refuses at admission
+(`TestKubeVirtClusterRefusesFetchSelectionAndMixedArms`). Libvirt and physical
+nodes may share a cluster: both take fetched delivery, and a cluster whose nodes
+are on more than one arm type declares its platform, which is derived only when
+every node is on one arm type
+([platform union](api/openshift-clusters.md#platform-union-and-derivation)).
 
 Platform. Each arm's derivation, and the segment rule of a KubeVirt cluster
 that authors `baremetal`, are in the
 [platform union](api/openshift-clusters.md#platform-union-and-derivation). The
 installer's keepalived holds the VIPs on the nodes' shared layer 2
 ([endpoints](api/openshift-clusters.md#endpoints)), which a
-`Localnet` network with `ipam.mode: Disabled` permits by filtering by MAC alone
-(4.22); a bridge NetworkAttachmentDefinition needs `macspoofchk` off.
-
-These rules are evidence of what the 4.20 to 4.22 agent installer accepts and
-does, not a support statement
-([knowledge](../.agents/knowledge/kubevirt-agent-node-boot.md)).
+`Localnet` network with `ipam.mode: Disabled` permits by filtering by MAC alone;
+a bridge NetworkAttachmentDefinition needs `macspoofchk` off
+([evidence](../.agents/knowledge/kubevirt-agent-node-boot.md)).
 
 The port is lent and pinned per node. The installation lends each node's
 controller credential by the parts its arm's `ControllerCredential` fact names,
@@ -321,7 +339,7 @@ follows; a logical-volume root adds its hint once the media block has the Machin
 
 | Machine hint | `rootDeviceHints` key |
 | --- | --- |
-| a virtual node's derived root, `/dev/vda` | `deviceName` |
+| a libvirt or KubeVirt node's derived root, `/dev/vda` | `deviceName` |
 | `hardware.rootDisk.wwn`, `serialNumber`, `hints.hctl` | the same name |
 | `hardware.rootDisk.hints.model`, `vendor` | the same name |
 | `hardware.rootDisk.hints.minSizeGigabytes`, `rotational` | the same name, as an integer and a boolean |
@@ -344,12 +362,10 @@ the alternative: a single-node cluster renders `platform: none` whatever
 platform the API derived, since the installer accepts no bare-metal or vSphere
 platform for one control-plane node and no compute nodes. A multi-node
 `baremetal` cluster renders its `api` address as `apiVIPs` and its `ingress`
-address as `ingressVIPs`, and no installer input names a load-balancer type:
-the 4.20 to 4.22 agent installers forward none to the service that installs the
-cluster, which deploys its own VIP holders on that platform whatever the input
-says (the installer's development branch does forward one). Modelling an
-external load balancer only as platform `none` is Bootwright's choice, not a
-claim about every release. A multi-node `none` cluster renders no virtual IP.
+address as `ingressVIPs`; no installer input names a load-balancer type, and an
+external load balancer is modelled only as platform `none`
+([evidence](../.agents/knowledge/openshift-agent-vips-and-platforms.md)). A
+multi-node `none` cluster renders no virtual IP.
 
 On `vsphere`, `platform.vsphere` carries `apiVIPs` and `ingressVIPs` from the
 slots. When the cluster declares
@@ -420,7 +436,11 @@ The media block writes into `<work>/openshift/`, before it builds the image, the
 manifests its frozen request carries: each a core-kind object, named
 `bootwright-<nn>-<purpose>.yaml`, rendered from typed intent, never authored.
 The admitted kinds are `MachineConfig` and the operator `Network` named
-`cluster`. The one MachineConfig source is the time configuration: under the
+`cluster`. The `Network` source is `spec.networking.ovnKubernetesConfig`: when
+it sets any field, the block writes `bootwright-00-ovn-network.yaml`, the
+`operator.openshift.io/v1` `Network` `cluster` with `defaultNetwork.type:
+OVNKubernetes` and the fields that are set
+(`TestInstallNetworkManifestGolden`). The one MachineConfig source is the time configuration: under the
 Environment's image mirror, a cluster that selects an NTP server gets
 `bootwright-10-master-chrony.yaml` and `bootwright-11-worker-chrony.yaml`, the
 MachineConfigs `99-master-bootwright-chrony` and `99-worker-bootwright-chrony`
@@ -436,7 +456,7 @@ line and no DHCP `sourcedir`. Its name sorts after the installer's own
 `50-<role>s-chrony-configuration`, so the machine config operator writes this
 file. An address outside the `host` rule refuses at `$.spec.install.ntp`, and a
 frozen request admits a MachineConfig only in exactly this derived form, both
-pools together, each naming exactly the agent's `additionalNTPSources`. No operator custom resource is one, because the bootstrap control
+pools together, each naming exactly the agent's `additionalNTPSources`. No other operator custom resource is one, because the bootstrap control
 plane retries a manifest whose kind it cannot map for 60 minutes after
 bootstrap and then fails it; such objects are applied after installation by the
 [cluster network block](#post-installation-network-configuration). A manifest
@@ -505,8 +525,10 @@ OpenShiftCluster `metadata.name` follows the
 
 The block `cluster-media-<cluster>` produces the cluster's agent boot image. It
 requires the managed `ArtifactServer` its `agent.redfishVirtualMedia` selection
-names, because that is where the image is published, and the managed `Proxy`
-its installation proxy selects, whose address its install-config carries, and
+names, because that is where the image is published (none when every node takes
+pushed delivery), the managed `Proxy` its installation proxy selects, whose
+address its install-config carries, and, under a managed image mirror, that
+Registry's release copy ([registry mirrors](#installation-features)), and
 nothing else: the name and time services the cluster selects are baked into the
 image as data rather than reached while it is built.
 
@@ -556,16 +578,23 @@ installer's own copy of the administrator access to the cluster they install,
 the only one until the installation block proves the installation complete,
 and a rebuild starts by discarding it. The installation block therefore marks
 the area with the file `.bootwright-booted` before it hands any node the image,
-and records each node's insert there, and this block's observation reports
-whether a node may have been handed the image by the rule its
-[Unknown resolution](#installation) reads. An attempt that finds such an area
+and writes each node's `.bootwright-inserted-<index>` record there durably after
+that node's pre-boot proof and before its insert. A node may have been handed
+the image when the area exists but cannot be listed, holds an entry whose name contains
+`.bootwright-inserted-` (the partial file of an interrupted write of a record
+included), or holds a `.bootwright-booted` entry that is not a regular file
+holding exactly the content this build writes there, which is this build's mark;
+otherwise no node was. This block's observation reports that predicate
+(`inserted` and `VOUCH` in `containercluster_work_area.py`,
+`test_the_boot_mark_vouches_for_the_insert_records_and_is_never_rewritten`), and
+the [Unknown resolution](#installation) of the installation reads it. An attempt that finds such an area
 and would build again, because no image built there is published, no receipt
 there records what it was built from, or the inputs or installer version it
 records are not the ones frozen now, refuses before any effect, naming each
 reason and directing the operator to destroy the cluster's installation first;
-the discard reads the rule again and keeps such an area whole. A published
-image that is this request's is replayed as below, and any other area,
-unmarked or carrying only this build's mark with no insert record, is rebuilt. The mark and the records leave only with the area itself, in this
+the discard reads the predicate again and keeps such an area whole. A published
+image that is this request's is replayed as below, and any other area is
+rebuilt. The mark and the records leave only with the area itself, in this
 block's inverse, which a removal starts only once the installation's own
 inverse has completed, because a removal
 [waits on its dependents](state-reconciliation.md#continuation-and-removal). It
@@ -652,11 +681,12 @@ installation's kept administrator kubeconfig, which is never deleted while
 custody holds none for the cluster (D124): before the inverse runs, when
 custody holds no entry for the installation block's `kubeconfig`, the engine
 runs this block's read-only observation with that one output declared, and the
-role copies the kept kubeconfig there, private to root, when it is a regular
-file of one byte up to the inspection's 64 KiB bound, whatever the
+role hands the kept kubeconfig over there, private to root, whatever the
 installation proved. The engine keeps it in custody under the installation
 block and `kubeconfig`, marked unproved, before the inverse deletes anything
-([produced material custody](state-reconciliation.md#produced-material-custody)). A removal's resolution
+([produced material custody](state-reconciliation.md#produced-material-custody),
+which states what a copy that is not a regular file or exceeds the bound
+does). A removal's resolution
 reads the observation for what the removal proves: neither the image nor the
 work area present is its completion, the image this request describes is
 positive no effect, and anything else of this block's own left is a positive
@@ -737,7 +767,9 @@ managed libvirt network whose provider host is the controller: it sends
 duplicate-address ARP probes from that network's bridge, three within three
 seconds, and any reply fails the block naming the address, its endpoint slot
 and the hardware address that answered, before the work area is marked or
-anything is inserted. The assisted service refuses a virtual IP another host
+anything is inserted. An incomplete probe fails the block naming the address and its slot as not
+proved free; only a completed probe with no reply proves it free
+(`test_a_probe_that_could_not_run_refuses_as_failed_not_free`). The assisted service refuses a virtual IP another host
 answers only after every node has registered, and the installer reports that
 as a timeout naming no address. Bootwright never assigns a virtual IP to a host
 interface. An IPv6 virtual IP and one on any other network is not probed, and
@@ -864,56 +896,6 @@ fails with that classification's own hint: the stall's own message after a
 stall, the spent budget's or the installer timeout's otherwise. The read comes after the wait, so it is no
 part of the wait's budget, and the installation's deadline covers it.
 
-
-**Budgets.** Each long phase of a cluster's two blocks is bounded in wall-clock
-time by a budget its frozen request carries, never by a value the adapter
-chooses: the media request's build budget of 1,800 seconds, and the install
-request's boot budget, the per-round boot allowance of its slowest arm for each
-fan-out round, never less than 900 seconds, plus [firmware](#cluster-size),
-and its bootstrap and installation wait budgets of 5,400 seconds each. A
-round's allowance is 600 seconds behind emulated BMCs, 1,800 behind physical
-ones; the
-KubeVirt and vSphere arms publish theirs. The image build runs
-under `timeout` with the build budget and the same grace; a build the budget
-stopped fails the media block as the budget spent, publishes nothing, and is
-resumable, because the next apply discards the work area and builds again.
-The boot budget bounds booting every node together and proving that each
-answers: its deadline is taken once, before the first round, and each boot
-step, the substrate's own included, runs under ansible-core's task timeout with
-only what is left of it, so a node already running from this cluster's image,
-which the boot leaves alone, takes none of it. A step still running at the deadline is stopped there, and a node reached
-after it is not booted; either fails the block as the boot budget spent, and a
-repeated apply boots only the nodes not already running from the image. Each
-proof that a node answers waits for what is left of the same deadline, but for
-no less than one second, so a node checked after an earlier one spent the
-deadline still gets one connection attempt and is named only when it does not
-answer. The read of a node's BMC after an insert it did not complete
-runs under the media read's own bound plus 30 seconds rather than what is left
-of the boot budget, so an insert that failed near the deadline still has its
-link retired or the read's own failure named, rather than a censored timeout;
-the block then fails, so the node's media read after boot does not run in that
-attempt. The
-task timeout ends the step but not the management-controller request the step
-made, which ends within the adapter's own fixed bounds. Every read of the
-cluster through its API passes oc's `--request-timeout` of 30 seconds, so each
-request oc makes gives up rather than waiting on an API that accepted the
-connection and never answers. Every run of either block is bounded by a
-[deadline](architecture.md#the-adapter-result-protocol) derived from the
-budgets its request froze: the build budget plus 30 minutes for the media
-block, and for the installation its three budgets back to back plus 30 minutes
-and one round margin for each round, which is 3 hours 56 minutes for up to four
-nodes behind emulated BMCs. A round margin is exactly the
-[bounds](substrates.md#identity-and-power-operations) its arm publishes for the
-calls the installation makes to a node outside the boot budget: its media read
-in each of the two state reads, and the eject and the disk selection that
-release its media, 11 minutes behind an emulated BMC; a physical
-BMC's margin is the one [B67](milestones/m3.md#b67) derives. Those
-bounds count the requests of a call's polls as answered at once. The waits do
-not grow with the nodes, which join concurrently. The runner holds every run of
-the installation to exactly this deadline, however many rounds it counts, and
-cuts none short at a shared ceiling; [cluster size](#cluster-size) states how
-it grows.
-
 **The access it produces.** The installer writes the cluster administrator
 kubeconfig and the initial administrator password into the work area when it
 builds the image, beside the state it keeps there, and a completed installation
@@ -1034,14 +1016,13 @@ image is foreign.
 
 **Replay.** A cluster already answering with this operation's identity, at the
 declared release, reporting its installation completed and holding every
-declared node, reports `completed` with the same evidence, boots nothing and
-waits for nothing. The only differences it converges are media it did not
+declared node, each placed, reports `completed` with the same evidence and
+boots and waits for nothing. The only differences it converges are media it did not
 finish releasing and each node's BMC pointed at its installed disk:
-release runs on each attempt a continuation or a new operation makes, never on
+release runs on each attempt of a continuation or a new operation, never on
 a [settled apply](state-reconciliation.md#lifecycle-unit).
-The same cluster answering while it does not report its installation
-completed, as an attempt interrupted during the installation wait leaves it, is
-not installed: the next attempt waits for bootstrap and installation completion
+The same cluster answering without reporting its installation completed, as
+an interrupted installation wait leaves it, is not installed: the next attempt waits for bootstrap and installation completion
 again before it releases any media. An attempt interrupted during boot or the
 bootstrap wait, before the API answers, leaves nodes running from this
 cluster's own image. The next attempt boots only the nodes that are not both
@@ -1057,25 +1038,24 @@ cluster's nodes to be destroyed and applied again.
 **Inverse.** Destroy proves each node's media ejected before the media block
 removes its work area and publication. Administrator access leaves when
 removal completes. Physical disks and secondary networks stay. A fresh
-destroy requires managed nodes off. This inverse leaves power as it found it
-and consumes no authorization of its own. Before a physical media read,
-eject or disk selection, it checks the original system pin. Without a pin, it
-requires the complete declared MAC set and a reported UUID or serial.
+destroy requires every managed target Machine off, an unreadable power state
+refusing it ([power](state-reconciliation.md#power-before-a-new-apply-or-destroy)).
+This inverse leaves power as it found it and consumes no authorization of its
+own. Before a physical media read, eject or disk selection, it repeats the
+[target proof](substrates.md#physical-machine-realization).
 
 **Unknown resolution.** Observation is read-only against the frozen request. A
 cluster answering with this operation's identity at the declared release,
-reporting its installation completed, whole and with its media released, is
-positive completion. Nothing answering, no node running and no media inserted
-is positive no effect only while no node was handed the image: no
-`.bootwright-booted` area mark and no boot
-[before-state](state-reconciliation.md#operation-records) recorded, or this
-build's mark and no `.bootwright-inserted-<index>` record, which a node writes
-durably after its pre-boot proof and before its insert; its stage, another
-mark or an unlistable area reads as one. Otherwise it stays
+reporting its installation completed, whole, with its media released and every
+declared node placed, is positive completion. Nothing answering, no node running and no media inserted
+is positive no effect only while no node was handed the image: the media
+block's [predicate](#boot-media) finds no insert, and
+no boot [before-state](state-reconciliation.md#operation-records) is recorded
+unless the area still holds its mark (`ValidateInstallNoEffect`). Otherwise it stays
 unknown and boots nothing; remedy: destroy before installing again, or start
 installed nodes. That same cluster
-answering while the completion is not yet true is a positive partial
-realization the next attempt converges. So is nothing answering yet while this
+answering while the completion is not yet true, a missing placement
+included, is a positive partial realization the next attempt converges. So is nothing answering yet while this
 operation recorded its identity, at least one node presents this cluster's own
 image and no node presents any other, which an attempt interrupted during boot
 or the bootstrap wait leaves. Anything else stays unknown, including a foreign
@@ -1097,6 +1077,57 @@ follows the Machines under the
 [removal gate](state-reconciliation.md#quiescence-before-removal). An
 installation already under way continues on the nodes after cancellation; the
 attempt becomes unknown and is resolved by observing the cluster.
+
+## Installation budgets
+
+Each long phase of a cluster's two blocks is bounded in wall-clock
+time by a budget its frozen request carries, never by a value the adapter
+chooses: the media request's build budget of 1,800 seconds, and the install
+request's boot budget, the per-round boot allowance of its slowest arm for each
+fan-out round, never less than 900 seconds, plus [firmware](#cluster-size),
+and its bootstrap and installation wait budgets of 5,400 seconds each. A
+round's allowance is 600 seconds behind emulated BMCs, 1,800 behind physical
+ones; the
+KubeVirt arm publishes its own ([cluster size](#cluster-size)). The image build runs
+under `timeout` with the build budget and the same grace; a build the budget
+stopped fails the media block as the budget spent, publishes nothing, and is
+resumable, because the next apply discards the work area and builds again.
+The boot budget bounds booting every node together and proving that each
+answers: its deadline is taken once, before the first round, and each boot
+step, the substrate's own included, runs under ansible-core's task timeout with
+only what is left of it, so a node already running from this cluster's image,
+which the boot leaves alone, takes none of it. A step still running at the deadline is stopped there, and a node reached
+after it is not booted; either fails the block as the boot budget spent, and a
+repeated apply boots only the nodes not already running from the image. Each
+proof that a node answers waits for what is left of the same deadline, but for
+no less than one second, so a node checked after an earlier one spent the
+deadline still gets one connection attempt and is named only when it does not
+answer. The read of a node's BMC after an insert it did not complete
+runs under the media read's own bound plus 30 seconds rather than what is left
+of the boot budget, so an insert that failed near the deadline still has its
+link retired or the read's own failure named, rather than a censored timeout;
+the block then fails, so the node's media read after boot does not run in that
+attempt. The
+task timeout ends the step but not the management-controller request the step
+made, which ends within the adapter's own fixed bounds. Every read of the
+cluster through its API passes oc's `--request-timeout` of 30 seconds, so each
+request oc makes gives up rather than waiting on an API that accepted the
+connection and never answers. Every run of either block is bounded by a
+[deadline](architecture.md#the-adapter-result-protocol) derived from the
+budgets its request froze: the build budget plus 30 minutes for the media
+block, and for the installation its three budgets back to back plus 30 minutes
+and one round margin for each round, which is 3 hours 56 minutes for up to four
+nodes behind emulated BMCs. A round margin is exactly the
+[bounds](substrates.md#identity-and-power-operations) its arm publishes for the
+calls the installation makes to a node outside the boot budget: its media read
+in each of the two state reads, and the eject and the disk selection that
+release its media, 11 minutes behind an emulated BMC; a physical
+BMC's margin is the one [B67](milestones/m3.md#b67) derives. Those
+bounds count the requests of a call's polls as answered at once. The waits do
+not grow with the nodes, which join concurrently. The runner holds every run of
+the installation to exactly this deadline, however many rounds it counts, and
+cuts none short at a shared ceiling; [cluster size](#cluster-size) states how
+it grows.
 
 ## Node placement
 
@@ -1183,8 +1214,7 @@ readiness.
   [libvirt capacity checks](substrates.md#capacity-admission) of each provider
   host the cluster's nodes are placed on, as the apply's gate computes them.
 
-With `--dry-run` every check is `pending`, its `reason` names the record or the
-quantity it would check, and nothing is resolved or observed. These controller
+These controller
 checks take neither a host-key observation option nor borrowed SSH options;
 the [preflight rule](cli/output.md#preflight) owns their routing and refusal.
 
@@ -1244,6 +1274,14 @@ retires it with its cluster without contacting it: the cluster leaves with its
 virtual disks, or remains installed on the retained physical disks. A condition reporting `Degraded`, a
 policy matching no node and a foreign attachment definition each fail the block
 naming the object.
+
+The request freezes a readiness budget of 30 minutes
+(`readinessBudgetSeconds`) and a run deadline of that budget plus ten minutes
+(`runDeadlineMargin`), held by `TestTheNetworkRequestFreezesItsReadinessBudgetAndRunDeadline`.
+Every wait shares one absolute deadline and is read as the
+[cluster object program's checks](add-ons.md#the-cluster-object-program) are;
+at the deadline the block fails naming each unmet check and its last observation, and the next apply
+retries.
 
 ## Adapter boundary
 

@@ -11,6 +11,11 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
+const (
+	readinessBudgetSeconds = 1800
+	runDeadlineMargin      = 10 * time.Minute
+)
+
 type Tool struct {
 	Compatibility string `json:"compatibility"`
 	Kind          string `json:"kind"`
@@ -27,7 +32,7 @@ type Request struct {
 }
 
 func (r Request) Deadline() time.Duration {
-	return time.Duration(r.BudgetSeconds)*time.Second + 10*time.Minute
+	return time.Duration(r.BudgetSeconds)*time.Second + runDeadlineMargin
 }
 func (r Request) Canonical() ([]byte, error) {
 	if err := r.validate(); err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/crmarques/bootwright/internal/addons"
 	co "github.com/crmarques/bootwright/internal/addons/clusterobjects"
@@ -18,6 +19,18 @@ type networkRunner struct{ result lifecycle.RunResult }
 
 func (r networkRunner) Run(context.Context, lifecycle.RunRequest) (lifecycle.RunResult, error) {
 	return r.result, nil
+}
+func TestTheNetworkRequestFreezesItsReadinessBudgetAndRunDeadline(t *testing.T) {
+	request, err := renderRequest(clusterFixture(), noMachines, "controller", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if request.BudgetSeconds != readinessBudgetSeconds || readinessBudgetSeconds != 1800 {
+		t.Fatalf("budget = %d seconds, want %d", request.BudgetSeconds, readinessBudgetSeconds)
+	}
+	if want := 30*time.Minute + runDeadlineMargin; request.Deadline() != want || runDeadlineMargin != 10*time.Minute {
+		t.Fatalf("deadline = %s, want %s", request.Deadline(), want)
+	}
 }
 func TestNetworkPartialReceiptsSurviveButUnsafeEvidenceDoesNot(t *testing.T) {
 	request, err := renderRequest(clusterFixture(), noMachines, "controller", nil)
