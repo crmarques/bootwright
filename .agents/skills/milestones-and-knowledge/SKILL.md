@@ -34,6 +34,7 @@ A spec paragraph in the exact form the
 [conventions](../../../specs/index.md#conventions) give, linking one open item and ending at its link.
 It states what code does not yet do. It never links a delivered record and
 never holds acceptance or baseline state; those belong on the milestone page.
+The linked item's outcome is the paragraph's unmet rule.
 Delete the paragraph, or re-scope it to the part still undone, in the commit that
 moves its item to `awaiting operator acceptance`: the item's in-tree code is
 delivered, and the operator residue stays on the item. `make docs-check` fails
@@ -46,7 +47,17 @@ for each paragraph.
 ## Decisions and delivered records
 
 - A decision is appended only when the owner decides; a clause a session takes
-  is marked as pending the owner's review.
+  is marked as pending the owner's review. A program authorization lists the
+  slice ids it covers.
+- An entry holds the status token and date, the owner's quoted words, the
+  decision in one or two sentences, the reason, the alternatives rejected, the
+  owning spec anchors, the slice ids it authorizes, and the entries it
+  supersedes or that supersede it. It restates no spec rule and records no
+  delivery evidence; those go to the owning spec and to `delivered.md`.
+- An entry's text is never rewritten. A later decision's effect on it is one
+  appended pointer line in the earlier entry, `Superseded in part: (n) by
+  D<m>` or `Revised by D<m>`, linking that entry, and the Open session clauses
+  line names the clauses that still stand.
 - A delivered record names the slice, items, commits, gates with results,
   the finding-to-item map of an audit it remediates and any limitation; it
   links the spec clause instead of restating the rule, and holds no test

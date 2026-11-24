@@ -118,7 +118,7 @@ out["other"] = verdict(other, home, 1001)
 out["foreign"] = verdict("Service account", home, 1001)
 out["home"] = verdict(mark, "/home/svc", 1001)
 out["system"] = verdict(mark, home, 999)
-out["floors"] = ",".join(str(floor(lines)) for lines in (b"UID_MIN 500\n", b"# none\n", None))
+out["floors"] = ",".join(str(floor(lines)) for lines in (b"UID_MIN 500\n", b"UID_MIN 500\nUID_MIN 700\n", b"# none\n", None))
 place("regular")
 out["regular"] = read("regular")
 out["absent"] = str(ns["content"]("missing", os.open(work, os.O_RDONLY), (me,)))
@@ -160,7 +160,7 @@ func TestTheEnrollmentProgramRemovesOnlyALoginItOwnsInOrder(t *testing.T) {
 	const order = "keys destroy,unlink 90-bootwright-svc,archive,userdel"
 	want := map[string]string{
 		"mark": "ok", "other": "other-operation", "foreign": "not-bootwright", "home": "home-differs", "system": "system-uid",
-		"floors":  "500,1000,1000",
+		"floors":  "500,700,1000,1000",
 		"regular": "ok", "absent": "None", "fifo": "unsafe", "links": "unsafe", "writable": "unsafe", "large": "oversized", "limit": "unsafe",
 		"stranger": "foreign", "open directory": "foreign",
 		"exposed": "exposed", "private": "ok",

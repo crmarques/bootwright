@@ -16,7 +16,7 @@ import (
 const coverageSpec = "../../../specs/add-on-coverage.md"
 
 var (
-	coverageColumns   = []string{"Package", "Native objects", "Provides / requires", "Typed configuration", "Readiness", "Removal", "Item", "Submilestone", "Qualification"}
+	coverageColumns   = []string{"Package", "Native objects", "Provides / requires", "Typed configuration", "Readiness", "Removal", "Item", "Qualification"}
 	backtickToken     = regexp.MustCompile("`([^`]+)`")
 	timeoutDefault    = regexp.MustCompile("`timeout` \\(default `([^`]+)`\\)")
 	itemLinkTarget    = regexp.MustCompile(`\[(B\d+)\]`)

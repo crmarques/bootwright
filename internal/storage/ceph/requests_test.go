@@ -386,3 +386,31 @@ func TestDeclaredPackageRepositoryTrustBundlePlansOnceConsumed(t *testing.T) {
 		t.Fatalf("the runner ran %d times", runner.calls)
 	}
 }
+
+func TestAStretchPoolOfSizeFourNeedsFourOSDBearingHosts(t *testing.T) {
+	for name, osdHosts := range map[string]int{"four": 4, "three": 3} {
+		t.Run(name, func(t *testing.T) {
+			catalog, _ := tiebreakerCatalog(func(machine, cluster api.Value) (api.Value, api.Value) {
+				nodes := cluster.Get("topology", "nodes").Items()
+				for i := range nodes {
+					if i >= osdHosts && nodes[i].Get("name").Text() != "tie" {
+						nodes[i] = nodes[i].With("labels", api.StringList("mon"))
+					}
+				}
+				return machine, cluster.WithPath(api.ListValue(nodes...), "topology", "nodes")
+			})
+			pool := api.NewObject(api.CephPool, "volumes", api.Value{}, requestMap("clusterRef", "example", "role", "rbd"))
+			request, err := poolRequest(catalog, pool, contextDerivation("synthetic"))
+			if osdHosts == 4 {
+				if err != nil || request.Pool == nil || request.Pool.Size != 4 || request.Pool.MinSize != 2 {
+					t.Fatalf("pool request=%+v err=%v", request.Pool, err)
+				}
+				return
+			}
+			issues := diagnostics.Of(err)
+			if len(issues) != 1 || issues[0].Code != "api.invariant" || !strings.Contains(issues[0].Message, "replication size 4 requires more than 4 OSD-bearing hosts; 3 are declared") {
+				t.Fatalf("a stretch pool of size 4 over three OSD hosts was not refused: %v %+v", err, issues)
+			}
+		})
+	}
+}

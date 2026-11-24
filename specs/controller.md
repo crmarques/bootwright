@@ -69,9 +69,8 @@ records it. A release outside it is admitted with the informational
 `controller.untested-release` line, for example "Fedora 45 is newer than the
 releases this build was tested on (43, 44); setup checks its floors and
 continues", which never changes readiness, the plan or the next command. This
-warning is an explicit exception to [D163](milestones/backlog.md#d163)
-under [D165](milestones/backlog.md#d165): it concerns Bootwright's own
-host, never refuses and is not a component version rule.
+warning concerns Bootwright's own host, never refuses and is not a component
+version rule ([D163](milestones/backlog.md#d163)).
 
 A non-empty `/etc/ld.so.preload` is reported as the informational
 `controller.loader-preload` line, for example "/etc/ld.so.preload is not empty,
@@ -119,9 +118,9 @@ an entry a person recorded with its reason for a wheel that declares none
 unambiguously, and `verify` holds to the wheels; it feeds the
 [bill of materials](cli.md#bill-of-materials) and moves no digest.
 
-Versions are chosen when the lock is generated, never at setup: D10's and
-D20's "latest patch" is the latest at lock generation, and setup reads no
-publisher metadata. `scripts/runtime-lock` generates and verifies the lock,
+Versions are chosen when the lock is generated, never at setup: each pinned
+component is the latest patch of its qualified minor at lock generation, and
+setup reads no publisher metadata. `scripts/runtime-lock` generates and verifies the lock,
 and [development](../docs/development.md#lock-refresh-and-tested-hosts) owns
 refreshing it. Offline `make check` holds the lock to its strict parse, its
 one URL host, its digests, one `ansible-core` release across every ABI, each
@@ -167,9 +166,6 @@ When every locked ABI's package is installed and no interpreter qualifies, the
 `python-runtime` check is not-ready, "no installed interpreter qualifies", and
 setup adds no package
 (`TestEveryLockedPackageInstalledWithNoQualifyingInterpreterIsNotReady`).
-
-Not yet met: a standalone CPython for a host whose repositories offer no
-locked ABI is parked as [B561](milestones/backlog.md#b561).
 
 **Build.** The runtime digest is SHA-256 over
 `bootwright.controller.runtime-v1`, the lock digest, the ABI and the

@@ -389,7 +389,12 @@ lists any other CSV beside it. Once that CSV is installed, Bootwright
 approves nothing and fails on no plan: every later plan, including those of
 the Subscriptions the operator creates, is the operator's. The package's
 own checks then prove its operands. The evidence lists each InstallPlan
-and CSV of the namespace, as evidence and never as a rule.
+and CSV of the namespace, as evidence and never as a rule. On this path an
+installed CSV other than the `startingCSV` fails the attempt at once, naming
+both CSVs.
+
+Not yet met: the attempt waits for the `startingCSV` until its budget expires
+when another CSV is installed; tracked as [B1130](milestones/m4.md#b1130).
 
 Some operators create another operator's Subscription themselves. A
 package whose configuration fixes that Subscription's spec (the ACM hub's
@@ -531,8 +536,7 @@ A plan's approval names no approver, so on the operator-managed path the
 chain also covers the later plans the operator approves itself, including a
 plan that lists the package's CSV beside a dependent CSV, once the pinned CSV
 has been installed. Before the pinned CSV is ever installed no chain exists:
-the attempt's rules still refuse, an observation reads unknown, and
-[B1130](milestones/m4.md#b1130)'s case stands.
+the attempt's rules still refuse and an observation reads unknown.
 A chain that is not proved link by link, or whose installed CSV is not
 `Succeeded`, therefore stays unknown, and an upgrade the owner approves reads complete only while OLM
 retains every InstallPlan of its chain; the observation stays read-only and

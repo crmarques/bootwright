@@ -171,13 +171,10 @@ spec:
     - ocp-01
 ```
 
-The input reader still reads, bounds and records the
-`add-ons/_store/<name>/.bootwright-addon` markers, although with every
-discovered file selected they grant nothing; their removal is parked as
-[B771](../milestones/backlog.md#b771).
-
-Not yet met: a hard-linked marker refuses the whole input read as
-`input.symlink`; tracked as [B771](../milestones/backlog.md#b771).
+The input reader reads, bounds and records the
+`add-ons/_store/<name>/.bootwright-addon` markers under
+[the API input rules](input.md#discovery); with every discovered file
+selected they grant nothing.
 
 `spec.containerClusters` and `spec.storageClusters` select effective cluster
 roots after decoding and reference-independent normalization. Each

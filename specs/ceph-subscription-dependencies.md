@@ -104,11 +104,12 @@ hosted tree: repository metadata and every payload by digest, each BaseOS and
 AppStream package under Red Hat's signer. A resume reads the host's
 repositories again before any download, for the entitlement and the route
 alone, and fetches the URLs and digests the decision froze; a payload whose
-URL the host's repositories no longer hold refuses `packages`
-([B1551](milestones/backlog.md#b1551)).
+URL the host's repositories no longer hold refuses `packages`, naming the
+cause and a recovery.
 
 A host the Satellite already updated past the hosted DVD's packages takes
-them from the same content here, so the solve meets no
-[downgrade](milestones/m2.md#b1069). The installed path is qualified by the
-operator gates of [B1550](milestones/m2.md#b1550) and
-[B1069](milestones/m2.md#b1069).
+them from the same content here, so the solve meets no downgrade.
+
+Not yet met: a payload whose URL the host's repositories no longer hold
+refuses with the generic `packages` diagnostic, which names no cause and no
+recovery; tracked as [B1551](milestones/backlog.md#b1551).

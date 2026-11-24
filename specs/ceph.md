@@ -739,7 +739,9 @@ topology; this section owns what the plan derives and realizes (D196).
   pool, a CephPool's, a gateway's zone pool or a service's own, is created
   by a later block, after the cluster block's readiness. A CephPool and a
   zone pool of a stretch cluster are created on the stretch rule at 4/2, and
-  the PG budget counts them on it.
+  the PG budget counts them on it. Size 4 needs at least four OSD-bearing hosts
+  declared, and fewer refuse `api.invariant`
+  (`TestAStretchPoolOfSizeFourNeedsFourOSDBearingHosts`).
 - **Frozen intent.** Stretch is day-1 intent of the frozen cluster request:
   adding or removing `topology.stretch`, changing its tiebreaker, failure
   domain or rule, or a host's site refuses `stretch-intent` against the
@@ -984,7 +986,10 @@ applied in that run; within its bound, that suffix is truncated before the
 image and package part. The same ids appear in the block's evidence: the Ceph
 core and ceph-host evidence carry an optional `specializations` member naming,
 sorted, the specializations the native phases of the execution that wrote it
-applied, absent when none applied. The member is informational: no effect,
+applied, absent when none applied. The member holds 1 to 32 ids, strictly
+ascending, each a lower-case hyphenated identifier of at most 64 bytes, and any
+other shape refuses the evidence
+(`TestEvidenceSpecializationsMemberIsOptionalAndClosed`). The member is informational: no effect,
 ownership, readiness or identity decision reads it, and it enters no intent or
 digest. [Named refusal outcomes](#named-refusal-outcomes) states how a refusal
 ends the attempt.
@@ -2338,7 +2343,7 @@ write): `POOL_APP_NOT_ENABLED`, `POOL_FULL`, `POOL_NEAR_FULL`,
 `POOL_HAS_TARGET_SIZE_BYTES_AND_RATIO`, `SMALLER_PGP_NUM` and
 `MANY_OBJECTS_PER_PG` name pools; `FS_DEGRADED`, `FS_WITH_FAILED_MDS`,
 `FS_INLINE_DATA_DEPRECATED`, `MDS_ALL_DOWN`, `MDS_DAMAGE` and
-`MDS_UP_LESS_THAN_MAX` name filesystems (D256). When one is raised, the
+`MDS_UP_LESS_THAN_MAX` name filesystems. When one is raised, the
 observation reads `ceph health detail` once and takes the names from each of
 the check's detail lines by an exact pattern per check. The check keeps a block
 from [ready](#resources-readiness-and-access) only when it names a pool or

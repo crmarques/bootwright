@@ -116,6 +116,9 @@ block, and each run is lent, as its one known-hosts entry, the host key that
 installation's evidence proved, read through a reader composition binds
 (`TestAnInstalledPlacementConnectsOnlyAgainstItsProvedHostKey`). A consumer
 publishing into a server keeps the SSH arm and so cannot reach such a Machine.
+A managed service on an installed Machine does not retire with that Machine, so
+its removal needs the host reachable, and a host the controller cannot reach
+leaves the removal unknown under the resolution rule below.
 
 Two contexts targeting one SSH host are coordinated by the
 [host reservations](#host-reservations) below, which an SSH host's blocks

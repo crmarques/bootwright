@@ -412,7 +412,9 @@ addresses identify the host. Every listed `ethernet` interface carries the
 realized target's address, its matched NIC's own, over any authored one.
 Interface MTUs reach the installer as declared.
 A node whose network configuration holds an OVS or Linux bridge, an `ovn` or
-`ovs-db` section, or an interface named as OVN-Kubernetes reserves refuses, and
+`ovs-db` section, or an interface named as OVN-Kubernetes reserves refuses (the
+reserved set is `reservedOVNInterface` in
+`internal/containercluster/openshift/network_admission.go`), and
 so does a node whose install address is not on its default-route interface,
 because the installed node builds `br-ex` from that interface on every boot.
 Same-family default routes on distinct interfaces refuse regardless of metric
@@ -464,7 +466,7 @@ holding secret material names its Secret, and the attempt substitutes it.
 
 Not yet met: MachineConfig projections other than the time configuration, and
 Secret-part manifest projections, have no typed source; tracked as
-[B719](milestones/m3.md#b719).
+[B1794](milestones/m3.md#b1794).
 
 ### Installation features
 
@@ -482,9 +484,21 @@ substituted by the attempt. A managed proxy uses its effective listener port.
 An external TLS-only proxy leaves `httpProxy` absent. The HTTP destination
 field accepts an `http://` endpoint. A lone `*` bypasses all addresses. Other
 bypass lists contain the translated authored entries followed by every
-`networking.machineNetwork` CIDR and the cluster's own domain. A port-qualified
-bypass entry refuses as the [API page](api/openshift-clusters.md#installation-network-services)
-states. A proxy's trust bundle must be
+`networking.machineNetwork` CIDR and the cluster's own domain. An authored
+port-qualified bypass refuses as the [API page](api/openshift-clusters.md#installation-network-services)
+states. Each authored entry translates by
+`installerBypass`, held by `TestInstallerBypassTranslation`:
+
+| Authored entry | Installer entry |
+| --- | --- |
+| an IP or a CIDR | its canonical form |
+| `*.<domain>` | `.<domain>` |
+| a bare domain | itself |
+| a bracketed IPv6 address | the address, bare |
+| a lone `*` | `*` |
+| any `host:port` form | refused |
+
+A proxy's trust bundle must be
 one the cluster selects. The image build reaches the release payload through the
 controller Machine's own proxy choice.
 
@@ -1062,12 +1076,12 @@ or the bootstrap wait leaves. Anything else stays unknown, including a foreign
 answer, a foreign image while nothing answers, and a node running while nothing
 answers and no node presents this cluster's own image, because the first two
 may belong to another installation and the last may be installing now. A
-removal's resolution observes only the media each node's BMC presents, which
-is what the removal takes back, and nothing of the cluster: no node presenting
+removal's resolution observes only the media each node's BMC presents and
+nothing of the cluster: no node presenting
 media is its completion; any of this cluster's declared Machines presenting
 media, this cluster's own image or any other, is a positive partial
-realization, because the removal ejects whatever each node presents and
-repeating it converges; and it stays unknown when a node's BMC cannot be
+realization, because the removal ejects whatever a declared Machine's slot
+presents, owned by its record, and repeating it converges; and it stays unknown when a node's BMC cannot be
 read, which fails the observation, or when the evidence names a Machine that is
 not one of the cluster's nodes.
 
@@ -1269,7 +1283,7 @@ Every object is created through the
 same name refuses, a continuation reports equal objects unchanged and fails
 naming a difference, a settled apply reaches no cluster and
 `bootwright diff --observe` reports drift as a partial realization
-([observation](add-ons.md#observation-and-continuation), D153), and the block's removal
+([observation](add-ons.md#observation-and-continuation)), and the block's removal
 retires it with its cluster without contacting it: the cluster leaves with its
 virtual disks, or remains installed on the retained physical disks. A condition reporting `Degraded`, a
 policy matching no node and a foreign attachment definition each fail the block
@@ -1314,10 +1328,15 @@ trusts them on the nodes. A base-image read from the release that fails, for
 an unverified certificate or a mirror without the release, only warns, and the
 installer downloads the base image from its compiled stream URL instead; the
 build refuses when the installer's log records that fallback, and nothing is
-published. A release read that `oc` retries against the source repository
+published. A release read never reaches the source repository past a failing
+mirror.
+
+Not yet met: a release read that `oc` retries against the source repository
 after its mirrors fail is not refused; tracked as
-[B1326](milestones/backlog.md#b1326). The wrapper and the bundles are removed
-when the build ends, whatever its outcome. No pull secret, private key or captured credential enters an
+[B1326](milestones/backlog.md#b1326).
+
+The wrapper and the bundles are removed when the build ends, whatever its
+outcome. No pull secret, private key or captured credential enters an
 argument, an environment variable, the evidence or a log.
 
 Both frozen requests carry the controller arm alone: connection `local` and the

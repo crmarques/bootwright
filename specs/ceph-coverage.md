@@ -30,8 +30,6 @@ rows are tested scope, not approved versions. The minimal Ceph journey that M2b 
 recorded in its owner-accepted ledger row; it certifies no other version or
 feature.
 
-Authored versions select native acquisition without release/artifact pins.
-
 Native manager-to-host SSH must enforce pinned host keys, including a negative
 wrong-key test through actual manager connection, reconnect and failover paths.
 The upstream Tentacle connection disables that verification
@@ -420,7 +418,7 @@ metadata/index pools replicated and uses EC only where the release permits.
 The selected release's native tools decide which EC plugins, profiles and
 workload limits they accept and report a refusal through `nativeError`.
 
-B81 records the EC decision (D160, OD25, as D157 amends it). An
+An
 erasure-coded pool needs `k+m` OSD hosts of its device class under failure
 domain host, one per chunk; admission checks the declared hosts and apply
 proves the count from `ceph osd tree`. No `k`/`m` pair is otherwise

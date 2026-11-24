@@ -43,7 +43,7 @@ their kind-specific validation and built-in defaults.
 | `spec.olm` | object | conditional | — | Exactly one of `olm` and `manifestSet` is present. |
 | `spec.manifestSet` | object | conditional | — | Exactly one of `olm` and `manifestSet` is present. |
 | `spec.readiness` | object | no | — | Timeout and readiness checks. |
-| `spec.steps` | array of objects | no | `[]` | Ordered step declarations, admitted and [inert](#steps). |
+| `spec.steps` | array of objects | no | `[]` | Ordered step declarations, admitted but [unrealized](#steps). |
 
 The arm selects the add-on. Missing, multiple, or
 unknown arms are invalid; the selected arm must satisfy its required fields.
@@ -206,7 +206,7 @@ check of an OLM add-on names its own `namespace.name` and effective
 
 ### Steps
 
-`spec.steps` is admitted and inert. Admission validates each step's closed
+`spec.steps` is admitted but [unrealized](../api.md#admitted-but-unrealized): planning refuses a selected add-on that declares it. Admission validates each step's closed
 shape and its references as the [add-ons design](../deferred/add-ons-design.md#steps)
 records it: an ordered set keyed by unique `name`, a playbook or manifest
 declaration, a contained content path, a Bootwright-owned target selection,
@@ -505,6 +505,8 @@ Red Hat Advanced Cluster Management for Kubernetes
 | `hub.tolerations` | list | no | — | Entries of `key`, `operator` (`Exists` or `Equal`), `value`, `effect` (`NoSchedule`, `PreferNoSchedule` or `NoExecute`) and `tolerationSeconds`; a list replaces the hub's default infrastructure-node toleration. |
 | `timeout` | string | no | `45m` | As every package's `timeout`. |
 
+The package writes no annotation on the `MultiClusterHub` except the engine subscription annotation, and never writes `installer.open-cluster-management.io/pause` or `installer.open-cluster-management.io/ignore-ocp-version`, nor sets `DISABLE_OCP_MIN_VERSION` (`TestHubPackageRenderGoldens`).
+
 | Fault | Code | Field | Message | Remedy |
 | --- | --- | --- | --- | --- |
 | A single-node cluster without the basic hub | `api.invariant` | `$.spec.packages.acm.hub.availabilityConfig` | `package acm on single-node OpenShiftCluster/<cluster> needs hub availabilityConfig Basic` | `set hub.availabilityConfig to Basic` |
@@ -529,6 +531,8 @@ Red Hat OpenShift GitOps with its default Argo CD instance, a
 | `bootstrap.sync.prune` | boolean | no | `false` | Automated sync deletes what leaves the repository. |
 | `bootstrap.sync.selfHeal` | boolean | no | `false` | Automated sync reverts live changes. |
 | `timeout` | string | no | `20m` | As every package's `timeout`. |
+
+The package renders no Subscription configuration, so it never sets `DISABLE_DEFAULT_ARGOCD_INSTANCE`, `DISABLE_DEFAULT_ARGOCD_CONSOLELINK`, `ARGOCD_CLUSTER_CONFIG_NAMESPACES`, `CONTROLLER_CLUSTER_ROLE` or `SERVER_CLUSTER_ROLE`, and the default instance keeps the operator's own configuration (`TestHubPackageRenderGoldens`).
 
 | Fault | Code | Field | Message | Remedy |
 | --- | --- | --- | --- | --- |

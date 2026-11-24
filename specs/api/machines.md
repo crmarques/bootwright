@@ -805,7 +805,7 @@ symbolic link where the grant belongs.
 | --- | --- | --- |
 | Account mark | The account's GECOS field equals `bootwright-` followed by the SHA-256 hex digest of the creating apply operation, a NUL byte and the Machine block's request digest. | `account` `not-bootwright` for any other field; `account` `other-operation` for another operation's mark. |
 | Owned home | The account's home is `/home/<user>-<last 16 hex digits of the mark>`. | `account` `home-differs`. |
-| Regular UID | The UID is at least `UID_MIN` from `/etc/login.defs`, or 1000 where that file sets none. | `account` `system-uid`. |
+| Regular UID | The UID is at least `UID_MIN` from `/etc/login.defs`, the file's last `UID_MIN` line deciding, or 1000 where that file sets none (`TestTheEnrollmentProgramRemovesOnlyALoginItOwnsInOrder`). | `account` `system-uid`. |
 | Grant | `/etc/sudoers.d/90-bootwright-<user>` is a regular root-owned file with one link that group and others cannot write, within 32 KiB, and equals `Defaults:<user> !requiretty` and `<user> ALL=(root) NOPASSWD: ALL` as two lines. | `rule` `foreign` for other content; `rule` `unsafe` or `oversized` for another file; `rule` `orphan` for a grant with no account; `rule-publish` `foreign` or `unsafe` when apply finds one there. |
 | Home and keys | The home and its `.ssh` are directories the account owns that group and others cannot write, and `authorized_keys` is a regular file the account or root owns, with one link, that group and others cannot write, within 32 KiB, and holds the managed public keys, exactly in apply and destroy. A root-owned empty home or `.ssh` counts as absent in destroy and observe. | `home`, `ssh-directory` or `keys` `foreign`; `keys` `unsafe` or `oversized` for another file; `keys` `exists` for keys with no account; `home` `exists` when apply finds a home path with no account. |
 | Host directories | `/home` and `/etc/sudoers.d` are root-owned directories that group and others cannot write, and `/home/.bootwright-retired` is a root-owned directory with no group or other permission. | `home-root`, `rule-root` or `archive` `unsafe`; `archive` `exposed`. |
@@ -1196,7 +1196,7 @@ frozen request keeps its shape:
 | Field | Type | Required | Rule |
 | --- | --- | --- | --- |
 | `spec.bootMedia` | string | yes | `local-media:<filename.iso>` only. |
-| `spec.checksum` | string | no | SHA-256 content pin: 64 hexadecimal digits with an optional `sha256:` prefix. Surrounding whitespace and hex case are accepted; checksum consumers canonicalize the digest to lowercase. |
+| `spec.checksum` | string | no | SHA-256 content pin: 64 hexadecimal digits in any case with an optional `sha256:` prefix in any letter case. Surrounding whitespace is ignored; checksum consumers canonicalize the digest to lowercase (`TestMediaDigestsNormalizeToLowercaseHexadecimal`). |
 
 `<filename.iso>` follows the [media name grammar](../cli/commands.md#flag-relationships-and-safeguards)
 and names an entry of the host-wide [media store](../managed-os.md#media-store),

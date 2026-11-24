@@ -39,7 +39,8 @@ Slices with an item `in progress`.
 
 - Implement only the prompt-authorized outcome: an active slice's open work,
   or an explicit request, which authorizes only the outcome it names. No
-  spec, page, item or decision authorizes implementation or effect. A request
+  spec, page or item authorizes implementation or effect; a decision records the
+  owner's authorization of the ids it names. A request
   for an outcome no item holds is first recorded as an item on the page of the
   earliest milestone not done whose scope covers it, or as a parked item, and
   its slice takes the next X.
@@ -126,7 +127,7 @@ Slices with an item `in progress`.
   split notes; an old ID found nowhere else is in the backlog's
   Retired table.
 - A milestone page opens with its scope, Requires, Exit tier and Open
-  decisions, then `Planned slices`, the `Items` table
+  decisions, then an optional `Submilestones` section, `Planned slices`, the `Items` table
   (`ID | Alias | Kind | Owner | Outcome | Requires | Definition | Delivery`)
   and one `### B<n>` detail section per item holding its bounded outcome,
   exit evidence and any deferral reason. Kind is `product`, `safety`, `defect` or

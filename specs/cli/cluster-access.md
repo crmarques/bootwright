@@ -39,7 +39,9 @@ echoing the rejected argument, and no other argument within those bounds does: a
 `--password`, `--client-key`, `--client-certificate`,
 `--certificate-authority`, `--insecure-skip-tls-verify`, `--tls-server-name`,
 `--proxy-url` and `--cache-dir`
-(`TestClientHandoffsRefuseBeforeMetadataOrCredentials`). Sensitive payloads have no supported transport: callers
+(`TestClientHandoffsRefuseBeforeMetadataOrCredentials`). A `whoami` short flag
+holding `t` and `--show-token` print the operator's session token; a command
+that prints a service-account token is not such a reveal and stays allowed. Sensitive payloads have no supported transport: callers
 must not place secrets in other arbitrary payload values, which the
 descriptor prints as data. Failures emit no partial descriptor.
 

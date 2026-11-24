@@ -2,7 +2,6 @@
 specs/add-on-coverage.md B767
 specs/add-on-coverage.md B93
 specs/api/addons.md B767
-specs/api/environment.md B771
 specs/architecture.md B431
 specs/ceph-coverage.md B472
 specs/ceph-coverage.md B474
@@ -10,14 +9,11 @@ specs/ceph.md B491
 specs/ceph.md B920
 specs/cli/commands.md B52
 specs/cli/commands.md B55
-specs/cli/commands.md B770
-specs/controller.md B561
 specs/infrastructure-services.md B323
 specs/infrastructure-services.md B568
 specs/managed-os.md B878
 specs/openshift-clusters.md B733
 specs/openshift-clusters.md B927
-specs/security.md B1250
 specs/security.md B334
 specs/security.md B99
 specs/state-reconciliation.md B568

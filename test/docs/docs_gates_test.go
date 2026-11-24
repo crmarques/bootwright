@@ -513,8 +513,8 @@ var docsHistoryAllowances = map[string]historyAllowance{
 	"specs/ceph-native-api.md":      {links: 1},
 	"specs/ceph.md":                 {links: 1},
 	"specs/index.md":                {links: 1},
-	"specs/openshift-coverage.md":   {links: 17, ids: 1},
-	"specs/security.md":             {links: 2},
+	"specs/openshift-coverage.md":   {links: 17},
+	"specs/security.md":             {links: 1},
 	"specs/state-reconciliation.md": {links: 3},
 	"specs/storage-api-review.md":   {links: 2, ids: 1},
 }

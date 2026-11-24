@@ -163,11 +163,15 @@ only `ibm`, so planning refuses any other arm, an omitted one included, with
 `packageVersion` selects the Ceph/cephadm RPM roots and
 `cephadm.ansible.packageVersion` selects the actual cephadm-ansible RPM.
 Optional `nfsGanesha.packageVersion` selects the NFS-Ganesha RPM; NFS
-daemons that a declared nfs service deploys run from the frozen Ceph image. These strings are nonempty, bounded to 1024 UTF-8
-bytes and control-free; native tools interpret their contents.
+daemons that a declared nfs service deploys run from the frozen Ceph image. These strings are nonempty, valid UTF-8 of at most 1024 bytes, with no
+control character (U+0000 to U+001F, U+007F to U+009F), U+2028 or U+2029
+(`NativeVersion`, held by `TestNativeVersionStringsAreBoundedWithoutProviderGrammar`);
+native tools interpret their contents.
 `packageRepository` optionally selects an HTTPS RPM repository without
 userinfo or fragment, of at most 1798 bytes without trailing slashes, so
-every metadata path the host fetches stays within 2048 bytes. Omission uses
+every metadata path the host fetches stays within 2048 bytes; a path with a
+backslash, a dot segment or an encoded dot segment refuses
+(`TestPackageRepositoryAdmitsOnlyWhatTheGuestAcquisitionFetches`). Omission uses
 `https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64` as a
 source default, not a release catalog. Independent publisher signatures remain
 required for its selected RPMs.
@@ -253,7 +257,7 @@ owns delivery and operator acceptance.
 owns the Ceph image. Each holds `base` and `version` under the rules of
 `image`: an IBM distribution requires both, the base must be beneath the
 Entitlement registry namespace, and the version is a tag or a SHA-256 digest,
-nonempty, at most 1024 UTF-8 bytes and control-free, which native tools
+nonempty and bounded as the `packageVersion` strings are, which native tools
 interpret. An image is required exactly when a declared service or a
 CephSMBResource of the cluster needs it; planning refuses a missing one and
 one that nothing declared needs

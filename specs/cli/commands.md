@@ -78,6 +78,11 @@ irreversibly (`context delete`, `secret delete`, `secret encryption rotate`,
 `.claude/settings.json` and `.codex/rules/bootwright.rules` complete against
 these cells.
 
+Not yet met: a grouped ask pattern other than `render`, `context delete`,
+`secret delete`, `secret encryption rotate` and `catalog media delete` does not
+match a global flag written between the group and its command; tracked as
+[B1219](../milestones/backlog.md#b1219).
+
 The Effects column is the only owner of what a command may do. Another page
 describes a command's effects only by projecting its cell and defines no other
 class. Read a cell by invocation: its leading clause states the effects with
@@ -149,8 +154,6 @@ and answer `cli.not-implemented`; their contracts are intent, tracked as
 
 Every other command here is available.
 `TestUnavailableCommandsMatchTheStubWiring` holds this list.
-
-Not yet met: `apply --dry-run` defers add-on prerequisite checks to execution; tracked as [B770](../milestones/backlog.md#b770).
 
 ### Resource, access, and general commands
 
@@ -575,8 +578,8 @@ alphanumeric character and otherwise contains only ASCII alphanumerics, `.`,
 `_`, or `-`. A case-insensitive stem equal to `CON`, `PRN`, `AUX`, `NUL`,
 `COM1` through `COM9`, or `LPT1` through `LPT9` is invalid.
 
-A non-empty `--sha256` is 64 case-insensitive hexadecimal digits, optionally
-prefixed by exact lowercase `sha256:`, and normalizes to lowercase hexadecimal.
+A non-empty `--sha256` follows the [`spec.checksum` digest
+grammar](../api/machines.md#machineimage) and normalizes to lowercase hexadecimal.
 
 `cluster info --secrets=true` and `cluster info --object-user <name>` each
 require an explicitly supplied `--name` naming exactly one cluster after list

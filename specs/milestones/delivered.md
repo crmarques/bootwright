@@ -7404,10 +7404,6 @@ required (unit tests of both paths, the parity test and the empty-intersection
 refusal test); no live FIPS row is part of it. Keeping a policy is not FIPS
 certification: the Ceph FIPS rows belong to [B484](m2.md#b484) and stay unrun.
 
-**Not yet implemented:** X61's other work. The acceptance matrix lanes X61-L2
-to X61-L9 are not implemented, nor are the lanes D166 released from their hold,
-x61-ceph-fips (the ECDSA synthetic probe keys of B660 and
-the FIPS host proofs), x61-host-variants-example and X61-L6. B484 names them.
 The int-x61 review left no finding unfixed.
 
 **Constraints left behind:** `ceph-core-v23` and `ceph-tunnel-v3` moved with
@@ -7434,9 +7430,9 @@ lane; only `ceph-host-evidence-v2` moved for the member, and it strands nothing
 the same commit's core move did not.
 
 **Outcome:** the Ceph core evidence and the ceph-host evidence carry an optional
-`specializations` member: 1 to 32 ascending, unique lower-case ids of at most
-64 bytes, the ids the native phases of the writing execution applied. A malformed
-member refuses; nothing that decides an effect, ownership, identity, readiness,
+`specializations` member, whose
+[bounds](../ceph.md#bootstrap-identity-and-continuation) the Ceph spec owns, the ids
+the native phases of the writing execution applied; nothing that decides an effect, ownership, identity, readiness,
 drift or a digest reads it, and it is not cumulative across executions. The
 collection's native dispatch records the ids the worker's selection applied,
 the transport refuses an unknown, empty, unsorted or duplicated list, and the
@@ -9490,9 +9486,8 @@ delivering commit records the gates.
 the [audit remediation](backlog.md#lane-order-and-progress) under the owner's
 request to implement the remaining items; the lane parked B872 and B873.
 
-A CephCluster has one default replica pair (4/2 under stretch, else its
-declared `osd_pool_default_size` and `osd_pool_default_min_size`, else 2/1 on a
-single host, else 3/2), which pool and placement-policy admission, a gateway's
+A CephCluster has one default replica pair
+([replicated protection](../ceph-resources.md#replicated-protection)), which pool and placement-policy admission, a gateway's
 derived pools and the plan builder all read, so a pool that omits its size is
 judged and planned at the cluster's default. A pool or policy on a bounded
 device class whose size equals the class's host count refuses on every
@@ -11494,10 +11489,9 @@ ceph-core-v37 to v38 with the record format `ceph-osd-device-clear-v1`.
 Independent reviews found the orphan OSD ID, a DB/WAL data disk being
 admitted, records keyed by kernel name, a window before the zap, the
 observation refusing before the purge, and a lost completion record; all are
-fixed. **Left open:** partial DB/WAL allocations ([B1084](m2.md#b1084)); a
-compromised Ceph host can name another host's created but never-booted OSD
-to the purge, accepted because every Ceph host already holds the cluster's
-trust; the clear's and purge's native calls are not counted in their call's
+fixed. **Left open:** partial DB/WAL allocations ([B1084](m2.md#b1084)); the
+[purge's trust in each Ceph host's reported fsids](../ceph.md#devices-and-destructive-ownership);
+the clear's and purge's native calls are not counted in their call's
 budget ([B900](m2.md#b900)). **Unverified live:** the frozen image's
 `ceph-volume lvm zap --destroy` and `ceph osd purge-new`, the RHEL devices
 file and `lvmdevices --delpvid`, and whether cephadm's periodic inventory
@@ -12509,12 +12503,9 @@ the source before it, `TestCapacityAdmissionCountsWhatTheApplyWritesBesideItsGue
 on 9942a6127 (the overflowing apply was admitted) and the review's five on
 96189deca. Gates: `make focus` passed on every commit; `make check` was left
 to integration, and no live run or push occurred. **Limitations:** bytes
-already written by an interrupted publication get no credit; a transient work
-copy of an installer image on a filesystem other than its publication's is not
-counted; and the local filesystem identity is the statfs `f_fsid`, which btrfs
-gives each subvolume its own, so a write on another subvolume of the guests'
-btrfs filesystem is not gated, as guest disks on two subvolumes already form
-two checks.
+already written by an interrupted publication get no credit; the
+[filesystem identity and the uncounted transient copy](../substrates.md#capacity-admission)
+are stated where the spec owns them.
 
 ### X327 — One preflight command and the command groups
 
@@ -14626,16 +14617,7 @@ check about a pool no object declares cannot finish under that build until
 the operator removes the cause (deletes the hand-made pool or enables its
 application).
 
-Decisions taken by the session, pending the owner's review: which blocks a
-pool or filesystem holds (one owning it, or whose frozen request names it as a
-dependency: a client's capability scope, a CephFS-backed NFS export's
-filesystem, an NVMe-oF subsystem's pools; object users and buckets name only
-their gateway and rely on it, and SMB resources read no cluster health); a
-malformed or partial
-detail gates every block instead of refusing `native-output`; and
-`MDS_INSUFFICIENT_STANDBY` and `POOL_TARGET_SIZE_BYTES_OVERCOMMITTED` stay
-unscoped, because their detail names no filesystem or names a CRUSH subtree's
-pools as a list. The independent review's findings were applied before
+Decisions taken by the session, pending the owner's review, are [D286](backlog.md#d286) (1) to (3). The independent review's findings were applied before
 integration; a hand pool's PG checks still gate every block, parked as
 [B1328](backlog.md#b1328).
 
@@ -14931,8 +14913,7 @@ occurred. **Limitations:** no host has run the installed arm: sudo becoming
 root under Ansible on an installed RHEL guest, `podman` from the profile and
 the host-key proof of a first apply are proved by tests alone; a managed image
 mirror there and releases remain on [B1249](#x431--the-image-mirror-on-the-controller-and-on-a-machine-bootwright-installs). A service on
-an installed Machine that is powered off stalls its removal at the connection,
-because the managed-service capabilities take no retirement with their hosts;
+an installed Machine that is powered off [needs its host reachable to be removed](../infrastructure-services.md#placement-arms-and-credentials);
 an earlier build refuses the arm with the generic unbound-host-key message.
 
 ### X413 — Rebuild a never-inserted area
@@ -16106,8 +16087,8 @@ cluster client handoff refused `--show-token` but issued a descriptor for
 `oc whoami -t` and its grouped short forms, which print the session token.
 The handoff now refuses every short-flag form of `whoami` that carries `t`,
 alongside the long forms. Commands that print a service-account token (`oc
-create token`, `oc serviceaccounts get-token`) are not refused; whether the
-token-reveal rule covers them is left to the owner. The delivering commit
+create token`, `oc serviceaccounts get-token`) are not refused; the owner's
+review of 2026-11-17 settled that in [D274](backlog.md#d274). The delivering commit
 records the refusal tests failing first.
 
 ## X500 — Audit 005 gates
@@ -16351,9 +16332,9 @@ parses `--authorize` with the lifecycle's grammar, checks media names and
 digests with the media store's rule, leaves `info` selection to the inventory
 and custody services, and renders the `diff` verdict and summary the
 lifecycle's `Judge` computes; every command's output, refusals and exit codes
-are unchanged, and the CLI goldens did not move. One loosening: `--sha256`
-accepts the spellings the media store already accepted (surrounding blanks,
-an upper-case `sha256:` prefix). An independent check found the lifecycle's
+are unchanged, and the CLI goldens did not move. `--sha256` follows the
+[`spec.checksum` digest grammar](../api/machines.md#machineimage).
+An independent check found the lifecycle's
 value comparison equivalent to the old comparison of encoded documents for
 every object it builds.
 
@@ -16667,7 +16648,7 @@ single attempt, and a proof the boot budget stopped is still reported as the
 spent budget. Disk discovery's phase and failure descriptions sit beside the
 codes in the runtime, with a test that every emitted code has one. An
 independent review found no leak; its two fixes are applied. An operator run of
-an erase and an install is owed.
+an erase and an install is owed under [B1793](m1.md#b1793).
 
 ## X534 — One guest session builder and one identity verdict
 
@@ -16687,7 +16668,7 @@ differed it refuses, no correct machine reaches those cases, and an unpinned
 power target refused for its identity rather than its addresses now says so
 (`identity-unproved`). An independent review found the sessions pinned exactly
 as before; its two message fixes are applied. An operator run of an install, a
-power and an erase is owed.
+power and an erase is owed under [B1793](m1.md#b1793).
 
 ## X528 — Host state read once
 
@@ -16705,7 +16686,7 @@ settle. The libvirt host role installs its packages in one `dnf` transaction,
 reported changed unless `dnf` did nothing. Each verdict, refusal and recorded
 evidence is unchanged apart from the budget wording. An independent review
 found no wrong verdict; its fixes are applied. An operator libvirt host apply
-is owed.
+is owed under [B1793](m1.md#b1793).
 
 ## X536 — Releases wait out forks in flight
 
@@ -16862,7 +16843,7 @@ environment and the account's own home. A cluster read is one cluster-version
 read and one node read through the cluster-object runner, returning one state.
 One `installer_config` filter composes the install configuration from the
 frozen document and the bound files. Every pinned message, verdict and
-install-config is byte-identical. An operator cluster install is owed.
+install-config is byte-identical. An operator cluster install is owed under [B1793](m1.md#b1793).
 
 ## X548 — Strings to shipped files
 
@@ -17171,7 +17152,7 @@ worker; after a refusal no new download starts, the running ones are joined
 and the first refusal in input order is reported, worded as before. The
 physical erase capability and its controller name the controller material by
 the frozen machine port, as installation and discovery do. No contract moved.
-A live controller run is owed for the worker's import of the collection.
+A live controller run is owed for the worker's import of the collection under [B1793](m1.md#b1793).
 
 ## X574 — Coverage floors after the audit program
 
@@ -17228,7 +17209,7 @@ egress policies, egress firewall and ingress controllers, and the
 comparison found the base output equal to the retired tree in every drilled
 object; it adds restricted pod security, resource bounds and a digest-pinned
 image. The parent runbook renders the base profile, and a test holds both
-profiles to the objects their runbooks drill. The drills await a live run.
+profiles to the objects their runbooks drill. The drills await a live run under [B1793](m1.md#b1793).
 
 ## X576 — Role entry points run through ansible-core
 
@@ -17523,7 +17504,7 @@ were plugged into it, so another context's guests, or the operator's own, lost
 their network with no warning; only the trunks were guarded. The host
 observation now lists, for each owned active network, the domains plugged into
 it, from one listing and one definition per domain, and the removal refuses
-before its first effect while one runs there or while the hypervisor does not
+before its first effect while one that is not shut off is plugged into it or while the hypervisor does not
 answer, naming the network and each domain, as the trunk guard does. Every
 destroy runs it, a continuation included
 ([provider host realization](../substrates.md#provider-host-realization)). The listing
@@ -17531,7 +17512,7 @@ is observation only and never reaches evidence. Guarded by
 `test_the_observation_names_what_runs_on_each_owned_active_network`,
 `test_libvirt_host_destroy_guard.py` and the evidence-fields test. Open:
 [Q129](backlog.md#audit-remediation-decisions), whether a stopped foreign domain refuses
-too; this guard, like the trunk and restart guards, reads running domains only.
+too; this guard, like the trunk and restart guards, ignores shut-off domains.
 B568's interim orphan warning stays parked. An independent Opus review found
 that an owned network whose state read failed read as inactive and escaped the
 guard; such a network is now unanswered, which the removal refuses before any
@@ -17907,7 +17888,7 @@ host-wide Podman default in the plan.
 **Exit evidence:** route and projection regressions, including a refused
 HTTP-only acquisition route and a verified artifact publication. Live
 verification follows the [OpenShift proxy runbook](../../e2e/lab-3-nodes-ocp-features/runbook.md#proxy-route-when-enabled)
-and remains open. In-place changes are [B1611](backlog.md#b1611).
+and is owed under [B1793](m1.md#b1793). In-place changes are [B1611](backlog.md#b1611).
 
 ## X628 — A refused Satellite client certificate under load
 
@@ -17940,7 +17921,7 @@ records its release and stops it again before removal continues.
 untouched, native power and identity readings for libvirt, KubeVirt and
 Redfish, and recovery after a subscription release whose shutdown did not
 finish, all against simulated machines. Live verification on each substrate
-remains open. A hosted KubeVirt Machine refuses new work until
+is owed under [B1793](m1.md#b1793). A hosted KubeVirt Machine refuses new work until
 [B1622](backlog.md#b1622); explicit discovery's check is
 [B1623](backlog.md#b1623) and the automatic preparation's `Stop first` list
 [B1624](backlog.md#b1624).
@@ -18055,7 +18036,7 @@ root escalation through the adapter transport.
 **Exit evidence:** credential-resolution and SSH argument tests, inventory
 goldens, a placement admission test and an adapter fixture proving that a sudo
 refusal prevents the effect playbook from starting. Live SSH and sudo
-verification remains open.
+verification is owed under [B1793](m1.md#b1793).
 
 ## X638 — Retained-root Ceph SSH diagnostics
 

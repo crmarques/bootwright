@@ -164,7 +164,7 @@ installation whose apply was cut short before its marker proof, so the consumer
 its installer registered stays on the Satellite; tracked as
 [B1724](milestones/m1.md#b1724).
 
-## Sources and qualification
+## Sources
 
 [RHEL 9 Kickstart `rhsm`](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/automatically_installing_rhel/kickstart-commands-and-options-reference_rhel-installer),
 [Anaconda Satellite provisioning](https://github.com/rhinstaller/anaconda/blob/rhel-9/pyanaconda/modules/subscription/satellite.py),
@@ -173,5 +173,3 @@ its installer registered stays on the Satellite; tracked as
 [`$releasever`](https://github.com/rhinstaller/anaconda/blob/rhel-9/pyanaconda/modules/payloads/payload/dnf/utils.py),
 [the installer's `/etc/dnf/vars`](https://github.com/rhinstaller/anaconda/blob/rhel-9/pyanaconda/modules/payloads/payload/dnf/dnf_manager.py)
 and the [RHSM configuration interface](https://github.com/candlepin/subscription-manager/blob/main/src/rhsmlib/dbus/objects/config.py).
-The installer's behavior is read from those sources and is not proved in-tree;
-its emulated rehearsal is the operator gate of [B1548](milestones/m1.md#b1548).

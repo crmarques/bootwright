@@ -881,11 +881,6 @@ and a [machine power command](cli.md#machine-power-operations), which
 registers no operation, lends for its own run the same way from the proved
 entry custody holds.
 
-Not yet met: no live run has confirmed that the monitor map's creation time
-stays the same across a monitor added or removed and a Ceph upgrade, and
-changes on a new bootstrap under the same fsid; tracked as
-[B867](milestones/backlog.md#b867).
-
 ### Block transitions
 
 | Block state | Step | Leads to |
@@ -2436,12 +2431,14 @@ projection claiming any other field is refused as above.
 | Implementation | Object | Observed fields | Notes |
 | --- | --- | --- | --- |
 | `machine-libvirt-v1` | `Machine` | `spec.hardware.providerRef` | domain state; emulated BMC power |
-| `machine-libvirt-v1` | `InfraProvider` | `spec.libvirt.machineProfiles[].name`, `[].diskGiB`, `[].dataDisks[].name`, `[].dataDisks[].sizeGiB`, `[].dataDisks[].media` | missing disks; a data disk attached by hand, also beside a profile that declares none |
+| `machine-libvirt-v1` | `InfraProvider` | `spec.libvirt.machineProfiles[].name`, `[].diskGiB`, `[].dataDisks[].name`, `[].dataDisks[].sizeGiB`, `[].dataDisks[].media` | missing disks; a data disk attached by hand beside a profile that declares none |
 | `cluster-install-agent-v1` | `OpenShiftCluster` | `spec.nodes[].name`, `[].labels`, `[].taints` | declared labels and taints a node lacks |
 | `os-install-anaconda-v1` | `MachineInstallProfile` | `spec.os.version`, held by the `Machine` whose `spec.os.install.profileRef` names it | `ID` and `VERSION_ID` of `/etc/os-release`; the running kernel |
 | `storage-ceph-core-v1` | `CephPool` | `spec.replicated.size`, `spec.replicated.minSize`, `spec.application`, `spec.autoscale.mode`, `spec.quota.maxBytes`, `spec.quota.maxObjects` | a pool's own block |
 | `storage-ceph-core-v1` | `CephPool`, discovered | `spec.clusterRef`, `spec.nativeName` and the fields above | the cluster block's pools that no applied object declares or derives, each named `<cluster>-<pool>` when the applied revision declares several clusters |
 | `storage-ceph-core-v1` | `CephCluster` | `spec.services[]` of `service_type` `osd` | an OSD no declared OSD service explains, as one service per host; one it cannot place on a declared host and device, as a count in a note |
+
+Not yet met: a guest whose profile declares data disks and also holds a disk attached by hand reads unknown; tracked as [B1119](milestones/backlog.md#b1119).
 
 ## Bootstrap completion and GitOps readiness
 
@@ -2508,16 +2505,10 @@ unchanged input performs before it reports; `status` never clears it.
 - Human plan, confirmation, progress, status, and refusal views derive from the
   same immutable plan and registry.
 
-A name still proves ownership in one known case: a libvirt domain, an emulated
-BMC unit, a managed-service unit and an artifact-server path derive their
-identity from the context and Machine names, so an object an abandoned context
-of the same name left reads as this context's own. The objects an
-orphan-acknowledged deletion abandons are removed by hand before the same name
-is initialized again.
-
-Not yet met: a context has no persistent incarnation that tells its own objects
-from those an abandoned context of the same name left; tracked as
-[B568](milestones/backlog.md#b568).
+Not yet met: a libvirt domain, an emulated BMC unit, a managed-service unit
+and an artifact-server path derive their identity from the context and Machine
+names, so an object an abandoned context of the same name left reads as this
+context's own; tracked as [B568](milestones/backlog.md#b568).
 
 Lost-reply adoption is the one case where a record and a shape together prove
 an object: a Ceph placement rule, profile, pool, image, filesystem, subvolume
@@ -2539,7 +2530,9 @@ Provided infrastructure and the controller stay available. A failed or
 ambiguous reading refuses the complete flow with `lifecycle.start-power` before any registration,
 credential issue, recovery write or cleanup. It leaves existing records,
 logs, staged files and subscriptions intact. Repeating the command checks
-again. Authorization and `--unregistered` leave this condition in force.
+again. Authorization and `--unregistered` leave this condition in force. An
+entry reading creates nothing on a provider host, no Secret and no token
+(`TestStartPowerRequiresClusterAndVMIdentityAndNeverLendsHostedAccess`).
 Each reading reports one row under `Checks` while it runs and settles with
 its outcome, so the wait for a management controller is visible; an apply
 asks for its [bootstrap passwords](api/machines.md#managed-lifecycle-enrollment)
@@ -2747,11 +2740,11 @@ declared MACs and root-device hints and offers no supported hook before disk
 erasure, so it admits no equivalent check. Every bare-metal apply therefore
 retains all controller-side proofs, fails closed on any mismatch or unknown
 probe, and passes explicit real-hardware qualification before it is called
-supported.
+supported; firmware identity, hotplug and cache semantics are never inferred
+from passing unit tests.
 
 Omitting the opt-in physical erase policy retains the machine and its installed
-system. Offline erase follows its separate safety contract below
-([B70](milestones/m1.md#b70)).
+system. Offline erase follows its separate safety contract below.
 
 An erase recognises the root disk under the
 [disk action rules](api/machines.md#data-disks-and-disk-actions) at three points,
@@ -2944,9 +2937,7 @@ Without a receipt, another boot must
 reprove all identities and repeat every target's whole write and readback. A powered-off
 machine, missing OS or zero prefix never proves completion. Identity drift,
 short writes, failed readback and unavailable probes refuse without selecting
-another disk. B70 remains subject to failure-injection and real-hardware
-qualification; firmware identity, hotplug and cache semantics are not inferred
-from passing unit tests.
+another disk.
 
 An erase phase that refuses names its refusal to the runner instead of failing
 under `no_log`: `machine-running`, `identity-mismatch`, `hardware-mismatch` and

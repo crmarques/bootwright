@@ -1,7 +1,7 @@
 # Per-page count of availability phrases (refused until, is parked, currently, today, not yet, until B<n>) that a normative page states outside a Not yet met paragraph. Each count only falls.
-specs/add-on-coverage.md 2
+specs/add-on-coverage.md 1
 specs/add-ons.md 4
-specs/api/environment.md 2
+specs/api/environment.md 1
 specs/api/machines.md 1
 specs/ceph-native-api.md 2
 specs/ceph.md 1

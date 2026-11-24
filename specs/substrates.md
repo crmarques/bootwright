@@ -133,11 +133,10 @@ Its reason and remedy are the diagnostic's message and remediation, in which
 
 ## Qualification
 
-One row per realized arm and management-controller family: the operator gates
-that still qualify it and the [acceptance ledger](../docs/acceptance.md#ledger)
-rows that accepted part of it, or `unrun` when no row exists. The rows name no
-version and no host; the private archive behind each ledger row keeps those.
-The vSphere arm is not realized and has no row.
+One row per realized arm and management-controller family, with the operator
+gates that qualify it. The [acceptance ledger](../docs/acceptance.md#ledger)
+owns the dated rows that accepted part of it. The vSphere arm is not realized
+and has no row.
 
 | Arm | Management controller | Operator gates | Ledger rows |
 | --- | --- | --- | --- |
@@ -256,7 +255,7 @@ The routes belong to one unit,
 `bootwright-<context>-<provider>-vlan-refusal.service`, set in
 `vlanRefusalUnit` whenever the provider defines a managed network or a VLAN
 leg, with or without a subnet to refuse, so an apply that stops refusing a subnet removes
-the unit it installed and a removal always finds it. It is a oneshot with
+the unit it installed. It is a oneshot with
 `RemainAfterExit=yes`, enabled under `multi-user.target.wants` so the routes
 return after a restart, and its file names each route as `ip route add
 unreachable <subnet> proto 251 metric <metric>`, deleted by the same key when
@@ -273,7 +272,7 @@ a route by table, destination, TOS and metric, so two units that refuse one
 subnet, two providers of one context on one host or two contexts, hold two
 routes; a unit adds, deletes and reports only routes of its own metric and
 never removes another's. Each provider refuses every subnet its own managed
-Networks carry, instead of one provider per host holding a shared subnet, so a
+Networks carry, so a
 provider's apply or removal never depends on another's and its subnets stay
 refused while any unit holding them runs. Metrics from distinct names differ
 unless their hashes collide, which no host-wide registry rules out; the
@@ -285,6 +284,8 @@ Destroy stops and removes the unit and its enablement after the networks, and
 resets a failed unit's state, then deletes the refusing routes the unit's own
 key still holds, as [refusing routes left behind](#refusing-routes-left-behind)
 specifies.
+
+Not yet met: a provider that loses its last Network keeps its units; tracked as [B1229](milestones/backlog.md#b1229).
 
 Before it installs anything, and before any network is defined, the apply reads
 every IPv4 and IPv6 route of every table, and an unanswered listing refuses.
@@ -1204,8 +1205,13 @@ a staged copy on that of the pool path; each is read once, at that path or its
 nearest existing ancestor, whatever its type and without following a link, on
 the host the write lands on, as the pool path is. A write joins a check only
 when that filesystem holds a counted guest disk on the same host; on any other
-filesystem it is not gated. A write whose filesystem cannot be observed makes
-that host's disk checks unknown.
+filesystem it is not gated. The filesystem is identified by its statfs id (the `%i` of
+`stat --file-system` over SSH), so two subvolumes of one btrfs filesystem are
+two filesystems, so a write on another subvolume of the guests' filesystem is
+not gated, and a transient installer work copy on a filesystem other than its
+publication's is not counted
+(`TestRemoteDiskIdentityIsStablePerFilesystemAndNeverLocal`). A write whose
+filesystem cannot be observed makes that host's disk checks unknown.
 
 Sizes are known before the effect. The admission reads the image sizes its
 plan froze; preflight reads the media store's records, and an image without a
@@ -1265,10 +1271,11 @@ complete, any other non-zero exit or output past its bound makes that fact
 unknown. The observation of such a host has 60 seconds, since each command
 opens its own session; a local one keeps 10 seconds.
 
-An allocation already on that host receives no reuse credit, because its
-domain, process and backing-file proofs are local reads. It is reported
-unproved, which decides only a budget that would otherwise be exceeded
-([B1099](milestones/backlog.md#b1099)).
+A remote allocation receives reuse credit only after the proofs a local one
+passes.
+
+Not yet met: a remote allocation receives no reuse credit and is reported
+unproved; tracked as [B1099](milestones/backlog.md#b1099).
 
 ## Physical machine realization
 
@@ -1536,11 +1543,14 @@ way ends at its next read or pause as a spent share would, no further write
 or power-on is sent, a machine the step powered on is still forced off and
 polled to `Off`, and the step reports `firmware-setting-not-applied` because
 it was asked to stop, with any power-off failure. A run deadline or a
-cancellation ends the step through its supervisor's kill, which the step
-cannot intercept ([B881](milestones/backlog.md#b881)), and leaves the machine unproved, possibly on in firmware
-setup: as for a `firmware-setting-not-applied` machine not proved off,
+cancellation likewise still forces a machine the step powered on off.
+
+Not yet met: a run deadline or a cancellation ends the step through its
+supervisor's kill, which the step cannot intercept, and leaves the machine
+unproved, possibly on in firmware setup, so that, as for a
+`firmware-setting-not-applied` machine not proved off,
 `bootwright machine stop --context <context> --name <machine> --force` stops
-it before the continuation.
+it before the continuation; tracked as [B881](milestones/backlog.md#b881).
 
 `boot_media`'s later override names no mode, so the declared one stands. A
 refusal names the declared field paths and the BMC's
@@ -1580,8 +1590,7 @@ machine off when the `ForceOff` poll proved it off, and otherwise unproved,
 with that one-time override, and any pending SettingsObject the
 step wrote, in place: both apply at the machine's next boot, whoever starts it.
 
-These rules are proved in-tree; no BMC's firmware behavior is claimed, and
-[B78](milestones/m1.md#b78) qualifies them on hardware.
+These rules are proved in-tree; no BMC's firmware behavior is claimed.
 
 ## KubeVirt machine realization
 
@@ -1636,7 +1645,7 @@ when it declares secondary networks; each Machine block requires the proof,
 and a removal inverts these edges, so the child's Machines leave before the
 host's blocks. The child's VirtualMachines are the removal's
 [online effects](state-reconciliation.md#quiescence-before-removal): with the
-child stopped, the removal registers while the host runs, removes them
+child stopped, a continuing removal registers while the host runs, removes them
 through its API, releases the proof without reaching the host, and, when the
 host's own Machines probe quiescence, as libvirt's do, pauses before the
 first of them until the operator stops them, listed under `Stop after online
@@ -1678,6 +1687,11 @@ hosted KubeVirt Machine refuses `lifecycle.start-power` before registration.
 
 Not yet met: a hosted KubeVirt Machine cannot be proved off or absent without
 creating access on its host; tracked as [B1622](milestones/backlog.md#b1622).
+
+Not yet met: the [initial power check](state-reconciliation.md#power-before-a-new-apply-or-destroy)
+cannot prove a hosted Machine off or absent without minting a lend, so a
+context with a hosted KubeVirt Machine refuses every new apply and destroy;
+tracked as [B1622](milestones/backlog.md#b1622).
 
 A [power command or the power reading](#identity-and-power-operations) on
 such a Machine runs outside any operation, so it takes its access the same
@@ -2055,7 +2069,9 @@ BMC that offers no virtual media reports none, and inserting into it
 refuses. A media observation distinguishes occupancy from the image name.
 The device's `Inserted` decides occupancy. A device that reports it null or
 omits it is read by its `ConnectedVia`: `NotConnected` with no image named
-is empty, and `URI`, `Applet` or `Oem` is occupied.
+is empty, and `URI`, `Applet` or `Oem` is occupied; a `NotConnected` device
+that names an image is an unreadable insertion state and refuses
+(`test_insertion_is_read_from_inserted_then_from_the_connection`).
 An occupied device without an image name cannot prove absence or ownership,
 and an unreadable insertion state refuses. A partial NIC or virtual-media
 collection cannot prove identity or absence.

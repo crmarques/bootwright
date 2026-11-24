@@ -636,8 +636,9 @@ harness consumes the key: B476's client-data test runs through `cluster exec`
 with the bootstrap node's administrator keyring
 ([storage contract](ceph.md#resources-readiness-and-access)). An operator
 exports one client's keyring only through the
-[client keyring export](cli.md#client-keyring-export). Removal waits for declared consumers to be quiescent, revokes the
-owned principal and withdraws its material through the lifecycle transaction.
+[client keyring export](cli.md#client-keyring-export). The principal and its
+material retire with the cluster; revoking one client while the cluster
+remains is [B491](milestones/m2.md#b491)'s.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1

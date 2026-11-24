@@ -78,9 +78,7 @@ here once:
 - **W4, the system OpenSSL and crypto-policy.** The runtime's Python TLS
   follows the host's crypto-policy and FIPS mode, and the runtime carries no
   OpenSSL of its own. Bootwright's Go binary stays outside the host's
-  FIPS-validated modules
-  ([D108](milestones/backlog.md#d108) as D152 and D248 amend it); a
-  FIPS-qualified runtime stays parked as [B331](milestones/backlog.md#b331).
+  FIPS-validated modules; a FIPS-qualified runtime stays parked as [B331](milestones/backlog.md#b331).
 
 ### Remote principals
 
@@ -108,7 +106,7 @@ Native tool output is no principal: it is untrusted input decoded under the
 Passwords, tokens, pull secrets, private keys, kubeconfigs, provider and
 management-controller credentials, credential-bearing URLs, generated secret
 material, and outputs containing them are sensitive. A URL whose query carries
-a signature is a credential (D183, Q99): `catalog media add` takes one through
+a signature is a credential: `catalog media add` takes one through
 `--from-url-file <path|->` and refuses a `--from-url` carrying any query
 ([flag safeguards](cli/commands.md#flag-relationships-and-safeguards)),
 records only its scheme, host and path, and names it in no output. The
@@ -121,7 +119,7 @@ environment variables, plan hashes, ownership or operation evidence, examples,
 fixtures, crash reports, inventory, facts, or caches. Names, public keys, public
 certificates, fingerprints, endpoints, image references and digests,
 desired-state hashes, ownership identifiers and a `usernamePassword` Secret's
-username, which is identity metadata (D183, Q98), are non-secret only when they
+username, which is identity metadata, are non-secret only when they
 embed no credential; private-estate identifiers still do not belong in public
 examples. The prohibition covers Bootwright-owned sinks. A management
 controller necessarily receives a private virtual-media URL to fetch an image
@@ -340,12 +338,14 @@ whichever comes first. A group kill alone never reaches a worker in a session
 of its own, and sent first it would end the supervisor before its handler ran.
 This ends every process of a lifecycle run on the controller. A worker a run started on a
 managed host over SSH is not in that tree: a Ceph native worker ends its
-process group on `SIGHUP`, `SIGTERM` or `SIGINT`, but a lost channel that
-delivers no signal leaves it running until its own aggregate limit, 640
-seconds, or the longer budget of a package or bootstrap worker, while the
-attempt already reads canceled or unknown. A concurrent bootstrap is fenced by
-its attempt marker; ending such a worker on disconnect, or a resolution that
-waits out its limit, is [B573](milestones/backlog.md#b573).
+process group on `SIGHUP`, `SIGTERM` or `SIGINT`, and a concurrent bootstrap is
+fenced by its attempt marker.
+
+Not yet met: a worker on a managed host survives a lost SSH channel that
+delivers no signal until its aggregate limit (640 seconds for a Ceph native
+worker, longer for a package or bootstrap worker), while the attempt already
+reads canceled or unknown; tracked as [B573](milestones/backlog.md#b573).
+
 A controller run arms no parent-death signal, so its tree outlives its
 invocation; its supervisor carries the same termination handler, and its
 cancellation, deadline and drain follow the
@@ -493,7 +493,8 @@ so an install path holding a space refuses; only the invoking account's own
 build output is re-executed through `/proc/<pid>/exe`. Every root invocation
 whose parent is the qualified sudo, a supervised child or a command an
 operator ran with sudo by hand, refuses `runtime.privilege` before it acts on
-any variable outside what sudo sets, the
+any variable outside the names sudo sets (`sudoVariables` in
+`internal/controller/privilege`, with `LC_*`), the
 [route vocabulary](controller.md#the-context-free-acquisition-route), the
 PAM session variables `KRB5CCNAME`, `DBUS_SESSION_BUS_ADDRESS`,
 `XDG_RUNTIME_DIR`, `XDG_SESSION_*`, `XDG_SEAT` and `XDG_VTNR`, and the exact
@@ -505,7 +506,7 @@ It unsets those session variables and `COLORTERM` before it starts any
 process, without interpreting or using the hint's value. A failed removal
 refuses `runtime.privilege` before a process starts. `COLORTERM` needs no sudo
 or PAM configuration change. A host whose PAM stack, `/etc/environment` or
-pam_env configuration exports any other variable into sudo's commands refuses
+pam_env configuration, or a sudoers `env_keep` entry, exports any other variable into sudo's commands refuses
 naming it; `env -i PATH=/usr/bin:/bin sudo -u '#0' -- /usr/bin/env` lists what a
 root command receives there. This sudo-entry guard does not inspect or strip
 the environment of a root process that was not started by qualified sudo.
@@ -729,9 +730,6 @@ firewalld query and manual remedy.
 
 Not yet met: the emulated BMC does not refuse a non-loopback bind and has no
 confined SELinux type; tracked as [B334](milestones/backlog.md#b334).
-
-Verified TLS transport is delivered under
-[B446](milestones/delivered.md#x47--verified-emulated-controller-trust-and-bounds).
 
 ### Direct SSH sessions
 
@@ -961,7 +959,9 @@ gate did not pass. It refuses `VULNCHECK=skip`, any variable that does not come
 from the Makefile other than its named release inputs, a `GO_IMAGE` not pinned
 by digest, `make -n`, `-i`, `-t` and `-q`, a
 tree with any modified or untracked file (again after the build), a missing
-`VERSION` and a `COMMIT` that is not `HEAD` before it builds, with the gate
+`VERSION`, a `VERSION` that names a dirty tree, a `COMMIT` that is not `HEAD`
+and, in the host build, an ignored file under `ansible/collections` that the
+executable would embed, each before it builds, with the gate
 forced on, in either the host build (the default) or the container build
 (`RELEASE_BUILD=container`), each run with an allowlisted environment and no
 go env file. It then runs the executable and
@@ -971,12 +971,11 @@ executable's `sbom` writes, and unless `bootwright.notices.txt` names the
 SHA-256 of that document. It ships the executable, the two documents and a
 `SHA256SUMS` over them, and nothing else, into `dist` (`RELEASE_DIR`)
 ([`TestReleaseRefusesWhatItMustNotShip`](../test/tooling/release_recipe_test.go),
-which runs the real Makefile against stand-ins for the engine and `scripts/go`).
+which runs the real Makefile against stand-ins for the engine and `scripts/go`,
+and `TestReleaseOnTheHostRefusesAnIgnoredFileTheCollectionWouldEmbed` for the
+embedded ignored file).
 The release is unsigned and no provenance statement accompanies it; the
 verdict it carries is the one the gate wrote during that build.
-
-Not yet met: the images in the mirror registry are not scanned; tracked as
-[B1250](milestones/backlog.md#b1250).
 
 ### Acquisition origins
 
@@ -1035,7 +1034,7 @@ serving host as well: Docker Hub's and `quay.io`'s are public origins, and
 serves `registry.access.redhat.com`'s signatures, are vendor origins. Red
 Hat's registries redirect blob reads to shared `quay.io` delivery hosts.
 A controlled network admits those reads as fetch-only vendor-delivery
-exceptions, as [D251](milestones/backlog.md#d251) (41) decides; it keeps the
+exceptions, as [D251](milestones/backlog.md#d251) decides; it keeps the
 registry and upload endpoints of public registries blocked. The
 [acquisition list](cli.md#acquisition-list) labels that vendor registry's
 shared-host edge `vendor delivery`, separate from `public` rows for a
@@ -1209,4 +1208,4 @@ require qualified real-system tests, recorded in the
 | Rejected operations perform no effect. | `TestCancellationBeforeAnyEffectRegistersNothing`, `TestDeclinedConfirmationRegistersNothing`, `TestUnsupportedObjectsRefuseBeforeRegistration`, `TestInvalidAdmissionAndUnavailableRoutesDoNotWrite`, `TestADestroyOverAnIncompleteApplyWithAContradictedBlockRefuses`, `TestARepeatedApplyOverACompletedApplyWithABlockNotDoneRefuses`, `TestATransitionRefusesWhenItsFrozenPlanChangedBeforeMutation`, `TestATransitionRefusesWhenTheOperationRecordChangedBeforeMutation`, `TestAContinuationRefusesWhenABlockWasRetriedBeforeMutation`, `TestAFrozenPlanThatIsNotItsOperationsRefuses`, `TestARepeatedMaterialRefusesBeforeAnyJobExists`, `TestAnUnsafeMaterialNameOrValueRefusesBeforeAnyJobExists`, `TestAFrozenPlacementOffTheControllerRefusesEveryVerb` | none |
 | A failed security check cannot be bypassed by confirmation, retry or adapter behavior. | `TestMissingSafeguardsCannotBeReplacedByConfirmationFlags`, `TestOrphanAcknowledgementClaimsNothingAndReplacesNoOtherSafeguard`, `TestDestroyOverAnInterruptedApplyIsStillGated` | none |
 | Package content cannot select code, and configuration selects code only through the declared catalog, channel and CSV; neither can carry Secret bytes into a request, adopt a foreign object or force a field conflict, and a placed Secret's value reaches no record or output. | `TestDeclaredSecretPlacementLendsOnlyMappedPartsGolden`; the collection's cluster object adapter tests | [B751](milestones/delivered.md#b751), [B753](milestones/m4.md#b753) |
-| A Ceph consumer's keys and external-cluster details reach only custody and the consuming cluster's owned Secret, never a request, record, evidence, log, diagnostic, argument or output; no gateway private key leaves the Ceph side; an export never adopts or alters an entity it did not mint. | none yet | [B86](milestones/m4.md#b86), [B760](milestones/m4.md#b760) |
+| A Ceph consumer's keys and external-cluster details reach only custody and the consuming cluster's owned Secret, never a request, record, evidence, log, diagnostic, argument or output; no gateway private key leaves the Ceph side; an export never adopts or alters an entity it did not mint. | `TestExportDeclaresProducedOutputOnlyForItsFrozenIdentity`, `TestExportRequestRejectsExpandedCapsAndRuntimeScope`, `TestExportProducedDetailsValidator`, `TestProducedPlacementLentOnlyForApplyAndNeverSerialized` | none |
