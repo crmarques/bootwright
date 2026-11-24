@@ -53,6 +53,7 @@ test/docs TestDocsCheckRecipeReadsTheList
 test/docs TestDocsCheckRecipeRefusesAHardCodedSelection
 test/docs TestDocsChecksListIsComplete
 test/docs TestDocsChecksListRefusesAMissingAndAnUnlistedTest
+test/docs TestDocsCitedTestsCheckSkipsOnlyDeliveredRecords
 test/docs TestDocsCitedTestsExist
 test/docs TestDocsCodexRuleViolations
 test/docs TestDocsDecisionLinkViolations

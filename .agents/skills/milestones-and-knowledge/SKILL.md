@@ -43,8 +43,12 @@ a paragraph whose item is `completed` or awaiting acceptance.
 
 - A decision is appended only when the owner decides; a clause a session takes
   is marked as pending the owner's review.
-- A delivered record names the slice, items, commits, gates with results and
-  any limitation; it links the spec clause instead of restating the rule.
+- A delivered record names the slice, items, commits, gates with results,
+  the finding-to-item map of an audit it remediates and any limitation; it
+  links the spec clause instead of restating the rule, and holds no test
+  inventory or narrative of how the work went. Records are dated: the
+  cited-test check does not read them, so a test named there keeps the name it
+  had when the slice was delivered.
 
 ## Knowledge pages
 

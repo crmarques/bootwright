@@ -424,6 +424,9 @@ func TestDocsCitedTestsExist(t *testing.T) {
 		}
 	}
 	for _, file := range guidanceFiles(t) {
+		if !citesLiveTests(file.path) {
+			continue
+		}
 		proseLines(file, func(number int, line string) {
 			for _, match := range citedGoTest.FindAllStringSubmatch(line, -1) {
 				if !declared[match[1]] {
@@ -431,6 +434,27 @@ func TestDocsCitedTestsExist(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// deliveredRecords holds dated slice records: a test name in a record is the
+// name it had when the slice was delivered, so a later rename never edits it.
+const deliveredRecords = "specs/milestones/delivered.md"
+
+// citesLiveTests says whether the test names a page cites must exist today.
+func citesLiveTests(path string) bool { return path != deliveredRecords }
+
+func TestDocsCitedTestsCheckSkipsOnlyDeliveredRecords(t *testing.T) {
+	for path, want := range map[string]bool{
+		deliveredRecords:              false,
+		"specs/milestones/m1.md":      true,
+		"specs/milestones/backlog.md": true,
+		"specs/secrets.md":            true,
+		".agents/skills/x/SKILL.md":   true,
+	} {
+		if got := citesLiveTests(path); got != want {
+			t.Errorf("citesLiveTests(%q) = %v, want %v", path, got, want)
+		}
 	}
 }
 
