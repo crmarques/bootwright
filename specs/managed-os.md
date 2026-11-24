@@ -1031,7 +1031,8 @@ anything is published or booted.
 
 **Fleet key.** The plan refuses a fleet key Secret that generates an Ed25519
 key, the default included, and an apply refuses, before any effect, a bound
-fleet key that is not ECDSA or an RSA key of at least 2048 bits; both name the
+fleet key that is not ECDSA or RSA, whose size
+[Secret admission](secrets.md#acquisition-and-commands) bounds; both name the
 Secret and the key type, never key bytes, as the [refusal table](#refusal-table)
 lists. A continued apply reads the Secret version its context bound, so the
 apply refusal's remedy takes the context back with destroy before replacing the
@@ -1040,7 +1041,8 @@ Secret.
 **Physical Machines.** A FIPS installation uses the same private delivered-key
 path and physical target proofs. Admission refuses a generated Ed25519 host
 key as well as an Ed25519 fleet key; execution checks both bound public keys
-before publication or boot, requiring ECDSA or RSA of at least 2048 bits.
+before publication or boot, requiring ECDSA or RSA, whose size
+[Secret admission](secrets.md#acquisition-and-commands) bounds.
 Real-hardware qualification remains [B78](milestones/m1.md#b78).
 
 **Proof.** After the installed system's network converged, an apply reads

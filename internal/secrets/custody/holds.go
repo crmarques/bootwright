@@ -92,7 +92,7 @@ func (h holdIndex) holder(snapshot secretstore.Snapshot, name string) (string, b
 
 func heldMaterial(contextName, name, holder string) error {
 	return secrets.Refusal("store.conflict",
-		"Secret "+name+"'s current version is held by "+holder+", and no command reveals a bound version; nothing was written",
+		"Secret "+name+" is held by "+holder+", and no command reveals a version other than the current one; nothing was written",
 		contextName, name,
 		"take the context back with bootwright destroy --context "+contextName+", which releases the binding, then repeat the command")
 }

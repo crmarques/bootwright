@@ -69,7 +69,7 @@ func TestRenewRefusesALiveEffectMaterialBinding(t *testing.T) {
 	writes := access.session.writes
 	_, err := service.Generate(context.Background(), GenerateRequest{Name: "passphrase", Renew: true, SkipConfirmation: true})
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "secret.store.conflict" || !strings.Contains(reported[0].Message, "Secret passphrase's current version is held by the apply op-1 (done)") ||
+	if len(reported) != 1 || reported[0].Code != "secret.store.conflict" || !strings.Contains(reported[0].Message, "Secret passphrase is held by the apply op-1 (done) as effect material, and no command reveals a version other than the current one") ||
 		!strings.Contains(reported[0].Remediation, "bootwright destroy --context fixture") || access.session.writes != writes || currentOf(access, "passphrase") != passphrase {
 		t.Fatalf("a named renewal of held effect material reported %#v and wrote %d", reported, access.session.writes-writes)
 	}
@@ -83,7 +83,7 @@ func TestRenewRefusesALiveEffectMaterialBinding(t *testing.T) {
 	for _, yes := range []bool{true, false} {
 		calls, writes := confirmer.calls, access.session.writes
 		_, err = service.Set(context.Background(), SetRequest{Name: "recovery", Input: secrets.Input{ValueFile: "second"}, SkipConfirmation: yes})
-		if reported := diagnostics.Of(err); len(reported) != 1 || !strings.Contains(reported[0].Message, "Secret recovery's current version is held by the apply op-1 (done)") ||
+		if reported := diagnostics.Of(err); len(reported) != 1 || !strings.Contains(reported[0].Message, "Secret recovery is held by the apply op-1 (done) as effect material, and no command reveals a version other than the current one") ||
 			access.session.writes != writes || confirmer.calls != calls || currentOf(access, "recovery") != recovery {
 			t.Fatalf("a set over held effect material (--yes %v) reported %#v", yes, reported)
 		}
@@ -100,7 +100,7 @@ func TestDeleteRefusesALiveEffectMaterialBinding(t *testing.T) {
 			current, writes, calls := currentOf(access, name), access.session.writes, confirmer.calls
 			_, err := service.Delete(context.Background(), DeleteRequest{Name: name, SkipConfirmation: yes})
 			reported := diagnostics.Of(err)
-			if len(reported) != 1 || reported[0].Code != "secret.store.conflict" || !strings.Contains(reported[0].Message, "Secret "+name+"'s current version is held by the apply op-1 (done)") ||
+			if len(reported) != 1 || reported[0].Code != "secret.store.conflict" || !strings.Contains(reported[0].Message, "Secret "+name+" is held by the apply op-1 (done) as effect material, and no command reveals a version other than the current one") ||
 				!strings.Contains(reported[0].Remediation, "bootwright destroy --context fixture") || access.session.writes != writes || confirmer.calls != calls || currentOf(access, name) != current {
 				t.Fatalf("a delete of held %s (--yes %v) reported %#v, wrote %d, asked %d", name, yes, reported, access.session.writes-writes, confirmer.calls-calls)
 			}

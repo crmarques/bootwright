@@ -591,8 +591,6 @@ Secret, media, and add-on mutation obeys the immutable binding and external-
 content rules in state reconciliation. A set, renewal, replacement, or
 deletion refuses while an incomplete operation or completed-apply snapshot
 needs the existing version, unless that exact version remains durably
-available for continuation and destroy. A bound version of effect material
-stays available but no command reveals it, so a renewal, replacement or
-deletion of a Secret whose current version a live binding holds as effect material refuses
-even then, as [effect material under a live binding](../secrets.md#effect-material-under-a-live-binding)
-states.
+available for continuation and destroy. A Secret
+[held as effect material](../secrets.md#effect-material-under-a-live-binding)
+refuses even then.

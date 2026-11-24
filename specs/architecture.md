@@ -1397,21 +1397,14 @@ owning spec, which names the check.
   replay, interruption, and structured failure/evidence.
 - The collection's structural tests hold every role to the rules a play cannot
   check: an entry point hands the runner `loaded` once, before anything but an
-  assertion; a task that receives bound material, and every completion, runs
-  under `no_log`, but for the exact list of completions that read no bound
-  material and whose refusal the attempt's retained output carries, today the
-  bare-metal proof and observation publications
-  ([Physical machine realization](substrates.md#physical-machine-realization));
-  material crosses an include only as a path; a command
+  assertion; the [`no_log` rule](security.md#logs-output-and-diagnostics)
+  holds; material crosses an include only as a path; a command
   runs from `argv` an executable its exact allowlist names, `timeout`'s own
   command included, and never through a shell; a container unit names its
   entrypoint and nothing passes `--debug`; a poll reads its result only
   through a default, so a failed read spends an attempt; a task that reaches a
-  management controller under `no_log` never fails itself, and the next task,
-  with only the protocol's group records between them, either refuses outside
-  `no_log` with the controller's own message, deciding on that task's result
-  alone and stopping the play whenever the controller refused, or publishes
-  the result as an unproved observation; every template
+  management controller follows the
+  [controller refusal rule](security.md#logs-output-and-diagnostics); every template
   renders the same bytes twice and its golden's; and every action plugin's
   `run()` is driven with what surrounds it stubbed. Go holds every request
   this build sends, request version included, to what the argument

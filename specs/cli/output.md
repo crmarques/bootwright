@@ -1211,7 +1211,7 @@ it to a variable.
 | `secret.store.uninitialized` | The configured secret store is not initialized. |
 | `secret.store.implementation` | The secret store implementation is unconfigured, unavailable or incompatible. |
 | `secret.store.key-unavailable` | The secret store key or unlock session is unavailable. |
-| `secret.store.conflict` | Secret storage changed during the operation or refuses the requested access. |
+| `secret.store.conflict` | Secret storage changed during the operation, a confirmation was declined or could not be asked, held effect material refuses the change, the context is not ready, or a publication or its cleanup did not finish; the message states whether anything committed ([results and failures](../secrets.md#results-and-failures)). |
 | `secret.store.corrupt` | Stored secret state is invalid, incomplete or not attributable. |
 | `secret.store.crypto` | Secret encryption randomness or key material is unusable. |
 | `secret.store.limit` | A secret material, input, metadata or recovery bound was exceeded. |
@@ -1267,9 +1267,10 @@ duplicates only when every present or absent member is equal.
 
 ## Private operation logs
 
-Help, completion, `version`, `catalog schema`, `sbom`, every `validate`, `render effective`, lifecycle previews, and
-local list/current/status reads create no cache, temporary file, state record,
-output path, or log. Other render commands create only their declared
+An invocation in the [catalog's run-nothing set](commands.md#command-and-flag-catalog)
+leaves nothing behind, as [filesystem and artifact safety](../security.md#filesystem-and-artifact-safety)
+states. Every `validate` and every lifecycle preview (`--dry-run`) creates no
+cache, temporary file, state record or log. Other render commands create only their declared
 artifacts. Preflight, local setup, sensitive export, and access handoff allocate
 no lifecycle identity or log. Setup uses its
 [private recovery receipt](../controller.md#publication-and-interrupted-setup),
@@ -1315,10 +1316,8 @@ exists for every run that printed anything, not only for one that ended without
 a complete result: the structured events say which groups settled, never what
 the adapter did inside them, so a run that succeeded is as worth reading as one
 that failed. Keeping material out of a retained run is the adapter's own
-obligation, discharged where the material is used: every task that reads bound
-material marks itself `no_log`, and the adapter's output callback prints
-nothing a `no_log` result raised
-([security](../security.md#logs-output-and-diagnostics)), so the adapter's
+obligation, discharged where the material is used under the
+[`no_log` rule](../security.md#logs-output-and-diagnostics), so the adapter's
 output never carries it. The file is appended to while the run produces it,
 within a bounded delay, so a run that wedges is readable before it ends rather
 than only once it stops. That
@@ -1385,8 +1384,8 @@ The file is created exclusively, under the log root's
 the controller admits the run's private Python runtime and before the adapter
 runs, so the path an operator is given exists whether or not the run reaches
 its result. Its content is retained while the run produces it, under the same
-masking obligation: every adapter task that reads bound material marks itself
-`no_log`, so a retained run carries none. It is cut at
+[`no_log` rule](../security.md#logs-output-and-diagnostics), so a retained run
+carries no material. It is cut at
 `operationstore.MaxAdapterOutputBytes` without a marker. Neither retaining it
 nor failing to changes what the run reports. An adapter failure that its output explains points its remediation at this file,
 as an attempt's points at the output beside that attempt's log, by the

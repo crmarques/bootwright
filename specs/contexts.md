@@ -309,9 +309,8 @@ confirmed setup:
 | `secrets/` | Context-bound encrypted custody with its own independently versioned [storage contract](secrets.md#local-keyring). |
 
 Every directory is owned by `root:root` with mode `0700`; every file is owned
-by `root:root` with mode `0600`, except the catalogued controller executables
-the [controller record](contexts/controller-record.md#location-and-file-modes)
-allows, and the content of a setup runtime. All store access runs as root. No environment variable selects another
+by `root:root` with mode `0600`, except the store's entries among the
+[mode exceptions](security.md#filesystem-and-artifact-safety). All store access runs as root. No environment variable selects another
 production root. Isolated test storage is injected at
 composition. Reject unsafe existing objects without chmod/chown repair. A root
 of another type, owner or mode refuses naming the type, the `uid:gid` owner and

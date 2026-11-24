@@ -219,7 +219,7 @@ and `none` under [client TLS trust](../secrets.md#client-tls-trust).
 | `url` | string | no | `registry.redhat.io` for `redhatCeph`; `cp.icr.io/cp` for `ibmStorageCeph` | Scheme-less `host[:port][/namespace]`. |
 | `credentialsRef` | string | conditional | — | Required for `redhatCeph` and `ibmStorageCeph`; `usernamePassword` registry credential Secret. Access credential: the registry login, which cephadm also retains [native-side](../secrets.md#native-side-retention). |
 | `trustBundleRef` | string | no | — | `caBundle` or `trustBundle` Secret. When set, it is the only TLS anchor that Ceph image resolution and the guest pull broker use for this registry, for the Ceph image and every auxiliary image; without it they verify against the host trust store ([storage](../ceph.md#registry-broker)). Trust anchor. |
-| `tlsVerification` | string | no | `full` | [Client TLS policy](../secrets.md#client-tls-trust); this registry consumer refuses `certificate` and `none`. |
+| `tlsVerification` | string | no | `full` | [Client TLS policy](../secrets.md#client-tls-trust). |
 
 A registry address contains no scheme, inline credentials, query, fragment,
 whitespace, leading or trailing slash, empty path segment, `.` segment, or

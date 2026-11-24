@@ -206,8 +206,7 @@ native pulls, such as the manager's license acceptance, through the
 controller's image resolution keeps the controller's own route.
 
 `packageRepositoryTLSVerification` selects
-[client TLS trust](../secrets.md#client-tls-trust), defaulting to `full`;
-non-full policies refuse before package acquisition.
+[client TLS trust](../secrets.md#client-tls-trust), defaulting to `full`.
 
 `packageRepositoryTrustBundleRef` optionally names a `caBundle` or `trustBundle` Secret,
 a trust anchor, that is the only TLS trust anchor for the authored `packageRepository`:

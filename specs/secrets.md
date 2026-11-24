@@ -22,11 +22,9 @@ publication, without requiring Environment input or generating Secret values.
 no `--type` override. It also completes interrupted cleanup. Changing the
 initialized type refuses. Subsequent commands
 resolve exact persisted references; absent, ambiguous or incompatible
-implementations never fall back. Rotation confirms unless `--yes`, before the
-lease: a shared read finds the active key, the prompt holds no store lock and
-no context lease, and under the lease rotation refuses with
-`secret.store.conflict`, rotating nothing, when the active key changed
-meanwhile. It does not migrate implementations, and reports the keys it retired and how many versions
+implementations never fall back. Rotation is a
+[confirmed replacement](#confirmed-replacement) of the active key. It does not
+migrate implementations, and reports the keys it retired and how many versions
 and parts it re-encrypted.
 Encryption initialization/status/rotation require context identity and
 configuration, but no desired-state revision. Declaration-dependent commands
@@ -80,13 +78,9 @@ its type, before any material is read or the store is opened, and exits `2` as a
 source flags have no aliases. Only the alternatives no type takes together,
 `--value-file` with `--value-stdin`, `--password-file` with `--password-stdin`
 and `--value-stdin` with `--password-stdin`, refuse before the context is read,
-as `cli.usage`. Fresh set does not confirm. A file-input replacement, like
-`delete` and encryption rotation, is confirmed before the lease unless
-`--yes`: a shared read finds the current version, the prompt holds no store
-lock and no context lease, and under the lease the command refuses with
-`secret.store.conflict`, writing nothing, when that version changed meanwhile;
-the files are then read under the lease. With `--yes` nothing is asked and the
-command reads, decides and writes in one lease. Standard input
+as `cli.usage`. Fresh set does not confirm. A file-input replacement is a
+[confirmed replacement](#confirmed-replacement), and reads its files under the
+lease. Standard input
 is read with no store lock held, so a value still being typed or piped blocks
 no other command: under a shared read, set refuses an uninitialized store with
 `secret.store.uninitialized` and a replacement without `--yes` with
@@ -115,13 +109,12 @@ discipline honours the same settings.
 
 `generate [--name] [--renew]` selects every effective generated declaration or
 one named generated declaration. Unknown/non-generated names fail before writes.
-Without renew, create missing/stale values. A renewal that would replace an
-existing current version is confirmed before the lease unless `--yes`, as a
-file-input replacement is: the prompt names every Secret it would replace, and
-under the lease the command refuses with `secret.store.conflict`, writing
-nothing, when any of those versions changed meanwhile. A Secret whose current
-version is [held as effect material](#effect-material-under-a-live-binding)
-is refused when named and skipped, reported unchanged, when not. Generate reports by name the generated Secrets it changed and
+Without renew, create missing/stale values, asking nothing. A renewal that
+would replace an existing current version is a
+[confirmed replacement](#confirmed-replacement) whose prompt names every
+Secret it would replace. A Secret
+[held as effect material](#effect-material-under-a-live-binding) is refused
+when named and skipped, reported unchanged, when not. Generate reports by name the generated Secrets it changed and
 those it left unchanged. `check` validates all declarations and their current keyring
 material. `list` reads metadata only; an uninitialized store is empty.
 `info [--name <list>]` reuses that same metadata listing and adds no material
@@ -135,11 +128,10 @@ under Custody; full detail also shows an available durable version identifier.
 It reports no inferred usage, retention policy or readiness. JSON and YAML use
 the same CLI-owned metadata row fields as `secret list`.
 `delete --name` removes an active mapping, including orphans, while retaining
-bound versions; existing deletion confirms unless yes, before the lease as a
-file-input replacement does, and refuses with `secret.store.conflict`,
-deleting nothing, when the current version changed meanwhile. A Secret whose
-current version is [held as effect material](#effect-material-under-a-live-binding)
-is refused. A delete of a name with
+bound versions; deleting a current version is a
+[confirmed replacement](#confirmed-replacement). A Secret
+[held as effect material](#effect-material-under-a-live-binding) is refused.
+A delete of a name with
 no current version changes nothing, asks nothing, and reports that nothing was
 deleted.
 
@@ -265,6 +257,38 @@ derived in the same package with the selected `golang.org/x/crypto` bcrypt
 package ([managed registry](infrastructure-services.md#managed-registry)). The
 standard library owns AES-GCM, X.509, key generation and entropy. Do not import
 unrelated x/crypto packages.
+
+### Confirmed replacement
+
+A confirmed replacement is the prompt a command takes before it replaces or
+removes what a context holds. These are its only users:
+
+- a file-input `secret set` over a current version;
+- `secret generate --renew` over a current version;
+- `secret delete` of a current version;
+- `secret encryption rotate`, over the active key.
+
+Without `--yes`, the command runs these steps:
+
+1. A shared read finds the current version, or for rotation the active key.
+2. The prompt asks while the command holds no store lock and no context lease.
+3. Under the lease the command refuses with `secret.store.conflict`, writing
+   nothing, when what step 1 found changed meanwhile.
+
+A prompt declined, or one no terminal can answer, refuses with
+`secret.store.conflict` and writes nothing (`Confirmation.confirm`). Its
+remedy names the same command with `--yes`, and the remedy of a set, renewal
+or deletion names `secret check` before it. With `--yes` nothing is asked, and the command reads,
+decides and writes in one lease. A standard-input `set` never prompts: it
+refuses a replacement without `--yes` with `secret.input` before any read, as
+the [set rule](#acquisition-and-commands) states
+(`TestSecretPromptsHoldNoStoreReadAndNoLease`,
+`TestASecretChangedDuringItsConfirmationIsRefusedAndNothingWritten`,
+`TestSecretChangesWithYesTakeOneTransaction`,
+`TestAnUnconfirmedChangeNamesTheSecretAndTheCommandWithYes`,
+`TestARotationIsConfirmedWithNoStoreReadOrLeaseHeld`,
+`TestARotationWhoseKeyChangedDuringItsPromptRotatesNothing`,
+`TestAnUnconfirmedRotationNamesItsContextAndTheCommandWithYes`).
 
 ### Sudo I/O-log proof
 
@@ -425,8 +449,11 @@ keyring session under the store's shared lock, and raise the missing, stale
 and validation refusals a binding raises. A caBundle reaches them narrowed to
 its certificate. They publish no binding and no identity reservation, so any
 number of them leaves the keyring as it found it, and bounded consumers of two
-contexts read together. Their material lives in memory for the length of the
-call and is cleared when it returns, a call ended by cancellation included
+contexts read together. Their keyring read lives in memory for the length of
+the call and is cleared when it returns, a call ended by cancellation
+included. A run a power operation or the power-status reading starts receives
+that material as lent files in its job directory, which the
+[process boundary](security.md#process-boundary) removes or keeps
 (`TestReadCurrentReadsInOneSessionAndPublishesNothing`,
 `TestBoundedConsumersOfTwoContextsReadTogetherAndLeaveTheKeyringAsTheyFoundIt`).
 Binding and release occur outside the lifecycle
@@ -485,7 +512,8 @@ keyring and never exposes prior keyring material;
 
 While a binding that no completed removal released pins any version of an
 effect-material Secret, nothing replaces the Secret's current version, because
-no command reveals a bound version ([D160](milestones/backlog.md#d160)) and the
+no command reveals a version other than the current one
+([D160](milestones/backlog.md#d160)) and the
 current one is then the only copy the operator can read. `secret generate --renew` or
 a stale regeneration naming the Secret, a `secret set` replacement and a
 `secret delete` of it refuse with `secret.store.conflict` and write nothing,
@@ -507,7 +535,9 @@ effect material or leaves unclassified, the classes the
 reads. An access credential and a trust anchor are never held, so a libvirt
 host's SSH key and `known_hosts` entry renew and are replaced while it stays
 applied. A block whose capability cannot name or classify its Secrets holds
-every version its binding pins, and a `caBundle` is always a trust anchor.
+every version its binding pins. A `caBundle` is never held
+(`holdIndex.holder`), and a block is lent only its certificate
+(`narrowCABundles`).
 Every Secret a capability's plan binds is named by one of the blocks it
 planned, so a block's hold never rests on another block of the lineage;
 planning refuses `engine.request-defect` for a capability that binds one none of its
@@ -588,14 +618,17 @@ keyring.
 
 ## Material placed in a cluster
 
-A declared Secret reaches a cluster only as an
-[owned Secret](add-ons.md#owned-secrets) of a block that binds it: the request
+A declared Secret reaches a cluster by one of two routes: as a confidential
+[installer input](openshift-clusters.md#installer-inputs) the installation
+writes into the cluster, such as its pull secret, or as an
+[owned Secret](add-ons.md#owned-secrets) of a block that binds it. For an owned
+Secret the request
 names the target and the mapping of parts to keys, the attempt is lent exactly
 the mapped parts, and no value or value-derived digest reaches a request,
 record, evidence, log, diagnostic or adapter output. A Ceph consumer's
 external-cluster details reach their consuming cluster the same way, as an
 owned Secret placed from the consumer block's produced material, which no
-command reveals. The placed copy is outside custody once created: it leaves
+command reveals. A placed copy of either route is outside custody once created: it leaves
 with a virtual cluster's disks and stays on a physical cluster that keeps
 running after its context is destroyed. Rotating the declaration never
 changes a placed copy; a fresh apply after a destroy places the version it
@@ -754,10 +787,7 @@ publication issues identities: one version per secret value written (set,
 generate, renew) and one binding per fresh operation registration or
 rebind, so an apply issues about one binding plus the versions of the
 declarations it newly materializes, and a registration retried after an
-interruption issues another. An interactive context issues a few dozen a day at
-most and cannot reach the cap in practice; a context driven by automation at
-hundreds of registrations a day reaches it in a few months, and the refusal
-above is its only warning. The reservations publish with
+interruption issues another. The reservations publish with
 `store.json` under the exclusive lock (staged, synced, renamed, then the
 directory synced); a publication killed between stage and rename leaves the
 earlier record and its reservations in force, and the stage is collected
@@ -769,6 +799,9 @@ subtree's root or in `keys/` whose bytes are not one complete JSON value is a
 temporary a killed write left: initialization recovery skips it, and cleanup
 after the next durable publication removes it. A stage that holds a complete
 JSON value is attributed as initialization evidence or refused.
+
+Not yet met: no command shows how many identities a keyring has reserved
+before the cap refuses; tracked as [B104](milestones/backlog.md#b104).
 
 Sync new immutable material first, then revalidate the expected metadata inode,
 bytes and context under the lease. Atomic `store.json` replacement is the
@@ -868,9 +901,21 @@ Failures use the `secret.*` codes of the
 envelope/exit/cancellation rules apply. Every refusal about a declared or named
 Secret carries the object `Secret/<name>`, for a valid name, and a remedy; a
 remedy that names a command binds it to the context with `--context`. A
-replacement, renewal or deletion declined at its prompt, or one no terminal can
-confirm, refuses with `secret.store.conflict`, writes nothing, and names
-`secret check` and then the same command with `--yes`. A missing
+[confirmed replacement](#confirmed-replacement) owns the refusal of a prompt
+declined or no terminal can answer. A `secret.store.conflict` refusal states
+its outcome in its message alone: nothing was written after a version changed
+meanwhile, a declined or unanswerable prompt, held effect material, a context
+that is not ready (`requireActive`) or a publication that did not commit;
+durability is uncertain after a publication whose rename was not proved
+durable, and unknown when the publication reports no outcome; the change
+committed when a publication or its cleanup failed after the rename; and any
+other incomplete cleanup names `secret encryption init` as what completes it
+(`publicationFailure`, `cleanupFailure`, `cleanupIncomplete`).
+
+Not yet met: no structured member of a `secret.store.conflict` refusal carries
+its outcome; tracked as [B1771](milestones/m1.md#b1771).
+
+A missing
 or stale Secret's remedy is by its source: `secret generate --name <name>` for
 a generated Secret, which re-mints missing or stale material, and
 `secret set --name <name>` with the file flags of its type for a contextStore

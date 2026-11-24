@@ -50,12 +50,15 @@ network adversary between the host and the publishers it acquires from. Root,
 and anything only root can write, is trusted; the operator's sudo rule is
 treated as granting everything it permits. Administrative sudo grants carry
 authority over every context. The [delegated session entry](api/session-access-policy.md#delegated-execution)
-requires an active grant and limits the operations that entry accepts. Every file the controller executes
-or loads, the re-executed Bootwright binary, the interpreter, its standard
-library and `lib-dynload`, the controller runtime, `rpm` and `dnf` included, is
-therefore admitted only when it and every directory above it are owned by root
-(or, for the binary and the invoking account's own build output, by that
-account) and writable by neither group nor others. A defence against root, such
+requires an active grant and limits the operations that entry accepts. Every
+file the controller executes or loads, the interpreter, its standard library
+and `lib-dynload`, the controller runtime, `rpm` and `dnf` included, but not
+the re-executed Bootwright binary, is therefore admitted only when it and every directory above it are owned by root
+and writable by neither group nor others, a sticky directory included
+(`nativefs.StickyRefused`, `TestEveryStickyPolicyDecidesAWorldWritableStickyDirectory`). The re-executed Bootwright binary's walk is owned
+by [local context privilege](#local-context-privilege), which admits the
+invoking account's own build output and exempts a root-owned sticky
+directory. A defence against root, such
 as byte digests of root-owned system libraries, is no boundary here and is not
 kept ([D152](milestones/backlog.md#d152)).
 
@@ -217,7 +220,7 @@ cryptography, rotation, material input and sensitive reveal.
 An invocation in the [catalog's run-nothing set](cli/commands.md#command-and-flag-catalog)
 creates no cache, temporary file, state
 record, output path, or log; [the output contract](cli/output.md#private-operation-logs)
-lists them.
+owns the logs and artifacts any other invocation leaves.
 
 API discovery rejects a symlink root and discovered YAML symlinks, never
 descends through a symlink, and excludes the exact directory classes and
@@ -233,14 +236,19 @@ All managed writes remain beneath an explicitly selected and verified root.
 Components are validated single path segments; traversal, absolute
 substitution, links, special files, alternate streams, and unexpected mount or
 device crossings are rejected. Directories use mode `0700` and private files
-use `0600`, with a restrictive creation mask, with two exceptions. A tool
-area's published executables are
-[Workspace's](contexts/controller-record.md#location-and-file-modes)
-executable-file exception. A
-[private consumer publication](infrastructure-services.md#private-consumer-publication)
-serves `0640` `root:root` files beneath `0711` directories, because the
-artifact server's workers read them as group `root`; its confidentiality
-assumes no interactive account holds group `root`. Temporary and final files are
+use `0600`, with a restrictive creation mask. These are the only exceptions:
+
+- A tool area's published executables are
+  [Workspace's](contexts/controller-record.md#location-and-file-modes)
+  executable-file exception.
+- A setup runtime's contents hold the ordinary modes a Python virtual
+  environment creates ([the setup subtree](contexts/controller-record.md#the-setup-subtree)).
+- A [private consumer publication](infrastructure-services.md#private-consumer-publication)
+  serves `0640` `root:root` files beneath `0711` directories, because the
+  artifact server's workers read them as group `root`; its confidentiality
+  assumes no interactive account holds group `root`.
+
+Temporary and final files are
 created exclusively, written through held handles, bounded, flushed where
 durability is required, and atomically published without overwriting unrelated
 content. Parent directory durability is established when the owning state
@@ -280,9 +288,12 @@ read only through its bounded protocol. That function is the collection's
 or a `shell=` argument anywhere else under `plugins/`, and lists every file
 that names the SSH client and every file that hands a session a remote command.
 
-The escalated SSH-arm capacity probe is the second named exception. The remote
+An SSH remote command the Go side composes is the second named exception:
+`machine exec`, `cluster exec` and the SSH-arm capacity observation. The remote
 login shell parses its SSH command string, each word quoted by
-`sshlocal.quoteWord`; that string runs the fixed absolute
+`sshlocal.quoteWord`, so the remote command receives the exact argument vector
+(`TestACommandReachesTheRemoteShellAsTheExactWordsGiven`). The escalated
+capacity probe's string runs the fixed absolute
 `/usr/bin/sudo -H -n -k -u root` and `/bin/sh -c` with the one literal wrapper
 [capacity admission](substrates.md#capacity-admission) states, and the probe's
 arguments are only that wrapper's positional parameters.
@@ -327,7 +338,7 @@ the tree the same way: the runner sends the adapter that signal, then kills its
 process group once the adapter is reaped or the 5-second drain passes,
 whichever comes first. A group kill alone never reaches a worker in a session
 of its own, and sent first it would end the supervisor before its handler ran.
-This ends every process on the controller. A worker a run started on a
+This ends every process of a lifecycle run on the controller. A worker a run started on a
 managed host over SSH is not in that tree: a Ceph native worker ends its
 process group on `SIGHUP`, `SIGTERM` or `SIGINT`, but a lost channel that
 delivers no signal leaves it running until its own aggregate limit, 640
@@ -339,6 +350,9 @@ A controller run arms no parent-death signal, so its tree outlives its
 invocation; its supervisor carries the same termination handler, and its
 cancellation, deadline and drain follow the
 [adapter result protocol](architecture.md#the-adapter-result-protocol).
+
+Not yet met: a later setup or controller stage refuses while an earlier
+controller run's tree still runs; tracked as [B1772](milestones/m1.md#b1772).
 
 Each lifecycle adapter invocation owns a job directory `bootwright-run-<n>`
 beneath `/run`, which holds its lent material and never survives a reboot, and
@@ -364,8 +378,9 @@ valid context, or whose record a sweep could not read back, refuses before any
 job exists. The adapter inherits the lock, and so do the `ansible-playbook`
 child its supervisor forks and every Ansible worker, so the lock is free only
 once none of them runs; a worker still being stopped keeps holding it. A run refuses with `runner.adapter-running`,
-and starts nothing, only while a job of its own context holds its lock, except
-for its own live sibling adapters. That exemption requires the private
+and starts nothing, only while a job of its own context holds its lock, or a
+held job without an attributable record or a holder does, except for its own
+live sibling adapters. That exemption requires the private
 [invocation scope](state-reconciliation.md#stages-and-the-pause-boundary)
 to prove the exact original lock and holder file identities; context,
 operation and attribution bytes alone never authorize it. An invocation
@@ -385,7 +400,7 @@ invocation left behind, does it name the lock and advise ending the processes
 that hold it. A held job of another context neither refuses nor goes, so
 bounded runs of two contexts proceed together. A held job whose record is
 unreadable or names no valid context, or that has no holder, refuses a run of
-every context, naming the held lock, until it ends
+every context with `runner.adapter-running`, naming the held lock, until it ends
 (`TestTwoContextsRunsProceedTogether`,
 `TestASameContextRunRefusesNamingTheHeldJob`,
 `TestAHeldJobWithoutAnAttributableRecordRefusesEveryContext`). An invocation removes its
@@ -465,8 +480,9 @@ file that another account can write: one whose resolved file or any directory
 above it is owned by a UID other than 0 or the invoking account's, or is
 writable by group or others. A root-owned sticky directory such as `/tmp` is
 exempt, because its sticky bit stops another account from replacing an entry
-it does not own; a sticky directory another account owns still refuses. The
-remedy installs the binary to a root-owned path; the
+it does not own; a sticky directory another account owns still refuses
+(`TestReexecutionRefusesAWritableParentDirectory`,
+`TestReexecutionAcceptsTheInvokersOwnBinary`). The remedy installs the binary to a root-owned path; the
 [CLI boundary](cli.md#local-privilege-and-user-identity) owns the report.
 A file that passes with root owning it and every directory above it is
 re-executed by that absolute path, so a sudoers rule can name the installed
@@ -614,9 +630,22 @@ it. Only operation-required facts and the least authorized local and
 remote privilege are available. No environment or adapter default grants
 privilege escalation.
 
+The application request fixes exact targets and authorization before adapter
+execution. The adapter cannot widen targets, privileges, retries, or effects.
+Live remote identity, host-key or certificate identity, ownership, power state,
+and claimed absence are positively proved where required; probe failure is
+unknown. Secrets reach Ansible only by the channels
+[sensitive material](#sensitive-material) permits. Every task, result, and diff
+that could carry one uses `no_log` and no-diff behavior and must not persist it
+in inventory, facts, caches, evidence, logs, or adapter results.
+
+### SSH client configuration
+
 Every `ssh` client an adapter runs, and the runner's SSH arm, reads only a
-configuration generated for that run, which includes the host crypto-policy
-backend and nothing else. It takes no system or personal configuration, no
+configuration generated for that run. The runner's SSH arm includes the
+controller's crypto-policy back end whole (`cryptoPolicyConfig`); every other
+client takes a back end reduced to its crypto directives, as the following
+paragraphs state. Such a configuration takes no system or personal configuration, no
 known hosts but the one entry the request binds, no proxy, control socket,
 agent, forwarding or ambient identity, and carries `ServerAliveInterval=15` and
 `ServerAliveCountMax=3`, so a peer that stops answering ends the connection
@@ -650,17 +679,11 @@ removes those it matches; any other value keeps those it matches). Before
 the cluster block claims or authorizes any host, each manager host it will
 authorize renders that configuration in a read-only round trip, and an empty
 intersection refuses `tunnel-host-key-excluded` there. Strict host-key
-checking and the pinned known hosts are unchanged, and keeping a policy is not
-FIPS certification.
-
-The application request fixes exact targets and authorization before adapter
-execution. The adapter cannot widen targets, privileges, retries, or effects.
-Live remote identity, host-key or certificate identity, ownership, power state,
-and claimed absence are positively proved where required; probe failure is
-unknown. Secrets reach Ansible only by the channels
-[sensitive material](#sensitive-material) permits. Every task, result, and diff
-that could carry one uses `no_log` and no-diff behavior and must not persist it
-in inventory, facts, caches, evidence, logs, or adapter results.
+checking and the pinned known hosts are unchanged. The Go session reducer and
+the Python placement and Ceph tunnel reducers all give the verdicts of one
+shared table of policy lines. Keeping a host policy, in these clients and in a
+[direct session](#direct-ssh-sessions), is access compatibility, not FIPS
+certification.
 
 ### Listener exposure
 
@@ -669,13 +692,17 @@ requirements when its [firewall policy](managed-os.md#host-firewall-requirements
 is managed. Provided hosts require explicit opt-in; otherwise the operator
 owns their firewall policy and Bootwright makes no change. On an installed
 Machine, the enabled install profile selects automatic realization unless
-its Machine policy is external. A listener serves only its declared consumers. A privileged
-listener or one carrying cleartext credentials binds loopback or a host-only
-address unless the operator explicitly places it on a trusted network. A
+its Machine policy is external. Each managed listener binds only its declared
+addresses; the Client restriction column states which clients can reach it. A
 wildcard bind exposes all matching host interfaces and requires source
 restrictions on each reachable interface. The
 [operator guide](../docs/operator-guide.md#network-exposure) owns the firewall
 procedure and ports by source.
+
+Not yet met: a listener serves only its declared consumers, and a privileged
+listener or one carrying cleartext credentials binds loopback or a host-only
+address unless the operator explicitly places it on a trusted network;
+tracked as [B1773](milestones/m1.md#b1773).
 
 | Listener | Clients | Transport and authentication | Privilege | Client restriction |
 | --- | --- | --- | --- | --- |
@@ -684,7 +711,7 @@ procedure and ports by source.
 | Managed NTPServer | Selected graph's Machine addresses, network CIDRs and loopback | NTP over UDP; no client credential | Root container with host networking, without host clock adjustment | Chrony source ACL derived from the graph |
 | Managed ArtifactServer | BMCs fetching virtual media, installers fetching packages or private material, and controller probes | Authored HTTP or HTTPS; HTTPS verifies the declared serving certificate; private URL is a capability | Root container master with application-user workers and host networking | Bind address and operator firewall; private subtree needs its token |
 | Managed Registry | Machines and clusters pulling images, the controller and whoever fills it | HTTPS alone with the declared serving certificate; basic authentication against a bcrypt password file derived from the declared `usernamePassword` Secret, for every push and pull | Root container with host networking | Bind address and operator firewall; every request needs the credential |
-| Emulated BMC | Controller/provider-host clients | Verified HTTPS with basic authentication and the provider's bound serving certificate | Root container with host networking, SELinux label disabled and access to the libvirt socket | Lab examples bind loopback; other binds require a trusted network |
+| Emulated BMC | Controller/provider-host clients | Verified HTTPS with basic authentication and the provider's bound serving certificate | Root container with host networking, SELinux label disabled and access to the libvirt socket | Lab examples bind loopback; any other bind is an address the operator declares |
 | Libvirt guest display | Root, the emulator's account (`qemu`) and members of the `qemu` group on the provider host, and any client allowed to manage `qemu:///system`, which is root-equivalent | VNC on a UNIX socket in libvirt's per-domain private directory; no TCP listener and no VNC password | The guest's emulator process; every guest's QEMU runs as `qemu`, so isolation between guests rests on their sVirt labels | No other local account and no network client can open the socket |
 
 Private URL capabilities travel over verified TLS by default. The
@@ -738,8 +765,8 @@ retained, and it admits no identity, certificate, agent, command, forwarding
 or host rule from system or personal configuration. A line of the backend that
 is not one allowlisted directive, or `GSSAPIKeyExchange no`, with a value of
 letters, digits and `@.,_+^*?!/ -` refuses `access.unavailable` rather than
-being skipped; the Go session reducer and the Python placement and Ceph tunnel
-reducers all give the verdicts of one shared table of policy lines.
+being skipped, by the shared table of
+[SSH client configuration](#ssh-client-configuration).
 For `operatorIdentity` without an offered key, the launcher gives only the
 generated policy and proved host pin to a helper running under the verified
 invoking account. The helper holds the anonymous files under that UID and
@@ -752,8 +779,7 @@ command-line pinning cannot re-enable an algorithm the policy excludes. An
 empty intersection refuses `access.unavailable`, naming the Machine and the key
 type, before any session opens; a policy the client cannot evaluate refuses
 the same way, with no fallback. A host with no policy backend keeps the pinned
-algorithms under OpenSSH's defaults. This is access compatibility, not FIPS
-certification.
+algorithms under OpenSSH's defaults.
 The client receives only terminal-identifying environment values, so a
 caller-selected askpass helper, agent, loader or crypto-provider override
 cannot cross the process boundary. The session is a waited child whose streams
@@ -815,13 +841,22 @@ the [release recipe](#the-vulnerability-gate) checks before it ships either. The
 container build's Go image is pinned by tag and digest like every other
 artifact, and a test holds its tag to the `go` directive of `go.mod`.
 
-Pin Go modules, `ansible-core`, collections, controller Python packages and
-SDKs, execution-environment images, playbooks, add-on packages and catalog
-snapshots, executables, and downloaded artifacts by an immutable version and
-content digest. Verify integrity and required publisher authenticity from
+Every artifact Bootwright selects or embeds is pinned by an immutable version
+and content digest: Go modules, `ansible-core`, collections, controller Python
+packages and SDKs, execution-environment images, playbooks, add-on packages,
+executables, and downloaded artifacts. Verify integrity and required publisher authenticity from
 separately trusted metadata before use. Repository-owned automation is
 content-digested as part of the selected implementation. Implicit upgrade,
-floating tags during execution, and ambient external tools are forbidden.
+floating tags during execution, and ambient external tools are forbidden for
+every artifact Bootwright selects or embeds. An operator an add-on installs
+through OLM is outside that rule: an authored
+[`catalogSource`](api/addons.md#subscription) may name its catalog image by
+tag, a built-in package selects its operator by channel and `startingCSV`
+from a catalog no digest pins, and a later CSV the owner approves under
+`installPlanApproval: Manual` comes from that catalog, unpinned, so that trust
+lies in the binding that selects it
+([executable OLM add-ons](api/addons.md#executable-olm-add-ons),
+[D250](milestones/backlog.md#d250)).
 The controller runtime's Python packages are pinned by the
 [runtime lock](controller.md#the-runtime-lock) each build embeds: every wheel's
 URL, size and SHA-256, chosen when the lock is generated and never at setup,
@@ -931,7 +966,7 @@ Not yet met: the images in the mirror registry are not scanned; tracked as
 ### Acquisition origins
 
 Every artifact a context acquires, or hands a Machine to acquire, comes from
-one of three kinds of origin. The class follows who may publish on the serving
+one of four kinds of origin. The class follows who may publish on the serving
 host, never who wrote the content:
 
 | Origin | Who publishes there | Who connects |
@@ -939,12 +974,25 @@ host, never who wrote the content:
 | The host's package repositories | Whoever the host's package manager is configured to trust ([W2](#the-controller-hosts-attacker-model)) | Each host's own package manager |
 | A vendor origin | Red Hat or IBM alone, the vendors of the platforms a context installs, as on a client download site, an entitled registry, Red Hat's subscription and update services or an add-on catalog IBM publishes | The Machine that needs the artifact, directly or through its declared proxy |
 | A public origin | Any account, or a project other than those vendors | The same Machine, unless the artifact's mirror route moves it |
+| A declared origin | Whoever the host the desired state names admits, such as an operator's own registry | The same Machine, by its declared route; never mirrored |
 
 OpenShift's release payload is vendor content served from a registry on which
 any account publishes, so its origin is public. IBM's `icr.io`, which serves
 IBM's operator catalogs and images and on which IBM's cloud customers also
 publish, is a vendor origin by the owner's choice, so a cluster keeps taking
 its operators' later updates from it ([D250](milestones/backlog.md#d250)).
+
+[`acquisition.OriginClass`](../internal/acquisition/origins.go) holds the
+vendor and public host lists (`TestEveryOriginIsClassedByItsHost`). A listed
+host is classed by who may publish there; any other host is `declared`. The
+[acquisition list](cli.md#acquisition-list) also labels a host package row
+`host repositories`, an operator-named media row `media store` and a row of
+the fetch-only vendor-delivery exception `vendor delivery`.
+
+Not yet met: a registry on which any account publishes is a public origin and
+follows its mirror route even when `acquisition.OriginClass` does not list its
+host; an unlisted one is classed `declared` and never mirrored; tracked as
+[B1774](milestones/m1.md#b1774).
 
 A mirror route changes where the bytes come from. Where the request froze a
 digest, the consumer verifies it and the mirror is trusted for nothing
@@ -956,12 +1004,12 @@ states its route:
 | Artifact | Default origin | Mirror route |
 | --- | --- | --- |
 | Host packages | The host's repositories | The host's own dnf configuration ([host packages](controller.md#host-packages)) |
-| Target tools | Each tool's publisher: a vendor origin for an OpenShift release's clients and installer, a public one for every other tool, an OKD release's included | The [artifact mirror](api/environment.md#artifact-mirror) serves every public-origin client at its pinned release with no publisher contact, verified against the system trust store plus its optional `caBundle` anchor, which is lent to each download and the preflight probe and never recorded; vendor clients stay on their publisher, and any release the build does not pin still has its publisher's metadata read ([the controller stage](controller.md#the-controller-stage)) |
+| Target tools | Each tool's publisher: a vendor origin for an OpenShift release's clients and installer, a public one for every other tool, an OKD release's included | The [artifact mirror](api/environment.md#artifact-mirror) serves every public-origin client at its pinned release; vendor clients stay on their publisher ([the controller stage](controller.md#the-controller-stage)) |
 | A managed service's image | The executable's compiled default | The [image mirror](api/environment.md#image-mirror) for a public-origin image, or the service's `spec.image.local` ([management and placement](api/infrastructure-services.md#management-and-placement)); a managed mirror's own [mirror host](infrastructure-services.md#mirror-host) copies the image from its origin by digest, with the Registry's credential and anchor lent to that copy alone, and its own services read their origins |
 | The emulated BMC's image | The executable's compiled default | The [image mirror](api/environment.md#image-mirror); without it the provider host acquires the image, and only when it does not hold it ([Machine realization](substrates.md#machine-realization)) |
 | Operating-system media | The file or URL the operator names | The operator's own choice of source ([media store](managed-os.md#media-store)) |
 | A container cluster's release images | The release's publisher registries | The cluster's [registry policy](api/openshift-clusters.md#registry-policy); under a managed image mirror the [mirror host](infrastructure-services.md#mirror-host) copies the release from `quay.io` with the release's own `oc`, checked against its publisher's `sha256sum.txt`, lent only the pull secret's `quay.io` token and the Registry's credential |
-| An add-on's catalog image | The `catalogSource` image the add-on authors, on the registry its author chose | The catalog's contents are the cluster's mirror tooling's (`oc-mirror`); the image's registry is classed by its host, so only `icr.io` and Red Hat's are vendor origins |
+| An add-on's catalog image | The `catalogSource` image the add-on authors, on the registry its author chose | The catalog's contents are the cluster's mirror tooling's (`oc-mirror`); the image's registry is classed by its host under `acquisition.OriginClass` |
 | A connected cluster's default OperatorHub catalogs and update service | `registry.redhat.io` and `api.openshift.com`, vendor origins, which Bootwright leaves enabled | The cluster's own GitOps, which disables the defaults ([OLM installation](add-ons.md#olm-installation)) |
 | An installed Machine's repositories | `cdn.redhat.com` and `subscription.rhsm.redhat.com` for a hosted subscription, a vendor origin | The Entitlement's Satellite, or the profile's `repositories.configure` entries ([registration](managed-os.md#registration)) |
 | A storage cluster's images and packages | The distribution's vendor origins | The Entitlement's registry namespace and the cluster's package repository ([CephCluster](api/ceph.md#cephcluster)) |
@@ -1021,7 +1069,12 @@ is raw, private and bounded, and no decision reads it back. Only [`bootwright
 logs`](cli/output.md#reading-and-following-logs) presents it: the text output
 escapes every line with the display escaping, and raw bytes leave only through
 the structured export, base64 when they hold a control byte, or the file itself. Its
-secrecy depends on `no_log`: every task that receives bound material sets it,
+secrecy depends on `no_log`. Every task that receives bound or
+[produced](secrets.md#produced-material) material sets it, and so does every
+completion, except the completions that read no bound material and whose
+refusal the attempt's retained output carries, the bare-metal proof and
+observation publications
+([physical machine realization](substrates.md#physical-machine-realization)),
 so the material never reaches the adapter's own streams. ansible-core censors
 such a task's result but keeps the error, warnings and deprecations the task
 raised, and its default output prints them whole, so an assertion's templated
@@ -1033,10 +1086,11 @@ what the default prints, but nothing a result `no_log` censors raised, so a
 hidden task that fails shows its name and that it failed. Because the
 adapter's output keeps nothing of such a task's failure but that it failed, a
 task that reaches a management controller never fails itself: it registers
-its result, and the next step, before anything else acts, either refuses
-outside `no_log` with the controller's own message, printable and bounded and
-never with what the task was given, or publishes what it could not read as an
-unproved observation. The refusal decides on that result alone and stops the play
+its result, and the next step, with only the protocol's group records between
+them and before anything else acts, either refuses outside `no_log` with the
+controller's own message, printable and bounded and never with what the task
+was given, or publishes the result as an unproved observation, as its role
+chooses. The refusal decides on that result alone and stops the play
 whenever the controller refused: no condition, loop or tolerated failure of
 its own lets the play go on to act on what was refused.
 
@@ -1132,7 +1186,7 @@ require qualified real-system tests, recorded in the
 | Executable, argument, environment, working-directory, descriptor, inventory, plugin, endpoint, redirect, DNS, proxy and privilege substitution refuses. | `TestReexecutionPathPinsRunningExecutable`, `TestSupervisorRefusesAnAssignmentOutsideTheRouteVocabulary`, `TestInventoryPinsTheSSHIdentityAndHostKey`, `TestDownloadsFollowNoRedirectAndRefuseAnythingButOneServedImage`, `TestExplicitProxyIgnoresAmbientAndMatchesWithoutDNS`, `TestOnlyContextFreeAcquisitionConsumesTheInvokingEnvironment`, `TestOnlyContextFreeAcquisitionForwardsTheInvokingRoute`, and the collection's `test_every_command_starts_an_executable_the_allowlist_names`, `test_every_container_names_its_entrypoint_and_nothing_runs_a_debugger`, `test_the_token_goes_only_to_a_rendezvous_address_the_request_declares` and `test_an_answer_that_cannot_prove_which_node_is_missing_names_none` | none |
 | An authored, operator or remote string reaches Ansible as data and is never rendered as a template. | `TestExtraVariablesMarkEveryStringAsData`, `TestExtraVariablesRefuseAKeyAnsibleCoreReserves`, `TestThePlanRefusesEveryKeyTheRunnersCannotEncode`, `TestTheAdapterReadsEveryRequestStringAsData`, `TestTheLifecycleRunnerWritesTheCollectionsFixture`, `TestTheLargestRequestStillFitsTheVariablesBound`, `TestTheControllerRunnerWritesEveryRequestStringAsData`, `TestTheControllerRunnerWritesTheCollectionsFixture`, `TestAPlanRefusesARequestHoldingATemplateDelimiter`, `TestTheControllerPrerequisitesBlockIsScannedLikeEveryOther`, `TestARequestWithoutATemplateDelimiterPlans`, `TestEveryProvenPathToARequestRefusesItsTemplateDelimiter`, and the collection's `test_a_runner_request_string_reaches_the_module_verbatim` and `test_the_same_strings_unmarked_are_rendered` | none |
 | Invalid TLS and SSH identity, failed and ambiguous remote probes, target drift and unauthorized scope expansion refuse. | `TestCertificateValidationRejectsMismatchExpiryUsageAndFalseChain`, `TestADeclaredHostKeyForAnotherTargetRefuses`, `TestInstalledHostIdentityRefusesUntrustedOrAmbiguousEvidence`, `TestContinuationRefusesDriftedInputExecutableOrHost`, `TestEveryCapabilityHonoursTheCapabilityContract`, `TestOnlyADoneBareMetalApplyProofPinsAMachine`, `TestAProvedMachineCarriesItsIdentityToTheAdapter`, `TestAnUnreadableProofRefusesBeforeAnyPromptOrRun`, `TestTLSVerificationRefusesAPlainHTTPBMCAddress`, `TestEraseRefusesAPlainHTTPBMC`, `TestAProviderBundleIsNotInheritedByAMachineThatOptsOut`, `TestProviderVirtualMediaDisableVerificationRefuses`, `TestAMachineKindDefaultCannotDefaultDisableVerification`, `TestDisableVerificationIsNeverAKindDefault`, `TestAKindDefaultTrustBundleSkipsAMachineThatOptsOut`, `TestAPrivateInstallationFreezesExplicitDisabledVerification`, `TestImportCertificateNeedsAnHttpsImageAndItsCertificate`, `TestTheClaimReadsTheControllerThroughItsBundle`, `TestPowerCarriesTheControllerBundle`, `TestEachReadTargetReadsItsOwnBundle`, `TestTheProbeVerifiesTheListenerAgainstTheBoundServingCertificate` | B73 |
-| Secret and credential material never reaches output, diagnostics, verbose paths, logs, adapter events, retries, errors, cancellation or `no_log` handling. | `TestSecretNormalOutputsAndStateNeverContainMaterialOrDigests`, `TestMaterialNeverAppearsInMetadataOrErrors`, `TestVariablesCarryPathsNotMaterial`, `TestProducedMaterialNeverReachesRecordsLogsOrAdapterOutput`, `TestSecretCommandsNeverListOrTouchProducedMaterial`, `TestTheInstallOffersItsKubeconfigOnlyOnProvedCompletion`, `TestManagedAndExternalStorageClustersAreNotApplicableAndReadNoCustody`, `TestAFailedRunReadsNoOutput`, `TestClusterKubeconfigWritesExactlyItsBytesOrOneDiagnostic`, `TestTheAdapterOutputPrintsNothingANoLogTaskRaised`, and the collection's `test_no_material_or_completion_reaches_the_adapters_own_output`, `test_the_censored_callback_prints_nothing_a_hidden_task_raised`, `test_no_management_controller_refusal_is_censored`, `test_every_controller_refusal_names_the_controllers_message_and_nothing_it_was_given`, `test_the_module_reports_the_registration_and_never_the_token` and `test_the_read_after_a_stall_runs_under_no_log_and_never_fails_the_wait_itself` | none |
+| Secret and credential material never reaches output, diagnostics, verbose paths, logs, adapter events, retries, errors, cancellation or `no_log` handling. | `TestSecretNormalOutputsAndStateNeverContainMaterialOrDigests`, `TestMaterialNeverAppearsInMetadataOrErrors`, `TestVariablesCarryPathsNotMaterial`, `TestProducedMaterialNeverReachesRecordsLogsOrAdapterOutput`, `TestSecretCommandsNeverListOrTouchProducedMaterial`, `TestTheInstallOffersItsKubeconfigOnlyOnProvedCompletion`, `TestManagedAndExternalStorageClustersAreNotApplicableAndReadNoCustody`, `TestAFailedRunReadsNoOutput`, `TestClusterKubeconfigWritesExactlyItsBytesOrOneDiagnostic`, `TestTheAdapterOutputPrintsNothingANoLogTaskRaised`, and the collection's `test_no_material_or_completion_reaches_the_adapters_own_output`, `test_the_censored_callback_prints_nothing_a_hidden_task_raised`, `test_no_management_controller_refusal_is_censored`, `test_every_controller_refusal_names_the_controllers_message_and_nothing_it_was_given`, `test_the_module_reports_the_registration_and_never_the_token` and `test_the_read_after_a_stall_runs_inside_the_wait_under_no_log` | none |
 | Time, retry, concurrency, memory, disk, log and process-output limits hold, including cancellation and process-tree reaping. | `TestAdapterOutputStreamsWhileItRunsAndBoundsWhatItKeeps`, `TestGuardedCommandDiesAndIsReapedAfterParentExit`, `TestAKilledInvocationTakesItsAdapter`, `TestStoppingAnAdapterEndsItsTreeBeyondItsGroup`, `TestThreadChurnNeverSignalsARunningAdapter`, `TestAnAdapterStillRunningRefusesTheNextRun`, `TestAStaleRunDirectoryIsRemovedWithItsSecretFiles`, `TestHangupCancelsTheOperationLikeTerminate`, `TestAnIgnoredHangupLeavesTheOperationRunning`, `TestHangupIsRelayedToThePrivilegedOperation`, `TestRunnerReapsAnUnauthorizedChildOnCancellation`, `TestLifecycleConcurrencyBound`, `TestOperationBoundaryPreservesOrdinaryCancellationAndDeadline`, `TestABoundedRunCancelledInsideItsCallKeepsNoMaterial`, `TestABoundedConsumerCancelledInsideItsCallKeepsNoMaterial`, `TestABoundedConsumerCancelledWhileReadingRunsNothing`, and the collection's `test_the_read_is_bounded_in_time_however_slowly_the_answer_arrives` and `test_the_read_is_bounded_in_size` | B17, B23 |
 | Dependency integrity, lock agreement and native-schema compatibility hold, and runtime-tool substitution or drift refuses. | `TestFrozenToolRejectsVersionRouteAndChecksumSubstitution`, `TestTheLockCarriesOneAnsibleCoreEverywhere`, `TestEveryLockedURLIsOnFilesPythonhosted`, `TestACarriedWheelWithAnotherHashIsRefused`, `TestDecodeRefusesPackagesItsClosuresDoNotSelect`, `TestEveryCapabilityHonoursTheCapabilityContract`, `TestThePowerRolesAdmitTheRequestsThisBuildSends`, `TestTheRoleAdmitsEveryRequestThisBuildSends`, `TestRoleVersionAssertionsMatchTheirArgumentSpecs` | none |
 | Mutation crash points, lease conflict, replay, partial success, rollback, evidence loss and required-log write failure leave a recoverable context. | `TestCrashReleasesLocksAndLeavesCompleteSelection`, `TestLifecyclePublicationCheckpointsFireAndFailClosed`, `TestMutationGuardLayoutAndLeases`, `TestAPartlyRealizedBlockWhoseRetryFailsIsConvergedByRepeatingTheOperation`, `TestRequiredLogFaultStopsTheOperation`, `TestARestorationWhoseClearFailsStartsNothing`, `TestAJourneyKilledAtAnyWriteLeavesAUsableStoreAndConvergesOnRetry`, `TestAnUnknownDestroyBlockResolvesByWhatItsRemovalProves`, `TestAnInterruptedRemovalFinalizationIsCompletedByTheNextDestroy`, `TestARemovalWhoseBindingReleaseFailsReportsIncompleteFinalization`, `TestAnInterruptedApplyFinalizationIsCompletedByTheRepeatedApply`, `TestARunningOperationWhoseBlocksAreAllDoneIsFinalized`, `TestAFreshApplyOverAnUnfinalizedRemovalFinishesItFirst`, `TestNoFinalizationOverContradictedRecords`, `TestAReservationHeldBesideACompletedRemovalIsReleasedByTheNextDestroy`, `TestAFinalizationRefusesWhenTheContextChangedBeforeIt`, `TestEvidenceProtectsTheContextBeforeItBindsOrReserves`, `TestAFreshApplyClaimsItsOperationBeforeItBinds`, `TestAFailedEvidencePublicationBindsNothing`, `TestConcurrentFreshAppliesThatBothFailLeaveNothingRaised`, `TestABindingListingThatFailsBlocksNothing`, `TestARegistrationThatProvablyFailedRestoresTheEvidence`, `TestAFailedRegistrationWithReservationsKeepsItsEvidence`, `TestARegistrationThatMayHaveHappenedKeepsItsBinding`, `TestAContinuationProjectsBeforeItsFirstEffect`, `TestTheNextRegistrationReleasesBindingsNoOperationNames`, `TestADestroyReleasesWhatAnInterruptedRegistrationLeft`, `TestAnApplyWhoseBindingAnUnclaimedReleaseTookRefuses`, `TestAnApplyRefusesWhenAnotherClaimRaisedTheEvidenceAgain`, `TestAnApplyOverACompletedDestroyRefusesWhenAFinalizationTookItsBinding`, `TestADestroyOverUnindexedRecordsRefuses`, `TestARemovalRaisesItsEvidenceBeforeItRegisters`, `TestAnApplyInterruptedBeforeItRegistersGivesBackWhatItRaised`, `TestAFailedRestorationIsReportedBesideItsCause`, `TestADestroyReleaseRefusesWhenAnOperationRegisteredBeforeIt`, `TestARemovalWhosePublicationFailedCollectsNothing`, `TestAClaimedOperationRegistersIntoItsDirectory`, `TestAnUnknownOperationWhoseBlocksAreAllDoneIsFinalizedByItsOwnVerb`, `TestAFreshApplyWhoseClaimFailedRestoresTheEvidenceItsDirectoryMayHold`, `TestAnUnclaimedReleaseCollectsOnlyTheBindingsItReadFirst`, `TestAFinalizationCollectsOnlyTheBindingsItReadFirst`, `TestAnIncompleteApplyWithoutAContradictionIsStillRemovable`, `TestAnInitializationResumesOverATornStageAtEveryStagedWrite`, `TestAnInitializationRefusesAStageThatParsesButAttributesNothing`, `TestAContextInitRetryResumesOverATornKeyringStage`, `TestTheKillHarnessReachesTheCustodyPublications`, `TestAFailedPublicationLeavesTheAttemptUnknown`, `TestADestroyAfterAFailedPublicationCapturesBeforeAnyInverse`, `TestAnAgentInstallWhosePublicationFailedIsCapturedBeforeItsRemoval`, `TestACancelledPublicationLeavesItUnknown`, `TestAStoppedDestroyKeepsTheAccess`, `TestAFinalizationWithdrawsWhatAnInterruptedRemovalLeft` | none |

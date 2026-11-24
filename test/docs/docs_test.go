@@ -405,22 +405,33 @@ func hasRepositoryPrefix(token string) bool {
 	return false
 }
 
-var citedGoTest = regexp.MustCompile("`(Test[A-Z][A-Za-z0-9_]*)`")
+var (
+	citedGoTest     = regexp.MustCompile("`(Test[A-Z][A-Za-z0-9_]*)`")
+	citedPythonTest = regexp.MustCompile("`(test_[a-z0-9_]+)`")
+)
+
+// testDeclarations names the declaration of a test in a Go test file and in a
+// Python file of the collection's or a script's tests.
+var testDeclarations = map[string]*regexp.Regexp{
+	"_test.go": regexp.MustCompile(`(?m)^func (Test[A-Za-z0-9_]+)\(`),
+	".py":      regexp.MustCompile(`(?m)^\s*def (test_[a-z0-9_]+)\(`),
+}
 
 func TestDocsCitedTestsExist(t *testing.T) {
 	root := filepath.Join("..", "..")
 	declared := map[string]bool{}
-	declaration := regexp.MustCompile(`(?m)^func (Test[A-Za-z0-9_]+)\(`)
 	for _, name := range repositoryFiles(t) {
-		if !strings.HasSuffix(name, "_test.go") {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(name)))
-		if err != nil {
-			t.Fatalf("read tests: %v", err)
-		}
-		for _, match := range declaration.FindAllStringSubmatch(string(data), -1) {
-			declared[match[1]] = true
+		for suffix, declaration := range testDeclarations {
+			if !strings.HasSuffix(name, suffix) {
+				continue
+			}
+			data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(name)))
+			if err != nil {
+				t.Fatalf("read tests: %v", err)
+			}
+			for _, match := range declaration.FindAllStringSubmatch(string(data), -1) {
+				declared[match[1]] = true
+			}
 		}
 	}
 	for _, file := range guidanceFiles(t) {
@@ -428,9 +439,11 @@ func TestDocsCitedTestsExist(t *testing.T) {
 			continue
 		}
 		proseLines(file, func(number int, line string) {
-			for _, match := range citedGoTest.FindAllStringSubmatch(line, -1) {
-				if !declared[match[1]] {
-					t.Errorf("%s:%d cites missing test %s", file.path, number, match[1])
+			for _, cited := range []*regexp.Regexp{citedGoTest, citedPythonTest} {
+				for _, match := range cited.FindAllStringSubmatch(line, -1) {
+					if !declared[match[1]] {
+						t.Errorf("%s:%d cites missing test %s", file.path, number, match[1])
+					}
 				}
 			}
 		})

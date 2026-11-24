@@ -55,7 +55,8 @@ spec:
 Each grant has a unique DNS-label name, one or more subjects, explicit targets,
 a POSIX remote account and exactly one of the `exec` and `rsh` blocks.
 `exec.commands` contains one or more complete argument vectors starting with
-a clean absolute executable path. Arguments match literally and in order.
+a clean absolute executable path. Arguments match literally and in order,
+before the session quotes them for the remote shell.
 `rsh: {}` grants an interactive shell as the named remote account.
 The administrator approves the full behavior of each permitted program,
 including any programs it can invoke. The input is one UTF-8 YAML document

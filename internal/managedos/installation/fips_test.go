@@ -177,13 +177,14 @@ func TestFIPSRefusesAnEd25519FleetKeyBeforeRegistration(t *testing.T) {
 }
 
 func TestFIPSApplyRefusesABoundEd25519OrShortRSAFleetKey(t *testing.T) {
-	short := rsaPublicLine(1024)
+	short, below := rsaPublicLine(1024), rsaPublicLine(2048)
 	blob := strings.Fields(short)[1]
 	for _, row := range []struct {
 		line, message string
 	}{
 		{"ssh-ed25519 AAAAPUBLIC bootwright", "Secret/bootwright-machine-key holds a fleet key of type ssh-ed25519, which a FIPS-mode installation of Machine/rhel-01 refuses; nothing was published or booted"},
-		{short, "Secret/bootwright-machine-key holds an ssh-rsa fleet key of 1024 bits, and a FIPS-mode installation of Machine/rhel-01 needs at least 2048; nothing was published or booted"},
+		{short, "Secret/bootwright-machine-key holds an ssh-rsa fleet key of 1024 bits, and a FIPS-mode installation of Machine/rhel-01 needs at least 3072; nothing was published or booted"},
+		{below, "Secret/bootwright-machine-key holds an ssh-rsa fleet key of 2048 bits, and a FIPS-mode installation of Machine/rhel-01 needs at least 3072; nothing was published or booted"},
 		{"ssh-rsa !!! bootwright", "Secret/bootwright-machine-key holds an ssh-rsa fleet key whose size cannot be read, so a FIPS-mode installation of Machine/rhel-01 cannot admit it; nothing was published or booted"},
 	} {
 		runner := &fakeRunner{}
@@ -194,7 +195,7 @@ func TestFIPSApplyRefusesABoundEd25519OrShortRSAFleetKey(t *testing.T) {
 		if len(reported) != 1 || reported[0].Code != "api.value" || reported[0].Message != row.message {
 			t.Fatalf("%s: refusal = %#v (%v)", row.line, reported, err)
 		}
-		if reported[0].Remediation != "take this context back with bootwright destroy --context lab-b, then replace Secret/bootwright-machine-key with an ECDSA key or an RSA key of at least 2048 bits, "+
+		if reported[0].Remediation != "take this context back with bootwright destroy --context lab-b, then replace Secret/bootwright-machine-key with an ECDSA key or an RSA key of at least 3072 bits, "+
 			"for example a generated keyType ecdsaP256 or rsa, or disable spec.customizations.security.fips on MachineInstallProfile/rhel-9-8, "+
 			"and run bootwright apply --context lab-b; an apply that continues reads the key version this context bound" {
 			t.Fatalf("remediation = %q", reported[0].Remediation)
@@ -206,7 +207,7 @@ func TestFIPSApplyRefusesABoundEd25519OrShortRSAFleetKey(t *testing.T) {
 			t.Fatalf("%s reached the adapter", row.line)
 		}
 	}
-	for _, line := range []string{"ecdsa-sha2-nistp256 AAAAPUBLIC bootwright", rsaPublicLine(2048)} {
+	for _, line := range []string{"ecdsa-sha2-nistp256 AAAAPUBLIC bootwright", rsaPublicLine(3072)} {
 		runner := &fakeRunner{}
 		_, _ = New(runner).Apply(context.Background(), fipsExecution(t, line))
 		if len(runner.requests) != 1 {

@@ -474,7 +474,8 @@ consume reservations (D85). A new allocation scheme must preserve issued-ID
 non-reuse across crashes and restore, so it needs [B103](#b103)'s restore
 semantics. **Exit evidence:** bounded allocator state, reservation before use,
 counter and namespace exhaustion, migration of existing bindings and failed
-attempts, non-reuse and crash tests.
+attempts, non-reuse and crash tests, and `secret encryption status` naming
+the reservations used against their cap ([local keyring](../secrets.md#local-keyring)).
 
 ### B105
 
@@ -1838,7 +1839,7 @@ refusal kept as the backstop.
 
 ### B633
 
-An xdist worker crashed on `test_native_timeout_is_bounded_and_sanitized` in the
+An xdist worker crashed on the native timeout test, since removed, in the
 SSH key policy unit file during the first whole-tree unit run of X101, under
 load; the file passes alone and the whole tree passed on rerun. **Outcome:** the
 test is deterministic under parallel workers or its cause is recorded. **Requires:** none. **Definition:** `Specified`.

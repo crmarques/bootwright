@@ -141,11 +141,8 @@ func confirmationOf(action, name string) confirmation {
 func confirmationIn(action, object, contextName string) confirmation {
 	shown := escapeDisplayLine(object) + " in context " + escapeDisplayLine(contextName)
 	switch action {
-	case "replace secret", "delete secret":
-		noun := "replacement"
-		if action == "delete secret" {
-			noun = "deletion"
-		}
+	case "replace secret", "renew secret", "delete secret":
+		noun := map[string]string{"replace secret": "replacement", "renew secret": "renewal", "delete secret": "deletion"}[action]
 		var identity *diagnostics.ObjectIdentity
 		if api.ValidLexical(api.LexicalName, object) {
 			identity = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Secret), Name: object}

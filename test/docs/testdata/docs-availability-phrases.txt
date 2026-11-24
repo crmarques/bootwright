@@ -3,7 +3,6 @@ specs/add-on-coverage.md 2
 specs/add-ons.md 4
 specs/api/environment.md 2
 specs/api/machines.md 1
-specs/architecture.md 1
 specs/ceph-coverage.md 2
 specs/ceph-native-api.md 2
 specs/ceph-resources.md 1

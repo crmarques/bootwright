@@ -54,7 +54,7 @@ func fipsKey(contextName string, request Request, publicLine, reference, purpose
 	fields := strings.Fields(publicLine)
 	machine, secret := "Machine/"+request.Identity.Object, "Secret/"+reference
 	remedy := "take this context back with bootwright destroy --context " + contextName + ", then replace " + secret +
-		" with an ECDSA key or an RSA key of at least 2048 bits, for example a generated keyType ecdsaP256 or rsa, or disable spec.customizations.security.fips on MachineInstallProfile/" +
+		" with an ECDSA key or an RSA key of at least 3072 bits, for example a generated keyType ecdsaP256 or rsa, or disable spec.customizations.security.fips on MachineInstallProfile/" +
 		request.Identity.Profile + ", and run bootwright apply --context " + contextName + "; an apply that continues reads the key version this context bound"
 	switch fields[0] {
 	case "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521":
@@ -70,8 +70,8 @@ func fipsKey(contextName string, request Request, publicLine, reference, purpose
 	if !ok {
 		return refusal("api.value", secret+" holds an ssh-rsa "+purpose+" whose size cannot be read, so a FIPS-mode installation of "+machine+" cannot admit it; nothing was published or booted", remedy)
 	}
-	if bits < 2048 {
-		return refusal("api.value", secret+" holds an ssh-rsa "+purpose+" of "+strconv.Itoa(bits)+" bits, and a FIPS-mode installation of "+machine+" needs at least 2048; nothing was published or booted", remedy)
+	if bits < 3072 {
+		return refusal("api.value", secret+" holds an ssh-rsa "+purpose+" of "+strconv.Itoa(bits)+" bits, and a FIPS-mode installation of "+machine+" needs at least 3072; nothing was published or booted", remedy)
 	}
 	return nil
 }
