@@ -575,8 +575,17 @@ Its confidentiality rests on two properties together, and each must hold. The
 token is unguessable, so the path cannot be found by enumeration. And the
 fetch is made over a listener whose certificate the fetching machine verifies
 against the bound certificate it was given, so the path cannot be learned by
-observing the network. A consumer that would have to disable verification to
-fetch it must not publish confidentially this way.
+observing the network.
+
+The one exception is private boot media fetched by a BMC whose Machine
+explicitly selects `trust: disableVerification`
+([Machine BMC](api/machines.md#bmc),
+[security](security.md#network-remote-systems-and-privilege)). The block then
+publishes, and its confidentiality holds only against a passive observer: an
+active attacker on the media path can obtain the token and the image. The
+frozen request and plan record the weaker provenance. A consumer whose fetcher
+would disable verification without that explicit per-Machine selection must
+not publish confidentially this way.
 
 The attempt that publishes proves the publication before its block completes.
 From the placement Machine it requests the first byte of the published file
@@ -629,6 +638,11 @@ retained while the cluster's media block is, because a node may be booted from
 it again. A cluster's per-insert tokens are specified in
 [installation](openshift-clusters.md#installation). Any further use is
 specified before it is built.
+
+Held by: `TestMachineVirtualMediaDisableVerificationIsAnExplicitException`,
+`TestAPrivateInstallationFreezesExplicitDisabledVerification`,
+`TestProviderVirtualMediaDisableVerificationRefuses` and
+`TestAMachineKindDefaultCannotDefaultDisableVerification` for the exception.
 
 ## Managed network services
 

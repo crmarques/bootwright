@@ -180,9 +180,9 @@ BMC leg's bundle to the pre-boot, boot and disk-boot entry points, and
 the virtual-media trust, the server's certificate part, private delivery and
 the restore and removal settings to the insert and the eject. Because the image
 is private, a physical node whose BMC leg is `http` or does not verify refuses
-before registration. Media trust is verified and configured by default, with
-the explicit per-Machine [unverified-fetch exception](api/machines.md#bmc)
-recorded in the request and plan. An insert under `established` requires the
+before registration. Media trust is verified and configured by default; the one
+[unverified-fetch exception](infrastructure-services.md#private-consumer-publication)
+is that contract's. An insert under `established` requires the
 deciding setting on, enabling it by default when permitted.
 
 Every emulated BMC freezes automatic verified media trust with certificate
@@ -606,10 +606,10 @@ nothing to remove. Either block's refusal names the directory to fix, never a
 URL or a token
 (`test_a_refusal_names_the_directory_and_no_url_or_token`).
 
-That contract requires the fetching controller to verify the serving
-certificate. A physical management controller does so under the trust its
-Machine declares. An [emulated BMC](substrates.md#machine-realization) imports
-the same serving
+The [private publication contract](infrastructure-services.md#private-consumer-publication)
+owns when the fetcher verifies and its one unverified exception. A physical
+management controller verifies under the trust its Machine declares. An
+[emulated BMC](substrates.md#machine-realization) imports the same serving
 certificate and verifies the fetch whether the server is local or remote.
 
 **Pushed delivery.** A cluster whose every node takes pushed delivery needs no

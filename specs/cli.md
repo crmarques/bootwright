@@ -1361,11 +1361,12 @@ the default identities of the account the client runs as. Confidential
 material is never written to a named path, an argument, the environment or any
 durable state, and the operator is never asked to export it.
 
-`--ssh-user` reaches any account on any Machine, including one Bootwright
-installed. Naming the account the Machine already declares resolves to that
-account's own credential. Naming any other account offers it none, because a
-credential opens exactly the account it was authored for. Supply
-`--ssh-id-file` for that account, or select `--ssh-ask-password`.
+On the ordinary entry, `--ssh-user` reaches any account on any Machine,
+including one Bootwright installed; the
+[delegated entry](api/session-access-policy.md#delegated-execution) refuses
+it. Naming the Machine's declared account uses that account's own credential.
+Naming another offers none, because a credential opens only the account it was
+authored for. Supply `--ssh-id-file` for it, or select `--ssh-ask-password`.
 `--ssh-id-file` is offered ahead of the declared credential, which remains the
 fallback; a leading `~` resolves from the invoking account database, the file
 is opened with the invoking account's credentials and must satisfy the

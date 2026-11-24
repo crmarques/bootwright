@@ -953,10 +953,10 @@ capabilities before native authorization. Bind its protected file to the
 original operation, FSID, bootstrap host and native pool ID with
 secret-independent ownership and descriptor metadata. Replays and protected
 recapture prove that original file before reading it, then compare the native
-principal with the retained material privately. A lost authorization response
-reuses the original identity; a matching name, replacement file or key digest
-does not supply ownership. Native authorization must create or verify that
-exact identity, without overwriting a foreign principal.
+principal with the retained material privately. A matching name, replacement
+file or key digest does not supply ownership. The lost-reply adoption and the
+foreign-principal refusal belong to
+[CephClient](ceph-resources.md#cephclient).
 
 ## Native preservation, defaults and diagnostics
 

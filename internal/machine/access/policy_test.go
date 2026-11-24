@@ -77,6 +77,29 @@ func TestDelegatedSessionsRefuseOverridesAndUnconfiguredKeys(t *testing.T) {
 	}
 }
 
+func TestDelegatedSessionsRefuseEverySSHIdentityOverrideBeforeLending(t *testing.T) {
+	h := newHarness(t, func(options *Options) {
+		options.Authorize = func(context.Context, string, api.Catalog, []machine.SessionTarget, []string) error {
+			t.Fatal("an identity override reached policy")
+			return nil
+		}
+	})
+	for name, override := range map[string]machine.SSHOptions{
+		"user":                 {User: "bootwright"},
+		"id file":              {IdentityFile: "file"},
+		"ask password":         {User: "bootwright", AskPassword: true},
+		"ask sudo password":    {AskSudoPassword: true},
+		"user for provisioned": {UserForProvisioned: true},
+	} {
+		for _, names := range [][]string{{"declared"}, {"declared", "guest"}} {
+			_, err := h.service.Exec(t.Context(), ExecRequest{Names: names, SSH: override, Command: []string{"/usr/bin/uptime"}})
+			if code(t, err) != "access.denied" || h.lender.lends != 0 || h.client.proofs != 0 || len(h.client.sessions) != 0 {
+				t.Fatalf("%s over %v: error %v, lends %d, proofs %d, sessions %d", name, names, err, h.lender.lends, h.client.proofs, len(h.client.sessions))
+			}
+		}
+	}
+}
+
 func TestDelegatedExecNeedsExistingTrustAndClosesInput(t *testing.T) {
 	prepared := false
 	h := newHarness(t, func(options *Options) {

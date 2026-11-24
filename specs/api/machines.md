@@ -705,8 +705,8 @@ A remote Machine with `os.provided` opts into account creation by adding
 `access.lifecycle.bootstrap`. The lifecycle login is non-root with
 `privilege: sudo`. Its host pin matches `access.ssh.knownHostsRef`. The account
 and sudo rule are the context's owned effects. The managed account is a
-regular account by the host's own definition: its UID is at least `UID_MIN`
-from `/etc/login.defs`, or 1000 where that file sets none. Session
+regular account by the host's own definition, proved by the
+[ownership rules](#managed-login-ownership-and-removal). Session
 authentication comes from `access.ssh`.
 
 Bootstrap chooses one `auth` arm. `operatorIdentity: {}` uses the invoking
@@ -770,16 +770,65 @@ explicit bootstrap key file is scoped to enrollment. Withdrawal uses the
 declared bootstrap authentication and its own current credential.
 
 Destroy removes the managed login after its dependents through the bootstrap
-administrator, verifies withdrawal, and moves any home data behind a
-root-only directory before releasing the UID. A conflicting
-account or grant refuses. Unknown attempts inspect the owned effect before
-retrying. See [machine enroll](../cli.md#managed-machine-enrollment).
+administrator under the
+[ownership rules](#managed-login-ownership-and-removal). Unknown attempts
+inspect the owned effect before retrying. See
+[machine enroll](../cli.md#managed-machine-enrollment).
 A destroy that [abandons](../state-reconciliation.md#abandoned-removal) the
 Machine leaves the managed login, its home, its authorized key and its
 `/etc/sudoers.d/90-bootwright-<user>` grant in place without contacting the
 host. The account's mark names the apply that created it, so a later
 enrollment refuses that account as foreign until the host administrator removes
 the grant and the account.
+
+#### Managed login ownership and removal
+
+The enrollment program of the bootstrap administrator removes a login only
+when it owns every part of it. When a proof fails it refuses with exit status 3,
+names the step and reason below, and removes nothing the proof did not cover. A
+system failure reports `<step> <ERRNO>` instead, such as `rule` `ELOOP` for a
+symbolic link where the grant belongs.
+
+| Proof | Holds when | Refusal (step, reason) |
+| --- | --- | --- |
+| Account mark | The account's GECOS field equals `bootwright-` followed by the SHA-256 hex digest of the creating apply operation, a NUL byte and the Machine block's request digest. | `account` `not-bootwright` for any other field; `account` `other-operation` for another operation's mark. |
+| Owned home | The account's home is `/home/<user>-<last 16 hex digits of the mark>`. | `account` `home-differs`. |
+| Regular UID | The UID is at least `UID_MIN` from `/etc/login.defs`, or 1000 where that file sets none. | `account` `system-uid`. |
+| Grant | `/etc/sudoers.d/90-bootwright-<user>` is a regular root-owned file with one link that group and others cannot write, within 32 KiB, and equals `Defaults:<user> !requiretty` and `<user> ALL=(root) NOPASSWD: ALL` as two lines. | `rule` `foreign` for other content; `rule` `unsafe` or `oversized` for another file; `rule` `orphan` for a grant with no account; `rule-publish` `foreign` or `unsafe` when apply finds one there. |
+| Home and keys | The home and its `.ssh` are directories the account owns that group and others cannot write, and `authorized_keys` is a regular file the account or root owns, with one link, that group and others cannot write, within 32 KiB, and holds the managed public keys, exactly in apply and destroy. A root-owned empty home or `.ssh` counts as absent in destroy and observe. | `home`, `ssh-directory` or `keys` `foreign`; `keys` `unsafe` or `oversized` for another file; `keys` `exists` for keys with no account; `home` `exists` when apply finds a home path with no account. |
+| Host directories | `/home` and `/etc/sudoers.d` are root-owned directories that group and others cannot write, and `/home/.bootwright-retired` is a root-owned directory with no group or other permission. | `home-root`, `rule-root` or `archive` `unsafe`; `archive` `exposed`. |
+| Account creation | After `useradd` the host's name service returns the account. | `account` `unlisted`. |
+
+A conflicting account or grant is one that fails a row, and an
+account or grant of the same name that Bootwright did not create fails the mark
+or the grant row. Every mode holds an exclusive lock on `/etc/sudoers.d` from
+before it reads the account until it exits, so a concurrent run refuses `lock`
+`EAGAIN`.
+
+Destroy runs these steps in order after the proofs hold:
+
+1. Unlink `authorized_keys` when present.
+2. Unlink the grant.
+3. Rename the home into `/home/.bootwright-retired`, a root-only directory the
+   program creates. Home data moves there whole and is never copied or
+   deleted. A home that is not an owned directory refuses `archive` `foreign`,
+   and an archived entry that is not an owned directory, or an archived copy
+   beside a present home, refuses `archive` `conflict`.
+4. Run `userdel`, which releases the UID.
+5. Read the account, the home path and the grant again. The program reports
+   `absent` only when all three are gone, else it refuses `removal`
+   `unproved`.
+
+A destroy that stopped between steps continues from the first step still
+undone. A host with no account, no grant and no keys under the home path
+reports `absent` and changes nothing.
+
+Code: `internal/machine/account` and its embedded Python program `account.py`.
+Held by: `TestTheEnrollmentProgramRemovesOnlyALoginItOwnsInOrder` for the
+mark, home and UID proofs, the file and directory safety checks, the order of
+removal and the `removal` `unproved` refusal, and
+`TestARefusedEnrollmentNamesTheStepAndReasonTheProgramReports` for how Go
+renders each refusal.
 
 ## Bare-metal hardware
 

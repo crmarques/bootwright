@@ -39,11 +39,9 @@ resources at the owning boundary's documented cancellation points.
 
 Validation must distinguish absence, known value, and unknown result. A failed
 or ambiguous probe is unknown, never proof that a machine, object, credential,
-path, or effect is absent. The one narrowing is a removal whose capability
-declares it replay-safe: a successful read that cannot tell its postcondition
-from an unreadable target is recorded `inconclusive`, never `no-effect`, and
-admits one retry that reads the target again before any effect
-([resolution outcomes](state-reconciliation.md#resolution-outcomes)).
+path, or effect is absent. The one narrowing is the single replay-safe removal
+retry that [resolution outcomes](state-reconciliation.md#resolution-outcomes)
+owns.
 
 ### The controller host's attacker model
 
@@ -1051,17 +1049,26 @@ memory dump, request body, or provider response.
 ## Custom code
 
 Authored add-ons, [`ClusterAddon`](api/addons.md) declarations, are
-declarative data that only qualified Bootwright-owned code consumes; built-in
+declarative data that only qualified Bootwright-owned code consumes, except the
+[executable OLM shape](api/addons.md#executable-olm-add-ons); built-in
 [add-on packages](add-ons.md) are reviewed Go code whose program the
 [cluster object adapter](add-ons.md#the-cluster-object-adapter) runs. Built-in
-and custom origins have the
-same integrity, isolation, and negative-proof requirements, and custom
-packages gain the built-in lifecycle only with
-[B90](milestones/m4.md#b90). Neither grants process, adapter, target, effect,
-inventory, endpoint, dependency, credential, or privilege authority.
-Package-carried executable content is never loaded or run;
-that code may enter only its pinned embedded adapter and locked dependency
-closure under [architecture](architecture.md#go-and-ansible-responsibility-boundary).
+and authored origins have the
+same integrity, isolation, and negative-proof requirements.
+
+An authored add-on of the executable OLM shape selects a catalog image, a
+`startingCSV` and the custom resources it creates. The operator it installs
+runs with the privileges that catalog and ClusterServiceVersion request, so
+the binding that selects it is the trust decision. Its
+[admission rules](api/addons.md#executable-olm-add-ons) are defense in depth,
+not a containment boundary.
+
+Neither origin by itself grants process, adapter, target, effect, inventory,
+endpoint, dependency, credential, or privilege authority; every other authored
+shape is inert data. Package-carried executable content is never loaded or
+run, and Bootwright's own code may enter only its pinned embedded adapter and
+locked dependency closure under
+[architecture](architecture.md#go-and-ansible-responsibility-boundary).
 
 A built-in add-on package is Go code reviewed with the executable: its
 admission and rendering are pure, it never patches, adopts or deletes a

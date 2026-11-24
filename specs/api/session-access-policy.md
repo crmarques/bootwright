@@ -104,11 +104,27 @@ and pre-established host trust. The authorized target and the grant come from
 one effective context graph. Each target in a batch needs one complete matching
 grant for the verified caller, Machine, remote account and operation. With
 no grant, Bootwright refuses before lending credentials or opening any
-session. Any authorization refusal exits 255 with empty stdout. Delegated
-exec runs without a TTY and with closed stdin. Delegated rsh has ordinary
-interactive shell capabilities on the remote account. Policy changes affect
-new admissions. Running sessions end under the normal SSH session contract.
+session. Any authorization refusal exits 255 with empty stdout. Policy
+changes affect new admissions. Running sessions end under the normal SSH
+session contract.
+
+The delegated entry refuses every SSH identity override with `access.denied`
+and exit 255 before it lends any credential: `--ssh-user`, even naming the
+grant's remote account, `--ssh-id-file`, `--ssh-ask-password`,
+`--ssh-ask-sudo-password` and `--ssh-user-for-provisioned`. It offers only
+the Machine's configured key. Every delegated session sets the client's
+escape character off, clears all port forwarding and never forwards the agent.
+A delegated exec runs with no TTY and closed standard input. A delegated rsh
+is an interactive shell as the remote account, with neither escape nor port or
+agent forwarding.
 
 `bootwright policy permissions --context lab` shows grants matching the
 caller, the grant's subjects that matched the caller, their authored selectors
 and expanded Machines. Subjects that do not match the caller stay unlisted.
+
+Code: `access.Service.admitOptions` over `machine.SSHOptions.Borrowed`, and
+the delegated arguments of `internal/machine/sshlocal`.
+Held by: `TestDelegatedSessionsRefuseEverySSHIdentityOverrideBeforeLending`,
+`TestDelegatedSessionsRefuseOverridesAndUnconfiguredKeys`,
+`TestDelegatedExecNeedsExistingTrustAndClosesInput` and
+`TestDelegatedArgumentsDisableEscapeAndForwardingAndKeepShellInteractive`.

@@ -11,12 +11,12 @@ built-in package with its objects, configuration, readiness and acceptance.
 
 ## Trust boundary
 
-An authored add-on is declarative data under the
-[custom-code rule](security.md#custom-code). A built-in package's hooks are
+An authored add-on is declarative data, or the executable OLM shape, under the
+[custom-code rule](security.md#custom-code), which owns what that shape grants. A built-in package's hooks are
 pure Go reviewed with the executable, and its only remote effects are the
 [cluster object adapter](#the-cluster-object-adapter)'s. Authors cannot
-select executable code, [drivers](deferred/add-ons-design.md), inventory,
-privileges, retry policy or lifecycle order. A step
+select [drivers](deferred/add-ons-design.md), inventory, retry policy or
+lifecycle order, and cannot select executable code except as that shape. A step
 that names a playbook, roles or collections is admitted as inert data and
 makes its package lifecycle-ineligible regardless of origin. The
 [compiler boundary](api.md#compiler-boundary) applies to declarations and

@@ -590,16 +590,16 @@ CephClient.
 | `subvolumeRef` | CephFS subvolume arm: a same-cluster CephSubvolume. |
 | `access` | Required `readOnly` or `readWrite`; no implicit administrator access. |
 
-The native principal is `client.<metadata.name>`, with collision and ownership
-checks before the key is applied with `auth add` (never `auth import`,
-`auth get-or-create`, `auth caps` or `fs authorize`) and read back exactly with
-`auth get`. Go derives the capabilities from the selected access and the
-frozen scope and freezes them as the client request's `caps`; for the subvolume
-arm Go's prepare step binds the proved path into the frozen `mds` grant. The
-worker applies the frozen grants without deriving them, and Go judges the
-created principal against the same value
-([language responsibility](architecture.md#language-responsibility)). The RBD permission covers the declared pool,
-not only one image; the plan reports each arm's scope from the frozen request.
+The native principal is `client.<metadata.name>`. The key is applied with
+`auth add` (never `auth import`, `auth get-or-create`, `auth caps` or
+`fs authorize`) and read back exactly with `auth get`. Go derives the
+capabilities from the selected access and the frozen scope and freezes them as
+the client request's `caps`; for the subvolume arm Go's prepare step binds the
+proved path into the frozen `mds` grant. The worker applies the frozen grants
+without deriving them, and Go judges the created principal against the same
+value ([language responsibility](architecture.md#language-responsibility)). The
+RBD permission covers the declared pool, not only one image; the plan reports
+each arm's scope from the frozen request.
 
 The client has no data-pool field: a CephRBDImage's `spec.dataPoolRef` is
 the single owner of that fact. Plan derives the distinct `dataPoolRef` values
@@ -649,8 +649,28 @@ native ID and, for a subvolume, its recorded marker, its recorded path and the
 path `fs subvolume getpath` reports now. A client of a filesystem or subvolume
 plan propagates that resource's plan refusals and orders after its block.
 
-The generated key enters produced-material custody before client readiness;
-a lost response requires safe recapture of the same principal/key. No native
+The generated key enters produced-material custody before client readiness,
+under the retention and binding of the
+[secret bindings](ceph-native-api.md#secret-bindings).
+Before it applies the key the worker proves the block's ownership mark, the
+owned cluster and the incarnation of its frozen scope (the pool, the filesystem
+or the subvolume with its recorded path), and that no principal of the name
+exists without this block's records. A scope that differs refuses
+`pool-identity`, `filesystem-identity` or `subvolume-identity` as that resource
+section states. The worker writes the client attempt record
+`client-attempt-<metadata.name>.json` after the key is retained and before
+`auth add`; it binds the proved scope to the custody identity of the retained
+key. A lost reply is adopted only with the ownership mark, that attempt record
+and exactly one existing principal whose key and caps equal the retained key
+and the frozen caps; the worker then recaptures the key with `auth get` and
+never generates or applies another. The worker never overwrites a principal.
+
+| Refusal | Reached when |
+| --- | --- |
+| `foreign-client` | `client.<metadata.name>` exists without this block's ownership mark or attempt record, even when its key and caps equal the retained ones. |
+| `client-identity` | More than one principal of the name exists; its key or caps differ from the retained material or the frozen caps; the attempt or applied record differs from the current binding; an applied record has no principal; or `auth get` differs from the retained material. |
+
+No native
 keyring is emitted through ordinary render, status or evidence. No Bootwright
 harness consumes the key: B476's client-data test runs through `cluster exec`
 with the bootstrap node's administrator keyring
@@ -684,6 +704,14 @@ spec:
   subvolumeRef: documents
   access: readWrite
 ```
+
+Code: `ResourceWorker.client` in the collection's `ceph_native_resources` module.
+Held by: `test_lost_auth_creation_reply_recovers_exact_original_identity`,
+`test_foreign_principal_matching_expected_key_and_caps_is_still_foreign`,
+`test_reserved_material_without_auth_attempt_does_not_adopt_matching_principal`,
+`test_changed_native_principal_is_never_adopted_or_overwritten` and
+`test_racing_foreign_auth_add_cannot_be_overwritten` in
+`test_ceph_client_custody.py`.
 
 ## CephFilesystem
 
