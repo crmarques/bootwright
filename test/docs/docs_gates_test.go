@@ -184,7 +184,6 @@ var docsLeafExceptions = map[string]docsSectionException{
 	"specs/ceph.md ### Cluster execution budget":                                {ceiling: 11210, since: "2026-10-29"},
 	"specs/cli.md ### Lifecycle receipt":                                        {ceiling: 10899, since: "2026-10-29"},
 	"specs/cli.md ### Local privilege and user identity":                        {ceiling: 10666, since: "2026-10-29"},
-	"specs/cli.md ### Machine SSH sessions":                                     {ceiling: 9273, since: "2026-10-29"},
 	"specs/managed-os.md ### Derived installation":                              {ceiling: 11761, since: "2026-10-29"},
 	"specs/managed-os.md ### Network convergence":                               {ceiling: 16647, since: "2026-10-29"},
 	"specs/managed-os.md ### Registration":                                      {ceiling: 8429, since: "2026-10-29"},

@@ -3,6 +3,7 @@ package cli
 import (
 	"strings"
 
+	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/spf13/pflag"
 )
@@ -35,7 +36,7 @@ func repeatedCommand(args []string, contextName string) string {
 	}
 	words := strings.Fields(command.CommandPath())
 	if contextName != "" {
-		words = append(words, "--context", shellWord(contextName))
+		words = append(words, "--context", machine.ShellWord(contextName))
 	}
 	flags.Visit(func(flag *pflag.Flag) {
 		name := "--" + flag.Name
@@ -54,7 +55,7 @@ func repeatedCommand(args []string, contextName string) string {
 				}
 			}
 		default:
-			words = append(words, name, shellWord(flag.Value.String()))
+			words = append(words, name, machine.ShellWord(flag.Value.String()))
 		}
 	})
 	return strings.Join(words, " ")
@@ -64,7 +65,7 @@ func repeatedCommand(args []string, contextName string) string {
 // --yes and so refuses a bare token (Q117); the unquoted placeholder is no shell word.
 func repeatedValue(flag, value string) string {
 	if flag != "authorize" {
-		return shellWord(value)
+		return machine.ShellWord(value)
 	}
 	members := strings.Split(value, ",")
 	bound := false
@@ -75,23 +76,7 @@ func repeatedValue(flag, value string) string {
 		}
 	}
 	if !bound {
-		return shellWord(value)
+		return machine.ShellWord(value)
 	}
 	return strings.Join(members, ",")
-}
-
-// shellWord quotes one argument for a POSIX shell only when it needs it, so an
-// ordinary command reads as typed and every other one still runs as given.
-func shellWord(value string) string {
-	if value != "" && !strings.ContainsFunc(value, func(r rune) bool { return !shellSafe(r) }) {
-		return value
-	}
-	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
-}
-
-func shellSafe(r rune) bool {
-	if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' {
-		return true
-	}
-	return strings.ContainsRune("-_=+:,./@%", r)
 }

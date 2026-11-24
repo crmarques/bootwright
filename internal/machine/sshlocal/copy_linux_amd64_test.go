@@ -25,7 +25,7 @@ func copyFixture(t *testing.T) (Copier, context.Context) {
 	}
 	dir := t.TempDir()
 	client := filepath.Join(dir, "ssh-fixture")
-	if err := os.WriteFile(client, []byte("#!/bin/sh\nexec /usr/bin/python3 -I -B -c "+quoteWord(copyWorkerSource)+"\n"), 0o700); err != nil {
+	if err := os.WriteFile(client, []byte("#!/bin/sh\nexec /usr/bin/python3 -I -B -c "+machine.ShellWord(copyWorkerSource)+"\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	l := New(nil, nil, nil)

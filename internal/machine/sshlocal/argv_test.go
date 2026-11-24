@@ -205,6 +205,23 @@ func TestACommandReachesTheRemoteShellAsTheExactWordsGiven(t *testing.T) {
 	}
 }
 
+// Shell syntax is only data to the remote login shell, so a glob or a variable
+// expands only inside a script the operator hands to a shell by name, which
+// then expands it with that shell's privilege.
+func TestShellSyntaxExpandsOnlyInsideAScriptGivenToAShell(t *testing.T) {
+	with := session(machine.IdentityOperator)
+	with.Command = []string{"sudo", "ls", "/var/lib/app/*", "$HOME", "a|b"}
+	got := arguments(with, paths{config: 3, knownHosts: 4}, with.HostKey.Algorithms())
+	if tail, want := got[len(got)-5:], []string{"sudo", "ls", "'/var/lib/app/*'", "'$HOME'", "'a|b'"}; !slices.Equal(tail, want) {
+		t.Fatalf("literal words = %q, want %q", tail, want)
+	}
+	with.Command = []string{"sudo", "sh", "-c", `ls /var/lib/app/* "$HOME" | wc -l`}
+	got = arguments(with, paths{config: 3, knownHosts: 4}, with.HostKey.Algorithms())
+	if tail, want := got[len(got)-4:], []string{"sudo", "sh", "-c", `'ls /var/lib/app/* "$HOME" | wc -l'`}; !slices.Equal(tail, want) {
+		t.Fatalf("script words = %q, want %q", tail, want)
+	}
+}
+
 // An observation proves a key and nothing else: it must offer no credential,
 // because a key that has not been trusted yet cannot authorize one.
 func TestAnObservationOffersNoCredential(t *testing.T) {

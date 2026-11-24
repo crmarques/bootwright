@@ -59,6 +59,7 @@ func TestCarryPresentationPreservesArgumentsAndResolvedColor(t *testing.T) {
 		{"secret value", []string{"secret", "set", "--name", "demo", "--username", "private value --color always"}, PresentationOptions{NoColor: true}, []string{"secret", "set", "--name", "demo", "--username", "private value --color always", "--color=never"}},
 		{"flag-shaped secret value", []string{"secret", "set", "--name", "demo", "--username", "--color"}, PresentationOptions{NoColor: true}, []string{"secret", "set", "--name", "demo", "--username", "--color", "--color=never"}},
 		{"separator secret value", []string{"secret", "set", "--name", "demo", "--username", "--"}, PresentationOptions{NoColor: true}, []string{"secret", "set", "--name", "demo", "--username", "--", "--color=never"}},
+		{"remote script flags", []string{"machine", "exec", "--name", "demo", "--shell", "--sudo", "--var", "x=--color", "ls $x"}, PresentationOptions{NoColor: true}, []string{"machine", "exec", "--name", "demo", "--shell", "--sudo", "--var", "x=--color", "--color=never", "ls $x"}},
 		{"separator target value", []string{"machine", "exec", "--name", "--", "uptime"}, PresentationOptions{NoColor: true}, []string{"machine", "exec", "--name", "--", "--color=never", "uptime"}},
 		{"invalid syntax", []string{"machine", "list", "--unknown"}, PresentationOptions{NoColor: true}, []string{"machine", "list", "--unknown"}},
 	} {

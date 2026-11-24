@@ -1416,11 +1416,12 @@ Machine, the type and the remedy, before any credential is offered.
 The session is the operator's. Standard input, output and error belong to the
 client for its whole duration, its exit status is the result, and Bootwright
 writes only diagnostics and the host-key confirmation, on standard error,
-before the connection opens. `machine exec` runs the exact argument vector and
-reports the remote command's exit status; `machine rsh` accepts no command
-tail. The client reads no ambient SSH configuration, inherits no agent,
-receives only terminal-identifying environment values, and reads anonymous
-session material through descriptors the launcher holds until the client exits.
+before the connection opens. `machine exec` runs the exact argument vector its
+[remote command](cli/remote-commands.md) builds and reports the remote command's
+exit status; `machine rsh` accepts no command tail. The client
+reads no ambient SSH configuration, inherits no agent, receives only
+terminal-identifying environment values, and reads anonymous session material
+through descriptors the launcher holds until the client exits.
 
 Resolution follows explicit access: an unknown or excluded name fails
 `access.target`, a Machine reached locally fails `access.unavailable` naming
@@ -1438,6 +1439,8 @@ refusal there and exits `1`, and the child writes no start line to a terminal,
 so the supervisor cannot tell that refusal from a remote command's `1` and
 keeps it. Once the session
 opened, its status is the result even after an interrupt.
+
+#### Several Machines
 
 `machine exec` accepts a comma-separated `--name` under the
 [list rules](#parsing-and-input-conventions); `machine rsh` names one Machine.

@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"slices"
 
 	environmentaccess "github.com/crmarques/bootwright/internal/environment/access"
 	"github.com/crmarques/bootwright/internal/environment/inspection"
@@ -115,12 +114,16 @@ func (s Services) invokeClusterExec(ctx context.Context, values *requestValues, 
 	if s.EnvironmentAccess == nil {
 		return commandResult{}, errMissingService
 	}
+	command, err := remoteCommand(values.flags, args)
+	if err != nil {
+		return commandResult{}, err
+	}
 	result, err := invokeResult(ctx, values, environmentaccess.ClusterExecRequest{
 		ContextName: values.text("context"),
 		Names:       values.names("name"),
 		Nodes:       values.names("node"),
 		SSH:         values.sshSession(),
-		Command:     slices.Clone(args),
+		Command:     command,
 	}, s.EnvironmentAccess.ClusterExec)
 	return commandResult{session: result}, err
 }

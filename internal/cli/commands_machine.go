@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"slices"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/machine"
@@ -148,11 +147,15 @@ func (s Services) invokeMachineExec(ctx context.Context, values *requestValues, 
 	if s.MachineAccess == nil {
 		return commandResult{}, errMissingService
 	}
+	command, err := remoteCommand(values.flags, args)
+	if err != nil {
+		return commandResult{}, err
+	}
 	result, err := invokeResult(ctx, values, machineaccess.ExecRequest{
 		ContextName: values.text("context"),
 		Names:       values.names("name"),
 		SSH:         values.sshSession(),
-		Command:     slices.Clone(args),
+		Command:     command,
 	}, s.MachineAccess.Exec)
 	return commandResult{session: result}, err
 }

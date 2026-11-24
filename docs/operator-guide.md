@@ -750,6 +750,19 @@ bootwright machine stop --context lab-rhel --name rhel-01,rhel-02,rhel-03 --yes
 bootwright machine exec --context lab-rhel --name rhel-01,rhel-02,rhel-03 cat /etc/os-release
 ```
 
+An exec runs its words exactly as given, so nothing on the Machine expands a
+glob or a variable in them. Add `--shell` to run the words as one script of the
+Machine's `/bin/sh`, where `$name` takes the Machine's value, and
+`--var <name>=<value>` to hand it a value from the controller. `--sudo` runs the
+command, or the whole script with its globs, through the Machine's sudo. Quote
+the script so your own shell leaves it alone
+([remote commands](../specs/cli/remote-commands.md)):
+
+```sh
+bootwright machine exec --name node --shell --sudo -- 'ls /var/lib/bootwright/ceph/*'
+bootwright machine exec --name node --shell --var src="$PWD" -- 'echo "$src on $(hostname)"'
+```
+
 To use an existing account for one session, supply its login and private key.
 The target account must already accept the corresponding public key. Place
 both flags before the remote command.

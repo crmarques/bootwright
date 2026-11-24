@@ -3,7 +3,6 @@ package sshlocal
 import (
 	"os"
 	"strconv"
-	"strings"
 
 	"github.com/crmarques/bootwright/internal/machine"
 )
@@ -82,7 +81,7 @@ func clientArguments(session machine.Session, held paths, pinned string, descrip
 	}
 	args = append(args, session.Address)
 	for _, word := range session.Command {
-		args = append(args, quoteWord(word))
+		args = append(args, machine.ShellWord(word))
 	}
 	return args
 }
@@ -157,21 +156,4 @@ func observation(address string, port, config int, knownHosts string, seconds in
 		args = append(args, "-o", "HostKeyAlgorithms="+pinned)
 	}
 	return append(args, address)
-}
-
-// quoteWord quotes one argument for the remote shell. The client joins the
-// words it is given with spaces and the remote shell splits them again, so a
-// value reaches the remote command unchanged only when it is quoted here.
-func quoteWord(value string) string {
-	if value != "" && !strings.ContainsFunc(value, func(r rune) bool { return !shellSafe(r) }) {
-		return value
-	}
-	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
-}
-
-func shellSafe(r rune) bool {
-	if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' {
-		return true
-	}
-	return strings.ContainsRune("-_=+:,./@%", r)
 }

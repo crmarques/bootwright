@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/crmarques/bootwright/internal/machine"
 )
 
 // This subprocess models OpenSSH closing inherited descriptors before it
@@ -81,7 +83,7 @@ func descriptorClient(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return stubClient(t, `[ "$1" = -G ] && { echo "hostkeyalgorithms ssh-ed25519"; exit 0; }
-exec `+quoteWord(executable)+" -test.run=^TestSSHDescriptorClient$ -- --ssh-descriptor-client \"$@\"")
+exec `+machine.ShellWord(executable)+" -test.run=^TestSSHDescriptorClient$ -- --ssh-descriptor-client \"$@\"")
 }
 
 func TestSSHMaterialSurvivesClientDescriptorClosure(t *testing.T) {

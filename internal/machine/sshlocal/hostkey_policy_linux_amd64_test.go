@@ -39,7 +39,7 @@ func policyClient(t *testing.T, output string, exit int, policy string) policyRi
 	if err := os.WriteFile(filepath.Join(records, "output"), []byte(output), 0600); err != nil {
 		t.Fatal(err)
 	}
-	dir := quoteWord(records)
+	dir := machine.ShellWord(records)
 	client := stubClient(t, `if [ "$1" = -G ]; then
  cat > `+dir+`/policy-stdin
  printf '%s\n' "$*" >> `+dir+`/evaluations

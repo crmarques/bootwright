@@ -297,7 +297,9 @@ func sessionCommand(spec commandSpec) commandSpec {
 	spec.sshFlags = sessionSSHFlags
 	spec.short += " as the Machine's resolved identity; confirm or refuse an unproved host key and return the client's exit status"
 	if spec.payload {
-		spec.long += payloadHelp
+		spec.long += payloadHelp + remoteWordsHelp
+		spec.flags = append(spec.flags, remoteCommandFlags()...)
+		spec.validate = firstRefusal(spec.validate, validateRemoteCommand)
 	}
 	return spec
 }
