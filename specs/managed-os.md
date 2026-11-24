@@ -2074,9 +2074,15 @@ controller-stage prerequisite.
 
 The worker proves `ID=rhel` and the target's `VERSION_ID` before its
 transaction: `withinRelease` requires the declared minor, and `toRelease`
-also admits an earlier minor of the same major. It scopes DNF's release
-substitutions to the declared minor for its transaction. Fixed repository URLs
-still require operator-published content for that minor. Candidates that
+also admits an earlier minor of the same major. It reads the host's
+repositories as the host's own DNF does. That means the release substitutions
+DNF derives from the installed system and `/etc/dnf/vars`, and any sticky
+`subscription-manager release`. It does not override them, because a
+Satellite content view can serve RHEL only at the major path, such as
+`.../rhel9/9/...`, where a minor substitution would ask for a path the view
+does not serve. A repository whose metadata cannot be read refuses
+`update-unavailable` with the detail `metadata@<repository id>`. The
+inspected transaction, not the repository path, bounds the release. Candidates that
 would change the release identity to any other version, remove it, or
 explicitly name a later minor refuse before the exact resolved DNF transaction
 runs. A host on an earlier minor moves only when that transaction installs the

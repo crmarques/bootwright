@@ -220,28 +220,25 @@ class Substitutions(dict):
         self["releasever"] = "9"
 
 
-def test_transaction_uses_the_exact_minor_during_repository_configuration():
+def test_repositories_keep_the_hosts_own_release_substitution():
+    # A Satellite content view can serve RHEL only at the major path, rhel9/9/;
+    # a minor substitution would ask it for rhel9/9.8/ and fail on metadata.
     events = []
     repo = SimpleNamespace()
     substitutions = Substitutions()
     conf = SimpleNamespace(read=lambda: events.append("conf"), installroot="/", varsdir=["/etc/dnf/vars"],
                            substitutions=substitutions)
 
-    def pre_configure():
-        assert substitutions["releasever"] == "9.8"
-        substitutions["releasever"] = "different"
-        events.append("pre-configure")
-
     def read_repos():
-        assert substitutions == {"releasever": "9.8", "releasever_major": "9", "releasever_minor": "8"}
+        assert substitutions == {"releasever": "9"}
         events.append("read-repos")
 
     base = SimpleNamespace(
         conf=conf, repos=SimpleNamespace(iter_enabled=lambda: [repo]),
-        init_plugins=lambda: events.append("init-plugins"), pre_configure_plugins=pre_configure,
+        init_plugins=lambda: events.append("init-plugins"), pre_configure_plugins=lambda: events.append("pre-configure"),
         read_all_repos=read_repos, configure_plugins=lambda: events.append("plugins"),
     )
-    update.configure(base, OWNER, "9.8")
+    update.configure(base, OWNER)
 
     assert events == ["conf", "init-plugins", "pre-configure", "read-repos", "plugins"]
     assert conf.comment == update.COMMENT + OWNER
@@ -284,6 +281,37 @@ def test_only_the_inspected_solver_transaction_can_commit(monkeypatch):
     transaction.install_set = [package("systemd", "1")]
     assert update.upgrade(OWNER, "9.8", "9.8", dnf)
     assert steps == ["input", "upgrade", "resolve", "download", "signatures", "commit"]
+
+
+def test_a_metadata_failure_names_the_first_unreadable_repository(monkeypatch):
+    monkeypatch.setitem(sys.modules, "dnf.callback", SimpleNamespace(TransactionProgress=object))
+    monkeypatch.setattr(update, "configure", lambda *args: None)
+
+    class Error(Exception):
+        pass
+
+    def repo(name, readable):
+        def load():
+            if not readable:
+                raise Error(name)
+        return SimpleNamespace(id=name, load=load)
+
+    def fill_sack(**kwargs):
+        raise Error("metadata")
+
+    enabled = [repo("rhel-9-for-x86_64-baseos-rpms", True), repo("rhel-9-for-x86_64-appstream-rpms", False),
+               repo("custom/elk", False)]
+    base = SimpleNamespace(fill_sack=fill_sack, repos=SimpleNamespace(iter_enabled=lambda: enabled))
+    dnf = SimpleNamespace(Base=lambda: nullcontext(base), exceptions=SimpleNamespace(Error=Error))
+    for repositories, detail in (
+        (enabled, "metadata@rhel-9-for-x86_64-appstream-rpms"),
+        (enabled[2:], "metadata@unknown"),
+        (enabled[:1], "metadata"),
+    ):
+        base.repos = SimpleNamespace(iter_enabled=lambda repositories=repositories: repositories)
+        with pytest.raises(Refused) as error:
+            update.upgrade(OWNER, "9.8", "9.8", dnf)
+        assert (error.value.reason, error.value.cause, error.value.detail) == ("update-unavailable", "metadata", detail)
 
 
 class RootView:

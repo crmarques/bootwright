@@ -178,10 +178,10 @@ func refusals(request Request) map[string]error {
 	for reason, message := range map[string]string{
 		"update-release-mismatch":    mismatch,
 		"update-release-unavailable": "the enabled repositories offer no RHEL " + request.Release + " release package to update to",
-		"update-release-drift":       "the resolved package transaction would leave RHEL " + request.Release,
+		"update-release-drift":       "the resolved package transaction would leave RHEL " + request.Release + "; pin the host's repositories to it, such as with subscription-manager release --set=" + request.Release + ", or select a content view that holds it",
 		"update-no-repository":       "no enabled update repository supplies packages",
 		"update-foreign":             "the update receipt could not be attributed to this operation",
-		"update-unavailable":         "the host could not resolve or download the release-scoped update",
+		"update-unavailable":         "the host could not read its enabled repositories or download the update",
 		"update-failed":              "the package update did not settle",
 		"update-reboot":              "the host did not prove that it rebooted after updating",
 	} {

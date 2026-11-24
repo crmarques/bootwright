@@ -193,10 +193,12 @@ def history(owner, dnf):
         raise shared.Refused("update-failed", "history") from None
 
 
+def repository_token(value):
+    return value if isinstance(value, str) and shared.REPOSITORY.fullmatch(value) else "unknown"
+
+
 def release_swap(package, version):
-    repository = getattr(package, "reponame", "")
-    if not isinstance(repository, str) or not shared.REPOSITORY.fullmatch(repository):
-        repository = "unknown"
+    repository = repository_token(getattr(package, "reponame", ""))
     raise shared.Refused("update-release-drift", detail=shared.token(version) + "@" + repository)
 
 
@@ -222,24 +224,16 @@ def check_release_transaction(transaction, release, installed):
     return installing
 
 
-def pin_transaction(conf, release):
-    major, minor = release.split(".")
-    conf.substitutions["releasever"] = release
-    conf.substitutions["releasever_major"] = major
-    conf.substitutions["releasever_minor"] = minor
-
-
-def configure(base, owner, release):
+def configure(base, owner):
+    """Read the repositories as the host's own DNF does; the inspected transaction bounds the release."""
     base.conf.read()
     base.conf.substitutions.update_from_etc(base.conf.installroot, varsdir=base.conf.varsdir)
-    pin_transaction(base.conf, release)
     base.conf.history_record = True
     base.conf.comment = COMMENT + owner
     base.conf.exit_on_lock = True
     base.conf.assumeno = True
     base.init_plugins()
     base.pre_configure_plugins()
-    pin_transaction(base.conf, release)
     base.read_all_repos()
     base.configure_plugins()
     repositories = list(base.repos.iter_enabled())
@@ -248,6 +242,16 @@ def configure(base, owner, release):
     for repo in repositories:
         repo.metadata_expire = 0
         repo.skip_if_unavailable = False
+
+
+def unreadable_repository(base, dnf):
+    """After a failed metadata load, name the first enabled repository that still cannot be read."""
+    for repo in base.repos.iter_enabled():
+        try:
+            repo.load()
+        except dnf.exceptions.Error:
+            return "metadata@" + repository_token(repo.id)
+    return "metadata"
 
 
 def check_signatures(base, packages):
@@ -275,11 +279,11 @@ def upgrade(owner, release, installed, dnf):
             self.failed = True
 
     with dnf.Base() as base:
-        configure(base, owner, release)
+        configure(base, owner)
         try:
             base.fill_sack(load_system_repo=True)
         except dnf.exceptions.Error:
-            raise shared.Refused("update-unavailable", "metadata") from None
+            raise shared.Refused("update-unavailable", "metadata", detail=unreadable_repository(base, dnf)) from None
         base.upgrade_all()
         try:
             base.resolve()
