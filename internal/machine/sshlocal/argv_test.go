@@ -222,6 +222,15 @@ func TestShellSyntaxExpandsOnlyInsideAScriptGivenToAShell(t *testing.T) {
 	}
 }
 
+func TestALeadingAssignmentShapedWordStaysTheCommandName(t *testing.T) {
+	with := session(machine.IdentityOperator)
+	with.Command = []string{"FOO=bar", "env", "A=b"}
+	got := arguments(with, paths{config: 3, knownHosts: 4}, with.HostKey.Algorithms())
+	if tail, want := got[len(got)-3:], []string{"'FOO=bar'", "env", "A=b"}; !slices.Equal(tail, want) {
+		t.Fatalf("words = %q, want %q", tail, want)
+	}
+}
+
 // An observation proves a key and nothing else: it must offer no credential,
 // because a key that has not been trusted yet cannot authorize one.
 func TestAnObservationOffersNoCredential(t *testing.T) {

@@ -73,11 +73,28 @@ func ShellName(name string) bool {
 	})
 }
 
+// ShellLine quotes a leading word holding = too: unquoted, a shell assigns it.
+func ShellLine(words []string) []string {
+	line := make([]string, 0, len(words))
+	for _, word := range words {
+		if len(line) == 0 && strings.ContainsRune(word, '=') {
+			line = append(line, quotedWord(word))
+			continue
+		}
+		line = append(line, ShellWord(word))
+	}
+	return line
+}
+
 // ShellWord quotes a word only when a POSIX shell would otherwise change it.
 func ShellWord(value string) string {
 	if value != "" && !strings.ContainsFunc(value, func(r rune) bool { return !shellSafe(r) }) {
 		return value
 	}
+	return quotedWord(value)
+}
+
+func quotedWord(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
 }
 

@@ -2,6 +2,7 @@ package machine
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -76,15 +77,7 @@ func TestABindingReachesTheScriptAsDataAndTheScriptExpandsTargetValues(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	line := make([]string, 0, len(vector))
-	for _, word := range vector {
-		line = append(line, ShellWord(word))
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	login := exec.CommandContext(ctx, RemoteShell, "-c", strings.Join(line, " "))
-	login.Env = []string{"TARGET_ONLY=from the target", "PATH=/usr/bin:/bin"}
-	got, err := login.Output()
+	got, err := asTheLoginShell(t, vector, "TARGET_ONLY=from the target")
 	if err != nil {
 		t.Fatalf("shell: %v", err)
 	}
@@ -92,4 +85,21 @@ func TestABindingReachesTheScriptAsDataAndTheScriptExpandsTargetValues(t *testin
 	if string(got) != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
+}
+
+func TestALeadingAssignmentShapedWordRunsAsTheCommandItNames(t *testing.T) {
+	got, err := asTheLoginShell(t, []string{"MARK=assigned", RemoteShell, "-c", `printf '%s' "${MARK-unset}"`})
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) || exit.ExitCode() != 127 || string(got) != "" {
+		t.Fatalf("output = %q, err = %v; want the missing command MARK=assigned (127)", got, err)
+	}
+}
+
+func asTheLoginShell(t *testing.T, vector []string, env ...string) ([]byte, error) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	login := exec.CommandContext(ctx, RemoteShell, "-c", strings.Join(ShellLine(vector), " "))
+	login.Env = append([]string{"PATH=/usr/bin:/bin"}, env...)
+	return login.Output()
 }

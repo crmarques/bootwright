@@ -10,7 +10,8 @@ the Machine.
 
 Without `--shell` the payload words are the vector, and each reaches the
 remote command unchanged, so no shell on the Machine expands a glob, a
-variable, a pipe or a redirection in it. The invoking shell expands only what
+variable, a pipe or a redirection in it. A leading word that holds `=` names
+the command, never a variable assignment. The invoking shell expands only what
 the operator leaves outside quotes, against the controller.
 
 ## Machine scripts and controller values
@@ -34,7 +35,8 @@ controller's values travel through `--var`.
 runs the literal command, or the whole script with its globs, as root under
 the remote account's own sudo policy. A session command has no terminal for
 sudo to prompt on, so a rule that asks for a password refuses with sudo's own
-message and status.
+message and status. Sudo itself reads a leading `<name>=<value>` word after
+`--sudo` as an environment setting its policy may refuse.
 
 Both programs are named by absolute path, so a
 [session policy grant](../api/session-access-policy.md), which matches

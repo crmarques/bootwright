@@ -80,9 +80,7 @@ func clientArguments(session machine.Session, held paths, pinned string, descrip
 		args = append(args, "-l", session.User)
 	}
 	args = append(args, session.Address)
-	for _, word := range session.Command {
-		args = append(args, machine.ShellWord(word))
-	}
+	args = append(args, machine.ShellLine(session.Command)...)
 	return args
 }
 
