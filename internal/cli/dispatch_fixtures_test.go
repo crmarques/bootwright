@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	addoncatalog "github.com/crmarques/bootwright/internal/addons/catalog"
 	containeraccess "github.com/crmarques/bootwright/internal/containercluster/access"
 	"github.com/crmarques/bootwright/internal/containercluster/installation"
@@ -433,8 +434,8 @@ func (p policySpy) Install(ctx context.Context, name, file string) (string, erro
 
 func (p policySpy) Permissions(ctx context.Context, name string) (string, []sessionpolicy.Grant, error) {
 	return name, []sessionpolicy.Grant{
-		{Name: "diagnostics", ClusterRefs: []string{"apps"}, MachineRefs: []string{"gateway"}, Machines: []string{"gateway", "worker"}, RemoteUser: "core", Commands: [][]string{{"/usr/bin/uptime"}}},
-		{Name: "support", Machines: []string{"worker"}, RemoteUser: "core", Shell: true},
+		{Name: "diagnostics", Subjects: []api.PolicySubject{{Group: "PLATFORM_SUPPORT"}, {User: "analyst"}}, ClusterRefs: []string{"apps"}, MachineRefs: []string{"gateway"}, Machines: []string{"gateway", "worker"}, RemoteUser: "core", Commands: [][]string{{"/usr/bin/uptime"}}},
+		{Name: "support", Subjects: []api.PolicySubject{{User: "analyst"}}, Machines: []string{"worker"}, RemoteUser: "core", Shell: true},
 	}, p.record.called(ctx, "policy permissions", name)
 }
 

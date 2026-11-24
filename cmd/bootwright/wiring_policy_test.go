@@ -94,23 +94,27 @@ func TestPolicyInstallPublishesOnlyValidatedBytesForTheSelectedRecord(t *testing
 	failure := errors.New("storage failed")
 	selected := contexts.Record{Name: "lab", Revision: "test-revision"}
 	for _, test := range []struct {
-		name              string
+		test              string
 		data              string
 		registry          contexts.Registry
+		name              string
+		selection         error
 		view, render      error
 		publish, want     error
 		wantPublish       bool
 		wantPolicyRefusal bool
 	}{
-		{name: "success", data: sessionPolicyYAML, wantPublish: true},
-		{name: "publication error", data: sessionPolicyYAML, publish: failure, want: failure, wantPublish: true},
-		{name: "registry error", view: failure, want: failure},
-		{name: "unknown context", registry: contexts.Registry{Contexts: []contexts.Record{{Name: "other"}}}},
-		{name: "render error", render: failure, want: failure},
-		{name: "missing input"},
-		{name: "invalid policy", data: "invalid", wantPolicyRefusal: true},
+		{test: "success", name: "lab", data: sessionPolicyYAML, wantPublish: true},
+		{test: "current context", data: sessionPolicyYAML, wantPublish: true},
+		{test: "selection error", selection: failure, data: sessionPolicyYAML, want: failure},
+		{test: "publication error", name: "lab", data: sessionPolicyYAML, publish: failure, want: failure, wantPublish: true},
+		{test: "registry error", name: "lab", view: failure, want: failure},
+		{test: "unknown context", name: "lab", registry: contexts.Registry{Contexts: []contexts.Record{{Name: "other"}}}},
+		{test: "render error", name: "lab", render: failure, want: failure},
+		{test: "missing input", name: "lab"},
+		{test: "invalid policy", name: "lab", data: "invalid", wantPolicyRefusal: true},
 	} {
-		t.Run(test.name, func(t *testing.T) {
+		t.Run(test.test, func(t *testing.T) {
 			file := filepath.Join(t.TempDir(), "policy.yaml")
 			if test.data != "" {
 				if err := os.WriteFile(file, []byte(test.data), 0o600); err != nil {
@@ -124,6 +128,7 @@ func TestPolicyInstallPublishesOnlyValidatedBytesForTheSelectedRecord(t *testing
 			published := false
 			commands := policyCommands{
 				repository: policyRegistry(func(context.Context) (contexts.Registry, error) { return registry, test.view }),
+				selection:  func(context.Context) (string, error) { return "lab", test.selection },
 				graph:      testPolicyGraph(t, test.render),
 				service:    sessionpolicy.Service{Lookup: lookupPolicyGroup(t)},
 				publish: func(_ context.Context, record contexts.Record, data []byte) error {
@@ -134,7 +139,7 @@ func TestPolicyInstallPublishesOnlyValidatedBytesForTheSelectedRecord(t *testing
 					return test.publish
 				},
 			}
-			name, err := commands.Install(t.Context(), "lab", file)
+			name, err := commands.Install(t.Context(), test.name, file)
 			if published != test.wantPublish || (name == "lab") != test.wantPublish {
 				t.Fatalf("context %q, published %t, error %v", name, published, err)
 			}

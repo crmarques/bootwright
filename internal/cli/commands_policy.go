@@ -7,14 +7,13 @@ import (
 
 	"github.com/crmarques/bootwright/internal/machine/sessionpolicy"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 )
 
 func policyCommands() []commandSpec {
 	return []commandSpec{
-		available(commandSpec{path: "policy install", flags: []flagSpec{requiredPolicyFile()}, validate: validatePolicyInstall, missingInput: missingPolicyContext,
+		available(commandSpec{path: "policy install", flags: []flagSpec{requiredPolicyFile()}, validate: validatePolicyInstall,
 			results: []jsonResult{policyInstallation{}}, render: renderPolicyInstall(),
-			example: "--context lab --file sessions.yaml", invoke: Services.invokePolicyInstall, short: "Install a context's session access policy", long: "Validate and atomically replace the delegated SSH session policy. Requires an explicit --context and exactly one --file."}),
+			example: "--file sessions.yaml", invoke: Services.invokePolicyInstall, short: "Install a context's session access policy", long: "Validate and atomically replace the delegated SSH session policy of the selected context. Requires exactly one --file."}),
 		available(commandSpec{path: "policy permissions", results: []jsonResult{policyPermissions{}},
 			render: renderPolicyPermissions(), example: "--context lab", invoke: Services.invokePolicyPermissions, short: "Show your delegated session grants"}),
 	}
@@ -24,10 +23,6 @@ func requiredPolicyFile() flagSpec {
 	flag := fileFlag("file", "Read one standalone SessionAccessPolicy YAML document")
 	flag.required, flag.short, flag.kind = true, "f", "stringArray"
 	return flag
-}
-
-func missingPolicyContext(flags *pflag.FlagSet) bool {
-	return stringValue(flags, "context") == ""
 }
 
 func validatePolicyInstall(command *cobra.Command) string {
@@ -56,13 +51,19 @@ type policyPermissions struct {
 func (policyPermissions) documentedResult() {}
 
 type policyGrantView struct {
-	Name        string     `json:"name"`
-	RemoteUser  string     `json:"remoteUser"`
-	MachineRefs []string   `json:"machineRefs,omitempty"`
-	ClusterRefs []string   `json:"clusterRefs,omitempty"`
-	Machines    []string   `json:"machines"`
-	Commands    [][]string `json:"commands,omitempty"`
-	Shell       bool       `json:"shell"`
+	Name        string              `json:"name"`
+	Subjects    []policySubjectView `json:"subjects"`
+	RemoteUser  string              `json:"remoteUser"`
+	MachineRefs []string            `json:"machineRefs,omitempty"`
+	ClusterRefs []string            `json:"clusterRefs,omitempty"`
+	Machines    []string            `json:"machines"`
+	Commands    [][]string          `json:"commands,omitempty"`
+	Shell       bool                `json:"shell"`
+}
+
+type policySubjectView struct {
+	User  string `json:"user,omitempty"`
+	Group string `json:"group,omitempty"`
 }
 
 func (s Services) invokePolicyInstall(ctx context.Context, values *requestValues, _ []string) (commandResult, error) {
@@ -86,8 +87,12 @@ func (s Services) invokePolicyPermissions(ctx context.Context, values *requestVa
 	}
 	result := policyPermissions{Context: name, Grants: make([]policyGrantView, 0, len(grants))}
 	for _, grant := range grants {
+		subjects := make([]policySubjectView, 0, len(grant.Subjects))
+		for _, subject := range grant.Subjects {
+			subjects = append(subjects, policySubjectView{User: subject.User, Group: subject.Group})
+		}
 		result.Grants = append(result.Grants, policyGrantView{
-			Name: grant.Name, RemoteUser: grant.RemoteUser, MachineRefs: grant.MachineRefs, ClusterRefs: grant.ClusterRefs,
+			Name: grant.Name, Subjects: subjects, RemoteUser: grant.RemoteUser, MachineRefs: grant.MachineRefs, ClusterRefs: grant.ClusterRefs,
 			Machines: grant.Machines, Commands: grant.Commands, Shell: grant.Shell,
 		})
 	}
@@ -125,6 +130,7 @@ func renderPolicyPermissions() commandRenderer {
 			}
 			for _, grant := range result.Grants {
 				fmt.Fprintf(&display, "%s (as %s)\n", grant.Name, grant.RemoteUser)
+				fmt.Fprintf(&display, "  Granted to: %s\n", policySubjects(grant.Subjects))
 				if len(grant.ClusterRefs) > 0 {
 					fmt.Fprintf(&display, "  Cluster selectors: %s\n", strings.Join(grant.ClusterRefs, ", "))
 				}
@@ -143,4 +149,16 @@ func renderPolicyPermissions() commandRenderer {
 			return true, err
 		},
 	}
+}
+
+func policySubjects(subjects []policySubjectView) string {
+	names := make([]string, 0, len(subjects))
+	for _, subject := range subjects {
+		if subject.Group != "" {
+			names = append(names, "group "+subject.Group)
+			continue
+		}
+		names = append(names, "user "+subject.User)
+	}
+	return strings.Join(names, ", ")
 }

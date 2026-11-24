@@ -24,6 +24,7 @@ type Service struct {
 
 type Grant struct {
 	Name, RemoteUser                   string
+	Subjects                           []api.PolicySubject
 	MachineRefs, ClusterRefs, Machines []string
 	Commands                           [][]string
 	Shell                              bool
@@ -67,23 +68,24 @@ func (s Service) Permissions(ctx context.Context, principal Principal, contextNa
 	grants := []Grant{}
 	resolved := make(map[api.PolicySubject]uint32)
 	for _, grant := range policy.Spec.Grants {
-		matched := false
+		var matched []api.PolicySubject
 		for _, subject := range grant.Subjects {
 			id, err := s.subject(ctx, resolved, subject)
 			if err != nil {
 				return nil, denied(contextName, "a policy subject could not be verified")
 			}
-			matched = matched || (subject.User != "" && id == principal.UID) ||
-				(subject.Group != "" && slices.Contains(principal.Groups, id))
+			if subject.User != "" && id == principal.UID || subject.Group != "" && slices.Contains(principal.Groups, id) {
+				matched = append(matched, subject)
+			}
 		}
-		if !matched {
+		if len(matched) == 0 {
 			continue
 		}
 		machines, err := s.machines(grant.Targets, catalog)
 		if err != nil {
 			return nil, denied(contextName, err.Error())
 		}
-		entry := Grant{Name: grant.Name, RemoteUser: grant.RemoteUser, MachineRefs: grant.Targets.MachineRefs,
+		entry := Grant{Name: grant.Name, Subjects: matched, RemoteUser: grant.RemoteUser, MachineRefs: grant.Targets.MachineRefs,
 			ClusterRefs: grant.Targets.ClusterRefs, Machines: machines, Shell: grant.Rsh != nil}
 		if grant.Exec != nil {
 			entry.Commands = grant.Exec.Commands

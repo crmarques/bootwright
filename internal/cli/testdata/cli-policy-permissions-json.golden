@@ -8,6 +8,14 @@
     "grants": [
       {
         "name": "diagnostics",
+        "subjects": [
+          {
+            "group": "PLATFORM_SUPPORT"
+          },
+          {
+            "user": "analyst"
+          }
+        ],
         "remoteUser": "core",
         "machineRefs": [
           "gateway"
@@ -28,6 +36,11 @@
       },
       {
         "name": "support",
+        "subjects": [
+          {
+            "user": "analyst"
+          }
+        ],
         "remoteUser": "core",
         "machines": [
           "worker"

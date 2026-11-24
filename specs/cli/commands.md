@@ -222,7 +222,8 @@ access failure, not a change in applicability.
 
 ## Session policy installation
 
-Pass an explicit context to `policy install`. See the
+`policy install` replaces the policy of the selected context: `--context`,
+else the current context. See the
 [session policy](../api/session-access-policy.md) for the schema and delegation rules.
 
 ## Help content

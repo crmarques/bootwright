@@ -22,6 +22,7 @@ Alias cell.
 | [B1622](#b1622) | new, 2026-11-18 (X627 review) | product | Substrate and Reconciliation | Prove a hosted KubeVirt Machine off or absent without creating access on its host cluster | Fails closed: a context with a hosted KubeVirt Machine refuses every new apply and destroy |
 | [B1623](#b1623) | new, 2026-11-18 (X627 review) | safety | Reconciliation and Machine | Decide whether explicit `machine discover` and `machine inventory` take the power entry check | The owner's request named apply and destroy only |
 | [B1624](#b1624) | new, 2026-11-18 (X627 review) | product | Reconciliation, with CLI | `Stop first` names the whole fleet an automatic preparation's entry check reads | The refusal already names every blocking Machine |
+| [B1706](#b1706) | new, 2026-11-24 (X679 request) | product | Machine, with CLI | A session refusal names which part of the request no grant matched: the Machine, the remote account or the command, with a granted command's exact path | `policy permissions` already lists each grant's remote account, Machines and exact commands |
 | [B1698](#b1698) | new, 2026-11-24 (X675 review) | safety | Managed OS | A subscription-sourced installation updating `none` proves its installed `VERSION_ID` equals `spec.os.version` | A content view at the major path holds the declared minor until a newer one is synced, and an updating profile already refuses the mismatch |
 | [B1695](#b1695) | new, 2026-11-23 (X673 diagnosis) | product | Managed OS, with CLI | A physical erase's controller refusal shows the controller's own printable line in the destroy's diagnostic | The retained output already holds the line, and the remedy names it |
 | [B1678](#b1678) | new, 2026-11-23 (X662 rehearsal) | defect | CLI | A confirmation is asked on the terminal it reads from when standard error is redirected | `--yes` and an unredirected error stream both avoid it |
@@ -4020,6 +4021,23 @@ that minor.
 
 **Exit evidence:** a subscription-sourced installation updating `none` whose
 installed system reports another minor refuses with that minor named.
+
+### B1706
+
+**Owner:** Machine, with CLI. **Kind:** product. **Requires:** none.
+**Definition:** Needs definition.
+
+**Outcome:** the owner's `bootwright machine exec --name srv4203 -- hostname`
+was refused with `no grant matches Machine srv4203 and its remote account
+for this operation`, although a grant admitted that Machine and account and
+listed `/usr/bin/hostname`: grants match argument vectors literally. The
+refusal names which part of the request no grant matched and, for a command
+that only a granted path differs from, that exact path. Open decision: what
+a refusal may disclose of grants the caller holds.
+
+**Exit evidence:** refusals of an ungranted Machine, account and command each
+name the mismatching part, and a bare command whose granted path differs names
+that path.
 
 ## Retired
 

@@ -138,7 +138,7 @@ func TestIncompleteInvocationShowsHelp(t *testing.T) {
 		{path: "context update", args: "--name demo"},
 		{path: "context delete", args: "--name demo"},
 		{path: "secret show", args: "--name demo"},
-		{path: "policy install", args: "--file sessions.yaml"},
+		{path: "policy install"},
 		{path: "catalog media add", args: "--name image.iso"},
 		{path: "machine exec", args: "--name demo --"},
 		{path: "machine exec", args: "private-payload"},

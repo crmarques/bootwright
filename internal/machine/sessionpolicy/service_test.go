@@ -81,8 +81,13 @@ func TestSessionPolicyUsesCurrentRosterAndRequiresCompleteGrants(t *testing.T) {
 	argv := []string{"/usr/bin/uptime"}
 	target := machine.SessionTarget{Machine: "worker", RemoteUser: "core"}
 	grants, err := s.Permissions(t.Context(), diagnostics, "lab", catalog)
-	if err != nil || len(grants) != 1 || !slices.Equal(grants[0].Machines, []string{"gateway", "worker", "worker-b"}) {
+	if err != nil || len(grants) != 1 || !slices.Equal(grants[0].Machines, []string{"gateway", "worker", "worker-b"}) ||
+		!slices.Equal(grants[0].Subjects, []api.PolicySubject{{Group: "PLATFORM_SUPPORT"}}) {
 		t.Fatalf("unexpected grants %+v, %v", grants, err)
+	}
+	both, err := s.Permissions(t.Context(), Principal{UID: 3001, Groups: []uint32{1001}}, "lab", catalog)
+	if err != nil || len(both) != 1 || !slices.Equal(both[0].Subjects, []api.PolicySubject{{Group: "PLATFORM_SUPPORT"}, {User: "analyst@example.test"}}) {
+		t.Fatalf("grant subjects matching the caller %+v, %v", both, err)
 	}
 	if err := s.Authorize(t.Context(), diagnostics, "lab", catalog, []machine.SessionTarget{target, {Machine: "worker-b", RemoteUser: "core"}}, argv); err != nil {
 		t.Fatal(err)

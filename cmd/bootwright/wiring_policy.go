@@ -27,7 +27,11 @@ type policyCommands struct {
 	publish func(context.Context, contexts.Record, []byte) error
 }
 
-func (p policyCommands) Install(ctx context.Context, contextName, file string) (string, error) {
+func (p policyCommands) Install(ctx context.Context, name, file string) (string, error) {
+	contextName, err := machine.SelectedContext(ctx, p.selection, name)
+	if err != nil {
+		return "", err
+	}
 	registry, err := p.repository.View(ctx)
 	if err != nil {
 		return "", err

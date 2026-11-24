@@ -1,8 +1,10 @@
 diagnostics (as core)
+  Granted to: group PLATFORM_SUPPORT, user analyst
   Cluster selectors: apps
   Machine selectors: gateway
   Effective Machines: gateway, worker
   Exec ["/usr/bin/uptime"]
 support (as core)
+  Granted to: user analyst
   Effective Machines: worker
   Interactive shell

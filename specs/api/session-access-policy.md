@@ -110,4 +110,5 @@ interactive shell capabilities on the remote account. Policy changes affect
 new admissions. Running sessions end under the normal SSH session contract.
 
 `bootwright policy permissions --context lab` shows grants matching the
-caller, their authored selectors and expanded Machines.
+caller, the grant's subjects that matched the caller, their authored selectors
+and expanded Machines. Subjects that do not match the caller stay unlisted.
