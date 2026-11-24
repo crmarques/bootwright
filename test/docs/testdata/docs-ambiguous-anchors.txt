@@ -1,0 +1,9 @@
+# Known violations of TestDocsLinksNameAUniqueHeading: source -> target#anchor. The list only shrinks.
+specs/api/machines.md -> specs/managed-os.md#refusal-table
+specs/index.md -> specs/managed-os.md#refusal-table
+specs/managed-os-subscription-source.md -> specs/managed-os.md#refusal-table
+specs/managed-os.md -> specs/managed-os.md#refusal-table
+specs/milestones/backlog.md -> specs/managed-os.md#refusal-table
+specs/milestones/delivered.md -> specs/managed-os.md#implementations
+specs/milestones/m1.md -> specs/managed-os.md#refusal-table
+specs/openshift-clusters.md -> specs/managed-os.md#refusal-table

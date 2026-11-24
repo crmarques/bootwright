@@ -4190,6 +4190,8 @@ holding such a clause, the clauses pending and the work they enable.
   lifecycle placement hosts (X22), which D251 (31) narrows for a
   Machine Bootwright installs, whose `bootwright` account escalates through
   its installation's own sudo rule (X409).
+- [D90](#d90): D152's clause 8, which supersedes the parked retirement of
+  tool areas that B292 left for B322 (X90).
 - [D134](#d134): the 2026-10-11 readings that D134 waives M2's Requires for
   X47, X52, X53 and X54 and excepts M2b from the WIP limit; moot since D165
   returned those slices and D183 counts the WIP limit per program.
@@ -4243,8 +4245,43 @@ holding such a clause, the clauses pending and the work they enable.
   of a stretch cluster with a provided tiebreaker (X205).
 - [D207](#d207): clauses (1) to (10), power and the live reading of KubeVirt
   Machines on a host the context builds and the reading's pin (X206).
+- [D225](#d225): the session clauses on the metadata-clear regions, the
+  896 GiB bound on a `logicalOverwrite` target and the field names of the disk
+  clear (B1083, B662).
+- [D227](#d227): the session clauses on the derived trust for a FIPS
+  controller's emulated substrate: no API field, `established` kept for
+  colocated nodes, and the certificate removed after every boot.
+- [D228](#d228): the session clauses on the remote provider-capacity
+  observation, run as fixed commands over the placement's pinned connection
+  (X294, B1093).
+- [D229](#d229): the session clauses on selecting a whole disk by
+  `serialNumber` and exact `sizeBytes` without a WWN: the by-serial form, the
+  alias rule, Ceph's serial grammar and graph-wide uniqueness (X298, X299).
+- [D230](#d230): the session clauses on the `bootwright diff` comparison:
+  how the real side overlays observed values and how hosts that read
+  different values split an object (X300, X301).
+- [D231](#d231): the session clauses on pool `serviceAllocation` selectors
+  and the case's own namespaces, and the retired node forwarding between two
+  networks (B1123, B1124).
+- [D232](#d232): the session clauses on the Data Foundation end-to-end case:
+  no object gateway, the consumer key type and the refusal of a replaced CSV
+  (X303).
+- [D233](#d233): the session clauses of the audit 003 remediation: stable
+  root hints for physical agent installations, KubeVirt completion proof, the
+  NFS export security default and the Ceph shapes covered; D238 replaces the
+  WWN-only root clause.
 - [D234](#d234): clauses (1) to (6), the KubeVirt provisioning program's
   in-tree slices X309 to X312 and its recorded owner questions Q139 to Q152.
+- [D235](#d235): the clauses marked as the session's: the reading of Q145,
+  which keeps both agent-installed shapes on KubeVirt nodes and plans hosted
+  control planes (B1167), and the clauses beside the owner's answers to Q139
+  to Q152 (X313, X314).
+- [D236](#d236): the session clauses of the `machine cp` copy contract:
+  no-overwrite by default, private staging, structured partial results and the
+  transport proof (X315).
+- [D238](#d238): the implementation clause for serial-selected agent roots:
+  the frozen `serialNumber` and `sizeBytes` and the pre-boot port's proof of
+  one matching whole Drive (X318).
 - [D240](#d240): clauses (1) to (14), the networking API program's slices
   X321 to X324.
 - [D241](#d241): clauses (1) to (5), the removal of backward compatibility
@@ -4252,10 +4289,48 @@ holding such a clause, the clauses pending and the work they enable.
 - [D242](#d242): clauses (1) to (4), what the capacity admission counts
   beside the guests' disks (X326).
 - [D243](#d243): clauses (6) to (11), the CLI command structure (X327).
+- [D244](#d244): the clause that lands X328 before X329, reversing the
+  recommended order of the on-host storage and log structure.
+- [D245](#d245): clauses (3) to (7), the Ceph admin client's monitor
+  addressing (B1020), the administrator node of a session (B1090), the
+  concurrent proof round (B891), the lent TokenRequest Secret (B1187) and the
+  unreachable route per refused subnet (B1215) (X330 to X333).
+- [D246](#d246): the clauses marked as the session's, including (5) to (7),
+  the interface pool's forwarding, the one `networkType` and the
+  environment-ha chart's tagged `Network` (B1231, B1232).
+- [D247](#d247): clauses (3) and (4), the `podman` a controller stage
+  installs and the hosts that never get it (X337).
+- [D248](#d248): clauses (4) and (5), a build that fetched no wheels and
+  the images that need not come from a Red Hat registry (X338, X339).
+- [D249](#d249): clause (4), the `bootwright logs --install` flag that
+  replaces `--setup` (X341).
+- [D250](#d250): clauses (5) to (17), the controlled-network design: origin
+  classes, the optional mirror and its placement, the reviewed vulnerability
+  exception, the dependency-release standard and the removal of `latest`.
+- [D251](#d251): clauses (1) to (40), the controlled-network program's
+  slices X342 to X431, among them the minimum client releases, the image and
+  artifact mirrors, the proxy's allowed destinations, the `installed`
+  placement arm and the release recipe.
 - [D255](#d255): clauses (1) to (14), managed VLAN networks on a
   Bootwright-owned NetworkManager trunk and one owned nftables routing table
   per provider (X395); (7), turning on `net.ipv4.ip_forward`, is outside the
   approved boundary.
+- [D257](#d257): the clauses taken by the session on package 11 of the audit
+  roadmap and the unclaimed reading of a provided tiebreaker (B1079).
+- [D272](#d272): the audit's recommended options for discovery, taken by the
+  session: the BMC drive inventory first under an `automatic` default, an
+  explicit `boot` choice, and boot-tree-only fallback media (X490).
+- [D274](#d274): clauses (1) to (10), the code audit 005 program's
+  recommendations, which the owner decided on 2026-11-17 and which the
+  entry's text still marks as pending.
+- [D275](#d275): clauses (1) to (6), the Machine schema's `hardware.rootDisk`,
+  the virtual Machine's root, the erase condition and the BMC TLS fields
+  (X568).
+- [D276](#d276): clauses (1) to (13), the lifecycle audit 006 program's
+  recommendations: stop codes, the adapter channel, `bootwright explain`,
+  the tables that decide and the order of the plan (X579).
+- [D277](#d277): the clauses on the consumer's declared key type and B761's
+  acceptance (X620).
 
 ### D1
 

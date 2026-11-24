@@ -1,0 +1,45 @@
+# Spec inventories (tables and lists that enumerate what code defines) that no
+# test compares with the code. Each line names the heading that holds one:
+# `path ## heading text`, or `path:anchor` where a page repeats the heading text.
+# TestDocsUnheldInventoriesExist fails when a listed heading no longer exists,
+# so remove a line when its table is held by a test or leaves the specs. The
+# list cannot see a new unheld inventory; a reviewer does.
+specs/cli/commands.md ## Global flags
+specs/cli/commands.md ## Cluster command applicability
+specs/cli/output.md ## Streams and exit status
+specs/cli.md ## Parsing and input conventions
+specs/cli.md ## Lifecycle receipt
+specs/cli.md ## Ordinary confirmation
+specs/managed-os.md ## Network convergence
+specs/api/input.md ## Fixed input ceilings
+specs/api.md ## Cluster family registry
+specs/api/infrastructure-services.md ## Management and placement
+specs/api/infrastructure-services.md ## Proxy, DNS, NTP and registry deployment
+specs/api/openshift-clusters.md ## Networking
+specs/api/openshift-clusters.md ## Platform union and derivation
+specs/api/machines.md ## Hardware and substrate
+specs/api/secrets.md ## Entitlement
+specs/secrets.md ## Acquisition and commands
+specs/secrets.md ## Produced material
+specs/secrets.md ## Client TLS trust
+specs/substrates.md ## Qualification
+specs/openshift-clusters.md ## Root-device hint projection
+specs/ceph.md ## Frozen release and trust
+specs/ceph-native-api.md ## RGW, ingress and NFS records
+specs/ceph-native-api.md ## Observability and management gateway records
+specs/ceph-resources.md ## CephClient
+specs/ceph-resources.md ## Consumer refusals
+specs/contexts.md ## Storage, locking and publication
+specs/architecture.md ## Bounded contexts
+specs/architecture.md ## Ansible collection structure
+specs/architecture.md ## The adapter result protocol
+specs/state-reconciliation.md ## Stages and the pause boundary
+specs/security.md ## Listener exposure
+specs/controller.md ## The controller stage
+specs/controller.md ## Controller prerequisites and setup
+specs/controller.md ## Host packages
+specs/cli/output.md ## Human diagnostics
+specs/managed-os.md:refusal-table
+specs/managed-os.md:refusal-table-1
+specs/managed-os.md:refusal-table-2
+specs/managed-os.md:refusal-table-3

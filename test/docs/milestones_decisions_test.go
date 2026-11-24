@@ -15,6 +15,10 @@ const (
 	milestoneDecisionsHead  = "## Decisions"
 	milestoneClausesHeading = "### Open session clauses"
 
+	// milestonePendingClauses is the phrase of an entry that holds a clause a
+	// session took and the owner has not reviewed.
+	milestonePendingClauses = "pending the owner's review"
+
 	// milestoneFixtureDecisions is the smallest decision log the check accepts.
 	milestoneFixtureDecisions = milestoneDecisionsHead + "\n\n" + milestoneClausesHeading + "\n\nNone.\n\n### D1\n\n**owner** (2026-09-26): Decided.\n"
 )
@@ -49,6 +53,7 @@ func (c *milestoneCheck) decisions() {
 	var targets []entry
 	last, clauses, listed, pending := 0, -1, map[int]bool{}, map[int]bool{}
 	current, sawList := 0, false
+	ownerTokened, entryText := map[int]bool{}, map[int][]string{}
 	for index := start; index < end; index++ {
 		line := lines[index]
 		switch {
@@ -82,6 +87,8 @@ func (c *milestoneCheck) decisions() {
 				continue
 			}
 			switch {
+			case tokenMatch[1] == "owner":
+				ownerTokened[number] = true
 			case tokenMatch[1] == "session-pending":
 				pending[number] = true
 			case tokenMatch[2] != "" || tokenMatch[3] != "":
@@ -91,6 +98,8 @@ func (c *milestoneCheck) decisions() {
 					c.report(milestoneBacklogPath, index+1, "D%d names itself in its status token", number)
 				}
 			}
+		case current != 0:
+			entryText[current] = append(entryText[current], line)
 		case clauses >= 0 && current == 0:
 			for _, match := range milestoneClauseLink.FindAllStringSubmatch(line, -1) {
 				if match[1] != match[2] {
@@ -113,14 +122,25 @@ func (c *milestoneCheck) decisions() {
 			c.report(milestoneBacklogPath, target.line, "status token names D%d, which has no entry", target.target)
 		}
 	}
+	holdsPending := map[int]bool{}
+	for number := range ownerTokened {
+		if strings.Contains(strings.Join(strings.Fields(strings.Join(entryText[number], " ")), " "), milestonePendingClauses) {
+			holdsPending[number] = true
+		}
+	}
 	for _, number := range slices.Sorted(maps.Keys(pending)) {
 		if !listed[number] {
 			c.report(milestoneBacklogPath, start, "D%d is session-pending but %q does not list it", number, milestoneClausesHeading)
 		}
 	}
+	for _, number := range slices.Sorted(maps.Keys(holdsPending)) {
+		if !listed[number] {
+			c.report(milestoneBacklogPath, start, "D%d is an owner entry that holds clauses %q, but %q does not list it", number, milestonePendingClauses, milestoneClausesHeading)
+		}
+	}
 	for _, number := range slices.Sorted(maps.Keys(listed)) {
-		if !pending[number] {
-			c.report(milestoneBacklogPath, start, "%q lists D%d, which is not session-pending", milestoneClausesHeading, number)
+		if !pending[number] && !holdsPending[number] {
+			c.report(milestoneBacklogPath, start, "%q lists D%d, which is neither session-pending nor an owner entry holding clauses %q", milestoneClausesHeading, number, milestonePendingClauses)
 		}
 	}
 }
@@ -227,7 +247,7 @@ func TestDocsMilestoneCheckFindsDecisionAndQuestionViolations(t *testing.T) {
 		{"a delegated entry the clause list names",
 			[]milestoneEdit{milestoneReplace(backlog, "- [D2](#d2): a clause.", "- [D2](#d2): a clause.\n- [D3](#d3): a clause."),
 				milestoneReplace(backlog, "### D3\n\n**owner**", "### D3\n\n**delegated**")},
-			`"### Open session clauses" lists D3, which is not session-pending`},
+			`"### Open session clauses" lists D3, which is neither session-pending nor an owner entry`},
 		{"a token naming a missing decision",
 			[]milestoneEdit{milestoneReplace(backlog, "### D3\n\n**owner**", "### D3\n\n**accepted-by D9**")},
 			"status token names D9, which has no entry"},
@@ -243,7 +263,17 @@ func TestDocsMilestoneCheckFindsDecisionAndQuestionViolations(t *testing.T) {
 			`D3 is session-pending but "### Open session clauses" does not list it`},
 		{"a listed clause whose entry is no longer pending",
 			[]milestoneEdit{milestoneReplace(backlog, "**session-pending** (2026-09-29", "**accepted-by D3** (2026-09-29")},
-			`"### Open session clauses" lists D2, which is not session-pending`},
+			`"### Open session clauses" lists D2, which is neither session-pending nor an owner entry`},
+		{"an owner entry holding a clause pending the owner's review, unlisted",
+			[]milestoneEdit{milestoneReplace(backlog, "### D3\n\n**owner** (2026-09-26): decided.", "### D3\n\n**owner** (2026-09-26): decided. Clauses (1) taken by the\nsession, pending the owner's\nreview.")},
+			`D3 is an owner entry that holds clauses "pending the owner's review", but "### Open session clauses" does not list it`},
+		{"an owner entry holding such a clause, listed",
+			[]milestoneEdit{milestoneReplace(backlog, "- [D2](#d2): a clause.", "- [D2](#d2): a clause.\n- [D3](#d3): a clause."),
+				milestoneReplace(backlog, "### D3\n\n**owner** (2026-09-26): decided.", "### D3\n\n**owner** (2026-09-26): decided. Clauses (1), pending the owner's review.")},
+			""},
+		{"a first owner entry holding such a clause, unlisted",
+			[]milestoneEdit{milestoneReplace(backlog, "### D1\n\n**owner** (2026-09-26): decided.", "### D1\n\n**owner** (2026-09-26): decided. Clauses, pending the owner's review.")},
+			`D1 is an owner entry that holds clauses`},
 		{"a clause link to another anchor",
 			[]milestoneEdit{milestoneReplace(backlog, "[D2](#d2)", "[D2](#d3)")},
 			"open session clauses link [D2](#d3) to #d3"},

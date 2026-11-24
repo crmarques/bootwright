@@ -1,0 +1,27 @@
+# Per-page count of availability phrases (refused until, is parked, currently, today, not yet) that a normative page states outside a Not yet met paragraph. Each count only falls.
+specs/add-on-coverage.md 2
+specs/add-ons.md 4
+specs/api/ceph.md 2
+specs/api/environment.md 2
+specs/api/infrastructure-services.md 1
+specs/api/networks.md 3
+specs/api/secrets.md 1
+specs/architecture.md 1
+specs/ceph-coverage.md 2
+specs/ceph-native-api.md 2
+specs/ceph-resources.md 1
+specs/ceph.md 5
+specs/cli.md 3
+specs/cli/output.md 2
+specs/cli/stops.md 1
+specs/contexts/log-root.md 1
+specs/controller.md 3
+specs/infrastructure-services.md 1
+specs/managed-os.md 4
+specs/openshift-clusters.md 1
+specs/openshift-coverage.md 2
+specs/project.md 1
+specs/secrets.md 3
+specs/state-reconciliation.md 11
+specs/storage-api-review.md 2
+specs/substrates.md 4

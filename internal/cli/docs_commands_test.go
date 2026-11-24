@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -180,6 +181,169 @@ func TestDocsCommandLinesMatchTheCatalog(t *testing.T) {
 		t.Fatal("no documented bootwright invocation was found; the scan no longer reads the operator documents")
 	}
 	t.Logf("checked %d documented invocations", checked)
+
+	pages, err := normativeSpecPages(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("list normative pages: %v", err)
+	}
+	listed, err := os.ReadFile(filepath.Join("testdata", "docs-spec-command-spans.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	found, spans := specCommandSpanViolations(pages, paths, global)
+	if spans < 100 {
+		t.Fatalf("read %d bootwright spans of the normative pages; the scan no longer reads them", spans)
+	}
+	for _, violation := range spanListViolations(found, listLines(string(listed)), "internal/cli/testdata/docs-spec-command-spans.txt") {
+		t.Error(violation)
+	}
+}
+
+// normativeSpecPages reads the specs Git tracks under root outside
+// specs/milestones/ and specs/deferred/, by path, as lines.
+func normativeSpecPages(root string) (map[string][]string, error) {
+	command := exec.Command("git", "ls-files", "-z", "--", "specs")
+	command.Dir = root
+	command.Env = slices.DeleteFunc(os.Environ(), func(variable string) bool { return strings.HasPrefix(variable, "GIT_") })
+	output, err := command.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git ls-files: %w", err)
+	}
+	pages := map[string][]string{}
+	for name := range strings.SplitSeq(string(output), "\x00") {
+		if !strings.HasSuffix(name, ".md") || strings.HasPrefix(name, "specs/milestones/") || strings.HasPrefix(name, "specs/deferred/") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(name)))
+		if err != nil {
+			return nil, err
+		}
+		pages[name] = strings.Split(string(data), "\n")
+	}
+	return pages, nil
+}
+
+// listLines returns the entries of a known-violations file: its lines but the
+// blank and comment ones.
+func listLines(text string) []string {
+	var entries []string
+	for _, line := range strings.Split(text, "\n") {
+		if line = strings.TrimSpace(line); line != "" && !strings.HasPrefix(line, "#") {
+			entries = append(entries, line)
+		}
+	}
+	return entries
+}
+
+// spanListViolations compares the violations a check found with its list of
+// known ones: a finding the list lacks is new, and a listed entry no longer
+// found is stale, so the list only shrinks.
+func spanListViolations(found, listed []string, list string) []string {
+	var violations []string
+	for _, entry := range found {
+		if !slices.Contains(listed, entry) {
+			violations = append(violations, entry+" is a new violation; fix it, the list only shrinks")
+		}
+	}
+	for _, entry := range listed {
+		if !slices.Contains(found, entry) {
+			violations = append(violations, list+" lists "+entry+", which is no longer a violation; remove it")
+		}
+	}
+	return violations
+}
+
+var (
+	longFlag    = regexp.MustCompile(`--[a-z][a-z0-9-]*`)
+	commandWord = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
+)
+
+// specCommandSpanViolations reads the inline code spans of the pages that
+// start with "bootwright " and reports, as "page: span: problem", each whose
+// command path the catalog lacks and each long flag the command and the global
+// flags do not accept. A flag after a bare -- is a remote command's payload,
+// and a native tool's flags outside such a span are not read.
+func specCommandSpanViolations(pages map[string][]string, paths map[string]commandSpec, global map[string]bool) ([]string, int) {
+	found, spans := map[string]bool{}, 0
+	for name, lines := range pages {
+		fenced := false
+		for _, line := range lines {
+			if strings.HasPrefix(strings.TrimSpace(line), "```") {
+				fenced = !fenced
+				continue
+			}
+			if fenced {
+				continue
+			}
+			for _, match := range backticked.FindAllStringSubmatch(line, -1) {
+				span := match[1]
+				rest, ok := strings.CutPrefix(span, "bootwright ")
+				if !ok {
+					continue
+				}
+				spans++
+				arguments := strings.Fields(rest)
+				var words []string
+				for _, argument := range arguments {
+					if strings.HasPrefix(argument, "-") || !commandWord.MatchString(argument) {
+						break
+					}
+					words = append(words, argument)
+				}
+				var spec commandSpec
+				matched := false
+				for length := len(words); length > 0; length-- {
+					if candidate, ok := paths[strings.Join(words[:length], " ")]; ok {
+						spec, matched = candidate, true
+						break
+					}
+				}
+				if !matched {
+					if len(words) > 0 {
+						found[name+": "+span+": unknown command"] = true
+					}
+					continue
+				}
+				allowed := flagSpellings(spec.flags)
+				payload, _, _ := strings.Cut(" "+rest+" ", " -- ")
+				for _, flag := range longFlag.FindAllString(payload, -1) {
+					if !allowed[flag] && !global[flag] {
+						found[name+": "+span+": "+flag+" is not a flag of bootwright "+spec.path] = true
+					}
+				}
+			}
+		}
+	}
+	return slices.Sorted(maps.Keys(found)), spans
+}
+
+func TestDocsCommandSpanViolations(t *testing.T) {
+	paths := map[string]commandSpec{
+		"apply":       {path: "apply", flags: []flagSpec{{name: "scope"}}},
+		"machine rsh": {path: "machine rsh", flags: []flagSpec{{name: "name"}}},
+	}
+	global := map[string]bool{"--context": true}
+	pages := map[string][]string{"specs/a.md": {
+		"Run `bootwright apply --scope x --context y`, not `bootwright plan` or `bootwright apply --keep-going`.",
+		"A native `git push --force` and `bootwright machine rsh --name a -- ls --color` and `bootwright machine rsh --nope`.",
+		"Prose says bootwright alone, `bootwright` and `bootwright <command>` are no commands; `bootwright apply [--scope]`.",
+		"```", "`bootwright gone`", "```",
+	}}
+	got, _ := specCommandSpanViolations(pages, paths, global)
+	want := []string{
+		"specs/a.md: bootwright apply --keep-going: --keep-going is not a flag of bootwright apply",
+		"specs/a.md: bootwright machine rsh --nope: --nope is not a flag of bootwright machine rsh",
+		"specs/a.md: bootwright plan: unknown command",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("violations = %q, want %q", got, want)
+	}
+	if got := spanListViolations([]string{"a: new", "b: kept"}, []string{"b: kept", "c: gone"}, "list.txt"); !slices.Equal(got, []string{
+		"a: new is a new violation; fix it, the list only shrinks",
+		"list.txt lists c: gone, which is no longer a violation; remove it",
+	}) {
+		t.Fatalf("list violations = %q", got)
+	}
 }
 
 // catalogRows returns the command rows of the catalog tables in

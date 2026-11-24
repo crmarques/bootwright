@@ -66,6 +66,28 @@ func TestSubstrateRefusalTableMatchesUnsupported(t *testing.T) {
 		"A KubeVirt NIC on an unrealized network kind": {catalogOf(controller(), networkConfig(), kubevirtProvider("kubeconfigRef", "UserDefinedNetwork"), kubevirtGuest()),
 			"Machine/node-01", map[string]string{"<machine>": "Machine/node-01", "<segment>": "lab-guests"}},
 	}
+	// Each row's Path names more conditions than the graph above exercises;
+	// every other one the row names refuses with the same row.
+	installed := api.NewObject(api.Machine, "node-01", api.Value{}, api.MapValue(
+		field("hardware", api.MapValue(text("providerRef", "vc"))),
+		field("os", api.MapValue(field("install", api.MapValue(text("profileRef", "rhel-9-8"))))),
+	))
+	bindAt := func(address string) api.Object {
+		return provider(field("libvirt", provider().Spec().Get("libvirt").With("bmcEmulation", provider().Spec().Get("libvirt", "bmcEmulation").With("bindAddress", api.StringValue(address)))))
+	}
+	alternatives := map[string]map[string]refusalCase{
+		"A Machine on an unrealized substrate": {
+			"os.install": {catalogOf(controller(), vsphere, installed), "Machine/node-01", map[string]string{"<provider>": "InfraProvider/vc", "<machine>": "Machine/node-01"}},
+		},
+		"An emulated BMC no endpoint can name": {
+			"multicast address": {catalogOf(controller(), bindAt("224.0.0.1")), "InfraProvider/lab-libvirt", map[string]string{"<provider>": "InfraProvider/lab-libvirt"}},
+			"host name":         {catalogOf(controller(), bindAt("bmc.example.test")), "InfraProvider/lab-libvirt", map[string]string{"<provider>": "InfraProvider/lab-libvirt"}},
+		},
+		"A KubeVirt profile without a size": {
+			"memoryMiB": {catalogOf(controller(), networkConfig(), kubevirtProvider("kubeconfigRef", "", number("memoryMiB", "0")), kubevirtGuest()), "Machine/node-01", map[string]string{"<provider>": "InfraProvider/kv", "<profile>": "node"}},
+			"diskGiB":   {catalogOf(controller(), networkConfig(), kubevirtProvider("kubeconfigRef", "", number("diskGiB", "0")), kubevirtGuest()), "Machine/node-01", map[string]string{"<provider>": "InfraProvider/kv", "<profile>": "node"}},
+		},
+	}
 	authoredHost := func(catalog api.Catalog) kubevirt.HostCapability {
 		var requirements kubevirt.HostRequirements
 		if _, hosted := catalog.Find(api.OpenShiftCluster, "host"); hosted {
@@ -85,7 +107,7 @@ func TestSubstrateRefusalTableMatchesUnsupported(t *testing.T) {
 			continue
 		}
 		delete(cases, row.name)
-		t.Run(row.name, func(t *testing.T) {
+		check := func(t *testing.T, test refusalCase) {
 			kind, name, _ := strings.Cut(test.refused, "/")
 			want := []lifecycle.Refusal{{Kind: kind, Name: name, Reason: expand(row.reason, test.values), Remediation: expand(row.remedy, test.values)}}
 			state := compilation.NewState(test.catalog, test.catalog, nil)
@@ -94,7 +116,11 @@ func TestSubstrateRefusalTableMatchesUnsupported(t *testing.T) {
 			if !reflect.DeepEqual(got, want) {
 				t.Fatalf("the capability refuses %+v, the table %+v", got, want)
 			}
-		})
+		}
+		t.Run(row.name, func(t *testing.T) { check(t, test) })
+		for _, label := range slices.Sorted(maps.Keys(alternatives[row.name])) {
+			t.Run(row.name+"/"+label, func(t *testing.T) { check(t, alternatives[row.name][label]) })
+		}
 	}
 	for _, name := range slices.Sorted(maps.Keys(cases)) {
 		t.Errorf("the table has no row %q", name)

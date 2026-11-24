@@ -1,0 +1,2 @@
+# Known violations of TestDocsCodeTokensAreRegisteredCodes: page: token. The list only shrinks.
+specs/state-reconciliation.md: lifecycle.stage
