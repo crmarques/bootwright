@@ -23,6 +23,9 @@ Alias cell.
 | [B1623](#b1623) | new, 2026-11-18 (X627 review) | safety | Reconciliation and Machine | Decide whether explicit `machine discover` and `machine inventory` take the power entry check | The owner's request named apply and destroy only |
 | [B1624](#b1624) | new, 2026-11-18 (X627 review) | product | Reconciliation, with CLI | `Stop first` names the whole fleet an automatic preparation's entry check reads | The refusal already names every blocking Machine |
 | [B1706](#b1706) | new, 2026-11-24 (X679 request) | product | Machine, with CLI | A session refusal names which part of the request no grant matched: the Machine, the remote account or the command, with a granted command's exact path | `policy permissions` already lists each grant's remote account, Machines and exact commands |
+| [B1702](#b1702) | new, 2026-11-24 (X678 design) | safety | Managed OS | A provided registration registers an unregistered provided host with the Entitlement's activation key and decides whether destroy unregisters it | Fails closed: an unregistered provided host refuses `registration-absent` and its owner registers it |
+| [B1703](#b1703) | new, 2026-11-24 (X678 design) | product | Managed OS | A provided registration converges onto the hosted subscription service, an Entitlement without `spec.rhsm.satellite` | No requested environment uses the hosted service for a provided host |
+| [B1704](#b1704) | new, 2026-11-24 (X678 design) | product | Managed OS | A provided registration enables and disables the provided host's subscription repositories | The host's owner keeps its repository selection |
 | [B1698](#b1698) | new, 2026-11-24 (X675 review) | safety | Managed OS | A subscription-sourced installation updating `none` proves its installed `VERSION_ID` equals `spec.os.version` | A content view at the major path holds the declared minor until a newer one is synced, and an updating profile already refuses the mismatch |
 | [B1695](#b1695) | new, 2026-11-23 (X673 diagnosis) | product | Managed OS, with CLI | A physical erase's controller refusal shows the controller's own printable line in the destroy's diagnostic | The retained output already holds the line, and the remedy names it |
 | [B1678](#b1678) | new, 2026-11-23 (X662 rehearsal) | defect | CLI | A confirmation is asked on the terminal it reads from when standard error is redirected | `--yes` and an unredirected error stream both avoid it |
@@ -4038,6 +4041,43 @@ a refusal may disclose of grants the caller holds.
 **Exit evidence:** refusals of an ungranted Machine, account and command each
 name the mismatching part, and a bare command whose granted path differs names
 that path.
+### B1702
+
+**Owner:** Managed OS. **Kind:** safety. **Requires:** B1701.
+**Definition:** Needs definition.
+
+**Outcome:** a [provided registration](../managed-os.md#provided-registration)
+whose host holds no consumer registers it with the Entitlement's organization
+and activation key, records the consumer as its own, and an owner decision
+states whether destroy unregisters that consumer from a host Bootwright
+retains.
+
+**Exit evidence:** an unregistered provided host registered by apply, and the
+decided destroy behavior proved on it.
+
+### B1703
+
+**Owner:** Managed OS. **Kind:** product. **Requires:** B1701.
+**Definition:** Needs definition.
+
+**Outcome:** a provided registration names a managed Entitlement without
+`spec.rhsm.satellite` and converges the host's configuration onto the hosted
+subscription service.
+
+**Exit evidence:** a provided host re-pointed from a Satellite to the hosted
+service, with its consumer proved there.
+
+### B1704
+
+**Owner:** Managed OS. **Kind:** product. **Requires:** B1701.
+**Definition:** Needs definition.
+
+**Outcome:** `spec.os.provided.subscription` carries repository enable and
+disable lists that converge on every apply, as an installation's
+`spec.customizations.repositories.subscription` do.
+
+**Exit evidence:** a provided host whose enabled repositories follow the
+declared lists across two applies.
 
 ## Retired
 

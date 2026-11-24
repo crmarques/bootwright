@@ -35,6 +35,7 @@ import (
 	"github.com/crmarques/bootwright/internal/managedos/media"
 	"github.com/crmarques/bootwright/internal/managedos/physicalerase"
 	"github.com/crmarques/bootwright/internal/managedos/providedhostname"
+	"github.com/crmarques/bootwright/internal/managedos/providedregistration"
 	"github.com/crmarques/bootwright/internal/managedos/providedupdate"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/ansiblerunner"
@@ -201,6 +202,8 @@ func operationPlaybook() map[string]string {
 		providedupdate.Implementation + "/observe":                  "managedos/provided_update_observe.yml",
 		providedhostname.Implementation + "/apply":                  "managedos/provided_hostname_apply.yml",
 		providedhostname.Implementation + "/observe":                "managedos/provided_hostname_observe.yml",
+		providedregistration.Implementation + "/apply":              "managedos/provided_registration_apply.yml",
+		providedregistration.Implementation + "/observe":            "managedos/provided_registration_observe.yml",
 		hostfirewall.FirewallImplementation + "/apply":              "managedos/firewall_apply.yml",
 		hostfirewall.FirewallImplementation + "/observe":            "managedos/firewall_observe.yml",
 		hostfirewall.FirewallImplementation + "/destroy":            "managedos/firewall_destroy.yml",
@@ -321,6 +324,9 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 	}, {
 		kind: installation.Kind, implementation: providedhostname.Implementation, family: machine.ProvidedHostnameFamily,
 		capability: providedhostname.New(runner),
+	}, {
+		kind: installation.Kind, implementation: providedregistration.Implementation, family: machine.ProvidedRegistrationFamily,
+		capability: providedregistration.New(runner),
 	}, boundCapability{
 		kind: installation.Kind, implementation: hostfirewall.FirewallImplementation, family: hostfirewall.FirewallFamily,
 		capability: hostfirewall.New(runner).WithHostPorts(hostPortRequirements),

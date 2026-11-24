@@ -1,0 +1,13 @@
+---
+- name: Execute one provided registration capability
+  hosts: bootwright_target
+  gather_facts: false
+  any_errors_fatal: true
+  serial: 1
+  strategy: ansible.builtin.linear
+
+  tasks:
+    - name: Execute the provided registration observe
+      ansible.builtin.import_role:
+        name: bootwright.core.managedos_provided_registration
+        tasks_from: observe

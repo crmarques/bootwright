@@ -228,7 +228,7 @@ func ControllerName(c api.Catalog) string {
 
 // placementHost reports whether a managed capability places lifecycle effects on the Machine.
 func placementHost(o api.Object, c api.Catalog) bool {
-	if o.Spec().Get("firewall", "management").Text() == "managed" || ProvidedUpdateRelease(o) != "" || ProvidedHostname(o, ControllerName(c)) != "" {
+	if o.Spec().Get("firewall", "management").Text() == "managed" || ProvidedUpdateRelease(o) != "" || ProvidedHostname(o, ControllerName(c)) != "" || ProvidedSubscription(o) != "" {
 		return true
 	}
 	for _, candidate := range c.Objects() {

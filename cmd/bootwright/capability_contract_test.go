@@ -51,6 +51,7 @@ import (
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/managedos/physicalerase"
 	"github.com/crmarques/bootwright/internal/managedos/providedhostname"
+	"github.com/crmarques/bootwright/internal/managedos/providedregistration"
 	"github.com/crmarques/bootwright/internal/managedos/providedupdate"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -231,6 +232,12 @@ func contractRows() []contractRow {
 			noEffect:               map[string]any{"version": providedhostname.EvidenceVersion, "state": "absent", "hostname": "witness.example.test"},
 			removalObservesNothing: "specs/managed-os.md, Provided hostname: removal retains the Machine and its hostname without contacting it",
 			drift:                  map[string]any{"hostname": "other.example.test"}},
+		{kind: installation.Kind, implementation: providedregistration.Implementation, example: "lab-rhel+provided-registration",
+			retains: true, retirementOnly: true, presence: contractProvidedRegistrationPresence,
+			absence:                map[string]any{"version": providedregistration.EvidenceVersion, "state": "retained"},
+			noEffect:               map[string]any{"version": providedregistration.EvidenceVersion, "state": "absent", "consumer": ""},
+			removalObservesNothing: "specs/managed-os.md, Provided registration: removal retains the Machine, its registration and its configuration without contacting it",
+			drift:                  map[string]any{"state": "registered"}},
 		{kind: installation.Kind, implementation: hostfirewall.FirewallImplementation, example: "lab-rhel+firewall",
 			completedFrom: "specs/managed-os.md, Host firewall requirements: each run pins the guest key its original apply's installation proved, and marks its services with that apply operation"},
 		{kind: installation.Kind, implementation: diskdiscovery.DiscoveryImplementation, example: "lab-baremetal+discovery", completedFrom: "specs/managed-os.md, Automatic root-disk discovery: each inventory boot requires the original physical UUID/MAC proof and durable attempt binding"},
@@ -290,6 +297,7 @@ var contractOverlays = map[string][2]string{
 	"lab-baremetal+erase":                {"lab-baremetal", filepath.Join("testdata", "capability-overlays", "physical-erase")},
 	"lab-rhel+provided-update":           {"lab-rhel", filepath.Join("testdata", "capability-overlays", "provided-update")},
 	"lab-rhel+provided-hostname":         {"lab-rhel", filepath.Join("testdata", "capability-overlays", "provided-hostname")},
+	"lab-rhel+provided-registration":     {"lab-rhel", filepath.Join("testdata", "capability-overlays", "provided-registration")},
 	"lab-rhel+firewall":                  {"lab-rhel", filepath.Join("testdata", "capability-overlays", "host-firewall")},
 	"lab-rhel+enrollment":                {"lab-rhel", filepath.Join("testdata", "capability-overlays", "machine-enrollment")},
 	"lab-rhel+registry":                  {"lab-rhel", filepath.Join("testdata", "capability-overlays", "managed-registry")},
@@ -1964,6 +1972,11 @@ func withContractHostPorts(resolver capabilityResolver, runner capabilityRunner)
 		}
 	}
 	return resolver
+}
+
+func contractProvidedRegistrationPresence(_ *testing.T, _ lifecycle.Execution) map[string]any {
+	return map[string]any{"postcondition": true, "version": providedregistration.EvidenceVersion, "state": "converged",
+		"consumer": "11111111-2222-3333-4444-555555555555"}
 }
 
 func contractProvidedUpdatePresence(_ *testing.T, _ lifecycle.Execution) map[string]any {

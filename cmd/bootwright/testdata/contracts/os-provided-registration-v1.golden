@@ -1,0 +1,42 @@
+implementation: os-provided-registration-v1
+content-digest: 0fb5f78ccca444bb834fcbd3c07325852fc5b6ae4c5368134f8e7efd403936ce
+request-version: provided-os-registration-request-v1
+automation-formats: none
+mark-formats: none
+proof-ids: /etc/bootwright/provided-registration.json
+fixed-places: .bootwright-satellite.pem.tmp, /etc/rhsm/ca/bootwright-satellite.pem
+effect-pins:
+  converge-existing-consumer-onto-declared-satellite-v1
+request-identity:
+  identity.context
+  identity.object
+  identity.block
+  placement.machine
+  satellite.hostname
+  satellite.contentBaseURL
+request-schema:
+  entitlementRef string
+  identity struct providedregistration.Identity
+  identity.block string
+  identity.context string
+  identity.object string
+  placement struct machine.Placement
+  placement.address string omitempty
+  placement.connection string
+  placement.knownHostsRef string omitempty
+  placement.machine string
+  placement.port int omitempty
+  placement.privateKeyRef string omitempty
+  placement.privilege string omitempty
+  placement.user string omitempty
+  satellite struct providedregistration.Satellite
+  satellite.contentBaseURL string
+  satellite.hostname string
+  satellite.trustBundleRef string
+  version string
+evidence-schema:
+  consumer string
+  postcondition bool
+  request string
+  state string
+  version string

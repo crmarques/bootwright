@@ -281,7 +281,7 @@ own refusal.
 | `spec.hardware.nics[].segmentRef` | string | no | the provider's sole segment | A segment of the provider; refused without `providerRef`. |
 | `spec.hardware.rootDisk` | object | no | — | The root disk's identity, selector and hints, and its removal action; [root disk](#root-disk). |
 | `spec.hardware.dataDisks` | array | no | — | Data disks acted on at installation or removal; [data disks and disk actions](#data-disks-and-disk-actions). |
-| `spec.os.provided` | object | union | — | The OS-ready arm. Use `provided: {}` or opt into [provided OS updates](#provided-os-updates). |
+| `spec.os.provided` | object | union | — | The OS-ready arm. Use `provided: {}` or opt into [provided OS updates](#provided-os-updates) and a [provided registration](#provided-registration). |
 | `spec.os.install.profileRef` | string | with `install` | — | Global `MachineInstallProfile`; the Bootwright-installed arm. |
 | `spec.os.install.ntp` | array of selections | no | install-profile selections | NTPServer selections for a Bootwright-installed Machine; `[]` clears profile selections. |
 | `spec.os.install.hostKeyRef` | string | conditional | — | `sshKeyPair` `Secret` delivered as the installed SSH host key; required on bare metal, optional on libvirt ([completion channel](../managed-os.md#delivered-identity-off-the-hypervisor)), forbidden otherwise. Unique per Machine and no other credential. Effect material. |
@@ -390,6 +390,24 @@ content view that stops at the host's current minor refuses before anything
 changes. Moving to another major is not supported. The controller Machine keeps
 its own maintenance policy. See
 [provided OS updates](../managed-os.md#provided-os-updates) for effect and replay.
+
+### Provided registration
+
+`spec.os.provided.subscription` names the subscription a remote provided
+Machine's existing registration converges onto. It is a closed record with
+one required field.
+
+| Field | Type | Rule |
+| --- | --- | --- |
+| `entitlementRef` | string | A `redhatRhel` [Entitlement](secrets.md#entitlement) whose `spec.rhsm.management` is `managed` and that declares `spec.rhsm.satellite` with its `trustBundleRef`. |
+
+The Machine requires pinned lifecycle SSH, as
+[provided OS updates](#provided-os-updates) do, and is not the controller.
+The host must already be registered with that Satellite, under any of its
+names: Bootwright points the registration at the declared hostname, content
+root and CA, and never creates or removes a consumer on a provided host. See
+[provided registration](../managed-os.md#provided-registration) for the
+effect and its refusals.
 
 ### Hardware and substrate
 

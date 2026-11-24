@@ -87,6 +87,10 @@
     "contentDigest": "030299f00c5d2d4bc7b7f83c4c04ff2d8987c2122061c1c84c6f8bb4d5c28175",
     "fingerprint": "4d50982d9508a254e38ead5c63049708ab0306e76714143acde60ba1d804f5aa"
   },
+  "os-provided-registration-v1": {
+    "contentDigest": "0fb5f78ccca444bb834fcbd3c07325852fc5b6ae4c5368134f8e7efd403936ce",
+    "fingerprint": "0bdf6e613a77763a9bb923cac06e0b64b9b8bcef689459b49a6ef3a01c608b10"
+  },
   "os-provided-update-v1": {
     "contentDigest": "838ca785639f9e4b5fc6632987e7858a38a745e4b3a1c8feec52fd191982b6f9",
     "fingerprint": "eaeffb491a114da926aefe3d70b8cef59a2fdef2ec009f386687fc3a1309bdf3"

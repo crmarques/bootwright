@@ -121,7 +121,7 @@ func packageRoles() map[string]packageRole {
 		"containercluster/installation", "containercluster/preflight",
 		"controller/clients", "controller/prerequisites", "controller/firewall", "desiredstate/compilation",
 		"environment/access", "environment/clusterpreflight", "environment/inspection", "environment/preflight",
-		"machine/access", "machine/sessionpolicy", "machine/account", "machine/hardware", "machine/inventory", "machine/power", "managedos/media", "managedos/installation", "managedos/hostfirewall", "managedos/physicalerase", "managedos/diskdiscovery", "managedos/providedupdate", "managedos/providedhostname",
+		"machine/access", "machine/sessionpolicy", "machine/account", "machine/hardware", "machine/inventory", "machine/power", "managedos/media", "managedos/installation", "managedos/hostfirewall", "managedos/physicalerase", "managedos/diskdiscovery", "managedos/providedupdate", "managedos/providedhostname", "managedos/providedregistration",
 		"nativeartifacts/rendering", "reconciliation/lifecycle",
 		"secrets/custody", "secrets/encryption", "storage/preflight", "storage/rendering", "storage/ceph",
 		"substrate/baremetal", "substrate/kubevirt", "substrate/libvirt", "trust/enrollment", "workspace/contexts",
@@ -173,6 +173,7 @@ func applicationDependencies() map[string][]string {
 		// discovery also refuses what physical erase owns.
 		"internal/managedos/providedupdate":              {"internal/reconciliation/lifecycle"},
 		"internal/managedos/providedhostname":            {"internal/reconciliation/lifecycle"},
+		"internal/managedos/providedregistration":        {"internal/reconciliation/lifecycle"},
 		"internal/managedos/hostfirewall":                {"internal/reconciliation/lifecycle", "internal/managedos/installation"},
 		"internal/managedos/physicalerase":               {"internal/reconciliation/lifecycle", "internal/managedos/installation"},
 		"internal/managedos/diskdiscovery":               {"internal/reconciliation/lifecycle", "internal/managedos/installation", "internal/managedos/physicalerase"},

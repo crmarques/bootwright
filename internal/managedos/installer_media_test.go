@@ -48,6 +48,8 @@ func TestEffectBearingNamesAMachineWhoseOperatingSystemIsNotProvided(t *testing.
 		"cluster installed":   {obj(api.Machine, "n", m("os", m("clusterInstalled", m()))), true},
 		"provided":            {obj(api.Machine, "n", m("os", m("provided", m()))), false},
 		"provided undeclared": {obj(api.Machine, "n", m("os", m())), false},
+		"provided update":     {obj(api.Machine, "n", m("os", m("provided", m("updates", m("policy", "withinRelease", "release", "9.8"))))), true},
+		"provided registered": {obj(api.Machine, "n", m("os", m("provided", m("subscription", m("entitlementRef", "satellite"))))), true},
 		"another kind":        {obj(api.Proxy, "n", m("os", m("clusterInstalled", m()))), false},
 	} {
 		reason, bearing := EffectBearing(test.object)

@@ -1,0 +1,22 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: witness
+
+spec:
+  os:
+    provided:
+      subscription:
+        entitlementRef: rhel-satellite
+
+  network:
+    addresses:
+      - name: ssh
+        address: 192.0.2.234
+
+  access:
+    ssh:
+      knownHostsRef: witness-host-key
+
+      auth:
+        privateKeyRef: witness-admin

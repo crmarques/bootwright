@@ -117,6 +117,47 @@ func TestAProvidedTiebreakerBindsAsAMONOnlyHostWithItsPinnedKeyAndTheBootstrapDV
 	}
 }
 
+func TestAProvidedTiebreakerWithItsOwnRegistrationTakesThatEntitlementsSatellite(t *testing.T) {
+	catalog, _ := tiebreakerCatalog(func(m, c api.Value) (api.Value, api.Value) {
+		return m.WithPath(api.StringValue("tie-satellite"), "os", "provided", "subscription", "entitlementRef"), c
+	})
+	catalog = api.NewCatalog(append(catalog.Objects(), api.NewObject(api.Entitlement, "tie-satellite", api.Value{}, requestMap("rhsm", requestMap(
+		"management", "managed", "organizationRef", "rhsm-organization", "activationKeyRef", "rhsm-activation-key",
+		"satellite", requestMap("hostname", "tie.satellite.example.test", "contentBaseURL", "https://tie.satellite.example.test/pulp/content", "trustBundleRef", "tie-satellite-ca"),
+	)))))
+	cluster, _ := catalog.Find(api.CephCluster, "example")
+	r, err := boundTiebreaker(catalog, cluster)
+	if err != nil {
+		t.Fatal(err)
+	}
+	packages, err := packageSources(catalog, r, "synthetic")
+	if err != nil {
+		t.Fatalf("%+v", diagnostics.Of(err))
+	}
+	for _, source := range packages.Sources {
+		own := source.Host == "tie"
+		if own != (source.Subscription != nil) {
+			t.Fatalf("source of %s = %+v, want the Satellite only for the provided host that declares its registration", source.Host, source)
+		}
+		if own && (source.Profile != "rhel" || source.CertificateRef != "tie-satellite-ca" || source.Subscription.Hostname != "tie.satellite.example.test" ||
+			source.Subscription.ContentBaseURL != "https://tie.satellite.example.test/pulp/content") {
+			t.Fatalf("the provided host's source = %+v", source)
+		}
+	}
+	catalog = api.NewCatalog(slices.DeleteFunc(catalog.Objects(), func(object api.Object) bool {
+		return object.Kind() == api.Entitlement && object.Name() == "tie-satellite"
+	}))
+	cluster, _ = catalog.Find(api.CephCluster, "example")
+	r, err = boundTiebreaker(catalog, cluster)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := packageSources(catalog, r, "synthetic"); diagnostics.Of(err)[0].Code != cephPackageSourceUnsupported.Code ||
+		!strings.Contains(diagnostics.Of(err)[0].Remediation, "spec.os.provided.subscription.entitlementRef on Machine/tie") {
+		t.Fatalf("a registration naming no Entitlement was admitted: %+v", diagnostics.Of(err))
+	}
+}
+
 func TestAProvidedHostRefusesOutsideTheTiebreakerOrWithoutItsPinnedFleetAccess(t *testing.T) {
 	for name, change := range map[string]func(machine, cluster api.Value) (api.Value, api.Value){
 		"not the tiebreaker": func(m, c api.Value) (api.Value, api.Value) {
@@ -216,8 +257,8 @@ func TestAProvidedHostsRefusedSatellitePackagesNameItsRegistration(t *testing.T)
 		Packages: &PackageRequest{Sources: []PackageSource{{Host: "tie", Profile: "subscribed", CertificateRef: "satellite-ca", Subscription: &satellite}}}}}
 	specialized := func(d []diagnostics.Diagnostic) bool {
 		return len(d) == 1 && d[0].Code == cephPackageUnproved.Code && strings.Contains(d[0].Message, "Machine/tie") && strings.Contains(d[0].Message, "Satellite satellite.example.test") &&
-			strings.Contains(d[0].Remediation, "register Machine/tie with the Satellite satellite.example.test") && strings.Contains(d[0].Remediation, "beneath https://satellite.example.test/pulp/content") &&
-			strings.Contains(d[0].Remediation, "Bootwright never registers a provided host")
+			strings.Contains(d[0].Remediation, "declare spec.os.provided.subscription.entitlementRef on Machine/tie so Bootwright converges its registration onto the Satellite satellite.example.test") &&
+			strings.Contains(d[0].Remediation, "or register it with that Satellite so that /etc/yum.repos.d/redhat.repo") && strings.Contains(d[0].Remediation, "beneath https://satellite.example.test/pulp/content")
 	}
 	if d := diagnostics.Of(providedRegistration(host, satellite)); !specialized(d) {
 		t.Fatalf("registration refusal = %+v", d)

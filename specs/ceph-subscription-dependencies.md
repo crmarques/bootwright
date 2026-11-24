@@ -22,11 +22,15 @@ may mix hosted-DVD and subscription hosts. Any other package source refuses
 host takes the source the bootstrap Machine's install profile selects. Under a subscription-sourced
 bootstrap profile that is the profile's Satellite, reached through the
 registration the host's operator made, because this executable registers no
-provided host and unregisters none; such a host holding no repository the
-[Repositories](#repositories) section admits beneath that content root refuses
-`packages`, its remedy naming the Machine, the Satellite and the registration
-to make. Under a Satellite-updated `hostedTree` profile a provided host keeps
-the bootstrap Machine's hosted DVD. A subscription
+provided host and unregisters none. Under a Satellite-updated `hostedTree`
+profile a provided host keeps the bootstrap Machine's hosted DVD. A provided
+Machine that declares a
+[provided registration](managed-os.md#provided-registration) takes its own
+Entitlement's Satellite under either bootstrap profile, after that
+registration converged. A subscription host holding no repository the
+[Repositories](#repositories) section admits beneath its content root refuses
+`packages`, its remedy naming the Machine, the Satellite and
+`spec.os.provided.subscription`. A subscription
 profile whose Entitlement is external, or declares no `spec.rhsm.satellite`
 with its `trustBundleRef`, refuses at plan. A `hostedTree` profile updating
 within its release from the CDN, an external registration or a configured

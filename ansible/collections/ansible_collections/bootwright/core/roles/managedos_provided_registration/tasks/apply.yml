@@ -1,0 +1,43 @@
+---
+- name: Validate the frozen provided registration request
+  ansible.builtin.assert:
+    that:
+      - bootwright_provided_registration_request.version == 'provided-os-registration-request-v1'
+      - bootwright_provided_registration_request.placement.connection == 'ssh'
+      - bootwright_provided_registration_request.satellite.hostname is string
+      - bootwright_provided_registration_request.satellite.hostname | length <= 255
+      - bootwright_provided_registration_request.satellite.contentBaseURL is string
+      - bootwright_provided_registration_request.satellite.contentBaseURL | length <= 2048
+      - bootwright_provided_registration_request.satellite.contentBaseURL is match('^https://')
+      - bootwright_provided_registration_digest is match('^[0-9a-f]{64}$(?!\n)')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.managedos_provided_registration_protocol:
+    phase: loaded
+
+- name: Converge the registration onto the declared Satellite
+  bootwright.core.managedos_provided_registration:
+    operation: apply
+    request: '{{ bootwright_provided_registration_digest }}'
+    hostname: '{{ bootwright_provided_registration_request.satellite.hostname }}'
+    content_base_url: '{{ bootwright_provided_registration_request.satellite.contentBaseURL }}'
+    ca_bundle: "{{ lookup('ansible.builtin.file', bootwright_provided_registration_material.satelliteCA, rstrip=false) }}"
+  register: managedos_provided_registration_applied
+  failed_when: false
+  timeout: 540
+  no_log: true
+
+- name: Resolve a bounded registration refusal
+  ansible.builtin.import_tasks: refused.yml
+  vars:
+    managedos_provided_registration_answer: '{{ managedos_provided_registration_applied }}'
+
+- name: Publish completed provided registration evidence
+  bootwright.core.managedos_provided_registration_protocol:
+    phase: completed
+    digest: '{{ bootwright_provided_registration_digest }}'
+    answer: '{{ managedos_provided_registration_applied }}'
+    outcome: "{{ 'changed' if managedos_provided_registration_applied.changed else 'unchanged' }}"
+  no_log: true

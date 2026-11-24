@@ -9,6 +9,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
+	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/managedos"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
@@ -70,7 +71,8 @@ func packageSources(c api.Catalog, r Request, contextName string) (*PackageReque
 	}
 	result.RepositoryProxy = proxy
 	for _, host := range r.Hosts {
-		m, _ := c.Find(api.Machine, host.Machine)
+		hostMachine, _ := c.Find(api.Machine, host.Machine)
+		m := hostMachine
 		if host.Provided {
 			m = bootstrapMachine(c, r)
 		}
@@ -79,8 +81,14 @@ func packageSources(c api.Catalog, r Request, contextName string) (*PackageReque
 			return nil, cephPackageSourceUnsupported.Fail("Ceph package acquisition requires the owned RHEL x86_64 installation profile", "select the hosted DVD or subscription profile used to install each Ceph Machine")
 		}
 		var source PackageSource
-		if profile.Spec().Has("installer", "anaconda", "packageSource", "subscription") || !host.Provided && updatesFromSatellite(c, profile) {
-			source, err = subscriptionPackageSource(c, profile)
+		own := ""
+		if host.Provided {
+			own = machine.ProvidedSubscription(hostMachine)
+		}
+		if own != "" {
+			source, err = subscriptionPackageSource(c, own, hostMachine.Identity(), "spec.os.provided.subscription.entitlementRef", "")
+		} else if profile.Spec().Has("installer", "anaconda", "packageSource", "subscription") || !host.Provided && updatesFromSatellite(c, profile) {
+			source, err = subscriptionPackageSource(c, profile.Spec().Get("subscription", "entitlementRef").Text(), profile.Identity(), "spec.subscription.entitlementRef", ", or select hostedTree")
 		} else {
 			source, err = treePackageSource(c, profile, contextName)
 		}
@@ -119,14 +127,14 @@ func treePackageSource(c api.Catalog, profile api.Object, contextName string) (P
 	return PackageSource{Media: media, PublicationPath: publication.Path, URL: endpoint + "/os/" + profile.Name() + "/tree", CertificateRef: certificate}, nil
 }
 
-func subscriptionPackageSource(c api.Catalog, profile api.Object) (PackageSource, error) {
-	entitlement, found := c.Find(api.Entitlement, profile.Spec().Get("subscription", "entitlementRef").Text())
+func subscriptionPackageSource(c api.Catalog, reference, owner, field, alternative string) (PackageSource, error) {
+	entitlement, found := c.Find(api.Entitlement, reference)
 	satellite := entitlement.Spec().Get("rhsm", "satellite")
 	source := PackageSource{CertificateRef: satellite.Get("trustBundleRef").Text(),
 		Subscription: &SubscriptionSource{ContentBaseURL: satellite.Get("contentBaseURL").Text(), Hostname: satellite.Get("hostname").Text()}}
 	if !found || entitlement.Spec().Get("rhsm", "management").Text() == "external" || source.CertificateRef == "" || source.Subscription.ContentBaseURL == "" || source.Subscription.Hostname == "" {
-		return PackageSource{}, cephPackageSourceUnsupported.Fail("Ceph dependencies from a subscription package source come from the Satellite of a managed registration, and "+profile.Identity()+" declares none",
-			"name a managed Entitlement that declares spec.rhsm.satellite with its trustBundleRef in spec.subscription.entitlementRef on "+profile.Identity()+", or select hostedTree")
+		return PackageSource{}, cephPackageSourceUnsupported.Fail("Ceph dependencies from a subscription package source come from the Satellite of a managed registration, and "+owner+" declares none",
+			"name a managed Entitlement that declares spec.rhsm.satellite with its trustBundleRef in "+field+" on "+owner+alternative)
 	}
 	if dottedPath(source.Subscription.ContentBaseURL) {
 		return PackageSource{}, cephPackageSourceUnsupported.Fail("the Satellite content root of "+entitlement.Identity()+" holds a '.', '..' or backslash path segment, which package acquisition refuses",

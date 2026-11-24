@@ -87,3 +87,57 @@ func TestProvidedHostnameAndUpdateOfOneMachineNeverOverlap(t *testing.T) {
 		t.Errorf("ceph dependencies = %v, want %v", got[3].Dependencies, want)
 	}
 }
+
+func TestProvidedRegistrationPrecedesTheUpdateAndEveryMachineConsumer(t *testing.T) {
+	machineRef := func(family string) reconciliation.ObjectRef {
+		return reconciliation.ObjectRef{Kind: string(api.Machine), Object: "witness", Family: family}
+	}
+	definitions := []reconciliation.BlockDefinition{
+		{ID: "claim", Kind: string(api.Machine), Object: "witness", Family: machine.HardwareFamily},
+		{ID: "enroll", Kind: string(api.Machine), Object: "witness", Family: machine.EnrollmentFamily, Requires: []reconciliation.ObjectRef{machineRef(machine.HardwareFamily)}},
+		{ID: "registration", Kind: string(api.Machine), Object: "witness", Family: machine.ProvidedRegistrationFamily, Requires: []reconciliation.ObjectRef{machineRef(machine.HardwareFamily)}},
+		{ID: "update", Kind: string(api.Machine), Object: "witness", Family: machine.ProvidedUpdateFamily, Requires: []reconciliation.ObjectRef{machineRef(machine.HardwareFamily)}},
+		{ID: "firewall", Kind: string(api.Machine), Object: "witness", Family: machine.FirewallFamily, Requires: []reconciliation.ObjectRef{machineRef(machine.HardwareFamily)}},
+		{ID: "ceph", Requires: []reconciliation.ObjectRef{machineRef(machine.HardwareFamily), machineRef(machine.FirewallFamily)}},
+		{ID: "other", Kind: string(api.Machine), Object: "other", Family: machine.HardwareFamily},
+		{ID: "other-ceph", Requires: []reconciliation.ObjectRef{{Kind: string(api.Machine), Object: "other", Family: machine.HardwareFamily}}},
+	}
+	got, err := reconciliation.ResolveRequirements(dependOnProvidedUpdates(dependOnEnrollment(definitions)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := [][]string{nil, {"claim"}, {"claim", "enroll"}, {"claim", "enroll", "registration"}, {"claim", "enroll"}, {"claim", "enroll", "firewall", "registration", "update"}, nil, {"other"}}
+	for index, definition := range got {
+		if !slices.Equal(definition.Dependencies, want[index]) {
+			t.Errorf("%s dependencies = %v, want %v", definition.ID, definition.Dependencies, want[index])
+		}
+	}
+}
+
+func TestProvidedRegistrationFollowsTheHostnameAndPrecedesTheUpdate(t *testing.T) {
+	machineRef := func(family string) reconciliation.ObjectRef {
+		return reconciliation.ObjectRef{Kind: string(api.Machine), Object: "witness", Family: family}
+	}
+	definitions := []reconciliation.BlockDefinition{
+		{ID: "claim", Kind: string(api.Machine), Object: "witness", Family: machine.HardwareFamily},
+		{ID: "hostname", Stage: reconciliation.StageMachines, Kind: string(api.Machine), Object: "witness", Family: machine.ProvidedHostnameFamily, Requires: []reconciliation.ObjectRef{machineRef(machine.HardwareFamily)}},
+		{ID: "registration", Stage: reconciliation.StageMachines, Kind: string(api.Machine), Object: "witness", Family: machine.ProvidedRegistrationFamily, Requires: []reconciliation.ObjectRef{machineRef(machine.HardwareFamily)}},
+		{ID: "update", Stage: reconciliation.StageMachines, Kind: string(api.Machine), Object: "witness", Family: machine.ProvidedUpdateFamily, Requires: []reconciliation.ObjectRef{machineRef(machine.HardwareFamily)}},
+		{ID: "ceph", Stage: reconciliation.StageClusters, Requires: []reconciliation.ObjectRef{machineRef(machine.HardwareFamily)}},
+		{ID: "firewall", Stage: reconciliation.StageMachines, Kind: string(api.Machine), Object: "witness", Family: machine.FirewallFamily, Requires: []reconciliation.ObjectRef{machineRef(machine.HardwareFamily)}},
+		{ID: "enroll", Stage: reconciliation.StageMachines, Kind: string(api.Machine), Object: "witness", Family: machine.EnrollmentFamily, Requires: []reconciliation.ObjectRef{machineRef(machine.HardwareFamily)}},
+	}
+	got, err := reconciliation.ResolveRequirements(dependOnProvidedUpdates(dependOnEnrollment(definitions)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := [][]string{nil, {"claim", "enroll"}, {"claim", "enroll", "hostname"}, {"claim", "enroll", "registration"}, {"claim", "enroll", "hostname", "registration", "update"}, {"claim", "enroll"}, {"claim"}}
+	for index, definition := range got {
+		if !slices.Equal(definition.Dependencies, want[index]) {
+			t.Errorf("%s dependencies = %v, want %v", definition.ID, definition.Dependencies, want[index])
+		}
+	}
+	if len(got[2].Exclusive) != 0 {
+		t.Errorf("the registration took the host exclusion %v", got[2].Exclusive)
+	}
+}

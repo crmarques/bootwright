@@ -2095,7 +2095,9 @@ downloaded. After the transaction, and again after the reboot, the host must
 run the declared minor under either policy. RPM
 release tags need not identify a minor, so repository selection remains part
 of the release boundary. The worker preserves DNF signature verification and
-leaves the host's persistent release settings and registration to its owner.
+leaves the host's persistent release settings to its owner, and its
+registration too unless a [provided registration](#provided-registration)
+converges it.
 See the [DNF Base API](https://dnf.readthedocs.io/en/latest/api_base.html).
 
 A root-only receipt scoped to the original apply records the package
@@ -2169,6 +2171,95 @@ display name it registered the host under until the owner runs
 | No `fqdn` address, no pinned lifecycle SSH, or the controller Machine | No block is planned; declare an `fqdn` address and pinned lifecycle SSH on a remote provided Machine to have its hostname set. |
 | `hostname-write`: `hostnamectl set-hostname` failed | Check that the lifecycle login can run `hostnamectl` as root and that the host's hostname policy permits a change, then repeat apply. |
 | `hostname-unproved`: after the write the kernel or static hostname still differs, such as when cloud-init or a configuration-management agent rewrites it | Stop what rewrites the hostname, or configure it to keep the declared `fqdn`, then repeat apply. |
+
+## Provided registration
+
+### Selection
+
+A remote provided Machine opts in through
+[`spec.os.provided.subscription`](api/machines.md#provided-registration). Its
+owner supplies the registration; Bootwright points it at the declared
+Satellite, so the host's repositories, its
+[provided update](#provided-os-updates) and a
+[Ceph host's dependencies](ceph-subscription-dependencies.md#selection-and-request)
+read the content that the desired state names. A Machine that is the
+controller, has no pinned lifecycle SSH, or names an Entitlement that is not a
+managed `redhatRhel` Entitlement declaring `spec.rhsm.satellite` with its
+`trustBundleRef` refuses at plan, naming the field.
+
+### Effect
+
+`providedregistration.Capability` freezes the Entitlement name, the
+Satellite's `hostname`, `contentBaseURL` and `trustBundleRef` and the pinned
+placement in an `os-registration-<machine>` block in the machines stage. It
+waits for the hardware claim, any managed lifecycle enrollment and the
+Machine's [provided hostname](#provided-hostname). Every other block that
+waits for that Machine's hardware claim, except its managed firewall, its
+enrollment and its hostname, also waits for the registration, so a provided
+update and a Ceph host read converged repositories. The block's CA bundle is a
+trust anchor that names no credential; its certificate part reaches the host
+as module input, as a Ceph host's package trust does.
+
+The worker runs as root on the pinned host:
+
+1. It reads the consumer certificate `/etc/pki/consumer/cert.pem`. A host
+   with none refuses `registration-absent`, because a provided host's
+   registration is its owner's, and one whose CN is not a consumer UUID
+   refuses `registration-foreign`.
+2. When the CA file `/etc/rhsm/ca/bootwright-satellite.pem` does not hold
+   the bundle or `rhsm.conf` does not name the declared settings, it first
+   records the six settings it is about to change, each as read or absent,
+   and the CA file's prior bytes or its absence, naming the request digest
+   for the operator alone, in the root-only `/etc/bootwright/provided-registration.json`, written
+   0600 through a staged rename and synced with its directory. A prior CA
+   file that is a link, not a regular file or larger than a bundle, and a
+   record that cannot be read, refuse `registration-unavailable` before
+   any change. A record an earlier apply left outstanding is the rollback
+   target, whatever changed on the host since, and is never recorded
+   again. It then publishes the bundle there
+   under the [registration](#registration) rules and runs the same
+   `subscription-manager config` an installation runs.
+3. It proves the consumer against the declared Satellite with
+   `subscription-manager identity`, whose system identity must equal the
+   certificate's CN, also when `rhsm.conf` already names the settings and
+   a record is outstanding. A failure while a record exists runs
+   `subscription-manager config` again with the recorded settings and
+   restores the CA file's recorded bytes, or unlinks it through its
+   directory when it was absent, so the host keeps the registration it
+   had; the record goes once both are restored. It refuses
+   `registration-trust` when the Satellite's certificate did not verify
+   against the bundle, `registration-foreign` when the Satellite does not
+   know the consumer, and `registration-unavailable` otherwise.
+4. It runs `subscription-manager refresh` and then regenerates
+   `/etc/yum.repos.d/redhat.repo` with
+   `subscription-manager repos --list-enabled`, each within a bounded time;
+   one that fails or times out refuses `registration-unavailable`. Every
+   base URL in the file must begin with the content root and `/`; a file
+   that holds no repository or another root refuses
+   `registration-content-root`. Only then does it remove the record.
+
+It reports `converged` when it changed the CA or the configuration or
+settled an outstanding record, and `unchanged` otherwise. It never
+registers, unregisters, runs `subscription-manager clean` or `--force`, or
+changes the release or the enabled repositories. An observation reads the
+record, the certificate, the CA file, `rhsm.conf` and `redhat.repo` without
+changing them: an outstanding or unreadable record reads `diverged`, a
+partial effect when the certificate names a consumer and an unknown one
+otherwise, a converged host proves completion, a registered one that is not converged a
+partial effect the next apply converges, and one without a consumer
+certificate no effect. Destroy
+retains the registration and its configuration, which name the declared
+Satellite; the block's removal has no host effect.
+
+### Refusal table
+
+| Reason | Remedy |
+| --- | --- |
+| `registration-absent` | Register the Machine with the declared Satellite, under any of its names, and repeat apply. |
+| `registration-foreign` | Register the Machine with the declared Satellite, or name the Entitlement of the Satellite it is registered with, and repeat apply. |
+| `registration-trust` | Set the Entitlement's CA bundle Secret to the CA that signs the Satellite's certificate, and repeat apply. |
+| `registration-unavailable` | Restore the Machine's route to the Satellite and its subscription tooling, or, when the record `/etc/bootwright/provided-registration.json` is unreadable, restore its settings by hand and remove it, and repeat apply. |
+| `registration-content-root` | Make the Satellite serve the host's repositories beneath the declared `contentBaseURL`, or correct it, and repeat apply. |
 
 ## Shared package-tree publication
 

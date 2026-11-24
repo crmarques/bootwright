@@ -95,8 +95,9 @@ func providedTransport(h Host) error {
 
 func providedRegistration(h Host, satellite SubscriptionSource) error {
 	return cephPackageUnproved.Fail("the Ceph host package preparation refused its request, source or result on the provided tiebreaker Machine/"+h.Machine+", which takes its RHEL dependencies from the Satellite "+satellite.Hostname+" through its own registration",
-		"the adapter detail names the refusing step; register Machine/"+h.Machine+" with the Satellite "+satellite.Hostname+" so that /etc/yum.repos.d/redhat.repo holds exactly one enabled BaseOS and one enabled AppStream repository beneath "+satellite.ContentBaseURL+
-			", check that the IBM Ceph repository serves the authored package selection to the host, then apply again; Bootwright never registers a provided host")
+		"the adapter detail names the refusing step; declare spec.os.provided.subscription.entitlementRef on Machine/"+h.Machine+" so Bootwright converges its registration onto the Satellite "+satellite.Hostname+
+			", or register it with that Satellite so that /etc/yum.repos.d/redhat.repo holds exactly one enabled BaseOS and one enabled AppStream repository beneath "+satellite.ContentBaseURL+
+			", check that the IBM Ceph repository serves the authored package selection to the host, then apply again")
 }
 
 func pinnedHostKey(h Host, e lifecycle.Execution) (trust.HostKey, error) {

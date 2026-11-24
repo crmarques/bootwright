@@ -79,6 +79,7 @@
     "internal/managedos/medialocal": 91.4,
     "internal/managedos/physicalerase": 81.6,
     "internal/managedos/providedhostname": 69.9,
+    "internal/managedos/providedregistration": 79.8,
     "internal/managedos/providedupdate": 63.6,
     "internal/nativeartifacts/comparisonlocal": 81.4,
     "internal/nativeartifacts/rendering": 89.8,

@@ -726,3 +726,39 @@ func TestASubscriptionPackageSourceNeedsAManagedSatelliteRegistration(t *testing
 		t.Fatalf("a hosted tree was held to the subscription source's rule: %+v", issues)
 	}
 }
+
+func TestProvidedSubscriptionNamesAManagedSatelliteEntitlement(t *testing.T) {
+	satellite := m("hostname", "satellite.example.test", "trustBundleRef", "satellite-ca")
+	entitlement := func(kind string, rhsm api.Value) api.Object {
+		return obj(api.Entitlement, "rhel", m("type", kind, "rhsm", rhsm))
+	}
+	machine := obj(api.Machine, "witness", m("os", m("provided", m("subscription", m("entitlementRef", "rhel")))))
+	const field = "$.spec.os.provided.subscription.entitlementRef"
+	for name, test := range map[string]struct {
+		entitlement api.Object
+		refused     bool
+	}{
+		"managed Satellite":      {entitlement("redhatRhel", m("organizationRef", "org", "activationKeyRef", "key", "satellite", satellite)), false},
+		"explicitly managed":     {entitlement("redhatRhel", m("management", "managed", "organizationRef", "org", "activationKeyRef", "key", "satellite", satellite)), false},
+		"external registration":  {entitlement("redhatRhel", m("management", "external")), true},
+		"hosted service":         {entitlement("redhatRhel", m("organizationRef", "org", "activationKeyRef", "key")), true},
+		"Satellite without a CA": {entitlement("redhatRhel", m("organizationRef", "org", "activationKeyRef", "key", "satellite", m("hostname", "satellite.example.test"))), true},
+		"a Ceph subscription":    {entitlement("redhatCeph", m("organizationRef", "org", "activationKeyRef", "key", "satellite", satellite)), true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			issues := Validate(machine, api.NewCatalog([]api.Object{machine, test.entitlement}))
+			if !test.refused {
+				if len(issues) != 0 {
+					t.Fatalf("issues = %+v", issues)
+				}
+				return
+			}
+			if len(issues) != 1 || issues[0].Field != field || !strings.Contains(issues[0].Remediation, "spec.rhsm.satellite") || !strings.Contains(issues[0].Message, "Entitlement/rhel") {
+				t.Fatalf("issues = %+v, want one at %s", issues, field)
+			}
+		})
+	}
+	if issues := Validate(obj(api.Machine, "plain", m("os", m("provided", m()))), api.NewCatalog(nil)); len(issues) != 0 {
+		t.Fatalf("a Machine without a registration was refused: %+v", issues)
+	}
+}

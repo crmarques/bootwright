@@ -1,0 +1,15 @@
+---
+- name: Publish a bounded provided registration refusal
+  bootwright.core.managedos_provided_registration_protocol:
+    phase: refused
+    reason: '{{ managedos_provided_registration_answer.reason }}'
+    detail: "{{ managedos_provided_registration_answer.detail | default('') }}"
+  when:
+    - managedos_provided_registration_answer.ok | default(false) is not true
+    - managedos_provided_registration_answer.reason is defined
+  no_log: true
+
+- name: Refuse a provided registration that did not provide success evidence
+  ansible.builtin.fail:
+    msg: 'The provided registration did not return success evidence'
+  when: managedos_provided_registration_answer.ok | default(false) is not true

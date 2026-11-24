@@ -1,0 +1,55 @@
+argument_specs:
+  apply:
+    short_description: Converge a provided RHEL host's registration onto its Satellite.
+    options: &request
+      bootwright_provided_registration_request:
+        type: dict
+        required: true
+        options:
+          version:
+            type: str
+            required: true
+            choices:
+              - provided-os-registration-request-v1
+          identity:
+            type: dict
+            required: true
+          placement:
+            type: dict
+            required: true
+          entitlementRef:
+            type: str
+            required: true
+          satellite:
+            type: dict
+            required: true
+            options:
+              hostname:
+                type: str
+                required: true
+              contentBaseURL:
+                type: str
+                required: true
+              trustBundleRef:
+                type: str
+                required: true
+      bootwright_provided_registration_digest:
+        type: str
+        required: true
+      bootwright_provided_registration_material:
+        type: dict
+        required: true
+        options:
+          identity:
+            type: str
+            required: true
+          knownHosts:
+            type: str
+            required: true
+          satelliteCA:
+            type: str
+            required: true
+
+  observe:
+    short_description: Read a provided RHEL host's Satellite registration.
+    options: *request

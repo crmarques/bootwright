@@ -81,6 +81,9 @@ func ValidateAuthored(o api.Object, c api.Catalog) []api.Issue {
 }
 
 func Validate(o api.Object, c api.Catalog) []api.Issue {
+	if o.Kind() == api.Machine {
+		return validateProvidedSubscription(o, c)
+	}
 	if o.Kind() == api.Entitlement && o.Spec().Get("type").Text() == "redhatRhel" {
 		return ValidateRHSM(o, false)
 	}
@@ -370,6 +373,24 @@ func validateSubscriptionSource(o api.Object, c api.Catalog) []api.Issue {
 	if strings.ContainsAny(rhsm.Get("satellite", "contentBaseURL").Text(), "\"'\\#") {
 		return []api.Issue{issue(path, "the installer's registration command carries the content root of "+entitlement.Identity()+" as one token, and it holds a quote, a backslash or '#'",
 			"set spec.rhsm.satellite.contentBaseURL on "+entitlement.Identity()+" to a URL without those characters"+other)}
+	}
+	return nil
+}
+
+func validateProvidedSubscription(o api.Object, c api.Catalog) []api.Issue {
+	reference := o.Spec().Get("os", "provided", "subscription", "entitlementRef")
+	if !reference.Present() {
+		return nil
+	}
+	const path = "$.spec.os.provided.subscription.entitlementRef"
+	entitlement, found := c.Find(api.Entitlement, reference.Text())
+	if !found {
+		return nil
+	}
+	rhsm := entitlement.Spec().Get("rhsm")
+	if entitlement.Spec().Get("type").Text() != "redhatRhel" || rhsm.Get("management").Text() == "external" || !rhsm.Has("satellite", "trustBundleRef") {
+		return []api.Issue{issue(path, o.Identity()+" converges its registration onto the Satellite of "+entitlement.Identity()+", which must be a managed redhatRhel Entitlement declaring spec.rhsm.satellite with its trustBundleRef",
+			"name a managed redhatRhel Entitlement that declares spec.rhsm.satellite with its trustBundleRef in spec.os.provided.subscription.entitlementRef on "+o.Identity()+", or remove spec.os.provided.subscription")}
 	}
 	return nil
 }

@@ -85,7 +85,7 @@ func machineSchema() *Shape {
 	provided := record(field("updates", atomic(record(
 		required("policy", enumeration("withinRelease", "toRelease")),
 		required("release", lexical(LexicalOSRelease)),
-	))))
+	))), field("subscription", record(required("entitlementRef", ref(Entitlement)))))
 	os := choice(field("provided", provided), field("install", record(required("profileRef", ref(MachineInstallProfile)), field("hostKeyRef", secret("sshKeyPair")), field("ntp", serverSelections(NTPServer)))), field("clusterInstalled", record()))
 	source := choice(field("ip", ip()), field("cidr", cidr()), field("machine", record(
 		required("machineRef", ref(Machine)),

@@ -421,6 +421,16 @@ Stops for the [provided hostname](../managed-os.md#provided-hostname).
 | `oshostname.refused` | adapter-run | possible | target | - | fix-then-repeat | the Machine did not accept the declared hostname | check what manages the Machine's hostname and its lifecycle access, then repeat the operation |
 | `oshostname.unproved` | block | unproved | target | - | repeat | the provided OS hostname adapter ended without proving the hostname | repeat the operation to observe the Machine before resuming the hostname |
 
+## Provided registration stops
+
+Stops for [provided registration](../managed-os.md#provided-registration).
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `osregistration.request-invalid` | block | none | defect | - | none | the provided registration request is invalid, so no adapter ran | report the message as a defect |
+| `osregistration.refused` | adapter-run | possible | target | - | fix-then-repeat | the Machine's registration or its Satellite did not satisfy the provided registration | check the Machine's registration, its route to the Satellite and the Entitlement's CA bundle, then repeat the operation |
+| `osregistration.unproved` | block | unproved | target | - | repeat | the provided registration adapter ended without proving the registration | repeat the operation to observe the Machine before resuming the registration |
+
 ## Managed OS installation stops
 
 The managed OS installation capability's stops (`internal/managedos/installation`).

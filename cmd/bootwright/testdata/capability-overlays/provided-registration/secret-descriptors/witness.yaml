@@ -1,0 +1,43 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: witness-host-key
+
+spec:
+  type: opaque
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: witness-admin
+
+spec:
+  type: sshKeyPair
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: satellite-org
+
+spec:
+  type: opaque
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: satellite-activation-key
+
+spec:
+  type: opaque
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: satellite-ca-bundle
+
+spec:
+  type: caBundle

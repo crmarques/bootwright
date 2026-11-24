@@ -44,6 +44,7 @@ internal/managedos/installation/
 internal/managedos/physicalerase/
 internal/managedos/providedhostname/
 internal/managedos/providedupdate/
+internal/managedos/providedregistration/
 internal/storage/ceph/
 internal/substrate/
 '

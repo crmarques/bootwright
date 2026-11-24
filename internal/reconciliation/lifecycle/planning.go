@@ -746,13 +746,15 @@ func dependOnEnrollment(definitions []reconciliation.BlockDefinition) []reconcil
 }
 
 func dependOnProvidedUpdates(definitions []reconciliation.BlockDefinition) []reconciliation.BlockDefinition {
-	updates, hostnames := map[string]bool{}, map[string]bool{}
+	updates, hostnames, registrations := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, definition := range definitions {
 		switch definition.Family {
 		case machine.ProvidedUpdateFamily:
 			updates[definition.Object] = true
 		case machine.ProvidedHostnameFamily:
 			hostnames[definition.Object] = true
+		case machine.ProvidedRegistrationFamily:
+			registrations[definition.Object] = true
 		}
 	}
 	for index := range definitions {
@@ -763,6 +765,12 @@ func dependOnProvidedUpdates(definitions []reconciliation.BlockDefinition) []rec
 				d.Exclusive = append(d.Exclusive, "provided-os/"+d.Object)
 				slices.Sort(d.Exclusive)
 				d.Exclusive = slices.Compact(d.Exclusive)
+			}
+		case machine.ProvidedRegistrationFamily:
+			for _, ref := range d.Requires {
+				if ref.Kind == string(api.Machine) && ref.Family == machine.HardwareFamily && hostnames[ref.Object] && machinesStageOrLater(d.Stage) {
+					d.Requires = append(d.Requires, reconciliation.ObjectRef{Kind: string(api.Machine), Object: ref.Object, Family: machine.ProvidedHostnameFamily})
+				}
 			}
 		case machine.EnrollmentFamily:
 		default:
@@ -776,6 +784,14 @@ func dependOnProvidedUpdates(definitions []reconciliation.BlockDefinition) []rec
 				if hostnames[ref.Object] && machinesStageOrLater(d.Stage) {
 					d.Requires = append(d.Requires, reconciliation.ObjectRef{Kind: string(api.Machine), Object: ref.Object, Family: machine.ProvidedHostnameFamily})
 				}
+			}
+		}
+		if d.Family == machine.ProvidedRegistrationFamily || d.Family == machine.ProvidedHostnameFamily || d.Family == machine.FirewallFamily || d.Family == machine.EnrollmentFamily {
+			continue
+		}
+		for _, ref := range d.Requires {
+			if ref.Kind == string(api.Machine) && ref.Family == machine.HardwareFamily && registrations[ref.Object] {
+				d.Requires = append(d.Requires, reconciliation.ObjectRef{Kind: string(api.Machine), Object: ref.Object, Family: machine.ProvidedRegistrationFamily})
 			}
 		}
 	}
