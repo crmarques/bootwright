@@ -212,8 +212,12 @@ same total still runs keeps its outcome in the block, and an appended stream
 withholds it, until every earlier running step settles. Closing the block
 writes any outcome still withheld, in position order.
 
-Apply reads its [enrollment passwords](../api/machines.md#managed-lifecycle-enrollment)
-directly after the plan and its confirmation, before any check. Their prompts
+Apply and destroy read their [enrollment passwords](../api/machines.md#managed-lifecycle-enrollment)
+directly after the plan and its confirmation, before any check. Destroy asks
+for the removal steps it has not finished, never for a step already done or a
+Machine it abandons; a password it cannot read then is asked for
+again by the step that needs it, which refuses on its own, so a keep-going
+removal still completes the cleanup that does not depend on it. Their prompts
 form one `First access` group on
 standard error: the heading, a grey note that typing stays hidden and that the
 passwords are kept in memory for the invocation, then one prompt per password

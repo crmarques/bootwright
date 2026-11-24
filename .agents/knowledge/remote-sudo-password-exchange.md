@@ -35,6 +35,15 @@ launcher. Required behavior stays in
   for every directly reached managed host's firewall, and an enrolled host's
   firewall waits for its enrollment and hardware claim. A continued operation
   keeps the graph it froze, so the fix reaches a fresh operation only.
+- A destroy printed `SSH password for <user> on Machine/<m>` under
+  `Progress`, then a batch of `[DONE]` rows and later a `Sudo password` prompt
+  between two rows. Only apply collected passwords before it started; a
+  destroy asked when the enrollment withdrawal step ran, and the presenter
+  drew the independent steps that settled during the prompt once it ended.
+  `promptDestroyStart` in
+  [destroy_start.go](../../internal/reconciliation/lifecycle/destroy_start.go)
+  now reads them after the confirmation, inside the same `BeginPrompts` scope,
+  so the steps reuse them.
 - After a manual controller reset
   ([controller teardown](../../e2e/controller-teardown.md)) the enrolled
   account stayed on the provided Machine, and the next operation's check

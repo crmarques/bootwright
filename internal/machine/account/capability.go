@@ -198,6 +198,10 @@ func (c Capability) PromptApplyStart(ctx context.Context, p lifecycle.Probe) err
 	return c.Remote.collect(ctx, p.Context, request, p.Material)
 }
 
+func (c Capability) PromptDestroyStart(ctx context.Context, p lifecycle.Probe) error {
+	return c.PromptApplyStart(ctx, p)
+}
+
 func (Capability) ApplyStartCheck(block reconciliation.Block) string {
 	return "prove first access to Machine/" + block.Object + ", changing nothing"
 }

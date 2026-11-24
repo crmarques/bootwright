@@ -537,6 +537,18 @@ func TestPromptedCredentialsFollowTheBootstrapUserAcrossMachines(t *testing.T) {
 	}
 }
 
+func TestDestroyStartAsksTheWithdrawalPasswordsWithoutConnecting(t *testing.T) {
+	capability, execution, ssh, prompts := enrollmentFixture(t)
+	ctx, release := BeginInvocation(t.Context())
+	defer release()
+	probe := lifecycle.Probe{Context: execution.Context, Block: execution.Block}
+	for range 2 {
+		if err := capability.PromptDestroyStart(ctx, probe); err != nil || len(*prompts) != 2 || len(ssh.received) != 0 {
+			t.Fatalf("collecting withdrawal credentials asked %d prompts over %d connections: %v", len(*prompts), len(ssh.received), err)
+		}
+	}
+}
+
 func TestEnrollmentProvesTerminalSudoBeforeChangingTheAccount(t *testing.T) {
 	for _, effect := range []string{"apply", "destroy"} {
 		t.Run(effect, func(t *testing.T) {

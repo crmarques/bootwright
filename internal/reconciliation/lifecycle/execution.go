@@ -40,6 +40,11 @@ func (s Service) Destroy(ctx context.Context, request DestroyRequest) (*Operatio
 		return nil, err
 	}
 	s.keepGoing = request.KeepGoing
+	if s.options.BeginPrompts != nil {
+		var end func()
+		ctx, end = s.options.BeginPrompts(ctx)
+		defer end()
+	}
 	return s.mutate(ctx, reconciliation.Destroy, request.ContextName, reconciliation.Selection{}, request.Authorizations, request.Unregistered, request.SkipConfirmation, request.Unattended, request.SSH.Borrowed(), nil)
 }
 
@@ -129,10 +134,8 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 			return nil, err
 		}
 	}
-	if verb == reconciliation.Apply {
-		if err := s.promptApplyStart(ctx, name, decided); err != nil {
-			return nil, err
-		}
+	if err := s.promptStart(ctx, name, decided); err != nil {
+		return nil, err
 	}
 	if s.startsFlow(decided) {
 		s.startCheck, err = s.startFor(ctx, identity, decided)
