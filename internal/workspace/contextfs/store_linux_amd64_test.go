@@ -42,6 +42,15 @@ func testOptions(root string) Options {
 
 func publish(t *testing.T, store *Store, name string, sources desiredstate.Sources) contexts.Record {
 	t.Helper()
+	result, err := tryPublish(store, name, sources)
+	if err != nil {
+		t.Fatalf("publication failed: %#v", err)
+	}
+	return result
+}
+
+// tryPublish is publish for a test that expects the publication to refuse.
+func tryPublish(store *Store, name string, sources desiredstate.Sources) (contexts.Record, error) {
 	var result contexts.Record
 	err := store.Transact(context.Background(), true, sources.Roots, func(tx contexts.Transaction) error {
 		registry := tx.Registry()
@@ -74,10 +83,7 @@ func publish(t *testing.T, store *Store, name string, sources desiredstate.Sourc
 		}
 		return tx.Commit(context.Background(), registry)
 	})
-	if err != nil {
-		t.Fatalf("publication failed: %#v", err)
-	}
-	return result
+	return result, err
 }
 
 func expectState(t *testing.T, err error) {

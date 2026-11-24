@@ -22,10 +22,13 @@ packages already present ([D178](milestones/backlog.md#d178)).
 | Scope | Prerequisites | Owner |
 | --- | --- | --- |
 | Host | A [supported](#supported-hosts) OS family and architecture and verified installed-host identity; the fixed root and its [setup subtree](contexts/controller-record.md#the-setup-subtree); the [controller runtime](#the-controller-runtime), a virtual environment on the host's own CPython holding the [locked](#the-runtime-lock) `ansible-core` closure; the baseline [host package](#host-packages) `openssh-clients`. | `install` |
-| Context | The target client closure the selected graph needs; the container runtime a managed service placed on this Machine or a libvirt provider hosted on it selects; the libvirt client closure any Machine a libvirt provider hosts selects, derived from placements with no Machine role declared; the hypervisor closure and the libvirt client a libvirt provider hosted on this Machine selects; the installer-media tooling an Anaconda installation published through an artifact server on this Machine selects; the `skopeo` copy tool the managed image mirror's Registry placed on this Machine selects; the `nmstate` package an agent-installed OpenShiftCluster node that references a declared Machine selects; the `iputils` package an agent-installed multi-node baremetal OpenShiftCluster selects when one of its OpenShift-sourced IPv4 virtual IPs lies in a managed libvirt network of a provider hosted on this Machine; the binding between this context and this host. | [`apply --stage controller`](#the-controller-stage) |
+| Context | The target client closure the selected graph needs; the stage closures of the [host package](#host-packages) table the graph selects. | [`apply --stage controller`](#the-controller-stage) |
+| Context | The binding between this context and this host ([binding](contexts.md#controller-relationship-and-host-binding)). | the context's first `apply` |
+| Context | A positive kernel FIPS mode, when the graph selects a FIPS cluster ([adapter boundary](openshift-clusters.md#adapter-boundary)). | the operator; `apply --dry-run` and `apply` refuse `controller.unsupported` without it |
 
 A host prepared once therefore serves every context later created on it, and a
-context that selects nothing beyond the baseline needs no controller stage.
+context that selects nothing beyond the baseline, and whose binding names no
+tool area, needs no controller stage.
 The [Environment-selected controller Machine](api/environment.md#controller-machine)
 names the host a context expects to run on; `install` never reads it.
 
@@ -46,14 +49,19 @@ hold, each refusing `controller.unsupported` with its remedy otherwise:
   Fedora, RHEL or derivative host;
 - the architecture is amd64, matching the Go build;
 - `/usr/bin/rpm` and `/usr/bin/dnf` are qualified system executables: each
-  resolves to a regular file owned by root, and neither it nor any directory
-  above it is writable by group or others; another names restoring the host's
-  tool under `/usr/bin` with root ownership;
+  path, every link it passes through and its resolved regular file are owned
+  by root, and no directory above any of them is writable by group or others;
+  another names restoring the host's tool under `/usr/bin` with root
+  ownership;
 - an interpreter of a locked Python ABI is installed, or the host's dnf offers
   one ([the controller runtime](#the-controller-runtime));
 - glibc is at or above the lock's `glibcFloor`, which the lock generator
   computes from the highest manylinux tag among the locked wheels; another
   names a host whose glibc is that floor or newer.
+
+Not yet met: `nativeexec.Qualify` and the runtime guard's `ownedExecutable`
+walk the resolved file and the directories above it, and check neither a link
+on the way nor the directory that holds it; tracked as [B1779](milestones/m1.md#b1779).
 
 No release name appears in the admission. The lock's `tested` list names the
 releases a build was tested on, and [development](../docs/development.md#lock-refresh-and-tested-hosts)
@@ -79,8 +87,10 @@ host's OpenSSL and crypto-policy and the runtime carries no OpenSSL of its own
 ([W4](security.md#the-controller-hosts-attacker-model)). Setup,
 `install --check` and the controller checks of `apply --dry-run` report the
 kernel's FIPS mode as the informational `fips-mode` check, with that statement
-when it is enabled. Values of 0 and 1 and an absent flag leave readiness,
-the plan and the next command unchanged. An unreadable or invalid flag refuses with
+when it is enabled. With no selected FIPS cluster, values of 0 and 1 and an
+absent flag leave readiness, the plan and the next command unchanged; a
+selected FIPS cluster requires the flag to be 1
+([adapter boundary](openshift-clusters.md#adapter-boundary)). An unreadable or invalid flag refuses with
 `controller.unsupported`, which [B414](milestones/backlog.md#b414) would report
 as not verified instead. Bootwright claims no FIPS compliance; a
 FIPS-qualified runtime is parked as [B331](milestones/backlog.md#b331).
@@ -138,18 +148,25 @@ path, `/usr/bin/python<abi>` for an ABI the lock serves, never
 `/usr/bin/python3`, so the path fixes the ABI. Setup prefers the interpreter
 its receipt names while it still qualifies, so a newer interpreter installed
 later never forces a rebuild, and otherwise takes the newest locked ABI. A
-candidate qualifies when it, its resolved target and the interpreter's
-standard library and `lib-dynload` directories are owned by root with no
-group or other write on them or any directory above, when `-I -B` runs a probe
+candidate qualifies when it meets the [executable rule](#supported-hosts) of
+`rpm` and dnf, when the interpreter's standard library and `lib-dynload`
+directories are owned by root with no group or other write on them or any
+directory above, when `-I -B` runs a probe
 that imports `ssl`, `ctypes`, `zlib`, `bz2` and `venv` and reports its version,
 cache tag and glibc, and when that glibc is at or above the floor. With no
 qualified interpreter, setup adds the host package requirement `python3.X`
-for the first locked ABI X.Y whose dnf preview resolves, newest first
-([W1](security.md#the-controller-hosts-attacker-model)). It names the package
-rather than the `python(abi) = X.Y` capability because Fedora's alternative
+for the first locked ABI X.Y whose package is not installed and whose dnf
+preview resolves, newest first
+([W1](security.md#the-controller-hosts-attacker-model)).
+Setup names the package rather than the `python(abi) = X.Y` capability because Fedora's alternative
 interpreters omit that provide, while every supported release's package of a
 locked ABI, the OS's own `python3` included, provides `python3.X`: RHEL 9
 AppStream's `python3.12` and Fedora's `python3.12`.
+
+When every locked ABI's package is installed and no interpreter qualifies, the
+`python-runtime` check is not-ready, "no installed interpreter qualifies", and
+setup adds no package
+(`TestEveryLockedPackageInstalledWithNoQualifyingInterpreterIsNotReady`).
 
 Not yet met: a standalone CPython for a host whose repositories offer no
 locked ABI is parked as [B561](milestones/backlog.md#b561).
@@ -212,7 +229,7 @@ apply refused over an incomplete removal names that removal's continuation,
 which rebuilds it, rather than setup. No decision rebuilds it: that refusal
 compares the closure from the setup receipt alone, so a cache that lacks a
 wheel is reported by the continuation it names. When the
-receipt is complete, its interpreter still qualifies at the same path and the
+receipt is [complete](contexts/controller-record.md#the-setup-subtree), its interpreter still qualifies at the same path and the
 wheel cache holds every locked wheel of its ABI and the installer, the launch
 waits for `controller/install/lock` (it never refuses a held lock as busy), repeats those
 checks under it, and builds and publishes the runtime exactly as setup does
@@ -244,19 +261,23 @@ therefore needs a build and an apply, never a setup.
 
 ## Host packages
 
-One Go table names the host packages by name or RPM capability:
+`BaselineHostRequirements` and `StageHostRequirements` in
+`internal/controller/prerequisites/hostpackages.go` name the host packages by
+name or RPM capability, and `TestHostPackageTableMatchesTheRequirements` holds
+this table to them. The table owns each closure's selecting condition; every
+other statement of a closure names its row and links here.
 
 | Scope | Selected when | Requirements |
 | --- | --- | --- |
 | Baseline (setup) | always | `openssh-clients` |
-| Baseline (setup) | no locked interpreter installed | `python3.X` |
-| Stage | container runtime | `podman` |
-| Stage | libvirt client | `libvirt-client` |
-| Stage | hypervisor | `libvirt-daemon`, `libvirt-daemon-driver-network`, `libvirt-daemon-driver-qemu`, `libvirt-daemon-driver-storage-core`, `qemu-img`, `qemu-kvm-core`, `swtpm`, `swtpm-tools` |
-| Stage | installer media | `lorax`, `xorriso`, `squashfs-tools`, `e2fsprogs`, `binutils` |
-| Stage | image mirror, the managed image mirror's `Registry` on the controller Machine | `skopeo` |
-| Stage | agent-installed OpenShiftCluster with a node that references a declared Machine | `nmstate` |
-| Stage | agent-installed multi-node baremetal OpenShiftCluster with an OpenShift-sourced IPv4 virtual IP in a managed libvirt network of a provider hosted on the controller Machine | `iputils` |
+| Baseline (setup) | no qualified interpreter, and a locked ABI's package not installed | `python3.X` |
+| Stage | container runtime: a managed service placed on the controller Machine, or a libvirt provider hosted on it, whose emulated BMC runs as a container | `podman` |
+| Stage | libvirt client: a libvirt provider hosted on the controller Machine, or any Machine a libvirt provider hosts, derived from placements with no Machine role declared | `libvirt-client` |
+| Stage | hypervisor: a libvirt provider hosted on the controller Machine | `libvirt-daemon`, `libvirt-daemon-driver-network`, `libvirt-daemon-driver-qemu`, `libvirt-daemon-driver-storage-core`, `qemu-img`, `qemu-kvm-core`, `swtpm`, `swtpm-tools` |
+| Stage | installer media: an Anaconda installation published through an artifact server on the controller Machine | `lorax`, `xorriso`, `squashfs-tools`, `e2fsprogs`, `binutils` |
+| Stage | image mirror: the managed image mirror's `Registry` placed on the controller Machine | `skopeo` |
+| Stage | `nmstate`: an agent-installed OpenShiftCluster with a node that references a declared Machine | `nmstate` |
+| Stage | `iputils`: an agent-installed OpenShiftCluster with at least two nodes on the `baremetal` platform and an OpenShift-sourced IPv4 virtual IP in a managed libvirt Network of a provider hosted on the controller Machine | `iputils` |
 
 `podman` runs only the containers a context places on the controller Machine:
 a managed service whose `machineRef` names it, and the emulated BMC a libvirt
@@ -284,8 +305,10 @@ because rpm reads a whole `name = EVR` string as one provide name.
 
 **Preview** runs as root,
 `dnf install --assumeno --setopt=install_weak_deps=False -- <missing>`, before
-confirmation. Its standard output is display text, bounded to 64 KiB and shown
-verbatim in the plan, never parsed for a decision, because dnf4 and dnf5 render
+confirmation. Its standard output is display text, bounded to 64 KiB, with every control
+character but newline and tab replaced by `?` (`sanitize` in
+`internal/controller/hostdnf`, `TestThePreviewIsBoundedDisplayText`), and shown
+unparsed in the plan, never parsed for a decision, because dnf4 and dnf5 render
 it differently; its expected exit status 1 is no error. A "no match" for a
 requirement and a dependency-resolution failure each refuse `controller.install`
 naming the requirement and dnf's last error line, with the remedy of fixing
@@ -343,9 +366,16 @@ package removed, or removed and installed again, drops out
 (`TestACarriedAddedSetDropsWhatIsGone`). The set holds at most 1024 packages;
 past it the install refuses `controller.install` with the remedy of running
 `uninstall --keep-packages`, which leaves every host package and
-works while a pending intent remains, then `install` again (`TestTheAddedSetBoundNamesARemedy`).
+works while a pending intent remains, then `install` again
+(`TestTheAddedSetBoundNamesARemedy`). That remedy needs a host that holds no
+context, because uninstall refuses a registry that names one
+([uninstall refusals](#the-uninstall-flow)).
 A package another tool installs in its own rpm transaction during the dnf
 transaction therefore refuses the install rather than counting as added. The set is never read from dnf's output.
+
+Not yet met: a host that holds a context and carries an added set past the
+bound has no exit short of destroying every environment and deleting every
+context; tracked as [B1780](milestones/m1.md#b1780).
 
 `rpm` and `dnf` get a clean environment, `LC_ALL=C` and
 `PATH=/usr/sbin:/usr/bin`, stdin from `/dev/null`, a bounded run time and
@@ -377,11 +407,10 @@ context must be ready and have an admitted input revision, and an empty one
 returns `context.input` with the import command. Every check carries the scope that owns it, so a negative
 report names the one command that settles it: `install` for a host prerequisite,
 and that context's own `apply --stage controller --context <name>` for anything
-its graph selects. A context whose graph selects no target client, container
-runtime, libvirt client, hypervisor, installer-media tooling, image mirror
-copy tool, `nmstate` or `iputils` has no controller stage, so its
-only context check, the binding, names `apply --context <name>`, whose first
-apply publishes it. The report's next command and the diagnostic's remedy are
+its graph selects. A context whose graph selects no target client and no stage
+closure of the [host package](#host-packages) table has no controller stage,
+so its only context check, the binding, names `apply --context <name>`, whose
+first apply publishes it. The report's next command and the diagnostic's remedy are
 that one decision. An unmet host prerequisite always wins, because the
 prerequisites a context adds cannot be prepared on an unprepared host. Global
 SSH flags remain unconsumed by these checks.
@@ -389,9 +418,9 @@ SSH flags remain unconsumed by these checks.
 | Invocation | Required behavior |
 | --- | --- |
 | `bootwright install --dry-run` | Inspect the host and its private setup state to plan missing work. Report the ordered actions, RPM requirements by name, and the locked wheel inventory in structured output. A feasible plan exits 0 even when prerequisites are missing or setup was interrupted. Admission refusals exit 1 and retain any plan already computed. |
-| `bootwright install --check` | Verify supported host and tool admission, installed-host identity, the locked interpreter and published runtime, baseline RPM presence, a complete receipt for the current runtime, and state-root admission. Report each observed finding and any remedy. Exit 0 when ready and 1 when a prerequisite is missing, unverified or refused. |
+| `bootwright install --check` | Verify supported host and tool admission, installed-host identity, the locked interpreter and published runtime, baseline RPM presence, a [complete receipt](contexts/controller-record.md#the-setup-subtree) for the current runtime, and state-root admission. Report each observed finding and any remedy. Exit 0 when ready and 1 when a prerequisite is missing, unverified or refused. |
 | `bootwright install` | Elevate, then inspect read-only: admission, the installed host, FIPS mode, the untested release and loader preload (informational), the setup state, the interpreter and its runtime and the baseline package presence. A ready host prints the receipt table and `Nothing to do.`, with no network request, confirmation or write. Otherwise run the preview and present the plan, confirm, take `controller/install/lock`, inspect again and refuse a host that moved, record the pending intent, install with dnf, copy the carried wheels, build, verify and publish the runtime, and write the receipt, which clears the pending intent. Publish no binding and touch no controller record. |
-| `bootwright apply --dry-run --stage controller --context <name>` | Additionally report that context's own target tools, its container runtime, libvirt client, hypervisor, installer-media, image-mirror, `nmstate` and `iputils` requirements by `rpm` presence, and its host binding, as context-scoped checks. Contact no publisher and read no repository metadata for them. |
+| `bootwright apply --dry-run --stage controller --context <name>` | Additionally report that context's own target tools and the stage closures of the [host package](#host-packages) table it selects by `rpm` presence, and its host binding, as context-scoped checks. Contact no publisher and read no repository metadata for them. |
 
 Both install read-only modes can elevate to read private setup state. They
 use the local RPM database, perform no dnf call or repository resolution,
@@ -407,7 +436,7 @@ The plan names each action setup takes, in order:
 - `resume`, when a pending intent is present: "An earlier setup
   (`install-000042`) was interrupted during `<step>`; this run re-inspects the
   host and continues";
-- `native-packages`, with the verbatim dnf preview and its core-package note;
+- `native-packages`, with the unparsed dnf preview and its core-package note;
 - `runtime`, for example "Python 3.14 at /usr/bin/python3.14, ansible-core
   2.21.5: 3 of 7 wheels to copy from this executable (2.1 MB), 4 cached".
 
@@ -442,16 +471,18 @@ host is as it was before its first install apart from what the operator or a
 context's controller stage added. No context remains, so no operation can
 read what those roots hold again. It never removes the Bootwright executable,
 a package present before Bootwright, a package a
-[controller stage](#the-controller-stage) installed, which no record names,
-data the operator supplied, or what a context realized on an SSH placement
-host, which no uninstall reaches. Like install it selects no context, refuses
+[controller stage](#the-controller-stage) installed, which no record names, or
+what a context realized on an SSH placement host, which no uninstall reaches.
+Over a store this build reads it removes no data the operator supplied; a
+`--discard-unreadable` of a store this build cannot read removes that store's
+[media store](managed-os.md#media-store) with it. Like install it selects no context, refuses
 `--context`, and elevates as install does.
 
 | Invocation | Required behavior |
 | --- | --- |
 | `bootwright uninstall` | Elevate, take the exclusive root lock and [`controller/install/lock`](contexts/controller-record.md#the-setup-subtree), each refused as busy rather than awaited, and inspect read-only. A host where every root is absent and no tree an interrupted uninstall renamed remains prints `Nothing to do.` and changes nothing. A root without a setup subtree has no receipt, so it names no package to remove. Otherwise run the owned-object proof below, present the plan, confirm, inspect and prove again under the same locks and refuse a host that moved, remove the packages, then remove every root, and report what it removed and what it kept. |
 | `bootwright uninstall --keep-packages` | The same, without the package action: no `rpm` erase test, dnf preview or dnf removal, and no refusal that only package removal needs. |
-| `bootwright uninstall --discard-unreadable` | Discard what this build cannot read or attribute ([B1216](milestones/m1.md#b1216)): accepted when the store refuses as another build's (a registry of another version, or state without a registry), when this build's registry stands beside an entry it cannot attribute and names no context, or when the store is readable and holds no context; it then also takes the guest disks under the libvirt image prefix. It takes the same locks, a held `controller/install/lock` included when one stands there, runs the same owned-object proof, and removes every root and the image prefix whole. It never removes a package, and reads no receipt of a store it cannot read, so it runs no `rpm` or dnf and reads no egress route. A malformed registry of this build, a store listing that fails, changes while read or outgrows its bound, an I/O, busy or permission refusal, and a registry this build decodes that names any context or a media store holding any image, beside an unattributed entry too, still refuse as the plain uninstall does (`TestADiscardBesideAnUnattributedEntryStillRefusesContextsAndMedia`, `TestADiscardRefusesAListingOrReadFailureOfTheStore`). With `--keep-packages` it is a usage error. It knows no path an earlier build used. |
+| `bootwright uninstall --discard-unreadable` | Discard what this build cannot read or attribute ([B1216](milestones/m1.md#b1216)): accepted when the store refuses as another build's (a registry of another version, or state without a registry), when this build's registry stands beside an entry it cannot attribute and names no context, or when the store is readable and holds no context; it then also takes the guest disks under the libvirt image prefix, and a store this build cannot read goes whole, its media store included. It takes the same locks, a held `controller/install/lock` included when one stands there, runs the same owned-object proof, and removes every root and the image prefix whole. It never removes a package, and reads no receipt of a store it cannot read, so it runs no `rpm` or dnf and reads no egress route. A malformed registry of this build, a store listing that fails, changes while read or outgrows its bound, an I/O, busy or permission refusal, and a registry this build decodes that names any context or a media store holding any image, beside an unattributed entry too, still refuse as the plain uninstall does (`TestADiscardBesideAnUnattributedEntryStillRefusesContextsAndMedia`, `TestADiscardRefusesAListingOrReadFailureOfTheStore`). With `--keep-packages` it is a usage error. It knows no path an earlier build used. |
 
 `uninstall --dry-run` uses the same inspection before presenting its planned changes. It checks package dependencies with the RPM erase test and performs no dnf transaction, confirmation or removal.
 
@@ -469,10 +500,16 @@ remedy named, unless it names another code:
   bootwright uninstall again";
 - a [media store](managed-os.md#media-store) holding any image, record or kept
   stage refuses naming each image, with the remedy
-  `bootwright catalog media delete --name <image>` for each, because uninstall never
-  deletes media the operator supplied;
+  `bootwright catalog media delete --name <image>` for each, because uninstall
+  of a store this build reads never deletes media the operator supplied;
 - a staging extraction another process holds refuses `context.busy` with a
   retry remedy;
+- each root that exists must be a directory `root:root` owns, writable by no
+  group or other, not a link, not a mount point (a bind mount included, since
+  no rename in its parent can move one) and on its parent's device, or
+  uninstall refuses naming it
+  (`TestAnUninstallRefusesAMountedRootOrStagingBeforeAnyEffect`,
+  `TestAnUninstallNamesGuestDisksAndRefusesForeignRoots`);
 - any Bootwright-owned object the owned-object proof below
   finds refuses naming each, such as "libvirt domain bootwright-lab-rhel-01",
   with the remedy to destroy the context that owns it with a build that reads
@@ -482,7 +519,8 @@ remedy named, unless it names another code:
   `/var/lib/libvirt/images/bootwright` refuses naming each as guest disks no
   removal took back, with the remedy
   `bootwright uninstall --discard-unreadable`, because they may hold
-  data and only a destroy consumes `data-loss` for them;
+  data; a discard removes them only after its plan names each guest disk
+  entry and the operator confirms;
 - without `--keep-packages`, a setup record that carries a pending intent, or
   that does not decode as this build's format, refuses, because the
   packages that install added are not known: "an earlier install (`<id>`) was
@@ -505,14 +543,16 @@ the package Bootwright installed, so it stays, and the plan names it among
 what uninstall keeps (`TestAnUninstallLeavesAPackageInstalledAgain`). Before the plan, as root,
 `rpm --erase --test -- <names>` must succeed; a failure that names a dependent
 outside the set is the refusal above, and any other failure refuses with rpm's
-own message. The plan then shows, as display text bounded to 64 KiB as
+own message. The plan then shows, as display text bounded and sanitized as
 install's preview is and never read for a decision,
 `dnf remove --assumeno --setopt=clean_requirements_on_remove=False -- <names>`.
 The removal runs
 `dnf remove --assumeyes --setopt=clean_requirements_on_remove=False -- <names>`,
 so dnf removes exactly the names and no dependency it would call unused, with
 the environment, executable qualification and dnf configuration ownership of
-an [install](#host-packages), and streams what dnf prints to the terminal.
+an [install](#host-packages), and streams what dnf prints to the terminal with
+each line [display-escaped](cli/output.md#human-output)
+(`TestDnfRemovalOutputReachesTheTerminalEscaped`).
 `rpm -qa` before and after it then proves the result: a name still listed
 refuses `controller.uninstall`, "dnf did not remove `<names>`", with the remedy
 of reviewing the host's dnf configuration and running uninstall again, and a
@@ -538,10 +578,9 @@ container and a missing quadlet directory as no source, a missing
 beyond its bound refuses, except that a unit-file listing exiting 1 with no
 output on either stream is systemd's answer that no unit file matches and
 counts as none ([B1239](milestones/m1.md#b1239),
-`TestAHostWithoutLibvirtOrPodmanHoldsNothingOwned`). `virsh`, `systemctl` and `podman` are qualified as
-[host packages](#host-packages) qualify `rpm` and dnf: absolute, root-owned
-and writable by no group or other, run with a fixed environment and a
-bounded output. Its limits: it sees only what those tools list now, so it
+`TestAHostWithoutLibvirtOrPodmanHoldsNothingOwned`). `virsh`, `systemctl` and `podman` are qualified by the
+[executable rule](#supported-hosts) of `rpm` and dnf and run with a fixed
+environment and a bounded output. Its limits: it sees only what those tools list now, so it
 cannot see a process of an older build that holds no lock, nor anything on an
 SSH placement host, whose hosted content stays. A command of another build is
 detected only through the locks this build takes, the root lock and
@@ -559,9 +598,7 @@ to `/var/lib/.bootwright-hosted-uninstall-<32 hex>`, `/var/log/bootwright` to
 `/var/lib/libvirt/images/bootwright` to
 `/var/lib/libvirt/images/.bootwright-uninstall-<32 hex>`. It then syncs each
 parent and removes each renamed tree without following a link or crossing a
-device. Each root must first be a directory `root:root` owns, writable
-by no group or other, not a link, not a mount point and on its parent's
-device, or uninstall refuses naming it. Each parent uninstall renames or
+device. Each parent uninstall renames or
 removes a tree within must be root's and writable by no group or other unless
 its sticky bit is set, or uninstall refuses naming that parent before any
 effect (`TestAnUninstallRefusesAParentAnotherUserMayWrite`). A renamed tree
@@ -577,7 +614,7 @@ one, which removes every directory of those names it finds in `/var/lib`, `/var/
 The plan names each action in order, then what stays:
 
 - `remove-host-packages`, "Remove the host packages install added: `<names>`",
-  with dnf's verbatim preview; absent with `--keep-packages` or when no package
+  with dnf's unparsed preview; absent with `--keep-packages` or when no package
   remains to remove;
 - `remove-state`, "Remove Bootwright's state on this host:", naming each root
   that exists with what it holds: the store (the install record, runtimes,
@@ -607,13 +644,8 @@ The inspection after confirmation repeats the erase test and the preview
 check before dnf removes anything, so a dependent installed meanwhile still
 refuses; one another dnf installs after that last test is an accepted window.
 A media stage a running `catalog media add` holds refuses `context.busy`; an
-abandoned stage goes with the state. A root that is its own mount, a bind
-mount included, refuses before any effect, since no rename in its parent can
-move it, and a staging directory, log root, hosted root or image prefix that
-is a link, or that another user owns or may write, refuses as not
-Bootwright's (`TestAnUninstallRefusesAMountedRootOrStagingBeforeAnyEffect`,
-`TestAnUninstallNamesGuestDisksAndRefusesForeignRoots`,
-`TestAnUninstallLeavesWhatIsNotItsOwn`). Each renamed tree is locked while a
+abandoned stage goes with the state. What is not Bootwright's is left in place
+(`TestAnUninstallLeavesWhatIsNotItsOwn`). Each renamed tree is locked while a
 run removes it, so a second run refuses busy, and renamed trees go before the
 run's own renames, so a failing rename strands none. A state removal that
 fails after the packages names the packages already removed
@@ -632,22 +664,11 @@ clients are read from a managed artifact mirror, planned by its
 capability from effective state alone and frozen before any effect: the target
 client requirements the graph names, the closures it selects with the
 [host package](#host-packages) requirements each one names, the libvirt
-intent, and the controller Machine's normalized proxy choice. The container
-runtime is selected by a managed service placed on the controller Machine and
-by a libvirt provider hosted on it, whose emulated BMC runs as a container. The libvirt
-client closure is selected by a libvirt
-provider hosted on the controller Machine, or any Machine a libvirt provider
-hosts, and by nothing else; the [hypervisor closure](substrates.md#provider-host-realization)
-by a libvirt provider hosted on the controller Machine; the
-[installer-media tooling](managed-os.md#installation) by an Anaconda
-installation published through an artifact server on the controller Machine;
-the image mirror's copy tool by the managed image mirror's `Registry` placed
-on the controller Machine; the `nmstate` package by an agent-installed OpenShiftCluster with a node whose
-`machineRef` names a declared Machine; and the `iputils` package by an
-agent-installed OpenShiftCluster with at least two nodes on the `baremetal`
-platform that has an OpenShift-sourced IPv4 endpoint address inside a managed
-libvirt Network of a provider hosted on the controller Machine.
-No closure forces another into the request. The plan presents each selected
+intent, and the controller Machine's normalized proxy choice. Each stage closure is selected
+by its row of the [host package](#host-packages) table and by nothing else; the
+[hypervisor closure](substrates.md#provider-host-realization) and the
+[installer-media tooling](managed-os.md#installation) name the contracts that
+realize them. No closure forces another into the request. The plan presents each selected
 requirement by name, `install-host-package <requirement>`; planning reads no
 host, so it names what the closures require, and a requirement the host
 already provides is left as it is.
@@ -661,15 +682,15 @@ intent the Environment's [`dependencyVersions`](api/environment.md#dependency-ve
 declares. OpenShift/OKD installer and clients remain tied to the target
 release. A cluster pinned to a release image still selects its clients from
 the declared `release.version`; without that version the stage refuses rather
-than inferring a client release from the image. Helm, `govc`, `virtctl` and a
-standalone `kubectl` take the release the build's
-[tool table](#the-tool-table) names as their default unless the Environment
-declares one; no remote target discovery or automatic compatibility inference
-is required, and no stage resolves a newest release. A host package is
-whatever the host's repositories provide. An agent-installed OpenShiftCluster node that references a declared Machine
-selects the host's `nmstate` package for the installer's `nmstatectl gc`
-invocation; the `iputils` package serves the virtual-IP duplicate-address
-probe.
+than inferring a client release from the image. Helm, `govc` and `virtctl`
+take the release the build's [tool table](#the-tool-table) names as their
+default unless the Environment declares one. No graph shape selects a
+standalone `kubectl`, and [dependency versions](api/environment.md#dependency-versions)
+name no `kubectl` key; the table's pin serves none. No remote target discovery
+or automatic compatibility inference is required, and no stage resolves a newest release. A host package is
+whatever the host's repositories provide. The `nmstate` package serves the
+installer's `nmstatectl gc` invocation; the `iputils` package serves the
+virtual-IP duplicate-address probe.
 
 A declared [artifact mirror](api/environment.md#artifact-mirror) serves every
 public-origin client in place of its publisher, verified against the system
@@ -701,13 +722,18 @@ widening of [publisher authenticity](security.md#cryptography-and-supply-chain):
 | --- | --- | --- |
 | OpenShift `oc`, `kubectl` and installer | the declared release | `sha256sum.txt` beside the archive on `mirror.openshift.com` |
 | OKD `oc`, `kubectl` and installer | the declared release's GitHub release | the release asset's digest, else `sha256sum.txt` beside the archive |
-| standalone `kubectl` | the declared release | `<archive>.sha256` on `dl.k8s.io` |
 | Helm | the `helm/helm` GitHub release | `<archive>.sha256sum` on `get.helm.sh` |
 | `govc` | the `vmware/govmomi` GitHub release | the release asset's digest, else the release's `checksums.txt` |
 | `virtctl` | the `kubevirt/kubevirt` GitHub release | the release asset's digest; a release without one refuses |
 
 A context that selects nothing beyond the host
-baseline contributes no block at all.
+baseline contributes no block once its binding names no tool area; while its
+binding still names one, it contributes the block, which selects no tool,
+clears `tools` and retires what no binding names.
+
+Not yet met: a context whose binding names a tool area and whose selection
+drops to the host baseline runs no stage, so its binding keeps naming that area
+until the context is deleted; tracked as [B1781](milestones/m1.md#b1781).
 
 The block first reads what is missing. Presence reads each selected host
 package requirement, and the target clients are recovered from retained
@@ -775,8 +801,10 @@ change anything at all; the fixed automation runs from the stage's own staged
 extraction ([automation](#the-controller-runtime)). The fixed controller
 playbook composes `bootwright.core.controller_prerequisites`. It validates the
 request, announces the exact sources it is about to add, which must equal the
-sources the stage already recorded as the attempt's intent, and waits for
-one acknowledgement before installing any tool. It checks every tool first,
+sources the stage already recorded as the attempt's intent, and installs no
+tool before the runner acknowledges its `prepared` and `continue` records
+([adapter result protocol](architecture.md#the-adapter-result-protocol)). It
+checks every tool first,
 then acquires each missing source at once, at most four together and two from
 one host, each in a fixed worker interpreter of its own, started through the bounded
 process runner and never forked from the Ansible worker, under its own
@@ -844,7 +872,11 @@ is not installed and names `apply --stage controller`, and no search path is
 ever consulted instead.
 
 Each client source has an acquisition deadline of 2 minutes plus its declared
-bytes at 512 KiB/s, rounded up to a whole second. A tool publication's
+bytes at 512 KiB/s, rounded up to a whole second. A non-default release's
+declared bytes are its GitHub release asset's size, else the source's HTTP
+`Content-Length`; a size that is absent, not positive or above 1 GiB
+(`maxToolSourceBytes` in `internal/controller/bundlelocal/tools.go`) refuses
+before acquisition (`TestAPublisherSizeThatIsAbsentNotPositiveOrOverTheBoundRefuses`). A tool publication's
 deadline is the controller run's 10 minutes plus the acquisition deadline of
 every tool source it selects, held to the controller stage's 2-hour ceiling; a
 closure whose deadline would pass that ceiling is refused before Ansible
@@ -865,9 +897,9 @@ area no remaining binding names is then retired. Recovery is idempotent rather t
 dnf installs only what is missing and publication verifies existing bytes
 instead of overwriting them, so an interrupted stage is completed by repeating
 it. `apply --dry-run --stage controller --context <name>` reports the same closures by
-presence, one check each for the container runtime, the libvirt client, the
-hypervisor, the installer-media tooling, the image mirror's copy tool, `nmstate` and `iputils` the context selects, read through the same
-requirements, and requires every one of them; it names this command when one
+presence, one check each for the stage closures of the [host package](#host-packages)
+table the context selects, read through the same requirements, and requires
+every one of them; it names this command when one
 is not yet installed. Setup remains the owner of the host baseline, and this
 stage never installs it, publishes a binding, or claims another context's
 resources.
@@ -915,11 +947,16 @@ minimum, that build raises both to the first fixed release. The table governs
 only the plan of a fresh apply. A settling apply and a removal run the release
 the completed apply proved, even below this build's minimum
 ([lifecycle unit](state-reconciliation.md#lifecycle-unit)), and a continuation
-an earlier build registered refuses, so a retained release moves to the new
-default only after a destroy and a fresh apply. `status` and `diff` report each
+keeps the release its frozen request names
+([continuation guards](state-reconciliation.md#continuation-and-removal)), so
+a retained release moves to the new default only after a destroy and a fresh
+apply. `status` and `diff` report each
 client an apply's completed controller stage proved below this build's minimum
 ([outdated clients](cli.md#outdated-clients)); taking a raised release without
 a destroy is declined ([D257](milestones/backlog.md#d257) (1)).
+
+Not yet met: the tool table pins a standalone `kubectl` that no graph shape
+selects; tracked as [B1783](milestones/m1.md#b1783).
 
 A declared release is compared by its leading `MAJOR.MINOR.PATCH`, a
 prerelease suffix ranking below the release it precedes; one below the
@@ -1082,8 +1119,9 @@ substitution and namespace contradictions, not hardware attestation. A complete
 clone preserving all three identity values and the relevant namespace view is
 indistinguishable; copied identity bytes alone are never a claim of clone
 resistance. Full-store restore follows the
-[restore boundary](contexts.md#format-and-restore-boundary); controller
-relocation waits on [B103](milestones/backlog.md#b103).
+[restore boundary](contexts.md#format-and-restore-boundary); a changed host
+identity is resolved by
+[`bootwright rebind-host`](contexts.md#controller-relationship-and-host-binding).
 
 [Workspace](contexts.md#controller-relationship-and-host-binding) persists the
 verified identity and context relationship. Setup prepares the host without
@@ -1094,15 +1132,15 @@ context preflight verify that exact binding under
 [controller-host protection](state-reconciliation.md#controller-host-protection);
 they never silently rebind.
 
-Workspace serializes shared prerequisite mutation across every context in the
-fixed root using its exclusive root lock, acquired before a context lease.
-Preflight holds a shared root lock when the root exists, for coherent stored
-evidence. An absent root reports missing setup with `install` guidance
-and creates nothing. A busy lock refuses; there is no timeout-based takeover.
-Setup's own subtree has its own lock, `controller/install/lock`, which setup, runtime
-publication and the controller stage's dnf take; a launch takes none and holds
-its runtime's `.lock` shared instead. The OS package-manager lock is an
-additional requirement, not a replacement for Bootwright coordination.
+Host package mutation across every context is serialized by
+`controller/install/lock`, which setup, runtime publication and the controller
+stage's dnf take; a launch takes none and holds its runtime's `.lock` shared
+instead. Root-lock and lease holds and waits follow the
+[lock table](contexts.md#storage-locking-and-publication), and preflight holds
+a shared root lock when the root exists, for coherent stored evidence. An absent root
+reports missing setup with `install` guidance and creates nothing. The OS
+package-manager lock is an additional requirement, not a replacement for
+Bootwright coordination.
 
 **Setup subtree.** Setup keeps its pending intent, receipt, runtimes and wheel
 cache in `/var/lib/bootwright/controller/install/`, beside the
@@ -1135,8 +1173,9 @@ Setup's receipt is private durable evidence, separate from lifecycle operation
 state and logs, in the [setup subtree](contexts/controller-record.md#the-setup-subtree).
 What its dnf prints is kept under the [log root](contexts.md#log-root) in a
 [setup run](cli/output.md#setup-run-output), which is troubleshooting material
-only: neither keeping one nor failing to changes a setup outcome or its
-receipt. A receipt is no lifecycle operation ID, ownership of the host or
+only: an output that cannot be created or written leaves dnf's output discarded
+and never changes the outcome or the receipt, and what an output's name admits
+is the [log root](contexts/log-root.md#setup-output)'s. A receipt is no lifecycle operation ID, ownership of the host or
 GitOps readiness.
 
 **Intent before effect.** Before dnf or the runtime build runs, setup writes
@@ -1167,7 +1206,9 @@ another build's; a record or subtree that cannot be read for an I/O, bound or
 permission reason refuses, setup and `uninstall` alike, and is kept
 for the operator to repair; setup's read and its locked transaction judge it alike. Setup plans "Discard setup state another
 Bootwright build wrote (`<format>`)", removes the subtree after confirmation,
-taking every runtime's lock first so it never removes one in use, and
+taking every runtime's `.lock` exclusively without waiting; a runtime a
+running command holds refuses the discard as `context.busy` and removes
+nothing (`TestDiscardRefusesWhileALaunchHoldsARuntime`); otherwise it
 proceeds. Because the discard removes every runtime and the wheel cache, the
 plan treats them as absent: its `runtime` row counts every locked wheel as one
 to copy, and setup copies, builds and publishes the runtime before the
@@ -1182,9 +1223,8 @@ that build carries again and discards this build's subtree in turn, or through t
 **Publication.** A runtime is published only whole, as the
 [setup subtree](contexts/controller-record.md#the-setup-subtree) defines.
 
-**Retention.** Setup's outputs under the log root are bounded to the newest 8:
-opening one removes the oldest beyond 7 first, and its number passes every
-setup ID the receipt names. The receipt names the current runtime and the
+**Retention.** Setup's outputs follow the
+[log root](contexts/log-root.md#setup-output). The receipt names the current runtime and the
 record's `runtimes` the current and the immediately previous distinct one. After
 each setup that writes its receipt, under the same `controller/install/lock` and before it
 reports:

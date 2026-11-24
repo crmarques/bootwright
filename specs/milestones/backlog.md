@@ -1328,7 +1328,7 @@ beyond the three needs. **Exit evidence:** exact format and migration
 definition under D155; a test per capability that an object carrying another
 incarnation reads as foreign and its apply and destroy refuse; the contract
 guard goldens and `cmd/bootwright/contract_versions_test.go` classifying every
-new literal; the interim wording in the contexts spec.
+new literal; the interim wording in the contexts spec. Its rule is stated in [Permanent deletion](../contexts.md#permanent-deletion).
 
 ### B569
 
@@ -3528,7 +3528,7 @@ does not pass the registry's identity check as the recorded directory. A future
 format records the directory's birth time or generation and `recorded()`
 compares it, which needs a record format change. **Exit evidence:** a contextfs
 test whose recreated directory takes the freed inode and refuses as replaced,
-or a recorded reason the filesystem cannot present that case.
+or a recorded reason the filesystem cannot present that case. Its rule is stated in [Recorded directory identity](../contexts.md#recorded-directory-identity).
 
 ### B1342
 
@@ -4106,7 +4106,7 @@ item, whose Alias cell names the old ID too. Searching an old ID over
 | T1 | 2026-09-28 | Delivered by X15 (cluster goldens) and [X17](delivered.md#x17--goldens-and-checkpoint-harnesses) (records, commands and examples); no bounded remainder was named. |
 | C13 | 2026-09-28 | No milestone needs a redistributable release. |
 | O9 | 2026-09-28 | It measures the repository's guidance, not the product. |
-| C16 | before 2026-09 | Delivered by [M1d](delivered.md#m1d--controller-setup) and [M1e](delivered.md#m1e--lifecycle-engine-and-managed-artifact-serving); controller relocation is [B103](#b103). |
+| C16 | before 2026-09 | Delivered by [M1d](delivered.md#m1d--controller-setup) and [M1e](delivered.md#m1e--lifecycle-engine-and-managed-artifact-serving); controller relocation is the D184 rebind, [B836](delivered.md#x164--audit-lane-e-store-durability-and-controller-records). |
 | C17 | before 2026-09 | Promoted into M1h, now [B72](delivered.md#x38--the-real-host-run-of-2026-10-05), as its host-wide media store. |
 | C18 | 2026-09-28 | Delivered by `d0980fc3` (refactor(architecture): align packages with the command and port map), which removed its row from the milestones page with no note. |
 | C27 | before 2026-09 | Delivered by [X3](delivered.md#x3--machine-ssh-sessions-and-host-trust). |

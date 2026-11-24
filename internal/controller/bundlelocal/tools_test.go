@@ -411,3 +411,51 @@ func TestContactsNameEveryHostAClientsAcquisitionReaches(t *testing.T) {
 		t.Fatalf("kubectl reaches %v", kubectl)
 	}
 }
+
+// A release other than the table's default declares its bytes from the
+// publisher: the release asset's size, else the source's content length. A size
+// that is absent, not positive or above the tool-source bound refuses before
+// any acquisition.
+func TestAPublisherSizeThatIsAbsentNotPositiveOrOverTheBoundRefuses(t *testing.T) {
+	asset := func(size int64) string {
+		return fmt.Sprintf(`{"tag_name":"v1.8.2","draft":false,"prerelease":false,"assets":[{"name":"virtctl-v1.8.2-linux-amd64","browser_download_url":"https://github.com/kubevirt/kubevirt/releases/download/v1.8.2/virtctl-v1.8.2-linux-amd64","size":%d,"digest":"sha256:%s"}]}`, size, strings.Repeat("e", 64))
+	}
+	request := evidence.ToolRequest{Kind: "virtctl", Version: "v1.8.2", Compatibility: "kubevirt"}
+	for name, size := range map[string]int64{"zero": 0, "negative": -1, "over the bound": maxToolSourceBytes + 1} {
+		t.Run("asset "+name, func(t *testing.T) {
+			resolver := &ToolCatalog{metadata: func(_ context.Context, method, _ string, _ int64, _ prerequisites.SetupEgress) (toolMetadata, error) {
+				if method != http.MethodGet {
+					t.Fatal("a refused asset size reached for its content length", method)
+				}
+				return toolMetadata{data: []byte(asset(size))}, nil
+			}}
+			if resolved, err := resolver.Resolve(t.Context(), []evidence.ToolRequest{request}, prerequisites.SetupEgress{}); err == nil {
+				t.Fatalf("an asset of %d bytes resolved to %+v", size, resolved)
+			}
+		})
+	}
+	resolver := &ToolCatalog{metadata: func(_ context.Context, _, _ string, _ int64, _ prerequisites.SetupEgress) (toolMetadata, error) {
+		return toolMetadata{data: []byte(asset(maxToolSourceBytes))}, nil
+	}}
+	if resolved, err := resolver.Resolve(t.Context(), []evidence.ToolRequest{request}, prerequisites.SetupEgress{}); err != nil || len(resolved) != 1 || resolved[0].Source.Bytes != maxToolSourceBytes {
+		t.Fatalf("an asset at the bound resolved to %+v (%v)", resolved, err)
+	}
+	for name, size := range map[string]int64{"zero": 0, "negative": -1, "over the bound": maxToolSourceBytes + 1} {
+		t.Run("content length "+name, func(t *testing.T) {
+			digest := strings.Repeat("c", 64)
+			url := "https://get.helm.sh/helm-v4.1.0-rc.1-linux-amd64.tar.gz"
+			resolver := &ToolCatalog{metadata: func(_ context.Context, method, endpoint string, _ int64, _ prerequisites.SetupEgress) (toolMetadata, error) {
+				if method == http.MethodHead && endpoint == url {
+					return toolMetadata{size: size}, nil
+				}
+				if endpoint == url+".sha256sum" {
+					return toolMetadata{data: []byte(digest + "  helm-v4.1.0-rc.1-linux-amd64.tar.gz\n")}, nil
+				}
+				return toolMetadata{data: []byte(`{"tag_name":"v4.1.0-rc.1","draft":false,"prerelease":true,"assets":[]}`)}, nil
+			}}
+			if resolved, err := resolver.Resolve(t.Context(), []evidence.ToolRequest{{Kind: "helm", Version: "4.1.0-rc.1"}}, prerequisites.SetupEgress{}); err == nil {
+				t.Fatalf("a content length of %d resolved to %+v", size, resolved)
+			}
+		})
+	}
+}

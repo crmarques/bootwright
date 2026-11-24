@@ -20,8 +20,8 @@ binding record, so a binding and the host it names cannot disagree after an
 interruption. Records contain no Secret values, and opaque private host
 evidence is never emitted by inspection. Tool files that must execute are a
 narrow root-owned `0700` exception to the regular-file `0600` rule; metadata
-and other files remain `0600`. Only a tool area's published executables use
-this exception.
+and other files remain `0600`. A setup runtime's content is the second
+exception ([setup subtree](#the-setup-subtree)).
 
 ## Descriptor
 
@@ -78,8 +78,10 @@ identity, and a `retiring` one keeps the identity its directory had.
 
 Reservations record the host resources that locally hosted services claim,
 under the
-[Infrastructure services conflict contract](../infrastructure-services.md#host-reservations).
-Each entry contains the context name, capability kind, service name and a sorted
+[Infrastructure services conflict contract](../infrastructure-services.md#host-reservations),
+which owns the key grammar, the SSH and host-key qualifiers, the conflict
+relation of each key class, the exclusive and shared rule and the release
+paths. Each entry contains the context name, capability kind, service name and a sorted
 unique key list, plus `objectKind`, the API kind of the object the claim
 reserves for, present on a claim whose capability kind does not name it (a
 `cluster-media` claim records its cluster family kind), which a
@@ -96,17 +98,8 @@ before an effect (B839): it stays until the claim is released, by the
 completed removal or the holder's deletion, and while it stands a claim another context makes on a
 key that release guards refuses
 ([host reservations](../infrastructure-services.md#host-reservations)). Entries are
-ordered by context name then kind then service. A claim a block places on
-an SSH host that is not the controller prefixes every key but a `bmc:`,
-`bmc-system:` or `bmc-mac:` key, which it publishes unqualified, with
-`ssh/<address>:<port>/`, the SSH address as declared (an IP in canonical form,
-unbracketed, a DNS name without case or a final dot) and port its placement
-connects to; the same claim's keys are published again prefixed by
-`sshkey/SHA256:<digest>/`, the host key its placement Machine pins, in
-unpadded URL-safe base64 ([host reservations](../infrastructure-services.md#host-reservations));
-keys with two qualifiers, or one and none, never conflict, and
-keys with one qualifier conflict by their class's relation. A record holds
-keys with or without the qualifier, side by side
+ordered by context name then kind then service. A record holds keys with or
+without a qualifier, side by side
 (`TestARecordHoldsUnqualifiedAndSSHQualifiedKeys`). A record of any other
 version is not read, and no build converts one. A controller read and every
 context transaction refuse with `context.state`, "controller evidence version
@@ -118,21 +111,19 @@ build's `bootwright uninstall --discard-unreadable` and
 `bootwright install`. Uninstall never reads the controller record,
 so one of another version does not stop it, and the discard is accepted
 because the store is readable and holds no context
-([uninstall flow](../controller.md#the-uninstall-flow)). No command rebuilds the record alone: it is
+([uninstall flow](../controller.md#the-uninstall-flow)). The discard removes no
+package, so every host package stays installed; the later install's receipt
+marks each setup requirement already installed as present before Bootwright and
+its added set names none, so no later uninstall removes any of them
+(`TestASetupOverInstalledPackagesRecordsThemAsPresentBeforeBootwright`). No command rebuilds the record alone: it is
 published by the first binding of an apply on a root that holds none, and a
 root holding one never gets a second. Recreate the contexts and media
 afterwards with `bootwright context init` and `bootwright catalog media add`
 from the input directories and images; the refusal says so and leaves the
 record unchanged (`TestAControllerRecordOfAnotherVersionNamesTheFreshInstall`).
-Workspace stores them and, before it publishes a context's entries, applies
-the conflict relation each key class has under that contract (equal keys,
-a wildcard socket and a socket on its port, overlapping prefixes), which the
-controller prerequisites evaluate.
-Publishing an exclusive key another context holds refuses; a shared key is held
-by any number of contexts and a reader asks only whether any context holds it;
-a context replaces only its own entries, and only the release paths that
-contract lists drop them. The record is absent when empty, so a store that
-never hosted a service is unchanged.
+Workspace applies that contract's conflict relation before it publishes a
+context's entries, and a context replaces only its own. The record is absent
+when empty, so a store that never hosted a service is unchanged.
 
 ## Bounds
 
@@ -141,7 +132,9 @@ identities, 4096 bindings and 256 reservations of at most 128 keys of 256 bytes
 each: a claim holds at most 64 keys, and an SSH-placed claim publishes each in
 both its address and its host-key form (D188). The 4 MiB state bound is reached
 before 256 reservations of 128 maximal keys, and a publication past it
-refuses as an encoding-limit state error, writing nothing. Controller records allow nesting depth 16 and 32 fields per object;
+refuses `context.state`, "persisted record exceeds its encoding limit", before
+it writes anything
+(`TestAReservationSetPastTheRecordByteBoundRefusesWritingNothing`). Controller records allow nesting depth 16 and 32 fields per object;
 other durable records keep their own bounds. An apply whose reservations would
 take the record past 256 entries refuses with `controller.conflict` before it
 publishes them, naming that bound, the entries it needs and those other
@@ -166,11 +159,15 @@ this build frees a retained tool source, and names the two exits: run this
 context's controller stage on another controller host, or start this host
 afresh by destroying every environment, deleting every context and deleting
 every stored image (`bootwright catalog media delete --name <image>`) on it,
-then running `bootwright uninstall --keep-packages` and
-`bootwright install`
+then running `bootwright uninstall --keep-packages`, which leaves every host
+package installed as the discard above does, and `bootwright install`
 (`TestToolSourcesPastTheBoundNameTheFreshStoreExit`). The
 [uninstall flow](../controller.md#the-uninstall-flow) owns what uninstall
 refuses.
+
+Not yet met: the byte-bound refusal names no operator remedy, as the entry,
+area and tool-source bounds do; tracked as
+[B1782](../milestones/m1.md#b1782).
 
 A tool area is bounded to 8 GiB total,
 1 GiB per file, 32768 entries and depth 32. Symlinks, hard links, nested
@@ -270,7 +267,13 @@ matching the requirement and package name across NEVRA updates. If no log run
 can be retained, the durable setup ID instead uses `install-` followed by a
 random 32-digit hexadecimal token; it names no output file.
 `runtimes` names the current and the previous
-runtime digest. A record or subtree that cannot be read for an I/O, bound or
+runtime digest. A receipt is **complete** for a runtime when the record
+decodes as `SetupStateFormat`, holds no pending intent, and its receipt names
+this build's lock digest and that runtime's digest (`settleSetupState`); a
+[cache-only rebuild](../controller.md#the-controller-runtime) also requires the
+receipt to name the runtime's interpreter path and ABI
+(`TestInstallCheckReportsReadinessWithoutPlanningOrEffects`,
+`TestARebuildIsRefusedWhereOnlySetupCanPrepareTheRuntime`). A record or subtree that cannot be read for an I/O, bound or
 permission reason is refused as a storage failure and kept, never taken as
 another build's. A record whose content does not decode as this build's
 format, or a subtree holding a name this build does not list, is another
@@ -293,28 +296,23 @@ while the runtime's `runtime.json` names its own digest; retirement takes the
 lock exclusively without waiting, so a runtime in use is skipped, and retires a
 runtime whose `.lock` is gone, which no launch can hold. Retirement renames
 the runtime to a stage name, synchronizes the parent and then removes it.
-Its contents hold the ordinary modes a Python virtual environment creates,
-and the `requirements.lock` its build installed from, which names each wheel's
-SHA-256. Locked wheels are cached at `cache/wheels/<sha256>/<filename>`, each
+Its contents hold the modes a Python virtual environment creates, and the
+`requirements.lock` its build installed from, which names each wheel's SHA-256.
+Before each launch the runtime's `bin/` directory and every directory above
+it, its `.lock`, `bin/python`, the interpreter it leads to and the
+interpreter's standard library directories must be owned by root and writable
+by no group or other, or the launch refuses
+(`TestTheGuardRefusesARuntimeThatNoLongerVerifies`); the launch checks no file
+beneath `site-packages`, which only the store's root-owned `0700` directories
+above the runtime protect. Locked wheels are cached at `cache/wheels/<sha256>/<filename>`, each
 verified for size and digest before it is renamed into place.
 
 Which runtimes and cached wheels a setup keeps and retires follows its
 [retention](../controller.md#publication-and-interrupted-setup).
 
-What setup's dnf prints is kept outside this subtree, under the
-[log root](../contexts.md#log-root), as
-[setup run output](../cli/output.md#setup-run-output) describes: one private
-file `controller/install-NNNNNN.output` per run, named by the run's setup ID from
-`install-000001` upward, written under `controller/install/lock` and bounded at 4 MiB.
-That is the [bounded run](../cli/output.md#bounded-run-output)'s bound, so
-every run's output shares one ([D92](../milestones/backlog.md#d92)).
-There are at most 8 outputs: the next is numbered past both the newest output and every
-setup ID this record's receipt or pending intent names, the oldest are removed
-before it is created, and a setup whose next number would need a seventh
-digit keeps no output. Its file is created exclusively beneath the held log
-directory handle without following a link, and made durable before it is
-named. A name a setup output takes that is no private regular file within its
-bound refuses; other names are ignored. Nothing reads an output back.
+What setup's dnf prints is kept outside this subtree, under the log root, as
+its [setup output](log-root.md#setup-output), which owns its name, bound,
+numbering, retention and refusals.
 
 ## Publication and recovery
 

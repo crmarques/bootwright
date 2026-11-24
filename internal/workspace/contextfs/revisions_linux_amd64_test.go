@@ -344,3 +344,26 @@ func TestInputUpdateReclaimsFullRevisionDirectory(t *testing.T) {
 	}
 	requireSelectedInput(t, store, record, sources.Files[0].Bytes(), 1)
 }
+
+// A context whose evidence is not pristine keeps every revision, so an update
+// that finds the revision directory full refuses instead of collecting.
+func TestAProtectedContextAtTheRevisionBoundRefusesTheUpdate(t *testing.T) {
+	t.Parallel()
+	store, sources := fixture(t)
+	record := publish(t, store, "example", sources)
+	writePrivate(t, filepath.Join(store.options.Root, "contexts", record.Name, "state", "mutation.json"), []byte("{\"version\":1,\"operation\":\"applied\",\"ownership\":\"retained\"}\n"))
+	for index := range maxRevisions - 1 {
+		name := fmt.Sprintf("rev-%032x", index)
+		if err := os.Mkdir(filepath.Join(revisionDirectory(store, record), name), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reported := diagnostics.Of(replaceInput(store, record, sources))
+	if len(reported) != 1 || reported[0].Code != "context.state" || reported[0].Message != "retained revision count exceeds its limit" {
+		t.Fatalf("an update at the revision bound reported %#v", reported)
+	}
+	entries, err := os.ReadDir(revisionDirectory(store, record))
+	if err != nil || len(entries) != maxRevisions {
+		t.Fatalf("the refused update left %d revisions (%v)", len(entries), err)
+	}
+}

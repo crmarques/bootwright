@@ -4,7 +4,10 @@ package contextfs
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -82,6 +85,102 @@ func TestADeletedContextsReservationsAreReleasedForAnotherContext(t *testing.T) 
 	}
 	if err := reserve("second", machine); err != nil {
 		t.Fatalf("another context could not reserve the released keys: %#v", diagnostics.Of(err))
+	}
+}
+
+// A deletion drops what the controller record holds for the context after it
+// marks the context deleting and before it removes any file, so a deletion
+// stopped before its directory goes has already released its reservations, and
+// its retry finds them released and completes without naming them again.
+func TestADeletionRetryAfterItsClaimsWereDroppedFindsThemReleased(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store, record := lifecycleFixture(t)
+	reserveFixture(t, store, record)
+	keys := []string{"unit:bootwright-bmc-lab-rhel-01"}
+	if err := store.MutateLifecycle(ctx, record.Name, func(tx lifecycle.Transaction) error {
+		if err := tx.Reserve(ctx, []infrastructureservices.HostReservation{{Context: record.Name, Kind: "substrate-machine", Service: "rhel-01", Keys: keys}}); err != nil {
+			return err
+		}
+		return tx.PublishEvidence(ctx, []byte(`{"version":1,"operation":"unknown","ownership":"retained"}`))
+	}); err != nil {
+		t.Fatalf("the context's reservation failed: %#v", diagnostics.Of(err))
+	}
+	claimed := func() int {
+		count := 0
+		if err := store.ReadController(ctx, "", func(view prerequisites.StorageView) error {
+			for _, reservation := range view.State.Reservations {
+				if reservation.Context == record.Name {
+					count++
+				}
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return count
+	}
+	if claimed() != 1 {
+		t.Fatalf("the context holds %d reservations before its deletion", claimed())
+	}
+	store.fail = func(at string) error {
+		if at == string(checkpointBeforeContextRmdir) {
+			return errors.New("synthetic stop before the directory goes")
+		}
+		return nil
+	}
+	if err := deleteExample(store, record); err == nil {
+		t.Fatal("the stopped deletion succeeded")
+	}
+	store.fail = nil
+	if claimed() != 0 {
+		t.Fatal("a deletion stopped before its directory went still holds its reservations")
+	}
+	var retried []string
+	if err := store.Transact(ctx, false, nil, func(tx contexts.Transaction) error {
+		var err error
+		retried, err = tx.HostReservations(ctx, record.Name)
+		return err
+	}); err != nil || len(retried) != 0 {
+		t.Fatalf("the retry names %v released keys (%v)", retried, err)
+	}
+	if err := deleteExample(store, record); err != nil {
+		t.Fatalf("the retry failed: %#v", diagnostics.Of(err))
+	}
+	if _, err := os.Lstat(filepath.Join(store.options.Root, "contexts", record.Name)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the retried deletion left the context directory (%v)", err)
+	}
+}
+
+// The controller record's byte bound is reached before its entry bound when
+// every key is maximal: a publication past it refuses context.state before it
+// writes, and the reservations it held stay as they were.
+func TestAReservationSetPastTheRecordByteBoundRefusesWritingNothing(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store, record := lifecycleFixture(t)
+	reserveFixture(t, store, record)
+	claims := make([]infrastructureservices.HostReservation, maxControllerReservations)
+	for index := range claims {
+		keys := make([]string, 64)
+		for key := range keys {
+			prefix := fmt.Sprintf("path:/bytes/%03d/%02d/", index, key)
+			keys[key] = prefix + strings.Repeat("a", 256-len(prefix))
+		}
+		claims[index] = infrastructureservices.HostReservation{Context: record.Name, Kind: "substrate-machine", Service: fmt.Sprintf("machine-%03d", index), Keys: keys}
+	}
+	err := store.MutateLifecycle(ctx, record.Name, func(tx lifecycle.Transaction) error { return tx.Reserve(ctx, claims) })
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "context.state" || reported[0].Message != "persisted record exceeds its encoding limit" {
+		t.Fatalf("reservations past the byte bound reported %#v", reported)
+	}
+	if err := store.ReadController(ctx, "", func(view prerequisites.StorageView) error {
+		if len(view.State.Reservations) != 0 {
+			t.Fatalf("the refused publication left %d reservations", len(view.State.Reservations))
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
 	}
 }
 

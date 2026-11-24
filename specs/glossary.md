@@ -8,6 +8,10 @@ its modifier wherever two of its senses can meet; elsewhere context decides. A n
 - **Context**: a named, durable Bootwright workspace holding frozen input,
   secrets and lifecycle state ([contexts](contexts.md)). It is not a Go
   `context.Context` and not a bounded context of the architecture.
+- **Context incarnation**: the recorded device and inode of a context's
+  directory with its birth time or inode generation
+  ([contexts](contexts.md#recorded-directory-identity)). It is no ownership
+  marker.
 - **Controller**: the host that runs Bootwright, and in desired state the
   Machine that `spec.controller.machineRef` names ([controller](controller.md)).
   Bare "controller" never names anything else.

@@ -182,6 +182,25 @@ func TestTheReceiptRecordsWhatTheInstallTransactionAdded(t *testing.T) {
 	}
 }
 
+// A setup over a store with no receipt, on a host that already holds every
+// package, marks each as present before Bootwright and adds none, so no later
+// uninstall removes any of them.
+func TestASetupOverInstalledPackagesRecordsThemAsPresentBeforeBootwright(t *testing.T) {
+	f := newSetupFixture(t)
+	if _, err := f.service.Setup(context.Background(), SetupRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	receipt := f.store.view.State.Receipt
+	if receipt == nil || len(receipt.Packages) == 0 || len(receipt.Added) != 0 {
+		t.Fatalf("receipt = %+v", receipt)
+	}
+	for _, item := range receipt.Packages {
+		if item.InstalledBy != PresentBeforeBootwright {
+			t.Fatalf("%s is recorded as installed by %q", item.Requirement, item.InstalledBy)
+		}
+	}
+}
+
 // A package step that fails after dnf ran leaves the identities the host held
 // before the transaction in the pending intent, so the resumed install still
 // records what that transaction added.

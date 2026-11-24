@@ -10,7 +10,6 @@ specs/ceph.md 2
 specs/cli.md 3
 specs/cli/output.md 2
 specs/cli/stops.md 1
-specs/contexts.md 2
 specs/contexts/log-root.md 1
 specs/controller.md 3
 specs/infrastructure-services.md 1

@@ -1444,7 +1444,9 @@ nothing reads it back for a decision; only `bootwright logs` presents it.
 
 A dry run and a no-op setup create no output. Neither creating, writing nor
 removing one ever changes a setup outcome or its receipt: an output that cannot
-be created leaves dnf's output discarded, exactly as a setup kept none.
+be created or written leaves dnf's output discarded, exactly as a setup kept
+none; what an output's name admits, and the refusal of an unsafe entry, are the
+[log root](../contexts/log-root.md#setup-output)'s.
 
 Human setup output names the file on this host as the same `Logs`
 field, once before dnf starts and once with the result, for the reason an

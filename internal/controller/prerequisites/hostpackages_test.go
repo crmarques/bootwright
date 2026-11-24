@@ -1,7 +1,9 @@
 package prerequisites
 
 import (
+	"os"
 	"slices"
+	"strings"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -145,5 +147,79 @@ func TestOnlyAProbedInstallerVIPSelectsIPUtils(t *testing.T) {
 	}
 	if StageNativeOf(controller.Baseline()).ContainerRuntime {
 		t.Fatal("baseline selected the container runtime")
+	}
+}
+
+// hostPackageSpec owns the host-package table, read from this package's
+// directory.
+const hostPackageSpec = "../../../specs/controller.md"
+
+// hostPackageRows reads the rows of the table under the Host packages heading:
+// scope, selecting condition and requirements.
+func hostPackageRows(t *testing.T) [][3]string {
+	t.Helper()
+	data, err := os.ReadFile(hostPackageSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rows [][3]string
+	inSection := false
+	for _, line := range strings.Split(string(data), "\n") {
+		switch {
+		case strings.HasPrefix(line, "## "):
+			inSection = line == "## Host packages"
+		case inSection && strings.HasPrefix(line, "| Baseline") || inSection && strings.HasPrefix(line, "| Stage"):
+			cells := strings.Split(strings.Trim(line, "| "), " | ")
+			if len(cells) != 3 {
+				t.Fatalf("a host-package row has %d cells: %q", len(cells), line)
+			}
+			rows = append(rows, [3]string{cells[0], cells[1], cells[2]})
+		}
+	}
+	return rows
+}
+
+func requirementsOf(cell string) []string {
+	names := []string{}
+	for _, name := range strings.Split(cell, ", ") {
+		names = append(names, strings.Trim(name, "`"))
+	}
+	return names
+}
+
+// TestHostPackageTableMatchesTheRequirements holds the Host packages table of
+// the controller spec to BaselineHostRequirements and StageHostRequirements: the
+// baseline rows name the baseline and the interpreter package, and each stage
+// row names exactly what its closure selects, in the order the code lists them.
+func TestHostPackageTableMatchesTheRequirements(t *testing.T) {
+	rows := hostPackageRows(t)
+	stages := []NativeRequirements{
+		{ContainerRuntime: true}, {LibvirtClient: true}, {Hypervisor: true}, {InstallerMedia: true},
+		{ImageMirror: true}, {NMState: true}, {IPUtils: true},
+	}
+	if len(rows) != 2+len(stages) {
+		t.Fatalf("the table holds %d rows, want %d", len(rows), 2+len(stages))
+	}
+	baseline, err := BaselineHostRequirements("3.12")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rows[0][0] != "Baseline (setup)" || !slices.Equal(requirementsOf(rows[0][2]), baseline[:1]) {
+		t.Errorf("the baseline row is %q, the code names %v", rows[0], baseline[:1])
+	}
+	if rows[1][0] != "Baseline (setup)" || !slices.Equal(requirementsOf(rows[1][2]), []string{strings.Replace(baseline[1], "3.12", "3.X", 1)}) {
+		t.Errorf("the interpreter row is %q, the code names %v", rows[1], baseline[1:])
+	}
+	var every []string
+	for index, selected := range stages {
+		row, want := rows[2+index], StageHostRequirements(selected)
+		if row[0] != "Stage" || !slices.Equal(requirementsOf(row[2]), want) {
+			t.Errorf("the stage row %q names %v, the code names %v", row[1], requirementsOf(row[2]), want)
+		}
+		every = append(every, want...)
+	}
+	all := NativeRequirements{ContainerRuntime: true, LibvirtClient: true, Hypervisor: true, InstallerMedia: true, ImageMirror: true, NMState: true, IPUtils: true}
+	if got := StageHostRequirements(all); !slices.Equal(got, every) {
+		t.Errorf("every closure selected names %v, the rows name %v in order", got, every)
 	}
 }

@@ -375,6 +375,28 @@ func TestInitRemovesALeftoverLogDirectory(t *testing.T) {
 	}
 }
 
+// The removal initialization makes is the one deletion makes: a leftover log
+// directory holding what this store would not have created refuses the
+// initialization naming that entry, and the directory stays for a repetition.
+func TestInitRefusesALeftoverLogDirectoryHoldingAForeignEntry(t *testing.T) {
+	t.Parallel()
+	store, sources := fixture(t)
+	leftover := filepath.Join(store.options.Root+logsSuffix, logContexts, "example", operationLogs)
+	foreign := filepath.Join(leftover, "kept")
+	mkdirs(t, 0700, foreign)
+	if err := os.Chmod(foreign, 0755); err != nil {
+		t.Fatal(err)
+	}
+	_, err := tryPublish(store, "example", sources)
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "context.state" || !strings.Contains(reported[0].Message, foreign) {
+		t.Fatalf("an initialization over a foreign log entry reported %#v, want its refusal", reported)
+	}
+	if _, err := os.Lstat(foreign); err != nil {
+		t.Fatalf("the refused entry was removed (%v)", err)
+	}
+}
+
 // A log area write the root refuses is an error its caller sees, which the
 // lifecycle latches as engine.log-unmaintained; the store repairs nothing.
 func TestALogAreaWriteFailureLatchesRuntimeLog(t *testing.T) {

@@ -37,7 +37,6 @@ specs/state-reconciliation.md ## Stages and the pause boundary
 specs/security.md ## Listener exposure
 specs/controller.md ## The controller stage
 specs/controller.md ## Controller prerequisites and setup
-specs/controller.md ## Host packages
 specs/cli/output.md ## Human diagnostics
 specs/managed-os.md:refusal-table
 specs/managed-os.md:refusal-table-1

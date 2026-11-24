@@ -563,11 +563,9 @@ installation later needs, whose admin client certificate is the cluster's
 never enumerated in evidence, progress output or a log, and is discarded and
 rebuilt rather than reused whenever the inputs it was built from are not the
 inputs frozen now, unless a node may have been handed the image built there. The build
-receipt also records the context's incarnation: the device and inode the
-registry holds for the context's directory with that directory's birth time,
-or its inode generation where the filesystem reports no birth time, since a
-filesystem reuses a freed inode; a context directory with neither refuses
-`context.state`. A build or a removal over an area whose receipt records
+receipt also records the context's
+[incarnation](contexts.md#recorded-directory-identity); a context directory
+with neither a birth time nor an inode generation refuses `context.state`. A build or a removal over an area whose receipt records
 another incarnation, as a recreated context of the same name finds one its
 predecessor left, refuses before any effect, naming the area and keeping it,
 and the hand-over of a kept kubeconfig to custody before a removal refuses

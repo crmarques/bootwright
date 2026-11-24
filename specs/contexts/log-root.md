@@ -105,17 +105,34 @@ past `999999` refuses `contextfs.runs-exhausted`, naming the `runs/` directory t
 
 ## Setup output
 
-A setup's output is `controller/install-NNNNNN.output`, its number the setup's ID for a
-setup that starts afresh; a resumed setup writes its output under a new number
-and keeps its original ID.
-The next is numbered past both the newest output and every `install-NNNNNN` the
-setup record's receipt or pending intent names, so retention never lends a
-later setup an ID a receipt attributes
-(`TestSetupOutputNumbersPastTheReceiptsIDs`), and the oldest outputs beyond the
-[bounds table](../contexts.md#storage-locking-and-publication)'s setup outputs
-are removed before it is created. A name a setup output takes that is no
-private regular file within its bound refuses setup; every other name is
-ignored.
+A setup's output is `controller/install-NNNNNN.output`, written under
+`controller/install/lock`. Its number is the setup's ID for a setup that
+starts afresh; a resumed setup writes its output under a new number and keeps
+its original ID. Numbers run from `install-000001` upward, and the next is
+numbered past both the newest output and every `install-NNNNNN` the setup
+record's receipt or pending intent names, so retention never lends a later
+setup an ID a receipt attributes (`TestSetupOutputNumbersPastTheReceiptsIDs`).
+A setup whose next number would need a seventh digit keeps no output and
+completes
+(`TestSetupSequenceExhaustionKeepsReceiptWithoutAStoredRun`).
+
+The output is bounded at 4 MiB (`maxSetupRunOutput` in
+`internal/workspace/contextfs/setup_runs_linux_amd64.go`), the [bounded
+run](../cli/output.md#bounded-run-output)'s bound, so every run's output shares
+one ([D92](../milestones/backlog.md#d92)). The file is created exclusively
+beneath the held log directory handle without following a link, and made
+durable before it is named. The oldest outputs beyond the [bounds
+table](../contexts.md#storage-locking-and-publication)'s setup outputs are
+removed before it is created.
+
+A name a setup output takes that is no private regular file within its bound,
+or a directory that is a link, of another type or permission, replaced or past
+its entry limit, refuses setup before any package is installed
+(`TestUnsafeRunStateStillRefusesBeforePackages`,
+`TestSetupRunAccessFailureClassification`); every other name is ignored. An
+output that cannot be created or written for an operational reason leaves
+dnf's output discarded and never changes a setup outcome or its receipt
+(`TestSetupRunOperationalCreationFaultsRemainOptional`).
 
 ## Lifetime and naming
 
@@ -123,12 +140,14 @@ On a host that holds no context, `uninstall` removes the log root
 whole, under [the uninstall flow](../controller.md#the-uninstall-flow); no
 other command removes the root itself.
 
-`context delete --purge` removes the context's directory under the log root as
-the last filesystem step before it drops the registry entry, and a repeated
-deletion finds it gone. A directory holding a mount, an entry of another owner
-or anything else this store never creates refuses `context.state` naming that
-entry, and links are removed as links
-(`TestDeletionRemovesTheContextLogDirectory`). `context init` removes a
+`context delete --purge` and `context init` remove a context's directory under
+the log root by one removal: a directory holding a mount, an entry of another
+owner or anything else this store never creates refuses `context.state` naming
+that entry, and links are removed as links
+(`TestDeletionRemovesTheContextLogDirectory`,
+`TestInitRefusesALeftoverLogDirectoryHoldingAForeignEntry`). `context delete
+--purge` runs it as the last filesystem step before it drops the registry
+entry, and a repeated deletion finds it gone. `context init` removes a
 directory an earlier context of the same name left there, under the exclusive
 root lock, before the context is ready
 (`TestInitRemovesALeftoverLogDirectory`). A structured result names a log

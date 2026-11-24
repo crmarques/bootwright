@@ -213,14 +213,15 @@ func (p *hostPackages) Install(_ context.Context, missing []string, _ RunOutput)
 }
 
 type osPython struct {
-	owner     *setupFixture
-	installed bool
-	ready     bool
-	glibcLow  bool
-	cached    bool
-	named     map[string][]string
-	buildErr  error
-	fetchErr  error
+	owner       *setupFixture
+	installed   bool
+	ready       bool
+	glibcLow    bool
+	unqualified bool
+	cached      bool
+	named       map[string][]string
+	buildErr    error
+	fetchErr    error
 }
 
 func (p *osPython) interpreter() PythonInterpreter {
@@ -235,6 +236,9 @@ func (p *osPython) Select(context.Context, string) (PythonInterpreter, error) {
 	p.owner.record("select")
 	if p.glibcLow {
 		return PythonInterpreter{}, errors.Join(ErrNoPythonInterpreter, ErrGlibcBelowFloor)
+	}
+	if p.unqualified {
+		return PythonInterpreter{}, ErrNoPythonInterpreter
 	}
 	if !p.installed && !p.owner.packages.present["python3.14"] && !p.owner.packages.present["python3.13"] {
 		return PythonInterpreter{}, ErrNoPythonInterpreter
@@ -629,6 +633,34 @@ func TestNoLockedInterpreterAddsThePythonABIRequirement(t *testing.T) {
 	})
 	if !found {
 		t.Fatalf("the receipt's packages are %+v", receipt.Packages)
+	}
+}
+
+func TestEveryLockedPackageInstalledWithNoQualifyingInterpreterIsNotReady(t *testing.T) {
+	f := newSetupFixture(t)
+	f.python.installed, f.python.ready, f.python.unqualified = false, false, true
+	for _, abi := range testLock.ABIs {
+		f.packages.present["python"+abi] = true
+	}
+	report, err := f.service.Check(context.Background(), CheckRequest{})
+	if err == nil {
+		t.Fatalf("Check = %+v, want a refusal", report)
+	}
+	var found *Check
+	for index := range report.Checks {
+		if report.Checks[index].ID == "python-runtime" {
+			found = &report.Checks[index]
+		}
+	}
+	if found == nil || found.Status != "not-ready" || found.Observed != "no installed interpreter qualifies" {
+		t.Fatalf("python-runtime = %+v in %+v", found, report.Checks)
+	}
+	if effects := f.effects(); len(effects) != 0 {
+		t.Fatalf("a check ran %v", f.events)
+	}
+	_, err = f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
+	if err == nil || f.count("install python3.14") != 0 || f.count("install python3.13") != 0 || f.count("install python3.12") != 0 {
+		t.Fatalf("Setup = %v after %v", err, f.events)
 	}
 }
 
