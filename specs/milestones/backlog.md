@@ -9634,3 +9634,59 @@ release after the reboot. Rejected alternatives:
 
 Moving to another major is still not supported. This opens X669 and
 [B1689](m1.md#b1689), with integration into local main; no push.
+
+### D285
+
+**owner** (2026-11-24): shown [audit 008](../../audits/008-spec-quality/report-fable.md)
+and its plan, the owner said "plan and implement as much high and medium item
+as possible. i accept the recommendations". This authorizes, out of sequence
+for implementation, the plan's lanes C, K and D and its writing standard F0,
+items [B1712](m1.md#b1712) to [B1755](m1.md#b1755) on M1 to M4, no more than
+two slices active at once, and lifts [D116](#d116) for the Medium findings of
+the audit: the owner asked for them by name, wording included. The page-by-page
+form work of lane F after F0 waits for the pilot. The owner's answers are the
+report's recommendations (section 7.11):
+
+1. Scope: the steps up to the pause point, the other Medium findings on
+   safety, failure, missing rules and mismatch, and the delivery pages; the
+   Medium findings of two pages, or one page, that state a rule two ways are
+   included by the owner's request.
+2. One item per High finding and one per workstream, on the milestone page
+   that owns its subject.
+3. When text and code disagree on a safety path, the safer side wins, unless
+   an owner decision chose the other side.
+4. New and touched spec text follows the writing standard, as guidance.
+5. An elevated reveal refuses when sudo's policy logs output or cannot be
+   read.
+6. Admission refuses `tls.verification` on a BMC address that is not
+   `https://`.
+7. `access.rootLogin: revoke` and `access.ssh.sudoPasswordRef` are removed;
+   `keep` stays.
+8. A libvirt guest's VNC console is a UNIX socket that only root and the
+   emulator's account can open.
+9. The capacity observation of an SSH-arm provider host runs without a shell
+   when a security review finds another way to tell a refused sudo from an
+   absent path; otherwise the text states the wrapper's exact form.
+10. A failed verification of the SSH source filter withdraws the filter and
+    its unit before the apply reports.
+11. The gap of a destroy before the first apply recorded a subscription-sourced
+    installation is recorded, with a safety item for a destroy that reads the
+    guest and unregisters it.
+12. A continuation that rebinds the Ceph registry login writes each host's
+    retained copy again before any native pull.
+13. A resumed controller install records only the packages of its own
+    transaction, and refuses when it cannot tell them apart.
+14. Each Recovery value of the stop catalog is defined by the operator's next
+    action and whether the context's records survive, and the rows that
+    disagree are reclassed, in a breaking commit.
+15. The owner reviews first the 16 pending decisions that normative rules
+    cite; an old entry may gain one appended line naming the decision that
+    changed it.
+16. A new delivered record keeps outcome, evidence, the finding-to-item map
+    and limits, and links the spec for the rule; the cited-test check stops
+    reading older records.
+17. How far the form work goes stays open until the pilot.
+
+**Exit evidence:** each item's in-tree evidence, a finding-to-item map in each
+integrating commit, and `make check` on each integration tree, with an
+independent review and `make race` for each safety slice. No push.
