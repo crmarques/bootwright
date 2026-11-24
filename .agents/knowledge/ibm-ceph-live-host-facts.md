@@ -74,6 +74,16 @@ operator as a first-call refusal; the slice that records it is named.
   checked the LV's one dm-crypt child, on its own fresh TPM2 OSDs, and the host
   showed `crypto_LUKS` and that child minutes later. The header proof reads
   `cryptsetup luksDump` instead (X624).
+- cephadm creates a host's OSDs after the OSD service call returns, so the
+  readiness wait observes hosts mid-creation: `lvs` lists a block volume
+  `ceph-volume` already tagged with the cluster FSID and OSD ID while the host's
+  `lsblk` tree does not yet show it as the disk's `lvm` child. On 2026-11-24 a
+  ceph-stretch run stopped at `foreign-osd@ceph_native_osd.prove_osd_crypto:93`
+  at 17:05:51 UTC, beside the first host's OSD volume links of 14:05 -03; the
+  other hosts' came 14:07 to 14:19 and all 30 proved clean afterwards. Event
+  log times are UTC; `ls -l /dev/ceph-*/ /dev/mapper/` on the hosts shows local
+  time. A proof refusal while `ceph-volume` runs, or while a tagged volume's
+  OSD has no daemon on the host yet, reads the host unsettled (X684).
 - On 20.2.1-405, `fs new … set allow_standby_replay <bool>` aborts the MON
   leader (`std::out_of_range` in `FileSystemCommandHandler::set_val`), and the
   CLI resends it to every restarted MON until systemd stops restarting it;

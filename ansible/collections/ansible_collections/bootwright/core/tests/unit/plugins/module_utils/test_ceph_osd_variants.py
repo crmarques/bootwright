@@ -4,7 +4,7 @@ import copy
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native, ceph_native_worker
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_core as fixtures
 
 core_request = fixtures.core_request
@@ -257,10 +257,12 @@ def test_completed_variant_proof_observes_native_crypto_and_auxiliary_identity(c
     assert all("--dump-master-key" not in argv and "--dump-volume-key" not in argv for argv in calls)
 
 
-def test_existing_host_readiness_round_requires_variant_proof(core_request):
+def test_existing_host_readiness_round_requires_variant_proof(core_request, monkeypatch):
     native, unused = fixtures.worker(core_request, {})
     native.daemons = lambda: [{"name": "osd.0"}]
     native.prove_registry = lambda: None
+    monkeypatch.setattr(ceph_native, "volume_tool_running", lambda: False)
+    native.undeployed_osd = lambda daemons: False
     calls = []
     native.prove_completed_osd_variants = lambda physical: calls.append("proved")
     assert native.host_state()["exists"]
@@ -272,6 +274,105 @@ def test_existing_host_readiness_round_requires_variant_proof(core_request):
     native.prove_completed_osd_variants = refuse
     with pytest.raises(ceph_native.Refusal, match="foreign-osd"):
         native.host_state()
+
+
+def block_row(fsid, identity, kind="block"):
+    return {"lv_path": "/dev/ceph-vg/osd-block-" + identity, "lv_uuid": "volume-" + identity, "devices": "/dev/vdb(0)",
+            "lv_tags": "ceph.cluster_fsid=" + fsid + ",ceph.type=" + kind + ",ceph.osd_id=" + identity}
+
+
+@pytest.mark.parametrize("running, volumes, token, expected", [
+    ((True, False), "deployed", "foreign-osd", "not-ready"),
+    ((False, True), "deployed", "foreign-osd", "not-ready"),
+    ((False, False), "undeployed", "foreign-osd", "not-ready"),
+    ((False, False), "deployed", "foreign-osd", "foreign-osd"),
+    ((False, False), "other-cluster", "foreign-osd", "foreign-osd"),
+    ((False, False), "db", "foreign-osd", "foreign-osd"),
+    ((False, False), "unreadable", "foreign-osd", "foreign-osd"),
+    ((False, False), "malformed", "foreign-osd", "foreign-osd"),
+    ((True, True), "undeployed", "osd-partial", "osd-partial"),
+    ((True, True), "undeployed", "native-output", "native-output"),
+])
+def test_an_osd_cephadm_is_still_creating_reads_the_host_unsettled(core_request, monkeypatch, running, volumes, token, expected):
+    # On 2026-11-24 a stretch readiness wait read a host while cephadm's ceph-volume had tagged a block volume the host's
+    # device tree did not show yet, and refused foreign-osd at prove_osd_crypto on the cluster's own OSD.
+    native, unused = fixtures.worker(core_request, {})
+    native.daemons = lambda: [{"name": "osd.0"}, {"name": "crash.node-0"}]
+    native.prove_registry = lambda: None
+    native.physical_devices = lambda: {}
+    reads = list(running)
+    monkeypatch.setattr(ceph_native, "volume_tool_running", lambda: reads.pop(0))
+    rows = {"deployed": [block_row(core_request["fsid"], "0")], "undeployed": [block_row(core_request["fsid"], "0"), block_row(core_request["fsid"], "1")],
+            "other-cluster": [block_row("foreign", "1")], "db": [block_row(core_request["fsid"], "1", "db")],
+            "malformed": [{"lv_path": "/dev/x", "lv_tags": None}, block_row(core_request["fsid"], "1")]}
+
+    def command(argv, **kwargs):
+        assert argv[0] == "/usr/sbin/lvs"
+        if volumes == "unreadable":
+            raise ceph_native.Refusal("native-command")
+        return {"report": [{"lv": rows[volumes]}]}
+
+    def refuse(physical):
+        raise ceph_native.Refusal(token)
+
+    native.command = command
+    native.prove_completed_osd_variants = refuse
+    with pytest.raises(ceph_native.Refusal) as refused:
+        native.host_state()
+    assert str(refused.value) == expected and not isinstance(refused.value, (ceph_native.NativeFailure, ceph_native.RemoteRefusal))
+    assert native.markers.writes == []
+
+
+def test_a_named_osd_failure_keeps_its_meaning_while_ceph_volume_runs(core_request, monkeypatch):
+    native, unused = fixtures.worker(core_request, {})
+    native.daemons = lambda: [{"name": "osd.0"}]
+    native.prove_registry = lambda: None
+    monkeypatch.setattr(ceph_native, "volume_tool_running", lambda: True)
+
+    def refuse(physical):
+        raise ceph_native.NativeFailure("foreign-osd", "osd", b"detail")
+
+    native.prove_completed_osd_variants = refuse
+    with pytest.raises(ceph_native.NativeFailure, match="foreign-osd"):
+        native.host_state()
+
+
+@pytest.mark.parametrize("creating", [True, False])
+def test_a_tagged_volume_the_device_tree_does_not_show_yet_is_unsettled_at_the_proof_site(core_request, monkeypatch, creating):
+    core_request["services"][-1]["spec"].update(encrypted=True, tpm2=True)
+    native, unused = fixtures.worker(core_request, {})
+    native.markers.records["osd-device-intent.json"] = native.osd_device_scope()
+    native.daemons = lambda: [{"name": "osd.1"}]
+    native.prove_registry = lambda: None
+    host = core_request["hosts"][0]
+    device = host["devices"][0]
+    row = block_row(core_request["fsid"], "0")
+    row["lv_tags"] += ",ceph.osd_fsid=6da65e47-8789-4a1c-88e8-3bbd195719a1,ceph.encrypted=1,ceph.with_tpm=1"
+    disk = {"path": device["path"], "type": "disk", "serial": device["serial"], "size": device["sizeBytes"], "fstype": "LVM2_member"}
+
+    def command(argv, **kwargs):
+        if argv[0] == "/usr/bin/lsblk":
+            return util_linux(argv, [disk])
+        if argv[:3] == ["/usr/sbin/wipefs", "--no-act", "--json"]:
+            return {"signatures": [{"type": "LVM2_member"}]}
+        assert argv[0] == "/usr/sbin/lvs"
+        return {"report": [{"lv": [row]}]}
+
+    native.command = command
+    aliases = {"/dev/disk/by-id/virtio-" + d["serial"]: d["path"] for d in host["devices"]}
+    monkeypatch.setattr(ceph_native.os.path, "realpath", lambda value: aliases.get(value, value))
+    monkeypatch.setattr(ceph_native, "volume_tool_running", lambda: False)
+    if creating:
+        with pytest.raises(ceph_native.Refusal, match="^not-ready$") as refused:
+            native.host_state()
+        cause = ceph_native_worker.cause(refused.value)
+        assert cause.startswith("not-ready@ceph_native_osd.prove_osd_crypto:")
+        assert ceph_core.unsettled(ceph_native.RemoteRefusal("native-refusal:" + cause))
+    else:
+        native.daemons = lambda: [{"name": "osd.0"}]
+        with pytest.raises(ceph_native.Refusal, match="^foreign-osd$"):
+            native.host_state()
+    assert native.markers.writes == []
 
 
 def classed(request, spec_class="", path_classes=()):

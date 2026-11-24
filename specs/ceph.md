@@ -1455,6 +1455,22 @@ refusal's detail names the token and the code site that refused, never the
 disk: a native worker's cause carries no value, so the host and device are
 not reported.
 
+A host that already runs one of the cluster's OSDs proves, each time it is
+observed, the completed OSD on every disk of its encrypted, TPM2, DB or WAL
+OSD services. While cephadm creates the host's other OSDs, `ceph-volume` tags a
+block volume before the host's device tree shows that volume and its dm-crypt
+mapping, which appears only when cephadm deploys the OSD's daemon, so the same
+proof would refuse the cluster's own OSD. A `foreign-osd` refusal of that proof
+therefore reads the host as not settled when creation is visibly unfinished: a
+process on the host runs `ceph-volume`, read before and after the proof, or
+`lvs` lists a block volume tagged with this cluster's FSID whose OSD ID no
+daemon of the host runs. That follows the rule
+[readiness](#resources-readiness-and-access) states for a layout cephadm moves:
+the readiness wait polls again and its timeout names `unsettled@<host>`, and
+an action refuses `not-ready`. Nothing is admitted, and the same shape once
+creation has finished, or an `lvs` read that fails, still refuses
+`foreign-osd`.
+
 An intent-marked data disk that holds LVM metadata without a complete OSD tag
 set, the shape an interrupted `ceph-volume` creation leaves, refuses
 `osd-partial`, coded `ceph.osd-unproved`, because an interrupted creation and a

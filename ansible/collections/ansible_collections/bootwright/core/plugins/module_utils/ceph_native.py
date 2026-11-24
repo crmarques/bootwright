@@ -1787,8 +1787,49 @@ class Worker:
             if pending:
                 return {"name": self.host["name"], "owned": owned, "exists": exists, "pending": pending}
         if owned and any(str(d.get("name", "")).startswith("osd.") for d in daemons):
-            self.prove_completed_osd_variants(physical)
+            self.prove_osd_state(physical, daemons)
         return {"name": self.host["name"], "owned": owned, "exists": exists}
+
+    def prove_osd_state(self, physical, daemons):
+        """This host's completed OSDs, proved. While ceph-volume runs here, before or after the proof, or a block volume tagged with
+        this cluster's FSID names an OSD this host does not run yet, cephadm is still creating an OSD, whose tagged volume precedes
+        the device tree that completes it, so its foreign-osd refusal reads the host unsettled: observed again, never admitted,
+        and the same shape refuses foreign-osd once creation has finished."""
+        creating = volume_tool_running()
+        try:
+            self.prove_completed_osd_variants(physical)
+        except Refusal as error:
+            if type(error) is not Refusal or str(error) != "foreign-osd":
+                raise
+            if not (creating or volume_tool_running() or self.undeployed_osd(daemons)):
+                raise
+            raise Refusal("not-ready").with_traceback(error.__traceback__) from None
+
+    def undeployed_osd(self, daemons):
+        """Whether a block volume tagged with this cluster's FSID names an OSD ID no daemon of this host runs; a read that fails
+        proves nothing, so the refusal keeps its meaning."""
+        deployed = {str(d.get("name", "")) for d in daemons if isinstance(d, dict)}
+        try:
+            output = self.command(["/usr/sbin/lvs", "--reportformat", "json", "--options", "lv_path,lv_uuid,lv_tags,devices"])
+        except Refusal:
+            return False
+        if not (isinstance(output, dict) and isinstance(output.get("report"), list) and len(output["report"]) == 1):
+            return False
+        rows = output["report"][0].get("lv") if isinstance(output["report"][0], dict) else None
+        if not isinstance(rows, list) or len(rows) > 1024:
+            return False
+        for row in rows:
+            if not isinstance(row, dict) or not isinstance(row.get("lv_tags"), str):
+                return False
+            tags = {}
+            for tag in row["lv_tags"].split(","):
+                key, unused, value = tag.strip().partition("=")
+                tags.setdefault(key, value)
+            identity = tags.get("ceph.osd_id", "")
+            if (tags.get("ceph.cluster_fsid") == self.request["fsid"] and tags.get("ceph.type") == "block"
+                    and re.fullmatch(r"[0-9]+", identity) is not None and "osd." + identity not in deployed):
+                return True
+        return False
 
     def prove_completed_osd_variants(self, physical=None, services=None):
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_osd
