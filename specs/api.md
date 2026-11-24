@@ -445,9 +445,7 @@ The kinds lay out the facts that flows serving every cluster kind read in
 different spec fields (`spec.nodes` against `spec.topology.nodes`), so each
 cluster kind registers its layout and those flows read the facts through the
 registry's accessors: the Machines its nodes bind (`ClusterNodeMachines`), the
-SSH key fields its nodes trust (`ClusterNodeLoginField`), whether a managed
-non-root keyed login can succeed a revoked root login
-(`ClusterSuccessorLogin`), whether it demands a FIPS controller
+SSH key fields its nodes trust (`ClusterNodeLoginField`), whether it demands a FIPS controller
 (`ClusterRequiresControllerFIPS`) and whether the agent installer installs it
 (`ClusterInstallsByAgent`). The container-cluster domain publishes per kind
 what needs its derivations (`containercluster.FactsOf`): the controller tools,

@@ -90,10 +90,7 @@ func (r remoteCommands) Run(ctx context.Context, contextName, machine string, ar
 	}
 	effective, sudo := lifecycleAccess(effective, machine)
 	if sudo {
-		// Preserve the probe's exit 1 without treating a sudo denial as an
-		// absent file. The shell receives the probe argv as positional data.
-		argv = append([]string{"/usr/bin/sudo", "-H", "-n", "-k", "-u", "root", "--", "/bin/sh", "-c",
-			`"$@"; status=$?; if [ "$status" -eq 1 ]; then exit 41; fi; exit "$status"`, "bootwright-capacity"}, argv...)
+		argv = escalatedCapacityProbe(argv)
 	}
 	capture := nativeexec.Refusing(cmp.Or(max(bound, 0), preflightlocal.MaxOutput))
 	client := sessionClient(r.deps.Home, r.deps.Owner, r.deps.Files, r.deps.CopyAccount)
@@ -108,15 +105,31 @@ func (r remoteCommands) Run(ctx context.Context, contextName, machine string, ar
 	}
 	if result.ExitCode != 0 {
 		capture.Clear()
-		if sudo && result.ExitCode == 1 {
-			return nil, 0, errors.New("lifecycle account did not prove noninteractive sudo for the capacity probe")
-		}
-		if sudo && result.ExitCode == 41 {
-			return nil, 1, nil
-		}
-		return nil, result.ExitCode, nil
+		status, err := capacityProbeStatus(sudo, result.ExitCode)
+		return nil, status, err
 	}
 	return capture.Bytes(), 0, nil
+}
+
+const (
+	capacityProbeWrapper = `"$@"; status=$?; if [ "$status" -eq 1 ]; then exit 41; fi; exit "$status"`
+	capacityProbeExit1   = 41
+)
+
+// sudo exits 1 when it refuses, as a probe does for an absent path, so the
+// fixed wrapper moves the probe's exit 1 away; argv stays positional data.
+func escalatedCapacityProbe(argv []string) []string {
+	return append([]string{"/usr/bin/sudo", "-H", "-n", "-k", "-u", "root", "--", "/bin/sh", "-c", capacityProbeWrapper, "bootwright-capacity"}, argv...)
+}
+
+func capacityProbeStatus(sudo bool, exit int) (int, error) {
+	switch {
+	case sudo && exit == 1:
+		return 0, errors.New("lifecycle account did not prove noninteractive sudo for the capacity probe")
+	case sudo && exit == capacityProbeExit1:
+		return 1, nil
+	}
+	return exit, nil
 }
 
 func preflightCommands(state inventory.EffectiveState, reconciler lifecycle.Service, deps serviceDependencies) preflight.Commands {

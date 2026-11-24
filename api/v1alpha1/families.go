@@ -158,7 +158,6 @@ func (c Catalog) OfCategory(category Category) []Object {
 type clusterLayout struct {
 	nodes          []string
 	nodeLogins     [][]string
-	successorLogin []string
 	controllerFIPS []string
 	agentInstall   []string
 }
@@ -171,9 +170,8 @@ var clusterLayouts = map[Kind]clusterLayout{
 		agentInstall:   []string{"install", "agent"},
 	},
 	CephCluster: {
-		nodes:          []string{"topology", "nodes"},
-		nodeLogins:     [][]string{{"cephadm", "clusterSSH", "keyRef"}},
-		successorLogin: []string{"cephadm", "clusterSSH"},
+		nodes:      []string{"topology", "nodes"},
+		nodeLogins: [][]string{{"cephadm", "clusterSSH", "keyRef"}},
 	},
 }
 
@@ -212,24 +210,6 @@ func ClusterNodeLoginField(cluster Object, key string) (string, bool) {
 		}
 	}
 	return "", false
-}
-
-func ClusterSuccessorLogin(cluster Object) bool {
-	path := clusterLayouts[cluster.Kind()].successorLogin
-	if path == nil || cluster.Spec().Get("management").Text() != "managed" {
-		return false
-	}
-	login := cluster.Spec().Get(path...)
-	user := login.Get("user").Text()
-	return user != "" && user != "root" && login.Has("keyRef")
-}
-
-func ClusterSuccessorLoginField(kind Kind) (string, bool) {
-	path := clusterLayouts[kind].successorLogin
-	if path == nil {
-		return "", false
-	}
-	return "spec." + strings.Join(path, "."), true
 }
 
 func ClusterRequiresControllerFIPS(cluster Object) bool {

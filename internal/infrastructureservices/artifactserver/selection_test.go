@@ -147,7 +147,6 @@ func TestSSHPlacementRequiresKeyAndHostKey(t *testing.T) {
 		"no key":            {complete.With("auth", api.MapValue()), "machine.placement-key-missing"},
 		"no host key":       {complete.Without("knownHostsRef"), "machine.placement-host-key-missing"},
 		"non-root user":     {complete.With("user", api.StringValue("operator")), "machine.placement-escalates"},
-		"escalation secret": {complete.With("sudoPasswordRef", api.StringValue("services-sudo")), "machine.placement-escalates"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := Requests(catalogOf(host(refusal.auth), server), "controller", testContext)

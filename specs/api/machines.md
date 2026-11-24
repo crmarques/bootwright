@@ -289,7 +289,7 @@ own refusal.
 | `spec.os.clusterInstalled` | empty object | union | — | The installer-provisioned arm, `clusterInstalled: {}`. |
 | `spec.proxy` | choice object | no | profile choice or direct access | Lifecycle-dependent atomic Machine-owned selection below; emits immediately after `os`. |
 | `spec.network` | object | no | contacts normalized below | Network selection, named contacts/static assignments and interface matches below. |
-| `spec.access` | object | lifecycle-dependent | normalized as below | Local or SSH access plus optional root-login posture. |
+| `spec.access` | object | lifecycle-dependent | normalized as below | Local or SSH access and an optional lifecycle login. |
 
 Effective output orders them `site`, `hardware`, `os`, `proxy`, `firewall`,
 `network`, `access`.
@@ -643,13 +643,10 @@ installer-provisioned machine, omission means no Bootwright login.
 | `auth.operatorIdentity` | empty object | union | — | Run SSH under the invoking account with its default identity files and no agent. A session override follows the [session credential rules](../cli.md#machine-ssh-sessions). |
 | `auth.privateKeyRef` | string | union | — | `sshKeyPair` `Secret`. Access credential. |
 | `auth.passwordRef` | string | union | — | `usernamePassword` `Secret`; requires authored `user`. Access credential. |
-| `sudoPasswordRef` | string | no | — | `usernamePassword` `Secret`. Reserved. The fallback lifecycle login refuses it. Access credential. |
 | `knownHostsRef` | string | no | [context-managed trust](../contexts.md#storage-locking-and-publication) | `opaque` `Secret` containing one exact OpenSSH `known_hosts` entry. Trust anchor. |
 
-Exactly one SSH `auth` arm is present. `access.rootLogin` is `keep` by default
-or `revoke`. `revoke` requires authored SSH access and a non-root replacement
-identity supplied by the managed storage-cluster relationship; it is invalid
-on a Bootwright-installed machine or a machine without that successor login.
+Exactly one SSH `auth` arm is present. `access.rootLogin` admits only `keep`,
+its default; no Bootwright operation changes the host's root login.
 
 A remote provided Machine that hosts managed infrastructure, a provider, or
 its own managed firewall or requests provided OS updates may declare `access.lifecycle`. The record is atomic and requires the four fields below. An optional
@@ -665,8 +662,7 @@ and `ssh.port`. Sessions continue to use the account and credential in
 | `privilege` | enum | `direct` requires user `root`. `sudo` requires a non-root user with noninteractive sudo to root for the operation. |
 
 Without `access.lifecycle`, a provided lifecycle placement uses
-`access.ssh` with a root login, private key and host pin. That login refuses
-`sudoPasswordRef`. Bootwright-installed service hosts use their installation's
+`access.ssh` with a root login, private key and host pin. Bootwright-installed service hosts use their installation's
 derived login. See [placement credentials](../infrastructure-services.md#placement-arms-and-credentials).
 
 Both `knownHostsRef` fields can share a trust anchor Secret for

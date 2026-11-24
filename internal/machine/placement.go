@@ -109,8 +109,8 @@ func PlacementFor(machine api.Object, controllerMachine string) (Placement, erro
 	if !ssh.Has("knownHostsRef") {
 		return Placement{}, machinePlacementHostKeyMissing.Fail("lifecycle placement requires a bound SSH host key", "author access.ssh.knownHostsRef on "+machine.Identity())
 	}
-	if len(privilegeFields(ssh)) != 0 {
-		return Placement{}, machinePlacementEscalates.Fail("a lifecycle placement host connects as root and never escalates", "set access.ssh.user to root or omit it, and remove access.ssh.sudoPasswordRef, on "+machine.Identity())
+	if nonRootUser(ssh) {
+		return Placement{}, machinePlacementEscalates.Fail("a lifecycle placement host connects as root and never escalates", "set access.ssh.user to root or omit it on "+machine.Identity())
 	}
 	address, err := infrastructureservices.ResolveAddress(machine, ssh.Get("addressRef").Text())
 	if err != nil {
@@ -165,31 +165,10 @@ func ServicePlacementFor(machine api.Object, controllerMachine string) (Placemen
 	return Placement{Address: ssh.Address, Connection: ConnectionInstalled, Machine: machine.Name(), Port: ssh.Port, PrivateKeyRef: ssh.PrivateKeyRef, User: ssh.User}, nil
 }
 
-// privilegeFields names the access.ssh fields that keep a host from connecting
-// as root without escalation: a user other than root, and an escalation Secret.
-func privilegeFields(ssh api.Value) []string {
-	var fields []string
-	if ssh.Has("user") && ssh.Get("user").Text() != "root" {
-		fields = append(fields, "user")
-	}
-	if ssh.Has("sudoPasswordRef") {
-		fields = append(fields, "sudoPasswordRef")
-	}
-	return fields
-}
-
-var privilegeRefusals = map[string]string{
-	"user":            "a lifecycle placement host connects as root; non-root SSH accounts are not supported",
-	"sudoPasswordRef": "a lifecycle placement never escalates; remove access.ssh.sudoPasswordRef",
-}
-
-var privilegeRemediations = map[string]string{
-	"user":            "remove spec.access.ssh.user, or set it to root",
-	"sudoPasswordRef": "remove spec.access.ssh.sudoPasswordRef",
-}
+func nonRootUser(ssh api.Value) bool { return ssh.Has("user") && ssh.Get("user").Text() != "root" }
 
 // validatePlacementHost refuses a lifecycle placement host whose SSH access
-// would connect as another account or escalate. A Machine no placement names,
+// would connect as another account. A Machine no placement names,
 // such as a cluster node, a storage node or a session target, keeps any account.
 func validatePlacementHost(o api.Object, c api.Catalog) []api.Issue {
 	ssh := o.Spec().Get("access", "ssh")
@@ -200,7 +179,7 @@ func validatePlacementHost(o api.Object, c api.Catalog) []api.Issue {
 				"select a provided placement host reached over SSH or remove spec.access.lifecycle")}
 		}
 		if enroll && (!bootstrap.Valid(login.Get("user").Text()) || login.Get("privilege").Text() != "sudo" ||
-			login.Get("knownHostsRef").Text() != ssh.Get("knownHostsRef").Text() || o.Spec().Get("access", "rootLogin").Text() == "revoke") {
+			login.Get("knownHostsRef").Text() != ssh.Get("knownHostsRef").Text()) {
 			return []api.Issue{invariant("$.spec.access.lifecycle.bootstrap", "enrollment requires a separate bootstrap identity, a shared explicit host pin and a non-root lifecycle login with sudo",
 				"declare bootstrap access and keep the original administrator available")}
 		}
@@ -212,11 +191,10 @@ func validatePlacementHost(o api.Object, c api.Catalog) []api.Issue {
 	if !ssh.Present() || !placementHost(o, c) || installed(o) && !providerHost(o, c) {
 		return nil
 	}
-	var issues []api.Issue
-	for _, field := range privilegeFields(ssh) {
-		issues = append(issues, invariant("$.spec.access.ssh."+field, privilegeRefusals[field], privilegeRemediations[field]))
+	if nonRootUser(ssh) {
+		return []api.Issue{invariant("$.spec.access.ssh.user", "a lifecycle placement host connects as root; non-root SSH accounts are not supported", "remove spec.access.ssh.user, or set it to root")}
 	}
-	return issues
+	return nil
 }
 
 func ControllerName(c api.Catalog) string {

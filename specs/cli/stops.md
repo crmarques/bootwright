@@ -551,7 +551,7 @@ The Machine placement and access checks' stops (`internal/machine`).
 | `machine.placement-auth-unsupported` | operation | none | input | - | change-input | a Machine that hosts lifecycle work authenticates with an operator identity or a password, which a placement does not support | author access.ssh.auth.privateKeyRef on the Machine |
 | `machine.placement-key-missing` | operation | none | input | - | change-input | a Machine that hosts lifecycle work declares no SSH private key reference | author access.ssh.auth.privateKeyRef on the Machine |
 | `machine.placement-host-key-missing` | operation | none | input | - | change-input | a Machine that hosts lifecycle work declares no bound SSH host key | author access.ssh.knownHostsRef on the Machine |
-| `machine.placement-escalates` | operation | none | input | - | change-input | a Machine that hosts lifecycle work declares an SSH account other than root or an escalation Secret | set access.ssh.user to root or omit it, and remove access.ssh.sudoPasswordRef, on the Machine |
+| `machine.placement-escalates` | operation | none | input | - | change-input | a Machine that hosts lifecycle work declares an SSH account other than root | set access.ssh.user to root or omit it on the Machine |
 | `machine.installed-access-mismatch` | operation | none | input | - | change-input | a Machine Bootwright installs declares SSH access other than its installation's own, so no work was placed on it | remove spec.access.ssh from the Machine so its access is the installation's own |
 
 ## Machine hardware stops

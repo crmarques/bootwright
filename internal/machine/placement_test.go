@@ -71,7 +71,7 @@ func TestDedicatedLifecycleLoginPreservesSessionAccess(t *testing.T) {
 func privilegeInvariants(issues []api.Issue) []string {
 	var fields []string
 	for _, issue := range issues {
-		if issue.Code == "api.invariant" && (issue.Field == "$.spec.access.ssh.user" || issue.Field == "$.spec.access.ssh.sudoPasswordRef") {
+		if issue.Code == "api.invariant" && issue.Field == "$.spec.access.ssh.user" {
 			fields = append(fields, issue.Field)
 		}
 	}
@@ -87,7 +87,6 @@ func TestALifecyclePlacementHostConnectsAsRoot(t *testing.T) {
 		"managed service host as another account":  {providedHost("services", m("user", "operator", "auth", key)), "$.spec.access.ssh.user"},
 		"libvirt provider host as another account": {providedHost("hypervisor", m("user", "operator", "auth", key)), "$.spec.access.ssh.user"},
 		"operator identity as another account":     {providedHost("services", m("user", "operator", "auth", m("operatorIdentity", m()))), "$.spec.access.ssh.user"},
-		"root host with an escalation Secret":      {providedHost("services", m("user", "root", "auth", key, "sudoPasswordRef", "services-sudo")), "$.spec.access.ssh.sudoPasswordRef"},
 		"installed host of a libvirt provider":     {object(api.Machine, "hypervisor", m("os", m("install", m("profileRef", "rhel")))), "$.spec.access.ssh.user"},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -97,9 +96,9 @@ func TestALifecyclePlacementHostConnectsAsRoot(t *testing.T) {
 		})
 	}
 	for name, machine := range map[string]api.Object{
-		"cluster node as another account":     providedHost("node", m("user", "operator", "auth", key)),
-		"operator identity with no user":      providedHost("services", m("auth", m("operatorIdentity", m()))),
-		"root host without escalation Secret": providedHost("services", m("user", "root", "auth", key, "knownHostsRef", "services-host-key")),
+		"cluster node as another account": providedHost("node", m("user", "operator", "auth", key)),
+		"operator identity with no user":  providedHost("services", m("auth", m("operatorIdentity", m()))),
+		"root host":                       providedHost("services", m("user", "root", "auth", key, "knownHostsRef", "services-host-key")),
 	} {
 		t.Run(name, func(t *testing.T) {
 			if issues := admitPlacementHost(machine); len(issues) != 0 {
@@ -120,9 +119,7 @@ func TestALifecyclePlacementHostConnectsAsRoot(t *testing.T) {
 		}
 	}
 	for name, ssh := range map[string]api.Value{
-		"another account":    root.With("user", api.StringValue("operator")),
-		"an escalation":      root.With("sudoPasswordRef", api.StringValue("services-sudo")),
-		"root and escalates": root.With("user", api.StringValue("root")).With("sudoPasswordRef", api.StringValue("services-sudo")),
+		"another account": root.With("user", api.StringValue("operator")),
 	} {
 		t.Run("placement refuses "+name, func(t *testing.T) {
 			_, err := PlacementFor(host(ssh), "controller")

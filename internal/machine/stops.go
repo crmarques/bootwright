@@ -21,7 +21,7 @@ var (
 		Meaning: "a Machine that hosts lifecycle work declares no bound SSH host key", Remedy: "author access.ssh.knownHostsRef on the Machine"}
 	machinePlacementEscalates = diagnostics.Stop{Code: "machine.placement-escalates", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
-		Meaning: "a Machine that hosts lifecycle work declares an SSH account other than root or an escalation Secret", Remedy: "set access.ssh.user to root or omit it, and remove access.ssh.sudoPasswordRef, on the Machine"}
+		Meaning: "a Machine that hosts lifecycle work declares an SSH account other than root", Remedy: "set access.ssh.user to root or omit it on the Machine"}
 	machineInstalledAccessMismatch = diagnostics.Stop{Code: "machine.installed-access-mismatch", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
 		Meaning: "a Machine Bootwright installs declares SSH access other than its installation's own, so no work was placed on it", Remedy: "remove spec.access.ssh from the Machine so its access is the installation's own"}

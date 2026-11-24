@@ -803,6 +803,11 @@ the command that failed to insert media.
 bootwright machine media eject --context lab-rhel --name rhel-01,rhel-02 --yes
 ```
 
+A libvirt guest's display has no TCP port. Attach it as root on the provider
+host with `virt-viewer --connect qemu:///system --attach <domain>`, or remotely
+with `--connect qemu+ssh://root@<host>/system`
+([guest display](../specs/security.md#listener-exposure)).
+
 `cluster exec` does the same across clusters and nodes: `--name` and `--node`
 take comma-separated lists, each listed cluster runs the command on its
 administrator node (the one `cluster info` names), or on the `--node` members

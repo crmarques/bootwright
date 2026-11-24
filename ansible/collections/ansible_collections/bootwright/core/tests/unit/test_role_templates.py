@@ -243,6 +243,13 @@ def test_ssd_domain_uses_distinct_scsi_units_and_preserves_root_and_unmarked_dat
     assert [item.get("unit") for item in root.findall('./devices/disk/address')] == ["0", "1"]
 
 
+def test_the_guest_display_listens_only_on_a_private_unix_socket():
+    variables = scope("substrate_libvirt_machine", {"bootwright_substrate_machine_request": MACHINE})
+    graphics = ElementTree.fromstring(render("substrate_libvirt_machine", "domain.xml.j2", variables)).findall("./devices/graphics")
+    assert [(item.get("type"), sorted(item.attrib)) for item in graphics] == [("vnc", ["type"])]
+    assert [sorted(listen.attrib.items()) for listen in graphics[0]] == [[("type", "socket")]]
+
+
 def test_the_golden_comparison_sees_a_change_in_what_a_template_writes():
     variables = scope("infra_managed_service", SCOPES["infra_managed_service", "squid.conf.j2"])
     written = render("infra_managed_service", "squid.conf.j2", variables)

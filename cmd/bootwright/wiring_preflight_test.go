@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -149,5 +150,28 @@ func TestSSHLauncherResolvesTheInvokingAccountThroughComposition(t *testing.T) {
 	account, err := client.Account(context.Background())
 	if err != nil || account.UID != 1234 || account.GID != 2345 || len(account.Groups) != 1 || account.Groups[0] != 4567 {
 		t.Fatalf("invoking SSH account = %+v, %v", account, err)
+	}
+}
+
+func TestTheEscalatedCapacityProbeKeepsSudoRefusalApartFromAnAbsentPath(t *testing.T) {
+	t.Parallel()
+	probe := []string{"/usr/bin/stat", "--file-system", "--format=%a %S %i", "--", "/var/lib/$(touch x);`id`"}
+	want := append([]string{"/usr/bin/sudo", "-H", "-n", "-k", "-u", "root", "--", "/bin/sh", "-c",
+		`"$@"; status=$?; if [ "$status" -eq 1 ]; then exit 41; fi; exit "$status"`, "bootwright-capacity"}, probe...)
+	if got := escalatedCapacityProbe(probe); !slices.Equal(got, want) {
+		t.Fatalf("escalated probe = %q", got)
+	}
+	for _, test := range []struct {
+		sudo         bool
+		exit, status int
+		refused      bool
+	}{
+		{false, 0, 0, false}, {false, 1, 1, false}, {false, 41, 41, false}, {false, 2, 2, false},
+		{true, 0, 0, false}, {true, 1, 0, true}, {true, 41, 1, false}, {true, 2, 2, false},
+	} {
+		status, err := capacityProbeStatus(test.sudo, test.exit)
+		if status != test.status || (err != nil) != test.refused {
+			t.Fatalf("sudo %t exit %d = %d, %v", test.sudo, test.exit, status, err)
+		}
 	}
 }

@@ -14,6 +14,7 @@ import (
 type remoteCall struct {
 	context, machine string
 	argv             []string
+	bound            int
 }
 
 type fakeRemote struct {
@@ -23,7 +24,7 @@ type fakeRemote struct {
 }
 
 func (f *fakeRemote) Run(_ context.Context, contextName, machine string, argv []string, bound int) ([]byte, int, error) {
-	f.calls = append(f.calls, remoteCall{contextName, machine, slices.Clone(argv)})
+	f.calls = append(f.calls, remoteCall{contextName, machine, slices.Clone(argv), bound})
 	key := strings.Join(argv, " ")
 	if f.failing[key] {
 		return nil, 0, errors.New("SECRET-OUTPUT /root/.ssh/id_rsa")
@@ -116,6 +117,21 @@ func TestRemoteObservationRunsFixedCommandsAndParsesEveryFact(t *testing.T) {
 	}
 	if got := remote.calls[2].argv; len(got) != 5 || got[1] != "--file-system" || got[2] != "--format=%a %S %i" || got[3] != "--" || got[4] != "/var/lib/libvirt/images" {
 		t.Fatalf("%q", got)
+	}
+}
+
+func TestEachRemoteCommandCarriesItsNamedOutputBound(t *testing.T) {
+	remote := completeRemote()
+	if _, err := (Observer{Remote: remote}).Observe(context.Background(), remoteTarget()); err != nil {
+		t.Fatal(err)
+	}
+	want := []int{remoteFactBound, remoteFactBound, remoteFactBound, remoteFactBound, remoteFactBound, remoteListingBound, remoteDomainReadBound}
+	got := make([]int, 0, len(remote.calls))
+	for _, call := range remote.calls {
+		got = append(got, call.bound)
+	}
+	if !slices.Equal(got, want) || remoteListingBound != remoteDomainDirectories*remoteEntryBound*(remotePathBound+1) {
+		t.Fatalf("bounds = %v, want %v", got, want)
 	}
 }
 

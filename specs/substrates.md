@@ -944,8 +944,11 @@ as `qcow2` images beneath
 `hardware.nics` entry, in order, on that NIC's segment, with a locally
 administered MAC derived from the context, Machine and NIC names, an
 emulated TPM 2.0 when the profile declares `tpm`, a serial console, a
-standard VGA adapter behind a VNC display bound to the loopback address, and
-ownership metadata naming the context and Machine. Every device is one the
+standard VGA adapter behind a VNC display on a UNIX socket with no TCP
+listener ([guest display](security.md#listener-exposure)), and
+ownership metadata naming the context and Machine. A running guest keeps a
+display listener it started with until its QEMU process restarts, by a stop and
+start or a power cycle through its BMC; nothing refuses it. Every device is one the
 QEMU core builds in, so the host's emulator is `qemu-kvm-core` with no display,
 audio or block module package ([D247](milestones/backlog.md#d247)). Provider media and machine
 disks occupy separate `providers` and `machines` subtrees, including when a
@@ -1204,8 +1207,9 @@ media, and the reserve.
 
 A provider host on the SSH arm is observed over its placement connection,
 pinned to its `knownHostsRef` key and authenticated by its `privateKeyRef`.
-The observation runs fixed, read-only commands with absolute paths and no
-shell:
+The observation runs fixed, read-only commands with absolute paths, and no
+authored or observed value forms shell text
+([process boundary](security.md#process-boundary)):
 - `nproc` for its CPUs;
 - `/proc/meminfo` for `MemAvailable`;
 - `stat --file-system` of the pool path, or its nearest existing ancestor, for
@@ -1213,11 +1217,30 @@ shell:
 - the libvirt domain definitions under `/etc/libvirt/qemu` and
   `/run/libvirt/qemu`, which it lists and then reads in one bounded read.
 
+Each command travels as one SSH command string that the remote account's
+login shell parses, every word quoted by `sshlocal.quoteWord`. When the
+lifecycle login's `privilege` is `sudo`, each command runs as root through
+the fixed absolute `/usr/bin/sudo -H -n -k -u root -- /bin/sh -c <wrapper>
+bootwright-capacity <command>`. The wrapper is the literal
+`"$@"; status=$?; if [ "$status" -eq 1 ]; then exit 41; fi; exit "$status"`
+(`capacityProbeWrapper`), and the command's arguments, a listed domain path
+included, reach it only as positional parameters. sudo exits 1 when it
+refuses, so the wrapper turns the command's own exit 1 into 41
+(`capacityProbeExit1`), which Bootwright maps back to the command's exit 1;
+none of the fixed commands exits 41 itself. An exit 1 is then a sudo refusal
+and makes that fact unknown; it is never read as an absent path.
+`escalatedCapacityProbe` and
+`capacityProbeStatus` in `cmd/bootwright/wiring_preflight.go` hold this, and
+`TestTheEscalatedCapacityProbeKeepsSudoRefusalApartFromAnAbsentPath` tests
+it.
+
 It parses those bytes exactly as the local observation parses the files it
 reads. A foreign domain reserves its vCPUs, and a remote filesystem never
-compares equal to a local one. Each command has its own output bound: 64 KiB
-for a single fact, enough for both directories' bounded listings, and 16 MiB
-for the domain definitions. The disk walk climbs only past a path `stat`
+compares equal to a local one. Each command has its own output bound, a
+constant in `internal/storage/preflightlocal/remote.go`: `remoteFactBound` for
+`nproc`, `/proc/meminfo` and each `stat`, `remoteListingBound` for the listing
+of both directories, and `remoteDomainReadBound` for the domain definitions;
+`TestEachRemoteCommandCarriesItsNamedOutputBound` holds them. The disk walk climbs only past a path `stat`
 reports absent. An untrusted or changed host key, a command that does not
 complete, any other non-zero exit or output past its bound makes that fact
 unknown. The observation of such a host has 60 seconds, since each command

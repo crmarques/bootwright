@@ -51,7 +51,9 @@
     <console type="pty">
       <target type="serial" port="0"/>
     </console>
-    <graphics type="vnc" port="-1" autoport="yes" listen="127.0.0.1"/>
+    <graphics type="vnc">
+      <listen type="socket"/>
+    </graphics>
     <video>
       <model type="vga"/>
     </video>

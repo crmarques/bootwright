@@ -280,6 +280,13 @@ read only through its bounded protocol. That function is the collection's
 or a `shell=` argument anywhere else under `plugins/`, and lists every file
 that names the SSH client and every file that hands a session a remote command.
 
+The escalated SSH-arm capacity probe is the second named exception. The remote
+login shell parses its SSH command string, each word quoted by
+`sshlocal.quoteWord`; that string runs the fixed absolute
+`/usr/bin/sudo -H -n -k -u root` and `/bin/sh -c` with the one literal wrapper
+[capacity admission](substrates.md#capacity-admission) states, and the probe's
+arguments are only that wrapper's positional parameters.
+
 A runner hands Ansible every value as data, never as a template. ansible-core
 loads an `--extra-vars @file` document as trusted template text, so each runner
 writes every string of that document, the frozen request, its digest, material
@@ -678,6 +685,7 @@ procedure and ports by source.
 | Managed ArtifactServer | BMCs fetching virtual media, installers fetching packages or private material, and controller probes | Authored HTTP or HTTPS; HTTPS verifies the declared serving certificate; private URL is a capability | Root container master with application-user workers and host networking | Bind address and operator firewall; private subtree needs its token |
 | Managed Registry | Machines and clusters pulling images, the controller and whoever fills it | HTTPS alone with the declared serving certificate; basic authentication against a bcrypt password file derived from the declared `usernamePassword` Secret, for every push and pull | Root container with host networking | Bind address and operator firewall; every request needs the credential |
 | Emulated BMC | Controller/provider-host clients | Verified HTTPS with basic authentication and the provider's bound serving certificate | Root container with host networking, SELinux label disabled and access to the libvirt socket | Lab examples bind loopback; other binds require a trusted network |
+| Libvirt guest display | Root, the emulator's account (`qemu`) and members of the `qemu` group on the provider host, and any client allowed to manage `qemu:///system`, which is root-equivalent | VNC on a UNIX socket in libvirt's per-domain private directory; no TCP listener and no VNC password | The guest's emulator process; every guest's QEMU runs as `qemu`, so isolation between guests rests on their sVirt labels | No other local account and no network client can open the socket |
 
 Private URL capabilities travel over verified TLS by default. The
 explicit per-Machine [unverified media policy](api/machines.md#bmc)

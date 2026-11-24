@@ -253,9 +253,6 @@ func ValidateAuthored(o api.Object, c api.Catalog) []api.Issue {
 	if s.Has("access", "ssh", "auth", "passwordRef") && !s.Has("access", "ssh", "user") {
 		issues = api.AppendIssues(issues, invariant("$.spec.access.ssh.user", "password authentication requires an authored user", "set spec.access.ssh.user, or authenticate with spec.access.ssh.auth.privateKeyRef instead of a password"))
 	}
-	if s.Get("access", "rootLogin").Text() == "revoke" && !s.Has("access", "ssh") {
-		issues = api.AppendIssues(issues, invariant("$.spec.access.rootLogin", "root-login revocation requires authored SSH access", "author spec.access.ssh for the login that replaces root, or remove spec.access.rootLogin"))
-	}
 	issues = api.AppendIssues(issues, substrate.ValidateBMCDefaults(substrate.MachineBMC(o), "$."+substrate.BMCPath, true)...)
 	issues = api.AppendIssues(issues, validateNative(s.Get("network", "inline", "nmstate"), "$.spec.network.inline.nmstate", false)...)
 	issues = api.AppendIssues(issues, validateNative(s.Get("network", "overrides"), "$.spec.network.overrides", true)...)
@@ -522,9 +519,6 @@ func validateAccess(o api.Object, c api.Catalog) []api.Issue {
 	s := o.Spec()
 	if s.Has("access", "local") && !api.MachineProvided(o) {
 		issues = api.AppendIssues(issues, invariant("$.spec.access.local", "local access requires an OS-ready Machine", "remove spec.access.local, or declare it on an OS-ready Machine"))
-	}
-	if s.Get("access", "rootLogin").Text() == "revoke" && (installed(o) || !successorLogin(o, c)) {
-		issues = api.AppendIssues(issues, invariant("$.spec.access.rootLogin", "revoking root login requires a managed storage-cluster non-root successor login", "remove spec.access.rootLogin, or make this Machine a node of "+successorLoginHolders()))
 	}
 	return issues
 }
@@ -993,24 +987,6 @@ func validateServices(o api.Object, c api.Catalog) []api.Issue {
 	return issues
 }
 
-func successorLoginHolders() string {
-	var holders []string
-	for _, kind := range api.ClusterKinds() {
-		if field, ok := api.ClusterSuccessorLoginField(kind); ok {
-			holders = append(holders, "a managed "+string(kind)+" whose "+field+" names a non-root user and a keyRef")
-		}
-	}
-	return strings.Join(holders, " or ")
-}
-
-func successorLogin(o api.Object, c api.Catalog) bool {
-	for _, cluster := range c.Clusters() {
-		if api.ClusterSuccessorLogin(cluster) && slices.Contains(api.ClusterNodeMachines(cluster), o.Name()) {
-			return true
-		}
-	}
-	return false
-}
 func installed(o api.Object) bool { return api.MachineInstalled(o) }
 func inherit(local, defaults api.Value) api.Value {
 	for _, f := range defaults.Fields() {

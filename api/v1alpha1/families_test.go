@@ -32,7 +32,7 @@ func TestEveryClusterKindLaysOutItsFactsInItsSchema(t *testing.T) {
 			t.Errorf("%s has no cluster layout naming its nodes", kind)
 			continue
 		}
-		paths := append([][]string{layout.nodes, layout.successorLogin, layout.controllerFIPS, layout.agentInstall}, layout.nodeLogins...)
+		paths := append([][]string{layout.nodes, layout.controllerFIPS, layout.agentInstall}, layout.nodeLogins...)
 		for _, path := range paths {
 			if path != nil && !layoutPathResolves(Schema(kind), path) {
 				t.Errorf("%s layout names %v, which its schema does not declare", kind, path)
@@ -76,9 +76,6 @@ func TestClusterAccessorsReadEachKindsOwnLayout(t *testing.T) {
 	if _, ok := ClusterNodeLoginField(ceph, ""); ok {
 		t.Error("an empty key matched an absent field")
 	}
-	if ClusterSuccessorLogin(openshift) || !ClusterSuccessorLogin(ceph) {
-		t.Error("only the managed Ceph cluster's non-root keyed login succeeds root")
-	}
 	if !ClusterRequiresControllerFIPS(openshift) || ClusterRequiresControllerFIPS(ceph) {
 		t.Error("only the OpenShift FIPS choice demands a FIPS controller")
 	}
@@ -101,14 +98,5 @@ func TestKindPhrasesFollowTheRegistry(t *testing.T) {
 	}
 	if Article(OpenShiftCluster) != "an" || Article(CephCluster) != "a" || Article("") != "a" {
 		t.Fatal("articles do not follow the kind's first letter")
-	}
-}
-
-func TestOnlyAKindWithASuccessorLoginNamesItsField(t *testing.T) {
-	if field, ok := ClusterSuccessorLoginField(CephCluster); !ok || field != "spec.cephadm.clusterSSH" {
-		t.Fatalf("CephCluster successor login field = %q, %t", field, ok)
-	}
-	if _, ok := ClusterSuccessorLoginField(OpenShiftCluster); ok {
-		t.Fatal("OpenShiftCluster names a successor login field")
 	}
 }
