@@ -94,3 +94,14 @@ func TestARunWithAnUnroutedReplicationVLANPublishesItUnderNoName(t *testing.T) {
 		}
 	}
 }
+
+// A record's addresses sort as text and the dnsmasq template gives the first
+// one the reverse record, so ten sorts before nine.
+func TestAMachineRecordSortsItsAddressesAsTextSoTheReverseRecordGoesToTheTextuallyFirst(t *testing.T) {
+	public := clientNetwork("ceph-public", field("ipv4", api.MapValue(text("cidr", "10.0.0.0/24"), text("gateway", "10.0.0.254"))))
+	objects := []api.Object{cephHostConfig(), public,
+		cephHost("ceph-01", "ip", assignment("ip", "10.0.0.9", "nic0"), assignment("second", "10.0.0.10", "nic1"))}
+	if got, want := recordAddresses(t, MachineRecords(catalogOf(objects...)), "ceph-01.lab.example.test"), []string{"10.0.0.10", "10.0.0.9"}; !slices.Equal(got, want) {
+		t.Fatalf("addresses = %v, want %v", got, want)
+	}
+}

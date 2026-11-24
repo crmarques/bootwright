@@ -169,7 +169,7 @@ an authored instance is named after its add-on, in place of `<package>` below:
 | Identity | `addon-<package>-<cluster>`, [hashing an identity over 63 bytes](state-reconciliation.md#durable-identities-and-private-paths) |
 | Kind and object | `ClusterAddonBinding`, `<cluster>.<package>` |
 | Implementation | `addon-instance-v1`, for every package and authored add-on |
-| Requirements | the cluster's blocks; every instance on the same cluster that provides a capability the package requires; every instance that a binding named by its binding's [`spec.afterRefs`](api/addons.md#clusteraddonbinding) selects; the installation block's `kubeconfig` as a [produced input](state-reconciliation.md#produced-material-custody); the objects the package's configuration references that another block realizes, with their produced material when a Secret placement takes it; and, for a [last package](#built-in-packages-and-selection), every other block of the `add-ons` stage that requires the same cluster's installation block: every other instance on that cluster and, when the cluster has one, its [cluster network block](openshift-clusters.md#post-installation-network-configuration) |
+| Requirements | the cluster's blocks; every instance on the same cluster that provides a capability the package requires; every instance that a binding named by its binding's [`spec.afterRefs`](api/addons.md#clusteraddonbinding) selects; the installation block's `kubeconfig` as a [produced input](state-reconciliation.md#produced-material-custody); the objects the package's configuration references that another block realizes, with their produced material when a Secret placement takes it; and, for a [last package](#built-in-packages-and-selection), the blocks that section names |
 | Apply description and impact | `install add-on <package> on <cluster>`; `install-addon <package> <cluster>` |
 | Removal description and impact | `retire add-on <package> with <cluster>`, saying its objects leave with the cluster's disks or stay on a cluster that keeps running; no impact |
 
@@ -207,8 +207,9 @@ proves.
 An attempt runs under one absolute deadline, its start plus the budget, which
 mutation consumes; the run deadline is the budget plus ten minutes, and
 admission bounds a budget at `5h50m`. An instance is never removed from a
-completed apply; one added to a cluster the apply installed is installed by an
-[additive apply](state-reconciliation.md#additive-apply), and repeating `apply`
+completed apply; an input that only adds what an
+[additive apply](state-reconciliation.md#additive-apply) admits is installed by
+one, and repeating `apply`
 over a completed apply under its unchanged input contacts no cluster. An
 addition that would make an existing instance wait, as a last package installed
 on that cluster does, refuses
@@ -228,8 +229,10 @@ name an object the program never creates, such as a CustomResourceDefinition
 or an operator's own resource; while waiting, such an object's absence is not
 yet a result. An object entry holds its `apiVersion`, `kind`, namespace and
 name, whether its kind is namespaced, and its canonical body. A program holds
-at most 64 owned objects, 32 checks and 96 steps, and its request fits the
-engine's request bound; planning refuses a program past a bound, naming it.
+at most 64 owned objects, 32 checks and 96 steps, and its request fits
+the [request bound](contexts.md#storage-locking-and-publication)
+(`reconciliation.MaxRequestBytes`); planning refuses a program past a bound,
+naming it.
 Bodies are canonical JSON and never hold a `Secret` object, Secret bytes,
 `status`, managed fields, the owner annotation or a template delimiter.
 
@@ -268,9 +271,9 @@ the basis of its ownership: `created`, `uid-matched` or `mark-recovered`. A
 present object is this block's own when its `uid` equals a receipt of the
 block, or, when the block holds no receipt for it, its owner annotation equals
 that object's mark and its server-set `metadata.creationTimestamp` is not
-earlier than the operation's registration, less the clock-skew allowance the
-program version fixes; any other present object is foreign and refuses,
-naming its kind, namespace and name. Only a recorded `uid` proves ownership
+earlier than the operation's registration, less the clock-skew allowance,
+`clusterobjects.ClockSkew` (5 seconds); any other present object is foreign and
+refuses, naming its kind, namespace and name. Only a recorded `uid` proves ownership
 outright; the mark is a recovery rule for an object whose receipt was lost with
 an interrupted or failed attempt, not a proof, because every value it hashes is
 readable from the cluster. A `mark-recovered` receipt records the `uid` the
@@ -324,10 +327,14 @@ removal entry point: an instance is [retired](#retirement).
 
 When execution refuses after partial progress, its receipts and observations
 are published on the private result channel before the attempt fails. The
-retained task output reports the bounded refusal naming the object and the
-failed proof; censoring request and evidence values must not hide that reason.
-If publication itself fails without an execution refusal, the task reports a
-fixed publication diagnostic. A failure remains a failure in either case.
+retained task output reports the bounded refusal (each native string is
+[bounded to 256 bytes](#readiness)), which names the object by kind, namespace
+and name and the failed proof and holds no request body, response or material;
+censoring request and evidence values must not hide that reason.
+If publication itself fails without an execution refusal, the task reports the
+fixed message `cluster object result could not be published`
+(`test_failed_publication_keeps_receipts_before_reporting_the_reason`). A
+failure remains a failure in either case.
 
 ## OLM installation
 
@@ -412,8 +419,12 @@ Bootwright did not create.
 
 All waits and checks of an attempt share its one absolute deadline. Checks
 are read every ten seconds; a failed read while waiting is not yet a result,
-and in an observation it is unknown. A condition unchanged long after its
-object's other conditions is reported as stale and never decides. At the
+and in an observation it is unknown. A condition whose
+`lastTransitionTime` is older than the newest `lastTransitionTime` among its
+object's conditions is recorded as `stale` in the evidence; staleness never
+changes whether the check holds
+(`test_a_condition_older_than_the_newest_of_its_object_is_stale_and_still_decides`,
+`TestObservationTable`). At the
 deadline the attempt fails, naming each unmet check and its last observation,
 and the next invocation retries. The authored `ClusterAddon` readiness API
 keeps its three arms; `statusPhase` and failure conditions are program checks.
@@ -441,9 +452,9 @@ non-secret keys, which are part of the canonical body, and never a lent value;
 an apply continuation compares the lent values in memory and the non-secret
 values, and reports only `unchanged` or the differing key, and an observation
 compares type, key names and non-secret values, never a lent value. A
-placement's namespace is one the program owns or one the package's registry
-entry names as its operator's namespace (for `gitops`, `openshift-gitops`),
-and its type is `Opaque` or `kubernetes.io/tls`; planning refuses any other
+placement's namespace is one the program owns or one of the
+`placementNamespaces` its package declares (for `gitops`, the default Argo CD
+instance's namespace `openshift-gitops`), and its type is `Opaque` or `kubernetes.io/tls`; planning refuses any other
 namespace or type naming the placement.
 [Material placed in a cluster](secrets.md#material-placed-in-a-cluster)
 states what remains after retirement. A global pull-secret merge is refused.
@@ -522,9 +533,8 @@ plan that lists the package's CSV beside a dependent CSV, once the pinned CSV
 has been installed. Before the pinned CSV is ever installed no chain exists:
 the attempt's rules still refuse, an observation reads unknown, and
 [B1130](milestones/m4.md#b1130)'s case stands.
-A chain with a collected plan, two plans for one CSV, a link that fails any
-test, more than sixteen CSVs or an installed CSV not `Succeeded` therefore
-stays unknown, and an upgrade the owner approves reads complete only while OLM
+A chain that is not proved link by link, or whose installed CSV is not
+`Succeeded`, therefore stays unknown, and an upgrade the owner approves reads complete only while OLM
 retains every InstallPlan of its chain; the observation stays read-only and
 the state unknown, never complete ([D153](milestones/backlog.md#d153)). Only a
 chain OLM's retention broke, with the installed CSV `Succeeded`, has a reason
@@ -549,7 +559,7 @@ plan, a plan that lists the CSV but fails a test, a missing plan OLM's
 collection would have kept, the installed CSV's own plan missing or not
 `Succeeded`, a `replaces` or generation mismatch, a foreign or unreadable CSV or a
 channel change, and a malformed cause, stays an unknown reading with the
-remedy above. A retention gap beside another unknown cause names that cause
+remedy of the [observation rule](#observation-and-continuation). A retention gap beside another unknown cause names that cause
 first, with its remedy. A channel change is not an upgrade of the pinned
 installation. The evidence records the installed CSV, its version and the
 chain, each CSV from the expected one with the plan that installed it, or the

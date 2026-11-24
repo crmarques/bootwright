@@ -186,6 +186,16 @@ def test_lagging_condition_and_failure():
     assert model.condition(check, live)[3]
 
 
+def test_a_condition_older_than_the_newest_of_its_object_is_stale_and_still_decides():
+    check = {"type": "Available", "status": "True"}
+    older = {"type": "Available", "status": "True", "lastTransitionTime": "2026-01-01T00:00:00Z"}
+    newer = {"type": "Progressing", "status": "False", "lastTransitionTime": "2026-01-01T00:00:01Z"}
+    ready, stale, _last, _failed = model.condition(check, {"status": {"conditions": [older, newer]}})
+    assert ready and stale
+    ready, stale, _last, _failed = model.condition(check, {"status": {"conditions": [older, dict(newer, lastTransitionTime=older["lastTransitionTime"])]}})
+    assert ready and not stale
+
+
 @pytest.mark.parametrize("stderr,answer", [
     ('error: the server doesn\'t have a resource type "NMState"\n', {"answered": True, "object": None}),
     ("error: the server doesn't have a resource type \"NMState\"\nerror: another\n", {"answered": False}),

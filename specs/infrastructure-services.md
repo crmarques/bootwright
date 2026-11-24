@@ -119,8 +119,8 @@ publishing into a server keeps the SSH arm and so cannot reach such a Machine.
 
 Two contexts targeting one SSH host are coordinated by the
 [host reservations](#host-reservations) below, which an SSH host's blocks
-publish qualified by that host's declared address and port, and again by the
-SSH host key its Machine pins.
+publish qualified by that host's declared address and port, and again, for a
+provided SSH host, by the SSH host key its Machine pins.
 
 ## Host reservations
 
@@ -149,7 +149,8 @@ A reservation key is one of:
 | `bridge-use:<name>` | A shared claim that a provider's libvirt segment uses one host bridge. It conflicts with nothing at acquisition, and a removal that would release the exclusive `bridge:<name>` refuses `controller.conflict` while another context holds it, naming that context: when the destroy registers, and again under the root lock immediately before the removal's effect on the provider holding the bridge, so a claim made after registration refuses that effect with nothing performed. The re-proof that admits the effect marks the holder's claim releasing in the same root-locked publication, and a claim of `bridge-use:<name>` by another context then refuses `controller.conflict` until the removal completes or the holder is deleted, naming the removing context, the bridge and its holder, with the remedy to complete that removal with `bootwright destroy --context <holder>`; an apply of the holder refuses while its destroy is incomplete, so only its completion or deletion clears the mark. The mark is durable, so an interrupted effect keeps refusing (`TestAClaimOnAKeyARemovalIsReleasingRefusesUntilTheRemovalCompletes`). One an abandoned context held is released with every other key of that context when it is deleted (D38), so it strands a removal only while the using context exists. |
 | `libvirt-network:<name>` | One libvirt network definition. |
 | `libvirt-pool:<name>` | One libvirt storage pool definition. |
-| `prefix:<masked prefix>` | One managed libvirt network's routed prefix, IPv4 or IPv6, written masked (`prefix:198.51.100.0/24`); it conflicts with every held prefix it overlaps, identical or nested, because the host routes each to its own bridge. |
+| `prefix:<masked prefix>` | One managed Network's or VLAN leg's routed prefix, IPv4 or IPv6, written masked (`prefix:198.51.100.0/24`); it conflicts with every held prefix it overlaps, identical or nested, because the host routes each to its own bridge. |
+| `nm-connection:<name>` | One NetworkManager connection name, exclusive, because the name is host-global. |
 | `libvirt-domain:<name>` | One libvirt domain definition. |
 | `kubevirt-vm:<server>/<namespace>/<name>` | One KubeVirt VirtualMachine, by the host cluster's API server, namespace and name. |
 | `bmc:<host>:<port>/<system>` | One [physical machine](substrates.md#physical-machine-realization), named by its management-controller endpoint, normalized for the key alone as that page states (the port it names or else its scheme's default), and exact ComputerSystem, so that two contexts of one controller store never [drive one server by its BMC](substrates.md#physical-machine-realization) at once. The claim serializes use; it is never ownership of the machine and authorizes nothing about it. An [emulated BMC's](substrates.md#machine-realization) machine block holds the same key shared: it conflicts with no other shared holder, its registration, which carries this Machine's installation, refuses `controller.conflict` while another context holds the key exclusively, a physical Machine's registration refuses while another context holds it shared (`TestASharedAndAnExclusiveBMCKeyConflictInEitherOrder`), and so does its release, re-proved like `bridge-use:<name>` immediately before the removal's effect, which marks the shared claim releasing as it marks a bridge, so an exclusive claim of the key refuses until the removal completes. A [machine power command](cli.md#machine-power-operations) refuses while another context holds the key it drives, under the same relation. |
@@ -250,8 +251,9 @@ host's, is published with every key but its `bmc:`, `bmc-system:` and
 address and port written as the host is named above with an IPv6 address
 unbracketed, and holds and releases those
 keys by the controller's conflict relation and release paths, compared only
-with keys of the same qualifier. Every such key is also published qualified
-by the host key that Machine's `access.ssh.knownHostsRef` pins (D188),
+with keys of the same qualifier. Every such key of a claim placed through the
+SSH arm is also published qualified by the host key that Machine's
+`access.ssh.knownHostsRef` pins (D188),
 `sshkey/SHA256:<digest>/<key>`, the SHA-256 digest of the key blob in
 unpadded URL-safe base64 (`ssh-keygen -l` shows it with `+` for `-` and `/`
 for `_`). Those three key classes name an endpoint the controller dials or a
@@ -267,29 +269,33 @@ the host-key form names the host by that fingerprint
 names one host, so two hosts sharing one key, as a cloned image without
 regenerated keys gives, are one host and refuse each other's conflicting
 claims, and that refusal's remedy adds giving each host its own key. A key
-conflicting under both forms is one conflict and one diagnostic. The pinned key is
+conflicting under both forms is one conflict and one diagnostic. A claim
+placed through the installed arm binds no `knownHostsRef` and publishes the
+`ssh/<address>:<port>/` form alone
+(`TestAnInstalledHostsClaimsAreQualifiedByItsAddressAlone`). The pinned key is
 read from the bound known-hosts material when the apply registers, and every
-SSH placement declares one ([placement](#placement-arms-and-credentials)):
+SSH-arm placement declares one ([placement](#placement-arms-and-credentials)):
 material that binds no readable key for the placement's address and port
-refuses `trust.identity` before anything is reserved or registered, naming
-the Secret and the Machine, so a claim is never published under its address
-alone. This enforces the one-entry rule of
+refuses `plan.host-key-unreadable` before anything is reserved or registered, naming
+the Secret and the Machine, so a claim placed through the SSH arm is never
+published under its address alone. This enforces the one-entry rule of
 [addresses and access](api/machines.md#addresses-and-access) for a placement
 Machine whose blocks publish claims at the apply's registration, as the
 adapter runner enforces it for every placement before it connects: a Secret
 holding several entries, a host list, a hashed host or a host token other
 than the placement's address and port refuses there
 (`TestAnSSHClaimWhosePinnedHostKeyCannotBeReadRefusesBeforeItIsPublished`).
-A qualified key past the record's 256-byte key bound refuses `api.value` while
+A qualified key past the record's 256-byte key bound refuses `plan.reservation-key-too-long` while
 the context plans: under the address form naming the Machine whose SSH
 address makes it long, under the host-key form, whose qualifier is 58 bytes,
 naming the claim and its Machine
-(`TestAClaimTooLongToKeyByItsHostKeyRefuses`). A placement that reaches the
-controller at port `22` on an address its controller Machine declares
-publishes the controller's own unqualified keys. A placement whose blocks
-publish claims and that reaches the controller any other way refuses at the
-apply's registration: the controller's
-own SSH host keys are read, read-only and through held root-owned directories,
+(`TestAClaimTooLongToKeyByItsHostKeyRefuses`). The host-key form's bound holds
+for every claim placed over SSH, an installed one included, although an
+installed claim publishes the address form alone
+(`TestAnInstalledClaimTooLongToKeyByItsHostKeyRefuses`). A placement that is the
+controller, as defined above, publishes the controller's own unqualified keys.
+A placement whose blocks publish claims and that reaches the controller any
+other way refuses at the apply's registration: the controller's own SSH host keys are read, read-only and through held root-owned directories,
 from its sshd public key files `/etc/ssh/ssh_host_ed25519_key.pub`,
 `/etc/ssh/ssh_host_ecdsa_key.pub` and `/etc/ssh/ssh_host_rsa_key.pub`, and a
 placement whose pinned host key is one of them, reached at another address or
@@ -678,7 +684,10 @@ its destroy is reset by it, as the
 **Owned host state.** Each service owns one content root,
 `/var/lib/bootwright-hosted/<context>/services/<kind>/<name>`, one daemon
 configuration inside it and one unit definition. The content root and its
-directories are `0755`; the [hosted directories](contexts.md#hosted-root)
+directories are `0755`, except the private directories its implementation
+selects, which are `0700` (the [Registry's](#managed-registry) `tls`, `auth` and
+`data`; `test_the_content_root_is_0755_and_only_the_registrys_private_directories_are_0700`);
+the [hosted directories](contexts.md#hosted-root)
 above it are created and removed as the artifact server's are, and the hosted
 root itself is retained. Each service's apply and destroy refuse a content
 root not in normal form before any effect, as the artifact server's do. Nothing else on the host is created, modified or
@@ -695,7 +704,7 @@ graph, never from authored daemon syntax:
 | Kind | Derived from the graph | Authored |
 | --- | --- | --- |
 | `Proxy` | The client set below, as the only addresses it serves. Before it admits a client it refuses every request whose destination is a loopback or unspecified address (`127.0.0.0/8`, `0.0.0.0/32`, `::1/128`, `::/128`) or a link-local one (`169.254.0.0/16`, `fe80::/10`), and every request for its cache manager (`test_the_proxy_refuses_local_link_local_and_manager_destinations_before_it_admits_a_client`). Without `allowedDestinations` it admits a client to every other destination and port, `CONNECT` included, and keeps no access log. With it, the destination rule below admits a client only to those destinations and the mirror hosts, and refuses and logs every other request. Caching and authentication are disabled. | `bindAddress`, `port`, `allowedDestinations[]` |
-| `DNSServer` | One name per retained Machine, from its effective `fqdn` contact, answering the addresses of that Machine its clients can reach, by the rule below, each as its own record, with the reverse record on the first address only, and the records each selected container cluster answers at. | `bindAddress`, `port`, `forwarders[]`, `forwardZones[]` |
+| `DNSServer` | One name per retained Machine, from its effective `fqdn` contact, answering the addresses of that Machine its clients can reach, by the rule below, each as its own record, with the reverse record on the address that sorts first as text, so `10.0.0.10` before `10.0.0.9`, only (`TestAMachineRecordSortsItsAddressesAsTextSoTheReverseRecordGoesToTheTextuallyFirst`), and the records each selected container cluster answers at. | `bindAddress`, `port`, `forwarders[]`, `forwardZones[]` |
 | `NTPServer` | The client set below, as the only addresses it answers. | `bindAddress`, `port`, `upstreamSources[]` |
 
 **DNS suffix forwarding.** The dnsmasq implementation freezes
@@ -722,9 +731,12 @@ never planned open to the world.
 **The proxy's destination rule.** A managed Proxy that declares
 [`allowedDestinations`](api/infrastructure-services.md#proxy-dns-ntp-and-registry-deployment)
 freezes them in its request, sorted and deduplicated, with the host of each
-mirror its Environment declares at the port it serves: `spec.mirror.artifacts.url`'s
-host at 443, and the url host of the Registry `spec.mirror.registry.registryRef`
-selects at its port, else 443. A Machine routed through the proxy therefore
+mirror location its Environment declares, at the port that location names, else
+443: the [artifact mirror's](api/environment.md#artifact-mirror) URL and the
+[image mirror's](api/environment.md#image-mirror) location, each as the owning
+section derives it for an authored or a managed mirror
+(`TestAProxyAdmitsAManagedArtifactMirrorAtItsEndpoint`,
+`TestAProxyAdmitsAManagedImageMirrorAtItsEndpoint`). A Machine routed through the proxy therefore
 reaches the mirror the same Environment routes its artifacts to, and an
 authored list need not repeat it. The derivation names no other host:
 the token and content hosts a registry redirects a pull to are the
@@ -772,8 +784,9 @@ unprivileged effective user, which a pipe the container runtime created as
 root may refuse. The log lives as long as the container, which each restart
 replaces, and is not rotated
 (`test_a_proxy_that_freezes_destinations_logs_to_a_capped_tmpfs_and_drops_lines_when_full`).
-Without them the access log stays off and the rendered configuration is the one an earlier
-request version wrote
+Without `allowedDestinations` the access log is off (`access_log none`) and the
+only rules are the local refusals, one admission of every derived client and a
+refusal of everything else
 (`test_a_proxy_that_freezes_no_destination_admits_every_remote_one_and_logs_nothing`).
 The apply refuses a frozen destination holding any character outside the
 grammar's alphabet, or not exactly one well-formed address or domain with an
@@ -806,8 +819,7 @@ answers for every name beneath it because that is what an ingress wildcard
 means. Each declared node answers at the same installation address its own
 installer configures. A cluster whose endpoint resolved no address contributes
 no record for that endpoint rather than a record pointing nowhere, and
-`additionalIngressHosts` remains frozen in the request without producing one,
-because nothing yet says which cluster's ingress an authored name belongs to. The names follow
+`additionalIngressHosts` is frozen in the request and produces no record. The names follow
 [the container-cluster zone](api/environment.md#domains), so the resolver a
 Machine uses and the installer that polls the cluster agree by construction.
 
@@ -1020,15 +1032,26 @@ back: one other than the pin fails the attempt with `mirror.digest-mismatch` on
 the Registry, an origin the host cannot copy from fails it with
 `mirror.origin-unreachable`, and a Registry it cannot read fails it with
 `mirror.unreadable`. The Registry's
-credential and trust anchor are lent to that one task as material, written by
-its module into a private directory beside the copy as an auth file and a
-certificate directory and removed after it whatever its result, and reach the
-Registry alone, never the origin; no record or evidence holds them. The
+credential and trust anchor are lent to that one task as material, and reach
+the Registry alone, never the origin; no record or evidence holds them. The
+custody is the one **Release custody** below states: a `0700` directory beneath
+`/run` that is emptied and removed whatever the copy did and swept after a
+killed copy. The
 evidence names, in request order, each image the Registry holds by repository
 and digest (`TestTheImageFillReadsItsEffectFromTheImagesTheMirrorHolds`). The
 fill's removal takes nothing back and contacts no host, because the Registry's
 own removal deletes what was pushed; pruning an image no longer listed is
 [B1323](milestones/backlog.md#b1323).
+
+Not yet met: the image fill's module writes the auth file, mode `0600`, and the
+certificate directory, mode `0700`, in a `0700` directory it creates beneath
+Ansible's temporary directory of that task on the host's disk, and its reader
+makes a second such directory, `bootwright-mirror-trust-`, for the anchor alone;
+the module removes both after the last copy whatever its result
+(`test_the_credential_and_anchor_are_lent_to_the_mirror_alone_and_removed_after`,
+`test_a_failed_copy_names_the_origin_unreachable_and_still_removes_the_credential`),
+but a copy killed before that removal leaves them, because no sweep reaches
+them; tracked as [B1765](milestones/m1.md#b1765).
 
 **Release fill.** One block of the same family per such cluster,
 implementation `mirrorfill.ReleaseImplementation`, named
@@ -1047,7 +1070,7 @@ archive headers and its total time, and must hash to its digest, as an index's
 component is not copied again, so a replay runs nothing and reports unchanged;
 a held copy that is damaged, with a layer missing or no readable image
 references, is copied over, while a mirror the host cannot read or one holding
-another release at the pin refuses. Otherwise it reads
+the release at another digest than a pinned one refuses. Otherwise it reads
 `openshift-client-linux-<version>.tar.gz` from the source the controller
 stage reads that client from and `sha256sum.txt` from its publisher's release
 directory on `mirror.openshift.com`, through the frozen egress route selected
@@ -1060,16 +1083,23 @@ Registry against its anchor beside the system roots through `SSL_CERT_DIR`;
 oc also reads the release's signatures from `storage.googleapis.com` and
 `mirror.openshift.com`, only warning when it cannot, and its report of what it
 copied, which holds no credential, enters the run's log.
+A release named by its tag alone has no pinned digest: the release the mirror
+holds at that tag is compared with no digest, so a tag its publisher moves is
+not detected, and the copy rests on verified HTTPS to `quay.io` and `oc`'s
+warn-only signature read.
 The release is read back as before: a release or component the Registry then
 lacks fails the attempt with `mirror.release-incomplete` on the cluster, and a
-release held at another digest than the pin and an archive its publisher does
-not list fail it with `mirror.digest-mismatch`; a client or copy the host
+release whose image pins a digest and that the Registry holds at another, and
+an archive its publisher does not list, fail it with `mirror.digest-mismatch`; a client or copy the host
 cannot read fails it with `mirror.origin-unreachable` and a Registry it cannot
 read with `mirror.unreadable`. The evidence names the release digest the
 Registry holds,
 each component by name and digest and how many it lacks
 (`TestTheReleaseFillReadsItsEffectFromWhatTheMirrorHolds`); its removal takes
 nothing back, as the image fill's does.
+
+Not yet met: the release fill verifies each release's signatures before it
+serves the release; tracked as [B1766](milestones/m1.md#b1766).
 
 **Release custody.** The copy runs in the run's private scratch on the mirror
 host, mode `0700`, with its own `HOME`, XDG directories and `DOCKER_CONFIG`,
@@ -1122,6 +1152,11 @@ build and installation wait for its release copy, which waits for the Registry
 and the controller stage
 (`TestAClusterUnderAManagedImageMirrorWaitsForItsReleaseCopy`).
 
+Not yet met: the reference-edge catalog names no row for an `ArtifactServer`
+that waits for the managed image mirror's `Registry` it pulls through, because
+its check refuses a row no example plans; tracked as
+[B1767](milestones/m1.md#b1767).
+
 **Trust.** Every consumer verifies the artifact mirror against the `caBundle`
 that issues the server's serving certificate, the
 `spec.source.generated.issuerRef` of its `tls.secretRef`, unless
@@ -1137,6 +1172,6 @@ Every managed-service effect crosses the
 through one fixed entrypoint per operation, under
 [the adapter result protocol](architecture.md#the-adapter-result-protocol) and
 the [process](security.md#process-boundary) and
-[Secret-material](security.md#sensitive-material) rules. Both placement arms
-use the same role, request and evidence contract, so local execution bypasses
-no authorization, privilege or validation.
+[Secret-material](security.md#sensitive-material) rules. All three placement arms (Controller, SSH, Installed)
+use the same role, request and evidence contract, so no arm bypasses
+authorization, privilege or validation.

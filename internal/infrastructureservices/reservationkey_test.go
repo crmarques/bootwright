@@ -1,8 +1,16 @@
 package infrastructureservices
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"net/netip"
+	"os"
+	"path/filepath"
+	"regexp"
 	"slices"
+	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -94,3 +102,46 @@ func TestOneControllerIsOneClaimHoweverItIsSpelled(t *testing.T) {
 		})
 	}
 }
+
+// The key table of specs/infrastructure-services.md#host-reservations names
+// every class a *Class constant of reservationkey.go declares, and each of its
+// rows names a declared class or one a capability builds without a constant.
+func TestHostReservationKeyTableNamesEveryKeyClass(t *testing.T) {
+	declared := slices.Clone(keyClassesWithoutAConstant)
+	file, err := parser.ParseFile(token.NewFileSet(), "reservationkey.go", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, declaration := range file.Decls {
+		group, ok := declaration.(*ast.GenDecl)
+		if !ok || group.Tok != token.CONST {
+			continue
+		}
+		for _, spec := range group.Specs {
+			value := spec.(*ast.ValueSpec)
+			for index, name := range value.Names {
+				if literal, ok := value.Values[index].(*ast.BasicLit); ok && strings.HasSuffix(name.Name, "Class") {
+					class, _ := strconv.Unquote(literal.Value)
+					declared = append(declared, class)
+				}
+			}
+		}
+	}
+	data, err := os.ReadFile(filepath.Join("..", "..", "specs", "infrastructure-services.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, table, _ := strings.Cut(string(data), "A reservation key is one of:")
+	table, _, _ = strings.Cut(table, "A `socket:` key writes")
+	var rows []string
+	for _, match := range regexp.MustCompile("(?m)^\\| `([a-z-]+):").FindAllStringSubmatch(table, -1) {
+		rows = append(rows, match[1])
+	}
+	slices.Sort(rows)
+	slices.Sort(declared)
+	if !slices.Equal(rows, declared) {
+		t.Fatalf("the key table names the classes %q, want %q (the *Class constants of reservationkey.go and %q)", rows, declared, keyClassesWithoutAConstant)
+	}
+}
+
+var keyClassesWithoutAConstant = []string{"bmc", "bmc-media", "kubevirt-vm"}

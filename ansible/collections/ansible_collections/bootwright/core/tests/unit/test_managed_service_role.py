@@ -115,6 +115,15 @@ def test_each_implementation_selects_only_its_own_templates():
     assert sorted(selected) == carried
 
 
+def test_the_content_root_is_0755_and_only_the_registrys_private_directories_are_0700():
+    tasks = {task["name"]: task["ansible.builtin.file"] for task in yaml.safe_load((ROLE / "tasks" / "apply.yml").read_text())
+             if "ansible.builtin.file" in task}
+    assert tasks["Create the owned service directories"]["mode"] == "0755"
+    assert tasks["Create the implementation's private directories"]["mode"] == "0700"
+    private = {name: row["private_directories"] for name, row in implementations().items() if "private_directories" in row}
+    assert private == {"registry-distribution-v1": ["tls", "auth", "data"]}
+
+
 def squid_lines():
     return [line.strip() for line in SQUID.read_text().splitlines() if line.strip()]
 

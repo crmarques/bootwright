@@ -48,15 +48,15 @@ profile on that release only.
 | certmgr | owned namespace `cert-manager-operator`, its OperatorGroup and Subscription (package and group shape fixed by its definition); the one approved InstallPlan; operands in `cert-manager`, created by the operator | provides `certManager`; requires none | `subscription` (source default to be verified); `timeout` (default `20m`) | `csvSucceeded`; operand Deployments `Available`; `certificates.cert-manager.io` and `issuers.cert-manager.io` `Established` | retired with its cluster | [B767](milestones/m4.md#b767) | M4f | Needs definition; package qualification in-tree; addons-gitlab ([B768](milestones/m4.md#b768)) |
 | gitlab | owned `v1 Namespace` `gitlab-system`; `operators.coreos.com/v1 OperatorGroup` `gitlab-system` targeting `[gitlab-system]`; `cert-manager.io/v1 Issuer` `gitlab-selfsigned-issuer` and `Certificate` `gitlab-serving-cert` (Secret `webhook-server-cert`); `operators.coreos.com/v1alpha1 Subscription` `gitlab-operator-kubernetes` (Manual, declared `startingCSV`, explicit `source`); the one approved InstallPlan; up to seven placed Secrets named with the prefix `bootwright-gitlab-`; `apps.gitlab.com/v1beta1 GitLab` `gitlab` | provides none; requires `certManager`, and `dataFoundation` when `gitaly.storageClass` names an `fdf` class | `subscription` (`source` required); `timeout` (default `1h`); `chartVersion`; `rootPasswordRef`; `tlsCertificateRef`; `licenseRef`; `database` (host, port, name, username, passwordRef); `redis` (host, port, passwordRef); `objectStorage` (connectionRef, registryRef, registryBucket); `gitaly` (storageClass, size) | `csvSucceeded`; `GitLab` `gitlab` `Available` `True`; claim `repo-data-gitlab-gitaly-0` `Bound`; pod `gitlab-gitaly-0` `Ready`; Deployment `gitlab-registry` `Available` | retired with its cluster; external database, Redis and buckets untouched | [B93](milestones/m4.md#b93) | M4f | package qualification in-tree; addons-gitlab ([B768](milestones/m4.md#b768)) |
 
-Every row installs through the shared [OLM installation](add-ons.md#olm-installation):
+Every row installs by [OLM installation](add-ons.md#olm-installation):
 an owned namespace, OperatorGroup and Subscription with manual approval of the
 declared `startingCSV`, an optional owned CatalogSource with an explicit
-priority, and one absolute readiness deadline. Exact approval is the policy
-of every row except `fdf`, whose operator approves the later plans of its own
+priority, and one absolute readiness deadline. Approval is exact for
+every row except `fdf`, whose operator approves the later plans of its own
 namespace. Every row's removal is [retirement](add-ons.md#retirement) with its
 cluster; on a physical cluster that keeps running, its objects and placed
-Secrets stay, unmanaged, as its removal description says. A changed
-configuration over a completed apply is destroyed and applied again (D153).
+Secrets stay, unmanaged. A changed configuration over a completed apply is
+destroyed and applied again (D153), except an [additive apply](state-reconciliation.md#additive-apply).
 
 Not yet met: the cert-manager and GitLab packages are absent; tracked as
 [B767](milestones/m4.md#b767) and [B93](milestones/m4.md#b93).
@@ -371,8 +371,8 @@ operator provides, its packages and its operator gate.
 
 | Profile | Submilestone | Cluster | Controller budget | Packages | Operator gate |
 | --- | --- | --- | --- | --- | --- |
-| addons-sno | M4b | M3b's lab-sno single node on libvirt+sushy, connected | [lab-sno's](openshift-coverage.md#acceptance-profiles): with a 4/8/40 reserve, at least 12 logical CPUs, 24 GiB available memory and 170 GiB free | `nmstate` | [B1125](milestones/m4.md#b1125) |
-| addons-lb | M4c | M3b's lab-sno single node on libvirt+sushy, connected, with one machine-network pool of eight addresses; an optional row on M3c's lab-compact | lab-sno's (lab-compact's for the optional row) | `metallb` | [B1125](milestones/m4.md#b1125) |
+| addons-sno | M4b | M3b's lab-sno single node on libvirt+sushy, connected | [lab-sno's](openshift-coverage.md#acceptance-profiles) | `nmstate` | [B1125](milestones/m4.md#b1125) |
+| addons-lb | M4c | M3b's lab-sno single node on libvirt+sushy, connected, with one machine-network pool of eight addresses; an optional row on M3c's lab-compact | addons-sno's (lab-compact's for the optional row) | `metallb` | [B1125](milestones/m4.md#b1125) |
 | addons-df | M4d | M2's three-node virtual Ceph cluster (MON 3, MGR 2, OSD 3, two MDS for one CephFS filesystem with the `csi` subvolume group, a prometheus service and a TLS object gateway) beside M3c's lab-compact cluster, whose install pull secret carries the IBM entitlement and whose trust bundle policy is `Always`, on one libvirt host | the Ceph guests at 4 vCPU and 13 GiB each, the lab-compact guests and the reserve: with 4/8/40, at least 34 logical CPUs, 95 GiB and 820 GiB | `fdf` | [B761](milestones/m4.md#b761) |
 | addons-hub | M4e | M3c's lab-compact topology with three schedulable control-plane nodes of 8 vCPU, 24 GiB and 120 GiB, connected, plus an operator-provided HTTPS Git repository | with a 4/8/40 reserve, at least 28 logical CPUs, 80 GiB and 400 GiB | `acm`, `gitops` | [B766](milestones/m4.md#b766) |
 | addons-gitlab | M4f | a fresh apply of addons-df's complete input (Ceph cluster, export, lab-compact, `fdf`) plus the GitLab bindings, after any earlier addons-df apply is destroyed, with at least 4 vCPU and 12 GiB of memory free beyond addons-df's use; Gitaly on its Data Foundation RBD StorageClass; S3 on M2's gateway or an operator-run endpoint; PostgreSQL 17 and Valkey 7.2 run by the operator on the libvirt host | addons-df's plus GitLab's increment | `fdf`, `certmgr`, `gitlab` | [B768](milestones/m4.md#b768) |
@@ -381,7 +381,8 @@ operator provides, its packages and its operator gate.
 
 - **Tiers.** In-tree tests qualify contracts, refusals and recovery over a
   fake `oc` and never reach a cluster. Each submilestone exits on an emulated
-  rehearsal on libvirt+sushy; no package needs real hardware.
+  rehearsal on libvirt+sushy. `kubevirt`, which belongs to no submilestone, is
+  accepted on [B730](milestones/m3.md#b730)'s physical run (D235 (2)).
 - **Package qualification.** Every package passes the
   [package qualification](add-ons.md#package-qualification) suite before it
   is offered: registry conformance, purity and determinism, content safety at

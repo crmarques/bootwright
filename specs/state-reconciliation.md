@@ -155,7 +155,8 @@ plan and changes none.
 ### Additive apply
 
 An `apply` over a completed apply under a changed input is an additive apply
-when the input only adds add-on instances to clusters that apply installed. It
+when the input only adds add-on instances to clusters that apply installed, as
+the admission list below defines. It
 registers a new operation, an apply whose record names the completed apply as
 its `predecessor` ([operation records](#operation-records)). No block of the
 completed apply runs again and none of its records changes. An apply and the
@@ -167,15 +168,21 @@ keeps the changed-input refusal, naming the first block that differs:
 - the completed apply and every predecessor read `done`, every block of their
   plans `done`;
 - the frozen revision compiles and the objects it differs from the selected
-  input by are only added `ClusterAddonBinding` objects, or bindings whose every
-  changed path is `spec.packages.<member>` for a member the frozen binding does
-  not declare; a change list cut at its bound refuses;
+  input by are only added `ClusterAddonBinding` objects, added `Secret` objects
+  that an added block names for the first time and no lineage block references,
+  or bindings whose every changed path is `spec.packages.<member>` for a member
+  the frozen binding does not declare; an added Secret that fails this refuses
+  `apply.not-an-addition`, naming it, and a changed or removed Secret keeps the
+  changed-input refusal
+  (`TestAnAdditiveApplyAdmitsOnlyANewSecretAnAddedBlockNames`); a change list cut
+  at its bound refuses;
 - this executable plans the selected input and the
   [comparison](#comparing-desired-and-real-state) of the lineage's plan with
   that plan shows every lineage block the same and at least one block added. A
   lineage block it would freeze differently refuses `records.lineage-reshaped`,
   naming it, and an existing instance that would wait for the added one
-  refuses too, as the instances of a cluster wait for its last package;
+  refuses too, as a cluster's [last package](add-ons.md#built-in-packages-and-selection)
+  waits for its other instances;
 - each added block's capability admits it through the optional `DeltaAdmitter`
   port, which only the add-on instance implements, for a cluster the lineage
   installed, and states that the block reads bound Secret material only in its

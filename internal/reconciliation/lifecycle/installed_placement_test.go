@@ -3,9 +3,11 @@ package lifecycle
 import (
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -81,5 +83,18 @@ func TestAnInstalledHostsClaimsAreQualifiedByItsAddressAlone(t *testing.T) {
 	}
 	if _, _, err := publishedSSHClaims(catalog, "controller", []SSHReservation{{Machine: "mirror", Address: "198.51.100.20", Port: 22, Reservation: reservation}}); err == nil {
 		t.Fatal("an SSH claim with no bound host key was admitted")
+	}
+}
+
+// The host-key form's key bound holds for an installed claim too, although it
+// publishes the address form alone.
+func TestAnInstalledClaimTooLongToKeyByItsHostKeyRefuses(t *testing.T) {
+	t.Parallel()
+	catalog := api.NewCatalog([]api.Object{api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue())})
+	long := infrastructureservices.HostReservation{Context: "lab", Kind: "proxy", Service: "gamma",
+		Keys: []string{"path:/srv/" + strings.Repeat("d", infrastructureservices.MaxReservationKeyBytes-infrastructureservices.SSHHostKeyQualifierBytes-len("path:/srv/")+1)}}
+	_, _, err := publishedSSHClaims(catalog, "controller", []SSHReservation{{Machine: "mirror", Address: "198.51.100.20", Port: 22, Installed: true, Reservation: long}})
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "plan.reservation-key-too-long" {
+		t.Fatalf("refusal = %+v (%v)", reported, err)
 	}
 }
