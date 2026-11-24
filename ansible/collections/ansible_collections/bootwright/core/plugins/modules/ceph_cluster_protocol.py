@@ -81,6 +81,7 @@ options:
       - cluster-unavailable
       - device
       - dashboard-manager
+      - hostname-mismatch
       - foreign-client
       - foreign-pool
       - foreign-profile

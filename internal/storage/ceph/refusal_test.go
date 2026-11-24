@@ -455,6 +455,16 @@ func TestAnUnverifiedSSORefusalNamesTheSkipAndItsRemedies(t *testing.T) {
 	}
 }
 
+func TestAHostnameMismatchNamesTheHostnameToSet(t *testing.T) {
+	refused := adapterRefusals()["hostname-mismatch"]
+	d := diagnostics.Of(refused)
+	const message = "a Ceph host reports a hostname other than the name the cluster registers it as, its topology node's fqdn, which defaults to its Machine's fqdn address, and cephadm admits a host only under its own hostname"
+	const remedy = "the native error names the Machine, the hostname it reports and the registered name; set that host's hostname to the registered name, for example with sudo hostnamectl set-hostname <registered name> on it, then apply again; the block changed nothing on any Ceph host before the check"
+	if len(d) != 1 || d[0].Code != cephPrerequisite.Code || d[0].Message != message || d[0].Remediation != remedy || !diagnostics.Unproved(refused) {
+		t.Fatalf("a hostname-mismatch refusal reached the operator as %+v", d)
+	}
+}
+
 func TestAPoolDriftRefusalNamesTheSettingsAndBothRemedies(t *testing.T) {
 	d := diagnostics.Of(adapterRefusals()["pool-drift"])
 	const message = "a setting this operation completed on the Ceph pool (size, min_size, a quota, a compression option, erasure-coded overwrites or its application) no longer has the value its CephPool or CephObjectGateway froze"

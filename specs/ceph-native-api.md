@@ -741,7 +741,10 @@ names. `location` retains the native HostSpec spelling and string values.
 Host identity and address are derived from the proved Machine/address binding;
 the registered hostname must agree with the installed host's native hostname,
 and a node's `site` is its Machine's `site`, never authored on the
-node ([normalization](api/ceph.md#normalization)).
+node ([normalization](api/ceph.md#normalization)). The cluster block and
+each resource block read every host's hostname before any effect of their
+own; a host that reports another hostname refuses `hostname-mismatch`, whose
+native error names the Machine, the reported hostname and the registered one.
 The generated native HostSpec is visible as non-secret plan intent. A raw
 `service_type: host` entry in `services` refuses because it would create a
 second infrastructure owner.

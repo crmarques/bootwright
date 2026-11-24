@@ -1613,6 +1613,22 @@ def test_colliding_short_host_stems_refuse_before_native_execution(core_request)
         ceph_native.validate(core_request)
 
 
+@pytest.mark.parametrize("reported", [b"NODE-1\n", b"other.example.test\n", b"\n"])
+def test_a_host_answering_to_another_hostname_refuses_naming_both(core_request, reported):
+    native, calls = worker(core_request, {("/usr/bin/hostname",): (0, reported)})
+    with pytest.raises(ceph_native.NativeFailure, match="^hostname-mismatch$") as refused:
+        native.prove_hostname()
+    cause = refused.value.native_error["cause"]
+    assert native.host["machine"] in refused.value.native_error["coordinate"]
+    assert (reported.strip().decode() or "(none)") in cause and cause.endswith("registers it as " + native.host["name"])
+    assert calls == [["/usr/bin/hostname"]] and native.markers.writes == []
+
+
+def test_a_host_answering_to_its_registered_hostname_passes(core_request):
+    native, unused = worker(core_request, {("/usr/bin/hostname",): (0, core_request["bootstrap"].encode() + b"\n")})
+    native.prove_hostname()
+
+
 @pytest.mark.parametrize("pending", ["down", "out", "starting", "missing-cache", "missing-image"])
 def test_starting_osd_does_not_request_an_unavailable_effective_config(core_request, pending):
     core_request["config"] = memory_config()

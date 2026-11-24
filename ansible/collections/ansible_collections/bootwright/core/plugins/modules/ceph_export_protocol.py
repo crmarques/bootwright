@@ -39,6 +39,7 @@ options:
       - native-option-undeclared
       - call-home-unqualified
       - dashboard-manager
+      - hostname-mismatch
       - request
       - artifact
       - ownership

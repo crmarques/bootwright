@@ -173,6 +173,8 @@ def test_an_exception_names_its_type_and_site_and_never_its_text(monkeypatch):
     ("native-refusal:dashboard-drift@ceph_native.dashboard:12", ceph_core.CLUSTER_REASONS, "dashboard-drift"),
     ("native-refusal:dashboard-manager@ceph_native.dashboard_redeploy:12", ceph_core.CLUSTER_REASONS, "dashboard-manager"),
     ("native-refusal:host-time@ceph_native.time:12", ceph_core.CLUSTER_REASONS, "remote-refusal"),
+    ("native-refusal:hostname-mismatch@ceph_native.prove_hostname:12", ceph_core.CLUSTER_REASONS, "hostname-mismatch"),
+    ("native-refusal:hostname-mismatch@ceph_native.prove_hostname:12", ceph_core.HOST_REASONS, "remote-refusal"),
     ("native-refusal:call-home-unqualified@ceph_native.tunnel_bootstrap:12", ceph_core.CLUSTER_REASONS, "call-home-unqualified"),
     ("native-refusal:call-home-unqualified@ceph_native.tunnel_bootstrap:12", ceph_core.HOST_REASONS, "remote-refusal"),
     ("native-refusal:pool-drift@ceph_native_resources.pool_option:451", ceph_core.CLUSTER_REASONS, "pool-drift"),

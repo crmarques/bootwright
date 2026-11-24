@@ -1796,8 +1796,7 @@ class Worker:
 
     def prerequisites(self):
         prove_fips(self.request)
-        hostname = self.command(["/usr/bin/hostname"], json_result=False).decode("ascii").strip()
-        require(hostname == self.host["name"], "host-identity")
+        self.prove_hostname()
         self.verify_tool()
         for executable in ("/usr/bin/ceph", "/usr/bin/rbd", "/usr/bin/rados", "/usr/bin/podman", "/usr/sbin/lvm", "/usr/bin/systemctl"):
             require(os.path.isfile(executable) and os.access(executable, os.X_OK), "host-prerequisite")
@@ -1807,6 +1806,14 @@ class Worker:
         if self.request["action"] == "cluster":
             result["recovery"] = self.preparation_state()
         return result
+
+    def prove_hostname(self):
+        """cephadm admits a host only under its kernel hostname, so a host that answers to another name refuses, naming both names."""
+        reported = self.command(["/usr/bin/hostname"], json_result=False).strip()
+        if reported != self.host["name"].encode("ascii"):
+            raise NativeFailure("hostname-mismatch", "hostname of Ceph host " + self.host["machine"],
+                                b"the host reports the hostname " + (reported or b"(none)") + b", and the cluster registers it as "
+                                + self.host["name"].encode("ascii"))
 
     def claim(self):
         prove_fips(self.request)
