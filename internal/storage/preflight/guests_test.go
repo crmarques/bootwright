@@ -129,3 +129,13 @@ func TestAHostnameApplySetsIsPendingNotFailed(t *testing.T) {
 		}
 	}
 }
+
+func TestAHostWithoutAProvidedHostnameExpectsNoAppliedName(t *testing.T) {
+	bare := api.NewObject(api.Machine, "bare", api.Value{}, api.MapValue())
+	catalog := api.NewCatalog([]api.Object{bare})
+	for _, name := range []string{"absent", "bare"} {
+		if applied := appliedHostname(catalog, name); applied != "" {
+			t.Fatalf("Machine %s expects the applied hostname %q", name, applied)
+		}
+	}
+}
