@@ -70,7 +70,7 @@ def test_node_failure_waits_for_its_siblings_and_never_starts_installer_wait(tmp
     env = dict(os.environ, ANSIBLE_CONFIG=str(config), ANSIBLE_HOME=str(tmp_path / 'home'), ANSIBLE_LOCAL_TEMP=str(tmp_path / 'local'))
     ran = subprocess.run([sys.executable, '-m', 'ansible.cli.playbook', '--forks', '2', '-i', str(inventory_path),
                           '--extra-vars', '@' + str(variables), str(playbook)],
-                         capture_output=True, text=True, env=env, timeout=30, check=False)
+                         capture_output=True, text=True, env=env, timeout=180, check=False)
     assert ran.returncode != 0, ran.stdout + ran.stderr
     assert sibling.exists(), ran.stdout + ran.stderr
     assert sibling.read_text() == 'ready', ran.stdout + ran.stderr

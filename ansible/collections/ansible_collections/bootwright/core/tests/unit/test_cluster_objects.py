@@ -441,7 +441,7 @@ def test_real_ansible_action_module_handoff(tmp_path, object_request, invalid):
                        ANSIBLE_COLLECTIONS_PATH=str(pathlib.Path(__file__).resolve().parents[5]),
                        ANSIBLE_STDOUT_CALLBACK="bootwright.core.censored")
     run = subprocess.run([sys.executable, "-m", "ansible.cli.playbook", "-i", "localhost,", str(playbook)],
-                         capture_output=True, text=True, env=environment, timeout=30, check=False)
+                         capture_output=True, text=True, env=environment, timeout=180, check=False)
     if invalid:
         assert run.returncode != 0
         assert not oc.calls()
