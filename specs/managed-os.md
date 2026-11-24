@@ -167,7 +167,10 @@ held so. A hosted tree's boot image is held so only when its record names a
 release, so a boot image with no release is bounded by its DVD's release and
 the installed system's `VERSION_ID` that
 [update within release](#update-within-release) proves. A plan therefore never
-installs one minor under a profile declaring another.
+installs one minor under a profile declaring another, except that a
+subscription source installs what its content view serves at the major path,
+which only an updating profile's `VERSION_ID` proof bounds
+([B1698](milestones/backlog.md#b1698)).
 
 Each apply attempt reads the size and SHA-256
 again before the image's first use and refuses a changed entry through a named
@@ -2046,7 +2049,7 @@ them.
 | Internal mirror in `repositories.configure` | `$releasever` expands to the minor; a snapshot mirror pins by content; the drift refusal catches a mirror of another minor. |
 | `external` Entitlement | Only configured repositories count; with none the profile refuses. |
 | Disconnected, DVD or `hostedTree` only | No update source, so `none` is required. |
-| Subscription package source | The installer installs the release its boot image names from the activation key's content view; the update then follows the Satellite rows below. |
+| Subscription package source | The installer reads the activation key's content view at the major's path, or at the release the activation key sets ([release path](managed-os-subscription-source.md#installer)); the update then follows the Satellite rows below. |
 | Satellite, release offered | The release is set, as on the hosted service, and the content view serves that minor; the evidence pin is `release`. |
 | Satellite, release not offered | The release is unset and the selected content view (explicit or inherited from the activation key) is the pin; the evidence pin is `contentView`. A newer minor in the view stops the update at `update-release-drift`. |
 | Configured repositories beside a Satellite | No release variable is written, so `$releasever` expands to the major; a minor is written literally in `baseURL`. |

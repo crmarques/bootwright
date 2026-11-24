@@ -61,7 +61,10 @@ certificate verified. It then:
    `com.redhat.RHSM1.Config` interface on every call;
 3. refuses an organization or activation key outside 1 to 255 printable ASCII
    characters without space, quote, backslash or `#`;
-4. writes `rhsm --organization=<organization> --activation-key=<key>
+4. writes the major of `spec.os.version`, such as `9`, and a newline to the
+   installer's `/etc/dnf/vars/releasever`, mode 0644, as the release path
+   below states;
+5. writes `rhsm --organization=<organization> --activation-key=<key>
    --server-hostname=not-satellite:<hostname> --rhsm-baseurl=<contentBaseURL>`
    to `/tmp/bootwright-rhsm.ks`, mode 0600, which the Kickstart includes in
    place of an install source.
@@ -82,10 +85,18 @@ passes it to the subscription service as a host name, and the registration
 fails closed.
 
 **Release path.** The installer expands `$releasever` to its boot image's
-version, the profile's `spec.os.version`, such as `9.8`. The content view the
-activation key selects therefore serves BaseOS and AppStream at that minor's
-path, unless the activation key sets a release, which the subscription service
-writes into the repository URLs literally.
+version, such as `9.8`, then takes any value in its own `/etc/dnf/vars`, which
+step 4 sets to the major. It therefore reads the content view the activation
+key selects at the major's path, such as `.../rhel9/9/...`, as the installed
+system's dnf does with a Satellite
+([release variable](managed-os.md#update-within-release)), unless the
+activation key sets a release, which the subscription service writes into the
+repository URLs literally. The content view is the pin, so a view holding a
+newer minor at the major's path installs that minor, which an updating
+profile refuses at `update-release-mismatch` and a profile updating `none`
+does not prove ([B1698](milestones/backlog.md#b1698)). A view synced only at
+minor paths, such as `.../rhel9/9.8/...`, serves the installer only through a
+release its activation key sets.
 
 ## Installed system
 
@@ -106,7 +117,8 @@ consumer.
 
 A registration the Satellite refuses, a certificate the CA bundle does not
 verify, a Satellite the install network cannot resolve or reach, a content
-view serving no repository at the release path, and a Satellite already
+view serving no repository at the [release path](#installer), which Anaconda
+reports as `Error setting up software source` at its menu, and a Satellite already
 holding a host with the Machine's hardware identity each stop the installer on
 the Machine's console, so the apply fails when the
 [installer budget](managed-os.md#budgets) ends, and its message names those
@@ -121,7 +133,8 @@ that last cause.
 [Anaconda Satellite provisioning](https://github.com/rhinstaller/anaconda/blob/rhel-9/pyanaconda/modules/subscription/satellite.py),
 [registration and the `not-satellite:` prefix](https://github.com/rhinstaller/anaconda/blob/rhel-9/pyanaconda/modules/subscription/runtime.py),
 [token transfer](https://github.com/rhinstaller/anaconda/blob/rhel-9/pyanaconda/modules/subscription/installation.py),
-[`$releasever`](https://github.com/rhinstaller/anaconda/blob/rhel-9/pyanaconda/modules/payloads/payload/dnf/utils.py)
+[`$releasever`](https://github.com/rhinstaller/anaconda/blob/rhel-9/pyanaconda/modules/payloads/payload/dnf/utils.py),
+[the installer's `/etc/dnf/vars`](https://github.com/rhinstaller/anaconda/blob/rhel-9/pyanaconda/modules/payloads/payload/dnf/dnf_manager.py)
 and the [RHSM configuration interface](https://github.com/candlepin/subscription-manager/blob/main/src/rhsmlib/dbus/objects/config.py).
 The installer's behavior is read from those sources and is not proved in-tree;
 its emulated rehearsal is the operator gate of [B1548](milestones/m1.md#b1548).

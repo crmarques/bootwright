@@ -285,6 +285,7 @@ var kickstartFields = []struct {
 	{"the SELinux mode", "spec.customizations.security.selinux.mode of the install profile", kickstartToken, func(i Installation) []string { return []string{i.SELinux} }},
 	{"the Satellite host name", "spec.rhsm.satellite.hostname of the Entitlement the install profile's spec.subscription names", kickstartToken, subscriptionValue(func(s KickstartSubscription) string { return s.Hostname })},
 	{"the Satellite content root", "spec.rhsm.satellite.contentBaseURL of the Entitlement the install profile's spec.subscription names", kickstartToken, subscriptionValue(func(s KickstartSubscription) string { return s.ContentBaseURL })},
+	{"the installer's release path", "spec.os.version of the install profile", kickstartToken, subscriptionValue(func(s KickstartSubscription) string { return s.Release })},
 	{"the time zone", "spec.customizations.localization.timezone of the install profile", kickstartToken, func(i Installation) []string { return []string{i.Timezone} }},
 	{"the install account", "the product-owned install account", kickstartToken, func(i Installation) []string { return []string{i.User} }},
 	{"the weak-dependency choice", "spec.customizations.packages.installWeakDeps of the install profile", kickstartToken, func(i Installation) []string { return []string{i.WeakDeps} }},

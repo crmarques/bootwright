@@ -2,13 +2,18 @@ package installation
 
 import (
 	"bytes"
+	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
 
+// KickstartSubscription is what the registration %pre writes. Release is the
+// major the installed system's dnf derives, which the installer's dnf takes
+// in place of its boot image's minor.
 type KickstartSubscription struct {
 	ContentBaseURL string
 	Hostname       string
+	Release        string
 }
 
 const (
@@ -40,13 +45,15 @@ func (r Request) subscriptionSourced() bool {
 	return r.Registration != nil && r.Registration.InstallSource
 }
 
-func kickstartSubscriptionFor(request Request) *KickstartSubscription {
+func kickstartSubscriptionFor(request Request, profile api.Object) *KickstartSubscription {
 	if !request.subscriptionSourced() || request.Registration.Satellite == nil {
 		return nil
 	}
+	major, _, _ := strings.Cut(profile.Spec().Get("os", "version").Text(), ".")
 	return &KickstartSubscription{
 		ContentBaseURL: request.Registration.Satellite.ContentBaseURL,
 		Hostname:       request.Registration.Satellite.Hostname,
+		Release:        major,
 	}
 }
 
@@ -63,8 +70,8 @@ func subscriptionSourceRefusal(input Installation) error {
 	if (input.PackageSource == subscriptionSource) != (input.Subscription != nil) {
 		return installRequestInvalid.Fail("the subscription package source and its installer registration disagree", "plan the installation again")
 	}
-	if input.Subscription != nil && (input.Subscription.Hostname == "" || input.Subscription.ContentBaseURL == "") {
-		return installRequestInvalid.Fail("the subscription package source names no Satellite host name and content root", "plan the installation again")
+	if input.Subscription != nil && (input.Subscription.Hostname == "" || input.Subscription.ContentBaseURL == "" || input.Subscription.Release == "") {
+		return installRequestInvalid.Fail("the subscription package source names no Satellite host name, content root and release", "plan the installation again")
 	}
 	return nil
 }
@@ -110,6 +117,9 @@ func subscriptionPreLines(input Installation) []string {
 		`    if config.Get(key, "").unpack() != value:`,
 		`        raise SystemExit("Bootwright: the installer's subscription service did not take the Satellite setting " + key + "; refusing before it registers.")`,
 		"BOOTWRIGHT_RHSM_TRUST_EOF",
+		"mkdir -p "+parentOf(ReleaseVariablePath),
+		"printf '%s\\n' '"+input.Subscription.Release+"' > "+ReleaseVariablePath,
+		"chmod 0644 "+ReleaseVariablePath,
 		`printf 'rhsm --organization=%s --activation-key=%s --server-hostname=%s --rhsm-baseurl=%s\n' "${bootwright_organization}" "${bootwright_activation_key}" '`+
 			notSatellitePrefix+input.Subscription.Hostname+`' '`+input.Subscription.ContentBaseURL+`' > `+subscriptionInclude,
 		"unset bootwright_organization bootwright_activation_key",

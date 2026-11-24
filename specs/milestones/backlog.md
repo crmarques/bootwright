@@ -22,6 +22,7 @@ Alias cell.
 | [B1622](#b1622) | new, 2026-11-18 (X627 review) | product | Substrate and Reconciliation | Prove a hosted KubeVirt Machine off or absent without creating access on its host cluster | Fails closed: a context with a hosted KubeVirt Machine refuses every new apply and destroy |
 | [B1623](#b1623) | new, 2026-11-18 (X627 review) | safety | Reconciliation and Machine | Decide whether explicit `machine discover` and `machine inventory` take the power entry check | The owner's request named apply and destroy only |
 | [B1624](#b1624) | new, 2026-11-18 (X627 review) | product | Reconciliation, with CLI | `Stop first` names the whole fleet an automatic preparation's entry check reads | The refusal already names every blocking Machine |
+| [B1698](#b1698) | new, 2026-11-24 (X675 review) | safety | Managed OS | A subscription-sourced installation updating `none` proves its installed `VERSION_ID` equals `spec.os.version` | A content view at the major path holds the declared minor until a newer one is synced, and an updating profile already refuses the mismatch |
 | [B1695](#b1695) | new, 2026-11-23 (X673 diagnosis) | product | Managed OS, with CLI | A physical erase's controller refusal shows the controller's own printable line in the destroy's diagnostic | The retained output already holds the line, and the remedy names it |
 | [B1678](#b1678) | new, 2026-11-23 (X662 rehearsal) | defect | CLI | A confirmation is asked on the terminal it reads from when standard error is redirected | `--yes` and an unredirected error stream both avoid it |
 | [B82](#b82) | C5; moved from M4 on 2026-10-10 (D128); parked on 2026-10-11 (D129) | product | Managed OS | One more image, profile or entitlement variant | No concrete additional OS variant beyond the qualified M2 matrix |
@@ -4004,6 +4005,21 @@ as root in the attempt's retained output.
 
 **Exit evidence:** a refused erase whose diagnostic carries the controller's
 line, bounded and printable, with no request material.
+
+### B1698
+
+**Owner:** Managed OS. **Kind:** safety. **Requires:** B1697.
+**Definition:** Needs definition.
+
+**Outcome:** a [subscription package source](../managed-os-subscription-source.md)
+installation whose profile updates `none` refuses when the installed
+`VERSION_ID` differs from `spec.os.version`, as an updating profile refuses
+`update-release-mismatch`. Since [B1697](m1.md#b1697) the installer reads the
+content view at the major path, so a view holding a newer minor installs
+that minor.
+
+**Exit evidence:** a subscription-sourced installation updating `none` whose
+installed system reports another minor refuses with that minor named.
 
 ## Retired
 

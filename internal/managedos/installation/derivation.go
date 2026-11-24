@@ -96,7 +96,7 @@ func InstallationFor(catalog api.Catalog, machine, profile api.Object, request R
 	topology := readInstallTopology(template, iface)
 	installation.InterfaceType, installation.VLANBase, installation.VLANID = topology.Type, topology.VLANBase, topology.VLANID
 	installation.BondPorts, installation.BondOptions = topology.Ports, topology.Options
-	installation.HostKeyType, installation.Subscription = request.Target.HostKeyType, kickstartSubscriptionFor(request)
+	installation.HostKeyType, installation.Subscription = request.Target.HostKeyType, kickstartSubscriptionFor(request, profile)
 	if request.Update != nil && !satelliteRegistration(request) {
 		installation.Release = request.Update.Release
 	}

@@ -99,7 +99,7 @@ func kickstartStrings(t *testing.T) []kickstartString {
 				}
 				found = append(found, kickstartString{field.Name + "." + subscription.Field(inner).Name, func(input *Installation, value string) {
 					if input.Subscription == nil {
-						input.Subscription = &KickstartSubscription{ContentBaseURL: "https://satellite.example.test/pulp/content", Hostname: "satellite.example.test"}
+						input.Subscription = &KickstartSubscription{ContentBaseURL: "https://satellite.example.test/pulp/content", Hostname: "satellite.example.test", Release: "9"}
 					}
 					reflect.ValueOf(input.Subscription).Elem().Field(inner).SetString(value)
 				}})

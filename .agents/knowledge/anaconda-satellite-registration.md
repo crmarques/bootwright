@@ -76,6 +76,18 @@ module does not write the `rhsm` command into the Kickstart it saves.
 `get_product_release_version` (`payload/dnf/utils.py`) sets DNF's `releasever`
 to the leading digits and dots of the product version, so a 9.8 boot image
 asks for `.../9.8/...`, where an installed system would ask for `.../9/...`.
+A content view synced only at the major then fails the installer's source
+setup with `Error setting up software source` at the menu, after every
+`%pre` passed ([B1697](../../specs/milestones/m1.md#b1697)).
+
+`DNFManager._create_base` (`payload/dnf/dnf_manager.py`) sets that value and
+then calls `base.conf.substitutions.update_from_etc("/")`, which reads the
+installer's own `/etc/dnf/vars` and overwrites any variable a file there
+names (rhbz#1920735). The base is built lazily: `DNFPayload.__init__` and
+`set_from_opts` (`pyanaconda/payload/dnf/payload.py`) build it, and both run
+after `run_pre_scripts` in `anaconda.py`; source setup reuses it. So a `%pre`
+that writes `/etc/dnf/vars/releasever` sets the path the installer reads.
+Read from the rhel-9 branch on 2026-11-24.
 
 ## Tools in the installer
 

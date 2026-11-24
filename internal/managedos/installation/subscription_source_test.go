@@ -148,6 +148,9 @@ func TestTheSubscriptionPreUsesOnlyTheVerifiedPathAndNoSatelliteProvisioning(t *
 		`settings = {"server.prefix": "/rhsm", "server.port": "443", "server.insecure": "0", "rhsm.repo_ca_cert": "/etc/rhsm/ca/bootwright-satellite.pem"}`,
 		`config = SystemMessageBus().get_proxy("com.redhat.RHSM1", "/com/redhat/RHSM1/Config", interface_name="com.redhat.RHSM1.Config")`,
 		`config.SetAll({key: get_variant(Str, value) for key, value in settings.items()}, "")`,
+		"mkdir -p /etc/dnf/vars",
+		"printf '%s\\n' '9' > /etc/dnf/vars/releasever",
+		"chmod 0644 /etc/dnf/vars/releasever",
 		"'not-satellite:satellite.example.test' 'https://capsule.example.test/pulp/content' > /tmp/bootwright-rhsm.ks",
 		"unset bootwright_organization bootwright_activation_key",
 	}
@@ -212,14 +215,16 @@ func TestTheSubscriptionPostRecordsThePendingRegistrationAndCarriesTheCA(t *test
 
 type subscriptionPreRun struct {
 	include, ca, trust string
+	release            string
 	includeMode        os.FileMode
 	caMode             os.FileMode
+	releaseMode        os.FileMode
 	artifactCA         bool
 	err                error
 }
 
 // runSubscriptionPre executes the actual %pre with an isolated /tmp and CA
-// directory. Only nmcli, curl, systemctl and python3's module path are
+// directory, and its installer release variable in that directory too. Only nmcli, curl, systemctl and python3's module path are
 // replaced, and only tools the installer environment holds are on the path;
 // the embedded Python runs as written
 // against a dasbus double that keeps what the subscription service was given
@@ -332,7 +337,7 @@ test "$*" = 'start rhsm.service'
 `)
 	input := physicalInstallation()
 	input.Physical, input.ExpectedMACs, input.RootSerial, input.RootWWN, input.RootSizeBytes = false, nil, "", "", 0
-	input.Subscription = &KickstartSubscription{ContentBaseURL: "https://capsule.example.test/pulp/content", Hostname: "satellite.example.test"}
+	input.Subscription = &KickstartSubscription{ContentBaseURL: "https://capsule.example.test/pulp/content", Hostname: "satellite.example.test", Release: "9"}
 	lines := subscriptionPreLines(input)
 	script := strings.Join(lines[1:len(lines)-2], "\n")
 	script = strings.ReplaceAll(script, "/usr/bin/python3", "python3")
@@ -341,6 +346,7 @@ test "$*" = 'start rhsm.service'
 	script = strings.ReplaceAll(script, "--output /etc/rhsm/ca/", "--output "+root+"/rhsm-ca/")
 	script = strings.ReplaceAll(script, "chmod 0644 /etc/rhsm/ca/", "chmod 0644 "+root+"/rhsm-ca/")
 	script = strings.ReplaceAll(script, "test -s /etc/rhsm/ca/", "test -s "+root+"/rhsm-ca/")
+	script = strings.ReplaceAll(script, "/etc/dnf/vars", root+"/dnf-vars")
 	script = strings.ReplaceAll(script, bootstrapConnections, filepath.Join(root, "connections"))
 	script = strings.ReplaceAll(script, CertificateToken, "SyntheticArtifactCertificate")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -366,6 +372,7 @@ test "$*" = 'start rhsm.service'
 	}
 	run.include, run.includeMode = read("bootwright-rhsm.ks")
 	run.ca, run.caMode = read("rhsm-ca/bootwright-satellite.pem")
+	run.release, run.releaseMode = read("dnf-vars/releasever")
 	run.trust, _ = read("trust")
 	_, statErr := os.Stat(filepath.Join(root, "bootwright-artifact-ca.pem"))
 	run.artifactCA = statErr == nil
@@ -384,6 +391,9 @@ func TestTheSubscriptionPreWritesTheRegistrationCommandTheKickstartIncludes(t *t
 	}
 	if run.ca != "SyntheticCA\n" || run.caMode != 0o644 {
 		t.Fatalf("installer CA = %q mode %o", run.ca, run.caMode)
+	}
+	if run.release != "9\n" || run.releaseMode != 0o644 {
+		t.Fatalf("installer release variable = %q mode %o, want the major the installed system's dnf derives", run.release, run.releaseMode)
 	}
 	want = `{"rhsm.repo_ca_cert": "/etc/rhsm/ca/bootwright-satellite.pem", "server.insecure": "0", "server.port": "443", "server.prefix": "/rhsm"}`
 	if run.trust != want {
