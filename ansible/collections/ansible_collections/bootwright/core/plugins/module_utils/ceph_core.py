@@ -40,11 +40,11 @@ HOLDER_CALL = 60
 SSO_CALL = 120
 SSO_WINDOW = 600
 SSO_PAUSE = 10
-# The Grafana route proof of a management gateway fronting Grafana runs inside the unit's readiness wait: every gateway host in one
-# concurrent round of calls of at most ROUTE_CALL, each round after an observation reads the unit ready.
+# The route proof of a management gateway that fronts Grafana or declares an oauth2-proxy runs inside the unit's readiness wait: every
+# gateway host in one concurrent round of calls of at most ROUTE_CALL, each round after an observation reads the unit ready.
 ROUTE_CALL = 120
 ROUTE_ENTRY = "route@mgmt-gateway"
-ROUTES = frozenset(("external", "nginx"))
+ROUTES = frozenset(ceph_native_observability.GATEWAY_ROUTES)
 # One diff observation's host reading (state-reconciliation.md, Reading the real side live): the `hosts` reading of a resource block reads
 # each host's state once, and every resource block of the same scope replays it in place of its own host reads. Its Go caller
 # (decodeHostReading in internal/storage/ceph) decodes the same closed members; it lives within that one diff and is never stored.
@@ -1027,7 +1027,8 @@ class GrafanaRoutes:
 def wait_unit(request, request_digest, bootstrap, transport, now, pause, *, private=None, remedy=None, routes=None):
     """Poll the unit's own observation until ready and, with an ingress, until each virtual IP has exactly one holder; a timeout names the
     daemons, endpoint, holder or health checks still blocking. While an observation names lagging MGR ports, an apply's remedy runs
-    within the same window before the next poll, and a management gateway fronting Grafana proves its routes once the unit reads ready."""
+    within the same window before the next poll, and a management gateway fronting Grafana or declaring an oauth2-proxy proves its routes
+    once the unit reads ready."""
     call_timeout = unit_observation_timeout(request)
     deadline = now() + READINESS_TIMEOUT + (call_timeout if ceph_transport.nvmeof_unit(request) else 0)
     blocking, unheld = [], []
@@ -1186,7 +1187,8 @@ def execute_nvmeof(request, operation, request_digest, transport, bootstrap, *, 
 def execute_unit(request, operation, request_digest, transport, bootstrap, *, now, pause, phases=("unit",), outputs=None):
     """A service unit runs its apply phases only on the bootstrap host: its preparation proof, with an ingress the firewall check on each
     ingress host, its apply phases in order, with an oauth2-proxy the rendered-configuration proof on each proxy host and then the one
-    single sign-on write, then its own readiness wait, which for a gateway fronting Grafana includes the route proof on each gateway host,
+    single sign-on write, then its own readiness wait, which for a gateway fronting Grafana or declaring an oauth2-proxy includes the route
+    proof on each gateway host,
     and in which a monitoring unit with prometheus asks cephadm to reconfigure each MGR whose deployment ports lag the published module
     endpoints. Its apply phase holds every bound leaf; each observation and removal holds the observed ones, and a management gateway's
     served leaf must be the bound certificate's. A ready management gateway that declares its output then writes its monitoring logins
@@ -1209,7 +1211,7 @@ def execute_unit(request, operation, request_digest, transport, bootstrap, *, no
         remedy = ManagerPorts(bootstrap, transport) if (
             request["action"] == "service" and ceph_native_observability.prometheus_declared(request["service"])) else None
         routes = GrafanaRoutes(request, bootstrap, transport) if (
-            request["action"] == "service" and ceph_native_observability.grafana_fronted(request["service"])) else None
+            request["action"] == "service" and ceph_native_observability.routes_owed(request["service"])) else None
         observation = wait_unit(request, request_digest, bootstrap, transport, now, pause, private=seen, remedy=remedy, routes=routes)
         changed = remedy is not None and remedy.changed or routes is not None and routes.asked or changed
         ceph_native.require(observation["ready"], "not-ready")

@@ -24,11 +24,13 @@ IBM_OVERRIDE = "IBM_BUILD = True\n"
 RAW_SOURCE_FACTS = ("image-monitoring.", "image-gateway.")
 OVERRIDE_FORMS = {"assign True": IBM_OVERRIDE}
 BUILDS = {"20.1.0-221.el9cp": False, "20.2.1-405.el9cp": True, "20.2.2-349.el9cp": True, "20.2.2-349.el10cp": True}
-GENERAL = {"ceph.monitoring.scrape-template": "native", "ceph.gateway.grafana-route": "native", "ceph.bootstrap.license-flag": "pass",
+GENERAL = {"ceph.monitoring.scrape-template": "native", "ceph.gateway.grafana-route": "native", "ceph.gateway.sign-on-headers": "native",
+           "ceph.bootstrap.license-flag": "pass",
            "ceph.mgr.license-contract": "ibm",
            "ceph.call-home-model": "opt-out",
            "ceph.mgr.set-user-pre-steps": "skip", "ceph.bootstrap.license-call-refusal": "fail"}
-SPECIALIZED = {"ceph.monitoring.scrape-template": "native", "ceph.gateway.grafana-route": "native", "ceph.bootstrap.license-flag": "omit",
+SPECIALIZED = {"ceph.monitoring.scrape-template": "native", "ceph.gateway.grafana-route": "native", "ceph.gateway.sign-on-headers": "native",
+               "ceph.bootstrap.license-flag": "omit",
                "ceph.mgr.license-contract": "absent",
                "ceph.call-home-model": "opt-in",
                "ceph.mgr.set-user-pre-steps": "absent", "ceph.bootstrap.license-call-refusal": "fail"}
@@ -100,7 +102,7 @@ def test_twenty_one_shaped_artifacts_take_every_specialized_variant():
     chosen = selection(old_shaped())
     assert facts(chosen) == dict.fromkeys([name for name in ns.FACTS if not name.startswith(RAW_SOURCE_FACTS)], False)
     assert variants(chosen) == SPECIALIZED
-    raw = {"ceph-monitoring-plaintext-exporters", "ceph-gateway-grafana-sessions"}
+    raw = {"ceph-monitoring-plaintext-exporters", "ceph-gateway-grafana-sessions", "ceph-gateway-sign-on-headers"}
     assert chosen.applied == {record.id for record in ns.SPECIALIZATIONS} - {LICENSE_CALL_ID} - raw
 
 

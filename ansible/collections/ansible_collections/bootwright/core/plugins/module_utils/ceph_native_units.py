@@ -759,23 +759,24 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
         return {"changed": True, "pending": False}
 
     def grafana_gateway(self):
-        """The unit's mgmt-gateway document: only a management gateway unit fronting a declared Grafana has Grafana routes."""
+        """The unit's mgmt-gateway document: only a management gateway unit fronting a declared Grafana or declaring an oauth2-proxy has
+        routes."""
         unit = self.request["service"]
-        require(ceph_native_observability.grafana_fronted(unit))
+        require(ceph_native_observability.routes_owed(unit))
         return ceph_native_observability.gateway_documents(unit)[1]
 
     def grafana_route(self):
-        """Read-only, on the bootstrap host once the unit reads ready: whether the seam selected a Grafana routing override, each of
-        which is then complete, so every running gateway daemon must serve the Grafana routes."""
+        """Read-only, on the bootstrap host once the unit reads ready: which corrections the seams selected, by name, whose overrides
+        are then complete, so every running gateway daemon must serve each of them."""
         require(self.markers.owned(), "ownership")
         require(self.ceph("fsid") == {"fsid": self.request["fsid"]}, "ownership")
         self.grafana_gateway()
         plans = [(descriptor, plan) for descriptor, plan in ceph_monitoring_template.gateway_plans(self, self.request["service"]) if plan is not None]
         require(all(ceph_monitoring_template.ready(self, plan, descriptor) for descriptor, plan in plans), "not-ready")
-        return {"changed": False, "routes": sorted(ceph_monitoring_template.ROUTES[descriptor] for descriptor, unused in plans)}
+        return {"changed": False, "routes": sorted(ceph_monitoring_template.gateway_corrections(self, self.request["service"]))}
 
     def grafana_route_proof(self):
-        """Read-only, on one gateway host: the running mgmt-gateway containers of this cluster here, and for each Grafana route how many
+        """Read-only, on one gateway host: the running mgmt-gateway containers of this cluster here, and for each route how many
         serve it in the files they mount and started after those files were written. No path or byte is returned."""
         gateway = self.grafana_gateway()
         require(self.host["name"] in gateway["placement"]["hosts"])
@@ -783,7 +784,7 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
         prefix = "ceph-" + fsid + "-mgmt-gateway"
         rows = self.command([PODMAN, "ps", "--all", "--format", "json", "--filter", "name=^" + prefix + "[.-]"], timeout=SSO_TIMEOUT)
         require(isinstance(rows, list) and len(rows) <= MAX_GATEWAY_CONTAINERS and all(isinstance(row, dict) for row in rows), "native-output")
-        daemons, served = 0, {"external": 0, "nginx": 0}
+        daemons, served = 0, dict.fromkeys(ceph_native_observability.GATEWAY_ROUTES, 0)
         for row in rows:
             names = row.get("Names")
             require(isinstance(names, list) and len(names) == 1 and isinstance(names[0], str)

@@ -291,6 +291,8 @@ class SSOTransport(units.Transport):
         if phase == "sso":
             assert timeout is None
             return self.enables.pop(0) if len(self.enables) > 1 else self.enables[0]
+        if phase == "grafana_route":
+            return {"changed": False, "routes": []}
         result = super().call(host, phase, timeout=timeout)
         return {"changed": False} if phase == "ingress_firewall" else result
 
@@ -409,6 +411,8 @@ def test_every_bound_placeholder_passes_the_proxy_spec_validation(tmp_path, monk
     def contained(self, image, user, script, arguments=(), **options):
         del self, image, user, script, options
         groups = json.loads(arguments[0])
+        if isinstance(groups, dict):
+            return groups  # the gateway template read: its paths stand in for template text and witness no defect
         if not all(upstream_oauth2_proxy(value["spec"]) for group in groups for value in group if value["service_type"] == "oauth2-proxy"):
             raise ceph_native.Refusal("native-output")
         return groups

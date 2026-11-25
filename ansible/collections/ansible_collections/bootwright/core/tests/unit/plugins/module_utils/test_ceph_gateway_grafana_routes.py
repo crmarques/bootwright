@@ -68,7 +68,7 @@ PINNED = NGINX_SOURCE.replace(template.UPSTREAM, template.UPSTREAM + "     hash 
 
 
 def selection(value):
-    return native_specializations.Selection({"image-gateway": lambda: value}, {"image-gateway": template.grafana_unrouted})
+    return native_specializations.Selection({"image-gateway": lambda: value}, {"image-gateway": template.gateway_facts})
 
 
 # What cephadm's Jinja environment renders from each template under CONTEXT, keyed by (file, corrected, oauth2-proxy declared); the
@@ -88,6 +88,11 @@ RENDERED = {("nginx", False, False): UPSTREAM_NATIVE, ("nginx", False, True): UP
 
 def render(kind, corrected, proxied):
     return RENDERED[(kind, corrected, proxied)]
+
+
+def grafana(routes):
+    """The two Grafana routes of a route reading."""
+    return {name: routes[name] for name in ("nginx", "external")}
 
 
 def test_each_witnessed_defect_selects_its_own_correction():
@@ -133,11 +138,11 @@ def test_the_corrections_render_one_host_header_and_a_pinned_grafana(proxied):
     assert nginx.decode().replace(template.AFFINITY, "", 1) == NGINX_SOURCE
     assert external.decode().replace(template.HOST, "", 1) == EXTERNAL_SOURCE
     rendered_nginx, rendered_external = render("nginx", True, proxied), render("external", True, proxied)
-    assert observability.routes_grafana(rendered_nginx, rendered_external) == {"nginx": True, "external": True}
+    assert grafana(observability.routes_grafana(rendered_nginx, rendered_external)) == {"nginx": True, "external": True}
     location = observability.config_block(rendered_external, "location /grafana {")
     assert location.count("proxy_set_header Host $host;") == 1 and ("auth_request /oauth2/auth;" in location) is proxied
-    assert observability.routes_grafana(render("nginx", False, proxied), render("external", False, proxied)) == {"nginx": False, "external": proxied}
-    assert observability.routes_grafana(rendered_nginx, render("external", False, proxied)) == {"nginx": True, "external": proxied}
+    assert grafana(observability.routes_grafana(render("nginx", False, proxied), render("external", False, proxied))) == {"nginx": False, "external": proxied}
+    assert grafana(observability.routes_grafana(rendered_nginx, render("external", False, proxied))) == {"nginx": True, "external": proxied}
 
 
 def test_an_ambiguous_or_oversized_template_refuses_before_any_write():
@@ -400,16 +405,16 @@ def corrected_files(root, host="node-1", proxied=False):
     return files(root, host, render("nginx", True, proxied), render("external", True, proxied))
 
 
-BOTH = {"nginx": True, "external": True}
-NEITHER = {"nginx": False, "external": False}
+NEITHER = dict.fromkeys(observability.GATEWAY_ROUTES, False)
+BOTH = dict(NEITHER, nginx=True, external=True)
 
 
 def test_a_deployed_gateway_proves_each_line_in_the_files_it_started_with(root):
     assert observability.gateway_routed(FSID, corrected_files(root)) == BOTH
     assert observability.gateway_routed(FSID, corrected_files(root, proxied=True)) == BOTH
     assert observability.gateway_routed(FSID, files(root, "node-1", render("nginx", False, False), render("external", False, False))) == NEITHER
-    assert observability.gateway_routed(FSID, files(root, "node-1", render("nginx", True, False), render("external", False, False))) == {
-        "nginx": True, "external": False}
+    assert observability.gateway_routed(FSID, files(root, "node-1", render("nginx", True, False), render("external", False, False))) == dict(
+        NEITHER, nginx=True)
     inspected = corrected_files(root)
     for started in ("2025-11-24T15:59:59.999999999Z", "2025-11-24T16:59:59+01:00", "yesterday", None):
         assert observability.gateway_routed(FSID, dict(inspected, State={"StartedAt": started})) == NEITHER, started
@@ -429,7 +434,7 @@ def test_each_gateway_host_counts_its_running_daemons_and_each_route_they_serve(
                                                                              render("external", False, False)))]
     monitor = GatewayMonitor(request, containers)
     native = units.worker(monitor, units.markers_for(tmp_path, request))
-    assert native.grafana_route_proof() == {"changed": False, "daemons": 2, "served": {"external": 1, "nginx": 2}}
+    assert native.grafana_route_proof() == {"changed": False, "daemons": 2, "served": {"cookie": 0, "external": 1, "nginx": 2, "role": 0}}
     assert not monitor.mutations
     monitor.containers = [("ceph-other-mgmt-gateway-node-1", "running", {})]
     with pytest.raises(ceph_native.Refusal, match="^native-output$"):
@@ -457,7 +462,7 @@ class RouteTransport(gateway.MaterialTransport):
                 return {"changed": True}
             daemons = 0 if self.mode == "short" and host["name"] == "node-2" else 1
             routed = self.mode in ("routed", "short") or self.mode == "stale" and self.reconfigured
-            return {"changed": False, "daemons": daemons, "served": dict.fromkeys(("external", "nginx"), daemons if routed else 0)}
+            return {"changed": False, "daemons": daemons, "served": dict.fromkeys(observability.GATEWAY_ROUTES, daemons if routed else 0)}
 
 
 def applying(transport):

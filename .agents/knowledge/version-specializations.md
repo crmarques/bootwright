@@ -28,9 +28,9 @@ Ceph `20.1.0-221` is not an IBM licensing build, so its cephadm and MGR lack
 the licensing, opt-out Call Home and sudo-hardening mechanics the `20.2.x`
 builds carry. The fifth is a `20.2.x` workaround. The monitoring row recognizes
 one exact qualified native source contract; a byte change, even one retaining
-the defect, leaves the fact unknown. The gateway row instead witnesses its
-defect on exact template anchors, because the run's own image could not be
-read; any other shape leaves its fact unknown or false. Each fact below is derived
+the defect, leaves the fact unknown. The two gateway rows instead witness their
+defects on exact template anchors, because the run's own image could not be
+read; any other shape leaves a fact unknown or false. Each fact below is derived
 from the bytes of an artifact the operation has already frozen and proved; the
 release label and the image tag key nothing.
 
@@ -43,6 +43,7 @@ release label and the image tag key nothing.
 | `ceph-bootstrap-license-call-continues` | P/native_specializations.py | ceph-cephadm (host RPM zipapp) | `host-cephadm.bootstrap-license-call` is True | matched `20.2.1-405.el9cp`, `20.2.2-349.el9cp`, `20.2.2-349.el10cp`; not matched `20.1.0-221.el9cp` | workaround | `ceph.bootstrap.license-call-refusal` to `continue-seed` | The bootstrap of the IBM `20.2.x` builds calls `orch accept-license --image`, which the MGR refuses with `no hosts defined` on the zero-host seed after the seed exists; the exact owned seed continues in the same apply. | Bootstrap exits 1 after the seed exists; the attempt record and the seed remain and the next apply continues them at stage `seed` (no version move). | RPM [cephadm-20.2.1-405.el9cp](https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64/cephadm-20.2.1-405.el9cp.noarch.rpm) sha256 `7acf50c99cf3263c64a103476dcf67a3fd93a7b918472db7df660541ea987287`, zipapp sha256 `027222324b11d1af53b72b4ebb17134f58e477f63c39e9d07be40ba1fc2aabc1`, the call at `__main__.py:3445-3447`; RPM [cephadm-20.2.2-349.el9cp](https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64/cephadm-20.2.2-349.el9cp.noarch.rpm) sha256 `1d323901a72b7b56554278f31b53e0400c8b14382daf22efdbdb2f94644a4994`, zipapp sha256 `381a5d2e5b3332f7604de0e7f9118ced26ffeae6e21b07372835a4d2a05c5bfc`, the call at `__main__.py:3534-3535`; the output shape `cephadmlib/call_wrappers.py:280-310` and `cephadmlib/logging.py:118-160`; the MGR refusal `src/pybind/mgr/cephadm/serve.py:2696-2703` (`20.2.2` source RPM, changes archive); the committed lists `T/data/cephadm_declared/20.1.0-221.el9cp.json`, `20.2.1-405.el9cp.json`, `20.2.2-349.el9cp.json`, `20.2.2-349.el10cp.json`. The live operation is unqualified, so no operation id is cited | P/native_specializations.py (record, fact `host-cephadm.bootstrap-license-call`); P/ceph_tunnel_staging.py `license_call_refusal`; P/ceph_native.py `Worker.command` (`recover`), P/ceph_native_bootstrap.py `Bootstrap.tunnel_bootstrap` and `Bootstrap.license_call_continues` (the one consult of the seam) | T/test_native_specializations.py `test_bootstrap_license_call_true_on_an_ibm_build_that_lists_it`, `test_twenty_two_shaped_artifacts_keep_the_general_flow_but_continue_the_license_call_refusal`; T/test_ceph_tunnel_staging.py `test_the_ibm_license_call_refusal_is_recognized_exactly`; T/test_ceph_bootstrap_finalization.py `test_ibm_license_call_refusal_continues_the_owned_seed_in_the_same_apply` |
 | `ceph-monitoring-plaintext-exporters` | P/native_specializations.py | ceph-image monitoring templates and service discovery | `image-monitoring.blanket-https-scrapes` is True | matched the six source fingerprints from `20.2.1-405.el9cp`; other bytes unknown | workaround | `ceph.monitoring.scrape-template` to `plaintext-exporters` | The secure template selects HTTPS for plaintext metrics, discovery includes keepalive-only ingress, and HAProxy gates its exporter on unset statistics. | Can complete deployment with unhealthy scrapes; the current core request freezes the corrected monitoring sources. | Immutable `cp.icr.io/cp/ibm-ceph/ceph-9-rhel9@sha256:8dae4b5b8f07c7fa95bd1d68b22d4c1dd4c2d323d533d807dc1ceae4e329cb7f`; source locations and fingerprints below; [native template overrides](https://docs.ceph.com/en/tentacle/cephadm/services/monitoring/#using-custom-configuration-files) | P/ceph_monitoring_template.py `QUALIFIED`, `blanket_https`, `desired`, `corrected`; P/ceph_native.py `Worker.__init__` wires the confined source getter | T/test_ceph_monitoring_template.py; T/test_native_specializations.py |
 | `ceph-gateway-grafana-sessions` | P/native_specializations.py | ceph-image management gateway templates | `image-gateway.grafana-unrouted` is True, each template then corrected only when it witnesses its own defect | matched both templates of `20.2.1-405.el9cp`, `v9.9.1-25074` and `v9.9.2-26947` (rhel10); other shapes unknown or false | workaround | `ceph.gateway.grafana-route` to `host-and-affinity` | Without an oauth2-proxy the gateway proxies `/grafana` with `Host: grafana_servers`, which Grafana's CSRF check refuses as `origin not allowed`, and balances the Grafanas round-robin while each keeps its own sessions. | Can complete with Grafana sign-in refused through the gateway. An automation fix: no intent, digest or contract moves, so it reaches a gateway block this build runs, including a continued operation whose gateway block has not completed ([continuation](continuation-after-a-fix.md#rule)). | `/usr/share/ceph/mgr/cephadm/templates/services/mgmt-gateway/nginx.conf.j2:45-51` sha256 `589d8e1a802b0d1adb26d27ccff99cb7cfd67d3c36de027ab06730a261f2f990` and `external_server.conf.j2:117-147` sha256 `fec000edde5fba3db28f953601188f87c6a4a3ae2a4e237ceacbb59807cba444`, identical in the three builds; [Grafana behind the gateway](ibm-ceph-monitoring.md#grafana-behind-the-gateway) | P/ceph_monitoring_template.py `gateway_witness`, `grafana_unrouted`, `gateway_plans`, `routed_upstream`, `routed_location`; P/ceph_native.py `Worker.__init__` wires the confined source getter | T/test_ceph_gateway_grafana_routes.py; T/test_native_specializations.py |
+| `ceph-gateway-sign-on-headers` | P/native_specializations.py | ceph-image management gateway templates | `image-gateway.sign-on-forwarded` is True, each line then corrected only when it witnesses its own defect | matched `external_server.conf.j2` of `v9.9.1-25074` and `v9.9.2-26947` (rhel10); other shapes unknown or false | workaround | `ceph.gateway.sign-on-headers` to `gateway-identity` | With an oauth2-proxy the gateway forwards the client's cookies to the dashboard, which in OAuth2 mode reads a `token` cookie before the gateway's `X-Access-Token` and decodes it unverified, and sends Grafana the client's own `X-Auth-Request-Role` header as its role. | Completes with any signed-in user able to act as the dashboard's local `admin` and to choose their Grafana role. An automation fix: no intent, digest or contract moves, and a gateway without an oauth2-proxy keeps the Grafana routes' override bytes ([continuation](continuation-after-a-fix.md#rule)). | `/usr/share/ceph/mgr/cephadm/templates/services/mgmt-gateway/external_server.conf.j2:78-113` (dashboard) and `:117-147` (Grafana, the role line at `:135`), sha256 `fec000edde5fba3db28f953601188f87c6a4a3ae2a4e237ceacbb59807cba444`, identical in both builds; [IBM Ceph sign-on](ibm-ceph-sign-on.md) | P/ceph_monitoring_template.py `sign_on_witness`, `gateway_facts`, `gateway_corrections`, `gateway_plans`, `cleared_cookie`, `viewer_role`; P/ceph_native.py `Worker.__init__` wires the confined source getter | T/test_ceph_gateway_sign_on_headers.py; T/test_native_specializations.py |
 
 ### Record notes
 
@@ -167,6 +168,26 @@ continues a live operation, as the
 
 The digests identify the read bytes only; the witness never compares them.
 
+#### ceph-gateway-sign-on-headers
+
+The source getter and parser are the Grafana routes' own: one read of the two
+gateway templates gives both facts, each from its own witnesses, so either
+record is selected independently. Its seam is consulted only for a unit that
+declares an oauth2-proxy. The dashboard witness needs `location /` to open
+with its `proxy_pass`, set no Cookie header and hold the template's one
+`X-Access-Token` line inside its one unnested oauth2-proxy branch; the role
+witness needs `location /grafana` to hold the template's one
+`$http_x_auth_request_role` role line there and no other role line. A role
+line taking no client header, or a set Cookie header, is False; any other
+shape is unknown; either keeps that line native. The variant inserts
+`proxy_set_header Cookie "";` after the `X-Access-Token` line and replaces the
+role line with `proxy_set_header X-WEBAUTH-ROLE "Viewer";`, the latter only
+for a unit that fronts Grafana. Both join the Grafana routes' host correction
+in the one `external_server.conf` override, so ownership, the deployed-file
+proof and the one reconfigure are the
+[Grafana routes](../../specs/ceph.md#grafana-routes) protocol, as
+[gateway sign-on headers](../../specs/ceph.md#gateway-sign-on-headers) states.
+
 ### General topology rule (OpenShift)
 
 The one rule of a Go-owned component. It is not a specialization: it applies
@@ -195,7 +216,8 @@ D162 clause (b) and the [storage API](../../specs/api/ceph.md).
 | seam | variants | general | refusal | call sites |
 | --- | --- | --- | --- | --- |
 | `ceph.monitoring.scrape-template` | `native`, `plaintext-exporters` | `native` | no | P/ceph_monitoring_template.py `desired` |
-| `ceph.gateway.grafana-route` | `native`, `host-and-affinity` | `native` | no | P/ceph_monitoring_template.py `gateway_plans` |
+| `ceph.gateway.grafana-route` | `native`, `host-and-affinity` | `native` | no | P/ceph_monitoring_template.py `gateway_corrections` |
+| `ceph.gateway.sign-on-headers` | `native`, `gateway-identity` | `native` | no | P/ceph_monitoring_template.py `gateway_corrections` |
 | `ceph.bootstrap.license-flag` | `pass`, `omit` | `pass` | no | P/ceph_tunnel_staging.py `bootstrap_argv` |
 | `ceph.mgr.license-contract` | `ibm`, `absent` | `ibm` | no | P/ceph_native.py `Worker.enroll`, `Worker.observe_cluster` |
 | `ceph.call-home-model` | `opt-out`, `opt-in` | `opt-out` | yes | P/ceph_native.py `Worker.require_call_home_path`; P/ceph_tunnel_staging.py `bootstrap_argv` |

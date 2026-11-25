@@ -2415,6 +2415,57 @@ until whole-cluster retirement. A gateway that stops listing `grafana`, or an
 artifact that no longer selects an owned override, while that override remains
 refuses `monitoring-template-identity`.
 
+The same `external_server.conf` override also carries the
+[gateway sign-on headers](#gateway-sign-on-headers) corrections when they are
+selected, so the gateway owns at most one override per template file.
+
+## Gateway sign-on headers
+
+A management gateway unit that declares an oauth2-proxy corrects two lines of
+cephadm's `external_server.conf` template, each inside its
+`{% if enable_oauth2_proxy %}` branch and each when the
+[artifact specialization catalog](../.agents/knowledge/version-specializations.md#ceph-gateway-sign-on-headers)
+selects it:
+
+- the dashboard location `/` gains `proxy_set_header Cookie "";`, so no client
+  cookie reaches the dashboard. In OAuth2 mode the dashboard reads a `token`
+  cookie before the gateway's `X-Access-Token` header and decodes it without
+  checking its signature, so a signed-in user could otherwise present a forged
+  token naming the local `admin`
+  ([the reproduction](../.agents/knowledge/ibm-ceph-sign-on.md#forged-dashboard-token));
+- when the unit also fronts Grafana, the `/grafana` location sends
+  `proxy_set_header X-WEBAUTH-ROLE "Viewer";` in place of the client's own
+  `X-Auth-Request-Role` header, so no signed-in user chooses their Grafana
+  role. Every user the identity provider signs in is a Grafana Viewer.
+
+Each correction is applied only when its own exact anchor is witnessed: the
+dashboard location opens with its `proxy_pass`, sets no Cookie header and
+holds the template's one `X-Access-Token` line in its one oauth2-proxy branch;
+Grafana's location holds the template's one client-role line there and sets
+no other role. A template that lacks an anchor, holds it twice or already sets
+the header keeps that line native, and no digest, release or tag selects
+them. The selected corrections join the [Grafana routes](#grafana-routes)
+host correction in the one owned `external_server.conf` override, applied in
+that order, under the same records, check, completion before the stream and
+removal. A gateway without an oauth2-proxy carries none of them, so its
+override is the Grafana routes' alone.
+
+The route proof inside the readiness wait runs for every gateway unit that
+fronts Grafana or declares an oauth2-proxy, and counts each selected
+correction in the file each running container mounts at
+`/etc/nginx_external_server.conf`: exactly one `proxy_set_header Cookie "";`
+in the dashboard location, and in Grafana's exactly one
+`proxy_set_header X-WEBAUTH-ROLE "Viewer";` and no
+`$http_x_auth_request_role`. A daemon rendered before the oauth2-proxy
+daemons ran lacks both lines, so it takes the one reconfigure and the wait
+goes on until it serves them.
+
+Not yet met: while a management gateway signs users in, each manager's own
+dashboard port (8443 by default) still answers any network the host admits,
+and there the dashboard accepts an unsigned token naming a local user, since
+the gateway's corrections cannot reach a request that bypasses the gateway;
+tracked as [B1829](milestones/m2.md#b1829).
+
 ## Monitoring scrape templates
 
 The monitoring request freezes `scrapeIngress`, a map of every admitted native

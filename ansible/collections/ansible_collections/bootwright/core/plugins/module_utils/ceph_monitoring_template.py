@@ -2,7 +2,7 @@
 
 The fixed sources are read inside the held image, through HostRuntime's confined executor. A conservative fingerprint
 recognizes the complete qualified native rendering/discovery/exporter contract; unfamiliar source bytes stay general.
-The management gateway's Grafana routing templates use the same ownership protocol under an exact-anchor witness instead.
+The management gateway's templates use the same ownership protocol under exact-anchor witnesses instead.
 No provider source is shipped, and no release label or component-version pairing selects the correction.
 """
 
@@ -43,8 +43,8 @@ QUALIFIED = {
     'smb': 'aba61b29639d66c731d24d1e349eee7972ad810f3d67799d4b723266fc01a4ab',
 }
 ANCHOR = "    {% if service == 'ceph' %}\n"
-# The management gateway's two Grafana routing templates, owned by its unit. A structural witness on exact anchors, never a digest, selects
-# each template's own correction, so every build still carrying a defect is corrected and any other bytes keep the native template.
+# The management gateway's two templates, owned by its unit. A structural witness on exact anchors, never a digest, selects each
+# correction of a template, so every build still carrying a defect is corrected and any other bytes keep the native template.
 
 
 def owned(key):
@@ -56,7 +56,7 @@ def owned(key):
 
 NGINX = owned("mgr/cephadm/services/mgmt-gateway/nginx.conf")
 EXTERNAL = owned("mgr/cephadm/services/mgmt-gateway/external_server.conf")
-# Each override's Grafana route, by its source name.
+# Each override's source name.
 ROUTES = {NGINX: "nginx", EXTERNAL: "external"}
 GATEWAY_SOURCES = {
     "nginx": "/usr/share/ceph/mgr/cephadm/templates/services/mgmt-gateway/nginx.conf.j2",
@@ -71,6 +71,15 @@ PROXIED = "        {% if enable_oauth2_proxy %}\n"
 BRANCH_END = "        {% endif %}\n"
 BLOCK_END = "\n    }\n"
 BALANCING = ("ip_hash", "hash ", "sticky", "least_conn", "random")
+# The sign-on corrections of external_server.conf's two oauth2-proxy branches: the dashboard location forwards no client cookie, since
+# in OAuth2 mode the dashboard reads a `token` cookie before the gateway's X-Access-Token and decodes it unverified, and Grafana's
+# location sends a fixed role instead of the client's own X-Auth-Request-Role header.
+DASHBOARD = "    location / {\n"
+DASHBOARD_PASS = "        proxy_pass {{ dashboard_scheme }}://dashboard_servers;\n"
+TOKEN = "        proxy_set_header X-Access-Token $token;\n"
+COOKIE = '        proxy_set_header Cookie "";\n'
+ROLE = "        proxy_set_header X-WEBAUTH-ROLE $http_x_auth_request_role;\n"
+VIEWER = '        proxy_set_header X-WEBAUTH-ROLE "Viewer";\n'
 SOURCE_SCRIPT = """import json,os,stat,sys,sysconfig
 paths=json.loads(sys.argv[1]); result={}
 for name,path in paths.items():
@@ -179,32 +188,81 @@ def upstream_unpinned(template):
     return not any(line.strip().lower().startswith(BALANCING) for line in upstream.splitlines())
 
 
-def location_unhosted(template):
-    """True when Grafana's one location opens with its proxy_pass and sets Host only inside its one oauth2-proxy branch, False when it
-    sets Host outside it, None for any other shape."""
-    location = block(template, LOCATION)
-    if location is None or not location.startswith(PASS) or location.count(PASS) != 1 or location.count(PROXIED) != 1:
+def proxied_branch(template, anchor, opening):
+    """(the location's lines outside its branch, the branch) of the one location an exact anchor opens with its one proxy_pass and one
+    unnested oauth2-proxy branch; None for any other shape."""
+    location = block(template, anchor)
+    if location is None or not location.startswith(opening) or location.count(opening) != 1 or location.count(PROXIED) != 1:
         return None
     before, unused, rest = location.partition(PROXIED)
     branch, closed, after = rest.partition(BRANCH_END)
     if not closed or "{%" in branch or "{%" in before + after:
         return None
-    return "proxy_set_header host" not in (before + after).lower()
+    return before + after, branch
+
+
+def location_unhosted(template):
+    """True when Grafana's one location opens with its proxy_pass and sets Host only inside its one oauth2-proxy branch, False when it
+    sets Host outside it, None for any other shape."""
+    shape = proxied_branch(template, LOCATION, PASS)
+    if shape is None:
+        return None
+    return "proxy_set_header host" not in shape[0].lower()
+
+
+def cookie_forwarded(template):
+    """True when the dashboard's one location forwards the client's cookies to the dashboard: it sets no Cookie header and its oauth2-proxy
+    branch holds the template's one X-Access-Token line. False when the location sets a Cookie header, None for any other shape."""
+    shape = proxied_branch(template, DASHBOARD, DASHBOARD_PASS)
+    if shape is None:
+        return None
+    outside, branch = shape
+    if "proxy_set_header cookie" in (outside + branch).lower():
+        return False
+    return True if branch.count(TOKEN) == 1 and template.count(TOKEN) == 1 else None
+
+
+def role_chosen(template):
+    """True when Grafana's one location sends, inside its oauth2-proxy branch, the client's own X-Auth-Request-Role header as the Grafana
+    role, on the template's one such line. False when every role line it sets takes no client header, None for any other shape."""
+    shape = proxied_branch(template, LOCATION, PASS)
+    if shape is None:
+        return None
+    outside, branch = shape
+    roles = [line for line in (outside + branch).splitlines() if "x-webauth-role" in line.lower()]
+    if len(roles) == 1 and branch.count(ROLE) == 1 and template.count(ROLE) == 1:
+        return True
+    return False if roles and not any("$http_" in line.lower() for line in roles) else None
 
 
 def gateway_witness(value):
-    """Each gateway template's own defect witness, by source name: True, False or None (unknown)."""
+    """Each gateway template's own Grafana routing defect witness, by source name: True, False or None (unknown)."""
     gateway_shape(value)
     return {"nginx": upstream_unpinned(value["nginx"]), "external": location_unhosted(value["external"])}
+
+
+def sign_on_witness(value):
+    """Each sign-on defect witness of external_server.conf, by correction name: True, False or None (unknown)."""
+    gateway_shape(value)
+    return {"cookie": cookie_forwarded(value["external"]), "role": role_chosen(value["external"])}
+
+
+def either(witness):
+    """True when any witness holds its defect, False when none does and every anchor was read, None otherwise."""
+    if True in witness.values():
+        return True
+    return False if None not in witness.values() else None
+
+
+def gateway_facts(value):
+    """The gateway source's two facts, each from its own witnesses."""
+    return {"grafana-unrouted": grafana_unrouted(value), "sign-on-forwarded": either(sign_on_witness(value))}
 
 
 def grafana_unrouted(value):
     """True when either template witnesses its own defect; each is then corrected alone. False when neither does and both anchors were
     read; None otherwise, which keeps the native templates."""
-    witness = gateway_witness(value)
-    if True in witness.values():
-        return True
-    return False if None not in witness.values() else None
+    return either(gateway_witness(value))
 
 
 def routed_upstream(template):
@@ -228,17 +286,66 @@ def routed_location(template):
     return data
 
 
+def cleared_cookie(template):
+    """Forward no client cookie to the dashboard: one empty Cookie header follows the X-Access-Token line of its oauth2-proxy branch, so the
+    dashboard reads only the token the gateway's oauth2-proxy issued."""
+    if template.count(DASHBOARD + DASHBOARD_PASS) != 1 or template.count(TOKEN) != 1 or "proxy_set_header cookie" in template.lower():
+        raise ValueError("ambiguous native gateway template")
+    return bounded(template.replace(TOKEN, TOKEN + COOKIE))
+
+
+def viewer_role(template):
+    """Send Grafana the fixed role Viewer in place of the client's own role header, so no signed-in user chooses their Grafana role."""
+    if template.count(ROLE) != 1 or template.count(VIEWER) != 0:
+        raise ValueError("ambiguous native gateway template")
+    return bounded(template.replace(ROLE, VIEWER))
+
+
+def bounded(text):
+    data = text.encode()
+    if len(data) > MAX_TEMPLATE:
+        raise ValueError("template bound")
+    return data
+
+
+# Every correction by name: the override it changes and its insertion, applied in this order to one template.
+CORRECTIONS = {"nginx": (NGINX, routed_upstream), "external": (EXTERNAL, routed_location), "cookie": (EXTERNAL, cleared_cookie),
+               "role": (EXTERNAL, viewer_role)}
+
+
+def proxied(unit):
+    """Whether the unit declares an oauth2-proxy, the only case the gateway renders its sign-on branches."""
+    return any(document.get("service_type") == "oauth2-proxy" for document in unit.get("documents", []))
+
+
+def gateway_corrections(worker, unit):
+    """The selected corrections by name, in CORRECTIONS order. The Grafana routes need a fronted Grafana and their seam; the sign-on
+    corrections need a declared oauth2-proxy and their own seam, the role one a fronted Grafana too. Each needs its own witness."""
+    fronted, chosen = "grafana" in unit.get("monitoring", []), set()
+    if fronted and worker.selection.variant("ceph.gateway.grafana-route") == "host-and-affinity":
+        witness = gateway_witness(worker.selection.source("image-gateway")[0])
+        chosen.update(name for name in ("nginx", "external") if witness[name] is True)
+    if proxied(unit) and worker.selection.variant("ceph.gateway.sign-on-headers") == "gateway-identity":
+        witness = sign_on_witness(worker.selection.source("image-gateway")[0])
+        chosen.update(name for name in ("cookie", "role") if witness[name] is True and (fronted or name == "cookie"))
+    return [name for name in CORRECTIONS if name in chosen]
+
+
 def gateway_plans(worker, unit):
-    """The gateway's two Grafana overrides: each wanted only when the gateway fronts a declared Grafana, the seam selects the correction
-    and that template witnesses its own defect."""
-    wanted = {"nginx": None, "external": None}
-    if "grafana" in unit.get("monitoring", []) and worker.selection.variant("ceph.gateway.grafana-route") == "host-and-affinity":
+    """The gateway's two owned overrides: each template, when a selected correction changes it, with every selected correction of that
+    template applied in order; every other byte stays native."""
+    names, wanted = gateway_corrections(worker, unit), {NGINX: None, EXTERNAL: None}
+    if names:
         sources, unused = worker.selection.source("image-gateway")
-        digests, witness = source_digests(sources), gateway_witness(sources)
-        for name, correct in (("nginx", routed_upstream), ("external", routed_location)):
-            if witness[name] is True:
-                wanted[name] = correct(sources[name]), digests
-    return ((NGINX, wanted["nginx"]), (EXTERNAL, wanted["external"]))
+        digests = source_digests(sources)
+        for descriptor in wanted:
+            corrections = [correct for name, (target, correct) in CORRECTIONS.items() if name in names and target == descriptor]
+            text = sources[ROUTES[descriptor]]
+            for correct in corrections:
+                text = correct(text).decode()
+            if corrections:
+                wanted[descriptor] = text.encode(), digests
+    return ((NGINX, wanted[NGINX]), (EXTERNAL, wanted[EXTERNAL]))
 
 
 def image_sources(worker, sources=None):

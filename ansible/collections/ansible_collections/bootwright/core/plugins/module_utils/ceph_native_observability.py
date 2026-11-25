@@ -147,6 +147,11 @@ GATEWAY_NGINX = "/etc/nginx/nginx.conf"
 GATEWAY_EXTERNAL = "/etc/nginx_external_server.conf"
 GRAFANA_AFFINITY = "ip_hash;"
 GRAFANA_HOST = "proxy_set_header Host $host;"
+# The lines the sign-on corrections render inside the dashboard's and Grafana's oauth2-proxy branches, and the client header they replace.
+DASHBOARD_COOKIE = 'proxy_set_header Cookie "";'
+GRAFANA_ROLE = 'proxy_set_header X-WEBAUTH-ROLE "Viewer";'
+CLIENT_ROLE = "$http_x_auth_request_role"
+GATEWAY_ROUTES = ("cookie", "external", "nginx", "role")
 STARTED_AT = re.compile(r"([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\.([0-9]{1,9}))?(Z|[+-][0-9]{2}:[0-9]{2})")
 GATEWAY_MEMBERS = frozenset(("enable_auth", "enable_health_check_endpoint", "port", "ssl", "ssl_ciphers", "ssl_protocols", "virtual_ip"))
 GATEWAY_INGRESS_MEMBERS = frozenset(("backend_service", "first_virtual_router_id", "health_check_interval", "keepalive_only", "virtual_interface_networks",
@@ -804,6 +809,12 @@ def grafana_fronted(unit):
     return unit.get("type") == "mgmt-gateway" and "grafana" in unit.get("monitoring", [])
 
 
+def routes_owed(unit):
+    """Whether a management gateway unit may own a template override, so its readiness proves the routes: it fronts a declared Grafana
+    or declares an oauth2-proxy."""
+    return grafana_fronted(unit) or unit.get("type") == "mgmt-gateway" and gateway_documents(unit)[2] is not None
+
+
 def config_block(text, opening):
     """The stripped lines of the one nginx block a line reading exactly `opening` opens, up to its closing brace; None when it is absent,
     repeated or unclosed."""
@@ -821,11 +832,15 @@ def config_block(text, opening):
 
 
 def routes_grafana(nginx, external):
-    """Which Grafana routes a deployed gateway's two rendered files carry, by override source name: `nginx` when Grafana's upstream pins
-    each client to one Grafana, `external` when its location forwards the client's Host exactly once."""
+    """Which routes a deployed gateway's two rendered files carry, by correction name: `nginx` when Grafana's upstream pins each client to
+    one Grafana, `external` when its location forwards the client's Host exactly once, `cookie` when the dashboard's location clears the
+    client's cookies once, `role` when Grafana's location sends the role Viewer once and no client role header."""
     upstream, location = config_block(nginx, "upstream grafana_servers {"), config_block(external, "location /grafana {")
+    dashboard = config_block(external, "location / {")
     return {"nginx": upstream is not None and GRAFANA_AFFINITY in upstream,
-            "external": location is not None and location.count(GRAFANA_HOST) == 1}
+            "external": location is not None and location.count(GRAFANA_HOST) == 1,
+            "cookie": dashboard is not None and dashboard.count(DASHBOARD_COOKIE) == 1,
+            "role": location is not None and location.count(GRAFANA_ROLE) == 1 and not any(CLIENT_ROLE in line for line in location)}
 
 
 def started_ns(value):
@@ -844,11 +859,11 @@ def started_ns(value):
 
 
 def gateway_routed(fsid, inspected):
-    """Which Grafana routes one running gateway container serves (routes_grafana), read from the two files it mounts beneath
+    """Which routes one running gateway container serves (routes_grafana), read from the two files it mounts beneath
     DATA_ROOT/<fsid>/ without following a link, each owned by root or the container's user and writable by its owner alone; none unless
     the container started after both were written, since a file bind mount keeps the inode it started with and cephadm's reconfigure
     rewrites the files before it restarts the daemon. No path or byte leaves this function."""
-    unserved = {"nginx": False, "external": False}
+    unserved = dict.fromkeys(GATEWAY_ROUTES, False)
     unused, unused_environment, user, mounts = proxy_container(inspected)
     state = inspected.get("State")
     started = started_ns(state.get("StartedAt")) if isinstance(state, dict) else None
