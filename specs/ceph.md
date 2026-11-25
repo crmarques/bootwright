@@ -1360,6 +1360,13 @@ native cleanup receipt. Its disk policy still applies. Foreign state or an inter
 cleanup refuses or remains partial. Generic online removal remains closed by
 the client-quiescence requirement.
 
+After a successful native removal, the worker reads the original absence
+checks immediately and up to four more times, five seconds apart while any
+find state. It does not repeat the mutation between reads. Persistent state
+keeps retirement unproved and names the Machine and the remaining check
+categories without reporting native paths or contents. The operator continues
+the destroy with the same authorizations.
+
 If the retained-root cleanup SSH command exits unsuccessfully, its transport
 failure can report the exit status and a fixed category derived from SSH
 stderr. Both raw command streams remain private.

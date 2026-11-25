@@ -73,6 +73,7 @@ class Host:
         self.sshd, self.sshd_lose = [], None
         self.styles = {}
         self.runtime_present = False
+        self.pauses = []
 
     def path(self, *parts):
         return os.path.join(self.root, *parts)
@@ -91,6 +92,9 @@ class Host:
 
     def registry_intent(self):
         return ceph_native.Worker.registry_intent(self)
+
+    def pause(self, seconds):
+        self.pauses.append(seconds)
 
     def command(self, argv, timeout=60, json_result=True):
         if argv[:2] == ["/usr/bin/systemctl", "list-units"]:
@@ -586,15 +590,36 @@ def test_retained_root_recovers_a_lost_native_cleanup_reply(tiebreaker):
 def test_a_cleanup_receipt_requires_absence_beyond_the_daemon_directory(tiebreaker):
     host = tiebreaker
     host.runtime_present = True
-    with pytest.raises(ceph_native.Refusal, match="^not-removed$"):
-        removal(host).remove()
+    cleanup = physical_removal(host)
+    with pytest.raises(ceph_native.NativeFailure, match="^not-removed$") as failure:
+        cleanup.remove()
+    assert failure.value.native_error == {"coordinate": "Ceph FSID cleanup on Machine/machine-5", "cause": "remaining checks: runtime"}
+    assert host.pauses == [stretch.REMOVAL_SETTLE_INTERVAL] * (stretch.REMOVAL_SETTLE_READS - 1)
     assert stretch.REMOVAL_COMPLETE not in host.markers.records
     host.runtime_present = False
     keyring = host.path("etc/ceph/ceph.client.admin.keyring")
     write(keyring, b"synthetic residue", 0o600)
-    assert removal(host).observe()["removed"] is False
+    assert cleanup.observe()["removed"] is False
     os.unlink(keyring)
-    assert removal(host).remove()["removed"] is True
+    assert cleanup.remove()["removed"] is True
+
+
+def test_retained_root_cleanup_waits_for_delayed_runtime_absence_without_repeating_the_inverse(tiebreaker, monkeypatch):
+    host = tiebreaker
+    host.runtime_present = True
+    cleanup = physical_removal(host)
+    assert cleanup.observe()["removed"] is False and not host.pauses
+
+    def settle(seconds):
+        host.pauses.append(seconds)
+        assert stretch.REMOVAL_COMPLETE not in host.markers.records
+        if len(host.pauses) == 2:
+            host.runtime_present = False
+
+    monkeypatch.setattr(host, "pause", settle)
+    assert cleanup.remove()["removed"] is True
+    assert host.pauses == [stretch.REMOVAL_SETTLE_INTERVAL, stretch.REMOVAL_SETTLE_INTERVAL]
+    assert len(host.commands) == 1 and cleanup.observe()["removed"] is True
 
 
 @pytest.mark.parametrize("relative", [
@@ -611,7 +636,7 @@ def test_native_layout_residue_blocks_a_removal_receipt(tiebreaker, relative):
         removal(host).remove()
     assert stretch.REMOVAL_COMPLETE not in host.markers.records
     assert removal(host).observe()["removed"] is False
-    assert len(host.commands) == 1
+    assert len(host.commands) == 1 and not host.pauses
 
 
 @pytest.mark.parametrize("operation", ["remove", "observe"])

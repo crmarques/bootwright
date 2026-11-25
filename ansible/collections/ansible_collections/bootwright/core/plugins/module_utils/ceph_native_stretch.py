@@ -31,7 +31,7 @@ import stat
 import uuid
 
 from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import (
-    REGISTRY_NAME, Refusal, daemon_identity_host, marker_identity, named, registry_directory, registry_exists, registry_read, require,
+    REGISTRY_NAME, NativeFailure, Refusal, daemon_identity_host, marker_identity, named, registry_directory, registry_exists, registry_read, require,
     tunnel_helpers,
 )
 
@@ -483,6 +483,7 @@ REMOVAL_COMPLETE = "tiebreaker-removal-complete.json"
 # The only daemon types of this FSID a provided tiebreaker runs: its MON and the derived crash collector.
 REMOVAL_TYPES = ("mon", "crash")
 RM_CLUSTER_TIMEOUT = 300
+REMOVAL_SETTLE_READS, REMOVAL_SETTLE_INTERVAL = 5, 5
 DATA_ROOT, LOG_ROOT, UNIT_ROOT, LOGROTATE_ROOT, CONF_ROOT = "/var/lib/ceph", "/var/log/ceph", "/etc/systemd/system", "/etc/logrotate.d", "/etc/ceph"
 UNIT_WANTS = "ceph.target.wants"
 MAX_LISTING = 4096
@@ -902,6 +903,16 @@ class TiebreakerRemoval:
                     credential=self.credential_present(), route=self.route_present(), confResidue=self.config_residue(),
                     runtime=self.native_runtime())
 
+    def require_absent(self, footprint):
+        """Name only the fixed checks that found residue, never native contents or paths."""
+        remaining = sorted(name for name, value in footprint.items() if value)
+        if remaining:
+            raise NativeFailure("not-removed", "Ceph FSID cleanup on Machine/" + self.host["machine"],
+                                ("remaining checks: " + ", ".join(remaining)).encode("ascii"))
+
+    def await_absence(self, authorization):
+        self.require_absent(self.footprint(authorization))
+
     def prove(self):
         """Read only: this cluster's owner marker, its records, and a footprint that is only its own; None for a host the cluster's
         claim never reached, which holds nothing of the FSID (any part of it there is another's)."""
@@ -943,7 +954,8 @@ class TiebreakerRemoval:
         require(complete is None, "tiebreaker-foreign")
         del attempt
         argv = self.rm_cluster() if any(footprint[name] for name in NATIVE) else None
-        require(argv is not None or not any(footprint[name] for name in ("runtime", "confResidue", "layoutResidue")), "not-removed")
+        if argv is None and any(footprint[name] for name in ("runtime", "confResidue", "layoutResidue")):
+            self.require_absent(footprint)
         if footprint["conf"]:
             self.markers.write("native-removal-config.json", self.record)
         self.markers.write(REMOVAL_ATTEMPT, self.record)
@@ -957,7 +969,7 @@ class TiebreakerRemoval:
             self.route_present(remove=True)
         if argv is not None:
             self.worker.command(argv, timeout=RM_CLUSTER_TIMEOUT, json_result=False)
-        require(not any(self.footprint(authorization).values()), "not-removed")
+        self.await_absence(authorization)
         self.markers.write(REMOVAL_COMPLETE, self.record)
         return {"changed": True, "removed": True, "attempted": True}
 
@@ -973,6 +985,16 @@ class PhysicalHostRemoval(TiebreakerRemoval):
         self.markers = worker.markers
         self.fsid = worker.request["fsid"]
         self.record = {"version": REMOVAL_VERSION, "owner": self.request["owner"], "fsid": self.fsid, "host": self.host["name"]}
+
+    def await_absence(self, authorization):
+        """Give a successful removal's footprint time to settle without performing any further effects."""
+        footprint = self.footprint(authorization)
+        for unused in range(REMOVAL_SETTLE_READS - 1):
+            if not any(footprint.values()):
+                return
+            self.worker.pause(REMOVAL_SETTLE_INTERVAL)
+            footprint = self.footprint(authorization)
+        self.require_absent(footprint)
 
     def daemons(self):
         require(all(name == self.fsid for name in listing(DATA_ROOT)), "tiebreaker-foreign")

@@ -447,7 +447,6 @@ func hostRefusals() map[string]error {
 		"image-profile":            "the contained probe of the frozen Ceph image did not prove its runtime profile",
 		"route-probe":              "the native SSH class inside the frozen Ceph image did not prove the verified tunnel route",
 		"tiebreaker-foreign":       "the retained-root host contains foreign or unproved Ceph state",
-		"not-removed":              "the selected FSID host state remains after cleanup",
 		"native-option-undeclared": "the selected cephadm does not declare an option required for cleanup",
 		"device-identity":          "the Ceph host could not derive its devices' native identities through the image SDK",
 		"runtime-profile":          "the Ceph host's retained runtime profile is missing or contradicts the image it holds",
@@ -455,6 +454,8 @@ func hostRefusals() map[string]error {
 	} {
 		out[reason] = cephBoundaryUnproved.Fail(message, "inspect the attempt's adapter output, then apply again; host preparation resumes from its journal")
 	}
+	out["not-removed"] = cephBoundaryUnproved.Fail("the selected FSID host state remains after cleanup",
+		"inspect the remaining checks on the named Machine, then continue the same destroy with its original authorizations; do not apply over an unfinished removal")
 	for reason, refusal := range packageRefusals() {
 		out[reason] = refusal
 	}

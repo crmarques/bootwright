@@ -46,6 +46,13 @@ func TestAHostRefusalReachesTheOperatorWithItsRemedy(t *testing.T) {
 	}
 }
 
+func TestRetainedRootResidueNamesDestroyAsTheRemedy(t *testing.T) {
+	d := diagnostics.Of(hostRefusals()["not-removed"])
+	if len(d) != 1 || d[0].Code != cephBoundaryUnproved.Code || !strings.Contains(d[0].Remediation, "continue the same destroy") {
+		t.Fatalf("a retained-root removal refusal reached the operator as %+v", d)
+	}
+}
+
 func TestAPackageRefusalReachesTheOperatorWithWhatToCheck(t *testing.T) {
 	for reason, want := range map[string]string{"package-license": "Entitlement.spec.license.accept", "package-signature": "publisher keys", "package-resolution": "IBM Ceph repository", "package-transaction": "dnf log", "package-acquisition": "network path"} {
 		t.Run(reason, func(t *testing.T) {
