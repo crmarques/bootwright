@@ -176,7 +176,11 @@ operator as a first-call refusal; the slice that records it is named.
   (`mgr/call_home_agent/proxy`, default the manager's `CHA_PROXY`, empty):
   it passes `proxies=` to each `requests.post`, so no host or container
   route applies (`call_home_agent/module.py` `refresh_options`, `report.py`
-  `send`, 20.2.1-405). On the owner's prd stretch cluster (2026-11-24, IBM
+  `send`, 20.2.1-405). Not every path honours it: `callhome list-tenants`
+  passes `proxies=self.proxy`, a string, which `requests` rejects with
+  `AttributeError` while the option is set (`module.py` ~870), and the
+  diagnostics upload (`workflow_upload_snap.py`) passes no proxies at all.
+  On the owner's prd stretch cluster (2026-11-24, IBM
   9.9.1.2), hosts reachable only through `http://proxy.inf.bndes.net:8080`
   raised it for every report class with `ConnectTimeoutError esupport.ibm.com`
   (connect timeout=60), and `ceph config dump` held no proxy option. The

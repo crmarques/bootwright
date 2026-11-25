@@ -1269,9 +1269,9 @@ Bootwright Ceph route, including on a host with a direct selection.
 
 ## Call Home route
 
-IBM's `call_home_agent` manager module sends each report and its
-registration request only through its `proxy` option
-(`mgr/call_home_agent/proxy`), passed explicitly to every request, and reads
+IBM's `call_home_agent` manager module sends each scheduled and
+unsolicited-request report only through its `proxy` option
+(`mgr/call_home_agent/proxy`), passed explicitly to each request, and reads
 no host or container route; a host that reaches the internet only through a
 proxy otherwise raises `CHA_ERROR_SENDING_REPORT` on every report. With
 enabled Call Home and a frozen
@@ -2246,8 +2246,11 @@ and runs no `dashboard` or `mgr module` command but the sign-on enable below.
 cephadm sets the standby options after the daemons deploy, so readiness waits
 until `config get mgr` reads `mgr/dashboard/standby_behaviour` as `error` and
 `mgr/dashboard/standby_error_status_code` as `503` (a JSON string or integer,
-else `native-output`), and no standby redirects to the active manager. The
-cluster's dashboard phase keeps its own publication and readback.
+else `native-output`), and no standby redirects to the active manager.
+Removing a gateway daemon resets both (cephadm's `post_remove`), and nothing
+sets them again until `ceph orch reconfig mgmt-gateway` marks the daemons for
+cephadm's post-deploy pass. The cluster's dashboard phase keeps its own
+publication and readback.
 
 A running management gateway turns on cephadm's monitoring security, which
 puts Prometheus and Alertmanager behind basic authentication, with the login

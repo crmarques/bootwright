@@ -248,13 +248,16 @@ package or registry route. It is admitted only with `callHome: enabled`;
 beside `disabled`, `direct: {}` included, it refuses at admission. Its bypass
 choice is resolved while planning against the host of the `call_home_agent`
 module's report target, `esupport.ibm.com`, and the resulting endpoint is
-frozen with the cluster's host scope. The module sends every report and its
-Storage Insights registration request (`join.insights.ibm.com`) through its
-one `proxy` option, so a frozen endpoint carries both and a bypass entry that
-matches only the registration host changes nothing. Bootwright sets that
+frozen with the cluster's host scope. The module sends its scheduled and
+unsolicited-request reports through its one `proxy` option; its diagnostics
+upload ignores the option, and its `callhome list-tenants` command, which
+passes the option as a string, fails while one is set. Bootwright sets that
 option to the frozen endpoint; the [Call Home route](../ceph.md#call-home-route)
 owns the effect and its proofs. The endpoint carries no credential: Proxy
-`auth` refuses at admission.
+`auth` refuses at admission. The route belongs to the cluster's frozen input:
+a cluster installed without it takes one only by `bootwright destroy` and a
+fresh apply, and while none is frozen an `mgr/call_home_agent/proxy` set
+outside Bootwright refuses `call-home-drift` on every observation.
 
 `image.base` names the repository and `image.version` supplies the
 authored tag or SHA-256 digest. The Entitlement registry namespace must contain
