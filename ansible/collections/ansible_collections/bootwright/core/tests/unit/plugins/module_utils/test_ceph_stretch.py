@@ -552,7 +552,7 @@ def test_activation_is_not_pending_while_a_host_has_not_joined():
 
 
 def test_osd_creation_past_the_activation_wait_is_its_readiness_timeout_never_an_unknown_effect():
-    """op-b63a749c: cephadm still created OSDs when the wait before activation ended; the worker of its last observation, given only the
+    """cephadm still created OSDs when the wait before activation ended; the worker of its last observation, given only the
     wait's remaining seconds, returned a bare timeout."""
     value = request()
     clock = core.ReadinessClock()
@@ -575,12 +575,11 @@ def test_osd_creation_past_the_activation_wait_is_its_readiness_timeout_never_an
     assert not {"stretch_locate", "stretch_enable"} & {phase for unused, phase, unused in transport.calls}
 
 
-# op-284a9069: the last two of 30 encrypted OSDs, never booted, when the 900 s wait before activation ended.
-CREATING = ["unbooted@osd.25.1ef1d847-b27d-4310-9f94-b6ea69965c43", "unbooted@osd.26.8f2cae53-da90-4c7f-a781-26c2ed43615e"]
-
-
 def unbooted(osd):
     return "unbooted@osd.%d.00000000-0000-4000-8000-%012d" % (osd, osd)
+
+
+CREATING = [unbooted(3), unbooted(7)]
 
 
 class Creating(ActivationTransport):
@@ -602,7 +601,7 @@ class Creating(ActivationTransport):
 
 
 def test_osd_creation_past_900_s_reaches_activation_within_the_run_deadline(tmp_path):
-    """op-284a9069: the OSDs were up 15 min 18 s after the services call; the cluster apply's run deadline leaves the wait the time."""
+    """OSD creation can outlast the initial wait while the cluster apply still has time available."""
     value = request()
     core.package_intent(value)
     clock = core.ReadinessClock()

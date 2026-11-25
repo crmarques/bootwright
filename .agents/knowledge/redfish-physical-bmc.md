@@ -60,9 +60,9 @@ attach and after every eject. The
 [adapter boundary](../../specs/substrates.md#identity-and-power-operations)
 lets `ConnectedVia` decide when `Inserted` is null or absent.
 
-The owner's ceph-stretch destroy of 2026-11-23 refused all six physical erases
+A destroy refused physical erases
 at the insert, with a controller line that named no HTTP status, on the
-captured BMC family. The same dc1 servers had erased on 2026-11-18. Reading
+captured BMC family. An earlier erase had succeeded. Reading
 the code, of what the shared client changed since then only its refusal of an
 unreadable insertion state reaches the insert without a status. That fits the captured
 BMC reporting `Inserted` null or absent when empty, but no capture shows the

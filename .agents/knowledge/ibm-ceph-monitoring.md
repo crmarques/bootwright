@@ -70,10 +70,10 @@ whose `pending_daemon_config` the deploy set, and only while the `dashboard`
 module is enabled. Until then `ceph config get mgr` answers the module
 defaults, `redirect` and 500, and a standby dashboard sends the browser to the
 active manager's address in `mgr services` (the gateway's nginx skips only a
-standby that answers 503). On the 2026-11-24 ceph-stretch run (`ceph-prd-01`)
+standby that answers 503). In one deployment,
 the pass waited behind a two-minute reconfiguration sweep that began right
 after the gateway deployed, the apply reported the gateway ready, and the
-owner's browser at the gateway's address landed on `https://10.7.7.2:8443/`.
+browser was redirected from the gateway to the active manager's dashboard.
 Gateway readiness therefore reads both options and is not ready until they
 read `error` and 503 (blocking entry `standby@mgmt-gateway`); it still writes
 nothing, because the wait outlasts cephadm's delay.
@@ -83,8 +83,7 @@ nothing, because the wait outlasts cephadm's delay.
 ([`ConfigMonitor.cc`](https://github.com/ceph/ceph/blob/v20.2.1/src/mon/ConfigMonitor.cc#L352-L365));
 only the keyless dump honours the format. A JSON parse of that answer works
 by accident for `true`, `false` and numbers and fails for any other string:
-the first standby read on the 2026-11-25 ceph-stretch run
-(`op-284a9069`) refused `native-output@ceph_native.command`. Read a single key
+a standby read in a stretch deployment refused `native-output@ceph_native.command`. Read a single key
 as text.
 
 The dashboard also uses its own certificate and key as the TLS client identity
@@ -179,11 +178,10 @@ publishes, before any monitoring unit runs, so every MGR gets ports 8443 and
 8765 only; bootstrap opened 9283 on the first host alone. Service discovery
 hands every Prometheus one target, the active MGR's FQDN at `:9283`
 (`prometheus_sd_config` in `services/service_discovery.py`), so only the
-Prometheus colocated with the active MGR reaches it. On the owner's
-`ceph-prd-01` (IBM 9.9.1.2, 2026-11-24) `ceph orch ps --daemon-type mgr`
-listed `*:8443,8765` on all four MGRs while `mgr services` published
-`https://10.7.7.2:9283/`. Three of the four Prometheus daemons saw the target
-down, so `CephMgrPrometheusModuleInactive` (`up{job="ceph"} == 0`) fired and
+Prometheus colocated with the active MGR reaches it. On IBM 9.9.1.2,
+`ceph orch ps --daemon-type mgr` listed `*:8443,8765` on each MGR while `mgr services` published the
+active manager's HTTPS exporter on port 9283. Remote Prometheus daemons
+saw the target down, so `CephMgrPrometheusModuleInactive` (`up{job="ceph"} == 0`) fired and
 cleared as the gateway balanced alert reads across them
 ([B1803](../../specs/milestones/m2.md#b1803)).
 
@@ -330,7 +328,7 @@ the update is owed under [B1632](../../specs/milestones/m2.md#b1632).
 
 ## Grafana behind the gateway
 
-Observation (2026-11-25, the owner's ceph-stretch run of `ceph-prd-01` on
+Observation (IBM image
 `cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-27200`): signing in to Grafana
 through the management gateway answered "Login failed - origin not allowed".
 cephadm's gateway templates, read in the image at

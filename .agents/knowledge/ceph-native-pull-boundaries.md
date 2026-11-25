@@ -39,7 +39,7 @@ failure without proving a real registry pull succeeded.
 
 ## Ping EOF on a host that egresses only through a proxy
 
-On 2026-11-18 every prd-dc1 Ceph host refused `image-pull` with podman's
+On 2026-11-18 every physical Ceph host refused `image-pull` with podman's
 `pinging container registry cp.icr.io: Get "https://cp.icr.io/v2/": EOF`
 within seconds, and the cause carried no broker reason. Those hosts reach the
 internet only through an external HTTP proxy, but the broker dialed the
@@ -57,7 +57,7 @@ select the hosts' egress Proxy in `registryProxy`.
 
 ## Manager pulls that bypass the broker on a proxied host
 
-On the same day the next prd-dc1 run bootstrapped the seed and enrolled every
+On the same day the next physical run bootstrapped the seed and enrolled every
 host, then the cluster block ended `native-timeout` at
 `ceph_native.bounded_command`. The bootstrap host's `/var/log/ceph/cephadm.log`
 showed the manager's own `cephadm --image <digest> pull` repeating every two

@@ -176,7 +176,7 @@ leaves the packages journal without `complete.json`.
   @System` (and the same for `podman`) is a downgrade: the `latest` roots pick
   the newest package the solve's repositories offer, and the host's
   within-release update had already installed a newer one from its Satellite.
-  On the owner's prd-dc1 run of 2026-11-17 the hosts installed from the hosted
+  On an operator run of 2026-11-17 the hosts installed from the hosted
   DVD and updated from the Satellite; such a host now takes its dependencies
   from that Satellite ([selection](../../specs/ceph-subscription-dependencies.md#selection-and-request)).
 
@@ -184,7 +184,7 @@ leaves the packages journal without `complete.json`.
 
 Symptom: every Satellite-sourced host refuses within seconds with
 `package-limit:package-limit@ceph_package_sources.metadata_member:<line>`,
-before any `decision.json`. The owner's prd-dc1 run of 2026-11-18 met it.
+before any `decision.json`. An operator run of 2026-11-18 met it.
 
 Cause: the metadata bounds fitted one DVD's repositories. A subscription
 repository keeps every package of its release since GA, so its metadata

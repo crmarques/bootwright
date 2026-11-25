@@ -12,9 +12,9 @@ func TestParseRelaxationsGrammar(t *testing.T) {
 		"":                                     nil,
 		"erase=a:retain":                       {"a": EraseRetain},
 		"erase=a:metadataClear,erase=b:retain": {"a": EraseMetadataClear, "b": EraseRetain},
-		"erase=srv-4203:retain,erase=srv-4204:metadataClear": {"srv-4203": EraseRetain, "srv-4204": EraseMetadataClear},
-		"abandon=vrt3068":                 {"vrt3068": Abandon},
-		"abandon=a,erase=b:metadataClear": {"a": Abandon, "b": EraseMetadataClear},
+		"erase=node-a:retain,erase=node-b:metadataClear": {"node-a": EraseRetain, "node-b": EraseMetadataClear},
+		"abandon=arbiter-01":                             {"arbiter-01": Abandon},
+		"abandon=a,erase=b:metadataClear":                {"a": Abandon, "b": EraseMetadataClear},
 	} {
 		var members []string
 		if tokens != "" {

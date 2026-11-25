@@ -406,7 +406,7 @@ func TestAnInputLoggingRefusalNamesTheInputItWouldLog(t *testing.T) {
 }
 
 func TestADelegatedCommandTakesTheOrdinaryEntryOnlyWhenSudoListsItForTheCaller(t *testing.T) {
-	args := []string{"machine", "rsh", "--name", "vrt3068"}
+	args := []string{"machine", "rsh", "--name", "arbiter-01"}
 	for _, test := range []struct {
 		name           string
 		noninteractive bool
@@ -415,14 +415,14 @@ func TestADelegatedCommandTakesTheOrdinaryEntryOnlyWhenSudoListsItForTheCaller(t
 		wantListing    []string
 		wantChild      []string
 	}{
-		{name: "permitted", listed: 0, wantListing: []string{"-l", "-u", "#0", "--", "/opt/bootwright", "machine", "rsh", "--name", "vrt3068"},
-			wantChild: []string{"-u", "#0", "--", "/opt/bootwright", "machine", "rsh", "--name", "vrt3068"}},
-		{name: "refused", listed: 1, wantListing: []string{"-l", "-u", "#0", "--", "/opt/bootwright", "machine", "rsh", "--name", "vrt3068"},
-			wantChild: []string{"-u", "#0", "--", "/opt/bootwright", "__delegate", "machine", "rsh", "--name", "vrt3068"}},
-		{name: "unattended", noninteractive: true, listed: 0, wantListing: []string{"-n", "-l", "-u", "#0", "--", "/opt/bootwright", "machine", "rsh", "--name", "vrt3068"},
-			wantChild: []string{"-u", "#0", "-n", "--", "/opt/bootwright", "machine", "rsh", "--name", "vrt3068"}},
+		{name: "permitted", listed: 0, wantListing: []string{"-l", "-u", "#0", "--", "/opt/bootwright", "machine", "rsh", "--name", "arbiter-01"},
+			wantChild: []string{"-u", "#0", "--", "/opt/bootwright", "machine", "rsh", "--name", "arbiter-01"}},
+		{name: "refused", listed: 1, wantListing: []string{"-l", "-u", "#0", "--", "/opt/bootwright", "machine", "rsh", "--name", "arbiter-01"},
+			wantChild: []string{"-u", "#0", "--", "/opt/bootwright", "__delegate", "machine", "rsh", "--name", "arbiter-01"}},
+		{name: "unattended", noninteractive: true, listed: 0, wantListing: []string{"-n", "-l", "-u", "#0", "--", "/opt/bootwright", "machine", "rsh", "--name", "arbiter-01"},
+			wantChild: []string{"-u", "#0", "-n", "--", "/opt/bootwright", "machine", "rsh", "--name", "arbiter-01"}},
 		{name: "route assignments", assignments: []string{"HTTPS_PROXY=http://proxy:3128"},
-			wantChild: []string{"-u", "#0", "HTTPS_PROXY=http://proxy:3128", "--", "/opt/bootwright", "__delegate", "machine", "rsh", "--name", "vrt3068"}},
+			wantChild: []string{"-u", "#0", "HTTPS_PROXY=http://proxy:3128", "--", "/opt/bootwright", "__delegate", "machine", "rsh", "--name", "arbiter-01"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			var listing, child []string
@@ -454,7 +454,7 @@ func TestADelegatedCommandTakesTheOrdinaryEntryOnlyWhenSudoListsItForTheCaller(t
 }
 
 func TestADelegatedCommandKeepsTheDelegatedEntryWhenTheListingCannotAnswer(t *testing.T) {
-	args := []string{"machine", "exec", "--name", "vrt3068", "uptime"}
+	args := []string{"machine", "exec", "--name", "arbiter-01", "uptime"}
 	for _, test := range []struct {
 		name       string
 		enrollment bool
@@ -464,9 +464,9 @@ func TestADelegatedCommandKeepsTheDelegatedEntryWhenTheListingCannotAnswer(t *te
 		wantErr    bool
 	}{
 		{name: "listing failed to run", listing: func(context.CancelFunc) (int, error) { return 0, errors.New("sudo vanished") }, wantListed: true,
-			wantChild: []string{"-u", "#0", "-n", "--", "/opt/bootwright", "__delegate", "machine", "exec", "--name", "vrt3068", "uptime"}},
+			wantChild: []string{"-u", "#0", "-n", "--", "/opt/bootwright", "__delegate", "machine", "exec", "--name", "arbiter-01", "uptime"}},
 		{name: "enrollment input", enrollment: true,
-			wantChild: []string{"-u", "#0", "-n", "--", "/opt/bootwright", "__delegate", "machine", "exec", "--name", "vrt3068", "uptime"}},
+			wantChild: []string{"-u", "#0", "-n", "--", "/opt/bootwright", "__delegate", "machine", "exec", "--name", "arbiter-01", "uptime"}},
 		{name: "interrupted at the prompt", listing: func(cancel context.CancelFunc) (int, error) { cancel(); return 1, nil }, wantListed: true, wantErr: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {

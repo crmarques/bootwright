@@ -338,7 +338,7 @@ Alias cell.
 | [B1557](#b1557) | new, 2026-11-17 (X576) | enabling | Verification tooling, with each owning context | The role families that call fixed executables, fixed host roots or remote endpoints run their entry points through ansible-core in the gate | Each needs an executable, root or endpoint override in the role, a custody change the owner has not asked for |
 | [B1588](#b1588) | new, 2026-11-18 (X597 review) | safety | Substrate | A libvirt guest listing reads each domain by its UUID, so no domain name is read as another domain's ID | Low confidence that libvirt admits an all-digit domain name; the fix touches every guest-listing fixture |
 | [B1612](#b1612) | new, 2026-11-18 (D277) | product | Storage, with Add-ons | An omitted CephConsumer key type defaults to one the cluster's MONs allow | An explicit `aes256k` already works; the default needs an owner decision |
-| [B1805](#b1805) | new, 2026-11-24 (the owner's ceph-stretch run) | product | Storage | The management gateway listens only on its virtual IP, so it can share hosts and port 443 with an object gateway ingress | The owner kept the gateway on 9443 for the next run; it needs an owned cephadm template override |
+| [B1805](#b1805) | new, 2026-11-24 (an operator run) | product | Storage | The management gateway listens only on its virtual IP, so it can share hosts and port 443 with an object gateway ingress | The gateway can use a separate port; it needs an owned cephadm template override |
 | [B1809](#b1809) | new, 2026-11-25 (X721) | product | Storage | An oauth2-proxy added to a management gateway an earlier apply realized switches the gateway and its Grafanas to single sign-on through the identity provider | The owner wants OIDC once the identity provider exists; Keycloak is not deployed yet |
 
 ### B82
@@ -3697,8 +3697,8 @@ and the kernel client's key support is still unqualified
 **Definition:** Candidate. **Outcome:** a CephCluster's management gateway
 binds its listener to the gateway's virtual IP only, so it can take port 443
 on hosts whose object gateway ingress already serves 443 on its own virtual IP.
-The owner asked for both endpoints on 443 on 2026-11-24, after the
-ceph-stretch run of `ceph-prd-01`, then kept 9443 for the next run. cephadm's
+The owner asked for both endpoints on 443 on 2026-11-24, after a
+stretch deployment, then retained a separate gateway port for the next run. cephadm's
 `external_server.conf.j2` writes `listen <port> ssl` with no address, so nginx
 claims the port on every host address; the gateway's service spec has no bind
 address, the kernel refuses a second listener on that port, and
@@ -4061,7 +4061,7 @@ empty while the question appears on the terminal.
 refused by its management controller shows the controller's printable line
 (the shared Redfish client's failure, which names no credential, image or
 token) in the destroy's diagnostic, beside the closed code and detail the
-runner hears now. In the owner's ceph-stretch destroy of 2026-11-23 the
+runner hears now. In an operator destroy of 2026-11-23 the
 diagnostic said only `adapter detail: insert`, and the line was readable only
 as root in the attempt's retained output.
 
@@ -4090,8 +4090,8 @@ Owning text: [installer](../managed-os-subscription-source.md#installer).
 **Owner:** Machine, with CLI. **Kind:** product. **Requires:** none.
 **Definition:** Needs definition.
 
-**Outcome:** the owner's `bootwright machine exec --name srv4203 -- hostname`
-was refused with `no grant matches Machine srv4203 and its remote account
+**Outcome:** `bootwright machine exec --name <machine> -- hostname`
+was refused with `no grant matches Machine <machine> and its remote account
 for this operation`, although a grant admitted that Machine and account and
 listed `/usr/bin/hostname`: grants match argument vectors literally. The
 refusal names which part of the request no grant matched and, for a command
@@ -9689,7 +9689,7 @@ authorized.
 
 ### D277
 
-**owner** (2026-11-18): after `ceph-prd-dc1-test` refused `cephx-policy`
+**owner** (2026-11-18): after a physical cluster refused `cephx-policy`
 because its input still declared `security.cephx.keyType: aes` against the
 pinned IBM Storage Ceph 9.9.1.2 build, which mints only `aes256k` keys, the
 owner was shown four corrections of [B628](delivered.md#b628) and chose the
@@ -9785,9 +9785,8 @@ Machine's own access. This opens X664, [B1682](m1.md#b1682) and
 
 ### D284
 
-**owner** (2026-11-23): the provided arbiter runs RHEL 9.6 while the chart
-declares 9.8. The owner asked whether Bootwright can declare that upgrade and,
-if not, to pick the best design, implement it, update the ceph-stretch chart
+**owner** (2026-11-23): the provided arbiter runs an earlier RHEL minor than the chart declares. The owner asked whether Bootwright can declare that upgrade and,
+if not, to pick the best design, implement it, update the stretch chart
 and merge into local main. Chosen: a second policy value,
 `spec.os.provided.updates.policy: toRelease`, with `release` as the target. The
 host may start on an earlier minor of the same major. The resolved transaction

@@ -813,8 +813,8 @@ def test_every_entry_point_admits_a_provided_host_whose_only_grant_is_its_ssh_so
     conditions = tasks(name)[0]["ansible.builtin.assert"]["that"]
     request = {"version": "os-host-firewall-v1", "direct": True, "preparation": False, "address": "", "user": "", "fleetKeyRef": "",
                "budgets": {"inspection": INSPECTION, "session": SESSION},
-               "identity": {"block": "os-firewall-vrt3068", "context": "lab", "object": "vrt3068"},
-               "placement": {"connection": "ssh", "machine": "vrt3068", "address": "192.0.2.5", "port": 22},
+               "identity": {"block": "os-firewall-arbiter-01", "context": "lab", "object": "arbiter-01"},
+               "placement": {"connection": "ssh", "machine": "arbiter-01", "address": "192.0.2.5", "port": 22},
                "services": [], "sshSources": ["192.0.2.0/24"]}
     material = {"mark": MARK, "services": "[]"}
     assert holds(conditions, bootwright_os_firewall_request=request, bootwright_os_firewall_material=material)

@@ -69,7 +69,7 @@ operator as a first-call refusal; the slice that records it is named.
 - `lsblk`'s `FSTYPE` comes from the host's udev record, not the device: right
   after `ceph-volume` formats an encrypted OSD's LV inside the Ceph container,
   the record may be absent or stale (the container's LVM runs without udev
-  rules, so the host may skip probing the LV). On 2026-11-18 a prd-dc1 run
+  rules, so the host may skip probing the LV). On 2026-11-18 a physical run
   stopped at `foreign-osd@ceph_native_osd.prove_osd_crypto:96`, which also
   checked the LV's one dm-crypt child, on its own fresh TPM2 OSDs, and the host
   showed `crypto_LUKS` and that child minutes later. The header proof reads
@@ -77,12 +77,10 @@ operator as a first-call refusal; the slice that records it is named.
 - cephadm creates a host's OSDs after the OSD service call returns, so the
   readiness wait observes hosts mid-creation: `lvs` lists a block volume
   `ceph-volume` already tagged with the cluster FSID and OSD ID while the host's
-  `lsblk` tree does not yet show it as the disk's `lvm` child. On 2026-11-24 a
-  ceph-stretch run stopped at `foreign-osd@ceph_native_osd.prove_osd_crypto:93`
-  at 17:05:51 UTC, beside the first host's OSD volume links of 14:05 -03; the
-  other hosts' came 14:07 to 14:19 and all 30 proved clean afterwards. Event
-  log times are UTC; `ls -l /dev/ceph-*/ /dev/mapper/` on the hosts shows local
-  time. A proof refusal while `ceph-volume` runs, or while a tagged volume's
+  `lsblk` tree does not yet show it as the disk's `lvm` child. During OSD volume link creation,
+  a readiness observation stopped at `foreign-osd@ceph_native_osd.prove_osd_crypto:93`.
+  The OSDs proved clean after deployment. Event logs use UTC and
+  `ls -l /dev/ceph-*/ /dev/mapper/` shows host local time. A proof refusal while `ceph-volume` runs, or while a tagged volume's
   OSD has no daemon on the host yet, reads the host unsettled (X684).
 - On 20.2.1-405, `fs new … set allow_standby_replay <bool>` aborts the MON
   leader (`std::out_of_range` in `FileSystemCommandHandler::set_val`), and the
@@ -180,8 +178,7 @@ operator as a first-call refusal; the slice that records it is named.
   passes `proxies=self.proxy`, a string, which `requests` rejects with
   `AttributeError` while the option is set (`module.py` ~870), and the
   diagnostics upload (`workflow_upload_snap.py`) passes no proxies at all.
-  On the owner's prd stretch cluster (2026-11-24, IBM
-  9.9.1.2), hosts reachable only through `http://proxy.inf.bndes.net:8080`
+  On IBM 9.9.1.2, hosts with proxy-only egress
   raised it for every report class with `ConnectTimeoutError esupport.ibm.com`
   (connect timeout=60), and `ceph config dump` held no proxy option. The
   CephCluster's `callHomeProxy` now sets it

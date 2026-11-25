@@ -393,7 +393,7 @@ def test_prometheus_module_observed_through_mgr_services(tmp_path):
 
 
 def lagging_monitor(tmp_path):
-    """The owner's ceph-prd-01 shape: the dashboard phase redeployed every MGR before the prometheus module published, so each MGR's
+    """The dashboard phase redeployed every MGR before the prometheus module published, so each MGR's
     deployment ports are 8443 and 8765 without 9283."""
     request = monitoring_request()
     markers = units.markers_for(tmp_path, request)

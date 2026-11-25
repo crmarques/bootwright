@@ -36,11 +36,9 @@ This source review executes no cleanup and qualifies no provider artifact.
 
 ## A live manager writes a cleaned host again
 
-On 2026-11-25 (`op-083b58cc`) every destroy of the ceph-stretch environment
-stopped on its two hosts that run no MGR, `srv4205` and `srv4502`, with
+Destroy repeatedly stopped on hosts without a manager with
 `native-refusal:not-removed@ceph_native_stretch.remove:960`: the absence read
-after `rm-cluster` still found a part of the FSID. The other four hosts passed,
-and a second destroy completed. The adapter output was not read; the cause
+after `rm-cluster` still found a part of the FSID. A subsequent destroy completed. The adapter output was not read; the cause
 below comes from the cephadm v20.2.1 manager source
 (`src/pybind/mgr/cephadm/serve.py`, `ssh.py`) and the failure pattern.
 

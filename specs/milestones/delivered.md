@@ -18221,3 +18221,12 @@ measured results for those five packages. No floor is lowered.
 reproduced the excess. The coverage check passes against the remeasured Go
 profile and the collection's coverage from unchanged inputs. The delivering
 commit records the integration gates.
+
+## X726 — Generic deployment examples and regression fixtures
+
+**Owner:** Developer tooling. **Item:** B1815 (defect).
+
+Troubleshooting notes and milestone records retain the commands, native
+symptoms and expected results using generic deployment names. Regression tests
+use synthetic host and OSD identities for the same comparisons. The collection
+unit tests and the Go privilege and lifecycle tests exercise the revised fixtures.
