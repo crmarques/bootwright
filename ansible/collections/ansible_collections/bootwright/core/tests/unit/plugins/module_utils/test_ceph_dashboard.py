@@ -25,6 +25,8 @@ CERTIFICATE_PEM = (b"-----BEGIN CERTIFICATE-----\n" + base64.encodebytes(CERTIFI
 SIGNED_PEM = CERTIFICATE_PEM.replace(base64.encodebytes(CERTIFICATE_DER), base64.encodebytes(b"cephadm-signed-dashboard-certificate"))
 TLS_PAIR = {"cert": SIGNED_PEM.decode(), "key": "-----BEGIN PRIVATE KEY-----\ncHJpdmF0ZS1rZXk=\n-----END PRIVATE KEY-----\n"}
 URL = "https://node-1.example.test:8443/"
+MANAGER_ONE = "node-1.abcdef"
+MANAGER_TWO = "node-2.ghijkl"
 
 
 class Markers:
@@ -100,7 +102,7 @@ def dashboard(tmp_path, monkeypatch):
                             publication_delay=0, published=True, last_publication=False, ports={}, repairs=[], repaired={},
                             active="node-2.ghijkl", gid=1, ignored=set(), ignored_calls=[], events=[],
                             managers=2, deferred=0, pending=[], unavailable=0, orchestrating=0, served=True, starting=set(),
-                            standbys=True, promotes=True, tls={}, tls_generated=0, tls_lose=None, tls_output=None)
+                            cache_actions={}, standbys=True, promotes=True, tls={}, tls_generated=0, tls_lose=None, tls_output=None)
     markers = Markers(request)
 
     def manager_rows():
@@ -110,6 +112,7 @@ def dashboard(tmp_path, monkeypatch):
             containers = list(state.containers)
         return [{"daemon_type": "mgr", "daemon_id": host + "." + suffix, "hostname": host,
                  "container_id": state.repaired.get(host + "." + suffix, container),
+                 "last_refresh": f"2020-01-01T00:00:00.{state.polls:06d}Z",
                  # orchestrator/_interface.py:1270-1275 DaemonDescriptionStatus: running is 1, starting is 2.
                  "status": 2 if host + "." + suffix in state.starting else 1,
                  "ports": state.ports.get(host + "." + suffix, [8443, 8765])}
@@ -171,6 +174,14 @@ def dashboard(tmp_path, monkeypatch):
             return 0, json.dumps(TLS_PAIR).encode()
         if args[:2] == ["config-key", "get"] and args[2] in ("mgr/dashboard/crt", "mgr/dashboard/key") and state.tls:
             return 0, state.tls["cert" if args[2].endswith("/crt") else "key"]
+        if args[:2] == ["config-key", "dump"]:
+            prefix = args[2]
+            rows = [row for row in manager_rows() if prefix == "mgr/cephadm/host." + row["hostname"] + ";"]
+            assert len(rows) == 1
+            name = "mgr." + rows[0]["daemon_id"]
+            cache = json.dumps({"daemons": {name: rows[0]}, "scheduled_daemon_actions": state.cache_actions})
+            cut = len(cache) // 2
+            return 0, json.dumps({prefix + "1": cache[cut:], prefix + "0": cache[:cut]}).encode()
         if args == ["fsid"]:
             value = {"fsid": request["fsid"]}
         elif args == ["mgr", "module", "ls"]:
@@ -211,7 +222,11 @@ def dashboard(tmp_path, monkeypatch):
             daemon = args[3].removeprefix("mgr.")
             assert state.last_publication
             attempt = "dashboard-port-" + hashlib.sha256(daemon.encode()).hexdigest() + ".json"
-            assert attempt in markers.records
+            if "dashboard-port-repair.json" in markers.records:
+                assert attempt in markers.records
+            else:
+                row = next(row for row in manager_rows() if row["daemon_id"] == daemon)
+                assert row["container_id"] in markers.records["dashboard-redeploy.json"]["containers"]
             assert state.unavailable <= 0 and state.served, "redeploy before the new active orchestrator serves"
             state.events.append(("repair", daemon))
             if daemon in state.ignored:
@@ -234,10 +249,10 @@ def dashboard(tmp_path, monkeypatch):
             value = {"available": False, "active_name": "", "active_gid": 0, "standbys": []}
         elif args == ["mgr", "dump"]:
             value = {"available": True, "active_name": state.active, "active_gid": state.gid,
-                     "standbys": [{"name": name} for name in ("node-1.abcdef", "node-2.ghijkl") if name != state.active and state.standbys]}
+                     "standbys": [{"name": name} for name in (MANAGER_ONE, MANAGER_TWO)[:state.managers] if name != state.active and state.standbys]}
         elif args[:2] == ["mgr", "fail"]:
             # MgrMonitor.cc:930 drop_active clears the services map until the new active publishes its endpoints again.
-            assert args[2:] == [state.active]
+            assert args[2:] == [str(state.gid)]
             state.events.append(("fail", state.active))
             if state.promotes:
                 state.active = "node-1.abcdef" if state.active == "node-2.ghijkl" else "node-2.ghijkl"
@@ -400,7 +415,138 @@ def test_an_interrupted_phase_before_the_user_creates_it_once_with_the_same_byte
     assert dashboard.state.generated == 1 and dashboard.state.creates == 1 and dashboard.state.redeploys == 1
 
 
-def test_an_unscheduled_redeploy_after_a_lost_response_is_scheduled_again(dashboard):
+def test_redeploy_timeout_names_the_outstanding_manager_proof(dashboard):
+    dashboard.state.settle = 10 ** 6
+    with pytest.raises(ceph_native.Refusal, match="^native-timeout$") as failure:
+        dashboard.native.dashboard()
+    assert failure.value.native_error["cause"] == "2 of 2 managers running, 0 of 2 containers replaced"
+    assert "dashboard-redeployed.json" not in dashboard.markers.records
+    assert dashboard.state.creates == 0
+
+
+@pytest.mark.parametrize("remaining", [MANAGER_ONE, MANAGER_TWO])
+def test_partial_service_redeploy_finishes_only_the_original_container(dashboard, remaining):
+    # The native service action replaces one manager and leaves the other on its original container.
+    dashboard.state.settle = 10 ** 6
+    effect = dashboard.native.tunnel_effect
+    peer = MANAGER_TWO if remaining == MANAGER_ONE else MANAGER_ONE
+
+    def partial(*args, **options):
+        result = effect(*args, **options)
+        if args == ("orch", "redeploy", "mgr"):
+            dashboard.state.repaired[peer] = "ab" * 6
+        return result
+
+    dashboard.native.tunnel_effect = partial
+    dashboard.native.dashboard()
+    assert dashboard.state.redeploys == 1 and dashboard.state.repairs == [remaining]
+    assert [event for event in dashboard.state.events if event[0] == "fail"] == (
+        [("fail", remaining)] if remaining == MANAGER_TWO else [])
+    assert "dashboard-redeployed.json" in dashboard.markers.records
+    assert dashboard.state.creates == 1
+
+
+@pytest.mark.parametrize("native_state", ["stale", "no-stamp", "replaced", "foreign-standby", "replacement-in-cache", "queued-redeploy"])
+def test_continuation_waits_for_new_host_observations_before_redeploy(dashboard, native_state):
+    dashboard.state.settle = 10 ** 6
+    with pytest.raises(ceph_native.Refusal, match="^native-timeout$"):
+        dashboard.native.dashboard()
+    password = retained(dashboard)
+    dashboard.state.repaired[MANAGER_ONE] = "ab" * 6
+    if native_state == "queued-redeploy":
+        # The pending action belongs to a standby and cephadm can finish it without our help.
+        dashboard.state.active = MANAGER_ONE
+        dashboard.state.cache_actions["mgr." + MANAGER_TWO] = "redeploy"
+    ceph = dashboard.native.ceph
+    inventories = []
+
+    def observe(*args, **options):
+        state = ceph(*args, **options)
+        if args == ("mgr", "dump") and native_state == "foreign-standby":
+            state["standbys"].append({"name": "foreign"})
+        if args[:2] == ("config-key", "dump") and native_state == "replacement-in-cache":
+            prefix = args[2]
+            cache = json.loads(state[prefix + "0"] + state[prefix + "1"])
+            cache["daemons"]["mgr." + MANAGER_TWO]["container_id"] = "cd" * 6
+            return {prefix + "0": json.dumps(cache)}
+        if args[:2] == ("orch", "ps"):
+            inventories.append(args)
+            if native_state == "stale":
+                # One host refreshes throughout, the other keeps returning the original cached row.
+                state[1]["last_refresh"] = "2020-01-01T00:00:00Z"
+            if native_state == "no-stamp":
+                state[1].pop("last_refresh")
+            if native_state == "replaced" and len(inventories) == 1:
+                # The service action completes between returning the stale row and the next refresh.
+                dashboard.state.repaired[MANAGER_TWO] = "bc" * 6
+        return state
+
+    dashboard.native.ceph = observe
+    if native_state == "replaced":
+        assert dashboard.native.dashboard()["private"] == password
+    else:
+        with pytest.raises(ceph_native.Refusal, match="^foreign-service$" if native_state == "foreign-standby" else "^native-timeout$"):
+            dashboard.native.dashboard()
+        assert "dashboard-redeployed.json" not in dashboard.markers.records
+    assert len(inventories) >= 2
+    assert dashboard.state.repairs == [] and not any(event[0] == "fail" for event in dashboard.state.events)
+    dashboard.native.ceph = ceph
+    dashboard.state.cache_actions.clear()
+    assert dashboard.native.dashboard()["private"] == password
+    assert dashboard.state.redeploys == 1
+    assert dashboard.state.repairs == ([] if native_state == "replaced" else [MANAGER_TWO])
+
+
+@pytest.mark.parametrize("stored", ["unnumbered", "part-gap", "foreign-host", "malformed", "changed-container", "queued-stop"])
+def test_only_a_matching_native_host_record_can_authorize_redeploy(dashboard, stored):
+    ceph = dashboard.native.ceph
+    prefix = "mgr/cephadm/host.node-1;"
+    name = "mgr." + MANAGER_ONE
+    row = {"hostname": "other" if stored == "foreign-host" else "node-1", "daemon_id": MANAGER_ONE, "daemon_type": "mgr",
+           "status": 1, "container_id": ("ab" if stored == "changed-container" else "a1") * 6}
+    cache = {"daemons": {name: row}, "scheduled_daemon_actions": {name: "stop"} if stored == "queued-stop" else {}}
+
+    def read(*args):
+        if args == ("config-key", "dump", prefix):
+            if stored == "unnumbered":
+                return {}
+            return {prefix + ("1" if stored == "part-gap" else "0"): "{" if stored == "malformed" else json.dumps(cache)}
+        if args == ("config-key", "get", prefix[:-1]) and stored == "unnumbered":
+            return cache
+        return ceph(*args)
+
+    dashboard.native.ceph = read
+    adapter = ceph_native_dashboard.Dashboard(dashboard.native)
+    if stored in ("part-gap", "malformed", "foreign-host"):
+        with pytest.raises(ceph_native.Refusal, match="^foreign-service$" if stored == "foreign-host" else "^native-output$"):
+            adapter.dashboard_original_action(MANAGER_ONE, "a1" * 6)
+    else:
+        assert adapter.dashboard_original_action(MANAGER_ONE, "a1" * 6) == {
+            "changed-container": None, "queued-stop": "stop", "unnumbered": ""}[stored]
+
+
+def test_queued_redeploy_of_last_original_active_finishes_after_handoff(dashboard):
+    dashboard.state.settle = 10 ** 6
+    with pytest.raises(ceph_native.Refusal, match="^native-timeout$"):
+        dashboard.native.dashboard()
+    dashboard.state.repaired[MANAGER_ONE] = "ab" * 6
+    dashboard.state.cache_actions["mgr." + MANAGER_TWO] = "redeploy"
+    pause = dashboard.native.pause
+
+    def finish(seconds):
+        pause(seconds)
+        if dashboard.state.active == MANAGER_ONE:
+            dashboard.state.repaired[MANAGER_TWO] = "bc" * 6
+            dashboard.state.cache_actions.clear()
+
+    dashboard.native.pause = finish
+    dashboard.native.dashboard()
+    assert dashboard.state.events.count(("fail", MANAGER_TWO)) == 1
+    assert dashboard.state.redeploys == 1 and dashboard.state.repairs == []
+    assert "dashboard-redeployed.json" in dashboard.markers.records
+
+
+def test_unscheduled_service_after_a_lost_response_is_finished_per_original_manager(dashboard):
     real = dashboard.native.tunnel_effect
     lost = []
 
@@ -415,7 +561,8 @@ def test_an_unscheduled_redeploy_after_a_lost_response_is_scheduled_again(dashbo
         dashboard.native.dashboard()
     assert lost and dashboard.state.redeploys == 0 and "dashboard-redeploy.json" in dashboard.markers.records
     dashboard.native.dashboard()
-    assert dashboard.state.redeploys == 1 and "dashboard-redeployed.json" in dashboard.markers.records
+    assert dashboard.state.redeploys == 0 and dashboard.state.repairs == [MANAGER_ONE, MANAGER_TWO]
+    assert "dashboard-redeployed.json" in dashboard.markers.records
 
 
 def test_a_lost_redeploy_response_tolerates_replacement_during_the_publication_wait(dashboard):
@@ -787,10 +934,6 @@ def test_the_manager_restarts_the_phase_causes_are_waited_out_within_its_budget(
     assert result["changed"] is True and dashboard.state.redeploys == 1 and dashboard.state.creates == 1
     assert len(after["enable"]) == 1 and len(after["redeploy"]) == 2
     assert dashboard.clock.value < ceph_native.DASHBOARD_BUDGET
-
-
-MANAGER_ONE = "node-1.abcdef"
-MANAGER_TWO = "node-2.ghijkl"
 
 
 def repair_attempt(daemon):

@@ -9,6 +9,7 @@ import errno
 import hashlib
 import hmac
 import importlib
+import json
 import re
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_native
@@ -131,11 +132,12 @@ class Dashboard:
                 require(self.worker.clock() < deadline, "native-timeout")
                 self.worker.pause(DASHBOARD_INTERVAL)
 
-    def manager_containers(self):
+    def manager_containers(self, refresh_times=None):
         """Refreshed declared MGR containers, running state and dashboard port publication."""
-        return {daemon: (container, up, DASHBOARD_PORT in ports) for daemon, (container, up, ports) in self.manager_daemons().items()}
+        daemons = self.manager_daemons(refresh_times=refresh_times)
+        return {daemon: (container, up, DASHBOARD_PORT in ports) for daemon, (container, up, ports) in daemons.items()}
 
-    def manager_daemons(self, refresh=True):
+    def manager_daemons(self, refresh=True, refresh_times=None):
         """Declared MGR containers, running state and deployment ports from cephadm's daemon cache. A refresh asks cephadm to reread every
         host's daemons, which only a later read shows."""
         with self.worker.manager_served():
@@ -151,6 +153,8 @@ class Dashboard:
             ports = row.get("ports", [])
             require(isinstance(ports, list) and len(ports) <= 128
                     and all(type(port) is int and 1 <= port <= 65535 for port in ports), "native-output")
+            if refresh_times is not None and row.get("last_refresh") is not None:
+                refresh_times[row["daemon_id"]] = ceph_native.monmap_time(row["last_refresh"])
             result[row["daemon_id"]] = (container or "", type(row.get("status")) is int and row["status"] == 1, tuple(ports))
         require(len({row["hostname"] for row in rows}) == len(rows), "foreign-service")
         containers = [container for container, unused_up, unused_ports in result.values() if container]
@@ -187,6 +191,80 @@ class Dashboard:
                 self.worker.tunnel_effect("orch", "redeploy", "mgr", json_result=False)
                 return True
             self.worker.pause(DASHBOARD_INTERVAL)
+
+    def dashboard_original_action(self, daemon, container):
+        """The selected original's pending action, or None when the daemon is no longer that running container."""
+        placement = next(s["placement"] for s in self.worker.request["services"] if s["service_type"] == "mgr")
+        host = daemon_identity_host("mgr", daemon, placement["hosts"])
+        key = "mgr/cephadm/host." + host.lower()
+        # IBM cephadm splits a host's JSON across numbered keys. One prefix read excludes device records and other hosts.
+        try:
+            parts = self.worker.ceph("config-key", "dump", key + ";")
+            require(isinstance(parts, dict), "native-output")
+            if parts:
+                keys = [key + ";" + str(index) for index in range(len(parts))]
+                require(set(keys) == set(parts) and all(isinstance(parts[k], str) for k in keys), "native-output")
+                cache = json.loads("".join(parts[k] for k in keys), object_pairs_hook=ceph_native.unique_object)
+            else:
+                cache = self.worker.ceph("config-key", "get", key)
+        except ceph_native.NativeFailure:
+            raise ceph_native.NativeFailure("native-command", "Ceph dashboard redeploy", "cannot read cephadm host cache") from None
+        except (json.JSONDecodeError, RecursionError):
+            raise Refusal("native-output") from None
+        require(isinstance(cache, dict) and isinstance(cache.get("daemons"), dict)
+                and isinstance(cache.get("scheduled_daemon_actions", {}), dict), "native-output")
+        name = "mgr." + daemon
+        row = cache["daemons"].get(name)
+        if row is None:
+            return None
+        require(isinstance(row, dict) and row.get("daemon_type") == "mgr" and row.get("daemon_id") == daemon
+                and row.get("hostname") == host, "foreign-service")
+        if type(row.get("status")) is not int or row["status"] != 1 or row.get("container_id") != container:
+            return None
+        actions = cache.get("scheduled_daemon_actions", {})
+        require(name not in actions or isinstance(actions[name], str) and actions[name], "native-output")
+        return actions.get(name, "")
+
+    def dashboard_redeploy_next(self, running, missing, submitted, failed_over, deadline, intents):
+        """Redeploy a declared standby, or hand off the last active target before reobserving publication and containers."""
+        if not missing - submitted:
+            return False
+        manager = self.worker.ceph("mgr", "dump")
+        require(isinstance(manager, dict) and isinstance(manager.get("active_name"), str)
+                and type(manager.get("active_gid")) is int and isinstance(manager.get("standbys"), list)
+                and all(isinstance(row, dict) and isinstance(row.get("name"), str) for row in manager["standbys"]), "native-output")
+        active = manager["active_name"]
+        if manager.get("available") is not True or active not in running:
+            return False
+        require(manager["active_gid"] > 0, "native-output")
+        standbys = {row["name"] for row in manager["standbys"]}
+        require(standbys <= running.keys() and active not in standbys, "foreign-service")
+        targets = (missing - submitted) & standbys
+        for target in sorted(targets, key=lambda daemon: (daemon in intents and intents[daemon][2] is not None, daemon)):
+            with self.worker.transport_hold(), self.worker.cache_hold():
+                if not intents and self.dashboard_original_action(target, running[target][0]) != "":
+                    continue
+                require(self.worker.clock() < deadline, "native-timeout")
+                if intents:
+                    filename, intent, unused_attempt = intents[target]
+                    self.worker.markers.write(filename, intent)
+                self.worker.ceph("orch", "daemon", "redeploy", "mgr." + target, json_result=False)
+            submitted.add(target)
+            return True
+        if missing == {active} and active not in failed_over:
+            require(len(running) >= 2, "dashboard-manager")
+            if standbys and (intents or self.dashboard_original_action(active, running[active][0]) in ("", "redeploy")):
+                require(self.worker.clock() < deadline, "native-timeout")
+                failed_over.add(active)
+                self.worker.ceph("mgr", "fail", str(manager["active_gid"]), json_result=False)
+                try:
+                    self.worker.manager_wait(previous=manager["active_gid"])
+                except Refusal as error:
+                    if str(error) != "native-timeout":
+                        raise
+                    raise ceph_native.NativeFailure("native-timeout", "Ceph dashboard redeploy", "new active manager or orchestrator unavailable") from None
+                return True
+        return False
 
     def dashboard_repair_ports(self, scope, running, count, deadline):
         """One frozen repair pass. A target still running its recorded container without the port is requested at most once per
@@ -234,32 +312,7 @@ class Dashboard:
                 require(all(running[daemon][0] == record["containers"][daemon] for daemon in missing), "dashboard-manager")
                 if not missing:
                     return changed
-                manager = self.worker.ceph("mgr", "dump")
-                require(isinstance(manager, dict) and isinstance(manager.get("active_name"), str)
-                        and type(manager.get("active_gid")) is int, "native-output")
-                active = manager["active_name"]
-                targets = sorted(missing - submitted, key=lambda daemon: (daemon == active, intents[daemon][2] is not None, daemon))
-                if targets and (targets[0] != active or missing == {active}):
-                    target = targets[0]
-                    require(self.worker.clock() < deadline, "native-timeout")
-                    if target == active:
-                        require(count >= 2, "dashboard-manager")
-                        standbys = manager.get("standbys")
-                        require(isinstance(standbys, list) and all(isinstance(item, dict) for item in standbys), "native-output")
-                        if target not in failed_over and any(item.get("name") in record["containers"] for item in standbys):
-                            failed_over.add(target)
-                            self.worker.ceph("mgr", "fail", target, json_result=False)
-                            self.worker.manager_wait(previous=manager["active_gid"])
-                            changed = True
-                            continue
-                        self.worker.pause(DASHBOARD_INTERVAL)
-                        continue
-                    filename, intent, unused_attempt = intents[target]
-                    submitted.add(target)
-                    proof = self.worker.transport_hold()
-                    with proof, self.worker.cache_hold():
-                        self.worker.markers.write(filename, intent)
-                        self.worker.ceph("orch", "daemon", "redeploy", "mgr." + target, json_result=False)
+                if self.dashboard_redeploy_next(running, missing, submitted, failed_over, deadline, intents):
                     changed = True
                     continue
             require(self.worker.clock() < deadline, "native-timeout")
@@ -287,32 +340,61 @@ class Dashboard:
                 and len(set(record["containers"])) == count, "dashboard-manager")
         completed = self.worker.markers.read(done)
         require(completed is None or canonical(completed) == canonical(record), "dashboard-manager")
-        reissued = changed
-        while True:
-            try:
-                running = self.worker.manager_containers()
-            except ManagerRefusal:
-                # The redeploy restarts the manager that serves this view: nothing proved replaced yet.
-                running = {}
-            replaced = len(running) == count and all(
-                container and up and container not in record["containers"] for container, up, unused_port in running.values())
-            if replaced and self.worker.dashboard_published():
-                if self.worker.markers.read("dashboard-port-repair.json") is not None or not all(row[2] for row in running.values()):
-                    changed = self.dashboard_repair_ports(scope, running, count, deadline) or changed
-                break
-            unchanged = running and all(container in record["containers"] for container, unused_up, unused_port in running.values())
-            if completed is None and not reissued and unchanged:
-                # A lost response before the scheduling left every MGR unreplaced;
-                # a redeploy restarts them and is safe to schedule again. One replaced meanwhile shows the lost one running.
-                scheduled = self.dashboard_schedule_redeploy(record, count, deadline)
-                reissued, changed = True, changed or scheduled
-            require(self.worker.clock() < deadline, "native-timeout")
-            self.worker.pause(DASHBOARD_INTERVAL)
+        changed = self.dashboard_wait_redeploy(scope, record, count, deadline, completed=completed is not None, scheduled=changed) or changed
         self.worker.markers.write(done, record)
         self.worker.verify_transport_bundle()
         self.worker.manager_retry(self.worker.verify_tunnel_configuration)
         self.worker.verify_manager_mounts(self.worker.daemons())
         return changed
+
+    def dashboard_wait_redeploy(self, scope, record, count, deadline, *, completed, scheduled):
+        """Wait for the service action and recover only its original containers after independent host refreshes."""
+        submitted, failed_over = set(), set()
+        changed = False
+        first_refresh = {}
+        while True:
+            refresh_times = {}
+            try:
+                running = self.manager_containers(refresh_times) if not completed else self.worker.manager_containers()
+            except ManagerRefusal:
+                if self.worker.clock() >= deadline:
+                    raise ceph_native.NativeFailure("native-timeout", "Ceph dashboard redeploy", "manager inventory unavailable") from None
+                first_refresh.clear()
+                self.worker.pause(DASHBOARD_INTERVAL)
+                continue
+            live = {daemon: container for daemon, (container, up, unused_port) in running.items() if container and up}
+            remaining = {daemon for daemon, container in live.items() if container in record["containers"]}
+            replaced = len(live) - len(remaining)
+            ready = len(running) == len(live) == count
+            if ready and self.worker.dashboard_published():
+                repair = self.worker.markers.read("dashboard-port-repair.json")
+                if not remaining:
+                    if repair is not None or not all(row[2] for row in running.values()):
+                        changed = self.dashboard_repair_ports(scope, running, count, deadline) or changed
+                    return changed
+                if not completed and len(refresh_times) == count and (replaced or not scheduled):
+                    require(repair is None, "dashboard-manager")
+                    # --refresh queues new observations but returns the current cache. Keep the first stamps until *every*
+                    # host has refreshed the same set of container IDs, even when different hosts refresh on different polls.
+                    if set(first_refresh) != set(live.items()):
+                        first_refresh = {(daemon, container): refresh_times[daemon] for daemon, container in live.items()}
+                    elif all(refresh_times[daemon] > stamp for (daemon, unused_container), stamp in first_refresh.items()):
+                        if count == 1 and not submitted:
+                            target, = remaining
+                            if self.dashboard_original_action(target, live[target]) == "" and self.dashboard_schedule_redeploy(record, count, deadline):
+                                submitted.update(remaining)
+                                changed = True
+                        elif count > 1 and self.dashboard_redeploy_next(running, remaining, submitted, failed_over, deadline, {}):
+                            changed = True
+                            first_refresh.clear()
+                            continue
+            else:
+                first_refresh.clear()
+            if self.worker.clock() >= deadline:
+                cause = (f"{len(live)} of {count} managers running, {replaced} of {count} containers replaced"
+                         if not ready or remaining else "all manager containers replaced, dashboard endpoint unpublished")
+                raise ceph_native.NativeFailure("native-timeout", "Ceph dashboard redeploy", cause)
+            self.worker.pause(DASHBOARD_INTERVAL)
 
     def dashboard_users(self):
         users = self.worker.ceph("dashboard", "ac-user-show")

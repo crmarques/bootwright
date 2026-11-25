@@ -252,7 +252,6 @@ func pythonFunctionsAwaitingSplit() []string {
 		"ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_host_runtime.py:HostRuntime.block_device",
 		"ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native.py:Worker.observe_cluster",
 		"ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native.py:Worker.observe_osds",
-		"ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native_dashboard.py:Dashboard.dashboard_repair_ports",
 		"ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native_osd.py:Devices.prove_completed_osd_variants",
 		"ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native_validate.py:scope_checks",
 		"ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native_validate.py:validate_hosts",

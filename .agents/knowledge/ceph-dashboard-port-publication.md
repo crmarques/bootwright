@@ -52,6 +52,33 @@ owns that behavior. The
 model certificate storage, endpoint publication and deployment port capture as
 separate events.
 
+The initial service action also schedules each daemon separately.
+A mixture of original and replacement containers can persist with the
+dashboard endpoint published and the TLS port present on every manager.
+The old continuation waited until timeout on every such attempt. Its service
+retry required all original containers and its port repair required all
+replacements.
+
+During the initial rollout and on continuation,
+[cephadm's daemon listing](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/module.py)
+can still return its cached inventory immediately after `orch ps --refresh`.
+A second read must show a later `last_refresh` on every host with the same
+running container identities before Bootwright issues a targeted request.
+After a failover it waits for the newly active manager to serve the dashboard
+and refresh the inventory again. The retained initial attempt covers the
+original containers still awaiting replacement.
+
+The IBM cephadm `HostCache.save_host` in images 9.9.1 and 9.9.2 stores the
+daemon observations and scheduled actions together. Its
+`_potentially_split_and_save_host_entry` writes numbered config keys starting
+at `mgr/cephadm/host.<hostname>;0`. Reading the unnumbered key can return
+`ENOENT` even while the manager is running. A prefix dump reads those parts
+together. The worker only retries a standby when that record still identifies
+its original running container and shows an empty action queue for it.
+A queued redeploy of the last original active can proceed after failover.
+The worker addresses the observed active GID and verifies that every
+registered standby belongs to the running placement.
+
 The durable repair plan and per-target intents belong to the core v6
 contract. The [format classifier](../../cmd/bootwright/contract_versions_test.go)
 holds their persisted ownership to the core content digest. Keep the original

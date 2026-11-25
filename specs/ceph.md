@@ -2481,7 +2481,15 @@ or changes, foreign existing material and localized overrides refuse. Native
 private output never enters diagnostics. The phase waits for publication
 of the dashboard endpoint before an attempt-marked MGR redeploy, and proves
 the dashboard port in every intended running MGR's refreshed deployment
-metadata. If publication changes during failover, one scoped repair plan
+metadata. When the service redeploy leaves some original containers running,
+apply waits for dashboard publication and the complete running manager
+inventory. Each host must report a newer refresh of the same container set
+before apply can retry a remaining standby by daemon name, once per apply.
+The standby must still run the recorded container and have no action queued
+in cephadm’s host cache. For a sole
+remaining active target, apply can fail its observed GID over to a declared
+standby and reobserve the cluster before submitting a redeploy. When the inventory wait expires, its diagnostic names the outstanding
+manager proof. If publication changes during failover, one scoped repair plan
 redeploys each affected owned standby MGR after publication, failing over first
 when the target is active; its per-daemon intent is written inside the transport
 and cache holds just before the effect, and a target still on its recorded
