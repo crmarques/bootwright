@@ -135,19 +135,6 @@ func lostBindingExit(name string) string {
 	return "bootwright context delete --name " + name + " --purge --allow-orphans"
 }
 
-// coveredBy is what a removal of an operation takes back, and so what every view
-// of its ownership reports: a completed apply's whole plan, an incomplete
-// apply's started blocks, or a removal's blocks not yet proved gone.
-func coveredBy(operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState) reconciliation.Plan {
-	switch {
-	case operation.Verb != reconciliation.Apply:
-		return reconciliation.RemainingSubset(plan, states)
-	case operation.State == reconciliation.OperationDone:
-		return completedOwnership(plan)
-	}
-	return reconciliation.OwnedSubset(plan, states)
-}
-
 // objectsOf names each API object a plan's blocks realize, once, in bytewise
 // order, so a removal and the operation it removes name the same objects.
 func objectsOf(plan reconciliation.Plan) []string {

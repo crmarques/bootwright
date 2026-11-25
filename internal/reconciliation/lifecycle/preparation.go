@@ -293,15 +293,11 @@ func (d decider) preparationAddition(ctx context.Context, view View, store recor
 	if err := definition.Advance(ctx, PreparationAdvance{AppliedEvidence: d.planner.planInput(view, state, binding.controller, d.preparation).AppliedEvidence, Scope: *scope, Context: view.Identity(), State: state, Before: before, Owned: owned, Fresh: fresh}); err != nil {
 		return nil, verdict(err)
 	}
-	plans := make([]reconciliation.Plan, 0, len(chain))
-	for _, member := range chain {
-		plans = append(plans, member.plan)
-	}
-	added, err := reconciliation.Additive(fresh, plans...)
+	added, err := reconciliation.AdditiveOver(fresh, chain.members()...)
 	if err != nil {
 		return nil, err
 	}
-	merged, err := reconciliation.Lineage(append(plans, added)...)
+	merged, err := chain.merged(added)
 	if err != nil {
 		return nil, err
 	}

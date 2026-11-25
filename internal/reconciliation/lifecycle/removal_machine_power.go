@@ -124,9 +124,8 @@ func (s Service) recordedMachinePower(ctx context.Context, run invocation, execu
 	if err != nil {
 		return BlockEvidence{}, Quiescence{}, err
 	}
-	member, held := chain.ownerOf(block.ID)
-	original, found := member.plan.Block(block.ID)
-	if !held || !found || original.Implementation != block.Implementation || original.RequestDigest != block.RequestDigest || original.Object != block.Object || original.Kind != block.Kind {
+	member, original, held := chain.owners().of(block.ID)
+	if !held || original.Implementation != block.Implementation || original.RequestDigest != block.RequestDigest || original.Object != block.Object || original.Kind != block.Kind {
 		return BlockEvidence{}, Quiescence{}, engineRecordsDamaged.Fail("the original apply does not identify Machine/"+block.Object, "restore its original apply records")
 	}
 	capability, _ := s.capabilities.Resolve(original.Kind, original.Implementation)

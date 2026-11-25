@@ -44,6 +44,7 @@ func TestTransitionTablesMatchSpec(t *testing.T) {
 		"removal checks":             checkRemovalChecks,
 		"block transitions":          checkBlockTransitions,
 		"operation state precedence": checkOperationPrecedence,
+		"every table is read":        checkEveryTableRead,
 	} {
 		t.Run(name, func(t *testing.T) { check(t, lines) })
 	}
@@ -683,6 +684,38 @@ func checkOperationPrecedence(t *testing.T, lines []string) {
 					t.Fatalf("blocks %v at boundary %t: the code derives %q (%v), the table %q", states, boundary, got, err, want)
 				}
 			}
+		}
+	}
+}
+
+// checkEveryTableRead requires each heading the tables come from to hold only
+// the tables this test reads, so a table added beside one is held too.
+func checkEveryTableRead(t *testing.T, lines []string) {
+	read := map[string][]string{
+		"## State machine":               {"Durable state"},
+		"### Attempt outcomes":           {"Adapter outcome"},
+		"### Resolution outcomes":        {"Observation proves", "Removal's check proves, after an apply observation that did not prove completion"},
+		"### Block transitions":          {"Block state"},
+		"### Operation state precedence": {"Operation state"},
+	}
+	for heading, want := range read {
+		start := slices.Index(lines, heading)
+		if start < 0 {
+			t.Fatalf("%s holds no %q heading", transitionSpec, heading)
+		}
+		var headers []string
+		opened := false
+		for _, line := range lines[start+1:] {
+			if strings.HasPrefix(line, "#") {
+				break
+			}
+			if table := strings.HasPrefix(line, "|"); table && !opened {
+				headers = append(headers, strings.TrimSpace(strings.Split(line, "|")[1]))
+			}
+			opened = strings.HasPrefix(line, "|")
+		}
+		if !slices.Equal(headers, want) {
+			t.Errorf("%q holds the tables headed %q, and this test reads %q", heading, headers, want)
 		}
 	}
 }

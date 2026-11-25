@@ -112,22 +112,21 @@ func (s Service) evidenceAt(ctx context.Context, view View, kind string, found m
 	if err != nil {
 		return err
 	}
-	for _, owner := range held {
-		for _, block := range owner.plan.Blocks {
-			records, selected := found[block.Object]
-			if block.Kind != kind || !selected {
-				continue
-			}
-			if err := s.proveContracts(reconciliation.Plan{Blocks: []reconciliation.Block{block}}, owner.operation.Contracts); err != nil {
-				return err
-			}
-			evidence, err := blockEvidence(ctx, store, owner.operation.ID, block, owner.operation.Verb)
-			if err != nil {
-				return err
-			}
-			evidence.Block = block
-			found[block.Object] = append(records, evidence)
+	for _, holding := range lineage(held).ownership().Holdings() {
+		owner, block := held[holding.Holder], holding.Block
+		records, selected := found[block.Object]
+		if block.Kind != kind || !selected {
+			continue
 		}
+		if err := s.proveContracts(reconciliation.Plan{Blocks: []reconciliation.Block{block}}, owner.operation.Contracts); err != nil {
+			return err
+		}
+		evidence, err := blockEvidence(ctx, store, owner.operation.ID, block, owner.operation.Verb)
+		if err != nil {
+			return err
+		}
+		evidence.Block = block
+		found[block.Object] = append(records, evidence)
 	}
 	return nil
 }
@@ -170,12 +169,12 @@ func provedDependencies(ctx context.Context, store OperationStore, operation ope
 	if err != nil {
 		return nil, err
 	}
+	owned := held.owners()
 	for _, id := range block.Prerequisites {
-		owner, found := held.ownerOf(id)
+		owner, prerequisite, found := owned.of(id)
 		if !found {
 			return nil, applyPrerequisiteLost.Fail("no apply of the lineage of "+operation.ID+" holds the prerequisite "+id, "restore the context store")
 		}
-		prerequisite, _ := owner.plan.Block(id)
 		evidence, err := blockEvidence(ctx, store, owner.operation.ID, prerequisite, operation.Verb)
 		if err != nil {
 			return nil, err
@@ -228,11 +227,12 @@ func (s Service) applyDependencies(ctx context.Context, store recordReader, appl
 		pending = append(pending, plan.Blocks[dependency].Dependencies...)
 	}
 	var proved []BlockEvidence
+	owned := held.owners()
 	for _, dependency := range plan.Blocks {
 		if !dependencies[dependency.ID] {
 			continue
 		}
-		owner, _ := held.ownerOf(dependency.ID)
+		owner, frozen, _ := owned.of(dependency.ID)
 		if err := s.proveContracts(reconciliation.Plan{Blocks: []reconciliation.Block{dependency}}, owner.operation.Contracts); err != nil {
 			return nil, err
 		}
@@ -240,7 +240,7 @@ func (s Service) applyDependencies(ctx context.Context, store recordReader, appl
 		if err != nil {
 			return nil, err
 		}
-		evidence.Block, _ = owner.plan.Block(dependency.ID)
+		evidence.Block = frozen
 		evidence.Evidence = slices.Clone(evidence.Evidence)
 		proved = append(proved, evidence)
 	}

@@ -48,7 +48,8 @@ func (s Service) SecretHolds(ctx context.Context, name string) (custody.Holds, e
 			chain = append(chain, lineageMember{operation: current, plan: plan})
 		}
 		for _, member := range chain {
-			effect, classified := s.effectMaterial(member.plan)
+			frozen, _ := member.record()
+			effect, classified := s.effectMaterial(frozen)
 			for _, binding := range member.operation.Bindings {
 				holds.Bindings = append(holds.Bindings, custody.Hold{Binding: binding, Operation: holdingOperation(member.operation), Secrets: effect, All: !classified})
 			}

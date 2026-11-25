@@ -12,6 +12,10 @@ type lineageMember struct {
 	operation operationstore.Operation
 	plan      reconciliation.Plan
 	states    map[string]reconciliation.BlockState
+	effects   map[string]reconciliation.EffectState
+	holds     map[string]bool
+	takenBack []string
+	whole     bool
 }
 
 type lineage []lineageMember
@@ -75,39 +79,132 @@ func appliedLineage(ctx context.Context, store recordReader, operation operation
 
 func (l lineage) head() lineageMember { return l[len(l)-1] }
 
-func (l lineage) ownerOf(block string) (lineageMember, bool) {
-	index := slices.IndexFunc(l, func(member lineageMember) bool {
-		_, held := member.plan.Block(block)
-		return held
-	})
-	if index < 0 {
-		return lineageMember{}, false
+func (l lineage) members() []reconciliation.Member {
+	members := make([]reconciliation.Member, 0, len(l))
+	for _, member := range l {
+		members = append(members, reconciliation.Member{
+			Operation: member.operation.ID, Plan: member.plan, States: member.states, Effects: member.effects,
+			Completed: member.operation.Verb == reconciliation.Apply && member.operation.State == reconciliation.OperationDone,
+			TakenBack: member.takenBack, Whole: member.whole,
+		})
 	}
-	return l[index], true
+	return members
+}
+
+func (l lineage) ownership() reconciliation.Ownership { return reconciliation.Fold(l.members()...) }
+
+type owners struct {
+	chain  lineage
+	folded reconciliation.Ownership
+}
+
+func (l lineage) owners() owners { return owners{chain: l, folded: l.ownership()} }
+
+func (o owners) of(block string) (lineageMember, reconciliation.Block, bool) {
+	holding, held := o.folded.Holding(block)
+	if !held || holding.Incarnation < 0 || o.folded.TakenBack(holding) {
+		return lineageMember{}, reconciliation.Block{}, false
+	}
+	return o.chain[holding.Incarnation], holding.Created, true
+}
+
+func (o owners) routed(block string) (lineageMember, error) {
+	switch len(o.chain) {
+	case 0:
+		return lineageMember{}, engineRecordsDamaged.Fail("the operation names no apply to route the block "+block+" to", "restore the context store")
+	case 1:
+		return o.chain[0], nil
+	}
+	owner, _, held := o.of(block)
+	if !held {
+		return lineageMember{}, engineRecordsDamaged.Fail("no apply of the lineage of "+o.chain.head().operation.ID+" holds the block "+block, "restore the context store")
+	}
+	return owner, nil
+}
+
+func (o owners) owned() []OwnedBlock {
+	var held []OwnedBlock
+	for _, holding := range o.folded.Holdings() {
+		if holding.Incarnation >= 0 && !o.folded.TakenBack(holding) {
+			held = append(held, OwnedBlock{Operation: o.chain[holding.Incarnation].operation.ID, Block: holding.Created})
+		}
+	}
+	return held
+}
+
+func (o owners) incarnated() []reconciliation.Plan {
+	plans := make([]reconciliation.Plan, len(o.chain))
+	for _, holding := range o.folded.Holdings() {
+		if holding.Incarnation >= 0 && !o.folded.TakenBack(holding) {
+			plans[holding.Incarnation].Blocks = append(plans[holding.Incarnation].Blocks, holding.Created)
+		}
+	}
+	return plans
+}
+
+func (o owners) definitions() []reconciliation.BlockDefinition {
+	var all []reconciliation.BlockDefinition
+	for _, held := range o.owned() {
+		all = append(all, held.Block.BlockDefinition)
+	}
+	return all
+}
+
+func (o owners) lending(plan reconciliation.Plan) []reconciliation.BlockDefinition {
+	definitions := planDefinitions(plan)
+	if len(o.chain) < 2 {
+		return definitions
+	}
+	for _, definition := range o.definitions() {
+		if _, held := plan.Block(definition.ID); !held {
+			definitions = append(definitions, definition)
+		}
+	}
+	return definitions
+}
+
+func (o owners) lendingHead() []reconciliation.BlockDefinition {
+	return o.lending(o.incarnated()[len(o.chain)-1])
+}
+
+func (l lineage) ownerOf(block string) (lineageMember, bool) {
+	owner, _, held := l.owners().of(block)
+	return owner, held
+}
+
+func (l lineage) merged(added reconciliation.Plan) (reconciliation.Plan, error) {
+	return reconciliation.LineageOf(append(l.members(), reconciliation.Member{Plan: added})...)
+}
+
+// record is a member's own record, never what the lineage holds.
+func (m lineageMember) record() (reconciliation.Plan, map[string]reconciliation.BlockState) {
+	return m.plan, m.states
+}
+
+func (m lineageMember) unproved(abandoned map[string]bool) []string {
+	return slices.DeleteFunc(unprovedBlocks(m.plan, m.states), func(id string) bool {
+		return abandoned[id] || m.holds != nil && !m.holds[id]
+	})
 }
 
 func (l lineage) plan() (reconciliation.Plan, error) {
 	if len(l) == 1 {
 		return l[0].plan, nil
 	}
-	plans := make([]reconciliation.Plan, 0, len(l))
-	for _, member := range l {
-		plans = append(plans, member.plan)
-	}
-	return reconciliation.Lineage(plans...)
+	return l.ownership().Plan()
 }
 
 func (l lineage) states() map[string]reconciliation.BlockState {
 	if len(l) == 1 {
 		return l[0].states
 	}
-	union := map[string]reconciliation.BlockState{}
-	for _, member := range l {
-		for id, state := range member.states {
-			union[id] = state
+	held := map[string]reconciliation.BlockState{}
+	for _, holding := range l.ownership().Holdings() {
+		if state, recorded := l[holding.Holder].states[holding.Block.ID]; recorded {
+			held[holding.Block.ID] = state
 		}
 	}
-	return union
+	return held
 }
 
 func (l lineage) bindings() []string {
@@ -118,27 +215,9 @@ func (l lineage) bindings() []string {
 	return held
 }
 
-func (l lineage) definitions() []reconciliation.BlockDefinition {
-	var all []reconciliation.BlockDefinition
-	for _, member := range l {
-		all = append(all, planDefinitions(member.plan)...)
-	}
-	return all
-}
+func (l lineage) definitions() []reconciliation.BlockDefinition { return l.owners().definitions() }
 
-func (l lineage) routed(block string) (lineageMember, error) {
-	switch len(l) {
-	case 0:
-		return lineageMember{}, engineRecordsDamaged.Fail("the operation names no apply to route the block "+block+" to", "restore the context store")
-	case 1:
-		return l[0], nil
-	}
-	owner, held := l.ownerOf(block)
-	if !held {
-		return lineageMember{}, engineRecordsDamaged.Fail("no apply of the lineage of "+l.head().operation.ID+" holds the block "+block, "restore the context store")
-	}
-	return owner, nil
-}
+func (l lineage) routed(block string) (lineageMember, error) { return l.owners().routed(block) }
 
 func (l lineage) ownerFor(block string) (string, error) {
 	if len(l) == 0 {
@@ -163,27 +242,10 @@ func lineageEntries(ctx context.Context, store recordReader, operation operation
 	return entries, nil
 }
 
-func (l lineage) owned() []OwnedBlock {
-	var held []OwnedBlock
-	for _, member := range l {
-		for _, block := range member.plan.Blocks {
-			held = append(held, OwnedBlock{Operation: member.operation.ID, Block: block})
-		}
-	}
-	return held
-}
+func (l lineage) owned() []OwnedBlock { return l.owners().owned() }
 
 func (l lineage) lending(plan reconciliation.Plan) []reconciliation.BlockDefinition {
-	definitions := planDefinitions(plan)
-	if len(l) < 2 {
-		return definitions
-	}
-	for _, definition := range l.definitions() {
-		if _, held := plan.Block(definition.ID); !held {
-			definitions = append(definitions, definition)
-		}
-	}
-	return definitions
+	return l.owners().lending(plan)
 }
 
 func ownerID(ctx context.Context, store recordReader, operation operationstore.Operation, block string) (string, error) {
@@ -266,8 +328,12 @@ func unfinishedOver(ctx context.Context, store recordReader, operation operation
 		return nil, err
 	}
 	unfinished := []string{}
-	for _, member := range chain {
-		unfinished = append(unfinished, unfinishedBlocks(member.plan, member.states)...)
+	for _, holding := range chain.ownership().Unfinished() {
+		state := holding.State
+		if state == "" {
+			state = reconciliation.BlockPending
+		}
+		unfinished = append(unfinished, holding.Block.ID+" ("+string(state)+")")
 	}
 	return unfinished, nil
 }
@@ -289,4 +355,74 @@ func lineageBindings(ctx context.Context, store recordReader, id string) ([]stri
 		return nil, err
 	}
 	return chain.bindings(), nil
+}
+
+// ownedLineage is what the index operation's ownership folds: an apply's
+// lineage, or a removal over the apply it removes, which took back what its
+// source covered and its own plan no longer names, because an earlier attempt
+// removed it.
+func ownedLineage(ctx context.Context, store recordReader, current lineageMember) (lineage, error) {
+	switch operation := current.operation; {
+	case operation.Verb == reconciliation.Apply && operation.Predecessor != "":
+		held, err := lineageOf(ctx, store, current)
+		if err != nil {
+			return nil, err
+		}
+		_, err = held.plan()
+		return held, err
+	case operation.Verb == reconciliation.Destroy && operation.Source != "":
+		applied, plan, states, err := removedApply(ctx, store, operation.Source)
+		if err != nil {
+			return nil, err
+		}
+		if current.effects, err = settledEffects(ctx, store, operation.ID, current.plan, current.states); err != nil {
+			return nil, err
+		}
+		current.whole = true
+		for _, block := range coveredBy(applied, plan, states).Blocks {
+			if _, removing := current.plan.Block(block.ID); !removing {
+				current.takenBack = append(current.takenBack, block.ID)
+			}
+		}
+		return lineage{{operation: applied, plan: plan, states: states}, current}, nil
+	}
+	return lineage{current}, nil
+}
+
+func settledEffects(ctx context.Context, store recordReader, operation string, plan reconciliation.Plan, states map[string]reconciliation.BlockState) (map[string]reconciliation.EffectState, error) {
+	effects := map[string]reconciliation.EffectState{}
+	for _, block := range plan.Blocks {
+		if state := states[block.ID]; state != reconciliation.BlockDone && state != reconciliation.BlockFailed {
+			continue
+		}
+		record, err := store.Block(ctx, operation, block.ID)
+		if err != nil {
+			return nil, err
+		}
+		if record.Attempts < 1 {
+			continue
+		}
+		settled, resolved, err := store.LastResolution(ctx, operation, block.ID, record.Attempts)
+		if err != nil {
+			return nil, err
+		}
+		if !resolved || settled.Effect == "" {
+			if settled, err = store.Attempt(ctx, operation, block.ID, record.Attempts); err != nil {
+				return nil, err
+			}
+		}
+		effects[block.ID] = settled.Effect
+	}
+	return effects, nil
+}
+
+// coveredBy is what a removal of an operation takes back, and so what every view
+// of its ownership reports: a completed apply's whole plan, an incomplete
+// apply's started blocks, or a removal's blocks not yet proved gone.
+func coveredBy(operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState) reconciliation.Plan {
+	covered := reconciliation.Plan{Verb: plan.Verb, Blocks: []reconciliation.Block{}, Preparation: plan.Preparation}
+	for _, holding := range (lineage{{operation: operation, plan: plan, states: states}}).ownership().Covered() {
+		covered.Blocks = append(covered.Blocks, holding.Block)
+	}
+	return covered
 }

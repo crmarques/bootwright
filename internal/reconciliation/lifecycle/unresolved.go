@@ -46,11 +46,12 @@ func (s Service) explainIn(ctx context.Context, store recordReader, head operati
 	if err != nil {
 		return s.explain(operationstore.Operation{}, nil, verb, block, evidence)
 	}
-	owner, err := chain.routed(block.ID)
+	owned := chain.owners()
+	owner, err := owned.routed(block.ID)
 	if err != nil {
 		return s.explain(operationstore.Operation{}, nil, verb, block, evidence)
 	}
-	return s.explain(owner.operation, chain.owned(), verb, block, evidence)
+	return s.explain(owner.operation, owned.owned(), verb, block, evidence)
 }
 
 // explain says why one block's observation proved nothing, from the evidence
@@ -225,7 +226,7 @@ func (s Service) explainUnproved(ctx context.Context, store OperationStore, oper
 			if block.State != string(reconciliation.BlockPending) || !unproved(member.states[block.ID]) {
 				continue
 			}
-			original, _ := member.plan.Block(block.ID)
+			_, original, _ := lineage{member}.owners().of(block.ID)
 			unresolved, err := s.unresolvedOf(ctx, store, member.operation, original, command)
 			if err != nil {
 				return err

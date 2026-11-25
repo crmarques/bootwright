@@ -57,7 +57,7 @@ func (s Service) proveRemovable(ctx context.Context, tx Transaction, store Opera
 	abandoned := abandonedBlocks(decided.plan)
 	declared, faulted := 0, false
 	for _, member := range members {
-		declared += len(unprovedOutside(member.plan, member.states, abandoned))
+		declared += len(member.unproved(abandoned))
 		faulted = faulted || member.operation.LogFault
 	}
 	if declared == 0 && !faulted {
@@ -160,8 +160,9 @@ type memberResolution struct {
 }
 
 func (s Service) resolveMember(ctx context.Context, tx Transaction, store OperationStore, approved approved, decided operationPlan, material map[string]secrets.Material, member lineageMember, abandoned map[string]bool) (memberResolution, error) {
-	replaced, frozen, states := member.operation, member.plan, member.states
-	unproved := unprovedOutside(frozen, states, abandoned)
+	replaced := member.operation
+	frozen, states := member.record()
+	unproved := member.unproved(abandoned)
 	if len(unproved) == 0 && !replaced.LogFault {
 		return memberResolution{}, nil
 	}
@@ -206,7 +207,7 @@ func (s Service) resolveMember(ctx context.Context, tx Transaction, store Operat
 	}
 	// A log fault refuses the removal even when every observation proved its
 	// block, because the removal's own effects would follow.
-	return memberResolution{left: unprovedOutside(frozen, states, abandoned), fault: logging.err(), cause: cause, causes: causes}, nil
+	return memberResolution{left: member.unproved(abandoned), fault: logging.err(), cause: cause, causes: causes}, nil
 }
 
 func unprovedOutside(plan reconciliation.Plan, states map[string]reconciliation.BlockState, abandoned map[string]bool) []string {

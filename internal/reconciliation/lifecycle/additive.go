@@ -206,19 +206,18 @@ func (d decider) refuseUnnamedSecrets(view View, chain lineage, admission *addit
 		return nil
 	}
 	var held []string
-	for _, member := range chain {
-		for _, block := range member.plan.Blocks {
-			capability, found := d.capabilities.Resolve(block.Kind, block.Implementation)
-			referencer, names := capability.(SecretReferencer)
-			if !found || !names {
-				return refusal(applyNotAnAddition.Fail("the block "+block.ID+" cannot name the Secrets it references, so no Secret is added beside it", d.changeRemedy(view)))
-			}
-			references, err := referencer.SecretReferences(block)
-			if err != nil {
-				return err
-			}
-			held = append(held, references...)
+	for _, owned := range chain.owned() {
+		block := owned.Block
+		capability, found := d.capabilities.Resolve(block.Kind, block.Implementation)
+		referencer, names := capability.(SecretReferencer)
+		if !found || !names {
+			return refusal(applyNotAnAddition.Fail("the block "+block.ID+" cannot name the Secrets it references, so no Secret is added beside it", d.changeRemedy(view)))
 		}
+		references, err := referencer.SecretReferences(block)
+		if err != nil {
+			return err
+		}
+		held = append(held, references...)
 	}
 	for _, name := range added {
 		if !slices.Contains(admission.secrets, name) || slices.Contains(held, name) {
@@ -243,11 +242,7 @@ func (d decider) compiledBoth(ctx context.Context, view View, operation operatio
 }
 
 func (d decider) admission(ctx context.Context, view View, chain lineage, held, fresh reconciliation.Plan) (*additiveAdmission, error) {
-	plans := make([]reconciliation.Plan, 0, len(chain))
-	for _, member := range chain {
-		plans = append(plans, member.plan)
-	}
-	added, err := reconciliation.Additive(fresh, plans...)
+	added, err := reconciliation.AdditiveOver(fresh, chain.members()...)
 	if err != nil {
 		return nil, unremovable(chain.head().operation, err)
 	}
@@ -260,7 +255,7 @@ func (d decider) admission(ctx context.Context, view View, chain lineage, held, 
 		references = joinBindings(references, named...)
 	}
 	slices.Sort(references)
-	merged, err := reconciliation.Lineage(append(plans, added)...)
+	merged, err := chain.merged(added)
 	if err != nil {
 		return nil, unremovable(chain.head().operation, err)
 	}
@@ -365,9 +360,10 @@ func (s Service) prerequisitesRefusal(ctx context.Context, view View, operation 
 	if err := s.proveLineageContracts(chain); err != nil {
 		return err
 	}
+	owned := chain.owners()
 	for _, block := range plan.Blocks {
 		for _, id := range block.Prerequisites {
-			owner, held := chain.ownerOf(id)
+			owner, _, held := owned.of(id)
 			if !held {
 				return applyPrerequisiteLost.Fail("no apply of the lineage of "+operation.ID+" holds the prerequisite "+id, "restore the context store")
 			}

@@ -416,7 +416,7 @@ func (s *Store) lineageRemoval(ctx context.Context, own, predecessor string, pla
 	if predecessor == "" {
 		return plan.Inverse()
 	}
-	plans := []reconciliation.Plan{plan}
+	members := []reconciliation.Member{{Operation: own, Plan: plan}}
 	seen := map[string]bool{own: true}
 	for id := predecessor; id != ""; {
 		if seen[id] || len(seen) >= MaxOperations {
@@ -431,11 +431,14 @@ func (s *Store) lineageRemoval(ctx context.Context, own, predecessor string, pla
 		if err != nil {
 			return reconciliation.Plan{}, err
 		}
-		plans = append(plans, earlier)
+		if earlier.Verb != reconciliation.Apply {
+			return reconciliation.Plan{}, recordError("the operation this apply adds to is no apply")
+		}
+		members = append(members, reconciliation.Member{Operation: id, Plan: earlier})
 		id = predecessor.Predecessor
 	}
-	slices.Reverse(plans)
-	lineage, err := reconciliation.Lineage(plans...)
+	slices.Reverse(members)
+	lineage, err := reconciliation.LineageOf(members...)
 	if err != nil {
 		return reconciliation.Plan{}, err
 	}

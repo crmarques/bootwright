@@ -45,7 +45,7 @@ causes.
 | --- | --- | --- |
 | 0 | [B1855](../milestones/delivered.md#x753--every-destroy-step-states-its-inverse) | Every destroy step states its inverse, frozen with the removal plan |
 | 1 | [B1856](../milestones/delivered.md#x754--run-time-inverse-branches-frozen) | The remaining inverse branches decided at run time are frozen |
-| 2 | [B1857](../milestones/m1.md#b1857) | One ownership fold answers what a context owns |
+| 2 | [B1857](../milestones/delivered.md#x755--one-fold-answers-what-a-contexts-operations-own) | One ownership fold answers what a context owns |
 | 3 | [B166](../milestones/m1.md#b166) | `destroy --stage` and the trimmed resting state |
 | 4 | [B1858](../milestones/m1.md#b1858) | The restoring apply over unchanged input |
 | 5 | [B1859](../milestones/m1.md#b1859) | A restore admits changed input inside the taken-back part |
@@ -169,41 +169,21 @@ makes each reachable, together with their `stateMachineRows` cases.
 
 ## Step life
 
-One pure function, `Live`, in `internal/reconciliation` answers what a context
-owns. Every reader goes through it: ownership, `status`, `diff`, the Machine
-list, Secret holds, the keep-list of binding collection, survivors, lineage
-removal, the build comparison, planning evidence, pins and host keys, store
-admission and the attempt reserve, block routing, completeness and contradiction
-checks, the machine power realization fallback, the storage and container
-preflights and host-key access. An architecture test forbids reading ownership
-from the index's plan and forbids `ownerOf` and `Lineage` folds outside it.
+The fold and its step life table are owned by
+[state reconciliation](../state-reconciliation.md#step-life). The staged
+destroy adds to it:
 
-- The fold input is the apply chain by `predecessor` and the staged-destroy
-  chain by `replaces`, in registration order.
-- An apply adds the blocks it started, its whole plan when it completed. A done
-  staged destroy subtracts its cumulative taken-back set.
-- `Live` returns, per block, the member that holds it and that member's state,
-  and the merged plan, where a repeated id takes the newest holder's
-  definition.
-- `reconciliation.Lineage` allows a repeated id only where a done staged
-  destroy took it back in between.
-- An ownership stamp reads `apply` with the holder's state for a Live block, and
-  `destroy` with `done` only for the scope of a done staged destroy.
-
-The table below is the specified life of one step across operations. A test
-drives the fold over every row and over sequences of four operations.
-
-| State | Meaning | Next |
-| --- | --- | --- |
-| absent | No member started the step, or a done staged destroy took it back | An apply that starts it: realizing |
-| realizing | An attempt of an apply runs the step | `done`: realized; failed or lost: unproved |
-| realized | The step is `done` in a member | A removal that starts it: removing |
-| unproved | The outcome failed or was lost | Resolution proves it realized or absent; a removal takes it back by its inverse |
-| removing | A removal attempt runs the inverse | `done` with every witness done: absent; `done` while a witness is not: leaving; failed or lost: unproved |
-| leaving | The inverse is done, and the step leaves with a witness step that is not done, so the step stays owned | The witness reads `done`: absent; the witness fails: still leaving, and its replacement inherits it |
-| retained | The inverse leaves something on purpose, with its residue class | A whole destroy that proves it gone; an apply never adopts it |
-| abandoned | `abandon=` left the effect in place | A whole destroy without `abandon` returns it to removing; an apply refuses and never adopts |
-| partial, inconclusive, no-effect | The outcome of an inverse that finished part of its effect, could not tell, or made none | Removing again, or resolution, as the outcome table of [resolution outcomes](../state-reconciliation.md#resolution-outcomes) states |
+- A staged destroy is a fold member after the apply lineage, and the removals
+  it replaces come before it by `replaces`, in registration order. Its `stage`
+  member freezes the cumulative taken-back set, which the fold holds `done`.
+- It is never a removal of the whole lineage, so its kept steps stay held by
+  their applies: an ownership report stamps a kept step `apply` with its
+  holder's state, and `destroy` with `done` only the taken-back set.
+- A restoring apply is the first member a fold admits over a take-back, so a
+  re-created step routes to it ([B1858](../milestones/m1.md#b1858)).
+- The machine power realization, the `status` walk of replaced removals and a
+  replacement's covered set move onto the fold first
+  ([B1866](../milestones/m1.md#b1866)).
 
 ## Identity follows the creation of an effect
 

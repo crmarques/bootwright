@@ -1,44 +1,21 @@
 package reconciliation
 
 import (
-	"maps"
 	"slices"
 )
 
 func Lineage(plans ...Plan) (Plan, error) {
-	if len(plans) == 0 {
-		return Plan{}, planError("a lineage needs at least one plan")
-	}
-	held := map[string]bool{}
-	var definitions []BlockDefinition
+	members := make([]Member, 0, len(plans))
 	for _, plan := range plans {
 		if plan.Verb != Apply {
+			if damage := Fold(members...).damage; damage != nil {
+				return Plan{}, damage
+			}
 			return Plan{}, planError("only apply plans make a lineage")
 		}
-		earlier := maps.Clone(held)
-		for _, block := range plan.Blocks {
-			if held[block.ID] {
-				return Plan{}, planError("lifecycle lineage repeats the block " + block.ID)
-			}
-			definition := clone(block.BlockDefinition)
-			for _, prerequisite := range definition.Prerequisites {
-				if !earlier[prerequisite] {
-					return Plan{}, planError("lifecycle block " + block.ID + " has the prerequisite " + prerequisite + ", which no earlier plan holds")
-				}
-			}
-			definition.Dependencies = append(definition.Dependencies, definition.Prerequisites...)
-			slices.Sort(definition.Dependencies)
-			definition.Dependencies = slices.Compact(definition.Dependencies)
-			definition.Prerequisites = nil
-			definitions = append(definitions, definition)
-			held[block.ID] = true
-		}
+		members = append(members, Member{Plan: plan})
 	}
-	result, err := NewPlan(Apply, definitions)
-	if err != nil {
-		return Plan{}, err
-	}
-	return result.WithPreparation(plans[len(plans)-1].Preparation)
+	return Fold(members...).Plan()
 }
 
 func Additive(fresh Plan, owned ...Plan) (Plan, error) {
@@ -46,6 +23,18 @@ func Additive(fresh Plan, owned ...Plan) (Plan, error) {
 	if err != nil {
 		return Plan{}, err
 	}
+	return additive(fresh, lineage)
+}
+
+func AdditiveOver(fresh Plan, members ...Member) (Plan, error) {
+	lineage, err := LineageOf(members...)
+	if err != nil {
+		return Plan{}, err
+	}
+	return additive(fresh, lineage)
+}
+
+func additive(fresh, lineage Plan) (Plan, error) {
 	if fresh.Verb != Apply {
 		return Plan{}, planError("only an apply plan can be added")
 	}

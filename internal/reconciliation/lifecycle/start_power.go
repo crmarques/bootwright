@@ -72,6 +72,7 @@ func (s Service) prepareStart(ctx context.Context, view View, decided operationP
 			return nil, err
 		}
 	}
+	owned := held.owners()
 	targets := make([]startTarget, 0, len(blocks))
 	for _, block := range blocks {
 		capability, _ := s.capabilities.Resolve(block.Kind, block.Implementation)
@@ -83,7 +84,7 @@ func (s Service) prepareStart(ctx context.Context, view View, decided operationP
 		if target.references, err = reader.StartPowerSecrets(block); err != nil {
 			return nil, err
 		}
-		if owner, found := held.ownerOf(block.ID); found {
+		if owner, _, found := owned.of(block.ID); found {
 			target.binding = firstBinding(owner.operation.Bindings)
 			target.probe.ApplyOperation = owner.operation.ID
 			if target.probe.PreviousEvidence, err = previousBlockEvidence(ctx, store, owner.operation.ID, block.ID); err != nil {

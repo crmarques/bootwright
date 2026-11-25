@@ -115,6 +115,7 @@ func replacedProofs(ctx context.Context, store recordReader, held lineage, opera
 
 func provedRemovals(ctx context.Context, store recordReader, held lineage, operation string, plan reconciliation.Plan, wanted, carried map[string]bool) ([]RemovalEvidence, error) {
 	var proofs []RemovalEvidence
+	owned := held.owners()
 	for _, dependency := range plan.Blocks {
 		if !wanted[dependency.ID] || carried[dependency.ID] {
 			continue
@@ -126,11 +127,11 @@ func provedRemovals(ctx context.Context, store recordReader, held lineage, opera
 		if removed.State != reconciliation.BlockDone || len(removed.Evidence) == 0 {
 			continue
 		}
-		owner, err := held.routed(dependency.ID)
+		owner, err := owned.routed(dependency.ID)
 		if err != nil {
 			return nil, err
 		}
-		appliedBlock, found := owner.plan.Block(dependency.ID)
+		_, appliedBlock, found := owned.of(dependency.ID)
 		if !found {
 			return nil, engineRecordsDamaged.Fail("the removal dependency has no original apply identity", "")
 		}
@@ -192,15 +193,16 @@ func originalRemovalDependents(ctx context.Context, store recordReader, operatio
 		}
 	}
 	var proved []BlockEvidence
+	owned := held.owners()
 	for _, candidate := range original.Blocks {
 		if candidate.ID == block || !wanted[candidate.ID] {
 			continue
 		}
-		owner, err := held.routed(candidate.ID)
+		owner, err := owned.routed(candidate.ID)
 		if err != nil {
 			return nil, err
 		}
-		frozen, _ := owner.plan.Block(candidate.ID)
+		_, frozen, _ := owned.of(candidate.ID)
 		proof, err := blockEvidence(ctx, store, owner.operation.ID, frozen, reconciliation.Apply)
 		if err != nil {
 			return nil, err

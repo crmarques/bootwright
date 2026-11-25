@@ -10056,7 +10056,7 @@ for the work. The words, in order:
 the owner's request, out of sequence. The program, in order, is the items of the
 [staged destroy design](../deferred/staged-destroy.md#program): the frozen
 inverse of every destroy step ([B1855](delivered.md#x753--every-destroy-step-states-its-inverse), [B1856](delivered.md#x754--run-time-inverse-branches-frozen)), one
-ownership fold ([B1857](m1.md#b1857)), `destroy --stage` (B166), the restoring
+ownership fold ([B1857](delivered.md#x755--one-fold-answers-what-a-contexts-operations-own)), `destroy --stage` (B166), the restoring
 apply ([B1858](m1.md#b1858), [B1859](m1.md#b1859)), and the per-capability
 unlocks ([B1860](m1.md#b1860), [B1861](m1.md#b1861),
 [B1862](m2.md#b1862)). This decision authorizes X753, the slice of B1855, and

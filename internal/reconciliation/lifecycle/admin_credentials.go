@@ -465,23 +465,22 @@ func (s AdminCredentialService) sharedSecret(ctx context.Context, store recordRe
 	if err != nil {
 		return false, err
 	}
-	for _, member := range chain {
-		for _, block := range member.plan.Blocks {
-			if block.ID == owner.ID {
-				continue
-			}
-			capability, found := s.capabilities.Resolve(block.Kind, block.Implementation)
-			referencer, named := capability.(SecretReferencer)
-			if !found || !named {
-				return true, nil
-			}
-			references, err := referencer.SecretReferences(block)
-			if err != nil {
-				return false, err
-			}
-			if slices.Contains(references, secret) {
-				return true, nil
-			}
+	for _, held := range chain.owned() {
+		block := held.Block
+		if block.ID == owner.ID {
+			continue
+		}
+		capability, found := s.capabilities.Resolve(block.Kind, block.Implementation)
+		referencer, named := capability.(SecretReferencer)
+		if !found || !named {
+			return true, nil
+		}
+		references, err := referencer.SecretReferences(block)
+		if err != nil {
+			return false, err
+		}
+		if slices.Contains(references, secret) {
+			return true, nil
 		}
 	}
 	return false, nil

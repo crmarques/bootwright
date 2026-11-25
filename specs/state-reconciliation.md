@@ -808,6 +808,77 @@ its target. Positive no effect and a positive partial realization record
 `failed`, and an unproved observation `unknown`: an outcome the capability
 states counts only beside a completion.
 
+### Step life
+
+One pure fold, `reconciliation.Fold`, answers what a context's operations own.
+It reads operation records oldest first, the apply lineage by `predecessor`,
+then a removal over it, each removal with the effect each block's settling
+record names (its last resolution, else its last attempt; an apply's effect
+moves no row), and answers for each step:
+
+- its holder, the member whose record holds its latest request and state;
+- its incarnation, the apply whose record created its effect after the last
+  take-back, with the block that apply froze, which carries the effect's
+  identity and its attempt records;
+- its life, which each record moves by the first row of the table below that
+  matches it. A step no record names is `absent`.
+
+The fold's rules:
+
+- A step is taken back when a removal holds it `done` and `absent`. A taken
+  back step routes to no apply: it has no owner, prerequisite or evidence.
+- An apply's record of a step another member holds is admitted only over a
+  take-back. Any other repeat is damaged records: the first holder keeps the
+  step and the merged plan refuses. No fold yet holds a removal before an
+  apply, so every repeat is damage.
+- A prerequisite is held, and not taken back, by an earlier member.
+- A removal holds `done` what it took back before its own plan: what the
+  apply it removes covered and its plan no longer names. A take-back leaves a
+  removal's `retained`, `leaving` or `abandoned` step in that life.
+- A `leaving` step turns `absent` once every step it leaves with is taken back,
+  settled before a removal of the whole lineage releases every step it
+  neither holds nor took back.
+- What a removal covers is every step of a completed apply, any other apply's
+  started steps, and a removal's steps other than `done` ones.
+- The merged plan holds every step not taken back, as its incarnation froze
+  it, each prerequisite folded into a dependency.
+
+| Record | Block | Condition | Life after |
+| --- | --- | --- | --- |
+| `apply` or `destroy` | `pending` | any | the life before |
+| `apply` | `running` | any | `realizing` |
+| `apply` | `done` | any | `realized` |
+| `apply` | `failed` or `unknown` | any | `unproved` |
+| `destroy` | `running` | any | `removing` |
+| `destroy` | `failed` | effect `partial` | `partial` |
+| `destroy` | `failed` | effect `inconclusive` | `inconclusive` |
+| `destroy` | `failed` | effect `no-effect` | `no-effect` |
+| `destroy` | `failed` or `unknown` | any | `unproved` |
+| `destroy` | `done` | effect `no-effect`, an [abandoned](#abandoned-removal) removal | `abandoned` |
+| `destroy` | `done` | its inverse retains | `retained` |
+| `destroy` | `done` | its inverse leaves with a step | `leaving` |
+| `destroy` | `done` | any | `absent` |
+
+`TestStepLifeMatchesSpec` drives the code with every row and folds every
+sequence of up to four records of one step against this table and these rules.
+
+Every reader of what a lineage holds asks the fold: store admission and the
+attempt reserve, block routing and the evidence, prerequisites, contracts and
+controller stages it reaches, a lineage's merged plan and states, additive and
+preparation admission, completeness checks, the steps a removal resolves, what
+a removal covers, its survivors, which its plan inverting the merged plan
+names, and the ownership report. `TestOwnershipIsFoldedOnlyByTheFold`
+forbids any other read of a member's plan and any fold of bare plans. Three
+read one record by design: a member's own plan for its attempts and operation
+state, the Secrets each member's binding pins, which the holds keep while any
+member holds it, and the bindings a removal keeps and releases, which belong to
+their records until the whole lineage is removed.
+
+Not yet met: the machine power realization's inference that a Machine absent
+from the current removal and done in its apply was removed, the `status` walk
+of the removals a removal replaces, and a replacement removal's covered set,
+which read the staged-destroy chain; tracked as [B1866](milestones/m1.md#b1866).
+
 ## Produced material and block transitions
 
 This section owns the custody of material a block produces and the transitions

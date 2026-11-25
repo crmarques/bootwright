@@ -642,8 +642,8 @@ func (s Service) locateTool(ctx context.Context, store recordReader, view prereq
 		if err != nil {
 			return "", err
 		}
-		for _, member := range slices.Backward(held) {
-			if stages = controllerStages(member.plan); len(stages) != 0 {
+		for _, created := range slices.Backward(held.owners().incarnated()) {
+			if stages = controllerStages(created); len(stages) != 0 {
 				break
 			}
 		}

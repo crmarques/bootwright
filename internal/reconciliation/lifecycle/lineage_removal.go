@@ -39,11 +39,7 @@ func removalOver(ctx context.Context, store recordReader, applied operationstore
 			scope.contracts[implementation] = contract
 		}
 	}
-	plans := make([]reconciliation.Plan, 0, len(held))
-	for _, member := range held[:len(held)-1] {
-		plans = append(plans, member.plan)
-	}
-	if scope.owned, err = reconciliation.Lineage(append(plans, started)...); err != nil {
+	if scope.owned, err = held[:len(held)-1].merged(started); err != nil {
 		return removalScope{}, unremovable(applied, err)
 	}
 	scope.reopen, scope.release = firstBinding(held[0].operation.Bindings), held.bindings()
@@ -125,6 +121,12 @@ func resolutionMembers(ctx context.Context, store recordReader, head lineageMemb
 	held, err := lineageOf(ctx, store, head)
 	if err != nil {
 		return nil, err
+	}
+	for index := range held {
+		held[index].holds = map[string]bool{}
+	}
+	for _, holding := range held.ownership().Holdings() {
+		held[holding.Holder].holds[holding.Block.ID] = true
 	}
 	slices.Reverse(held)
 	return held, nil

@@ -105,20 +105,16 @@ func (s Service) Ownership(ctx context.Context, contextName string) (map[string]
 		if err != nil {
 			return err
 		}
-		if operation.Verb == reconciliation.Apply {
-			if plan, states, err = appliedView(ctx, store, operation, plan, states); err != nil {
-				return err
-			}
-		}
-		if err := recordReleased(ctx, store, operation, owned); err != nil {
+		held, err := ownedLineage(ctx, store, lineageMember{operation: operation, plan: plan, states: states})
+		if err != nil {
 			return err
 		}
-		for _, block := range plan.Blocks {
-			state := states[block.ID]
+		for _, holding := range held.ownership().Holdings() {
+			state := holding.State
 			if state == "" {
 				state = reconciliation.BlockPending
 			}
-			recordOwnership(owned, block, operation.Verb, state)
+			recordOwnership(owned, holding.Block, held[holding.Holder].operation.Verb, state)
 		}
 		return nil
 	})
@@ -126,26 +122,6 @@ func (s Service) Ownership(ctx context.Context, contextName string) (map[string]
 		return nil, err
 	}
 	return owned, nil
-}
-
-// recordReleased reports the objects a removal already took back. A removal
-// covers what its apply owned and each superseding one covers what is not yet
-// proved gone, so an object the apply realized and this plan no longer names is
-// one an earlier attempt removed. Without it the only durable record that the
-// removal reached that object is lost the moment a later plan stops naming it,
-// and an object a destroy completed reads as one nothing ever realized.
-func recordReleased(ctx context.Context, store OperationStore, operation operationstore.Operation, owned map[string]ObjectOwnership) error {
-	if operation.Verb != reconciliation.Destroy || operation.Source == "" {
-		return nil
-	}
-	applied, plan, states, err := removedApply(ctx, store, operation.Source)
-	if err != nil {
-		return err
-	}
-	for _, block := range coveredBy(applied, plan, states).Blocks {
-		recordOwnership(owned, block, operation.Verb, reconciliation.BlockDone)
-	}
-	return nil
 }
 
 // removedApply reads the apply a removal removes, its frozen plan and what its

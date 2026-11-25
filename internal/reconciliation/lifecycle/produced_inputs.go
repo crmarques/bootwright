@@ -175,24 +175,27 @@ func (s Service) prepareProducedExecution(ctx context.Context, tx Transaction, s
 	definitions := planDefinitions(plan)
 	registered := operation.Created
 	owner := operation.ID
-	var held lineage
-	var err error
+	var held owners
 	switch {
 	case operation.Verb == reconciliation.Destroy:
-		if held, err = appliedLineage(ctx, store, operation); err != nil {
+		chain, err := appliedLineage(ctx, store, operation)
+		if err != nil {
 			return nil, err
 		}
-		if len(held) == 0 {
+		if len(chain) == 0 {
 			return nil, engineRecordsDamaged.Fail("the removal names no apply to borrow produced inputs from", "restore the context store")
 		}
-		definitions = held.lending(held.head().plan)
+		held = chain.owners()
+		definitions = held.lendingHead()
 	case operation.Predecessor != "":
-		if held, err = lineageOf(ctx, store, lineageMember{operation: operation, plan: plan}); err != nil {
+		chain, err := lineageOf(ctx, store, lineageMember{operation: operation, plan: plan})
+		if err != nil {
 			return nil, err
 		}
+		held = chain.owners()
 		definitions = held.lending(plan)
 	}
-	if len(held) != 0 {
+	if len(held.chain) != 0 {
 		member, err := held.routed(execution.Block.ID)
 		if err != nil {
 			return nil, err

@@ -237,6 +237,7 @@ type requestLoader struct {
 	sources    map[string][]*ast.File
 	packages   map[string]*checkedPackage
 	external   map[string]*types.Package
+	standard   types.Importer
 }
 
 func newRequestLoader(t *testing.T, module fs.FS, modulePath string, files []string, platform build.Context) *requestLoader {
@@ -280,6 +281,12 @@ func (l *requestLoader) Import(importPath string) (*types.Package, error) {
 	}
 	if stand, ok := l.external[importPath]; ok {
 		return stand, nil
+	}
+	if l.standard != nil && !strings.Contains(strings.Split(importPath, "/")[0], ".") {
+		if checked, err := l.standard.Import(importPath); err == nil {
+			l.external[importPath] = checked
+			return checked, nil
+		}
 	}
 	name := path.Base(importPath)
 	if len(name) > 1 && name[0] == 'v' && strings.Trim(name[1:], "0123456789") == "" {

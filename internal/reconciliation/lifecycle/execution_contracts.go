@@ -62,9 +62,9 @@ func contractMessage(err error) string {
 }
 
 func (s Service) proveLineageContracts(chain lineage) error {
-	for _, member := range chain {
-		if err := s.proveContracts(member.plan, member.operation.Contracts); err != nil {
-			return engineOtherBuild.Fail(contractMessage(err), removeWith(member.operation.Executable))
+	for index, created := range chain.owners().incarnated() {
+		if err := s.proveContracts(created, chain[index].operation.Contracts); err != nil {
+			return engineOtherBuild.Fail(contractMessage(err), removeWith(chain[index].operation.Executable))
 		}
 	}
 	return nil

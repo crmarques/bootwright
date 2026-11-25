@@ -18348,7 +18348,7 @@ command and result of each.
 
 **Limits:** the branches decided at run time stay with
 [B1856](#x754--run-time-inverse-branches-frozen), and one fold of what a context owns with
-[B1857](m1.md#b1857).
+[B1857](#x755--one-fold-answers-what-a-contexts-operations-own).
 
 ## X754 — Run-time inverse branches frozen
 
@@ -18382,3 +18382,38 @@ and the discovery case of `TestDiscoveryInventoryBecomesAnExactInstallerTarget`.
 
 **Limits:** whether a registering installation's removal reads its guest also
 depends on the apply's preparation records, which stay read at run time.
+
+## X755 — One fold answers what a context's operations own
+
+**Items:** B1857 and B1863. **Kind:** enabling, with a defect. **Owner:**
+Reconciliation. **Authorization:** [D288](backlog.md#d288), the second slice of
+the [staged destroy design](../deferred/staged-destroy.md#program).
+
+**Outcome:** `reconciliation.Fold` answers, for each step of a context's
+operation records, its holder, its incarnation with the block it froze, its
+state and its life, as [step life](../state-reconciliation.md#step-life)
+states, with each removal's settled effects. Every reader of what a lineage
+holds answers from it: the store's admission and attempt reserve through
+`LineageOf`, block routing, evidence, prerequisites, contracts and controller
+stages, the merged plan and states, additive and preparation admission through
+`AdditiveOver`, completeness checks, the steps a removal resolves, what a
+removal covers and the ownership report. A taken back step routes to no apply.
+No answer changes. B1863's premise was stale: `checkRemovalChecks` already held
+the removal's check table at the base. The transition test now also requires
+every table under each heading it reads to be one a check reads, so a table
+added beside one fails until a check holds it.
+
+**Guard tests:** `TestStepLifeMatchesSpec`,
+`TestTheFoldRoutesEachStepToItsCreatorAndListsWhatAppliesLeaveUnfinished`,
+`TestTheFoldAdmitsAPrerequisiteOnlyHeldByAnEarlierMemberAndNotTakenBack`,
+`TestTheFoldListsHoldingsInMemberThenPlanOrder`,
+`TestTheOwnedLineageReadsEachRemovalStepsSettledEffect`,
+`TestOwnershipIsFoldedOnlyByTheFold`,
+`TestOwnershipFoldGuardFindsPlantedViolations` and
+`TestTransitionTablesMatchSpec`.
+
+**Gates:** `make focus`; the delivering commit records the command and result.
+
+**Limits:** the machine power realization's inference, the `status` walk of
+replaced removals and a replacement removal's covered set stay with
+[B1866](m1.md#b1866).
