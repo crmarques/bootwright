@@ -78,6 +78,15 @@ Gateway readiness therefore reads both options and is not ready until they
 read `error` and 503 (blocking entry `standby@mgmt-gateway`); it still writes
 nothing, because the wait outlasts cephadm's delay.
 
+`ceph config get <who> <key>` answers one key as its bare value and a newline
+(`error`, `503`) and ignores `--format json`
+([`ConfigMonitor.cc`](https://github.com/ceph/ceph/blob/v20.2.1/src/mon/ConfigMonitor.cc#L352-L365));
+only the keyless dump honours the format. A JSON parse of that answer works
+by accident for `true`, `false` and numbers and fails for any other string:
+the first standby read on the 2026-11-25 ceph-stretch run
+(`op-284a9069`) refused `native-output@ceph_native.command`. Read a single key
+as text.
+
 The dashboard also uses its own certificate and key as the TLS client identity
 for Prometheus and Alertmanager (see
 [`get_access_info`](https://github.com/ceph/ceph/blob/v20.2.2/src/pybind/mgr/dashboard/controllers/prometheus.py)).

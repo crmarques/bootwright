@@ -593,13 +593,18 @@ def sso_enabled(worker):
 
 
 def standby_settled(worker):
-    """Read-only: both dashboard options read the values cephadm sets for a gateway, `error` and 503, as a JSON string or integer; `ceph config get`
-    answers the module default (`redirect`, 500) while a value is unset."""
+    """Read-only: both dashboard options read the values cephadm sets for a gateway, `error` and 503; `ceph config get` answers the module
+    default (`redirect`, 500) while a value is unset. The MON answers one key as its bare value and a newline whatever --format asks
+    (src/mon/ConfigMonitor.cc:352-365), so the answer is read as one ASCII token, never as JSON."""
     settled = True
     for option, wanted in STANDBY_OPTIONS:
-        value = worker.ceph("config", "get", "mgr", option)
-        require(isinstance(value, str) or (isinstance(value, int) and type(value) is not bool), "native-output")
-        settled = settled and str(value) == wanted
+        output = worker.ceph("config", "get", "mgr", option, json_result=False)
+        try:
+            value = output.decode("ascii") if isinstance(output, bytes) else output
+        except UnicodeError:
+            raise Refusal("native-output") from None
+        require(isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", value.strip()) is not None, "native-output")
+        settled = settled and value.strip() == wanted
     return settled
 
 

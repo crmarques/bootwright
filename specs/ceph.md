@@ -2245,8 +2245,9 @@ blocking health checks. For the gateway Bootwright writes no dashboard setting
 and runs no `dashboard` or `mgr module` command but the sign-on enable below.
 cephadm sets the standby options after the daemons deploy, so readiness waits
 until `config get mgr` reads `mgr/dashboard/standby_behaviour` as `error` and
-`mgr/dashboard/standby_error_status_code` as `503` (a JSON string or integer,
-else `native-output`), and no standby redirects to the active manager.
+`mgr/dashboard/standby_error_status_code` as `503` (each the MON's bare one-line
+answer, which ignores `--format`; another form is `native-output`), and no
+standby redirects to the active manager.
 Removing a gateway daemon resets both (cephadm's `post_remove`), and nothing
 sets them again until `ceph orch reconfig mgmt-gateway` marks the daemons for
 cephadm's post-deploy pass. The cluster's dashboard phase keeps its own

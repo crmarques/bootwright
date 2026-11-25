@@ -444,7 +444,8 @@ def test_gateway_unit_never_writes_a_dashboard_setting(tmp_path, monkeypatch):
     ({"standby_behaviour": "redirect", "standby_error_status_code": 500}, False),
     ({"standby_behaviour": "error", "standby_error_status_code": 500}, False),
     ({"standby_behaviour": "redirect", "standby_error_status_code": 503}, False),
-    ({"standby_behaviour": "error", "standby_error_status_code": "503"}, True),
+    ({"standby_behaviour": b"error\n", "standby_error_status_code": b"503\n"}, True),
+    ({"standby_behaviour": b"redirect\n", "standby_error_status_code": b"500\n"}, False),
     ({"standby_behaviour": "error", "standby_error_status_code": 503}, True)])
 def test_gateway_readiness_waits_for_cephadms_dashboard_standby_options(tmp_path, monkeypatch, standby, ready):
     markers, monitor = applied(tmp_path, gateway_request())
@@ -457,7 +458,7 @@ def test_gateway_readiness_waits_for_cephadms_dashboard_standby_options(tmp_path
     assert ceph_native_units.PENDING.fullmatch("standby@mgmt-gateway") and ceph_core.blocking_entry("standby@mgmt-gateway")
 
 
-@pytest.mark.parametrize("answer", [True, None, ["error"], 3.5])
+@pytest.mark.parametrize("answer", [b"", b"\n", b"error redirect\n", b"error\nredirect\n", "\u00e9rror".encode(), b'"error"\n'])
 def test_gateway_readiness_refuses_a_standby_option_it_cannot_read(tmp_path, monkeypatch, answer):
     markers, monitor = applied(tmp_path, gateway_request())
     Probes(monkeypatch, (LEAF, True))

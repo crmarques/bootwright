@@ -172,7 +172,8 @@ class Monitor:
                 self.managers = copy.deepcopy(self.realized)
             return 0, json.dumps(answers[command]).encode()
         if command[:3] == ("config", "get", "mgr") and command[3] in ("mgr/dashboard/" + name for name in self.standby):
-            return 0, json.dumps(self.standby[command[3].rsplit("/", 1)[1]]).encode()
+            value = self.standby[command[3].rsplit("/", 1)[1]]
+            return 0, value if isinstance(value, bytes) else (str(value) + "\n").encode()
         self.mutations.append(command)
         if command[:3] == ("orch", "daemon", "reconfig"):
             ports = [int(url.rsplit(":", 1)[1].rstrip("/")) for url in self.manager_services.values()]
