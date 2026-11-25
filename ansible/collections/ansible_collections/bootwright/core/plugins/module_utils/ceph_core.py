@@ -23,6 +23,15 @@ READINESS_TIMEOUT = 900
 READINESS_INTERVAL = 5
 # One bounded read of a wait: the transport's ordinary call bound around a 640 s worker.
 READ_BUDGET = 660
+# The cluster apply's first readiness wait after the services call covers cephadm's OSD creation, which grows with the OSD count. It may run
+# to the run's end less what may still follow it at its ceilings: each later native call (NATIVE_CALL, the Go nativeCall), each later
+# readiness wait, and RUN_MARGIN for the playbook around this module. Its Go caller states the run deadline in whole seconds.
+NATIVE_CALL = 660
+RUN_MARGIN = 120
+# Past its own bound that wait goes on only while cephadm visibly creates OSDs: the never-booted OSDs its observations name changed within
+# CREATION_QUIET seconds. cephadm names a new one about every 21 s while it prepares a host's OSDs and pauses under a minute between hosts.
+CREATION_QUIET = 300
+RUN_DEADLINE = re.compile(r"[1-9][0-9]{0,4}\Z")
 # Each ingress host's read-only firewall check: every host in one concurrent round, within one native call of the block's Go deadline.
 FIREWALL_CALL = 120
 HOLDER_CALL = 60
@@ -399,16 +408,53 @@ def observe_state(request, request_digest, bootstrap, transport, deadline=None, 
     return ceph_evidence.evidence(observed, request_digest, request)
 
 
-def wait_ready(request, request_digest, bootstrap, transport, now, pause):
+def run_deadline(value):
+    """The run deadline its Go caller states beside the material, in whole seconds within Ceph's six-hour bound, or None when it states none."""
+    if value is None:
+        return None
+    ceph_native.require(isinstance(value, str) and RUN_DEADLINE.fullmatch(value) is not None and int(value) <= 21600, "request")
+    return int(value)
+
+
+def creation_wait_end(request, run_end, now):
+    """The latest end of the first readiness wait after the services call, given a known run end: after its own READINESS_TIMEOUT or at that
+    end less every later call and wait at its ceiling, whichever is later. A stretch cluster's two activation calls and its final wait follow
+    it, then the dashboard call and the wait after it. With no run end the wait keeps its own bound."""
+    if run_end is None:
+        return None
+    later = 3 * NATIVE_CALL + 2 * READINESS_TIMEOUT if "stretch" in request else NATIVE_CALL + READINESS_TIMEOUT
+    return max(now() + READINESS_TIMEOUT, run_end - later)
+
+
+class CreationWindow:
+    """A readiness wait's end: its own READINESS_TIMEOUT, extended toward `until` only while the never-booted OSDs its observations name keep
+    changing, each change keeping it open CREATION_QUIET seconds more. A cluster that stops converging ends the wait as before."""
+
+    def __init__(self, now, until=None):
+        self.now, self.until = now, until
+        self.own = now() + READINESS_TIMEOUT
+        self.changed, self.seen = self.own - CREATION_QUIET, frozenset()
+
+    def note(self, blocking):
+        names = frozenset(entry for entry in blocking if ceph_native.PENDING_OSD.fullmatch(entry))
+        if names != self.seen:
+            self.changed = self.now()
+        self.seen = names
+
+    def end(self):
+        return self.own if self.until is None else max(self.own, min(self.until, self.changed + CREATION_QUIET))
+
+
+def wait_ready(request, request_digest, bootstrap, transport, now, pause, until=None):
     """Wait only on proved partial state, without repeating any native effect; a timeout names the health checks still blocking.
 
     A host whose snapshot never settled while cephadm converges is not ready yet: the wait polls again and names it.
     """
-    deadline = now() + READINESS_TIMEOUT
+    window = CreationWindow(now, until)
     blocking = []
     while True:
         try:
-            observed = observe_state(request, request_digest, bootstrap, transport, deadline, now, blocking)
+            observed = observe_state(request, request_digest, bootstrap, transport, window.end(), now, blocking)
         except UnsettledRefusal as error:
             blocking[:] = (["unsettled@" + error.host] + [entry for entry in blocking if not entry.startswith("unsettled@")])[:16]
             observed = None
@@ -419,19 +465,20 @@ def wait_ready(request, request_digest, bootstrap, transport, now, pause):
         if observed is not None and observed["ready"]:
             return observed
         ceph_native.require(observed is None or observed["owned"] and observed["exists"] and observed["partial"], "not-ready")
-        remaining = deadline - now()
+        window.note(blocking)
+        remaining = window.end() - now()
         if remaining <= 0:
             raise ReadinessRefusal(blocking)
         pause(min(READINESS_INTERVAL, remaining))
 
 
-def wait_activation(request, request_digest, bootstrap, transport, now, pause):
+def wait_activation(request, request_digest, bootstrap, transport, now, pause, until=None):
     """Wait, read-only, until a stretch cluster is ready but for its activation, or already ready; a timeout names what blocks it."""
-    deadline = now() + READINESS_TIMEOUT
+    window = CreationWindow(now, until)
     blocking, pending = [], [False]
     while True:
         try:
-            observed = observe_state(request, request_digest, bootstrap, transport, deadline, now, blocking, pending)
+            observed = observe_state(request, request_digest, bootstrap, transport, window.end(), now, blocking, pending)
         except UnsettledRefusal as error:
             blocking[:] = (["unsettled@" + error.host] + [entry for entry in blocking if not entry.startswith("unsettled@")])[:16]
             observed = None
@@ -442,15 +489,16 @@ def wait_activation(request, request_digest, bootstrap, transport, now, pause):
         if observed is not None and (observed["ready"] or pending[0]):
             return observed
         ceph_native.require(observed is None or observed["owned"] and observed["exists"] and observed["partial"], "not-ready")
-        remaining = deadline - now()
+        window.note(blocking)
+        remaining = window.end() - now()
         if remaining <= 0:
             raise ReadinessRefusal(blocking)
         pause(min(READINESS_INTERVAL, remaining))
 
 
-def activate_stretch(request, request_digest, bootstrap, transport, now, pause):
+def activate_stretch(request, request_digest, bootstrap, transport, now, pause, run_end=None):
     """Native stretch mode once every MON is in quorum with its location and every OSD up: two journaled calls, before any pool."""
-    if wait_activation(request, request_digest, bootstrap, transport, now, pause)["ready"]:
+    if wait_activation(request, request_digest, bootstrap, transport, now, pause, creation_wait_end(request, run_end, now))["ready"]:
         return False
     changed = False
     for phase, last in (("stretch_locate", "rule-present"), ("stretch_enable", "verified")):
@@ -663,11 +711,14 @@ def shared_hosts(value):
 
 
 def execute(request, operation, request_digest, transport, outputs=None, *, now=time.monotonic, pause=time.sleep, connect=tls_certificate,
-            retirement=None, reading=None, shared=None):
+            retirement=None, reading=None, shared=None, deadline=None):
     """Keep read-only observation distinct from any preparation or mutation; only an observation no operation records reads unrecorded.
-    A `hosts` reading reads only each host's state; a shared host reading replaces those reads of a resource observation."""
+    A `hosts` reading reads only each host's state; a shared host reading replaces those reads of a resource observation. Only a cluster
+    apply states its run deadline, which this module's run began within."""
+    run_end = None if deadline is None else now() + deadline - RUN_MARGIN
     ceph_native.validate(request)
     ceph_native.require(operation in ("apply", "observe", "destroy"))
+    ceph_native.require(deadline is None or request["action"] == "cluster" and operation == "apply", "request")
     ceph_native.require(ceph_native.digest(request_digest))
     admit_selectors(request, operation, outputs, retirement, reading, shared)
     if reading == HOSTS_READING:
@@ -681,8 +732,9 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
         return execute_tiebreaker(request, operation, request_digest, transport, outputs)
     bootstrap = next(h for h in request["hosts"] if h["name"] == request["bootstrap"])
     outputs = admit_outputs(request, operation, outputs)
+    extra = {"run_end": run_end} if request["action"] == "cluster" else {}
     return PROCEDURES[request["action"]](request, operation, request_digest, transport, bootstrap, outputs, now=now, pause=pause, connect=connect,
-                                         reading=reading, shared=shared)
+                                         reading=reading, shared=shared, **extra)
 
 
 def admit_outputs(request, operation, outputs):
@@ -720,9 +772,9 @@ def monitoring_output(request, operation, bootstrap, transport, path):
     private_files.write(path, data)
 
 
-def execute_cluster(request, operation, request_digest, transport, bootstrap, outputs, *, now, pause, connect, reading, shared):
+def execute_cluster(request, operation, request_digest, transport, bootstrap, outputs, *, now, pause, connect, reading, shared, run_end=None):
     """The cluster prepares every host in one round and bootstraps through the tunnel, stretches before readiness, then proves its
-    dashboard."""
+    dashboard. Its first readiness wait, before activation or else its postcondition's, may use the run's unspent time."""
     changed = False
     if operation == "apply":
         preparations = host_round(transport, request["hosts"], "prerequisites")
@@ -732,12 +784,13 @@ def execute_cluster(request, operation, request_digest, transport, bootstrap, ou
             if stage != "complete":
                 changed = apply_tunnel_cluster(request, bootstrap, transport, state, preparations) or changed
             if "stretch" in request:
-                changed = activate_stretch(request, request_digest, bootstrap, transport, now, pause) or changed
+                changed = activate_stretch(request, request_digest, bootstrap, transport, now, pause, run_end) or changed
     elif operation == "destroy":
         changed = transport.call(bootstrap, "destroy")["changed"]
     pending = []
+    until = creation_wait_end(request, run_end, now) if operation == "apply" and "stretch" not in request else None
     observation = postcondition(request, operation, request_digest, transport, bootstrap, pending, now=now, pause=pause, reading=reading,
-                                shared=shared)
+                                shared=shared, until=until)
     if operation in ("apply", "observe") and observation["ready"]:
         observation, effect = dashboard_phase(request, operation, request_digest, bootstrap, transport, observation, outputs.get("dashboard"),
                                               now=now, pause=pause, connect=connect)
@@ -776,9 +829,11 @@ def execute_resource(request, operation, request_digest, transport, bootstrap, o
     return observed({"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}, operation, pending)
 
 
-def postcondition(request, operation, request_digest, transport, bootstrap, pending, *, now, pause, reading, shared):
-    """An apply waits for readiness and a destroy proves removal; an observation reads once, its blocking checks into pending."""
-    observation = (wait_ready(request, request_digest, bootstrap, transport, now, pause) if operation == "apply"
+def postcondition(request, operation, request_digest, transport, bootstrap, pending, *, now, pause, reading, shared, until=None):
+    """An apply waits for readiness, until its own bound or the given end, and a destroy proves removal; an observation reads once, its
+    blocking checks into pending."""
+    bound = () if until is None else (until,)
+    observation = (wait_ready(request, request_digest, bootstrap, transport, now, pause, *bound) if operation == "apply"
                    else observe_state(request, request_digest, bootstrap, transport, blocking=pending, unrecorded=reading == UNRECORDED_READING,
                                       shared=shared))
     # Read-only observations may return partial evidence. Mutation completion

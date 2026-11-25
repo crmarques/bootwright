@@ -1126,7 +1126,8 @@ the ceiling refuses at planning, coded `ceph.budget-exceeded`, with the
 [refusal table](#refusal-table)'s row for more Ceph hosts than the cluster run
 deadline admits.
 
-Both readiness waits stay 900 s. A readiness timeout after the services call
+Each readiness wait counts 900 s ([OSD creation wait](#osd-creation-wait)).
+A readiness timeout after the services call
 is recoverable: once cephadm has converged, the next apply observes a ready
 cluster, every host's stage is complete, and the apply passes.
 
@@ -1187,6 +1188,26 @@ stay inside their bounds. At eleven hosts the
 frozen request and the ready cluster evidence stay well inside the 256 KiB
 request and 60 KiB evidence bounds, and the physical retirement policy admits
 the same host count as the cluster.
+
+### OSD creation wait
+
+cephadm creates the OSDs after the services call one host after another, so
+the time grows with the OSD count and can pass 900 s. The cluster apply's first
+readiness wait, the one before stretch activation or else its postcondition's,
+therefore goes on past its own 900 s while cephadm visibly creates OSDs: while
+the never-booted OSDs its observations name (`unbooted@osd.<id>.<osd fsid>`)
+changed within the last 300 s. Its latest end is the run's end less every call
+and wait that may still follow it at its ceiling: for a stretch cluster the
+two activation calls, the final wait, the dashboard call and the wait after
+it, 3 × 660 s + 2 × 900 s; otherwise the dashboard call and its wait,
+660 s + 900 s. The Ceph capability states the cluster apply's run deadline to
+the adapter beside its material, in whole seconds; the run's end is that
+deadline counted from the module's start, less 120 s for the playbook around
+the module. The wait thus uses only time earlier calls left unspent, and the
+deadline formula is unchanged. A cluster whose never-booted OSDs stop changing
+keeps the 900 s bound, at most 300 s longer, and every other readiness wait
+stays 900 s; a wait that ends refuses as its readiness timeout, naming what
+blocks.
 
 ## Registry broker
 

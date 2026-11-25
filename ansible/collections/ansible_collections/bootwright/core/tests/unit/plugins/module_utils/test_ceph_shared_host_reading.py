@@ -472,3 +472,19 @@ def test_the_module_reads_and_replays_hosts_through_its_masked_material(monkeypa
     assert oversized["failed"] is True and oversized["reason"] == "request"
     malformed = run_module(monkeypatch, capsys, blocks[1][0], dict(paths, hosts="{"), Transport())
     assert malformed["failed"] is True and malformed["reason"] == "request"
+
+
+def test_the_module_lends_the_run_deadline_to_the_core_and_never_masks_its_number(monkeypatch, capsys):
+    blocks = resources()
+    paths = {"sshKey": "/run/bootwright/ssh-key", "knownHosts": "/run/bootwright/known-hosts"}
+    lent = []
+
+    def execute(request, operation, digest, transport, outputs, **options):
+        lent.append(options["deadline"])
+        return {"changed": False, "evidence": {"seconds": "21120"}}
+
+    monkeypatch.setattr(ceph_core, "execute", execute)
+    published = run_module(monkeypatch, capsys, blocks[0][0], dict(paths, deadline="21120"), Transport())
+    assert lent == [21120] and published["evidence"] == {"seconds": "21120"}
+    malformed = run_module(monkeypatch, capsys, blocks[0][0], dict(paths, deadline="021120"), Transport())
+    assert lent == [21120] and malformed["failed"] is True and malformed["reason"] == "request"

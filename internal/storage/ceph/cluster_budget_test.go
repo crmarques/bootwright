@@ -22,6 +22,25 @@ func TestClusterHostBoundIsTheLargestDeadlineUnderTheRunCeiling(t *testing.T) {
 	}
 }
 
+func TestOnlyTheClusterApplyStatesItsRunDeadlineToTheAdapter(t *testing.T) {
+	r := coreRequest()
+	e := withMaterial(executionFor(t, r), r)
+	applied := &recordingRunner{}
+	_, _ = New(api.CephCluster, applied).run(context.Background(), e, "apply", r)
+	if applied.calls != 1 || applied.request.Deadline != clusterApplyDeadline(len(r.Hosts)) ||
+		applied.request.MaterialValues[runDeadlineValue] != fmt.Sprint(int(applied.request.Deadline/time.Second)) {
+		t.Fatalf("apply ran with deadline %s and values %v", applied.request.Deadline, applied.request.MaterialValues)
+	}
+	e.Attempt = 1
+	for _, operation := range []string{"observe", "destroy"} {
+		other := &recordingRunner{}
+		_, _ = New(api.CephCluster, other).run(context.Background(), e, operation, r)
+		if _, found := other.request.MaterialValues[runDeadlineValue]; other.calls != 1 || found {
+			t.Fatalf("%s ran with values %v", operation, other.request.MaterialValues)
+		}
+	}
+}
+
 func TestClusterBudgetAdmitsHostSpecificOSDServicesUpToTheBound(t *testing.T) {
 	for _, hosts := range []int{6, 7, 11} {
 		for _, services := range []int{2 + hosts, 2 + 2*hosts, 2 + 3*hosts} {

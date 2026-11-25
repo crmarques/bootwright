@@ -575,6 +575,93 @@ def test_osd_creation_past_the_activation_wait_is_its_readiness_timeout_never_an
     assert not {"stretch_locate", "stretch_enable"} & {phase for unused, phase, unused in transport.calls}
 
 
+# op-284a9069: the last two of 30 encrypted OSDs, never booted, when the 900 s wait before activation ended.
+CREATING = ["unbooted@osd.25.1ef1d847-b27d-4310-9f94-b6ea69965c43", "unbooted@osd.26.8f2cae53-da90-4c7f-a781-26c2ed43615e"]
+
+
+def unbooted(osd):
+    return "unbooted@osd.%d.00000000-0000-4000-8000-%012d" % (osd, osd)
+
+
+class Creating(ActivationTransport):
+    """cephadm creates the cluster's OSDs until `created` seconds have passed: before then each observation names the never-booted OSD it
+    is creating, a new one every 21 s until `stalled` seconds, and from then on the same ones."""
+
+    def __init__(self, value, clock, stage, created, stalled=float("inf")):
+        super().__init__(value, clock, stage)
+        self.created, self.stalled = created, stalled
+
+    def call(self, host, phase, private=None, *, timeout=None, devices=None, service=None):
+        if phase == "observe" and timeout is not None and self.clock.value < self.created:
+            self.calls.append((host["name"], phase, timeout))
+            osd = int(min(self.clock.value, self.stalled) // 21)
+            self.clock.value += 20
+            names = list(CREATING) if self.stalled == 0 else [unbooted(osd)]
+            return dict(self.observed(before=True), blocking=names)
+        return super().call(host, phase, private, timeout=timeout, devices=devices, service=service)
+
+
+def test_osd_creation_past_900_s_reaches_activation_within_the_run_deadline(tmp_path):
+    """op-284a9069: the OSDs were up 15 min 18 s after the services call; the cluster apply's run deadline leaves the wait the time."""
+    value = request()
+    core.package_intent(value)
+    clock = core.ReadinessClock()
+    transport = Creating(value, clock, "complete", 1000)
+    result = ceph_core.execute(value, "apply", "d" * 64, transport, {"dashboard": str(tmp_path / "dashboard")}, now=clock.now, pause=clock.pause,
+                               deadline=21120)
+    assert result["evidence"]["ready"] and result["evidence"]["stretch"] == {"stage": "verified", "enabled": True}
+    assert {"stretch_locate", "stretch_enable"} <= {phase for unused, phase, unused in transport.calls} and clock.value > ceph_core.READINESS_TIMEOUT
+
+
+def test_the_creation_wait_keeps_every_later_call_and_wait_at_its_ceiling():
+    value = request()
+    clock = core.ReadinessClock()
+    transport = Creating(value, clock, "complete", float("inf"))
+    run_end = 21120 - ceph_core.RUN_MARGIN
+    with pytest.raises(ceph_core.ReadinessRefusal, match="^not-ready$") as refused:
+        ceph_core.activate_stretch(value, "d" * 64, value["hosts"][0], transport, clock.now, clock.pause, run_end)
+    later = 3 * ceph_core.NATIVE_CALL + 2 * ceph_core.READINESS_TIMEOUT
+    assert refused.value.checks[0].startswith("unbooted@osd.") and run_end - later - 30 < clock.value <= run_end - later + 20
+    assert not {"stretch_locate", "stretch_enable"} & {phase for unused, phase, unused in transport.calls}
+
+
+@pytest.mark.parametrize(("stalled", "ends"), [(0, ceph_core.READINESS_TIMEOUT), (1200, 1200 + ceph_core.CREATION_QUIET)])
+def test_a_wait_whose_never_booted_osds_stop_changing_ends_creation_quiet_seconds_later(stalled, ends):
+    """An OSD that never boots, or a creation that stalls, never holds the wait to the run's end."""
+    value = request()
+    clock = core.ReadinessClock()
+    transport = Creating(value, clock, "complete", float("inf"), stalled)
+    with pytest.raises(ceph_core.ReadinessRefusal, match="^not-ready$") as refused:
+        ceph_core.activate_stretch(value, "d" * 64, value["hosts"][0], transport, clock.now, clock.pause, 21000)
+    # The last change is seen up to one creation step and one poll after it happened, and the last read overruns the end by one read.
+    assert refused.value.checks[0].startswith("unbooted@osd.") and ends - 30 < clock.value <= ends + 100
+    if not stalled:
+        assert refused.value.checks == CREATING
+
+
+def test_the_creation_wait_ends_after_its_own_bound_or_the_run_end_less_what_follows(core_request):
+    clock = core.ReadinessClock()
+    clock.value = 100
+    stretched = request()
+    assert ceph_core.creation_wait_end(stretched, None, clock.now) is None
+    assert ceph_core.creation_wait_end(stretched, 21000, clock.now) == 21000 - 3 * 660 - 2 * 900
+    assert ceph_core.creation_wait_end(core_request, 21000, clock.now) == 21000 - 660 - 900
+    assert ceph_core.creation_wait_end(stretched, 3000, clock.now) == 100 + ceph_core.READINESS_TIMEOUT
+
+
+@pytest.mark.parametrize("value", [21120, "0", "021120", "21601", "2.5", "", "21120\n"])
+def test_a_run_deadline_is_whole_seconds_within_the_six_hour_bound(value):
+    assert ceph_core.run_deadline(None) is None and ceph_core.run_deadline("21600") == 21600
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_core.run_deadline(value)
+
+
+@pytest.mark.parametrize("operation", ["observe", "destroy"])
+def test_only_a_cluster_apply_states_a_run_deadline(core_request, operation):
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_core.execute(core_request, operation, "d" * 64, None, deadline=21120)
+
+
 DOMAIN = ".lab.example.test"
 
 

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"strconv"
 	"time"
 
 	"github.com/crmarques/bootwright/internal/machine"
@@ -157,6 +158,8 @@ func gatewayMaterial(e lifecycle.Execution, r Request, operation string) ([]life
 
 const UnrecordedReading = "unrecorded"
 
+const runDeadlineValue = "deadline"
+
 func (c Capability) run(ctx context.Context, e lifecycle.Execution, operation string, r Request) (lifecycle.RunResult, error) {
 	return c.runFor(ctx, e, operation, r, false)
 }
@@ -205,6 +208,13 @@ func (c Capability) invokeFor(ctx context.Context, e lifecycle.Execution, operat
 	}
 	if produces && !removal && len(credentialServices(r)) != 0 {
 		outputs = append(outputs, lifecycle.OutputFile{Name: MonitoringOutput, Variable: MonitoringOutput})
+	}
+	if r.Action == "cluster" && operation == "apply" {
+		values = maps.Clone(values)
+		if values == nil {
+			values = map[string]string{}
+		}
+		values[runDeadlineValue] = strconv.Itoa(int(deadline / time.Second))
 	}
 	refusals := adapterRefusals()
 	if r.Client != nil {

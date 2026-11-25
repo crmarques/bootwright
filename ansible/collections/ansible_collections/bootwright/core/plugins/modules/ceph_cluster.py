@@ -105,12 +105,16 @@ def main():
         retirement = material.pop("retirement", None)
         reading = material.pop("reading", None)
         shared = ceph_core.shared_hosts(material.pop("hosts", None))
+        # The cluster apply's run deadline in seconds: masked as a material leaf, its number would be censored in every result string.
+        deadline = ceph_core.run_deadline(material.pop("deadline", None))
         for selector in (retirement, reading):
             if selector in SELECTORS:
                 module.no_log_values.discard(selector)
+        if deadline is not None:
+            module.no_log_values.discard(str(deadline))
         transport = ceph_transport.Transport(params["request"], material)
         result = ceph_core.execute(params["request"], params["operation"], params["digest"], transport, params["outputs"], retirement=retirement,
-                                   reading=reading, shared=shared)
+                                   reading=reading, shared=shared, deadline=deadline)
     except Exception as error:
         reason, detail = ceph_core.refusal(error, ceph_core.CLUSTER_REASONS)
         failure = {"reason": reason}
