@@ -154,7 +154,7 @@ func (s Service) protect(ctx context.Context, name string, decided operationPlan
 // revision and digest do not describe. It returns the completed operation the
 // apply follows, if any.
 func (s Service) verifyFreshApply(ctx context.Context, tx Transaction, store OperationStore, decided operationPlan) (operationstore.Operation, error) {
-	changed := func(current basis) error { return s.contextChanged(decided.verb, decided.basis, current) }
+	changed := func(current basis) error { return s.contextChanged(decided, decided.basis, current) }
 	previous, _, _, err := s.verifyBasis(ctx, store, decided.basis, changed)
 	if err != nil {
 		return operationstore.Operation{}, err
@@ -278,19 +278,23 @@ func (s Service) restoreEvidence(ctx context.Context, name string, record *regis
 		if err != nil {
 			return err
 		}
-		verb, state := reconciliation.Destroy, reconciliation.OperationDone
+		current := operationstore.Operation{Verb: reconciliation.Destroy, State: reconciliation.OperationDone}
 		if index.Current != "" {
-			operation, err := store.ReadOperation(ctx, index.Current)
-			if err != nil {
+			if current, err = store.ReadOperation(ctx, index.Current); err != nil {
 				return err
 			}
-			verb, state = operation.Verb, operation.State
 		}
-		if verb == reconciliation.Destroy && state == reconciliation.OperationDone && holdsReservation(tx) {
+		if current.Verb == reconciliation.Destroy && current.State == reconciliation.OperationDone && !staged(current) && holdsReservation(tx) {
 			return nil
 		}
-		if err := s.settle(ctx, tx, verb, state); err != nil {
+		data, err := projectionOf(current)
+		if err != nil {
 			return err
+		}
+		if !bytes.Equal(tx.Evidence(), data) {
+			if err := tx.PublishEvidence(ctx, data); err != nil {
+				return err
+			}
 		}
 		reclaim(ctx, tx, store)
 		return nil
@@ -479,7 +483,7 @@ func (s Service) releaseUnclaimed(ctx context.Context, name string, decided oper
 	held := s.held(ctx, name)
 	err := s.workspace.MutateLifecycle(ctx, name, func(tx Transaction) error {
 		store := s.store(tx)
-		changed := func(current basis) error { return s.contextChanged(decided.verb, decided.basis, current) }
+		changed := func(current basis) error { return s.contextChanged(decided, decided.basis, current) }
 		if _, _, _, err := s.verifyBasis(ctx, store, decided.basis, changed); err != nil {
 			return err
 		}

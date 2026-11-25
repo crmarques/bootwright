@@ -250,6 +250,43 @@ func TestWithdrawRemovesEveryEntryAndCollectsItsParts(t *testing.T) {
 	}
 }
 
+// Withdrawing named blocks removes their entries and collects their parts,
+// keeps every other block's, and publishes nothing when no entry matches.
+func TestWithdrawBlocksRemovesOnlyTheNamedBlocksEntries(t *testing.T) {
+	h := newIntegrationStore(t)
+	h.produce("cluster-install-kept", map[string]string{producedName: "kept"})
+	parts := h.partFiles()
+	h.produce(producedBlock, map[string]string{producedName: firstKubeconfig, "pending": "candidate"})
+	withdraw := func(blocks ...string) bool {
+		var withdrawn bool
+		if err := h.mutate(func(session secretstore.StoreSession) error {
+			var err error
+			withdrawn, err = session.WithdrawBlocks(context.Background(), blocks)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return withdrawn
+	}
+	if !withdraw(producedBlock, "cluster-install-absent") {
+		t.Fatal("a withdrawal of a block with two entries reported none")
+	}
+	snapshot := h.snapshot()
+	if len(snapshot.Produced) != 1 || snapshot.Produced[0].Block != "cluster-install-kept" || h.partFiles() != parts {
+		t.Fatalf("the withdrawal left %+v with %d parts, want %d", snapshot.Produced, h.partFiles(), parts)
+	}
+	if _, found := h.readProduced(producedBlock, producedName); found {
+		t.Fatal("a withdrawn entry is still read")
+	}
+	if value, found := h.readProduced("cluster-install-kept", producedName); !found || value != "kept" {
+		t.Fatal("the withdrawal dropped another block's entry")
+	}
+	record := h.storeRecord()
+	if withdraw("cluster-install-absent") || withdraw() || !bytes.Equal(h.storeRecord(), record) {
+		t.Fatal("a withdrawal matching no entry published")
+	}
+}
+
 func TestDiscardRemovesOneEntryAndKeepsTheBlocksOthers(t *testing.T) {
 	h := newIntegrationStore(t)
 	h.produce(producedBlock, map[string]string{producedName: firstKubeconfig, "pending": "candidate"})

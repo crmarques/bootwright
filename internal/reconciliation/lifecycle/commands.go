@@ -48,7 +48,7 @@ func (s Service) resolutionRemedy(contextName string, verb reconciliation.Verb, 
 	}
 	continuation := s.preparationRetry(contextName, planCommand(contextName, frozen, authorizing(frozen)...))
 	if !selection.Empty() {
-		continuation = contextCommand(contextName, "apply --dry-run", invocationFlags(selection, nil)...)
+		continuation = contextCommand(contextName, "apply --dry-run", invocationFlags("", selection, nil)...)
 		if partial {
 			return "review the continuation with " + continuation + ", or take back what it owns with " + contextCommand(contextName, string(reconciliation.Destroy))
 		}
@@ -125,10 +125,10 @@ func continuationCommand(contextName string, operation operationstore.Operation,
 	case "none":
 		return ""
 	case string(reconciliation.Destroy):
-		return contextCommand(contextName, action, authorizingUnfixed(reconciliation.RemainingSubset(frozen, states))...)
+		return contextCommand(contextName, action, invocationFlags(frozenFloor(operation), reconciliation.Selection{}, authorizingUnfixed(reconciliation.RemainingSubset(frozen, states)))...)
 	}
 	if !pendingRemains(frozen, states) {
-		return planCommand(contextName, frozen, slices.Concat(relaxationFlags(frozenRelaxations(frozen)), unregisteredFlags(frozen))...)
+		return planCommand(contextName, frozen, invocationFlags(frozenFloor(operation), reconciliation.Selection{}, slices.Concat(relaxationFlags(frozenRelaxations(frozen)), unregisteredFlags(frozen)))...)
 	}
-	return planCommand(contextName, frozen, authorizing(authorizationPlan(frozen, states, reconciliation.Selection{}))...)
+	return planCommand(contextName, frozen, invocationFlags(frozenFloor(operation), reconciliation.Selection{}, authorizing(authorizationPlan(frozen, states, reconciliation.Selection{})))...)
 }

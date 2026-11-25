@@ -29,6 +29,9 @@ func (s Service) automaticPreparation(ctx context.Context, name string, selectio
 			if err != nil {
 				return err
 			}
+			if trimmed(operation) {
+				return refuseTrimmed(name, operation, false)
+			}
 			if operation.State != reconciliation.OperationDone {
 				frozen, err := store.ReadPlan(ctx, operation.ID)
 				if err != nil {

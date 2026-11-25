@@ -41,6 +41,8 @@
       --keep-going    Continue independent cleanup after a target-local failure or a refused
                       enrollment proof
       --parallelism   Set the maximum number of running steps (positive integer) · default 8
+      --stage         Take back one stage and every stage built on it, keeping the stages below
+                      (values: substrates, machines, clusters, add-ons)
       --unregistered  Name a Machine whose subscription registration you removed with the
                       subscription service's own tools
       --yes           Confirm the command's ordinary confirmation

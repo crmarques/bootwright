@@ -86,6 +86,7 @@ type invocation struct {
 	unregistered   map[string]bool
 	effects        map[string]bool
 	selection      reconciliation.Selection
+	floor          reconciliation.Stage
 	stopGroups     []*removalMachineGroup
 	clusterStarts  *sync.Map
 	tx             Transaction
@@ -403,10 +404,10 @@ func (c *scheduler) durable(ctx context.Context, block string, prior reconciliat
 func (c *scheduler) observingCommand() string {
 	name := c.tx.Identity().Name
 	if c.removal != nil {
-		return contextCommand(name, string(reconciliation.Destroy), authorizingUnfixed(*c.removal)...)
+		return contextCommand(name, string(reconciliation.Destroy), invocationFlags(c.floor, reconciliation.Selection{}, authorizingUnfixed(*c.removal))...)
 	}
 	if c.operation.Verb == reconciliation.Apply && !c.selection.Empty() {
-		return contextCommand(name, "apply --dry-run", invocationFlags(c.selection, nil)...)
+		return contextCommand(name, "apply --dry-run", invocationFlags("", c.selection, nil)...)
 	}
 	if command := continuationCommand(name, c.operation, c.plan, c.states); command != "" {
 		if c.operation.Verb == reconciliation.Apply {
@@ -414,7 +415,7 @@ func (c *scheduler) observingCommand() string {
 		}
 		return command
 	}
-	return contextCommand(name, string(c.operation.Verb))
+	return contextCommand(name, string(c.operation.Verb), invocationFlags(c.floor, reconciliation.Selection{}, nil)...)
 }
 
 // settle records what one block proved and frees what it held.

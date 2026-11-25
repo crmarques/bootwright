@@ -128,7 +128,7 @@ func recordsMoved(planned, current basis) (string, bool) {
 // and what the context holds now, because repeating the command decides again
 // from the latter, which is the only plan it may register. The operation
 // records are compared first, and the input and evidence only once they agree.
-func (s Service) contextChanged(verb reconciliation.Verb, planned, current basis) error {
+func (s Service) contextChanged(decided operationPlan, planned, current basis) error {
 	message := "the context changed after this command read it: it was planned from " + planned.describe() +
 		", and the context now holds " + current.describe()
 	records, moved := recordsMoved(planned, current)
@@ -144,8 +144,8 @@ func (s Service) contextChanged(verb reconciliation.Verb, planned, current basis
 	case !slices.Equal(current.claims, planned.claims):
 		message += " with an operation claimed since it was read"
 	}
-	repeat := contextCommand(planned.context, string(verb))
-	if verb == reconciliation.Apply {
+	repeat := contextCommand(planned.context, string(decided.verb), invocationFlags(decided.floor(), reconciliation.Selection{}, nil)...)
+	if decided.verb == reconciliation.Apply {
 		repeat = s.preparationRetry(planned.context, repeat)
 	}
 	return enginePlanMoved.Fail(message, "repeat "+repeat+" to plan from what the context holds now")

@@ -32,7 +32,7 @@ func (s Service) presentation(decided operationPlan) PlanResult {
 		markSourceProofs(result.Steps, decided.basis.blocks, abandonedBlocks(decided.plan))
 	}
 	result.Continuation = !decided.fresh
-	result.AddsTo = decided.predecessor
+	result.AddsTo, result.Scope = decided.predecessor, decided.scope()
 	if decided.verb == reconciliation.Destroy && len(decided.takes) > 1 {
 		result.TakesBack = slices.Clone(decided.takes)
 	}

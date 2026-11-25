@@ -257,12 +257,12 @@ func TestARemovalReopensTheRootsBindingNotTheHeads(t *testing.T) {
 		t.Fatalf("release = %v", scope.release)
 	}
 	removal := operationstore.Operation{ID: "op-" + "d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2", Verb: reconciliation.Destroy, Source: f.head.ID}
-	replacement, err := replacementOf(ctx, f.store, removal, f.rootPlan)
+	replacement, err := replacementOf(ctx, f.store, removal, f.rootPlan, map[string]reconciliation.BlockState{})
 	if err != nil || replacement.reopen != f.root.Bindings[0] || len(replacement.release) != 2 {
 		t.Fatalf("a removal that names no binding reopens %q and releases %v (%v)", replacement.reopen, replacement.release, err)
 	}
 	removal.Bindings = []string{"rebound-1"}
-	replacement, err = replacementOf(ctx, f.store, removal, f.rootPlan)
+	replacement, err = replacementOf(ctx, f.store, removal, f.rootPlan, map[string]reconciliation.BlockState{})
 	if err != nil || replacement.reopen != "rebound-1" || len(replacement.release) != 3 {
 		t.Fatalf("a rebound removal reopens %q and releases %v (%v)", replacement.reopen, replacement.release, err)
 	}

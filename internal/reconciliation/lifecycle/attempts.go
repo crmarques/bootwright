@@ -535,7 +535,7 @@ func (s Service) invoke(ctx context.Context, run invocation, block reconciliatio
 				name := tx.Identity().Name
 				continuation = s.preparationRetry(name, contextCommand(name, string(reconciliation.Apply), authorizing(plan)...))
 			} else {
-				continuation = contextCommand(tx.Identity().Name, "apply --dry-run", invocationFlags(run.selection, nil)...)
+				continuation = contextCommand(tx.Identity().Name, "apply --dry-run", invocationFlags("", run.selection, nil)...)
 			}
 		}
 		if operation.Verb == reconciliation.Apply && resolution == 0 && attempt > 0 {
@@ -775,7 +775,11 @@ func (s Service) finish(ctx context.Context, tx Transaction, store OperationStor
 	if err := store.UpdateOperation(ctx, current); err != nil {
 		return result, err
 	}
-	if next == reconciliation.OperationDone && operation.Verb == reconciliation.Destroy {
+	if next == reconciliation.OperationDone && staged(current) {
+		if err := s.completeStaged(ctx, tx, store, current); err != nil {
+			return result, err
+		}
+	} else if next == reconciliation.OperationDone && operation.Verb == reconciliation.Destroy {
 		if err := s.withdraw(ctx, tx); err != nil {
 			return result, err
 		}
@@ -797,7 +801,7 @@ func (s Service) finish(ctx context.Context, tx Transaction, store OperationStor
 		if next == reconciliation.OperationPaused {
 			command = contextCommand(name, "apply --dry-run")
 		} else {
-			command = contextCommand(name, "apply --dry-run", invocationFlags(selection, nil)...)
+			command = contextCommand(name, "apply --dry-run", invocationFlags("", selection, nil)...)
 		}
 	}
 	result.Blocks, err = s.recordedBlockResults(ctx, store, current, plan, states, command)

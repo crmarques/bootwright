@@ -105,7 +105,7 @@ func validateFlagValues(command *cobra.Command, spec commandSpec) (incomplete bo
 			}
 			continue
 		}
-		if len(flag.enum) > 0 && !contains(flag.enum, value) {
+		if len(flag.enum) > 0 && (parsed.Changed || value != "") && !contains(flag.enum, value) {
 			return false, "--" + flag.name + " must be one of: " + strings.Join(flag.enum, ", ")
 		}
 	}

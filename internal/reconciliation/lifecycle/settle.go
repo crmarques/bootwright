@@ -29,7 +29,7 @@ func (s Service) finishSettled(ctx context.Context, name string, decided operati
 	if decided.idle {
 		s.reclaimIdle(ctx, name)
 	}
-	if decided.verb == reconciliation.Destroy && !finalized {
+	if decided.verb == reconciliation.Destroy && !finalized && !decided.keeps && !trimmed(decided.operation) {
 		s.collect(ctx, name, stranded, nil)
 	}
 	recovered := ""

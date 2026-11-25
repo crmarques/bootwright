@@ -255,6 +255,12 @@ func stageFlag() flagSpec {
 	return flag
 }
 
+func floorFlag() flagSpec {
+	flag := stringFlag("stage", "Take back one stage and every stage built on it, keeping the stages below")
+	flag.enum = []string{"substrates", "machines", "clusters", "add-ons"}
+	return flag
+}
+
 func loginFlag() flagSpec {
 	flag := stringFlag("login", "Select comma-separated administrator logins to update (default: all the cluster has)")
 	flag.enum, flag.enumList, flag.nameList = slices.Clone(lifecycle.AdminLoginNames), true, true

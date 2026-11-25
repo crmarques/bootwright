@@ -284,7 +284,7 @@ func (s Service) rebuiltBlocks(ctx context.Context, view View, owning operations
 
 func inputState(view View, current, owning operationstore.Operation) string {
 	switch {
-	case owning.ID == "", current.Verb == reconciliation.Destroy && current.State == reconciliation.OperationDone:
+	case owning.ID == "", current.Verb == reconciliation.Destroy && current.State == reconciliation.OperationDone && !trimmed(current):
 		return diffNone
 	case inputDrift(view, owning) == "":
 		return diffUnchanged
@@ -495,7 +495,7 @@ func recordedSide(read diffRead, identity string) RealSide {
 	case named:
 		side.State, side.Remedy = sideUnknown, reviewStatus(read.context.Name)
 		side.Reason = "its blocks read " + string(status) + ": " + strings.Join(read.blocksOf(identity), ", ")
-	case current.Verb == reconciliation.Destroy && current.State == reconciliation.OperationDone:
+	case current.Verb == reconciliation.Destroy && current.State == reconciliation.OperationDone && !trimmed(current):
 		side.Reason = "destroy " + current.ID + " took it back"
 	default:
 		return read.appliedSide(identity, false)

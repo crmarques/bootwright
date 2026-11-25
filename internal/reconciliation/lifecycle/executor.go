@@ -66,7 +66,7 @@ func (s Service) execute(ctx context.Context, name string, decided operationPlan
 		// transition releases and the binding this invocation reopened. A
 		// removal whose record reads done owes both even once the invocation
 		// is interrupted, so they run under the recording boundary.
-		if completedRemoval(decided, result) {
+		if completedRemoval(decided, result) && !decided.staged() {
 			completion, unreleased = captureRemoval(recordingContext(ctx), s.store(tx), result.Receipt.Operation, joinBindings(slices.Clone(decided.release), binding))
 		}
 		return err
@@ -80,11 +80,11 @@ func (s Service) execute(ctx context.Context, name string, decided operationPlan
 		// the one and needs the other. Both stay, and nothing is collected.
 		return result, err
 	}
-	collect := decided.fresh
+	collect := decided.fresh && !decided.staged()
 	// A completed removal no longer needs the material its apply bound, even
 	// when a log fault it latched makes the invocation report a failure. Its
 	// receipt stays done whether or not everything it owned was given back.
-	if completedRemoval(decided, result) {
+	if completedRemoval(decided, result) && !decided.staged() {
 		if unreleased == nil {
 			unreleased = s.completeRemoval(recordingContext(ctx), name, completion)
 		}
@@ -177,7 +177,7 @@ func (s Service) run(ctx context.Context, tx Transaction, decided operationPlan,
 	if err != nil {
 		return nil, err
 	}
-	result := &OperationResult{Context: tx.Identity(), Verb: string(operation.Verb), Steps: steps(plan, nil), KeepGoing: s.keepGoing}
+	result := &OperationResult{Context: tx.Identity(), Verb: string(operation.Verb), Steps: steps(plan, nil), KeepGoing: s.keepGoing, Scope: decided.scope()}
 	// A log fault requests cancellation of the work in flight, never of the
 	// records that settle it, which are written under the recording boundary.
 	work, cancel := context.WithCancel(ctx)
@@ -205,7 +205,7 @@ func (s Service) run(ctx context.Context, tx Transaction, decided operationPlan,
 	}
 	run := invocation{
 		stopGroups: stopGroups, deferredSource: deferred, tx: tx, store: store, approved: located, boundary: logging,
-		operation: operation, plan: plan, material: material, unregistered: frozenUnregistered(decided.plan),
+		operation: operation, plan: plan, material: material, unregistered: frozenUnregistered(decided.plan), floor: decided.floor(),
 	}
 	var refusal error
 	if operation.Verb == reconciliation.Apply {

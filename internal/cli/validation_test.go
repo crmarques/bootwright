@@ -202,7 +202,11 @@ func TestStageSelectionIsAClosedCommaList(t *testing.T) {
 		{"apply", "--stage", ",,"},
 		{"apply", "--stage="},
 		{"apply", "--dry-run", "--stage", "Machines"},
-		{"destroy", "--stage", "machines"},
+		{"destroy", "--stage", "controller"},
+		{"destroy", "--stage", "infrastructure-services"},
+		{"destroy", "--stage", "machines,clusters"},
+		{"destroy", "--dry-run", "--stage", "storage"},
+		{"destroy", "--stage", "machines", "--authorize", "abandon=node-1"},
 	} {
 		code, _, _, record := runRecorded(args)
 		if code != 2 || record.calls != 0 {

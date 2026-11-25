@@ -145,6 +145,21 @@ var (
 	destroyStageSelected = diagnostics.Stop{Code: "destroy.stage-selected", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryFixThenRepeat,
 		Meaning: "the next operation is a destroy, which accepts no stage selection", Remedy: "repeat the command without --stage and --until"}
+	destroyStageBelowFloor = diagnostics.Stop{Code: "destroy.stage-below-floor", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "a step below the floor depends on what a staged destroy from it takes back, so nothing was registered", Remedy: "repeat with the lower stage the message names, or destroy without --stage"}
+	destroyStageKeepsUnfinished = diagnostics.Stop{Code: "destroy.stage-keeps-unfinished", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryOtherVerb,
+		Meaning: "a step a staged destroy would keep is not done, so nothing was registered", Remedy: "finish it with apply, take it back with a lower stage, or destroy without --stage"}
+	destroyStageKeepsHost = diagnostics.Stop{Code: "destroy.stage-keeps-host", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "a step a staged destroy would take back runs on a Machine it keeps, which nothing yet takes such a step back from, so nothing was registered", Remedy: "repeat with the stage or the item the message names, or destroy without --stage"}
+	destroyStageChanged = diagnostics.Stop{Code: "destroy.stage-changed", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "an unfinished destroy froze another floor, or none, than the command names, so nothing was registered", Remedy: "finish it with the command the message names, then repeat"}
+	applyContextTrimmed = diagnostics.Stop{Code: "apply.context-trimmed", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryOtherVerb,
+		Meaning: "a staged destroy took back part of the context, and no apply restores it yet", Remedy: "take back what the context keeps with destroy, then apply again"}
 	applyTargetBeforePreparation = diagnostics.Stop{Code: "apply.target-before-preparation", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryOtherVerb,
 		Meaning: "a scoped apply cannot freeze its installation plan before inventory outside its targets exists", Remedy: "complete the named machine inventories and review the scoped apply again"}
@@ -315,7 +330,8 @@ var stops = []diagnostics.Stop{engineRecordsFull, engineRecordsReadOnly, engineR
 	applyNotAnAddition, applyPrerequisiteLost, applyNothingDeclared, applyStageEmpty, applyStageExcludesRetry, applyUntilUnknown,
 	planInputUncompilable, planCapabilityMissing, planCapabilityDefect, planHostKeyUnbound, planEnvironmentInvalid,
 	engineUnindexedRecords, engineRequestDefect, engineOtherBuild, destroyInverseMoved, destroyInverseUnstated, enginePlanMoved, engineInputMoved, engineBindingLost, authorizeUnneeded,
-	authorizeMissing, authorizeStale, authorizeRebindInvalid, destroyStageSelected, applyUntilBeforePreparation, applyTargetBeforePreparation,
+	authorizeMissing, authorizeStale, authorizeRebindInvalid, destroyStageSelected,
+	destroyStageBelowFloor, destroyStageKeepsUnfinished, destroyStageKeepsHost, destroyStageChanged, applyContextTrimmed, applyUntilBeforePreparation, applyTargetBeforePreparation,
 	engineRecordsDamaged, applyProducedInputMissing, engineRecaptureMismatch, engineResolvedUnperformed, engineResolvedPartial, destroyPostconditionUnknown,
 	prepareRefused, prepareUnsupported,
 	engineBorrowedSSH, engineConfirmationRequired, engineInputInvalid, engineCredentialMoved, engineFinalizationIncomplete,

@@ -55,6 +55,7 @@ func TestTransitionTablesMatchSpec(t *testing.T) {
 type stateMachineCase struct {
 	arrange        func(*testing.T, *harness)
 	apply, destroy string
+	staged         string
 	previewed      reconciliation.Verb
 	next           string
 	reopens        bool
@@ -286,6 +287,48 @@ func stateMachineRows() map[string]stateMachineRow {
 				"a removal whose block failed": {arrange: failedChainedRemoval, apply: "refuse", destroy: "fresh destroy", previewed: reconciliation.Destroy, next: "destroy", reopens: true, shown: planning("destroy")},
 			},
 		},
+		"staged destroy done (trimmed)": {
+			transition: "`destroy` starts a fresh destroy of what the context still owns, which replaces the staged destroy; `destroy --stage` at the same or a later stage settles without effect, and at an earlier one starts a fresh staged destroy of what the context still owns, which replaces it; `apply` refuses; `context update` is admitted, since the context guard reads `{none, retained}` as no mutation",
+			cases: map[string]stateMachineCase{
+				"a staged destroy from the clusters stage": {
+					arrange: func(t *testing.T, h *harness) { completeApply(t, h); stagedDestroy(t, h, reconciliation.StageClusters) },
+					apply:   "refuse", destroy: "fresh destroy", staged: "settle", previewed: reconciliation.Destroy, next: "none", reopens: true, shown: planning("destroy"),
+				},
+			},
+		},
+		"staged destroy running, paused, unknown or failed": {
+			transition: "the row of that destroy's state, at the stage it froze: `destroy --stage` at that stage continues it, or replaces a failed one with a fresh staged destroy of what it has not removed; `destroy` without `--stage` or at another stage refuses",
+			cases: map[string]stateMachineCase{
+				"a staged destroy whose block failed": {
+					arrange: failedStagedRemoval, apply: "refuse", destroy: "refuse", staged: "fresh destroy", previewed: reconciliation.Destroy, next: "destroy", reopens: true, shown: planning("destroy"),
+				},
+				"a staged destroy whose executor died": {
+					arrange: func(t *testing.T, h *harness) {
+						failedStagedRemoval(t, h)
+						rewriteState(t, h, path.Join(currentOperation(t, h), "operation.json"), string(reconciliation.OperationRunning))
+					},
+					apply: "refuse", destroy: "refuse", staged: "continue", previewed: reconciliation.Destroy, next: "continue-destroy", reopens: true, shown: continuing("continue-destroy"),
+				},
+				"a staged destroy paused before its next block": {
+					arrange: func(t *testing.T, h *harness) {
+						failedStagedRemoval(t, h)
+						rewriteState(t, h, path.Join(currentOperation(t, h), "operation.json"), string(reconciliation.OperationPaused))
+					},
+					apply: "refuse", destroy: "refuse", staged: "continue", previewed: reconciliation.Destroy, next: "continue-destroy", reopens: true, shown: continuing("continue-destroy"),
+				},
+				"a staged destroy whose block lost its outcome": {
+					arrange: func(t *testing.T, h *harness) {
+						completeApply(t, h)
+						h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
+						if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, Floor: string(reconciliation.StageClusters), SkipConfirmation: true}); err == nil {
+							t.Fatal("a staged destroy whose block lost its outcome reported success")
+						}
+						h.capability.outcomes = nil
+					},
+					apply: "refuse", destroy: "refuse", staged: "continue", previewed: reconciliation.Destroy, next: "resolve", reopens: true, shown: continuing("resolve"),
+				},
+			},
+		},
 		"destroy unknown": {
 			transition: "continue it, resolving every unproved block first and then retrying what resolution leaves `failed` (D146), or, under a relaxation its frozen plan does not hold, start a fresh destroy of what it has not removed, which resolves them first",
 			cases: map[string]stateMachineCase{
@@ -397,6 +440,11 @@ func checkStateMachine(t *testing.T, lines []string) {
 					t.Errorf("row %q, %s: the %s decides %q, want %q", row[0], name, verb, got, want)
 				}
 			}
+			if test.staged != "" {
+				if got := decisionAtFloor(t, h, currentFloor(t, h)); got != test.staged {
+					t.Errorf("row %q, %s: the destroy at the frozen stage decides %q, want %q", row[0], name, got, test.staged)
+				}
+			}
 			relaxed := test.destroy
 			if relaxationSupersedes[row[0]] {
 				relaxed = "fresh destroy"
@@ -408,7 +456,7 @@ func checkStateMachine(t *testing.T, lines []string) {
 			if previewed != test.previewed {
 				t.Errorf("row %q, %s: the preview decides as the %s, want the %s", row[0], name, previewed, test.previewed)
 			}
-			if want := decisionOver(t, h, test.previewed); decision != want {
+			if want := previewedDecision(t, h, test); decision != want {
 				t.Errorf("row %q, %s: the preview decides %q, but the %s it chose decides %q", row[0], name, decision, test.previewed, want)
 			}
 			if next := currentNextAction(t, h); next != test.next {
@@ -429,6 +477,51 @@ func checkStateMachine(t *testing.T, lines []string) {
 
 // decisionOver names the decision verb takes over what the harness holds,
 // read under the shared lock as the verb reads it, without acting on it.
+// previewedDecision is the decision of the verb a preview chooses: a destroy
+// over an unfinished staged destroy at the stage it froze.
+func previewedDecision(t *testing.T, h *harness, test stateMachineCase) string {
+	t.Helper()
+	if test.staged != "" && test.previewed == reconciliation.Destroy && unfinishedStaged(t, h) {
+		return test.staged
+	}
+	return decisionOver(t, h, test.previewed)
+}
+
+func decisionAtFloor(t *testing.T, h *harness, floor reconciliation.Stage) string {
+	t.Helper()
+	ctx := context.Background()
+	var decided operationPlan
+	err := h.workspace.ReadLifecycle(ctx, testContextName, func(view View) error {
+		decision := h.service.decider(nil)
+		decision.floor = floor
+		var err error
+		decided, _, err = decision.decideAs(ctx, view, reconciliation.Destroy, reconciliation.Selection{})
+		return err
+	})
+	if err != nil {
+		if code := firstCode(err); !refusedBeforeEffect(code) {
+			t.Fatalf("the destroy at %s refuses %s: %v", floor, code, err)
+		}
+		return "refuse"
+	}
+	return decisionNamed(decided)
+}
+
+func unfinishedStaged(t *testing.T, h *harness) bool {
+	t.Helper()
+	operation, _ := currentRecord(t, h)
+	return staged(operation) && operation.State != reconciliation.OperationDone
+}
+
+func currentFloor(t *testing.T, h *harness) reconciliation.Stage {
+	t.Helper()
+	operation, _ := currentRecord(t, h)
+	if operation.Stage == nil {
+		t.Fatalf("the current operation %s froze no stage", operation.ID)
+	}
+	return operation.Stage.Floor
+}
+
 func decisionOver(t *testing.T, h *harness, verb reconciliation.Verb) string {
 	t.Helper()
 	decision, _ := decidedAs(t, h, verb)
@@ -498,7 +591,11 @@ func requirePreviewShape(t *testing.T, h *harness, where string, test stateMachi
 		if _, chosen, refusal = h.service.decider(nil).decideAs(ctx, view, "", reconciliation.Selection{}); refusal != nil {
 			return nil
 		}
-		result, after, _, refusal = h.service.preview(ctx, h.service.decider(nil), view, chosen, reconciliation.Selection{})
+		decision := h.service.decider(nil)
+		if test.staged != "" && chosen == reconciliation.Destroy && unfinishedStaged(t, h) {
+			decision.floor = currentFloor(t, h)
+		}
+		result, after, _, refusal = h.service.preview(ctx, decision, view, chosen, reconciliation.Selection{})
 		return nil
 	})
 	if err != nil {
@@ -517,7 +614,7 @@ func requirePreviewShape(t *testing.T, h *harness, where string, test stateMachi
 	if result.Verb != string(chosen) || chosen != test.previewed {
 		t.Errorf("%s: the preview is of the %s, which decided as the %s, want the %s", where, result.Verb, chosen, test.previewed)
 	}
-	if want := decisionOver(t, h, test.previewed); result.Finalizes && decisionNamed(after) != "settle" || !result.Finalizes && decisionNamed(after) != want {
+	if want := previewedDecision(t, h, test); result.Finalizes && decisionNamed(after) != "settle" || !result.Finalizes && decisionNamed(after) != want {
 		t.Errorf("%s: the preview returns the decision %q after finalization, beside the %s's %q", where, decisionNamed(after), test.previewed, want)
 	}
 }

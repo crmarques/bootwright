@@ -36,6 +36,9 @@ func (s Service) applyWithin(ctx context.Context, request ApplyRequest, scope *r
 // selection: a removal covers exactly the effects that exist.
 func (s Service) Destroy(ctx context.Context, request DestroyRequest) (*OperationResult, error) {
 	s, err := s.relaxingFor(relaxingDestroy, request.Relaxations, request.Unregistered).withParallelism(request.Parallelism)
+	if err == nil {
+		s, err = s.withFloor(request.Floor, request.Relaxations)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -93,6 +96,9 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 		return settled(identity, operationPlan{verb: verb}, RecoveredRelease), nil
 	}
 	if decided.noop {
+		if err := s.acknowledgedReleases(name, decided); err != nil {
+			return nil, err
+		}
 		return s.finishSettled(ctx, name, decided, identity, finalized, stranded)
 	}
 
@@ -109,7 +115,7 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 	if err := s.present(ctx, name, decided); err != nil {
 		return nil, err
 	}
-	tokens, rebinds, err := splitRebinds(name, verb, authorizations)
+	tokens, rebinds, err := splitRebinds(name, decided, authorizations)
 	if err != nil {
 		return nil, err
 	}
@@ -126,11 +132,11 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 		if s.options.Confirmer == nil {
 			remedy := "review the plan and repeat with --yes"
 			if len(requiredTokens(decided.authorizationPlan())) != 0 {
-				remedy = "review the plan, then repeat " + contextCommand(name, string(verb), invocationFlags(decided.selection, authorizing(decided.authorizationPlan()))...) + " with --yes"
+				remedy = "review the plan, then repeat " + contextCommand(name, string(verb), invocationFlags(decided.floor(), decided.selection, authorizing(decided.authorizationPlan()))...) + " with --yes"
 			}
 			return nil, engineConfirmationRequired.Fail("this operation requires confirmation", remedy)
 		}
-		if err := s.options.Confirmer.Confirm(ctx, string(verb), name); err != nil {
+		if err := s.options.Confirmer.Confirm(ctx, confirmedAction(decided), name); err != nil {
 			return nil, err
 		}
 	}

@@ -20,6 +20,7 @@ type PlanRequest struct {
 	Until        string
 	Relaxations  map[string]string
 	Unregistered []string
+	Floor        string
 }
 
 type StatusRequest struct {
@@ -110,6 +111,7 @@ type DestroyRequest struct {
 	Authorizations   []string
 	Relaxations      map[string]string
 	Unregistered     []string
+	Floor            string
 	SkipConfirmation bool
 	Unattended       bool
 	SSH              machine.SSHOptions
@@ -205,6 +207,7 @@ type PlanResult struct {
 	Settled      bool
 	AddsTo       string
 	TakesBack    []string
+	Scope        *StagedScope
 	// Finalizes marks a preview whose verb only completes the operation's
 	// interrupted finalization and then settles, running no block.
 	Finalizes bool
@@ -298,6 +301,7 @@ type OperationResult struct {
 	NextCommand string
 	Warnings    []diagnostics.Diagnostic
 	Receipt     Receipt
+	Scope       *StagedScope
 }
 
 // What a settled invocation may have done before it settled. Either performs
@@ -431,6 +435,8 @@ type LifecycleSummary struct {
 	// remedy for a request this one cannot read before meeting the refusal.
 	Executable   string
 	AnotherBuild bool
+	Floor        string
+	TakenBack    []string
 }
 
 // LiveBlock is a running block and its newest attempt's output, named relative

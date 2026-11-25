@@ -56,6 +56,25 @@ func (s Service) Withdraw(ctx context.Context, selected secretstore.Context, are
 	return withdrawn, err
 }
 
+func (s Service) WithdrawBlocks(ctx context.Context, selected secretstore.Context, area secretstore.Area, blocks []string) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	if s.access == nil {
+		return false, secretstore.Failure("store.implementation", "secret service is not configured")
+	}
+	withdrawn := false
+	err := s.access.MutateArea(ctx, selected, area, func(session secretstore.StoreSession, _ secretstore.Selection) error {
+		if session == nil {
+			return nil
+		}
+		var err error
+		withdrawn, err = session.WithdrawBlocks(ctx, blocks)
+		return err
+	})
+	return withdrawn, err
+}
+
 func (s Service) DiscardProduced(ctx context.Context, selected secretstore.Context, area secretstore.Area, block, name string) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err

@@ -206,11 +206,15 @@ func (h *killHost) effect(ctx context.Context, execution Execution, verb reconci
 	killLog(ctx, execution, "converging")
 	h.mutex.Lock()
 	h.effects[string(verb)+" "+block]++
-	refused := verb == reconciliation.Apply && h.failures[block] > 0
+	failing := block
+	if verb == reconciliation.Destroy {
+		failing = "destroy " + block
+	}
+	refused := h.failures[failing] > 0
 	lost := verb == reconciliation.Apply && !refused && h.lost[block] > 0
 	switch {
 	case refused:
-		h.failures[block]--
+		h.failures[failing]--
 	case lost:
 		h.lost[block]--
 		h.partial[block] = true
@@ -552,8 +556,12 @@ func killElide(target string) string {
 }
 
 func killInvoke(ctx context.Context, service Service, verb reconciliation.Verb) error {
+	return killInvokeAt(ctx, service, verb, "")
+}
+
+func killInvokeAt(ctx context.Context, service Service, verb reconciliation.Verb, floor reconciliation.Stage) error {
 	if verb == reconciliation.Destroy {
-		_, err := service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
+		_, err := service.Destroy(ctx, DestroyRequest{ContextName: testContextName, Floor: string(floor), SkipConfirmation: true})
 		return err
 	}
 	_, err := service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
@@ -651,6 +659,8 @@ func killRest(w *testWorkspace) string {
 	switch {
 	case operation.State != reconciliation.OperationDone:
 		return "incomplete " + string(operation.Verb) + " " + string(operation.State)
+	case trimmed(operation):
+		return "trimmed from " + string(operation.Stage.Floor)
 	case operation.Verb == reconciliation.Destroy:
 		return "removed"
 	}
@@ -745,7 +755,34 @@ func killInvariants(snapshot *killSnapshot, pristine []byte) []string {
 			failures = append(failures, fmt.Sprintf("the evidence is pristine while custody keeps %v", produced))
 		}
 	}
+	failures = append(failures, killTrimmedCustody(snapshot)...)
 	return append(failures, killUnrecordedEffects(snapshot)...)
+}
+
+// killTrimmedCustody names the custody a trimmed context keeps for a producer
+// its staged destroy took back.
+func killTrimmedCustody(snapshot *killSnapshot) []string {
+	ctx := context.Background()
+	trimmed, err := reconciliation.Evidence{Operation: reconciliation.MutationNone, Ownership: reconciliation.OwnershipRetained}.Bytes()
+	if err != nil || !bytes.Equal(snapshot.workspace.evidence, trimmed) {
+		return nil
+	}
+	store := operationstore.New(snapshot.workspace.area, snapshot.workspace.logArea, killClock)
+	index, err := store.Index(ctx)
+	if err != nil || index.Current == "" {
+		return []string{"the evidence reads trimmed beside no operation"}
+	}
+	operation, err := store.ReadOperation(ctx, index.Current)
+	if err != nil || operation.Stage == nil {
+		return []string{"the evidence reads trimmed beside an operation that froze no stage"}
+	}
+	var failures []string
+	for _, entry := range snapshot.binder.producedEntries() {
+		if block, _, _ := strings.Cut(entry, "/"); slices.Contains(operation.Stage.TakenBack, block) {
+			failures = append(failures, "the trimmed context keeps the custody "+entry+" of a step it took back")
+		}
+	}
+	return failures
 }
 
 // killUnrecordedEffects compares every effect the host received with the
@@ -805,6 +842,7 @@ type killJourney struct {
 	// reaches names writes the uninterrupted invocation must make, so the
 	// harness keeps killing inside them.
 	reaches []string
+	floor   reconciliation.Stage
 }
 
 // killClaimed is the first write of a fresh apply after the transaction that
@@ -920,7 +958,37 @@ func killJourneys() []killJourney {
 			},
 		}}
 	}
+	stagedPlan := func(ctx context.Context, t *testing.T, rig *killRig) {
+		t.Helper()
+		rig.host.definitions = []reconciliation.BlockDefinition{
+			stagedDefinition("a", reconciliation.StageInfrastructureServices),
+			stagedDefinition("c", reconciliation.StageSubstrates),
+			stagedDefinition("b", reconciliation.StageClusters, "a", "c"),
+		}
+		applied(ctx, t, rig)
+	}
+	trimmedAt := func(floor reconciliation.Stage) func(context.Context, *testing.T, *killRig) {
+		return func(ctx context.Context, t *testing.T, rig *killRig) {
+			t.Helper()
+			stagedPlan(ctx, t, rig)
+			if err := killInvokeAt(ctx, rig.harness.service, reconciliation.Destroy, floor); err != nil {
+				t.Fatalf("the staged destroy a journey starts from failed: %v", err)
+			}
+		}
+	}
+	stagedFailed := func(ctx context.Context, t *testing.T, rig *killRig) {
+		t.Helper()
+		stagedPlan(ctx, t, rig)
+		rig.host.failures["destroy b"] = 1
+		if err := killInvokeAt(ctx, rig.harness.service, reconciliation.Destroy, reconciliation.StageClusters); err == nil || rig.host.failures["destroy b"] != 0 {
+			t.Fatal("the staged destroy a replacement starts from did not fail b")
+		}
+	}
 	return []killJourney{
+		{name: "staged", bound: killBoundDestroy, start: stagedPlan, run: reconciliation.Destroy, retry: reconciliation.Destroy, floor: reconciliation.StageClusters},
+		{name: "staged-replacement", bound: killBoundReplacement, start: stagedFailed, run: reconciliation.Destroy, retry: reconciliation.Destroy, floor: reconciliation.StageClusters},
+		{name: "staged-lower-floor", bound: killBoundDestroy, start: trimmedAt(reconciliation.StageClusters), run: reconciliation.Destroy, retry: reconciliation.Destroy, floor: reconciliation.StageSubstrates},
+		{name: "staged-then-whole", bound: killBoundDestroy, start: trimmedAt(reconciliation.StageClusters), run: reconciliation.Destroy, retry: reconciliation.Destroy},
 		{name: "a", bound: killBoundFreshApply, run: reconciliation.Apply, retry: reconciliation.Apply},
 		{name: "b", bound: killBoundDestroy, start: applied, run: reconciliation.Destroy, retry: reconciliation.Destroy},
 		{name: "c", bound: killBoundContinuation, start: failedOnce, run: reconciliation.Apply, retry: reconciliation.Apply},
@@ -1038,13 +1106,13 @@ func killJourneyOutcomes(ctx context.Context, t *testing.T, journey killJourney,
 	rig := journey.begin(ctx, t)
 	names := &killPoints{counts: map[string]int{}}
 	rig.arm(names)
-	if err := killInvoke(ctx, rig.harness.service, journey.run); err != nil {
+	if err := killInvokeAt(ctx, rig.harness.service, journey.run, journey.floor); err != nil {
 		t.Fatalf("the uninterrupted journey failed: %v", err)
 	}
 	rig.harness.workspace.area.landing, rig.harness.workspace.logArea.landing, rig.harness.workspace.runArea.landing, rig.harness.workspace.kill = nil, nil, nil, nil
 	rig.harness.binder.kill = nil
 	if journey.finish != "" {
-		if err := killInvoke(ctx, rig.harness.service, journey.finish); err != nil {
+		if err := killInvokeAt(ctx, rig.harness.service, journey.finish, journey.floor); err != nil {
 			t.Fatalf("the uninterrupted journey's %s failed: %v", journey.finish, err)
 		}
 	}
@@ -1062,7 +1130,7 @@ func killJourneyOutcomes(ctx context.Context, t *testing.T, journey killJourney,
 		killed := journey.begin(ctx, t)
 		points := &killPoints{counts: map[string]int{}, at: index + 1}
 		killed.arm(points)
-		_ = killInvoke(ctx, killed.harness.service, journey.run)
+		_ = killInvokeAt(ctx, killed.harness.service, journey.run, journey.floor)
 		if points.snapshot == nil || len(points.keys) <= index || points.keys[index] != key {
 			t.Fatalf("kill point %d is not %s in a repeated run: %v", index+1, key, points.keys)
 		}
@@ -1105,7 +1173,7 @@ func killEvaluate(ctx context.Context, journey killJourney, rig *killRig, snapsh
 	state := killStateOf(snapshot.workspace, snapshot.binder, snapshot.host)
 	for retry := 0; retry <= journey.bound; retry++ {
 		if retry != 0 {
-			_ = killInvoke(ctx, service, journey.retry)
+			_ = killInvokeAt(ctx, service, journey.retry, journey.floor)
 			outcome.failures = append(outcome.failures, killInvariants(snapshot, pristine)...)
 			state = killStateOf(snapshot.workspace, snapshot.binder, snapshot.host)
 		}

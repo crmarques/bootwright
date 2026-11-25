@@ -18416,4 +18416,59 @@ added beside one fails until a check holds it.
 
 **Limits:** the machine power realization's inference, the `status` walk of
 replaced removals and a replacement removal's covered set stay with
-[B1866](m1.md#b1866).
+[B1866](#x756--a-staged-destroy-takes-back-a-stage-and-the-context-rests-trimmed).
+
+## X756 — A staged destroy takes back a stage and the context rests trimmed
+
+**Items:** B1866 and B166. **Kind:** product, breaking digest, with an
+enabling item. **Owner:** Reconciliation, with CLI. **Authorization:** [D288](backlog.md#d288),
+the third slice of the [staged destroy design](../deferred/staged-destroy.md#program).
+
+**Outcome:** `destroy --stage <floor>` takes back `substrates`, `machines`,
+`clusters` or `add-ons` and every stage built on it, refusing a scope that
+reaches a step below the floor, keeps an unfinished step or takes back a step
+on a Machine it keeps, and the context rests trimmed with every binding held
+([staged destroy](../state-reconciliation.md#staged-destroy)). The record
+freezes the floor and the cumulative taken-back set; completion discards only
+the taken-back producers' custody, re-reserves the kept claims and publishes
+`{none, retained}`. Over a trimmed context `apply` and preparations refuse, a
+later floor settles, a lower one replaces the staged destroy, and a `destroy`
+without `--stage` removes the rest and ends pristine. A failed staged destroy
+is replaced at its floor. B1866: a removal's fold holds the removals it
+replaces, so evidence, the machine power realization, status realizations and
+a replacement's covered set read a kept step as its holder's. Two state-machine
+rows and their cases, five stops, the `scope` and status `stage` results and
+four kill-harness journeys land. Every remedy over a staged destroy repeats
+`--stage <floor>`.
+
+**Breaking:** every destroy's authorization digest now covers the steps it
+takes back, so a destroy digest an earlier build printed refuses
+`authorize.stale`; repeat `destroy --dry-run` and use the digest it prints.
+
+**Guard tests:** `TestTransitionTablesMatchSpec`,
+`TestAStagedDestroyTrimsTheContextAndAWholeDestroyFinishesIt`,
+`TestALowerFloorWidensATrimmedContextCumulatively`,
+`TestAStagedDestroyRefusesAStepOnAKeptMachine`,
+`TestAStagedDestroyRefusesADependentBelowTheFloor`,
+`TestAStagedDestroyKeepsOnlyFinishedSteps`,
+`TestAnEmptyScopeSettlesKeepingEveryBinding`,
+`TestAFailedStagedDestroyIsReplacedAtItsFloor`,
+`TestAStagedDestroyDiscardsOnlyItsProducersCustody`,
+`TestAKeptStepOfATrimmedLineageReadsAsItsHolders`,
+`TestEveryRemedyOverAStagedDestroyRepeatsItsFloor`,
+`TestARemedyRepeatingItsVerbCarriesTheFloor`,
+`TestATrimmedContextKeepsTheClaimsItsKeptStepsPlan`,
+`TestAResolutionThatCompletesAStagedDestroyDiscardsItsCustody`,
+`TestAStagedDestroyRefusesAStepBoundToAProvidedMachine`,
+`TestADiffOverATrimmedContextReadsWhatItKeeps`,
+`TestAWholeDestroyOverATrimmedContextReopensTheRebindingItsStagedDestroyMade`,
+`TestWithdrawBlocksRemovesOnlyTheNamedBlocksEntries`,
+`TestAFrozenBlockNamesTheSharedClaimItsPlanMade` and
+`TestAJourneyKilledAtAnyWriteLeavesAUsableStoreAndConvergesOnRetry`.
+
+**Gates:** `make focus`; the delivering commit records the command and result.
+
+**Limits:** over an unfinished staged destroy only its own floor is admitted
+([B1867](m1.md#b1867)); no scoped step may act on a kept Machine, so the kept
+power targets stay empty until [B1860](m1.md#b1860); a done staged destroy
+names next `none` until the restoring apply ([B1858](m1.md#b1858)).

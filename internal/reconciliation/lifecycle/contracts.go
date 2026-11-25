@@ -132,6 +132,7 @@ type SecretBinder interface {
 	Produce(context.Context, secretstore.Context, secretstore.Area, custody.ProduceRequest) ([]secretstore.Produced, error)
 	Holds(ctx context.Context, selected secretstore.Context, area secretstore.Area, block, name string) (bool, error)
 	Withdraw(context.Context, secretstore.Context, secretstore.Area) (bool, error)
+	WithdrawBlocks(context.Context, secretstore.Context, secretstore.Area, []string) (bool, error)
 	ReadProducedInArea(context.Context, secretstore.Context, secretstore.Area, string, string) (secretstore.ProducedMaterial, bool, error)
 	ReadProduced(context.Context, custody.ReadProducedRequest) (secretstore.ProducedMaterial, bool, error)
 	Rebind(context.Context, custody.RebindRequest) (secretstore.Binding, error)
@@ -336,6 +337,11 @@ type RemovalWarningSource interface {
 
 type MachineDeletion interface {
 	DeletesMachine(reconciliation.Block) bool
+}
+
+// SharedClaimer names the shared host reservations one frozen block plans.
+type SharedClaimer interface {
+	SharedClaims(reconciliation.Block) ([]infrastructureservices.HostReservation, error)
 }
 
 type HostedConsumer interface {
@@ -600,6 +606,7 @@ type decisionPlanner interface {
 	refuseUnsupported(*compilation.State, *reconciliation.PreparationScope) error
 	freshDestroy(context.Context, string, operationstore.Executable, string, removalScope, bool) (operationPlan, error)
 	computePhases(reconciliation.Plan) removalPhases
+	stagedScope(string, reconciliation.Stage, reconciliation.Plan, map[string]reconciliation.BlockState) ([]string, error)
 }
 
 type decisionProofs interface {

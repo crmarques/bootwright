@@ -106,6 +106,27 @@ func (s *session) Withdraw(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
+func (s *session) WithdrawBlocks(ctx context.Context, blocks []string) (bool, error) {
+	if err := s.usable(ctx, true); err != nil {
+		return false, err
+	}
+	next := cloneIndex(s.index)
+	next.Produced = slices.DeleteFunc(next.Produced, func(entry secretstore.Produced) bool { return slices.Contains(blocks, entry.Block) })
+	if len(next.Produced) == len(s.index.Produced) {
+		return false, nil
+	}
+	collectVersions(&next)
+	canonicalizeIndex(&next)
+	key, err := s.key(ctx, next.ActiveKey)
+	if err != nil {
+		return false, err
+	}
+	if err := s.publish(ctx, &next, nil, publicationKey{id: next.ActiveKey, value: key}, nil); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func (s *session) Discard(ctx context.Context, block, name string) (bool, error) {
 	if err := s.usable(ctx, true); err != nil {
 		return false, err

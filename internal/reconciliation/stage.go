@@ -27,6 +27,14 @@ func Stages() []Stage {
 
 func ValidStage(value Stage) bool { return slices.Contains(Stages(), value) }
 
+func Floors() []Stage { return Stages()[2:] }
+
+func ValidFloor(value Stage) bool { return slices.Contains(Floors(), value) }
+
+func (s Stage) AtOrAbove(floor Stage) bool {
+	return slices.Index(Stages(), s) >= slices.Index(Stages(), floor)
+}
+
 // StageSelection is the set of stages an invocation may start. An empty
 // selection admits every stage, which is what an omitted flag means.
 type StageSelection []Stage

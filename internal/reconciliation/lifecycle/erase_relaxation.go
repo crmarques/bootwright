@@ -162,7 +162,7 @@ func (s Service) refuseInapplicableRelaxations(contextName string, decided opera
 		}
 		return authorizeUnneeded.Fail(
 			"--authorize "+token+" names Machine/"+machine+", which "+reason,
-			"repeat "+contextCommand(contextName, s.relaxing.command, append(relaxationFlags(others), s.relaxing.unregisteredFlags()...)...)+" without --authorize "+token)
+			"repeat "+contextCommand(contextName, s.relaxing.command, invocationFlags(decided.floor(), reconciliation.Selection{}, append(relaxationFlags(others), s.relaxing.unregisteredFlags()...))...)+" without --authorize "+token)
 	}
 	return nil
 }

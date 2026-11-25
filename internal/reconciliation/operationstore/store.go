@@ -128,6 +128,9 @@ func (s *Store) Register(ctx context.Context, operation Operation, plan reconcil
 	if err := checkPredecessor(operation, plan); err != nil {
 		return err
 	}
+	if err := checkStage(operation, plan); err != nil {
+		return err
+	}
 	claimed, err := s.Claimed(ctx)
 	if err != nil {
 		return err
@@ -737,6 +740,9 @@ func (s *Store) ReadPlan(ctx context.Context, id string) (reconciliation.Plan, e
 		return reconciliation.Plan{}, err
 	}
 	if err := checkPredecessor(operation, plan); err != nil {
+		return reconciliation.Plan{}, err
+	}
+	if err := checkStage(operation, plan); err != nil {
 		return reconciliation.Plan{}, err
 	}
 	return plan, nil

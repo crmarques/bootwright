@@ -118,7 +118,7 @@ func (s Service) restoreSettledApply(ctx context.Context, name string, decided o
 	return s.workspace.MutateLifecycle(ctx, name, func(tx Transaction) error {
 		store := s.store(tx)
 		operation, frozen, states, err := s.verifyBasis(ctx, store, decided.basis, func(current basis) error {
-			return s.contextChanged(decided.verb, decided.basis, current)
+			return s.contextChanged(decided, decided.basis, current)
 		})
 		if err != nil {
 			return err

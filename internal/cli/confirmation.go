@@ -104,6 +104,10 @@ func (c *Confirmation) ConfirmIn(ctx context.Context, action, object, contextNam
 
 func confirmationOf(action, name string) confirmation {
 	shown := escapeDisplayLine(name)
+	if strings.HasPrefix(action, "destroy --stage ") {
+		return confirmation{stop: commandUnconfirmed, label: "destroy", review: "the plan", scope: name,
+			prompt: "Confirm " + escapeDisplayLine(action) + " for context " + shown + "? [y/N] "}
+	}
 	switch action {
 	case "install":
 		return confirmation{code: "controller.install", label: "install", review: "the plan",

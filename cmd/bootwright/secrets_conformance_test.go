@@ -336,6 +336,23 @@ func (s *memorySession) Withdraw(ctx context.Context) (bool, error) {
 	return true, s.publish(ctx)
 }
 
+func (s *memorySession) WithdrawBlocks(ctx context.Context, blocks []string) (bool, error) {
+	if err := s.authorized(); err != nil {
+		return false, err
+	}
+	withdrawn := false
+	for key, entry := range s.state.produced {
+		if slices.Contains(blocks, entry.Block) {
+			delete(s.state.produced, key)
+			withdrawn = true
+		}
+	}
+	if !withdrawn {
+		return false, nil
+	}
+	return true, s.publish(ctx)
+}
+
 func (s *memorySession) Discard(ctx context.Context, block, name string) (bool, error) {
 	if err := s.authorized(); err != nil {
 		return false, err

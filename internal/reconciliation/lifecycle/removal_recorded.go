@@ -162,17 +162,21 @@ func unregisteredFlags(plan reconciliation.Plan) []string {
 }
 
 func (s Service) acknowledgedReleases(contextName string, decided operationPlan) error {
-	if len(s.relaxing.unregistered) == 0 || decided.verb != reconciliation.Destroy || decided.noop || decided.unclaimed || decided.finalize {
+	if len(s.relaxing.unregistered) == 0 || decided.verb != reconciliation.Destroy || decided.noop && !decided.keeps || decided.unclaimed || decided.finalize {
 		return nil
 	}
-	frozen := frozenUnregistered(decided.plan)
+	var frozen map[string]bool
+	var tokens []string
+	if !decided.noop {
+		frozen, tokens = frozenUnregistered(decided.plan), authorizing(decided.plan)
+	}
 	for _, name := range slices.Sorted(maps.Keys(s.relaxing.unregistered)) {
 		if frozen[name] {
 			continue
 		}
 		return authorizeUnneeded.Fail(
 			"this destroy removes no subscription registration from Machine/"+name+", so --unregistered "+name+" acknowledges nothing",
-			"repeat "+contextCommand(contextName, string(reconciliation.Destroy), authorizing(decided.plan)...)+" without --unregistered "+name)
+			"repeat "+contextCommand(contextName, string(reconciliation.Destroy), invocationFlags(decided.floor(), reconciliation.Selection{}, tokens)...)+" without --unregistered "+name)
 	}
 	return nil
 }

@@ -25,12 +25,13 @@ type decider struct {
 	proofs       decisionProofs
 	relaxing     eraseRelaxing
 	changeRemedy func(View) string
+	floor        reconciliation.Stage
 }
 
 func (s Service) decider(scope *reconciliation.PreparationScope) decider {
 	return decider{
 		preparation: scope, sources: newCompilations(s.compiler), operations: s.options.Operations,
-		capabilities: s.capabilities, preparations: s.options.Preparations, planner: s, proofs: s, relaxing: s.relaxing, changeRemedy: s.changeRemedy,
+		capabilities: s.capabilities, preparations: s.options.Preparations, planner: s, proofs: s, relaxing: s.relaxing, changeRemedy: s.changeRemedy, floor: s.floor,
 	}
 }
 
@@ -128,12 +129,15 @@ func (d decider) decideFrom(ctx context.Context, view View, verb reconciliation.
 	}
 	var known *additiveVerdict
 	if verb == "" {
-		held := standing{held: true, verb: operation.Verb, state: operation.State}
+		held := standing{held: true, verb: operation.Verb, state: operation.State, trimmed: trimmed(operation)}
 		admitted, refused := d.additive(ctx, view, store, operation, frozen, states, true)
 		known = &additiveVerdict{admitted: admitted, refused: refused}
 		held.additive = admitted != nil
 		if verb = chosenVerb(held); verb == reconciliation.Destroy {
 			selection = reconciliation.Selection{}
+		}
+		if verb == reconciliation.Destroy && staged(operation) && operation.State != reconciliation.OperationDone {
+			d.floor = operation.Stage.Floor
 		}
 	}
 	if verb == reconciliation.Apply && d.preparation != nil && d.preparation.Command != string(reconciliation.Apply) &&
@@ -174,10 +178,8 @@ type additiveVerdict struct {
 }
 
 func (d decider) decideBy(ctx context.Context, view View, store decisionRecords, verb reconciliation.Verb, selection reconciliation.Selection, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int, known *additiveVerdict) (operationPlan, error) {
-	if verb == reconciliation.Apply {
-		if err := d.admitPreparationCommand(frozen, operation); err != nil {
-			return operationPlan{}, err
-		}
+	if decided, handled, err := d.decideStaged(ctx, view, store, verb, operation, frozen, states, attempts); handled {
+		return decided, err
 	}
 	name := view.Identity().Name
 	held := standingOf(operation, frozen, states)
@@ -260,12 +262,16 @@ func (d decider) decideBy(ctx context.Context, view View, store decisionRecords,
 		selection = bound
 	}
 	decided := operationPlan{verb: verb, operation: operation, plan: frozen, states: states, source: operation.Source, selection: selection}
-	if verb == reconciliation.Destroy && operation.Source != "" {
+	if verb == reconciliation.Destroy && operation.Source != "" && !staged(operation) {
 		released, err := sourceBindings(ctx, store, operation.Source)
 		if err != nil {
 			return operationPlan{}, err
 		}
 		decided.release = released
+	}
+	kept, err := keptOver(ctx, store, verb, operation, frozen, states)
+	if decided.kept = kept; err != nil {
+		return operationPlan{}, err
 	}
 	decided.executionProof = d.proofs.proveExecution(ctx, view, operation, frozen, states)
 	return plannedFrom(decided, operation, states, attempts), nil
@@ -493,7 +499,7 @@ func targetedBoundary(name string, plan reconciliation.Plan, states map[string]r
 			wider.Stages = append(slices.Clone(selection.Stages), block.Stage)
 			wider.Stages, _ = reconciliation.ParseStages(wider.Stages.Names())
 			return applyStageEmpty.Fail("the selected stages leave prerequisite "+block.ID+" outside this invocation",
-				"review "+contextCommand(name, "apply --dry-run", invocationFlags(wider, nil)...))
+				"review "+contextCommand(name, "apply --dry-run", invocationFlags("", wider, nil)...))
 		}
 	}
 	if kind == StepRetry {
@@ -551,7 +557,7 @@ func widenedApply(name string, plan reconciliation.Plan, states map[string]recon
 	stages := append(slices.Clone(selection.Stages), needed)
 	selection.Stages, _ = reconciliation.ParseStages(stages.Names())
 	bound, _ := selection.Bind(plan)
-	return contextCommand(name, "apply", invocationFlags(bound, authorizing(authorizationPlan(plan, states, bound)))...)
+	return contextCommand(name, "apply", invocationFlags("", bound, authorizing(authorizationPlan(plan, states, bound)))...)
 }
 
 // freshApply is the one fresh-plan decision: apply registers the transition it
@@ -639,13 +645,20 @@ func (d decider) supersede(ctx context.Context, view View, store decisionRecords
 	// released beside the lineage's once the replacement completes. The one it
 	// reopens is the removal's own, which differs from the lineage root's only
 	// after an access-credential rebind.
-	scope, err := replacementOf(ctx, store, operation, reconciliation.RemainingSubset(frozen, states))
+	scope, err := replacementOf(ctx, store, operation, frozen, states)
 	if err != nil {
 		return operationPlan{}, err
 	}
 	decided, err := d.planner.freshDestroy(ctx, name, operation.Executable, operation.Source, scope, false)
 	if err != nil {
 		return operationPlan{}, err
+	}
+	if staged(operation) {
+		decided.stage = &operationstore.Stage{Floor: operation.Stage.Floor, TakenBack: slices.Clone(operation.Stage.TakenBack)}
+		decided.release = nil
+		if decided.kept, err = keptSteps(ctx, store, operation, frozen, states); err != nil {
+			return operationPlan{}, err
+		}
 	}
 	decided.replacedPhases = d.planner.computePhases(frozen)
 	if len(unprovedOutside(frozen, states, nil)) != 0 {

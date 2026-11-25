@@ -16,7 +16,7 @@ import (
 
 const RebindAuthorization = "rebind="
 
-func splitRebinds(contextName string, verb reconciliation.Verb, authorizations []string) ([]string, []string, error) {
+func splitRebinds(contextName string, decided operationPlan, authorizations []string) ([]string, []string, error) {
 	var tokens, rebinds []string
 	for _, token := range authorizations {
 		secret, rebind := strings.CutPrefix(token, RebindAuthorization)
@@ -27,7 +27,7 @@ func splitRebinds(contextName string, verb reconciliation.Verb, authorizations [
 		if !api.ValidLexical(api.LexicalName, secret) || slices.Contains(rebinds, secret) {
 			return nil, nil, authorizeRebindInvalid.Fail(
 				"--authorize "+token+" must name one Secret once",
-				"repeat "+contextCommand(contextName, string(verb))+" naming each rotated access credential once as --authorize rebind=<secret>")
+				"repeat "+contextCommand(contextName, string(decided.verb), invocationFlags(decided.floor(), reconciliation.Selection{}, nil)...)+" naming each rotated access credential once as --authorize rebind=<secret>")
 		}
 		rebinds = append(rebinds, secret)
 	}
@@ -39,7 +39,7 @@ func (s Service) admitRebinds(ctx context.Context, name string, decided operatio
 	if len(rebinds) == 0 {
 		return decided, nil
 	}
-	without := "repeat " + contextCommand(name, string(decided.verb)) + " without --authorize " + RebindAuthorization
+	without := "repeat " + contextCommand(name, string(decided.verb), invocationFlags(decided.floor(), reconciliation.Selection{}, nil)...) + " without --authorize " + RebindAuthorization
 	binding := frozenBinding(decided)
 	if binding == "" {
 		return operationPlan{}, authorizeRebindInvalid.Fail(

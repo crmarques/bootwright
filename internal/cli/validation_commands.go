@@ -79,6 +79,14 @@ func validateLifecycleFlags(command *cobra.Command) string {
 }
 
 func validateDestroyFlags(command *cobra.Command) string {
+	if command.Flags().Changed("stage") {
+		tokens, _ := authorizationTokens(command)
+		for _, token := range tokens {
+			if strings.HasPrefix(token, "abandon=") {
+				return "--authorize abandon=<machine> leaves steps in place, which a staged destroy never does; repeat without one of them"
+			}
+		}
+	}
 	if dryRunSelected(command.Flags()) {
 		if problem := validatePlanFlags(command); problem != "" {
 			return problem

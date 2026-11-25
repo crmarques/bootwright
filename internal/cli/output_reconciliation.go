@@ -219,6 +219,16 @@ func writeLifecycleSteps(text *display, result lifecycle.PlanResult) {
 	if len(result.TakesBack) != 0 {
 		closing = append(closing, field{Label: "Takes back", Value: strings.Join(result.TakesBack, ", then ")})
 	}
+	if scope := result.Scope; scope != nil {
+		closing = append(closing, field{Label: "Floor", Value: scope.Floor + " and every stage built on it"})
+		if len(scope.Kept) != 0 {
+			closing = append(closing, field{Label: "Keeps", Value: strings.Join(scope.Kept, ", ")})
+		}
+		if len(scope.Residue) != 0 {
+			closing = append(closing, field{Label: "Residue", Value: strings.Join(scope.Residue, "; ")})
+		}
+		closing = append(closing, field{Label: "Restore", Value: fmt.Sprintf("no apply restores the %d steps this takes back yet; destroy without --stage takes back the %d it keeps", len(scope.Removed), len(scope.Kept))})
+	}
 	if len(result.Stops) != 0 {
 		label := "Stop first"
 		if selected {

@@ -113,6 +113,9 @@ func (s Service) evidenceAt(ctx context.Context, view View, kind string, found m
 		return err
 	}
 	for _, holding := range lineage(held).ownership().Holdings() {
+		if !lineage(held).current(holding) {
+			continue
+		}
 		owner, block := held[holding.Holder], holding.Block
 		records, selected := found[block.Object]
 		if block.Kind != kind || !selected {
@@ -132,7 +135,10 @@ func (s Service) evidenceAt(ctx context.Context, view View, kind string, found m
 }
 
 func evidenceOwners(ctx context.Context, store recordReader, current lineageMember) ([]lineageMember, error) {
-	if current.operation.Verb != reconciliation.Apply || current.operation.Predecessor == "" {
+	switch {
+	case current.operation.Verb == reconciliation.Destroy && current.operation.Source != "":
+		return removalLineage(ctx, store, current)
+	case current.operation.Verb != reconciliation.Apply || current.operation.Predecessor == "":
 		return []lineageMember{current}, nil
 	}
 	return lineageOf(ctx, store, current)

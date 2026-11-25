@@ -95,7 +95,7 @@ func (s Service) lostBinding(ctx context.Context, name string, decided operation
 			current.state, current.record = operation.State, operation
 		}
 		if current.operation != read.operation || current.state != read.state {
-			return s.contextChanged(decided.verb, read, current)
+			return s.contextChanged(decided, read, current)
 		}
 		return nil
 	})
@@ -106,7 +106,7 @@ func (s Service) lostBinding(ctx context.Context, name string, decided operation
 	if !decided.fresh {
 		objects = objectsOf(coveredBy(decided.operation, decided.plan, decided.states))
 	}
-	repeat := contextCommand(name, string(decided.verb))
+	repeat := contextCommand(name, string(decided.verb), invocationFlags(decided.floor(), reconciliation.Selection{}, nil)...)
 	if decided.verb == reconciliation.Apply {
 		repeat = s.preparationRetry(name, repeat)
 	}
@@ -176,6 +176,9 @@ func frozenReopenOf(ctx context.Context, store OperationStore) (frozenReopen, er
 	states, err := store.BlockStates(ctx, operation.ID, plan)
 	if err != nil {
 		return frozenReopen{}, err
+	}
+	if trimmed(operation) {
+		return trimmedReopen(ctx, store, operation, plan, states)
 	}
 	held := standingOf(operation, plan, states)
 	own := classify(operation.Verb, held)

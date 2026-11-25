@@ -3763,7 +3763,7 @@ daemon restarted with it, and leaves local users working throughout.
 staged destroy whose scope holds a physical Machine's installation or erase
 takes them back, and the restoring apply rebuilds them through the disk
 discovery a preparation apply owns. The
-[staged destroy design](../deferred/staged-destroy.md#the-scope-rule) refuses
+[staged destroy design](../state-reconciliation.md#staged-destroy) refuses
 such a scope, because an erased host would rest trimmed with a restore that
 cannot discover its disks. **Exit evidence:** the restore over a physical
 Machine on real hardware, and the refusal that stays for a host whose disks
@@ -3777,7 +3777,7 @@ the discovery cannot read.
 and the others stay kept. The scope, the proof that no dependent stays behind
 and the trimmed standing each hold per cluster. **Exit evidence:** a journey
 over two clusters of one context, and the proofs of the
-[staged destroy design](../deferred/staged-destroy.md#floor-and-scope) for the
+[staged destroy design](../state-reconciliation.md#staged-destroy) for the
 narrowed scope.
 
 ## Audit remediation (2026-10-26)
@@ -10052,7 +10052,7 @@ for the work. The words, in order:
 - 2026-11-25: "proceed with implementation, making code, logic and archictecture
   as good, safe and well-designed as possible"
 
-[B166](m1.md#b166), which [D41](#d41) parked, is revived and attached to M1 at
+[B166](delivered.md#x756--a-staged-destroy-takes-back-a-stage-and-the-context-rests-trimmed), which [D41](#d41) parked, is revived and attached to M1 at
 the owner's request, out of sequence. The program, in order, is the items of the
 [staged destroy design](../deferred/staged-destroy.md#program): the frozen
 inverse of every destroy step ([B1855](delivered.md#x753--every-destroy-step-states-its-inverse), [B1856](delivered.md#x754--run-time-inverse-branches-frozen)), one

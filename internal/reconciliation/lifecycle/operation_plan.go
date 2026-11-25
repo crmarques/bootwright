@@ -22,6 +22,10 @@ type operationPlan struct {
 	// idle marks a destroy that settles beside a claim that holds nothing,
 	// which only a transaction of its own reclaims.
 	idle      bool
+	keeps     bool
+	stage     *operationstore.Stage
+	requested reconciliation.Stage
+	kept      []string
 	verb      reconciliation.Verb
 	operation operationstore.Operation
 	plan      reconciliation.Plan

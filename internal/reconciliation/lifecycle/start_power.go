@@ -98,12 +98,12 @@ func (s Service) prepareStart(ctx context.Context, view View, decided operationP
 	}
 	identity := view.Identity()
 	return func(current View) error {
-		refuse := func(latest basis) error { return s.contextChanged(decided.verb, before, latest) }
+		refuse := func(latest basis) error { return s.contextChanged(decided, before, latest) }
 		if _, _, _, err := s.verifyBasis(ctx, s.store(current), before, refuse); err != nil {
 			return err
 		}
 		if current.Identity() != identity || decided.basis.input != "" && inputDigest(current) != decided.basis.input {
-			return engineInputMoved.Fail("the input changed before machine power admission", "repeat "+contextCommand(identity.Name, string(decided.verb)))
+			return engineInputMoved.Fail("the input changed before machine power admission", "repeat "+contextCommand(identity.Name, string(decided.verb), invocationFlags(decided.floor(), reconciliation.Selection{}, nil)...))
 		}
 		located, err := s.locateRuntime(ctx, false)
 		if err != nil {
@@ -179,7 +179,7 @@ func (s Service) proveStartPower(ctx context.Context, name string, decided opera
 		}
 	}
 	if len(blocked) != 0 {
-		remedies = append(remedies, "prove the named machines powered off or absent and repeat "+contextCommand(name, string(decided.verb)))
+		remedies = append(remedies, "prove the named machines powered off or absent and repeat "+contextCommand(name, string(decided.verb), invocationFlags(decided.floor(), reconciliation.Selection{}, nil)...))
 		return startPowerRefused.Fail("cannot start "+string(decided.verb)+": "+strings.Join(blocked, ", "), strings.Join(remedies, "; "))
 	}
 	return nil
@@ -313,7 +313,7 @@ func (s Service) finishBeforeStart(ctx context.Context, identity ContextIdentity
 	marked.verb = marked.operation.Verb
 	result := settled(identity, marked, RecoveredBeforeStart)
 	result.Receipt.Next = string(next)
-	result.NextCommand = s.preparationRetry(identity.Name, contextCommand(identity.Name, "apply --dry-run", invocationFlags(selection, nil)...), "--dry-run")
+	result.NextCommand = s.preparationRetry(identity.Name, contextCommand(identity.Name, "apply --dry-run", invocationFlags("", selection, nil)...), "--dry-run")
 	return result, nil
 }
 

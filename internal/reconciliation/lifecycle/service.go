@@ -79,6 +79,7 @@ type Service struct {
 	capabilities         CapabilityResolver
 	options              Options
 	relaxing             eraseRelaxing
+	floor                reconciliation.Stage
 }
 
 func New(workspace Workspace, compiler Compiler, binder SecretBinder, host HostIdentity, automation AutomationIdentity, guard ExecutionGuard, capabilities CapabilityResolver, options Options) Service {
@@ -136,6 +137,12 @@ func (s Service) Plan(ctx context.Context, request PlanRequest) (*PlanResult, er
 		return nil, err
 	}
 	s.keepGoing = request.KeepGoing && request.Verb == reconciliation.Destroy
+	if request.Floor != "" && request.Verb != reconciliation.Destroy {
+		return nil, engineInputInvalid.Fail("only a destroy takes a floor", "repeat the preview with --stage selecting what an apply starts")
+	}
+	if s, err = s.withFloor(request.Floor, request.Relaxations); err != nil {
+		return nil, err
+	}
 	result, err := s.relaxingFor(relaxingPlan, request.Relaxations, request.Unregistered).planWithin(ctx, request, nil)
 	if s.keepGoing && result != nil && err != nil {
 		result.Checks = append(result.Checks, PlanCheck{
@@ -191,7 +198,7 @@ func (s Service) planWithin(ctx context.Context, request PlanRequest, scope *rec
 		if view.Identity() != result.Context || decided.basis.input != "" && inputDigest(view) != decided.basis.input {
 			return engineInputMoved.Fail("the input changed before preview checks", "repeat the dry run for this context")
 		}
-		refuse := func(latest basis) error { return s.contextChanged(decided.verb, read, latest) }
+		refuse := func(latest basis) error { return s.contextChanged(decided, read, latest) }
 		if _, _, _, err := s.verifyBasis(ctx, s.store(view), read, refuse); err != nil {
 			return err
 		}

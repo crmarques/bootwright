@@ -166,7 +166,7 @@ func TestTheDigestCoversARelaxationAndLeavesAnUnrelaxedOneUnchanged(t *testing.T
 		RequestDigest: strings.Repeat("d", 64),
 	}
 	plan := reconciliation.Plan{Verb: reconciliation.Destroy, Blocks: []reconciliation.Block{block}}
-	sum := sha256.Sum256([]byte("bootwright.authorization-v1\x00data-loss\x00erase-node\x00ManagedOSInstallation\x00node\x00physical-erase-v1\x00" +
+	sum := sha256.Sum256([]byte("bootwright.authorization-v1\x00data-loss\x00removes\x00erase-node\x00erase-node\x00ManagedOSInstallation\x00node\x00physical-erase-v1\x00" +
 		strings.Repeat("c", 64) + "\x00" + strings.Repeat("d", 64)))
 	unrelaxed := AuthorizationDigest(plan, reconciliation.AuthorizationDataLoss)
 	if unrelaxed != hex.EncodeToString(sum[:])[:authorizationDigestLength] {

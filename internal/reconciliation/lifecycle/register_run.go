@@ -73,7 +73,7 @@ func (s Service) register(ctx context.Context, tx Transaction, store OperationSt
 		InputDigest: inputDigest(tx), PlanDigest: digest, AutomationDigest: s.automation.CatalogDigest(),
 		Executable: operationstore.Executable{Version: s.options.Executable.Version, Commit: s.options.Executable.Commit},
 		Closure:    &closure, Contracts: contracts,
-		Source: decided.source, DeferredSourceProofs: decided.deferredSourceProofs, Predecessor: decided.predecessor, Bindings: bindings, State: reconciliation.OperationRunning,
+		Source: decided.source, DeferredSourceProofs: decided.deferredSourceProofs, Predecessor: decided.predecessor, Stage: decided.stage, Bindings: bindings, State: reconciliation.OperationRunning,
 		Created: stamp, Updated: stamp,
 	}
 	if decided.verb == reconciliation.Destroy && decided.basis.record.Verb == reconciliation.Destroy &&
@@ -101,7 +101,7 @@ func (s Service) resume(ctx context.Context, tx Transaction, store OperationStor
 	fail := func(err error) (operationstore.Operation, reconciliation.Plan, *operationstore.Log, error) {
 		return operationstore.Operation{}, reconciliation.Plan{}, nil, err
 	}
-	changed := func(current basis) error { return s.contextChanged(decided.verb, decided.basis, current) }
+	changed := func(current basis) error { return s.contextChanged(decided, decided.basis, current) }
 	operation, plan, _, err := s.verifyBasis(ctx, store, decided.basis, changed)
 	if err != nil {
 		return fail(err)
@@ -152,7 +152,7 @@ func (s Service) reprove(ctx context.Context, tx Transaction, store OperationSto
 	current := decided.basis
 	current.evidence, current.claims = tx.Evidence(), claimed
 	if !bytes.Equal(current.evidence, decided.basis.evidence) || !slices.Equal(current.claims, decided.basis.claims) {
-		return s.contextChanged(decided.verb, decided.basis, current)
+		return s.contextChanged(decided, decided.basis, current)
 	}
 	// A completed removal that latched a log fault blocks the next apply
 	// until its boundary is restored, as it would block its own work.
@@ -181,6 +181,9 @@ func (s Service) proveHostBinding(ctx context.Context, tx Transaction, previous 
 // A destroy needs no new claim and releases at completion, so it refuses when
 // that release would strand another context's use of what it removes.
 func (s Service) reserve(ctx context.Context, tx Transaction, decided operationPlan, material map[string]secrets.Material) error {
+	if decided.verb == reconciliation.Destroy && decided.stage != nil {
+		return nil
+	}
 	if decided.verb == reconciliation.Destroy {
 		return reproveRelease(ctx, tx, "", "")
 	}

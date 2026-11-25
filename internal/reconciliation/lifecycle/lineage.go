@@ -371,22 +371,142 @@ func ownedLineage(ctx context.Context, store recordReader, current lineageMember
 		_, err = held.plan()
 		return held, err
 	case operation.Verb == reconciliation.Destroy && operation.Source != "":
-		applied, plan, states, err := removedApply(ctx, store, operation.Source)
+		return removalLineage(ctx, store, current)
+	}
+	return lineage{current}, nil
+}
+
+// removalLineage folds the removed apply lineage, the removals it replaces by
+// `replaces`, oldest first, and itself.
+func removalLineage(ctx context.Context, store recordReader, current lineageMember) (lineage, error) {
+	held, err := statedLineage(ctx, store, current.operation.Source)
+	if err != nil {
+		return nil, err
+	}
+	var covered []string
+	for _, holding := range held.ownership().Covered() {
+		covered = append(covered, holding.Block.ID)
+	}
+	removals, err := replacedChain(ctx, store, current.operation)
+	if err != nil {
+		return nil, err
+	}
+	removals = append(removals, current)
+	for index := range removals {
+		member := &removals[index]
+		if member.states == nil {
+			if member.states, err = store.BlockStates(ctx, member.operation.ID, member.plan); err != nil {
+				return nil, err
+			}
+		}
+		if member.effects, err = settledEffects(ctx, store, member.operation.ID, member.plan, member.states); err != nil {
+			return nil, err
+		}
+		member.whole = member.operation.Stage == nil
+		took := covered
+		if !member.whole {
+			took = member.operation.Stage.TakenBack
+		}
+		for _, id := range took {
+			if _, removing := member.plan.Block(id); !removing {
+				member.takenBack = append(member.takenBack, id)
+			}
+		}
+	}
+	return append(held, removals...), nil
+}
+
+func statedLineage(ctx context.Context, store recordReader, source string) (lineage, error) {
+	applied, err := store.ReadOperation(ctx, source)
+	if err != nil {
+		return nil, err
+	}
+	if applied.Verb != reconciliation.Apply {
+		return nil, notAnApply()
+	}
+	plan, err := store.ReadPlan(ctx, applied.ID)
+	if err != nil {
+		return nil, err
+	}
+	states, err := store.BlockStates(ctx, applied.ID, plan)
+	if err != nil {
+		return nil, err
+	}
+	return lineageOf(ctx, store, lineageMember{operation: applied, plan: plan, states: states})
+}
+
+func replacedChain(ctx context.Context, store recordReader, operation operationstore.Operation) (lineage, error) {
+	var chain lineage
+	seen := map[string]bool{operation.ID: true}
+	for id := operation.Replaces; id != ""; {
+		if seen[id] || len(seen) > operationstore.MaxOperations {
+			return nil, engineRecordsDamaged.Fail("the removals this operation replaces name one another in a cycle or exceed the operations a context retains", "restore the context store")
+		}
+		seen[id] = true
+		record, err := store.ReadOperation(ctx, id)
 		if err != nil {
 			return nil, err
 		}
-		if current.effects, err = settledEffects(ctx, store, operation.ID, current.plan, current.states); err != nil {
+		if record.Verb != reconciliation.Destroy || record.Source != operation.Source {
+			return nil, engineRecordsDamaged.Fail("the operation this removal replaces is no removal of the same apply", "restore the context store")
+		}
+		plan, err := store.ReadPlan(ctx, id)
+		if err != nil {
 			return nil, err
 		}
-		current.whole = true
-		for _, block := range coveredBy(applied, plan, states).Blocks {
-			if _, removing := current.plan.Block(block.ID); !removing {
-				current.takenBack = append(current.takenBack, block.ID)
-			}
-		}
-		return lineage{{operation: applied, plan: plan, states: states}, current}, nil
+		chain = append(chain, lineageMember{operation: record, plan: plan})
+		id = record.Replaces
 	}
-	return lineage{current}, nil
+	slices.Reverse(chain)
+	return chain, nil
+}
+
+func (l lineage) kept() map[string]bool {
+	kept := map[string]bool{}
+	for _, holding := range l.ownership().Holdings() {
+		if l[holding.Holder].operation.Verb == reconciliation.Apply && holding.Incarnation >= 0 {
+			kept[holding.Block.ID] = true
+		}
+	}
+	return kept
+}
+
+func (l lineage) live() ([]string, map[string]reconciliation.BlockState) {
+	var live []string
+	states := map[string]reconciliation.BlockState{}
+	folded := l.ownership()
+	for _, holding := range folded.Covered() {
+		if holding.Incarnation >= 0 && !folded.TakenBack(holding) {
+			live = append(live, holding.Block.ID)
+			states[holding.Block.ID] = holding.State
+		}
+	}
+	return live, states
+}
+
+func (l lineage) replacedReach() []map[string][]reconciliation.BlockState {
+	var reached []map[string][]reconciliation.BlockState
+	for index := len(l) - 2; index >= 0 && l[index].operation.Verb == reconciliation.Destroy; index-- {
+		reached = append(reached, reachedByObject(l[index].plan, l[index].states))
+	}
+	return reached
+}
+
+func (l lineage) remaining(frozen reconciliation.Plan) reconciliation.Plan {
+	folded, last := l.ownership(), len(l)-1
+	return reconciliation.Plan{Verb: frozen.Verb, Blocks: slices.DeleteFunc(slices.Clone(frozen.Blocks), func(block reconciliation.Block) bool {
+		holding, held := folded.Holding(block.ID)
+		return !held || holding.Holder != last || holding.State == reconciliation.BlockDone
+	})}
+}
+
+func (l lineage) current(holding reconciliation.Holding) bool {
+	member := l[holding.Holder]
+	if member.operation.Verb == reconciliation.Apply {
+		return true
+	}
+	_, own := member.plan.Block(holding.Block.ID)
+	return own && holding.Holder == len(l)-1
 }
 
 func settledEffects(ctx context.Context, store recordReader, operation string, plan reconciliation.Plan, states map[string]reconciliation.BlockState) (map[string]reconciliation.EffectState, error) {

@@ -1583,6 +1583,42 @@ func (b *testBinder) Withdraw(ctx context.Context, selected secretstore.Context,
 	return true, nil
 }
 
+func (b *testBinder) WithdrawBlocks(ctx context.Context, selected secretstore.Context, area secretstore.Area, blocks []string) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	if selected.Name != testContextName {
+		return false, errors.New("produced material was withdrawn from another context")
+	}
+	var named []string
+	for key := range b.produced {
+		if slices.Contains(blocks, strings.SplitN(key, "/", 2)[0]) {
+			named = append(named, key)
+		}
+	}
+	if len(named) == 0 {
+		return false, nil
+	}
+	if b.kill != nil {
+		if err := b.kill("withdraw produced material"); err != nil {
+			return false, err
+		}
+	}
+	if b.withdrawErr != nil {
+		return false, b.withdrawErr
+	}
+	if err := publishLent(area); err != nil {
+		return false, err
+	}
+	for _, key := range named {
+		delete(b.produced, key)
+		delete(b.unproved, key)
+		delete(b.identities, key)
+	}
+	b.journal = append(b.journal, "withdraw "+strings.Join(named, " "))
+	return true, nil
+}
+
 func (b *testBinder) Bind(_ context.Context, request custody.BindRequest) (secretstore.Binding, error) {
 	if b.kill != nil {
 		if err := b.kill("publish secret binding"); err != nil {

@@ -30,7 +30,7 @@ func (s Service) proveRemovable(ctx context.Context, tx Transaction, store Opera
 	replaced, frozen, states, err := s.verifyBasis(ctx, store, decided.basis, func(basis) error {
 		return enginePlanMoved.Fail(
 			"the operation this removal was planned from is no longer the one the context holds",
-			"repeat "+contextCommand(name, string(reconciliation.Destroy))+" to plan it from the operation the context holds now")
+			"repeat "+contextCommand(name, string(reconciliation.Destroy), invocationFlags(decided.floor(), reconciliation.Selection{}, nil)...)+" to plan it from the operation the context holds now")
 	})
 	if err != nil {
 		return nil, err
@@ -90,8 +90,8 @@ func (s Service) proveRemovable(ctx context.Context, tx Transaction, store Opera
 			}
 			unresolved = destroyUnprovedEffects.Fail(
 				"this removal cannot prove what these effects left behind, so "+outcome+": "+strings.Join(settled.left, ", "),
-				"do what the diagnostic of each reports, then repeat "+contextCommand(name, string(reconciliation.Destroy), authorizingUnfixed(decided.plan)...)+
-					s.abandonExit(name, decided.plan, settled.left))
+				"do what the diagnostic of each reports, then repeat "+contextCommand(name, string(reconciliation.Destroy), invocationFlags(decided.floor(), reconciliation.Selection{}, authorizingUnfixed(decided.plan))...)+
+					s.abandonExit(name, decided.floor(), decided.plan, settled.left))
 		}
 		return nil, withCause(settled.fault, withCause(settled.cause, unresolved))
 	}
@@ -130,7 +130,10 @@ func canDeferSourceProof(decided operationPlan, member lineageMember, settled me
 // abandonExit names, after a refusal's remedy, the abandonment that would let
 // this removal leave every effect it cannot prove in place, when each one's
 // capability offers it and no other relaxation of the plan names its Machine.
-func (s Service) abandonExit(contextName string, plan reconciliation.Plan, left []string) string {
+func (s Service) abandonExit(contextName string, floor reconciliation.Stage, plan reconciliation.Plan, left []string) string {
+	if floor != "" {
+		return ""
+	}
 	methods := frozenRelaxations(plan)
 	added := map[string]string{}
 	for _, id := range left {
@@ -200,7 +203,7 @@ func (s Service) resolveMember(ctx context.Context, tx Transaction, store Operat
 	if removal {
 		removalPlan = &decided.plan
 	}
-	causes, cause := s.observe(work, invocation{tx: tx, store: store, approved: approved, boundary: logging, operation: replaced, plan: frozen, material: material, abandoned: abandoned, unregistered: frozenUnregistered(decided.plan)}, phases, states, removalPlan, decided.phases)
+	causes, cause := s.observe(work, invocation{tx: tx, store: store, approved: approved, boundary: logging, operation: replaced, plan: frozen, material: material, abandoned: abandoned, unregistered: frozenUnregistered(decided.plan), floor: decided.floor()}, phases, states, removalPlan, decided.phases)
 	logging.close(ctx, log)
 	if err := s.recordFromBlocks(recordingContext(ctx), tx, store, replaced, frozen, states); err != nil {
 		return memberResolution{}, err
@@ -250,7 +253,10 @@ func (s Service) recordFromBlocks(ctx context.Context, tx Transaction, store Ope
 	if err != nil || index.Current != current.ID {
 		return err
 	}
-	return s.project(ctx, tx, current.Verb, next)
+	if trimmed(current) {
+		return s.completeStaged(ctx, tx, store, current)
+	}
+	return s.projectRecord(ctx, tx, current)
 }
 
 // unprovedBlocks names every block of a plan whose effect has no proved
@@ -312,7 +318,7 @@ func (s Service) reportResolution(ctx context.Context, event ProgressEvent) {
 // discovering the next obstacle each time they repeat the command. A probe
 // that cannot read its target reports live, because an environment that cannot
 // prove it is idle is never assumed to be.
-func (s Service) proveQuiescent(ctx context.Context, store OperationStore, contextName string, approved approved, plan reconciliation.Plan, phases removalPhases, material map[string]secrets.Material, held lineage, skip map[string]bool) error {
+func (s Service) proveQuiescent(ctx context.Context, store OperationStore, contextName string, floor reconciliation.Stage, approved approved, plan reconciliation.Plan, phases removalPhases, material map[string]secrets.Material, held lineage, skip map[string]bool) error {
 	var live, stops, remedies []string
 	generic := false
 	blocks := slices.DeleteFunc(slices.Clone(plan.Blocks), func(block reconciliation.Block) bool { return skip[block.ID] })
@@ -367,7 +373,7 @@ func (s Service) proveQuiescent(ctx context.Context, store OperationStore, conte
 		return nil
 	}
 	s.reportCheck(ctx, ProgressEvent{Status: "failed"})
-	repeat := "then repeat " + contextCommand(contextName, string(reconciliation.Destroy), authorizingUnfixed(plan)...)
+	repeat := "then repeat " + contextCommand(contextName, string(reconciliation.Destroy), invocationFlags(floor, reconciliation.Selection{}, authorizingUnfixed(plan))...)
 	remediation := "stop what is running, " + repeat
 	if len(stops) != 0 {
 		remediation = "stop it with " + strings.Join(stops, ", then ") + ", " + repeat

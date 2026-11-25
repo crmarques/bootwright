@@ -196,6 +196,20 @@ func MediaReservation(contextName string, names []string) (infrastructureservice
 	}, true
 }
 
+// SharedClaims is this frozen installation's share of the media claim: the
+// store entries its own request names.
+func (Capability) SharedClaims(block reconciliation.Block) ([]infrastructureservices.HostReservation, error) {
+	request, err := DecodeRequest(block.Request)
+	if err != nil {
+		return nil, err
+	}
+	claim, held := MediaReservation("", request.MediaNames())
+	if !held {
+		return nil, nil
+	}
+	return []infrastructureservices.HostReservation{claim}, nil
+}
+
 // description states what the planned verb does to this installation. A
 // removal takes back the media and the consumer this block left; the installed
 // system itself leaves with the disks the machine block deletes.

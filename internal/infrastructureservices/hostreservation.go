@@ -441,6 +441,10 @@ func Releases(reservation HostReservation, kind, object string) bool {
 	})
 }
 
+func NamesObject(reservation HostReservation, kind, object string) bool {
+	return kind != "" && releasedBy(reservation, kind, object)
+}
+
 func releasedBy(reservation HostReservation, kind, object string) bool {
 	claimed, _ := claimObjectKind(reservation)
 	return kind == "" || claimed == kind && reservation.Service == object

@@ -858,7 +858,7 @@ the steps `status` offers name the command the token maps to:
 | Token | Command |
 | --- | --- |
 | `apply`, `continue-apply` | `bootwright apply --context <name>` |
-| `destroy`, `continue-destroy` | `bootwright destroy --context <name>` |
+| `destroy`, `continue-destroy` | `bootwright destroy --context <name>`, with `--stage <floor>` when the operation froze one ([staged destroy](state-reconciliation.md#staged-destroy)) |
 | `resolve` | the operation's own verb: `bootwright apply --context <name>` or `bootwright destroy --context <name>` |
 | `none` | no step |
 

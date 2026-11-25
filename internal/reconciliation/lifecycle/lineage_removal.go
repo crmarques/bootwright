@@ -55,11 +55,18 @@ func unremovable(applied operationstore.Operation, cause error) error {
 	return engineRecordsDamaged.Fail(message, "restore the context store")
 }
 
-func replacementOf(ctx context.Context, store recordReader, removal operationstore.Operation, remaining reconciliation.Plan) (removalScope, error) {
+func replacementOf(ctx context.Context, store recordReader, removal operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) (removalScope, error) {
+	remaining := reconciliation.RemainingSubset(frozen, states)
 	scope := removalScope{contracts: removal.Contracts, owned: remaining, started: len(remaining.Blocks), reopen: firstBinding(removal.Bindings), release: slices.Clone(removal.Bindings), records: recordsFrom(store, removal)}
 	if removal.Source == "" {
 		return scope, nil
 	}
+	folded, err := removalLineage(ctx, store, lineageMember{operation: removal, plan: frozen, states: states})
+	if err != nil {
+		return removalScope{}, err
+	}
+	scope.owned = folded.remaining(frozen)
+	scope.started = len(scope.owned.Blocks)
 	held, err := sourceLineage(ctx, store, removal.Source)
 	if err != nil {
 		return removalScope{}, err

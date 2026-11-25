@@ -165,6 +165,7 @@ type Operation struct {
 	Closure              *Closure                      `json:"closure,omitempty"`
 	Source               string                        `json:"source"`
 	Replaces             string                        `json:"replaces,omitempty"`
+	Stage                *Stage                        `json:"stage,omitempty"`
 	DeferredSourceProofs []string                      `json:"deferredSourceProofs,omitempty"`
 	Predecessor          string                        `json:"predecessor,omitempty"`
 	Bindings             []string                      `json:"bindings"`
@@ -384,6 +385,42 @@ func validateOperationLinks(operation Operation) error {
 	}
 	if operation.Predecessor != "" && (operation.Verb != reconciliation.Apply || !reconciliation.ValidOperationID(operation.Predecessor) || operation.Predecessor == operation.ID) {
 		return recordError("lifecycle operation predecessor is invalid")
+	}
+	return validateStage(operation.Verb, operation.Stage)
+}
+
+type Stage struct {
+	Floor     reconciliation.Stage `json:"floor"`
+	TakenBack []string             `json:"takenBack"`
+}
+
+func validateStage(verb reconciliation.Verb, stage *Stage) error {
+	if stage == nil {
+		return nil
+	}
+	if verb != reconciliation.Destroy || !reconciliation.ValidFloor(stage.Floor) {
+		return recordError("lifecycle operation stage is invalid")
+	}
+	if len(stage.TakenBack) == 0 || len(stage.TakenBack) > reconciliation.MaxBlocks || !slices.IsSorted(stage.TakenBack) ||
+		len(slices.Compact(slices.Clone(stage.TakenBack))) != len(stage.TakenBack) {
+		return recordError("a staged destroy's taken-back steps must form a bounded ordered set")
+	}
+	for _, block := range stage.TakenBack {
+		if !reconciliation.ValidSegment(block) {
+			return recordError("a staged destroy's taken-back steps name an invalid block")
+		}
+	}
+	return nil
+}
+
+func checkStage(operation Operation, plan reconciliation.Plan) error {
+	if operation.Stage == nil {
+		return nil
+	}
+	for _, block := range plan.Blocks {
+		if _, held := slices.BinarySearch(operation.Stage.TakenBack, block.ID); !held {
+			return recordError("a staged destroy's plan holds a step its taken-back set does not name")
+		}
 	}
 	return nil
 }

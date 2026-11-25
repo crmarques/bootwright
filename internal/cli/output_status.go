@@ -111,9 +111,15 @@ type statusLifecycle struct {
 	Next         string          `json:"next"`
 	AnotherBuild bool            `json:"anotherBuild"`
 	Lineage      []statusLineage `json:"lineage,omitempty"`
+	Stage        *statusStage    `json:"stage,omitempty"`
 	Blocks       []statusBlock   `json:"blocks"`
 	Logs         []string        `json:"logs"`
 	Live         []statusLive    `json:"live"`
+}
+
+type statusStage struct {
+	Floor     string   `json:"floor"`
+	TakenBack []string `json:"takenBack"`
 }
 
 type statusLineage struct {
@@ -197,6 +203,9 @@ func displayStatus(result *lifecycle.StatusResult) statusResult {
 			Operation: escapeDisplayLine(summary.Operation), Verb: escapeDisplayLine(summary.Verb),
 			State: escapeDisplayLine(summary.State), Next: escapeDisplayLine(summary.Next),
 			AnotherBuild: summary.AnotherBuild, Blocks: blocks, Logs: displayLines(summary.Logs), Live: displayLive(summary.Live),
+		}
+		if summary.Floor != "" {
+			out.Lifecycle.Stage = &statusStage{Floor: escapeDisplayLine(summary.Floor), TakenBack: displayLines(summary.TakenBack)}
 		}
 		for _, entry := range summary.Lineage {
 			out.Lifecycle.Lineage = append(out.Lifecycle.Lineage, statusLineage{
@@ -379,6 +388,9 @@ func writeStatusLifecycle(text *display, result *lifecycle.StatusResult) {
 		field{Label: "Verb", Value: displayValue(summary.Verb)},
 		field{Label: "State", Value: displayValue(summary.State), Tone: "state"},
 	)
+	if summary.Floor != "" {
+		text.verbatimFields(field{Label: "Stage", Value: displayValue(summary.Floor) + " and every stage built on it, taking back " + displayValue(strings.Join(summary.TakenBack, ", "))})
+	}
 	if len(summary.Lineage) != 0 {
 		text.section("Lineage")
 		lineage := make([]field, 0, len(summary.Lineage))

@@ -148,6 +148,10 @@ func TestPlanFreezesEveryMediaEntryUnderOneClaim(t *testing.T) {
 	if !slices.Equal(media[0].Keys, want) {
 		t.Fatalf("media claims = %v", media[0].Keys)
 	}
+	shared, err := New(nil).SharedClaims(reconciliation.Block{BlockDefinition: plan.Definitions[0]})
+	if err != nil || len(shared) != 1 || shared[0].Kind != "media" || shared[0].Service != "media" || !shared[0].Shared || !slices.Equal(shared[0].Keys, want) {
+		t.Fatalf("the frozen installation's share of the media claim = %+v (%v)", shared, err)
+	}
 	if !slices.Equal(plan.Secrets, []string{"bootwright-machine-key", "lab-artifacts-tls", "lab-bmc-credentials", "lab-bmc-tls"}) {
 		t.Fatalf("secrets = %v", plan.Secrets)
 	}

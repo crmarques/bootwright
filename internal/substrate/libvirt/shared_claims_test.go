@@ -3,6 +3,7 @@ package libvirt
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"slices"
 	"testing"
 
@@ -83,5 +84,34 @@ func TestTheExternalBridgeBoundKeepsTheUseReservationWithinItsKeys(t *testing.T)
 	reservations := planned(t, NewHost(nil), catalogOf(controller(), provider(externalAttachments(bridges...)), networkConfig()))
 	if len(reservations) != 2 || len(reservations[1].Keys) != infrastructureservices.MaxReservationKeys {
 		t.Fatalf("%d external bridges claim %+v", len(bridges), reservations)
+	}
+}
+
+// A frozen host or machine block names exactly the shared claim its plan
+// made, so a staged destroy that takes it back drops that claim.
+func TestAFrozenBlockNamesTheSharedClaimItsPlanMade(t *testing.T) {
+	for name, test := range map[string]struct {
+		capability interface {
+			Plan(context.Context, lifecycle.PlanInput) (lifecycle.CapabilityPlan, error)
+			SharedClaims(reconciliation.Block) ([]infrastructureservices.HostReservation, error)
+		}
+		catalog api.Catalog
+	}{
+		"a provider host": {NewHost(nil), catalogOf(controller(), provider(externalAttachments("br-edge")), networkConfig())},
+		"a machine":       {NewMachine(nil), labCatalog()},
+	} {
+		plan, err := test.capability.Plan(context.Background(), lifecycle.PlanInput{
+			Verb: reconciliation.Apply, State: compilation.NewState(test.catalog, test.catalog, nil),
+			Controller: "controller", Context: lifecycle.ContextIdentity{Name: testContext},
+		})
+		if err != nil || len(plan.Definitions) != 1 {
+			t.Fatalf("%s: plan = %+v (%v)", name, plan, err)
+		}
+		shared, err := test.capability.SharedClaims(reconciliation.Block{BlockDefinition: plan.Definitions[0]})
+		want := plan.Reservations[1]
+		want.Context = ""
+		if err != nil || len(shared) != 1 || !reflect.DeepEqual(shared[0], want) {
+			t.Fatalf("%s: shared claims = %+v (%v), want %+v", name, shared, err, want)
+		}
 	}
 }

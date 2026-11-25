@@ -38,7 +38,7 @@ func finalization(ctx context.Context, view View, store decisionRecords, verb re
 		return operationPlan{}, nil
 	case classify(verb, held) == transitionFinalize:
 	case operation.State == reconciliation.OperationDone:
-		finished, err := finalized(view, operation)
+		finished, err := finalized(ctx, view, store, operation)
 		if err != nil || finished {
 			return operationPlan{}, err
 		}
@@ -46,7 +46,7 @@ func finalization(ctx context.Context, view View, store decisionRecords, verb re
 		return operationPlan{}, nil
 	}
 	decided := operationPlan{finalize: true, verb: verb, operation: operation, plan: frozen, states: states}
-	if operation.Verb == reconciliation.Destroy {
+	if operation.Verb == reconciliation.Destroy && !staged(operation) {
 		release, err := releaseSet(ctx, store, operation)
 		if err != nil {
 			return operationPlan{}, err
@@ -82,13 +82,17 @@ func finalState(frozen reconciliation.Plan, states map[string]reconciliation.Blo
 // its evidence is its projection and a completed removal leaves this context
 // no reservation. A removal publishes pristine evidence only once its Secret
 // bindings are released, so its pristine evidence proves those released too.
-func finalized(view View, operation operationstore.Operation) (bool, error) {
-	projected, err := projection(operation.Verb, reconciliation.OperationDone)
+func finalized(ctx context.Context, view View, store recordReader, operation operationstore.Operation) (bool, error) {
+	operation.State = reconciliation.OperationDone
+	projected, err := projectionOf(operation)
 	if err != nil {
 		return false, err
 	}
 	if !bytes.Equal(view.Evidence(), projected) {
 		return false, nil
+	}
+	if staged(operation) {
+		return stagedFinalized(ctx, view, store, operation)
 	}
 	return operation.Verb != reconciliation.Destroy || !holdsReservation(view), nil
 }
@@ -138,7 +142,7 @@ func (s Service) finalizeFirst(ctx context.Context, name string, verb reconcilia
 	if decided.finalize {
 		return operationPlan{}, ContextIdentity{}, engineFinalizationIncomplete.Fail(
 			"the operation's finalization did not complete",
-			"repeat "+s.preparationRetry(name, contextCommand(name, string(verb))))
+			"repeat "+s.preparationRetry(name, contextCommand(name, string(verb), invocationFlags(decided.floor(), reconciliation.Selection{}, nil)...)))
 	}
 	return decided, identity, nil
 }
@@ -153,13 +157,13 @@ func (s Service) finalizeFirst(ctx context.Context, name string, verb reconcilia
 // that no operation names are released too.
 func (s Service) finalize(ctx context.Context, name string, decided operationPlan) error {
 	var held []string
-	if decided.operation.Verb == reconciliation.Destroy {
+	if decided.operation.Verb == reconciliation.Destroy && !staged(decided.operation) {
 		held = s.held(ctx, name)
 	}
 	var completion removalCompletion
 	err := s.mutateAdmitted(ctx, name, s.startCheck, func(tx Transaction) error {
 		store := s.store(tx)
-		changed := func(current basis) error { return s.contextChanged(decided.verb, decided.basis, current) }
+		changed := func(current basis) error { return s.contextChanged(decided, decided.basis, current) }
 		operation, frozen, states, err := s.verifyBasis(ctx, store, decided.basis, changed)
 		if err != nil {
 			return err
@@ -179,6 +183,9 @@ func (s Service) finalize(ctx context.Context, name string, decided operationPla
 		if operation.Verb == reconciliation.Apply {
 			return s.project(ctx, tx, operation.Verb, next)
 		}
+		if staged(operation) {
+			return s.completeStaged(recordingContext(ctx), tx, store, operation)
+		}
 		// The removal's record reads done from here, so what it still owes is
 		// given back under the recording boundary, interrupted or not: the
 		// produced material first, then the reservations.
@@ -192,7 +199,7 @@ func (s Service) finalize(ctx context.Context, name string, decided operationPla
 		completion, err = captureRemoval(recording, store, operation.ID, decided.release)
 		return err
 	})
-	if err != nil || decided.operation.Verb == reconciliation.Apply {
+	if err != nil || decided.operation.Verb == reconciliation.Apply || staged(decided.operation) {
 		return err
 	}
 	if err := incompleteRemoval(name, s.completeRemoval(recordingContext(ctx), name, completion)); err != nil {
@@ -245,7 +252,9 @@ func (s Service) completeRemoval(ctx context.Context, name string, completion re
 	}
 	return s.workspace.MutateLifecycle(ctx, name, func(tx Transaction) error {
 		store := s.store(tx)
-		changed := func(current basis) error { return s.contextChanged(reconciliation.Destroy, completion.basis, current) }
+		changed := func(current basis) error {
+			return s.contextChanged(operationPlan{verb: reconciliation.Destroy}, completion.basis, current)
+		}
 		if _, _, _, err := s.verifyBasis(ctx, store, completion.basis, changed); err != nil {
 			return err
 		}

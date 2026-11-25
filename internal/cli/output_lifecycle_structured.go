@@ -82,6 +82,7 @@ type planPresentation struct {
 	Finalizes          bool                    `json:"finalizes"`
 	AddsTo             string                  `json:"addsTo,omitempty"`
 	TakesBack          []string                `json:"takesBack,omitempty"`
+	Scope              *scopePresentation      `json:"scope,omitempty"`
 	AnotherBuild       *planBuildPresentation  `json:"anotherBuild,omitempty"`
 	Stops              []string                `json:"stops"`
 	StopsAfterOnline   []string                `json:"stopsAfterOnline"`
@@ -100,7 +101,7 @@ func displayPlan(result *lifecycle.PlanResult) planPresentation {
 	shown.Clusters, shown.Machines = displayLines(result.Clusters), displayLines(result.Machines)
 	shown.Later, shown.Blocked, shown.Excluded = result.Later, result.Blocked, result.Excluded
 	shown.AuthorizationSteps = slices.Clone(result.AuthorizationSteps)
-	shown.AddsTo, shown.TakesBack = escapeDisplayLine(result.AddsTo), displayLines(result.TakesBack)
+	shown.AddsTo, shown.TakesBack, shown.Scope = escapeDisplayLine(result.AddsTo), displayLines(result.TakesBack), displayScope(result.Scope)
 	if b := result.AnotherBuild; b != nil {
 		shown.AnotherBuild = &planBuildPresentation{RegisteredBy: escapeDisplayLine(b.RegisteredBy), Steps: append([]int{}, b.Steps...)}
 	}
@@ -118,10 +119,26 @@ type operationPresentation struct {
 	Settled           bool                         `json:"settled"`
 	Recovered         string                       `json:"recovered"`
 	Next              string                       `json:"next"`
+	Scope             *scopePresentation           `json:"scope,omitempty"`
 	Receipt           receiptPresentation          `json:"receipt"`
 }
 
 func (operationPresentation) documentedResult() {}
+
+type scopePresentation struct {
+	Floor            string   `json:"floor"`
+	RemovedSteps     []string `json:"removedSteps"`
+	KeptSteps        []string `json:"keptSteps"`
+	Residue          []string `json:"residue"`
+	KeptPowerTargets []string `json:"keptPowerTargets"`
+}
+
+func displayScope(scope *lifecycle.StagedScope) *scopePresentation {
+	if scope == nil {
+		return nil
+	}
+	return &scopePresentation{Floor: escapeDisplayLine(scope.Floor), RemovedSteps: displayLines(scope.Removed), KeptSteps: displayLines(scope.Kept), Residue: displayLines(scope.Residue), KeptPowerTargets: displayLines(scope.KeptPowerTargets)}
+}
 
 type operationBlockPresentation struct {
 	ID          string            `json:"id"`
@@ -136,7 +153,7 @@ type operationBlockPresentation struct {
 }
 
 func displayOperation(result *lifecycle.OperationResult) operationPresentation {
-	shown := operationPresentation{KeepGoing: result.KeepGoing, RetiringWithHosts: displayLines(result.RetiringWithHosts), Context: resultContext{Name: escapeDisplayLine(result.Context.Name), Mode: escapeDisplayLine(result.Context.Mode)}, Verb: escapeDisplayLine(result.Verb), Steps: displayPlanSteps(result.Steps), Blocks: []operationBlockPresentation{}, Settled: result.Settled, Recovered: escapeDisplayLine(result.Recovered), Next: escapeDisplayLine(result.NextCommand), Receipt: displayReceipt(result.Receipt)}
+	shown := operationPresentation{KeepGoing: result.KeepGoing, RetiringWithHosts: displayLines(result.RetiringWithHosts), Context: resultContext{Name: escapeDisplayLine(result.Context.Name), Mode: escapeDisplayLine(result.Context.Mode)}, Verb: escapeDisplayLine(result.Verb), Steps: displayPlanSteps(result.Steps), Blocks: []operationBlockPresentation{}, Settled: result.Settled, Recovered: escapeDisplayLine(result.Recovered), Next: escapeDisplayLine(result.NextCommand), Scope: displayScope(result.Scope), Receipt: displayReceipt(result.Receipt)}
 	for _, b := range result.Blocks {
 		block := operationBlockPresentation{ID: escapeDisplayLine(b.ID), Description: escapeDisplayLine(b.Description), Stage: escapeDisplayLine(b.Stage), State: escapeDisplayLine(b.State), Outcome: escapeDisplayLine(b.Outcome), Attempts: b.Attempts}
 		if b.Unresolved != nil {

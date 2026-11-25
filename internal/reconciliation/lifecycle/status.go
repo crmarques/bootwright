@@ -259,7 +259,7 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, *api.Cat
 	if err := s.statusOutdatedClients(ctx, store, view.Identity().Name, operation, plan, states, result); err != nil {
 		return nil, nil, err
 	}
-	if result.Secrets.Bindings, err = bindingsHeld(view, operation); err != nil {
+	if result.Secrets.Bindings, err = bindingsHeld(ctx, view, store, operation); err != nil {
 		return nil, nil, err
 	}
 	realized, err := realizations(ctx, store, operation, plan, states)
@@ -283,6 +283,9 @@ func (s Service) lifecycleSummary(ctx context.Context, store OperationStore, ope
 	}
 	if summary.Logs == nil {
 		summary.Logs = []string{}
+	}
+	if staged(operation) {
+		summary.Floor, summary.TakenBack = string(operation.Stage.Floor), slices.Clone(operation.Stage.TakenBack)
 	}
 	var err error
 	summary.Lineage, err = lineageEntries(ctx, store, operation, plan, states)
@@ -311,9 +314,9 @@ func attemptWarnings(ctx context.Context, store OperationStore, operation string
 // bindingsHeld counts the Secret bindings the current operation's record
 // holds. A completed removal whose finalization completed released them, which
 // its pristine evidence proves, so the count reads no keyring.
-func bindingsHeld(view View, operation operationstore.Operation) (int, error) {
+func bindingsHeld(ctx context.Context, view View, store recordReader, operation operationstore.Operation) (int, error) {
 	if operation.Verb == reconciliation.Destroy && operation.State == reconciliation.OperationDone {
-		finished, err := finalized(view, operation)
+		finished, err := finalized(ctx, view, store, operation)
 		if err != nil || finished {
 			return 0, err
 		}
@@ -361,6 +364,12 @@ func (s Service) offered(ctx context.Context, view View, store OperationStore, o
 		unfinished := len(held) != 0
 		if operation.Verb == reconciliation.Apply && operation.LogFault && inputDrift(view, operation) == "" && !unfinished {
 			return []string{contextCommand(view.Identity().Name, string(reconciliation.Apply))}, nil
+		}
+		if trimmed(operation) && !unfinished {
+			if s.setupGates(ctx, view) {
+				return []string{setupStep}, nil
+			}
+			return []string{contextCommand(view.Identity().Name, "destroy --dry-run"), contextCommand(view.Identity().Name, string(reconciliation.Destroy))}, nil
 		}
 		if !unfinished {
 			return steps, nil
@@ -585,21 +594,30 @@ func realizations(ctx context.Context, store recordReader, operation operationst
 	}
 	var applied map[string][]reconciliation.BlockState
 	owned := map[string]int{}
+	var replaced map[string]RealizationStatus
 	if operation.Source != "" {
 		removed, source, sourceStates, err := removedApply(ctx, store, operation.Source)
 		if err != nil {
 			return nil, err
 		}
-		applied = reachedByObject(source, sourceStates)
-		subset := coveredBy(removed, source, sourceStates).Blocks
-		for _, block := range subset {
-			realized[block.Kind+"/"+block.Object] = RealizationPending
-			owned[block.Kind+"/"+block.Object]++
+		held, err := removalLineage(ctx, store, lineageMember{operation: operation, plan: frozen, states: states})
+		if err != nil {
+			return nil, err
 		}
-	}
-	replaced, err := replacedRemovals(ctx, store, operation)
-	if err != nil {
-		return nil, err
+		kept := held.kept()
+		applied = reachedByObject(source, sourceStates)
+		for _, block := range coveredBy(removed, source, sourceStates).Blocks {
+			if !kept[block.ID] {
+				realized[block.Kind+"/"+block.Object] = RealizationPending
+				owned[block.Kind+"/"+block.Object]++
+			}
+		}
+		for identity, blocks := range reachedByObject(keptPlan(source, kept), sourceStates) {
+			if owned[identity] == 0 {
+				realized[identity] = appliedStatus(blocks)
+			}
+		}
+		replaced = replacedStatuses(held.replacedReach())
 	}
 	for identity, blocks := range reached {
 		realized[identity] = removedStatus(blocks, applied[identity], owned[identity], replaced[identity])
@@ -610,46 +628,28 @@ func realizations(ctx context.Context, store recordReader, operation operationst
 	return realized, nil
 }
 
-// replacedRemovals walks the removals a removal replaces, nearest first, and
-// reports for each object what the nearest one that left it not all pending
-// did to it.
-func replacedRemovals(ctx context.Context, store recordReader, operation operationstore.Operation) (map[string]RealizationStatus, error) {
-	if operation.Replaces == "" {
-		return nil, nil
+func keptPlan(source reconciliation.Plan, kept map[string]bool) reconciliation.Plan {
+	held := reconciliation.Plan{Verb: source.Verb}
+	for _, block := range source.Blocks {
+		if kept[block.ID] {
+			held.Blocks = append(held.Blocks, block)
+		}
 	}
+	return held
+}
+
+func replacedStatuses(nearestFirst []map[string][]reconciliation.BlockState) map[string]RealizationStatus {
 	decided := map[string]RealizationStatus{}
-	seen := map[string]bool{operation.ID: true}
-	for id := operation.Replaces; ; {
-		switch {
-		case seen[id]:
-			return nil, engineRecordsDamaged.Fail("the removals this operation replaces name one another in a cycle", "restore the context store")
-		case len(seen) > operationstore.MaxOperations:
-			return nil, engineRecordsDamaged.Fail("the removals this operation replaces exceed the operations a context retains", "restore the context store")
-		}
-		seen[id] = true
-		record, err := store.ReadOperation(ctx, id)
-		if err != nil {
-			return nil, err
-		}
-		if record.Verb != reconciliation.Destroy {
-			return nil, engineRecordsDamaged.Fail("the operation this removal replaces is no removal", "restore the context store")
-		}
-		_, plan, states, err := removedApply(ctx, store, id)
-		if err != nil {
-			return nil, err
-		}
-		for identity, blocks := range reachedByObject(plan, states) {
+	for _, reached := range nearestFirst {
+		for identity, blocks := range reached {
 			if _, known := decided[identity]; !known {
 				if status, decides := replacedStatus(blocks); decides {
 					decided[identity] = status
 				}
 			}
 		}
-		if record.Replaces == "" {
-			return decided, nil
-		}
-		id = record.Replaces
 	}
+	return decided
 }
 
 // replacedStatus is what a replaced removal's blocks of one object did to it,

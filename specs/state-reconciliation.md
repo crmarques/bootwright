@@ -631,6 +631,8 @@ sends the operator back to `status`, which needs the same unreadable record.
 | destroy running | continue that exact destroy, or, under a relaxation its frozen plan does not hold, start a fresh destroy of what it has not removed, which resolves every unproved block first |
 | destroy paused | continue that exact destroy, or, under a relaxation its frozen plan does not hold, start a fresh destroy of what it has not removed, which resolves every unproved block first |
 | destroy failed | start a fresh destroy of what it has not removed |
+| staged destroy done (trimmed) | `destroy` starts a fresh destroy of what the context still owns, which replaces the staged destroy; `destroy --stage` at the same or a later stage settles without effect, and at an earlier one starts a fresh staged destroy of what the context still owns, which replaces it; `apply` refuses; `context update` is admitted, since the context guard reads `{none, retained}` as no mutation |
+| staged destroy running, paused, unknown or failed | the row of that destroy's state, at the stage it froze: `destroy --stage` at that stage continues it, or replaces a failed one with a fresh staged destroy of what it has not removed; `destroy` without `--stage` or at another stage refuses |
 | destroy unknown | continue it, resolving every unproved block first and then retrying what resolution leaves `failed` (D146), or, under a relaxation its frozen plan does not hold, start a fresh destroy of what it has not removed, which resolves them first |
 
 For an apply that names a predecessor, every fresh destroy these rows start also takes back the whole frozen plan of each predecessor ([removal over a lineage](#removal-over-a-lineage)).
@@ -832,8 +834,9 @@ The fold's rules:
   step and the merged plan refuses. No fold yet holds a removal before an
   apply, so every repeat is damage.
 - A prerequisite is held, and not taken back, by an earlier member.
-- A removal holds `done` what it took back before its own plan: what the
-  apply it removes covered and its plan no longer names. A take-back leaves a
+- A removal holds `done` what it took back before its own plan: a staged
+  destroy's frozen taken-back set, or else what the apply it removes covered,
+  that its plan no longer names. A take-back leaves a
   removal's `retained`, `leaving` or `abandoned` step in that life.
 - A `leaving` step turns `absent` once every step it leaves with is taken back,
   settled before a removal of the whole lineage releases every step it
@@ -874,10 +877,10 @@ state, the Secrets each member's binding pins, which the holds keep while any
 member holds it, and the bindings a removal keeps and releases, which belong to
 their records until the whole lineage is removed.
 
-Not yet met: the machine power realization's inference that a Machine absent
-from the current removal and done in its apply was removed, the `status` walk
-of the removals a removal replaces, and a replacement removal's covered set,
-which read the staged-destroy chain; tracked as [B1866](milestones/m1.md#b1866).
+A removal's fold also holds the removals it replaces by `replaces`, oldest
+first: a staged destroy takes back its frozen taken-back set and keeps every
+other step held by its apply, so evidence, the machine power realization,
+`status` and a replacement's covered set read a kept step as its holder's.
 
 ## Produced material and block transitions
 
@@ -2124,6 +2127,58 @@ the first binding of the root apply, never the head's. A rebind may name only
 Secrets that binding holds. Its completion releases the bindings of every
 apply of the lineage.
 
+### Staged destroy
+
+`destroy --stage <floor>` takes back one stage, `substrates`, `machines`,
+`clusters` or `add-ons`, and every stage built on it, and the context rests
+trimmed. It is a destroy whose `source` is the lineage head apply, completed or
+not, and whose record carries `stage`: the floor and the cumulative taken-back
+set, its own scope with what every staged destroy it `replaces` took back.
+
+- **Scope.** The seeds are the steps the context owns at or above the floor;
+  the scope adds every owned step that depends on one or consumes its produced
+  output. Before anything registers it refuses `destroy.stage-below-floor` when
+  the scope reaches a step below the floor, naming the lower floor that takes it
+  back, or the whole destroy at an infrastructure service;
+  `destroy.stage-keeps-unfinished` when a kept step is not `done`; and
+  `destroy.stage-keeps-host` when a scoped step is bound, by its dependencies,
+  hosts or nodes, to a Machine the scope keeps: any Machine a step of this
+  context names, a substrate machine or the hardware or enrollment step of a
+  physical, provided or bootstrap Machine, whose deletion step
+  (`lifecycle.MachineDeletion`) is outside the scope. A physical Machine is
+  always kept, since its own step only releases a claim. Every frozen
+  leaves-with names a scoped step. An empty scope settles keeping everything,
+  and refuses an `--unregistered` acknowledgement `authorize.unneeded`.
+- **Completion** releases no Secret binding and collects none on any path, and
+  runs no context-wide release check at registration. In the transaction that
+  records it `done`, its own run's or a resolution's, it discards the produced
+  custody of the taken-back producers, re-reserves the context's claims and
+  publishes `{none, retained}`, the projection of a done staged destroy. A
+  shared claim loses the keys only taken-back steps plan
+  (`lifecycle.SharedClaimer`) and goes once no kept step plans it; a claim of
+  an object only taken-back steps name keeps its `releasing` mark, since that
+  object is gone, and every other claim loses it. Its finalization repeats
+  those writes and is complete once that evidence stands and only such claims
+  hold a mark.
+- **Afterwards** `apply`, `machine discover`, `machine enroll` and automatic
+  preparation refuse (`apply.context-trimmed`, `prepare.refused`). A `destroy`
+  without `--stage` removes what the context still owns, replacing the staged
+  destroy, and ends pristine; a lower floor replaces it with a staged destroy
+  of what is left. Either reopens the binding the latest staged destroy holds,
+  which differs from the lineage root's only after a rebind, and the whole one
+  releases every staged destroy's binding beside the lineage's. Over an unfinished staged destroy only its own floor
+  continues or replaces it; any other floor and a destroy without `--stage`
+  refuse `destroy.stage-changed`.
+- Every `destroy` command a remedy, receipt or status names over a staged
+  destroy carries `--stage <floor>`. A done staged destroy's receipt names
+  next `none`. The plan and operation results carry `scope` (floor, removed
+  and kept steps, residue, kept power targets) and status carries `stage`.
+
+Not yet met: a `destroy` without `--stage`, or a lower floor, over an
+unfinished staged destroy refuses instead of superseding it behind a
+confirmation that names the widening; tracked as
+[B1867](milestones/m1.md#b1867).
+
 ## Frozen requests and contract guards
 
 A frozen block records what creating it did; removing it is the other half of
@@ -3342,7 +3397,9 @@ required token that is not supplied refuses `authorize.missing`, naming the bloc
 that consume it. A `data-loss` token may carry the digest of the steps that
 consume it, `data-loss=<digest>`: the first 16 lowercase hexadecimal digits of
 a SHA-256 over those steps' identity, kind, object, implementation, content
-digest and request digest in frozen order. The apply digest includes its verb. The plan
+digest and request digest in frozen order. The apply digest includes its verb, and a
+destroy digest every step the removal takes back, so a digest reviewed for one
+[staged destroy](#staged-destroy) never authorizes a wider removal. The plan
 prints the digest and the consuming steps beside the token. A digest the frozen plan does not give refuses
 `authorize.stale` before registration, naming the steps the plan holds
 now and the verb with `--dry-run` to review them. An invocation no reviewed prompt
