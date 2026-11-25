@@ -31,6 +31,7 @@ CORE = {
     "action": "cluster",
     "bootstrap": "node-1",
     "callHome": "enabled",
+    "callHomeProxy": "http://proxy.example.test:3128",
     "release": "synthetic-release",
     "ansiblePackageVersion": "synthetic-tool",
     "auxiliary": [{"image": "cp.icr.io/cp/ibm-ceph/haproxy-synthetic@sha256:" + "d" * 64, "name": "haproxy"}],

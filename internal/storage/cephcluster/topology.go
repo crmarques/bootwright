@@ -28,6 +28,7 @@ func (a *admission) cluster() {
 	a.packageRepositoryTrust(ceph)
 	a.packageProxy(ceph)
 	a.registryProxy(ceph)
+	a.callHomeProxy(ceph)
 	a.clusterAccess(ceph)
 	a.topology(ceph)
 	a.enrollmentAddresses(ceph)

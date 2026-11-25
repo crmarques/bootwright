@@ -99,3 +99,64 @@ func TestRegistryProxyReachesTheHostScope(t *testing.T) {
 		t.Fatalf("registry route = %q (scope %q), %v", r.RegistryProxy, scopeOf(r).RegistryProxy, err)
 	}
 }
+
+func callHomeCluster(c api.Catalog, selection api.Value) api.Object {
+	cluster, _ := c.Find(api.CephCluster, "example")
+	spec := cluster.Spec().WithPath(api.StringValue("enabled"), "distribution", "ibm", "callHome")
+	if selection.Len() != 0 {
+		spec = spec.WithPath(selection, "distribution", "ibm", "callHomeProxy")
+	}
+	return cluster.WithSpec(spec)
+}
+
+func TestCallHomeProxyFreezesTheReportTargetRoute(t *testing.T) {
+	for _, tc := range []struct {
+		name, bypass, want string
+	}{
+		{"proxied", "10.0.0.0/8", "http://proxy.example.test:3128"},
+		{"other domain bypass", ".example.test", "http://proxy.example.test:3128"},
+		{"registration host bypass", "join.insights.ibm.com", "http://proxy.example.test:3128"},
+		{"target bypass", "esupport.ibm.com", ""},
+		{"domain bypass", ".ibm.com", ""},
+		{"all bypass", "*", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			proxy := api.NewObject(api.Proxy, "egress", api.Value{}, requestMap("management", "external", "connection", requestMap("httpsProxy", "http://proxy.example.test:3128/")))
+			c := api.NewCatalog(append(packageCatalog().Objects(), proxy))
+			cluster := callHomeCluster(c, requestMap("proxyRef", "egress", "noProxy", api.ListValue(api.StringValue(tc.bypass))))
+			got, err := callHomeProxy(c, cluster)
+			if err != nil || got != tc.want {
+				t.Fatalf("proxy = %q, %v; want %q", got, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestCallHomeProxyInheritsNoOtherRoute(t *testing.T) {
+	proxy := api.NewObject(api.Proxy, "egress", api.Value{}, requestMap("management", "external", "connection", requestMap("httpsProxy", "http://proxy.example.test:3128")))
+	c := api.NewCatalog(append(packageCatalog().Objects(), proxy))
+	for _, selection := range []api.Value{{}, requestMap("direct", api.MapValue())} {
+		cluster := callHomeCluster(c, selection)
+		cluster = cluster.WithSpec(cluster.Spec().WithPath(requestMap("proxyRef", "egress"), "registryProxy").WithPath(requestMap("proxyRef", "egress"), "packageRepositoryProxy"))
+		if got, err := callHomeProxy(c, cluster); err != nil || got != "" {
+			t.Fatalf("omitted/direct Call Home route = %q, %v", got, err)
+		}
+	}
+	if _, err := callHomeProxy(c, callHomeCluster(c, requestMap("proxyRef", "missing"))); err == nil {
+		t.Fatal("an undeclared Call Home proxy became a direct route")
+	}
+}
+
+func TestCallHomeProxyReachesTheHostScope(t *testing.T) {
+	catalog := fipsCatalog()
+	proxy := api.NewObject(api.Proxy, "egress", api.Value{}, requestMap("management", "external", "connection", requestMap("httpsProxy", "http://proxy.example.test:3128")))
+	catalog = api.NewCatalog(append(catalog.Objects(), proxy))
+	r, err := baseRequest(catalog, callHomeCluster(catalog, api.Value{}), "synthetic")
+	if err != nil || r.CallHomeProxy != "" || scopeOf(r).CallHomeProxy != "" {
+		t.Fatalf("an unselected Call Home route = %q, %v", r.CallHomeProxy, err)
+	}
+	r, err = baseRequest(catalog, callHomeCluster(catalog, requestMap("proxyRef", "egress")), "synthetic")
+	if err != nil || r.CallHomeProxy != "http://proxy.example.test:3128" || scopeOf(r).CallHomeProxy != r.CallHomeProxy || r.RegistryProxy != "" {
+		t.Fatalf("Call Home route = %q (scope %q), %v", r.CallHomeProxy, scopeOf(r).CallHomeProxy, err)
+	}
+}

@@ -156,7 +156,7 @@ that adaptation neither approves nor refuses a selection.
 `distribution` is a [presence union](../api.md#unions) of the arms `oss`,
 `redhat` and `ibm`; omission selects `oss: {}`, which effective output shows.
 The `oss` arm holds the optional community `mirror` and `checksum`, `redhat`
-holds nothing, and `ibm` holds `callHome` and `packages`. Core Ceph realizes
+holds nothing, and `ibm` holds `callHome`, `callHomeProxy` and `packages`. Core Ceph realizes
 only `ibm`, so planning refuses any other arm, an omitted one included, with
 `plan.object-unsupported` ([refusal table](../ceph.md#refusal-table)).
 `release` is the operator's release label;
@@ -239,6 +239,22 @@ where `disabled` is the native default. On those artifacts `enabled` refuses
 frozen input, so a corrected `callHome` is an input change: `bootwright
 destroy` takes back what the apply owns, then `context update` and a fresh
 apply carry it (D162).
+
+The `ibm` arm's `callHomeProxy` optionally selects the route of IBM Call Home
+reporting, with the grammar, admission limits and refusals of
+`packageRepositoryProxy` and independently of every other route: omission
+means direct, and it inherits no controller, Machine, install-profile,
+package or registry route. It is admitted only with `callHome: enabled`;
+beside `disabled`, `direct: {}` included, it refuses at admission. Its bypass
+choice is resolved while planning against the host of the `call_home_agent`
+module's report target, `esupport.ibm.com`, and the resulting endpoint is
+frozen with the cluster's host scope. The module sends every report and its
+Storage Insights registration request (`join.insights.ibm.com`) through its
+one `proxy` option, so a frozen endpoint carries both and a bypass entry that
+matches only the registration host changes nothing. Bootwright sets that
+option to the frozen endpoint; the [Call Home route](../ceph.md#call-home-route)
+owns the effect and its proofs. The endpoint carries no credential: Proxy
+`auth` refuses at admission.
 
 `image.base` names the repository and `image.version` supplies the
 authored tag or SHA-256 digest. The Entitlement registry namespace must contain

@@ -2,6 +2,7 @@ package ceph
 
 import (
 	"net/url"
+	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller"
@@ -27,8 +28,19 @@ func registryProxy(c api.Catalog, cluster api.Object, registry string) (string, 
 	})
 }
 
+const CallHomeTarget = "https://esupport.ibm.com/connect/api/v1"
+
+func callHomeProxy(c api.Catalog, cluster api.Object) (string, error) {
+	if cluster.Spec().Get("distribution", "ibm", "callHome").Text() != "enabled" {
+		return "", nil
+	}
+	return connectProxy(c, cluster, "distribution.ibm.callHomeProxy", "Call Home", func() (*url.URL, error) {
+		return url.Parse(CallHomeTarget)
+	})
+}
+
 func connectProxy(c api.Catalog, cluster api.Object, name, consumer string, origin func() (*url.URL, error)) (string, error) {
-	choice := cluster.Spec().Get(name)
+	choice := cluster.Spec().Get(strings.Split(name, ".")...)
 	if !choice.Has("proxyRef") {
 		return "", nil
 	}

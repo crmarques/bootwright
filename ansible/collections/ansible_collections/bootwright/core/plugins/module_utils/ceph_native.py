@@ -50,6 +50,8 @@ DEVICE = re.compile(r"/dev/(?:disk/by-id/|disk/by-serial/)?[a-zA-Z0-9_.:+-]{1,20
 DEVICE_CLASS = re.compile(r"[A-Za-z0-9_.-]{1,64}\Z")
 # The reserved form naming, by its serial number, a disk the host's Machine declares; host preparation binds it to a disk.
 SERIAL_DEVICE = re.compile(r"/dev/disk/by-serial/([A-Za-z0-9._:+-]{1,128})\Z")
+# IBM's call_home_agent passes this option, and no ambient route, to every report and registration request it sends.
+CALL_HOME_PROXY_OPTION = "mgr/call_home_agent/proxy"
 REGISTRY_DIRECTORY = "/etc/ceph"
 REGISTRY_NAME = "podman-auth.json"
 REGISTRY_FILE = REGISTRY_DIRECTORY + "/" + REGISTRY_NAME
@@ -65,7 +67,7 @@ SCOPE_MEMBERS = frozenset(("controller", "version", "cluster", "owner", "fsid", 
                            "clusterSSHTransport", "monIP", "publicNetworks", "clusterNetworks", "callHome", "release", "ansiblePackageVersion",
                            "packageRepository", "packageRepositoryKey", "clusterKeyRef", "registryRef", "registry"))
 SCOPE_OPTIONAL = frozenset(("security", "auxiliary", "config", "packages", "nfsGaneshaPackageVersion", "registryTrustBundleRef",
-                            "registryProxy", "stretch", "singleHostDefaults"))
+                            "registryProxy", "callHomeProxy", "stretch", "singleHostDefaults"))
 # The members that name one block's own resource beside its action; everything else a request carries is its cluster's.
 RESOURCE_MEMBERS = frozenset(("pool", "client", "policy", "rbd", "filesystem", "subvolume", "settings", "service", "gateway", "nfsExport", "objectUser",
                               "objectBucket", "nvmeof"))
@@ -735,6 +737,14 @@ def registry_proxy(request):
         return None
     require(isinstance(request["registryProxy"], str) and request["registryProxy"] != "", "request")
     return package_proxy(request["registryProxy"], "request")
+
+
+def call_home_proxy(request):
+    """The frozen callHomeProxy CONNECT endpoint, or None for the direct route; only enabled Call Home carries one."""
+    if "callHomeProxy" not in request:
+        return None
+    require(request["callHome"] == "enabled" and isinstance(request["callHomeProxy"], str) and request["callHomeProxy"] != "", "request")
+    return package_proxy(request["callHomeProxy"], "request")
 
 
 def package_url(value):
@@ -1655,8 +1665,8 @@ class Worker:
             observed = self.ceph_text("config", "show", "osd." + str(identifier), name)
             require(observed == (value + "\n").encode(), "config-drift")
 
-    def call_home_state(self):
-        """A completion record never replaces current native module proof."""
+    def call_home_state(self, settled=True):
+        """A completion record never replaces current native module proof; enabled Call Home also proves its report route unless settled is None."""
         disabled = self.request["callHome"] == "disabled"
         modules = self.ceph("mgr", "module", "ls")
         require(isinstance(modules, dict), "native-output")
@@ -1671,6 +1681,26 @@ class Worker:
             require("call_home_agent" not in enabled, "call-home-drift")
             return
         require("call_home_agent" in enabled and "call_home_agent" not in selected["force_disabled_modules"], "call-home-drift")
+        if settled is not None:
+            self.call_home_route(settled)
+
+    def call_home_route(self, settled=True):
+        """The module's stored proxy option: absent or empty on the direct route, the frozen endpoint once set; any other value is drift.
+        Before the route step completes, a proxied cluster's option may still be absent."""
+        values = self.ceph("config", "dump")
+        require(isinstance(values, list), "native-output")
+        selected = [value for value in values if isinstance(value, dict) and value.get("name") == CALL_HOME_PROXY_OPTION]
+        require(len(selected) <= 1, "call-home-drift")
+        stored = None
+        if selected:
+            entry = selected[0]
+            require(entry.get("section") == "mgr" and entry.get("mask") == ""
+                    and not any(field in entry for field in ("location_type", "location_value", "device_class")), "call-home-drift")
+            require(isinstance(entry.get("value"), str), "call-home-drift")
+            stored = entry["value"] or None
+        wanted = self.request.get("callHomeProxy")
+        require(stored == wanted or not settled and stored is None, "call-home-drift")
+        return stored
 
     def decided_package(self, name):
         """The installed identity the host's completed package decision froze for one Ceph root, as rpm prints PACKAGE_QUERY."""
@@ -2066,6 +2096,10 @@ class Worker:
     def configure_call_home(self, mutate):
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_bootstrap
         return ceph_native_bootstrap.Bootstrap(self).configure_call_home(mutate)
+
+    def configure_call_home_route(self, mutate):
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_bootstrap
+        return ceph_native_bootstrap.Bootstrap(self).configure_call_home_route(mutate)
 
     def configuration_complete(self):
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_bootstrap

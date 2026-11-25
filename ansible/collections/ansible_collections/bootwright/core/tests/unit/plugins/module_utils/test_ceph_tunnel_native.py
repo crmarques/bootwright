@@ -169,7 +169,7 @@ def configuration_fixture(native, private):
     native.prove_seed = lambda daemons: None
     native.markers.records["bootstrap-original-ready.json"] = {"fixture": True}
     native.markers.records["transport-ready.json"] = {"custodyID": "d31ad0d4-2fcf-4a8b-9b92-5010197978ce"}
-    state, calls = {"values": {}, "acceptance": True}, []
+    state, calls = {"values": {}, "acceptance": True, "proxy": None}, []
 
     def ceph(*args, **kwargs):
         calls.append((args, kwargs))
@@ -184,7 +184,12 @@ def configuration_fixture(native, private):
         if args[:2] == ("config-key", "get"):
             return state["values"][args[2].removeprefix("mgr/cephadm/")]
         if args == ("config", "dump"):
-            return [{"name": "mgr/cephadm/call_home_needs_acceptance", "section": "mgr", "mask": "", "value": "true" if state["acceptance"] else "false"}]
+            proxy = [] if state["proxy"] is None else [{"name": ceph_native.CALL_HOME_PROXY_OPTION, "section": "mgr", "mask": "", "value": state["proxy"]}]
+            acceptance = {"name": "mgr/cephadm/call_home_needs_acceptance", "section": "mgr", "mask": "", "value": "true" if state["acceptance"] else "false"}
+            return [acceptance] + proxy
+        if args[:4] == ("config", "set", "mgr", ceph_native.CALL_HOME_PROXY_OPTION) and len(args) == 5:
+            state["proxy"] = args[4]
+            return b""
         names = {"set-priv-key": "ssh_identity_key", "set-pub-key": "ssh_identity_pub", "set-ssh-config": "ssh_config", "set-user": "ssh_user"}
         if args[0] == "cephadm" and args[1] in names:
             state["values"][names[args[1]]] = args[2].encode() if args[1] == "set-user" else kwargs["data"]
@@ -1916,3 +1921,102 @@ def test_a_wrong_cluster_key_refuses_bootstrap_before_any_attempt_under_each_fac
     with pytest.raises(ceph_native.Refusal, match="^ownership$"):
         native.tunnel_bootstrap(ssh_material(dict(private, clusterPrivateKey="different private fixture")))
     assert calls == [] and captured == [] and native.markers.read("bootstrap-attempt.json") is None
+
+
+CALL_HOME_PROXY = "http://proxy.example.test:3128"
+
+
+def route_effects(calls):
+    return [args for args, unused in calls if args[:2] == ("config", "set")]
+
+
+def proxied_configuration(native, private, proxy=CALL_HOME_PROXY):
+    native.request["callHomeProxy"] = proxy
+    return configuration_fixture(native, private)
+
+
+def test_a_proxied_call_home_sets_its_report_route_once_with_attempt_and_completion(native, private):
+    state, calls = proxied_configuration(native, private)
+    assert native.tunnel_configure(ssh_material(private)) == {"changed": True}
+    assert route_effects(calls) == [("config", "set", "mgr", "mgr/call_home_agent/proxy", CALL_HOME_PROXY)] and state["proxy"] == CALL_HOME_PROXY
+    intent = dict(native.configuration_intent(), step="call_home_proxy")
+    assert native.markers.read("tunnel-config-attempt-call_home_proxy.json") == intent
+    assert native.markers.read("tunnel-config-complete-call_home_proxy.json") == intent
+    assert native.configuration_complete() is True and native.configure_call_home_route(True) == (True, False)
+    assert len(route_effects(calls)) == 1
+
+
+def test_a_lost_route_reply_settles_by_readback_without_a_second_set(native, private):
+    state, calls = proxied_configuration(native, private)
+    general = native.ceph
+
+    def lost(*args, **kwargs):
+        reply = general(*args, **kwargs)
+        if args[:2] == ("config", "set"):
+            raise ceph_native.Refusal("native-command")
+        return reply
+
+    native.ceph = lost
+    with pytest.raises(ceph_native.Refusal, match="^native-command$"):
+        native.tunnel_configure(ssh_material(private))
+    assert native.markers.read("tunnel-config-attempt-call_home_proxy.json") is not None
+    assert native.markers.read("tunnel-config-complete-call_home_proxy.json") is None and state["proxy"] == CALL_HOME_PROXY
+    native.ceph = general
+    assert native.configure_call_home_route(True) == (True, False)
+    assert len(route_effects(calls)) == 1 and native.markers.read("tunnel-config-complete-call_home_proxy.json") is not None
+
+
+def test_a_route_attempt_whose_set_never_ran_sets_it_once_on_repeat(native, private):
+    state, calls = proxied_configuration(native, private)
+    native.markers.records["tunnel-config-attempt-call_home_proxy.json"] = dict(native.configuration_intent(), step="call_home_proxy")
+    assert native.configure_call_home_route(True) == (True, True)
+    assert route_effects(calls) == [("config", "set", "mgr", "mgr/call_home_agent/proxy", CALL_HOME_PROXY)] and state["proxy"] == CALL_HOME_PROXY
+
+
+@pytest.mark.parametrize("stored", [None, ""])
+def test_a_direct_call_home_proves_its_route_option_unset_and_sets_nothing(native, private, stored):
+    state, calls = configuration_fixture(native, private)
+    state["proxy"] = stored
+    assert native.tunnel_configure(ssh_material(private)) == {"changed": True}
+    assert route_effects(calls) == [] and not any("call_home_proxy" in name for name in native.markers.records)
+    assert native.configuration_complete() is True
+
+
+@pytest.mark.parametrize("proxy", [None, CALL_HOME_PROXY])
+def test_a_foreign_call_home_route_refuses_as_drift_before_any_set(native, private, proxy):
+    state, calls = proxied_configuration(native, private, proxy) if proxy else configuration_fixture(native, private)
+    state["proxy"] = "http://foreign.example.test:8080"
+    with pytest.raises(ceph_native.Refusal, match="^call-home-drift$"):
+        native.tunnel_configure(ssh_material(private))
+    assert route_effects(calls) == [] and native.markers.read("tunnel-configured.json") is None
+
+
+def test_an_unattempted_matching_route_is_not_adopted(native, private):
+    state, calls = proxied_configuration(native, private)
+    state["proxy"] = CALL_HOME_PROXY
+    with pytest.raises(ceph_native.Refusal, match="^call-home-drift$"):
+        native.tunnel_configure(ssh_material(private))
+    assert route_effects(calls) == []
+
+
+def test_a_settled_route_that_moved_or_vanished_is_call_home_drift(native, private):
+    state, unused = proxied_configuration(native, private)
+    assert native.tunnel_configure(ssh_material(private)) == {"changed": True}
+    assert native.call_home_route() == CALL_HOME_PROXY
+    for moved in ("", "http://foreign.example.test:8080"):
+        state["proxy"] = moved
+        with pytest.raises(ceph_native.Refusal, match="^call-home-drift$"):
+            native.call_home_route()
+    state["proxy"] = None
+    assert native.call_home_route(settled=False) is None
+    with pytest.raises(ceph_native.Refusal, match="^call-home-drift$"):
+        native.configuration_complete()
+
+
+@pytest.mark.parametrize("entry", [{"section": "mgr.node-1", "mask": ""}, {"section": "mgr", "mask": "host:node-1"},
+                                   {"section": "mgr", "mask": "", "location_type": "host"}])
+def test_a_scoped_call_home_route_is_drift(native, private, entry):
+    proxied_configuration(native, private)
+    native.ceph = lambda *args, **kwargs: [dict(entry, name="mgr/call_home_agent/proxy", value=CALL_HOME_PROXY)]
+    with pytest.raises(ceph_native.Refusal, match="^call-home-drift$"):
+        native.call_home_route(settled=False)

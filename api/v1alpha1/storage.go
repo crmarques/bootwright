@@ -53,7 +53,7 @@ func CephDistribution(spec Value) string {
 
 func cephDistributionSchema() *Shape {
 	return choice(field("oss", record(field("mirror", lexical(LexicalHTTPSURL)), field("checksum", lexical(LexicalChecksum)))), field("redhat", record()),
-		field("ibm", record(required("callHome", enumeration("enabled", "disabled")), field("packages", record(required("source", enumeration("vendor")))))))
+		field("ibm", record(required("callHome", enumeration("enabled", "disabled")), field("callHomeProxy", proxySelection()), field("packages", record(required("source", enumeration("vendor")))))))
 }
 
 func storageClusterSchema() *Shape {

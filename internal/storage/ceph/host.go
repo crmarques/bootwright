@@ -29,6 +29,7 @@ type ClusterScope struct {
 	Auxiliary                []AuxiliaryReference         `json:"auxiliary,omitempty"`
 	Bootstrap                string                       `json:"bootstrap"`
 	CallHome                 string                       `json:"callHome"`
+	CallHomeProxy            string                       `json:"callHomeProxy,omitempty"`
 	Cephadm                  Tool                         `json:"cephadm"`
 	Cluster                  string                       `json:"cluster"`
 	ClusterKeyRef            string                       `json:"clusterKeyRef"`

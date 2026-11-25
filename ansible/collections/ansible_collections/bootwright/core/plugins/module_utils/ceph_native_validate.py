@@ -11,7 +11,7 @@ import uuid
 
 from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import (
     DEVICE, DEVICE_CLASS, HOST_LABEL, Refusal, SERIAL_DEVICE, SUBVOLUME_UUID, class_groups, digest, named, package_proxy, package_url,
-    registry_authority, registry_proxy, require, selected_device, tunnel_helpers, validate_auxiliary,
+    registry_authority, registry_proxy, call_home_proxy, require, selected_device, tunnel_helpers, validate_auxiliary,
 )
 
 
@@ -45,6 +45,7 @@ def scope_checks(request):
     require(named(request["clusterKeyRef"]) and named(request["registryRef"]))
     require("registryTrustBundleRef" not in request or named(request["registryTrustBundleRef"]))
     registry_proxy(request)
+    call_home_proxy(request)
     require(isinstance(request["registry"], str) and re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9./:_-]{1,255}", request["registry"]) is not None)
     registry_authority(request)
     validate_auxiliary(request)

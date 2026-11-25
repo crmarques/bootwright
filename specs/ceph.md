@@ -1267,6 +1267,30 @@ the engine environment defaults, and the setting changes the container
 proxy-variable forwarding default. Authorization and proof refuse a competing
 Bootwright Ceph route, including on a host with a direct selection.
 
+## Call Home route
+
+IBM's `call_home_agent` manager module sends each report and its
+registration request only through its `proxy` option
+(`mgr/call_home_agent/proxy`), passed explicitly to every request, and reads
+no host or container route; a host that reaches the internet only through a
+proxy otherwise raises `CHA_ERROR_SENDING_REPORT` on every report. With
+enabled Call Home and a frozen
+[`callHomeProxy`](api/ceph.md#cephcluster), tunnel configuration, after the
+Call Home acceptance, writes the route fence
+(`tunnel-config-attempt-call_home_proxy.json`), then runs
+`config set mgr mgr/call_home_agent/proxy <endpoint>` and reads the option
+back from the MON configuration database before its completion record
+(`tunnel-config-complete-call_home_proxy.json`). The module rereads its
+options on each configuration change, so no restart follows. A lost reply
+settles by readback; an attempt whose option is still absent sets it once
+more with the same value. With a direct route the step sets nothing and
+proves the option absent or empty. The option must be one `mgr`-section
+entry without mask or location; any other value, scope or entry, a value
+present before the fence, or an option gone after completion refuses
+`call-home-drift`. Every observation of declared enabled Call Home proves the
+option again. Bootwright leaves the module's `target` at its native default.
+The proxy endpoint carries no secret.
+
 ## Named refusal outcomes
 
 A named refusal of a Ceph block ends the attempt with its entry's code. An
@@ -2230,7 +2254,8 @@ Blanket warning acceptance cannot claim readiness. The core profile requires
 `HEALTH_OK`, or a health whose every check is in a closed tolerated set or is a
 [scoped check](#scoped-health-checks) naming nothing that holds the block. The
 tolerated set holds only `CHA_ERROR_SENDING_REPORT`: IBM Call Home's egress is
-the operator's network, not the cluster's state. A readiness timeout names the
+the operator's network, not the cluster's state, even once the
+[Call Home route](#call-home-route) is proved. A readiness timeout names the
 checks still blocking in its refusal detail. A read-only observation that is
 not ready reports the same entries, at most 16, as `storage.not-ready`
 warnings `not ready: <entry>` beside its evidence, which `diff --observe`
@@ -2269,7 +2294,7 @@ hostname and pinned image. Short-name collisions refuse before effects;
 quorum alone does not replace the running MON daemon proof. OSD metadata and
 daemon rows must agree on the same numeric OSD identity, owned host and exact
 declared disk identity. Declared enabled IBM Call Home requires current native module
-state as well as frozen consent; declared disabled Call Home is realized as
+state, frozen consent and its [Call Home route](#call-home-route); declared disabled Call Home is realized as
 [storage API](api/ceph.md) states. IBM license readiness applies only
 where the selected image carries the IBM license contract. There the MON must
 hold the `mgr/cephadm/<version>_license_<digest>` record for the selected build

@@ -10,16 +10,29 @@ import (
 )
 
 func (a *admission) packageProxy(spec api.Value) {
-	a.connectProxy(spec, "packageRepositoryProxy", "Ceph package acquisition")
+	a.connectProxy(spec, "Ceph package acquisition", "packageRepositoryProxy")
 }
 
 func (a *admission) registryProxy(spec api.Value) {
-	a.connectProxy(spec, "registryProxy", "Ceph host image acquisition")
+	a.connectProxy(spec, "Ceph host image acquisition", "registryProxy")
 }
 
-func (a *admission) connectProxy(spec api.Value, name, consumer string) {
-	field := "$.spec." + name
-	choice := spec.Get(name)
+func (a *admission) callHomeProxy(spec api.Value) {
+	path := []string{"distribution", "ibm", "callHomeProxy"}
+	if !spec.Has(path...) {
+		return
+	}
+	if spec.Get("distribution", "ibm", "callHome").Text() != "enabled" {
+		a.issue("api.invariant", "$.spec.distribution.ibm.callHomeProxy", "IBM Call Home reporting route selected while spec.distribution.ibm.callHome is not enabled",
+			"remove spec.distribution.ibm.callHomeProxy, or set spec.distribution.ibm.callHome to enabled")
+		return
+	}
+	a.connectProxy(spec, "IBM Call Home reporting", path...)
+}
+
+func (a *admission) connectProxy(spec api.Value, consumer string, path ...string) {
+	field := "$.spec." + strings.Join(path, ".")
+	choice := spec.Get(path...)
 	a.issues = api.AppendIssues(a.issues, infrastructureservices.ValidateProxy(choice, a.catalog, field, false)...)
 	if !choice.Has("proxyRef") {
 		return

@@ -146,8 +146,9 @@ the next apply would run
 every other bootstrap failure keeps its attempt record and remains a native
 failure. Tunnel configuration writes a Call Home initialization fence
 (`tunnel-config-attempt-call_home_initialize.json`) before its
-`orch enable-call-home` and a separate acceptance fence before the Call Home
-acceptance. Enrollment starts a separate durable fence and, once every host is
+`orch enable-call-home`, a separate acceptance fence before the Call Home
+acceptance and, with a frozen Call Home proxy, a route fence before the
+[Call Home route](ceph.md#call-home-route) is set. Enrollment starts a separate durable fence and, once every host is
 enrolled and labelled, runs `orch accept-license --image` for the selected
 image at the end of the enroll step when the image carries the IBM license
 contract and the provider's MON acceptance entry is absent, then requires that

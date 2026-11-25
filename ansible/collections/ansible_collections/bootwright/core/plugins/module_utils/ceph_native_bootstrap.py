@@ -20,8 +20,8 @@ import uuid
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, held_directory, private_files
 from ansible_collections.bootwright.core.plugins.module_utils.canonical_json import canonical
 from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import (
-    BOOTSTRAP_TIMEOUT, CEPHADM_TIME_UNITS, MAX_INPUT, MAX_OUTPUT, NativeFailure, PENDING_DAEMON, Refusal, SOURCE_LINKS, bootstrap_config,
-    daemon_identity_host, held, publish_regular, registry_material, require, tunnel_helpers,
+    BOOTSTRAP_TIMEOUT, CALL_HOME_PROXY_OPTION, CEPHADM_TIME_UNITS, MAX_INPUT, MAX_OUTPUT, NativeFailure, PENDING_DAEMON, Refusal, SOURCE_LINKS,
+    bootstrap_config, daemon_identity_host, held, publish_regular, registry_material, require, tunnel_helpers,
 )
 
 
@@ -540,7 +540,7 @@ class Bootstrap:
         if needed is None:
             return True
         try:
-            self.worker.call_home_state()
+            self.worker.call_home_state(settled=None)
         except Refusal as error:
             if type(error) is not Refusal or str(error) != "call-home-drift":
                 raise
@@ -583,7 +583,7 @@ class Bootstrap:
             require(needed is not None, "partial-cluster")
             acceptance = dict(self.worker.configuration_intent(), step="call_home")
             require(needed or canonical(self.worker.markers.read("tunnel-config-attempt-call_home.json")) == canonical(acceptance), "call-home-drift")
-        self.worker.call_home_state()
+        self.worker.call_home_state(settled=False)
         if mutate and completed is None:
             self.worker.markers.write(prefix + "complete-call_home_initialize.json", intent)
         return True, changed
@@ -611,6 +611,37 @@ class Bootstrap:
             self.worker.markers.write("tunnel-config-complete-call_home.json", intent)
         return True, attempted is None
 
+    def configure_call_home_route(self, mutate):
+        """Set the module's report route to the frozen callHomeProxy once; the direct route proves the option unset."""
+        if not self.worker.call_home_applicable():
+            return True, False
+        wanted = self.worker.request.get("callHomeProxy")
+        if wanted is None:
+            self.worker.call_home_route()
+            return True, False
+        intent = dict(self.worker.configuration_intent(), step="call_home_proxy")
+        attempted = self.worker.markers.read("tunnel-config-attempt-call_home_proxy.json")
+        completed = self.worker.markers.read("tunnel-config-complete-call_home_proxy.json")
+        require(attempted is None or canonical(attempted) == canonical(intent), "ownership")
+        require(completed is None or attempted is not None and canonical(completed) == canonical(intent), "ownership")
+        stored = self.worker.call_home_route(settled=False)
+        changed = False
+        if stored is None:
+            require(completed is None, "call-home-drift")
+            if not mutate:
+                return False, False
+            if attempted is None:
+                self.worker.markers.write("tunnel-config-attempt-call_home_proxy.json", intent)
+            # The MON stores the value as given; repeating it after a lost reply sets the same value.
+            self.worker.tunnel_effect("config", "set", "mgr", CALL_HOME_PROXY_OPTION, wanted, json_result=False)
+            changed = True
+        else:
+            require(attempted is not None, "call-home-drift")
+        self.worker.call_home_route()
+        if mutate and completed is None:
+            self.worker.markers.write("tunnel-config-complete-call_home_proxy.json", intent)
+        return True, changed
+
     def configure_values(self, mutate):
         helper, unused = tunnel_helpers()
         self.worker.provider_registry_absent()
@@ -635,6 +666,9 @@ class Bootstrap:
             if proved:
                 proved, effect = self.worker.configure_call_home(mutate)
                 complete, changed = complete and proved, changed or effect
+            if proved:
+                proved, effect = self.worker.configure_call_home_route(mutate)
+                complete, changed = complete and proved, changed or effect
         self.worker.config_database()
         return complete, changed
 
@@ -642,7 +676,10 @@ class Bootstrap:
         intent = self.worker.configuration_intent()
         require(canonical(self.worker.markers.read("tunnel-config-intent.json")) == canonical(intent), "ownership")
         require(canonical(self.worker.markers.read("tunnel-configured.json")) == canonical(intent), "ownership")
-        for name in ("ssh_identity_key", "ssh_identity_pub", "ssh_config", "ssh_user") + (("call_home",) if self.worker.call_home_applicable() else ()):
+        names = ("ssh_identity_key", "ssh_identity_pub", "ssh_config", "ssh_user") + (("call_home",) if self.worker.call_home_applicable() else ())
+        if self.worker.call_home_applicable() and "callHomeProxy" in self.worker.request:
+            names += ("call_home_proxy",)
+        for name in names:
             require(canonical(self.worker.markers.read("tunnel-config-complete-" + name + ".json")) == canonical(dict(intent, step=name)), "ownership")
         return self.configure_values(False)[0]
 

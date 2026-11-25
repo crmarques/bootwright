@@ -270,6 +270,7 @@ type Request struct {
 	Auxiliary                []AuxiliaryReference         `json:"auxiliary,omitempty"`
 	Bootstrap                string                       `json:"bootstrap"`
 	CallHome                 string                       `json:"callHome"`
+	CallHomeProxy            string                       `json:"callHomeProxy,omitempty"`
 	Cephadm                  Tool                         `json:"cephadm"`
 	Client                   *Client                      `json:"client,omitempty"`
 	Cluster                  string                       `json:"cluster"`
@@ -338,7 +339,7 @@ func DecodeRequest(data []byte) (Request, error) {
 }
 
 func scopeOf(r Request) ClusterScope {
-	return ClusterScope{AnsiblePackageVersion: r.AnsiblePackageVersion, Auxiliary: r.Auxiliary, Bootstrap: r.Bootstrap, CallHome: r.CallHome, Cephadm: r.Cephadm, Cluster: r.Cluster,
+	return ClusterScope{AnsiblePackageVersion: r.AnsiblePackageVersion, Auxiliary: r.Auxiliary, Bootstrap: r.Bootstrap, CallHome: r.CallHome, CallHomeProxy: r.CallHomeProxy, Cephadm: r.Cephadm, Cluster: r.Cluster,
 		ClusterKeyRef: r.ClusterKeyRef, ClusterNetworks: r.ClusterNetworks, ClusterSSHTransport: r.ClusterSSHTransport, ClusterSSHUser: r.ClusterSSHUser,
 		Security: r.Security, SingleHostDefaults: r.SingleHostDefaults, Config: r.Config, Controller: r.Controller, FSID: r.FSID, Hosts: r.Hosts, Image: r.Image, MonIP: r.MonIP,
 		NFSGaneshaPackageVersion: r.NFSGaneshaPackageVersion, Owner: r.Owner, PackageRepository: r.PackageRepository, PackageRepositoryKey: r.PackageRepositoryKey, Packages: r.Packages,
@@ -367,7 +368,10 @@ func (r *Request) sources(c api.Catalog, cluster api.Object) error {
 		r.PackageRepositoryKey = DefaultPackageRepositoryKey
 	}
 	var err error
-	r.RegistryProxy, err = registryProxy(c, cluster, r.Registry)
+	if r.RegistryProxy, err = registryProxy(c, cluster, r.Registry); err != nil {
+		return err
+	}
+	r.CallHomeProxy, err = callHomeProxy(c, cluster)
 	return err
 }
 

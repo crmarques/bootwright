@@ -31,6 +31,7 @@ request-schema:
   cluster.auxiliary[].name string
   cluster.bootstrap string
   cluster.callHome string
+  cluster.callHomeProxy string omitempty
   cluster.cephadm struct ceph.Tool
   cluster.cephadm.packageVersion string
   cluster.cephadm.path string

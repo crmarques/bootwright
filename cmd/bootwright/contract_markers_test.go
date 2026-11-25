@@ -76,8 +76,8 @@ func cephMarkerNames() []string {
 		"ssh-authorization.json", "sshd-policy.json", "stretch-", "subvolume-", "subvolume-attempt.", "subvolume-path.",
 		"synthetic.json", "tiebreaker-removal-attempt.json", "tiebreaker-removal-complete.json", "transport-directory.json", "transport-file-ready-", "transport-file-relabeled-",
 		"transport-file-reserved-", "transport-ready.json", "transport-relabel.json", "transport.json",
-		"tunnel-config-attempt-", "tunnel-config-attempt-call_home.json", "tunnel-config-complete-",
-		"tunnel-config-complete-call_home.json", "tunnel-config-intent.json", "tunnel-configured.json",
+		"tunnel-config-attempt-", "tunnel-config-attempt-call_home.json", "tunnel-config-attempt-call_home_proxy.json", "tunnel-config-complete-",
+		"tunnel-config-complete-call_home.json", "tunnel-config-complete-call_home_proxy.json", "tunnel-config-intent.json", "tunnel-configured.json",
 		"tunnel-manager-files.json", "tunnel-mgr-source.json", "tunnel-mounted.json", "tunnel-redeploy.json",
 		"tunnel-stage.json", "verified.json",
 	}

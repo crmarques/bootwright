@@ -172,7 +172,16 @@ operator as a first-call refusal; the slice that records it is named.
 - IBM's bootstrap enables `call_home_agent`, which raises
   `CHA_ERROR_SENDING_REPORT` (HEALTH_ERR) when `esupport.ibm.com` is out of
   reach; readiness tolerates exactly that check (X76). The lab's NAT reached
-  it (HTTP 200).
+  it (HTTP 200). The module reaches it only through its own `proxy` option
+  (`mgr/call_home_agent/proxy`, default the manager's `CHA_PROXY`, empty):
+  it passes `proxies=` to each `requests.post`, so no host or container
+  route applies (`call_home_agent/module.py` `refresh_options`, `report.py`
+  `send`, 20.2.1-405). On the owner's prd stretch cluster (2026-11-24, IBM
+  9.9.1.2), hosts reachable only through `http://proxy.inf.bndes.net:8080`
+  raised it for every report class with `ConnectTimeoutError esupport.ibm.com`
+  (connect timeout=60), and `ceph config dump` held no proxy option. The
+  CephCluster's `callHomeProxy` now sets it
+  ([Call Home route](../../specs/ceph.md#call-home-route)).
 - IBM bootstrap restarts the manager three times (cephadm module, call home,
   license); the phase runs under its own 1800 s budget, not the 640 s
   default (X76). `READINESS_TIMEOUT` stays 900 s; a timeout is recovered by

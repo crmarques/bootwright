@@ -564,7 +564,7 @@ func TestRequestSchemaChangeLeavesHostDigest(t *testing.T) {
 			t.Fatalf("the host request reaches %s, so its schema moves the host contract", forbidden)
 		}
 	}
-	want := []string{"ansiblePackageVersion", "auxiliary", "bootstrap", "callHome", "cephadm", "cluster", "clusterKeyRef", "clusterNetworks", "clusterSSHTransport", "clusterSSHUser",
+	want := []string{"ansiblePackageVersion", "auxiliary", "bootstrap", "callHome", "callHomeProxy", "cephadm", "cluster", "clusterKeyRef", "clusterNetworks", "clusterSSHTransport", "clusterSSHUser",
 		"config", "controller", "delegated", "fsid", "hosts", "image", "monIP", "nfsGaneshaPackageVersion", "owner", "packageRepository", "packageRepositoryKey", "packages", "publicNetworks", "registry",
 		"registryProxy", "registryRef", "registryTrustBundleRef", "release", "security", "services", "singleHostDefaults", "stretch", "version"}
 	slices.Sort(want)
@@ -580,7 +580,7 @@ func TestRequestSchemaChangeLeavesHostDigest(t *testing.T) {
 	r.Auxiliary = []AuxiliaryReference{{Name: "haproxy", Image: PinnedRegistry + "/cp/ibm-ceph/haproxy-synthetic@sha256:" + strings.Repeat("d", 64)}}
 	r.PackageRepository, r.NFSGaneshaPackageVersion = "https://publisher.example.test/ceph", "synthetic-ganesha-1"
 	r.MonIP, r.ClusterSSHUser, r.CallHome = "192.0.2.1", "operator", "enabled"
-	r.RegistryTrustBundleRef, r.RegistryProxy = "registry-ca", "http://proxy.example.test:3128"
+	r.RegistryTrustBundleRef, r.RegistryProxy, r.CallHomeProxy = "registry-ca", "http://proxy.example.test:3128", "http://proxy.example.test:3128"
 	r.Security = &Security{FIPS: true, CephXKeyType: "aes256k"}
 	r.PublicNetworks, r.ClusterNetworks = []string{"192.0.2.0/24"}, []string{"198.51.100.0/24"}
 	r.Stretch = &Stretch{DataSites: []string{"site-a", "site-b"}, FailureDomain: "datacenter", Rule: "stretch-rule", Tiebreaker: "node-3", TiebreakerSite: "site-c"}
