@@ -293,25 +293,29 @@ func (s SignOnService) signOnBasis(ctx context.Context, view View, store Operati
 		return signOnBasis{}, err
 	}
 	basis := signOnBasis{operation: operation, plan: plan, revision: view.Identity().Revision}
-	for _, member := range chain {
-		for _, block := range member.plan.Blocks {
-			capability, resolved := s.capabilities.Resolve(block.Kind, block.Implementation)
-			suspender, signs := capability.(SignOnSuspender)
-			if !resolved || !signs {
-				continue
-			}
-			named, err := suspender.SignOnCluster(block)
-			if err != nil {
-				return signOnBasis{}, err
-			}
-			if named != name {
-				continue
-			}
-			if basis.suspender != nil {
-				return signOnBasis{}, engineRecordsDamaged.Fail("the applies of cluster "+name+" froze more than one sign-on", "restore the context store")
-			}
-			basis.owner, basis.block, basis.suspender = member.operation, block, suspender
+	if _, err := chain.plan(); err != nil {
+		return signOnBasis{}, err
+	}
+	holders := chain.owners()
+	for _, held := range holders.owned() {
+		block := held.Block
+		capability, resolved := s.capabilities.Resolve(block.Kind, block.Implementation)
+		suspender, signs := capability.(SignOnSuspender)
+		if !resolved || !signs {
+			continue
 		}
+		named, err := suspender.SignOnCluster(block)
+		if err != nil {
+			return signOnBasis{}, err
+		}
+		if named != name {
+			continue
+		}
+		if basis.suspender != nil {
+			return signOnBasis{}, engineRecordsDamaged.Fail("the applies of cluster "+name+" froze more than one sign-on", "restore the context store")
+		}
+		owner, _, _ := holders.of(block.ID)
+		basis.owner, basis.block, basis.suspender = owner.operation, block, suspender
 	}
 	if basis.suspender == nil {
 		return signOnBasis{}, engineSignOnAbsent.Fail("cluster "+name+" has no sign-on that a completed apply of context "+view.Identity().Name+" realized",

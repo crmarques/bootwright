@@ -14,14 +14,18 @@ import (
 var stopCode = regexp.MustCompile(`^[a-z]+(\.[a-z0-9-]+)+$`)
 
 // Every stop the engine declares is a row of the stop catalog, field by field,
-// and the catalog's engine section lists no other.
+// and the catalog's engine sections list no other.
 func TestTheEnginesStopsAreTheCatalogsEngineStops(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("..", "..", "..", "specs", "cli", "stops.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, section, _ := strings.Cut(string(data), "\n## Engine stops\n")
-	section, _, _ = strings.Cut(section, "\n## ")
+	var section string
+	for _, part := range strings.Split(string(data), "\n## ")[1:] {
+		if strings.HasPrefix(part, "Engine ") {
+			section += part + "\n"
+		}
+	}
 	rows := map[string][]string{}
 	for _, line := range strings.Split(section, "\n") {
 		if !strings.HasPrefix(line, "| `") {

@@ -358,9 +358,8 @@ func lineageBindings(ctx context.Context, store recordReader, id string) ([]stri
 }
 
 // ownedLineage is what the index operation's ownership folds: an apply's
-// lineage, or a removal over the apply it removes, which took back what its
-// source covered and its own plan no longer names, because an earlier attempt
-// removed it.
+// lineage, or a removal over the apply it removes, which also took back what
+// its source covered and an earlier attempt removed from its own plan.
 func ownedLineage(ctx context.Context, store recordReader, current lineageMember) (lineage, error) {
 	switch operation := current.operation; {
 	case operation.Verb == reconciliation.Apply && operation.Predecessor != "":

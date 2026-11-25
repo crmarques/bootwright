@@ -198,6 +198,12 @@ refusals of a decision and its plan before any effect.
 | `plan.template-value` | context | none | input | - | change-input | a planned request holds a template delimiter or a key ansible-core reserves, which no adapter may take as data | remove it from the desired-state values, import them, then plan again |
 | `plan.object-unsupported` | context | none | build | - | change-input | this executable cannot realize a selected object, for the reason the message names, so nothing was registered | remove the object this executable cannot realize, or use a build that supports it |
 
+## Engine credential, controller and warning stops
+
+The lifecycle engine's other stops (`internal/reconciliation/lifecycle`): the
+refusals of a cluster credential or sign-on update and of the controller host,
+and the warnings the engine reports.
+
 ### Credentials and the controller host
 
 | Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
