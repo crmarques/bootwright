@@ -2308,6 +2308,33 @@ spec:
     - address: 192.0.2.200
 ---
 apiVersion: bootwright.io/v1alpha1
+kind: OIDCProvider
+metadata:
+  name: corp-sso
+spec:
+  management: external
+  issuerURL: https://sso.example.com/realms/ceph
+  trustBundleRef: custom-ca-bundle
+---
+apiVersion: bootwright.io/v1alpha1
+kind: LDAPServer
+metadata:
+  name: corp-directory
+spec:
+  management: external
+  urls:
+    - ldaps://dc-01.corp.example.com:636
+    - ldaps://dc-02.corp.example.com:636
+  trustBundleRef: custom-ca-bundle
+  bindCredentialsRef: corp-directory-bind-credentials
+  users:
+    baseDN: OU=People,DC=corp,DC=example,DC=com
+    nameAttribute: sAMAccountName
+    filter: (memberOf=CN=ceph-users,OU=Groups,DC=corp,DC=example,DC=com)
+  activeDirectory:
+    realm: CORP.EXAMPLE.COM
+---
+apiVersion: bootwright.io/v1alpha1
 kind: OpenShiftCluster
 metadata:
   name: acceptance-sno
@@ -3399,6 +3426,15 @@ apiVersion: bootwright.io/v1alpha1
 kind: Secret
 metadata:
   name: ceph-registry-credentials
+spec:
+  type: usernamePassword
+  source:
+    contextStore: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: corp-directory-bind-credentials
 spec:
   type: usernamePassword
   source:

@@ -26,7 +26,7 @@ func TestEveryTrustReferenceAcceptsPublicTrustMaterialAndHasAnExplicitClientPoli
 				if !slices.Equal(ref.SecretTypes, []string{"caBundle", "trustBundle"}) {
 					t.Errorf("%s.%s does not accept both public trust types", path, field.Name)
 				}
-				if field.Name != "additionalTrustBundleRefs" && !strings.HasSuffix(path, ".defaults.bmc.tls") {
+				if field.Name != "additionalTrustBundleRefs" && !strings.HasSuffix(path, ".defaults.bmc.tls") && path != string(api.OIDCProvider) && path != string(api.LDAPServer) {
 					policy := "tlsVerification"
 					if field.Name == "packageRepositoryTrustBundleRef" {
 						policy = "packageRepositoryTLSVerification"
@@ -45,8 +45,8 @@ func TestEveryTrustReferenceAcceptsPublicTrustMaterialAndHasAnExplicitClientPoli
 	for _, kind := range api.Kinds() {
 		walk(api.Schema(kind), string(kind))
 	}
-	if count != 9 {
-		t.Fatalf("review trust consumer coverage: found %d references, expected 9", count)
+	if count != 11 {
+		t.Fatalf("review trust consumer coverage: found %d references, expected 11", count)
 	}
 }
 

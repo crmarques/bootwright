@@ -183,6 +183,8 @@ func selectionFixture(extra ...api.Object) []api.Object {
 		selectionObject(api.Machine, "s2-n"),
 		selectionObject(api.Proxy, "managed-proxy", "management", "managed", "machineRef", "svc-host"),
 		selectionObject(api.Proxy, "external-proxy", "management", "external", "machineRef", "orphan"),
+		selectionObject(api.OIDCProvider, "idp", "management", "external"),
+		selectionObject(api.LDAPServer, "directory", "management", "external"),
 		selectionObject(api.Secret, "secret"),
 		selectionContainer("c0", "c0-n"),
 		selectionContainer("c1", "c1-n"),

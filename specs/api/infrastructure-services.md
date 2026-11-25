@@ -1,7 +1,7 @@
 # Infrastructure services
 
-`Proxy`, `DNSServer`, `NTPServer`, `ArtifactServer`, `Registry`, and
-`LoadBalancer` each declare one shared service. Consumers refer directly to
+`Proxy`, `DNSServer`, `NTPServer`, `ArtifactServer`, `Registry`,
+`LoadBalancer`, `OIDCProvider`, and `LDAPServer` each declare one shared service. Consumers refer directly to
 its `metadata.name`; there is no Environment catalog or intermediate component
 identity. [Kind defaults](environment.md#kind-defaults) apply before service
 defaults and reference validation. [The compiler boundary](../api.md#compiler-boundary)
@@ -19,6 +19,8 @@ Every service kind names its objects under the [one name rule](../api.md#object-
 | `ArtifactServer` | One artifact server that publishes installer media and package trees; Bootwright manages it. |
 | `Registry` | One container image registry its consumers mirror from, managed or external. |
 | `LoadBalancer` | One load balancer in front of cluster endpoints, managed or external. |
+| `OIDCProvider` | One external OpenID Connect identity provider its consumers trust. |
+| `LDAPServer` | One external LDAP directory service, Microsoft Active Directory included, its consumers authenticate users against. |
 
 ## Management and placement
 
@@ -74,6 +76,8 @@ Effective service fields emit in this order, omitting inapplicable fields:
 | ArtifactServer | `management`, `machineRef`, `image`, `bindAddress`, `retention`, `tls`, `listeners`, `endpoints`. |
 | Registry | `management`, `machineRef`, `image`, `implementation`, `bindAddress`, `port`, `endpoints`, `tls`, `url`, `credentialsRef`, `trustBundleRef`, `tlsVerification`. |
 | LoadBalancer | `management`, `machineRef`, `image`, `implementation`, `bindAddresses`. |
+| OIDCProvider | `management`, `issuerURL`, `trustBundleRef`. |
+| LDAPServer | `management`, `urls`, `trustBundleRef`, `bindCredentialsRef`, `users`, `activeDirectory`. |
 
 ## Proxy, DNS, NTP and registry deployment
 
@@ -276,6 +280,37 @@ No capability realizes a managed LoadBalancer. It is admitted with an
 plan as an unclaimed managed service whose remedy names `management: external`
 ([unclaimed objects](../state-reconciliation.md#unrealizable-objects));
 declare `management: external` to use one.
+
+## OIDCProvider and LDAPServer
+
+An `OIDCProvider` and an `LDAPServer` declare an identity service the operator
+runs. Both are external: `spec.management: managed` is refused at admission,
+`api.invariant` at `$.spec.management`, with the remedy `declare management:
+external; Bootwright does not run an identity provider`. Each plans no block and
+no readiness edge, and an unconsumed one is retained by
+[Environment selection](environment.md#cluster-selection) like every other
+service. A `CephSignOn`, a `CephObjectGateway`'s authentication and an Active
+Directory SMB cluster consume them; their consumers' pages own the effects, and
+neither kind claims that a consumer exists or that the service answers.
+
+| Field | Type | Required | Default or rule |
+| --- | --- | --- | --- |
+| `management` | string | yes | `external` is the only realized value. |
+| `issuerURL` | string | OIDCProvider | The issuer's `https` URL, exactly the `iss` value its tokens carry: at most 2048 bytes, no userinfo, query, fragment or trailing slash. A value outside that form refuses at the field, naming the field and never the value. |
+| `urls` | array | LDAPServer | Non-empty ordered set of `ldaps://host[:port]` URIs, host a DNS name or IP address, with no path, userinfo, query or fragment; a duplicate refuses. An `ldap://` entry refuses at its index with the remedy `use ldaps://`, because a bind password never travels in cleartext and no StartTLS option exists. |
+| `trustBundleRef` | string | no | `caBundle` or `trustBundle` Secret: the only anchor a consumer verifies the service's TLS with; omitted, each consumer's system trust store. A trust anchor, the class of a [Registry's](#managed-registry) `trustBundleRef`; no `tlsVerification` exists, because verification is always `full`. |
+| `bindCredentialsRef` | string | LDAPServer | `usernamePassword` Secret: the username is the bind DN and the password its password. An access credential, the class of a Registry's `credentialsRef`. |
+| `users` | object | LDAPServer | Closed record locating the users. |
+| `users.baseDN` | string | yes | The search base DN, non-empty, at most 1024 bytes, without control characters. |
+| `users.nameAttribute` | string | yes | The attribute a sign-in name matches: letters, digits and hyphens, starting with a letter, such as `uid` for an LDAP directory and `sAMAccountName` or `cn` for Active Directory. |
+| `users.filter` | string | no | An LDAP filter that further restricts users: parenthesized with balanced parentheses, at most 1024 bytes, holding no `@USERNAME@` token, which a consumer's own search supplies. |
+| `activeDirectory` | object | no | Presence block declaring the directory an Active Directory domain. |
+| `activeDirectory.realm` | string | yes | The domain's DNS name, in any case. A consumer that joins the domain compares it without case. |
+
+An OIDC provider carries no client credential, because each consumer registers
+its own client. A consumer binds the trust anchor and the access credential above
+under those classes; one that places either on a host states that in its own page.
+Admission reads no Secret, resolves no name and contacts no service.
 
 ## Consumer selections
 

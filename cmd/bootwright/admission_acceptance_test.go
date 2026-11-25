@@ -295,8 +295,8 @@ func requireObject(t *testing.T, catalog api.Catalog, kind api.Kind, name string
 func TestActualCLIRefusesFutureReferenceFeatures(t *testing.T) {
 	t.Parallel()
 	sources := exampleSources(t)
-	if len(sources.Files) != 103 {
-		t.Fatalf("reference discovery: got %d files, want 103", len(sources.Files))
+	if len(sources.Files) != 106 {
+		t.Fatalf("reference discovery: got %d files, want 106", len(sources.Files))
 	}
 	var out, errOut bytes.Buffer
 	code := run(context.Background(), []string{"validate", "--input-dir", sources.Roots[0], "--output", "json"}, &out, &errOut)
@@ -486,7 +486,7 @@ func TestActualCompilerRefusesFutureKindsAndAdditionalVariants(t *testing.T) {
 		t.Fatal("future reference unexpectedly compiled")
 	}
 	requireReferenceRefusals(t, diagnostics.Of(err), true)
-	if len(api.Kinds()) != 35 {
+	if len(api.Kinds()) != 37 {
 		t.Fatalf("kind catalog changed: %d", len(api.Kinds()))
 	}
 }
@@ -502,7 +502,7 @@ func TestActualAdmissibleProjectionAdmitsEveryKindButTheRefusedFamilies(t *testi
 	replication, _ := compileAcceptance(t, exampleDirectory(t, "libvirt-2x4-nodes-ceph-multisite"))
 	networks, _ := compileAcceptance(t, exampleDirectory(t, "lab-networks"))
 	kinds := api.Kinds()
-	if len(kinds) != 35 {
+	if len(kinds) != 37 {
 		t.Fatalf("kind catalog changed: %d; cover the new kind in the reference or the extras", len(kinds))
 	}
 	for _, kind := range kinds {
@@ -515,7 +515,7 @@ func TestActualAdmissibleProjectionAdmitsEveryKindButTheRefusedFamilies(t *testi
 			t.Errorf("kind %s has no full-wiring positive admission coverage", kind)
 		}
 	}
-	if report.Counts != (compilation.Counts{FilesSeen: 91, ObjectsDecoded: 130}) {
+	if report.Counts != (compilation.Counts{FilesSeen: 94, ObjectsDecoded: 133}) {
 		t.Errorf("projection counts: %#v", report.Counts)
 	}
 	wantAdvisories := map[diagnosticTuple]bool{}

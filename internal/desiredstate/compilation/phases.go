@@ -171,7 +171,7 @@ func normalizationOrder() []api.Kind {
 	kinds := []api.Kind{
 		api.Environment, api.Entitlement, api.Network, api.NetworkConfig, api.MachineImage,
 		api.MachineInstallProfile, api.InfraProvider, api.Machine, api.Proxy, api.DNSServer,
-		api.NTPServer, api.ArtifactServer, api.Registry, api.LoadBalancer, api.Secret,
+		api.NTPServer, api.ArtifactServer, api.Registry, api.LoadBalancer, api.OIDCProvider, api.LDAPServer, api.Secret,
 	}
 	tail := []api.Kind{api.ClusterAddon, api.ClusterAddonProfile, api.ClusterAddonBinding, api.CustomPlaybook}
 	for _, kind := range api.FamilyKinds() {

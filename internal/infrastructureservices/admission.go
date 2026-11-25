@@ -125,6 +125,9 @@ func ValidateAuthored(o api.Object, _ api.Catalog) []api.Issue {
 }
 
 func Validate(o api.Object, c api.Catalog) []api.Issue {
+	if IsIdentityService(o.Kind()) {
+		return validateIdentityService(o, false)
+	}
 	if !IsService(o.Kind()) {
 		return nil
 	}
@@ -324,6 +327,9 @@ func placementOf(value api.Value) string {
 }
 
 func validateIntrinsic(o api.Object, partial bool) []api.Issue {
+	if IsIdentityService(o.Kind()) {
+		return validateIdentityService(o, partial)
+	}
 	if !IsService(o.Kind()) {
 		return nil
 	}

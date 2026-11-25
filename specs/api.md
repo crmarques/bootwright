@@ -398,7 +398,7 @@ table of its field page in the change that adds it, which
 | Machines and networks | `Network` | Network | [networks](api/networks.md#kinds) |
 | Managed operating systems | `MachineImage`, `MachineInstallProfile` | Managed OS | [machines](api/machines.md#kinds) |
 | Substrates | `InfraProvider` | Substrate | [machines](api/machines.md#kinds) |
-| Infrastructure services | `Proxy`, `DNSServer`, `NTPServer`, `ArtifactServer`, `Registry`, `LoadBalancer` | Infrastructure services | [infrastructure services](api/infrastructure-services.md#kinds) |
+| Infrastructure services | `Proxy`, `DNSServer`, `NTPServer`, `ArtifactServer`, `Registry`, `LoadBalancer`, `OIDCProvider`, `LDAPServer` | Infrastructure services | [infrastructure services](api/infrastructure-services.md#kinds) |
 | Container clusters | `OpenShiftCluster` | Container cluster (OpenShift implementation) | [OpenShift clusters](api/openshift-clusters.md#kinds) |
 | Storage | `CephCluster`, `CephPlacementPolicy`, `CephPool`, `CephRBDImage`, `CephClient`, `CephFilesystem`, `CephSubvolume`, `CephObjectGateway`, `CephObjectUser`, `CephObjectBucket`, `CephNFSExport`, `CephSMBResource`, `CephNVMeoFSubsystem`, `CephReplication`, `CephConsumer` | Storage | [Ceph](api/ceph.md#kinds) |
 | Add-ons | `ClusterAddon`, `ClusterAddonProfile`, `ClusterAddonBinding` | Add-ons | [add-ons](api/addons.md#kinds) |
@@ -573,7 +573,7 @@ Canonical effective output:
 1. orders kinds as `Environment`, `Entitlement`, `Machine`, `MachineImage`,
    `MachineInstallProfile`, `Network`, `NetworkConfig`, `InfraProvider`, `Proxy`,
    `DNSServer`, `NTPServer`, `ArtifactServer`, `Registry`, `LoadBalancer`,
-   `OpenShiftCluster`, `CephCluster`, `CephPlacementPolicy`,
+   `OIDCProvider`, `LDAPServer`, `OpenShiftCluster`, `CephCluster`, `CephPlacementPolicy`,
    `CephPool`, `CephRBDImage`, `CephClient`, `CephFilesystem`,
    `CephSubvolume`, `CephObjectGateway`, `CephObjectUser`,
    `CephObjectBucket`, `CephNFSExport`, `CephSMBResource`,

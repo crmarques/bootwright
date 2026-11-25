@@ -8,7 +8,11 @@ its inverse. The [kind schemas](api/infrastructure-services.md) own declaration;
 durable records.
 
 A managed service is a [lifecycle capability](state-reconciliation.md#plan-and-execution)
-that plans one block per service object.
+that plans one block per service object. An external identity service, an
+`OIDCProvider` or an `LDAPServer`, plans no block and no readiness edge: Bootwright
+runs no identity provider or directory, and each
+[consumer](api/infrastructure-services.md#oidcprovider-and-ldapserver) proves
+its own reach of the service it selects.
 
 ## Selection and refusal
 

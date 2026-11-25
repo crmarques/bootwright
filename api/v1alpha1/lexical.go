@@ -21,6 +21,7 @@ var imageTagPattern = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`)
 var cliVersionPattern = regexp.MustCompile(`^v?[0-9][A-Za-z0-9._+-]*$`)
 var clusterReleasePattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9][A-Za-z0-9._+-]*)?$`)
 var packageVersionPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+~^:-]{0,95}$`)
+var ldapAttributePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9-]*$`)
 var osReleasePattern = regexp.MustCompile(`^[1-9][0-9]*\.(?:0|[1-9][0-9]*)$`)
 
 // ociPathComponentPattern is one repository path component of the OCI
@@ -97,6 +98,11 @@ const (
 	LexicalToken                LexicalRule = "token"
 	LexicalPOSIXUser            LexicalRule = "posix-user"
 	LexicalChecksum             LexicalRule = "checksum"
+	LexicalLDAPURL              LexicalRule = "ldap-url"
+	LexicalLDAPDN               LexicalRule = "ldap-dn"
+	LexicalLDAPAttribute        LexicalRule = "ldap-attribute"
+	LexicalLDAPFilter           LexicalRule = "ldap-filter"
+	LexicalRealm                LexicalRule = "realm"
 )
 
 var lexicalRules = map[LexicalRule]func(string) bool{
@@ -195,6 +201,13 @@ var lexicalRules = map[LexicalRule]func(string) bool{
 	LexicalChecksum: func(value string) bool {
 		return digestPattern.MatchString(strings.TrimSpace(value))
 	},
+	LexicalLDAPURL: validLDAPURL,
+	LexicalLDAPDN:  validLDAPDN,
+	LexicalLDAPAttribute: func(value string) bool {
+		return len(value) <= maxLDAPAttributeBytes && ldapAttributePattern.MatchString(value)
+	},
+	LexicalLDAPFilter: validLDAPFilter,
+	LexicalRealm:      func(value string) bool { return validDNS(strings.ToLower(value)) },
 }
 
 func ValidLexical(rule LexicalRule, value string) bool {
@@ -482,4 +495,55 @@ func validImage(value string) bool {
 		return false
 	}
 	return validRegistry(value[:colon]) && value[colon+1:] != "latest" && imageTagPattern.MatchString(value[colon+1:])
+}
+
+const (
+	maxLDAPAttributeBytes = 127
+	maxLDAPDNBytes        = 1024
+	maxLDAPFilterBytes    = 1024
+	maxOIDCIssuerBytes    = 2048
+
+	LDAPUsernameToken = "@USERNAME@"
+)
+
+func validLDAPURL(value string) bool {
+	if len(value) > 512 || !printableExcept(value, uriExcluded) || strings.ContainsAny(value, "?#") || !strings.HasPrefix(value, "ldaps://") && !strings.HasPrefix(value, "ldap://") {
+		return false
+	}
+	u, err := neturl.Parse(value)
+	return err == nil && u.Opaque == "" && u.User == nil && u.Path == "" && u.RawPath == "" && u.Host != "" &&
+		validHost(u.Hostname()) && (u.Scheme == "ldaps" || u.Scheme == "ldap") && validURLPort(u)
+}
+
+const OIDCIssuerForm = "an https URL of at most 2048 bytes with no userinfo, query, fragment or trailing slash, such as https://sso.example.test/realms/ceph"
+
+func ValidOIDCIssuer(value string) bool {
+	if len(value) > maxOIDCIssuerBytes || strings.ContainsAny(value, "?#") || strings.HasSuffix(value, "/") || !validHTTPURL(value, true) {
+		return false
+	}
+	u, err := neturl.Parse(value)
+	return err == nil && u.RawQuery == "" && !u.ForceQuery && u.Fragment == ""
+}
+
+func validLDAPDN(value string) bool {
+	return len(value) <= maxLDAPDNBytes && utf8.ValidString(value) && strings.IndexFunc(value, unicode.IsControl) < 0
+}
+
+func validLDAPFilter(value string) bool {
+	if len(value) > maxLDAPFilterBytes || !validLDAPDN(value) || !strings.HasPrefix(value, "(") || !strings.HasSuffix(value, ")") || strings.Contains(value, LDAPUsernameToken) {
+		return false
+	}
+	depth := 0
+	for index := range len(value) {
+		switch value[index] {
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth < 0 {
+				return false
+			}
+		}
+	}
+	return depth == 0
 }

@@ -1,0 +1,10 @@
+apiVersion: bootwright.io/v1alpha1
+kind: OIDCProvider
+metadata:
+  name: corp-sso
+
+spec:
+  management: external
+
+  issuerURL: https://sso.example.com/realms/ceph
+  trustBundleRef: custom-ca-bundle

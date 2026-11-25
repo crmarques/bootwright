@@ -373,6 +373,8 @@ and kind defaults cannot select a non-full mode, and a non-full mode is
 recorded in effective state. Other connections refuse
 non-full policies during validation, naming the field and supported remedy;
 they never translate certificate identity into an insecure native-tool flag.
+An `OIDCProvider` and an `LDAPServer` carry no `tlsVerification`: every consumer
+verifies them in `full` mode, against `trustBundleRef` or its system roots.
 Native Satellite registration requires CA anchors even inside a `trustBundle`;
 a direct server leaf refuses before its worker runs.
 The installed OpenShift `additionalTrustBundleRefs` carries material, not an

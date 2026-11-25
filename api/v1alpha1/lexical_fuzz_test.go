@@ -52,6 +52,11 @@ var lexicalSeeds = map[LexicalRule]string{
 	"token":                  "token-1.2_3",
 	"posix-user":             "bootwright",
 	"checksum":               "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	"ldap-url":               "ldaps://ldap.example.test:636",
+	"ldap-dn":                "OU=Domain Users,DC=example,DC=test",
+	"ldap-attribute":         "sAMAccountName",
+	"ldap-filter":            "(memberOf=CN=ceph,OU=Groups,DC=example,DC=test)",
+	"realm":                  "EXAMPLE.TEST",
 }
 
 // lexicalBounds is each rule's longest admitted value in bytes, where its
@@ -77,6 +82,11 @@ var lexicalBounds = map[LexicalRule]int{
 	"os-release":           64,
 	"cli-version":          96,
 	"package-version":      96,
+	"ldap-url":             512,
+	"ldap-dn":              maxLDAPDNBytes,
+	"ldap-attribute":       maxLDAPAttributeBytes,
+	"ldap-filter":          maxLDAPFilterBytes,
+	"realm":                253,
 }
 
 func lexicalRuleNames() []LexicalRule {
@@ -116,10 +126,10 @@ func FuzzValidLexical(f *testing.F) {
 		if limit, bounded := lexicalBounds[rule]; bounded && len(value) > limit {
 			t.Fatalf("%s admitted %d bytes, above its %d-byte bound", rule, len(value), limit)
 		}
-		if rule == "native-version" && !utf8.ValidString(value) {
+		if (rule == "native-version" || rule == "ldap-dn" || rule == "ldap-filter") && !utf8.ValidString(value) {
 			t.Fatalf("%s admitted invalid UTF-8 %q", rule, value)
 		}
-		if !strings.HasSuffix(string(rule), "-path") && rule != "native-version" && rule != "checksum" && rule != "duration" && rule != "mac" {
+		if !strings.HasSuffix(string(rule), "-path") && rule != "native-version" && rule != "ldap-dn" && rule != "ldap-filter" && rule != "checksum" && rule != "duration" && rule != "mac" {
 			for index := range len(value) {
 				if value[index] < 0x21 || value[index] > 0x7e {
 					t.Fatalf("%s admitted %q holding a byte outside printable ASCII", rule, value)

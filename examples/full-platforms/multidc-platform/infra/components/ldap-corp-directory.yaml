@@ -1,0 +1,21 @@
+apiVersion: bootwright.io/v1alpha1
+kind: LDAPServer
+metadata:
+  name: corp-directory
+
+spec:
+  management: external
+
+  urls:
+    - ldaps://dc-01.corp.example.com:636
+    - ldaps://dc-02.corp.example.com:636
+  trustBundleRef: custom-ca-bundle
+  bindCredentialsRef: corp-directory-bind-credentials
+
+  users:
+    baseDN: OU=People,DC=corp,DC=example,DC=com
+    nameAttribute: sAMAccountName
+    filter: (memberOf=CN=ceph-users,OU=Groups,DC=corp,DC=example,DC=com)
+
+  activeDirectory:
+    realm: CORP.EXAMPLE.COM

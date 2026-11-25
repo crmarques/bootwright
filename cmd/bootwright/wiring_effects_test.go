@@ -14,7 +14,7 @@ import (
 func TestEveryKindIsEffectBearingByExactlyOneDomainOrListedAsBearingNone(t *testing.T) {
 	t.Parallel()
 	none := []api.Kind{api.Environment, api.Entitlement, api.MachineImage, api.MachineInstallProfile, api.Network, api.NetworkConfig,
-		api.ClusterAddon, api.ClusterAddonProfile, api.Secret}
+		api.ClusterAddon, api.ClusterAddonProfile, api.OIDCProvider, api.LDAPServer, api.Secret}
 	bearing := api.MapValue(
 		api.FieldValue{Name: "management", Value: api.StringValue("managed")},
 		api.FieldValue{Name: "enabled", Value: api.BoolValue(true)},
