@@ -202,7 +202,9 @@ from ansible_collections.bootwright.core.plugins.module_utils import managedos_f
 from ansible_collections.bootwright.core.plugins.module_utils.canonical_json import canonical
 
 MAX_TIMEOUT = 900
-REMOVE_READY_SECONDS, REMOVE_PROBE_SECONDS, REMOVE_PROBE_INTERVAL = 120, 12, 2
+REMOVE_READY_SECONDS = 120
+REMOVE_PROBE_SECONDS = 12
+REMOVE_PROBE_INTERVAL = 2
 
 
 class ArgumentError(ValueError):
@@ -322,7 +324,7 @@ def await_remove_session(argv, timeout, run, now, sleep):
     """Before a mutating removal, wait on the same pinned SSH destination with a fixed no-op."""
     started = now()
     deadline = started + min(REMOVE_READY_SECONDS, timeout / 2)
-    probe = argv[:-1] + [remote_command.remote_command(("/usr/bin/true",))]
+    probe = managedos_guest_ssh.readiness_argv(argv)
     refused = refusal("transport", "timeout")
     while (remaining := deadline - now()) > 0:
         outcome = run(probe, b"", min(REMOVE_PROBE_SECONDS, remaining))

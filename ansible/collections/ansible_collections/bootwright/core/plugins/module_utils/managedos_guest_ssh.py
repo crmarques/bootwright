@@ -148,6 +148,11 @@ def guest_argv(*, ssh_config, known_hosts, host_key_algorithms, policy_host_key_
     return argv + ["-i", identity, user + "@" + address, remote]
 
 
+def readiness_argv(argv):
+    """Use the already qualified guest argv with only its remote command replaced."""
+    return argv[:-1] + [remote_command.remote_command(("/usr/bin/true",))]
+
+
 def run(argv, data, timeout, runner=bounded_process.run):
     """Run the session once; stderr yields only fixed refusal flags."""
     try:
