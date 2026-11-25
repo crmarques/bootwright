@@ -1,6 +1,7 @@
 package ceph
 
 import (
+	"bytes"
 	"context"
 	"crypto/x509"
 	"encoding/json"
@@ -9,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -17,17 +19,100 @@ import (
 )
 
 type Gateway struct {
-	Bindings      []GatewayBinding  `json:"bindings"`
-	DataExtraPool string            `json:"dataExtraPool"`
-	DataPool      string            `json:"dataPool"`
-	Documents     []json.RawMessage `json:"documents"`
-	Endpoint      string            `json:"endpoint"`
-	IndexPool     string            `json:"indexPool"`
-	Name          string            `json:"name"`
-	Realm         string            `json:"realm"`
-	Zone          string            `json:"zone"`
-	ZoneGroup     string            `json:"zoneGroup"`
-	ZonePools     []string          `json:"zonePools"`
+	Authentication *GatewayAuthentication `json:"authentication,omitempty"`
+	Bindings       []GatewayBinding       `json:"bindings"`
+	DataExtraPool  string                 `json:"dataExtraPool"`
+	DataPool       string                 `json:"dataPool"`
+	Documents      []json.RawMessage      `json:"documents"`
+	Endpoint       string                 `json:"endpoint"`
+	IndexPool      string                 `json:"indexPool"`
+	Name           string                 `json:"name"`
+	Realm          string                 `json:"realm"`
+	Zone           string                 `json:"zone"`
+	ZoneGroup      string                 `json:"zoneGroup"`
+	ZonePools      []string               `json:"zonePools"`
+}
+
+type GatewayAuthentication struct {
+	LDAP *GatewayLDAP `json:"ldap,omitempty"`
+}
+
+type GatewayLDAP struct {
+	BindSecretRef  string `json:"bindSecretRef"`
+	Server         string `json:"server"`
+	TrustSecretRef string `json:"trustSecretRef,omitempty"`
+}
+
+const (
+	rgwLDAPBindPath   = "/etc/bootwright/rgw-ldap-bind"
+	rgwLDAPConfPath   = "/etc/openldap/ldap.conf"
+	rgwLDAPCAPath     = "/etc/bootwright/rgw-ldap-ca.pem"
+	rgwSystemBundle   = "/etc/pki/tls/certs/ca-bundle.crt"
+	maxLDAPBindSecret = 1023
+	maxLDAPCABundle   = 65536
+)
+
+func rgwLDAPConf(trusted bool) string {
+	ca := rgwSystemBundle
+	if trusted {
+		ca = rgwLDAPCAPath
+	}
+	return "TLS_CACERT " + ca + "\nTLS_REQCERT demand\nNETWORK_TIMEOUT 5\nTIMEOUT 10\n"
+}
+
+func rgwLDAPOptions(server api.Value) map[string]string {
+	users := server.Get("users")
+	options := map[string]string{"rgw_ldap_binddn": server.Get("bindDN").Text(), "rgw_ldap_dnattr": users.Get("nameAttribute").Text(),
+		"rgw_ldap_searchdn": users.Get("baseDN").Text(), "rgw_ldap_secret": rgwLDAPBindPath, "rgw_ldap_uri": strings.Join(server.Get("urls").Strings(), " "),
+		"rgw_s3_auth_use_ldap": "true"}
+	if filter := users.Get("filter").Text(); filter != "" {
+		options["rgw_ldap_searchfilter"] = "(&" + filter + "(" + users.Get("nameAttribute").Text() + "=" + api.LDAPUsernameToken + "))"
+	}
+	return options
+}
+
+func gatewayLDAP(c api.Catalog, gateway api.Object) (*GatewayLDAP, map[string]string, []customConfig, error) {
+	ref := gateway.Spec().Get("authentication", "ldap", "ldapServerRef").Text()
+	if ref == "" {
+		return nil, nil, nil, nil
+	}
+	server, found := c.Find(api.LDAPServer, ref)
+	if !found {
+		return nil, nil, nil, failure("api.invariant", "CephObjectGateway "+gateway.Name()+" names LDAPServer "+ref+", which is not declared", "declare LDAPServer "+ref+", or set spec.authentication.ldap.ldapServerRef to a declared LDAPServer")
+	}
+	trust := server.Spec().Get("trustBundleRef").Text()
+	mounts := []customConfig{{MountPath: rgwLDAPBindPath}, {Content: rgwLDAPConf(trust != ""), MountPath: rgwLDAPConfPath}}
+	if trust != "" {
+		mounts = append(mounts, customConfig{MountPath: rgwLDAPCAPath})
+	}
+	return &GatewayLDAP{BindSecretRef: server.Spec().Get("bindPasswordRef").Text(), Server: server.Name(), TrustSecretRef: trust}, rgwLDAPOptions(server.Spec()), mounts, nil
+}
+
+func (g *Gateway) authSecrets() []string {
+	if g == nil || g.Authentication == nil || g.Authentication.LDAP == nil {
+		return nil
+	}
+	ldap := g.Authentication.LDAP
+	if ldap.TrustSecretRef == "" {
+		return []string{ldap.BindSecretRef}
+	}
+	return []string{ldap.BindSecretRef, ldap.TrustSecretRef}
+}
+
+func objectGatewayImpacts(g Gateway) []string {
+	if g.Authentication == nil || g.Authentication.LDAP == nil {
+		return nil
+	}
+	out := []string{
+		"RGW of object gateway " + g.Name + " authenticates S3 users against LDAPServer " + g.Authentication.LDAP.Server + "; its local object users keep working while the directory is down",
+		"an LDAP user named like a CephObjectUser acts as that object user: keep directory names and CephObjectUser names disjoint",
+		"the directory bind password is stored in cephadm's service specification, which ceph orch ls --export and the dashboard's service API show to Ceph administrators; use a least-privilege bind account",
+		"rotating the directory bind password or trust bundle of the completed gateway needs bootwright destroy and a fresh apply",
+	}
+	if len(g.Documents) > 1 {
+		out = append(out, "the ingress of object gateway "+g.Name+" forwards each S3 request, whose LDAP access key carries the user's directory password, to RGW without TLS on the cluster network")
+	}
+	return out
 }
 
 type GatewayBinding struct {
@@ -37,15 +122,16 @@ type GatewayBinding struct {
 }
 
 type rgwSpec struct {
-	CertificateSource      string `json:"certificate_source,omitempty"`
-	OnlyBindPortOnNetworks bool   `json:"only_bind_port_on_networks,omitempty"`
-	RGWExitTimeoutSecs     *int64 `json:"rgw_exit_timeout_secs,omitempty"`
-	RGWFrontendPort        *int64 `json:"rgw_frontend_port,omitempty"`
-	RGWFrontendType        string `json:"rgw_frontend_type,omitempty"`
-	RGWRealm               string `json:"rgw_realm"`
-	RGWZone                string `json:"rgw_zone"`
-	RGWZoneGroup           string `json:"rgw_zonegroup"`
-	SSL                    bool   `json:"ssl,omitempty"`
+	CertificateSource      string            `json:"certificate_source,omitempty"`
+	Config                 map[string]string `json:"config,omitempty"`
+	OnlyBindPortOnNetworks bool              `json:"only_bind_port_on_networks,omitempty"`
+	RGWExitTimeoutSecs     *int64            `json:"rgw_exit_timeout_secs,omitempty"`
+	RGWFrontendPort        *int64            `json:"rgw_frontend_port,omitempty"`
+	RGWFrontendType        string            `json:"rgw_frontend_type,omitempty"`
+	RGWRealm               string            `json:"rgw_realm"`
+	RGWZone                string            `json:"rgw_zone"`
+	RGWZoneGroup           string            `json:"rgw_zonegroup"`
+	SSL                    bool              `json:"ssl,omitempty"`
 }
 
 type rgwIngressSpec struct {
@@ -113,9 +199,9 @@ func gatewayPoolObject(block reconciliation.Block, r Request) string {
 	return block.Object
 }
 
-func rgwSpecOf(gateway api.Value) func(api.Value) any {
+func rgwSpecOf(gateway api.Value, config map[string]string) func(api.Value) any {
 	return func(spec api.Value) any {
-		return rgwSpec{CertificateSource: spec.Get("certificate_source").Text(), OnlyBindPortOnNetworks: spec.Get("only_bind_port_on_networks").Bool(),
+		return rgwSpec{CertificateSource: spec.Get("certificate_source").Text(), Config: config, OnlyBindPortOnNetworks: spec.Get("only_bind_port_on_networks").Bool(),
 			RGWExitTimeoutSecs: integerOf(spec.Get("rgw_exit_timeout_secs")), RGWFrontendPort: integerOf(spec.Get("rgw_frontend_port")), RGWFrontendType: spec.Get("rgw_frontend_type").Text(),
 			RGWRealm: gateway.Get("realm").Text(), RGWZone: gateway.Get("zone").Text(), RGWZoneGroup: gateway.Get("zoneGroup").Text(), SSL: spec.Get("ssl").Bool()}
 	}
@@ -152,6 +238,13 @@ func (c Capability) ProveBinding(ctx context.Context, contextName string, block 
 	if c.kind != api.CephObjectGateway {
 		return nil
 	}
+	if err := proveGatewayTLS(contextName, r, material); err != nil {
+		return err
+	}
+	return proveGatewayLDAP(contextName, r, material)
+}
+
+func proveGatewayTLS(contextName string, r Request, material map[string]secrets.Material) error {
 	secret := gatewayTLSSecret(r.Gateway)
 	if secret == "" {
 		return nil
@@ -171,6 +264,60 @@ func (c Capability) ProveBinding(ctx context.Context, contextName string, block 
 			"store a certificate whose subject alternative names include "+fqdn+" (a DNS name or a matching wildcard) with "+set+", or set spec.endpoint.fqdn of CephObjectGateway "+name+" to a name the certificate holds, then apply again")
 	}
 	return nil
+}
+
+func proveGatewayLDAP(contextName string, r Request, material map[string]secrets.Material) error {
+	if r.Gateway == nil || r.Gateway.Authentication == nil || r.Gateway.Authentication.LDAP == nil {
+		return nil
+	}
+	ldap, name := r.Gateway.Authentication.LDAP, r.Gateway.Name
+	value, found := material[ldap.BindSecretRef]
+	if !found {
+		return cephUnconfigured.Fail("the bind password Secret a CephObjectGateway's LDAPServer names is not bound to this apply", "")
+	}
+	password, _ := value.Part(secrets.ValuePart)
+	defer clear(password)
+	if !rgwBindPassword(password) {
+		return cephSecretInvalid.Fail("the Secret "+ldap.BindSecretRef+" that LDAPServer "+ldap.Server+" names as the bind password of CephObjectGateway "+name+" is not one line of 1 to 1023 bytes of UTF-8 text without leading or trailing whitespace, which RGW would trim or cut",
+			"store the bind password in Secret "+ldap.BindSecretRef+" as one line of 1 to 1023 bytes without leading or trailing whitespace with "+secrets.Command(contextName, "set")+" --name "+ldap.BindSecretRef+" --value-stdin, then apply again")
+	}
+	if ldap.TrustSecretRef == "" {
+		return nil
+	}
+	bundle, found := material[ldap.TrustSecretRef]
+	if !found {
+		return cephUnconfigured.Fail("the trust bundle Secret a CephObjectGateway's LDAPServer names is not bound to this apply", "")
+	}
+	certificates, _ := bundle.Part(secrets.CertificatePart)
+	defer clear(certificates)
+	if !parsedBundle(certificates) {
+		return cephSecretInvalid.Fail("the Secret "+ldap.TrustSecretRef+" that LDAPServer "+ldap.Server+" names as the trust bundle of CephObjectGateway "+name+" holds no PEM certificate block that parses, or a block that does not, or more than 64 KiB",
+			"store the directory's CA certificates as PEM in Secret "+ldap.TrustSecretRef+" with "+secrets.Command(contextName, "set")+" --name "+ldap.TrustSecretRef+", then apply again")
+	}
+	return nil
+}
+
+func rgwBindPassword(value []byte) bool {
+	const space = " \t\n\v\f\r"
+	return len(value) != 0 && len(value) <= maxLDAPBindSecret && utf8.Valid(value) && !bytes.ContainsAny(value, "\x00\r\n") &&
+		!strings.ContainsRune(space, rune(value[0])) && !strings.ContainsRune(space, rune(value[len(value)-1]))
+}
+
+func parsedBundle(data []byte) bool {
+	if len(data) == 0 || len(data) > maxLDAPCABundle {
+		return false
+	}
+	parsed := 0
+	for rest := data; ; {
+		block, remaining := pem.Decode(rest)
+		if block == nil {
+			return parsed > 0 && len(bytes.TrimSpace(rest)) == 0
+		}
+		if _, err := x509.ParseCertificate(block.Bytes); block.Type != "CERTIFICATE" || err != nil {
+			return false
+		}
+		parsed, rest = parsed+1, remaining
+	}
 }
 
 func proveGatewayUnit(contextName string, block reconciliation.Block, material map[string]secrets.Material) error {
@@ -296,7 +443,18 @@ func gatewayRequest(c api.Catalog, cluster, gateway api.Object, base Request) (R
 	if !found {
 		return Request{}, failure("api.invariant", "CephObjectGateway "+gateway.Name()+" binds no declared rgw service", "set spec.serviceRef to rgw.<service_id> of a declared rgw service")
 	}
-	document, err := unitDocumentOf(cluster, svc, rgwSpecOf(spec))
+	ldap, options, mounts, err := gatewayLDAP(c, gateway)
+	if err != nil {
+		return Request{}, err
+	}
+	value, err := unitDocumentValue(cluster, svc, rgwSpecOf(spec, options))
+	if err != nil {
+		return Request{}, err
+	}
+	if len(mounts) != 0 {
+		value.CustomConfigs = mounts
+	}
+	document, err := json.Marshal(value)
 	if err != nil {
 		return Request{}, err
 	}
@@ -324,12 +482,18 @@ func gatewayRequest(c api.Catalog, cluster, gateway api.Object, base Request) (R
 	r.Gateway = &Gateway{Bindings: bindings, DataExtraPool: nativePoolRef(c, placementPool(spec, "buckets.non-ec")), DataPool: nativePoolRef(c, placementPool(spec, "buckets.data")), Documents: documents,
 		Endpoint: endpoint, IndexPool: nativePoolRef(c, placementPool(spec, "buckets.index")), Name: gateway.Name(), Realm: spec.Get("realm").Text(),
 		Zone: spec.Get("zone").Text(), ZoneGroup: spec.Get("zoneGroup").Text(), ZonePools: slices.Compact(zonePools)}
+	if ldap != nil {
+		r.Gateway.Authentication = &GatewayAuthentication{LDAP: ldap}
+	}
 	return r, nil
 }
 
-func gatewayDeadline(operation string) time.Duration {
+func gatewayDeadline(r Request, operation string) (time.Duration, error) {
 	budget := map[string]unitBudget{"apply": {calls: 5, waits: 1}, "observe": {calls: 1}, "destroy": {calls: 2}}[operation]
-	return time.Duration(budget.calls*nativeCall+budget.waits*readinessWait+60) * time.Second
+	if r.Gateway != nil && r.Gateway.Authentication != nil && operation != "destroy" {
+		budget.calls += map[string]int{"apply": 2, "observe": 1}[operation]
+	}
+	return time.Duration(budget.calls*nativeCall+budget.waits*readinessWait+60) * time.Second, nil
 }
 
 func gatewayRequests(c api.Catalog, gateway api.Object, d derivation) ([]Request, error) {

@@ -137,6 +137,7 @@ class Transport:
         ceph_native.require(isinstance(self.material, dict), "material")
         package_material = {"packageCA" + str(i) for i in range(len(self.request.get("packages", {}).get("sources", [])))}
         allowed = {"sshKey", "knownHosts", "clusterPrivateKey", "clusterPublicKey", "registryJSON", "gatewayCertificate", "gatewayKey"}
+        allowed |= set(ceph_native_object.auth_variables(self.request["gateway"]).values()) if "gateway" in self.request else set()
         allowed |= ceph_native_units.MATERIAL_VARIABLES
         allowed |= {"smbSecret" + str(index) for index in range(self.smb_secrets)}
         allowed |= {"registryCA"} if "registryTrustBundleRef" in self.request else set()
@@ -284,6 +285,15 @@ class Transport:
     def gateway_material(self, key):
         """A gateway's bound certificate, and its private key for the service apply, read from the runner's private files."""
         names = ("gatewayCertificate", "gatewayKey") if key else ("gatewayCertificate",)
+        ceph_native.require(isinstance(self.material, dict) and all(name in self.material for name in names), "material")
+        try:
+            return {name: ceph_native.read_regular(self.material[name], private=True).decode("utf-8") for name in names}
+        except UnicodeError:
+            raise ceph_native.Refusal("material") from None
+
+    def gateway_auth_material(self):
+        """A gateway's LDAP bind password and its optional CA bundle for the service apply, read from the runner's private files."""
+        names = sorted(ceph_native_object.auth_variables(self.request["gateway"]).values())
         ceph_native.require(isinstance(self.material, dict) and all(name in self.material for name in names), "material")
         try:
             return {name: ceph_native.read_regular(self.material[name], private=True).decode("utf-8") for name in names}

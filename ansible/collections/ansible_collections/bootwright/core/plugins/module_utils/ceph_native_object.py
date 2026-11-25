@@ -39,18 +39,21 @@ import os
 import re
 import socket
 import ssl
+import stat
 import time
 import unicodedata
 import urllib.parse
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_native_nfs, ceph_native_units
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_native_nfs, ceph_native_observability, ceph_native_units
 from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import (
     Custody, NativeFailure, Refusal, canonical, named, read_regular, require, unique_object,
 )
-from ansible_collections.bootwright.core.plugins.module_utils.ceph_native_observability import MAX_KEY, MAX_LEAF, PRIVATE_KEY, answers, leaf, served
+from ansible_collections.bootwright.core.plugins.module_utils.ceph_native_observability import (
+    MAX_CERTIFICATE, MAX_KEY, MAX_LEAF, PRIVATE_KEY, answers, file_identity, leaf, opened_beneath, proxy_container, served, started_ns,
+)
 
 APPLY_PHASES = ("gateway_zone", "gateway_placement", "gateway_service")
-PHASES = frozenset(APPLY_PHASES + ("ingress_firewall", "vip_holder"))
+PHASES = frozenset(APPLY_PHASES + ("ingress_firewall", "vip_holder", "gateway_auth_mounts"))
 RADOSGW_ADMIN = "/usr/bin/radosgw-admin"
 RGW_ROOT = ".rgw.root"
 ROOT_CLAIM = "rgw-root.json"
@@ -73,8 +76,27 @@ PLACEMENT = "default-placement"
 # RGWSpec.get_port: 443 with ssl, else 80 (IBM python3-ceph-common 20.2.1 service_spec.py:1888-1909).
 HTTP_PORT = 80
 HTTPS_PORT = 443
-PENDING = re.compile(r"(?:(?:rgw|http|tls|site)@rgw|tls@ingress|default@realm|stretch@)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\Z")
+PENDING = re.compile(r"(?:(?:rgw|http|tls|site|ldap|mount)@rgw|tls@ingress|default@realm|stretch@)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\Z")
 MEMBERS = frozenset(("bindings", "dataExtraPool", "dataPool", "documents", "endpoint", "indexPool", "name", "realm", "zone", "zoneGroup", "zonePools"))
+# The files and options a gateway's LDAP authentication derives (internal/storage/ceph gateway.go): RGW reads its bind password from a file
+# path (rgw_ldap_secret, src/rgw/rgw_ldap.cc parse_rgw_ldap_bindpw) and its LDAP client sets no TLS option or timeout, so libldap reads them from
+# ldap.conf; cephadm writes each custom config to custom_config_files/<daemon>/<basename> and bind-mounts it.
+LDAP_BIND = "/etc/bootwright/rgw-ldap-bind"
+LDAP_CONF = "/etc/openldap/ldap.conf"
+LDAP_CA = "/etc/bootwright/rgw-ldap-ca.pem"
+SYSTEM_BUNDLE = "/etc/pki/tls/certs/ca-bundle.crt"
+AUTH_MEMBERS = frozenset(("bindSecretRef", "server", "trustSecretRef"))
+LDAP_OPTIONS = frozenset(("rgw_ldap_binddn", "rgw_ldap_dnattr", "rgw_ldap_searchdn", "rgw_ldap_secret", "rgw_ldap_uri", "rgw_s3_auth_use_ldap"))
+LDAP_FILTER = "rgw_ldap_searchfilter"
+LDAP_TOKEN = "@USERNAME@"
+MAX_OPTION = 4096
+# RGW trims the bind password file and reads at most 1023 bytes of it (src/rgw/rgw_ldap.cc parse_rgw_ldap_bindpw).
+MAX_BIND = 1023
+SPACE = " \t\n\v\f\r"
+# The image's ceph user (`id ceph` in the selected IBM image), which owns every file cephadm writes for its daemons.
+CEPH_UID = 167
+CONFIG_SHOW_ENOENT = 2
+MAX_RGW_CONTAINERS = 16
 KINDS = ("realm", "zonegroup", "zone")
 LISTS = {"realm": "realms", "zonegroup": "zonegroups", "zone": "zones"}
 MAX_NAMES = 1024
@@ -135,7 +157,7 @@ def tls_members(spec):
 
 def validate_spec(spec, gateway):
     """The rgw document's spec: realm, zone group and zone are the gateway's, its frontend members, and TLS only through bindings."""
-    require(isinstance(spec, dict) and set(spec) <= RGW_MEMBERS)
+    require(isinstance(spec, dict) and set(spec) <= RGW_MEMBERS | {"config"})
     tls_members(spec)
     require(spec.get("rgw_realm") == gateway["realm"] and spec.get("rgw_zonegroup") == gateway["zoneGroup"] and spec.get("rgw_zone") == gateway["zone"])
     require("rgw_frontend_port" not in spec or type(spec["rgw_frontend_port"]) is int and 1 <= spec["rgw_frontend_port"] <= 65535)
@@ -178,9 +200,56 @@ def validate_bindings(gateway, documents):
     require(sorted({binding["serviceRef"] for binding in bindings}) == sorted(secure) and gateway["endpoint"] != "")
 
 
+def ldap_conf(trusted):
+    """The libldap client file the gateway mounts: the directory's CA bundle, else the image's system bundle, verified in full, with bounds."""
+    return "TLS_CACERT " + (LDAP_CA if trusted else SYSTEM_BUNDLE) + "\nTLS_REQCERT demand\nNETWORK_TIMEOUT 5\nTIMEOUT 10\n"
+
+
+def option_text(value):
+    """An RGW option value the request derives: non-empty text of at most MAX_OPTION bytes without control characters."""
+    return (isinstance(value, str) and 0 < len(value.encode("utf-8", "surrogatepass")) <= MAX_OPTION
+            and not any(unicodedata.category(char) == "Cc" for char in value))
+
+
+def validate_authentication(gateway):
+    """No authentication, or an LDAP block naming its server and the Secrets its bind password and optional trust bundle come from."""
+    if "authentication" not in gateway:
+        return None
+    authentication = gateway["authentication"]
+    require(isinstance(authentication, dict) and set(authentication) == {"ldap"})
+    ldap = authentication["ldap"]
+    require(isinstance(ldap, dict) and {"bindSecretRef", "server"} <= set(ldap) <= AUTH_MEMBERS)
+    require(all(named(ldap[key]) for key in ldap))
+    return ldap
+
+
+def validate_auth_document(document, ldap):
+    """The rgw document's derived custom configs: exactly the bind file, ldap.conf and, with a trust bundle, the CA file, only ldap.conf with content."""
+    if ldap is None:
+        require("custom_configs" not in document)
+        return
+    mounts = [{"mount_path": LDAP_BIND}, {"content": ldap_conf("trustSecretRef" in ldap), "mount_path": LDAP_CONF}]
+    if "trustSecretRef" in ldap:
+        mounts.append({"mount_path": LDAP_CA})
+    require(document.get("custom_configs") == mounts)
+
+
+def validate_auth_spec(spec, ldap):
+    """The rgw spec's derived config: exactly the LDAP options, the bind file path and a search filter holding the user token once."""
+    if ldap is None:
+        require("config" not in spec)
+        return
+    config = spec.get("config")
+    require(isinstance(config, dict) and set(config) in (LDAP_OPTIONS, LDAP_OPTIONS | {LDAP_FILTER}) and all(option_text(value) for value in config.values()))
+    require(config["rgw_ldap_secret"] == LDAP_BIND and config["rgw_s3_auth_use_ldap"] == "true")
+    require(all(url.startswith("ldaps://") for url in config["rgw_ldap_uri"].split(" ")))
+    require(LDAP_FILTER not in config or config[LDAP_FILTER].count(LDAP_TOKEN) == 1)
+
+
 def validate_document(document, kind, request, hosts):
     """One placed document of its type, listed in `delegated` with exactly its hosts."""
-    require(isinstance(document, dict) and {"placement", "service_id", "service_type", "spec"} <= set(document) <= ceph_native_units.DOCUMENT_MEMBERS)
+    members = ceph_native_units.DOCUMENT_MEMBERS | ({"custom_configs"} if kind == "rgw" else set())
+    require(isinstance(document, dict) and {"placement", "service_id", "service_type", "spec"} <= set(document) <= members)
     require(document["service_type"] == kind and named(document["service_id"]))
     placement = document["placement"]
     require(isinstance(placement, dict) and "hosts" in placement and set(placement) <= {"hosts", "count"})
@@ -198,7 +267,8 @@ def validate_document(document, kind, request, hosts):
 def validate(request, hosts):
     """One gateway: its native names, its frozen pools and endpoint, its rgw document, the ingress that fronts it and their TLS bindings."""
     gateway = request.get("gateway")
-    require(isinstance(gateway, dict) and set(gateway) == MEMBERS)
+    require(isinstance(gateway, dict) and MEMBERS <= set(gateway) <= MEMBERS | {"authentication"})
+    ldap = validate_authentication(gateway)
     require(named(gateway["name"]) and label(gateway["name"]))
     require(all(label(gateway[key]) for key in ("realm", "zoneGroup", "zone")))
     placement = [gateway[key] for key in ("indexPool", "dataPool", "dataExtraPool")]
@@ -213,6 +283,8 @@ def validate(request, hosts):
     require(isinstance(documents, list) and 1 <= len(documents) <= (1 + len(stretch["dataSites"]) if stretch else 2))
     validate_document(documents[0], "rgw", request, hosts)
     validate_spec(documents[0]["spec"], gateway)
+    validate_auth_document(documents[0], ldap)
+    validate_auth_spec(documents[0]["spec"], ldap)
     for ingress in documents[1:]:
         validate_document(ingress, "ingress", request, hosts)
         validate_ingress(ingress["spec"], documents[0])
@@ -228,6 +300,8 @@ def validate(request, hosts):
                     and sorted(site for held in sites for site in held) == stretch["dataSites"])
         require(stretched or per_site)
     validate_bindings(gateway, documents)
+    front = documents[1:] or documents[:1]
+    require(ldap is None or all(document["spec"].get("ssl") is True for document in front))
 
 
 def site_of(request, name):
@@ -438,14 +512,43 @@ def frontends(request):
     return [(document, document["spec"]["frontend_port"]) for document in request["gateway"]["documents"][1:]]
 
 
+def auth_variables(gateway):
+    """The material variables of the gateway's LDAP leaves: the bind password and, with a trust bundle, the CA bundle."""
+    ldap = gateway.get("authentication", {}).get("ldap")
+    if ldap is None:
+        return {}
+    leaves = {"/custom_configs/0/content": "rgwLDAPBindPassword"}
+    if "trustSecretRef" in ldap:
+        leaves["/custom_configs/2/content"] = "rgwLDAPCABundle"
+    return leaves
+
+
+def bind_password(value):
+    """A bind password RGW reads back unchanged: one line of 1 to 1023 bytes of UTF-8 without leading or trailing whitespace."""
+    try:
+        data = value.encode("utf-8") if isinstance(value, str) else b""
+    except UnicodeError:
+        return False
+    return 0 < len(data) <= MAX_BIND and not any(char in value for char in "\x00\r\n") and value[0] not in SPACE and value[-1] not in SPACE
+
+
 def material(request, phase, private):
-    """The bound leaves a phase may hold: certificate and key to the service apply, the certificate to observation and removal."""
+    """The bound leaves a phase may hold: certificate, key and the LDAP leaves to the service apply, the certificate to observation and
+    removal."""
     require(isinstance(private, dict), "material")
     expected = set()
     if request["gateway"]["bindings"]:
         expected = {"gateway_service": {"gatewayCertificate", "gatewayKey"}, "observe": {"gatewayCertificate"},
                     "destroy": {"gatewayCertificate"}}.get(phase, set())
+    if phase == "gateway_service":
+        expected = expected | set(auth_variables(request["gateway"]).values())
     require(set(private) == expected, "material")
+    if "rgwLDAPBindPassword" in private:
+        require(bind_password(private["rgwLDAPBindPassword"]), "material")
+    if "rgwLDAPCABundle" in private:
+        bundle = private["rgwLDAPCABundle"]
+        require(isinstance(bundle, str) and 0 < len(bundle.encode("utf-8")) <= MAX_CERTIFICATE, "material")
+        leaf(bundle)
     if "gatewayCertificate" in private:
         leaf(private["gatewayCertificate"])
     if "gatewayKey" in private:
@@ -518,11 +621,17 @@ class ObjectWorker(ceph_native_units.UnitWorker):
     def bound_services(self):
         return sorted({binding["serviceRef"] for binding in self.gateway()["bindings"]})
 
+    def auth_leaves(self):
+        return auth_variables(self.gateway())
+
     def unit_groups(self):
-        """Each document; a TLS service's holds the placeholders, so the SDK, the records and every comparison see no leaf."""
+        """Each document; a TLS service's and the rgw document's LDAP leaves hold the placeholders, so the SDK, the records and every
+        comparison see no leaf."""
         bound = self.bound_services()
+        documents = list(self.gateway()["documents"])
+        documents[0] = ceph_native_units.placed(documents[0], sorted(self.auth_leaves()))
         return [[dict(document, spec=dict(document["spec"], **BOUND)) if ceph_native_units.service_name(document) in bound else document]
-                for document in self.gateway()["documents"]]
+                for document in documents]
 
     def leaves(self):
         require(isinstance(self.tls, dict) and "gatewayCertificate" in self.tls, "material")
@@ -533,7 +642,10 @@ class ObjectWorker(ceph_native_units.UnitWorker):
 
     def splice(self, value):
         """The apply stream's copy of one normalized document, the bound leaves in place of their placeholders; never recorded."""
-        if ceph_native_units.service_name(value) not in self.bound_services():
+        name = ceph_native_units.service_name(value)
+        if name == self.unit_names()[0] and self.auth_leaves():
+            value = self.splice_auth(value)
+        if name not in self.bound_services():
             return value
         spec = value.get("spec")
         require(isinstance(spec, dict) and all(spec.get(member) == placeholder for member, placeholder in BOUND.items()), "native-output")
@@ -541,11 +653,47 @@ class ObjectWorker(ceph_native_units.UnitWorker):
         require("gatewayKey" in bound, "material")
         return dict(value, spec=dict(spec, ssl_cert=bound["gatewayCertificate"], ssl_key=bound["gatewayKey"]))
 
+    def splice_auth(self, value):
+        """The rgw document with each LDAP leaf in place of its placeholder, from this phase's held material."""
+        value = json.loads(canonical(value))
+        held = self.tls if isinstance(self.tls, dict) else {}
+        for path, variable in sorted(self.auth_leaves().items()):
+            present, found = ceph_native_units.leaf(value, path)
+            require(present and found == ceph_native_units.placeholder(path), "native-output")
+            require(variable in held, "material")
+            parts = path.split("/")[1:]
+            target = value
+            for part in parts[:-1]:
+                unused, target = ceph_native_units.step(target, part)
+            target[parts[-1]] = held[variable]
+        return value
+
     def tls_specs(self, stored):
-        """Each stored TLS service in placeholder form: its leaves omitted, or equal to the bound ones; any other leaf is not this Secret's."""
+        """Each stored TLS service in placeholder form: its leaves omitted, or equal to the bound ones; any other leaf is not this Secret's.
+        The rgw service's LDAP leaves likewise, once this operation's attempt record covers it."""
         for bound in self.bound_services():
             stored = self.tls_spec(stored, bound)
-        return stored
+        return self.auth_spec(stored)
+
+    def auth_spec(self, stored):
+        """The stored rgw service with its LDAP leaves in placeholder form when each is a string equal to the held one (any string where the
+        phase holds none); a differing leaf is not its Secret's. A stored service missing a leaf stays as stored, so the record checks refuse it.
+        Only a service this operation's attempt record covers is compared, so a foreign one is refused as foreign first."""
+        leaves = self.auth_leaves()
+        name = self.unit_names()[0]
+        value = stored.get(name)
+        if not leaves or not isinstance(value, dict) or self.markers.read("service-" + name + "-attempt.json") is None:
+            return stored
+        held = {key: item for key, item in (self.tls or {}).items() if key in leaves.values()}
+        found = [(path, variable) + ceph_native_units.leaf(value, path) for path, variable in sorted(leaves.items())]
+        if not all(present and isinstance(current, str) for unused, unused_variable, present, current in found):
+            return stored
+        for path, variable, unused, current in found:
+            same = bool(current) and (variable not in held or hmac.compare_digest(
+                current.encode("utf-8", "surrogatepass"), held[variable].encode("utf-8", "surrogatepass")))
+            if not same:
+                raise NativeFailure("object-auth-credential", self.native_coordinate(), name + " " + path, secrets=tuple(held.values()))
+        return dict(stored, **{name: ceph_native_units.placed(value, sorted(leaves))})
 
     def tls_spec(self, stored, bound):
         value = stored.get(bound)
@@ -828,6 +976,8 @@ class ObjectWorker(ceph_native_units.UnitWorker):
         self.unit_records(values, observed, scope)
         names = self.unit_names()
         missing = [(name, value) for name, value in zip(names, values) if name not in observed]
+        if names[0] in dict(missing):
+            self.foreign_auth_config()
         for name, value in missing:
             self.markers.write("service-" + name + "-attempt.json", {"scope": scope, "service": value})
         if missing:
@@ -838,6 +988,123 @@ class ObjectWorker(ceph_native_units.UnitWorker):
         for name, value in zip(names, values):
             self.markers.write("service-" + name + "-complete.json", {"scope": scope, "service": value})
         return {"changed": bool(missing)}
+
+    def auth_options(self):
+        """The RGW options the rgw document's spec.config freezes, or none without LDAP authentication."""
+        return self.gateway()["documents"][0]["spec"].get("config", {})
+
+    def auth_section(self):
+        return "client." + self.unit_names()[0]
+
+    def auth_entries(self):
+        """The configuration database's entries of the frozen options for this service's daemons: its section or a daemon's below it."""
+        options, section = self.auth_options(), self.auth_section()
+        rows = self.ceph("config", "dump")
+        require(isinstance(rows, list) and all(isinstance(row, dict) for row in rows), "native-output")
+        return [row for row in rows if row.get("name") in options and isinstance(row.get("section"), str)
+                and (row["section"] == section or row["section"].startswith(section + "."))]
+
+    def foreign_auth_config(self):
+        """Before the rgw service's first attempt: no frozen option is set for its daemons yet, since cephadm would then keep a value this
+        operation never wrote and the gateway never adopts one. Names and sections only reach the refusal, never a value."""
+        if self.auth_options() and self.markers.read("service-" + self.unit_names()[0] + "-attempt.json") is None:
+            entries = self.auth_entries()
+            if entries:
+                raise NativeFailure("object-auth-config", self.native_coordinate(),
+                                    ", ".join(sorted({row["name"] + " at " + row["section"] for row in entries})))
+
+    def auth_config_ready(self):
+        """Read-only: every frozen option once at the service's section without a mask and with its frozen value, as cephadm sets spec.config;
+        an absent one is pending, and another value, section or mask is drift."""
+        options, section = self.auth_options(), self.auth_section()
+        entries = self.auth_entries()
+        held = {}
+        for row in entries:
+            name = row["name"]
+            if row["section"] != section or row.get("mask") or name in held or row.get("value") != options[name] or any(
+                    field in row for field in ("location_type", "location_value", "device_class")):
+                raise NativeFailure("object-auth-config", self.native_coordinate(), name + " at " + row["section"])
+            held[name] = True
+        if set(held) != set(options):
+            self.pending("ldap@" + self.unit_names()[0])
+            return False
+        return True
+
+    def auth_ready(self, running):
+        """Without LDAP authentication nothing; with it, the stored options and each running rgw daemon's readback."""
+        if not self.auth_options():
+            return True
+        with self.manager_served():
+            stored = self.auth_config_ready()
+        started = [row for row in running if row["service_name"] == self.unit_names()[0] and row["daemon_type"] == "rgw"
+                   and type(row.get("status")) is int and row["status"] == 1]
+        return stored and self.daemon_auth(started)
+
+    def daemon_option(self, who, option):
+        """One option of a running daemon as the manager reports it: its one-line text, or None when the manager reports none."""
+        absent = []
+
+        def recover(code, unused):
+            absent.append(code == CONFIG_SHOW_ENOENT)
+            return absent[-1]
+
+        with self.bootstrap_hold():
+            output = self.command([*self.admin_argv("/usr/bin/ceph"), "config", "show", who, option], json_result=False, recover=recover)
+        if absent and absent[-1]:
+            return None
+        require(isinstance(output, bytes) and len(output) <= MAX_OPTION + 1 and output.endswith(b"\n"), "native-output")
+        try:
+            return output[:-1].decode("utf-8")
+        except UnicodeError:
+            raise Refusal("native-output") from None
+
+    def daemon_auth(self, rows):
+        """Read-only: each running rgw daemon reads every frozen option, and its sign-in order still reaches local users; a daemon that does not
+        read them yet is pending, and one whose order lost local refuses."""
+        ready = True
+        for row in rows:
+            who = "client.rgw." + row["daemon_id"]
+            with self.manager_served():
+                lagging = any(self.daemon_option(who, option) != value for option, value in sorted(self.auth_options().items()))
+                order, rados = self.daemon_option(who, "rgw_s3_auth_order"), self.daemon_option(who, "rgw_s3_auth_use_rados")
+            if order is not None and "local" not in re.split(r"[\s,]+", order) or rados not in (None, "true"):
+                raise NativeFailure("object-auth-config", self.native_coordinate(), who + " rgw_s3_auth_order or rgw_s3_auth_use_rados")
+            if lagging:
+                ready = False
+                self.pending("ldap@" + self.unit_names()[0])
+        return ready
+
+    def gateway_auth_mounts(self):
+        """Read-only, on one rgw host once the gateway reads ready: this host's running rgw containers of the gateway's service, each
+        attributed by the daemon directory its ceph.conf mount names, and how many of them prove every derived file mounted. No path or byte
+        is returned."""
+        document = self.gateway()["documents"][0]
+        ldap = self.gateway().get("authentication", {}).get("ldap")
+        require(ldap is not None and self.host["name"] in document["placement"]["hosts"])
+        fsid = self.request["fsid"]
+        expected = {LDAP_BIND: (MAX_BIND, None), LDAP_CONF: (MAX_OPTION, ldap_conf("trustSecretRef" in ldap).encode("ascii"))}
+        if "trustSecretRef" in ldap:
+            expected[LDAP_CA] = (MAX_CERTIFICATE, None)
+        daemon_id = re.compile(re.escape(document["service_id"]) + r"\." + re.escape(self.host["name"].split(".")[0]) + r"\.[a-z]{6}")
+        config = re.compile(re.escape(ceph_native_observability.DATA_ROOT + "/" + fsid + "/rgw.") + r"([A-Za-z0-9][A-Za-z0-9_.-]{0,250})/config")
+        prefix = "ceph-" + fsid + "-rgw"
+        rows = self.command([ceph_native_units.PODMAN, "ps", "--all", "--format", "json", "--filter", "name=^" + prefix + "[.-]"],
+                            timeout=ceph_native_units.SSO_TIMEOUT)
+        require(isinstance(rows, list) and len(rows) <= MAX_RGW_CONTAINERS and all(isinstance(row, dict) for row in rows), "native-output")
+        daemons = proved = 0
+        for row in rows:
+            identifier = row.get("Id")
+            if row.get("State") != "running":
+                continue
+            require(isinstance(identifier, str) and ceph_native_units.CONTAINER_ID.fullmatch(identifier) is not None, "native-output")
+            inspected = self.command([ceph_native_units.PODMAN, "inspect", "--type", "container", identifier], timeout=ceph_native_units.SSO_TIMEOUT)
+            require(isinstance(inspected, list) and len(inspected) == 1 and isinstance(inspected[0], dict), "native-output")
+            sources = [config.fullmatch(source) for target, source in proxy_container(inspected[0])[3] if target == "/etc/ceph/ceph.conf"]
+            if len(sources) != 1 or sources[0] is None or daemon_id.fullmatch(sources[0].group(1)) is None:
+                continue
+            daemons += 1
+            proved += mount_proved(fsid, inspected[0], sources[0].group(1), expected)
+        return {"changed": False, "daemons": daemons, "proved": proved}
 
     def unfinished(self, evidence):
         if self.request["action"] != "gateway":
@@ -879,11 +1146,12 @@ class ObjectWorker(ceph_native_units.UnitWorker):
             answered = [self.endpoint_ready(document) for document in documents[1:]]
             ingress, reachable = all(fronted), all(answered)
         root = self.stretch_root_ready()
+        auth = not (owned and proved and backend) or self.auth_ready(running)
         tls = bool(self.bound_services())
         evidence["endpoint"] = {"certificateSHA256": self.leaf_digest() if tls and reachable else "", "reachable": reachable}
         evidence["daemons"] = sorted(({"host": row["hostname"], "name": row["daemon_type"] + "." + row["daemon_id"], "service": row["service_name"]}
                                       for row in running), key=lambda item: item["name"])[:ceph_native_units.MAX_DAEMONS]
-        return ready and owned and proved and backend and ingress and reachable and root
+        return ready and owned and proved and backend and ingress and reachable and root and auth
 
     def observe_gateway(self, evidence, ids, specs):
         """Read-only: the recorded IDs, the zone's pools and placement, membership, the committed period and every service record."""
@@ -961,6 +1229,80 @@ class ObjectWorker(ceph_native_units.UnitWorker):
         if blocked is not None:
             self.pending(("tls@" if blocked == "tls" else "vip@") + name)
         return blocked is None
+
+
+def mounted_file(fsid, source, limit):
+    """(bytes, modification time in nanoseconds, SELinux label) of a regular, singly linked file beneath DATA_ROOT/<fsid>/ owned by the image's
+    ceph user with mode 0600 and 1 to limit bytes, opened component by component without following a link; else None."""
+    root = ceph_native_observability.DATA_ROOT
+    parts = source[len(root) + 1:].split("/") if isinstance(source, str) and source.startswith(root + "/" + fsid + "/") else [""]
+    if any(part in ("", ".", "..") for part in parts):
+        return None
+    descriptors = opened_beneath(parts[:-1])
+    if descriptors is None:
+        return None
+    try:
+        descriptor = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC, dir_fd=descriptors[-1])
+        with os.fdopen(descriptor, "rb") as handle:
+            before = os.fstat(handle.fileno())
+            if not (stat.S_ISREG(before.st_mode) and before.st_nlink == 1 and before.st_uid == CEPH_UID and stat.S_IMODE(before.st_mode) == 0o600
+                    and 0 < before.st_size <= limit):
+                return None
+            value = handle.read(limit + 1)
+            label = selinux_label(handle.fileno())
+            if len(value) != before.st_size or file_identity(os.fstat(handle.fileno())) != file_identity(before):
+                return None
+            return value, before.st_mtime_ns, label
+    except OSError:
+        return None
+    finally:
+        for descriptor in descriptors:
+            os.close(descriptor)
+
+
+def selinux_label(descriptor):
+    """A file's SELinux label, or the empty bytes where the host keeps none."""
+    try:
+        return os.getxattr(descriptor, "security.selinux")
+    except OSError:
+        return b""
+
+
+def keyring_label(fsid, daemon):
+    """The SELinux label of the daemon's own keyring, which cephadm writes for the same container; read by its descriptor, never its bytes."""
+    descriptors = opened_beneath([fsid, "rgw." + daemon])
+    if descriptors is None:
+        return None
+    try:
+        descriptor = os.open("keyring", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC, dir_fd=descriptors[-1])
+        try:
+            return selinux_label(descriptor) if stat.S_ISREG(os.fstat(descriptor).st_mode) else None
+        finally:
+            os.close(descriptor)
+    except OSError:
+        return None
+    finally:
+        for descriptor in descriptors:
+            os.close(descriptor)
+
+
+def mount_proved(fsid, inspected, daemon, expected):
+    """Whether one running rgw container mounts each derived file from cephadm's custom config directory of its daemon, each owned by the
+    ceph user with mode 0600 and the keyring's SELinux label, ldap.conf holding exactly its frozen bytes, and started after every file was
+    written; no path or byte leaves this function."""
+    unused, unused_environment, unused_user, mounts = proxy_container(inspected)
+    state = inspected.get("State")
+    started = started_ns(state.get("StartedAt")) if isinstance(state, dict) else None
+    label = keyring_label(fsid, daemon)
+    if started is None or label is None:
+        return False
+    directory = ceph_native_observability.DATA_ROOT + "/" + fsid + "/custom_config_files/rgw." + daemon + "/"
+    for destination, (limit, content) in expected.items():
+        sources = [source for target, source in mounts if target == destination]
+        found = mounted_file(fsid, sources[0], limit) if sources == [directory + destination.rsplit("/", 1)[1]] else None
+        if found is None or found[1] > started or found[2] != label or content is not None and found[0] != content:
+            return False
+    return True
 
 
 class UserWorker(ObjectWorker):

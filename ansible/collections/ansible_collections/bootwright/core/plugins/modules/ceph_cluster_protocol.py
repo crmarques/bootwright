@@ -104,6 +104,8 @@ options:
       - object-realm-foreign
       - object-zone-pools
       - object-endpoint-certificate
+      - object-auth-credential
+      - object-auth-config
       - object-user-foreign
       - object-user-identity
       - object-bucket-foreign

@@ -341,6 +341,7 @@ Alias cell.
 | [B1805](#b1805) | new, 2026-11-24 (an operator run) | product | Storage | The management gateway listens only on its virtual IP, so it can share hosts and port 443 with an object gateway ingress | The gateway can use a separate port; it needs an owned cephadm template override |
 | [B1837](#b1837) | new, 2026-11-25 (D287) | product | Storage | An object gateway's STS trusts an `OIDCProvider` whose certificate chains to a private CA | RGW can only replace its whole curl CA bundle, so admitting the provider's bundle would drop every public anchor |
 | [B1838](#b1838) | new, 2026-11-25 (D287) | product | Storage | A `CephSignOn` names the claim path its users' dashboard roles come from | cephadm loses a `roles_path` set on a fresh single sign-on database when a manager restarts |
+| [B1839](#b1839) | new, 2026-11-25 (X739) | product | Storage | A completed object gateway rotates its LDAP bind password, its directory's CA bundle or its STS key in place | The leaves are effect material the gateway block placed; revive when an owner asks for in-place rotation |
 
 ### B82
 
@@ -3740,6 +3741,20 @@ lost when a manager restarts
 ([management gateway](../ceph.md#management-gateway)). Parked by
 [D287](#d287) until a build keeps the setting. **Exit evidence:** a sign-on
 with a declared path whose roles map after a manager failover.
+
+### B1839
+
+**Owner:** Storage. **Kind:** product. **Requires:** [B1833](m2.md#b1833).
+**Definition:** Candidate. **Outcome:** a completed CephObjectGateway takes a
+new LDAP bind password, a new trust bundle of its `LDAPServer` or, after
+[B1834](m2.md#b1834), a new STS key without a destroy. Each leaf is effect
+material the gateway block placed in its rgw service
+([CephObjectGateway](../ceph-resources.md#cephobjectgateway-field-record)), so
+today rotating one needs `bootwright destroy` and a fresh apply, which an
+Active Directory password policy makes routine. Parked by X739 until an owner
+asks for in-place rotation. **Exit evidence:** a rotation that re-applies the
+stored service with the new leaf under its own attempt record, proves every
+daemon restarted with it, and leaves local users working throughout.
 
 ## Audit remediation (2026-10-26)
 

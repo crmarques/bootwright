@@ -2231,6 +2231,47 @@ custody. Access resolves the selected owned cluster, native tool and trust under
 [the access contract](cli.md#resource-inspection-and-explicit-access). Health
 inspection never mutates or reveals keys.
 
+## Object gateway authentication
+
+The [object gateway](#object-gateway) block realizes a gateway's LDAP sign-in.
+
+A gateway with [`authentication.ldap`](ceph-resources.md#cephobjectgateway-authentication)
+carries in its request the LDAPServer's name and the Secret references of its
+bind password and optional trust bundle, never their values, and its rgw
+document carries the derived `spec.config` options and the three
+`custom_configs` mount paths, only `ldap.conf` with its frozen content. The bind
+password and the CA bundle are bound to `gateway_service` only, never to an
+observation or removal. The worker normalizes and records the document with the
+placeholders `bootwright-bound:/custom_configs/0/content` and
+`bootwright-bound:/custom_configs/2/content` and splices the leaves into the one
+`ceph orch apply -i -` stream in memory, as it does the TLS leaves. Readback
+compares each stored leaf of a service this operation's attempt record covers
+with the held one (`hmac`), or, holding none, requires a string, then puts the
+placeholder back before any record or comparison; a stored leaf other than the
+Secret's refuses `object-auth-credential`, naming the service and pointer and
+redacting the value, and a stored service without a leaf is a `foreign-service`.
+Before the rgw service's first attempt, `gateway_service` reads `ceph config
+dump` and refuses `object-auth-config`, naming each option and section, when
+any frozen option is already set at `client.rgw.<service_id>` or a daemon's
+section below it, so no value this operation did not write is adopted.
+Readiness and observation then need each frozen option once at that section,
+without a mask and with its frozen value (`ldap@rgw.<id>` while cephadm has not
+set it, `object-auth-config` for another value, section or mask); each running
+rgw daemon's `ceph config show client.rgw.<daemon> <option>`, served by the
+manager, reading every frozen option (`ldap@rgw.<id>` until it does); and its
+`rgw_s3_auth_order` still holding `local` and `rgw_s3_auth_use_rados` true or
+unset, else `object-auth-config`, because that is the local-user fallback.
+Readiness never contacts the directory. Once the gateway reads ready, an apply
+asks every rgw host concurrently, in the phase `gateway_auth_mounts`, to prove
+from Podman that each running container of the service, attributed by the
+daemon directory its `/etc/ceph/ceph.conf` mount names, mounts each derived file
+from `/var/lib/ceph/<fsid>/custom_config_files/rgw.<daemon>/`, each a regular
+file with one link owned by the image's ceph user (167) with mode 0600 and the
+SELinux label of the daemon's keyring, `ldap.conf` holding its frozen bytes, and
+was started after every file was written; the round answers counts only, never
+a path or byte, and readiness waits on `mount@rgw.<id>` until the placement
+count proves.
+
 ## Management gateway
 
 The management gateway unit `ceph-service-<cluster>-mgmt-gateway` runs its

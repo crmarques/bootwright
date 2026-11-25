@@ -42,7 +42,7 @@ var actions = map[string]actionRow{
 		fixedDeadline(objectBucketDeadline), api.CephObjectBucket, objectBucketScopeText),
 	"gateway": {arm: func(r Request) bool { return r.Gateway != nil }, resource: gatewayResource,
 		scope: ownScope(func(r Request) bool { return r.Gateway != nil }, gatewayResource), ready: gatewayReady,
-		deadline: fixedDeadline(gatewayDeadline), scopeKind: api.CephObjectGateway, scopeText: gatewayScopeText},
+		deadline: gatewayDeadline, scopeKind: api.CephObjectGateway, scopeText: gatewayScopeText},
 }
 
 func numbered(arm func(Request) bool, object func(Request) string, id *regexp.Regexp, kind api.Kind, text func(Request) string) actionRow {

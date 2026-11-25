@@ -11,6 +11,14 @@ pools at the cluster's 2/2 defaults. The service binds `/spec/ssl_cert` and
 `/spec/ssl_key` to the generated `tlsCertificate` Secret `rgw-objects-tls`,
 whose only DNS name is the endpoint.
 
+The gateway also signs S3 users in through the Active Directory
+[`LDAPServer`](../../../specs/api/infrastructure-services.md#oidcprovider-and-ldapserver)
+`lab-directory` ([authentication](../../../specs/ceph-resources.md#cephobjectgateway-field-record)):
+RGW binds as `CN=svc ceph` with the password stored in the context Secret
+`lab-directory-bind` and verifies `dc-01.lab.example.test` against the image's
+system trust store. Local CephObjectUser keys keep working while the directory
+is down.
+
 ## Worth noting
 
 - Topology: `rhel-01` to `rhel-03`, each 4 vCPU, 8 GiB RAM, 60 GiB root and
@@ -22,8 +30,12 @@ whose only DNS name is the endpoint.
   [realized](../../../specs/ceph.md) but this example does not declare them.
 - The endpoint name is not published to DNS. To use your own certificate,
   replace the Secret's `source`; it must name the endpoint.
-- Required inputs: RHEL 9.8 boot and DVD ISOs from your Red Hat subscription
-  and the IBM entitlement key for Secret `ibm-registry`. The Entitlement
+- Required inputs: RHEL 9.8 boot and DVD ISOs from your Red Hat subscription,
+  the IBM entitlement key for Secret `ibm-registry` and the directory bind
+  password for Secret `lab-directory-bind`, stored with `bootwright secret set
+  --name lab-directory-bind --value-stdin`. Point `lab-directory` at your own
+  directory, or remove `spec.authentication` from the gateway and the
+  `LDAPServer` with its Secret. The Entitlement
   `license.accept: true` is a placeholder; review IBM's terms before use.
 - Release coordinates are the three-node example's authored choices.
 

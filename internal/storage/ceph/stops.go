@@ -75,7 +75,7 @@ var (
 		Meaning: "a Ceph cluster would be removed while hosts that outlive the destroy still run it: Bootwright-owned virtual hosts, physical hosts whose original erase policy and verified erase receipt are missing, or a physical CephConsumer", Remedy: "remove the cluster in the same destroy as every Bootwright-owned virtual host Machine it runs on; for physical hosts, supply the original erase policy of every host and its terminal verified erase receipt; retain the context while a physical CephConsumer uses the cluster"}
 	cephSecretInvalid = diagnostics.Stop{Code: "ceph.secret-invalid", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
-		Meaning: "a Secret a CephSMBResource binds is not a value the adapter can lend", Remedy: "bind a Secret holding one line of 1 to 1024 bytes of UTF-8 text"}
+		Meaning: "a Secret a CephSMBResource binds, or an LDAPServer names for a CephObjectGateway's authentication, is not a value the adapter can lend", Remedy: "bind a Secret holding what the refusal names: one line of 1 to 1024 bytes of UTF-8 text for an SMB password, one line of 1 to 1023 bytes without leading or trailing whitespace for an LDAP bind password, or parsable PEM certificates for an LDAP trust bundle"}
 	cephStretchIntent = diagnostics.Stop{Code: "ceph.stretch-intent-changed", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
 		Meaning: "the stretch topology the input declares differs from the intent the cluster was created with", Remedy: "restore the stretch topology the cluster was created with"}

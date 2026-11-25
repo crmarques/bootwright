@@ -18,7 +18,8 @@ func ldapServerSchema() *Shape {
 		required("management", enumeration("managed", "external")),
 		required("urls", nonemptyArray(set(lexical(LexicalLDAPURL)))),
 		field("trustBundleRef", secret("caBundle", "trustBundle")),
-		required("bindCredentialsRef", secret("usernamePassword")),
+		required("bindDN", lexical(LexicalLDAPDN)),
+		required("bindPasswordRef", secret("opaque", "token")),
 		required("users", record(required("baseDN", lexical(LexicalLDAPDN)), required("nameAttribute", lexical(LexicalLDAPAttribute)), field("filter", lexical(LexicalLDAPFilter)))),
 		field("activeDirectory", record(required("realm", lexical(LexicalRealm)))),
 	)

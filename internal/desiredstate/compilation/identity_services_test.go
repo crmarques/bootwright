@@ -18,6 +18,11 @@ spec: {type: caBundle}
 apiVersion: bootwright.io/v1alpha1
 kind: Secret
 metadata: {name: directory-bind}
+spec: {type: opaque}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata: {name: directory-login}
 spec: {type: usernamePassword}
 ---
 apiVersion: bootwright.io/v1alpha1
@@ -35,12 +40,13 @@ func ldapSpec(replace map[string]string) string {
 		"management": "  management: external\n",
 		"urls":       "  urls: [ldaps://dc-01.example.test:636, ldaps://dc-02.example.test]\n",
 		"trust":      "  trustBundleRef: directory-ca\n",
-		"bind":       "  bindCredentialsRef: directory-bind\n",
+		"dn":         "  bindDN: \"CN=svc ceph,OU=Service Accounts,DC=example,DC=test\"\n",
+		"bind":       "  bindPasswordRef: directory-bind\n",
 		"users":      "  users: {baseDN: \"OU=People,DC=example,DC=test\", nameAttribute: sAMAccountName, filter: \"(memberOf=CN=ceph,DC=example,DC=test)\"}\n",
 		"ad":         "  activeDirectory: {realm: EXAMPLE.TEST}\n",
 	}
 	var spec strings.Builder
-	for _, key := range []string{"management", "urls", "trust", "bind", "users", "ad"} {
+	for _, key := range []string{"management", "urls", "trust", "dn", "bind", "users", "ad"} {
 		line, replaced := replace[key]
 		if !replaced {
 			line = lines[key]
@@ -94,8 +100,11 @@ func TestIdentityServiceRefusalsNameTheirFieldAndNeverTheValue(t *testing.T) {
 		{"duplicate urls", identityObject("LDAPServer", ldapSpec(map[string]string{"urls": "  urls: [ldaps://dc-01.example.test, ldaps://dc-01.example.test]\n"})), "api.duplicate", "$.spec.urls[1]", ""},
 		{"empty urls", identityObject("LDAPServer", ldapSpec(map[string]string{"urls": "  urls: []\n"})), "", "$.spec.urls", ""},
 		{"missing urls", identityObject("LDAPServer", ldapSpec(map[string]string{"urls": ""})), "api.required", "$.spec.urls", ""},
-		{"missing bind credentials", identityObject("LDAPServer", ldapSpec(map[string]string{"bind": ""})), "api.required", "$.spec.bindCredentialsRef", ""},
-		{"bind credentials of the wrong type", identityObject("LDAPServer", ldapSpec(map[string]string{"bind": "  bindCredentialsRef: directory-ca\n"})), "api.reference", "$.spec.bindCredentialsRef", ""},
+		{"missing bind DN", identityObject("LDAPServer", ldapSpec(map[string]string{"dn": ""})), "api.required", "$.spec.bindDN", ""},
+		{"bind DN over 1024 bytes", identityObject("LDAPServer", ldapSpec(map[string]string{"dn": "  bindDN: \"CN=" + strings.Repeat("a", 1030) + "\"\n"})), "api.value", "$.spec.bindDN", ""},
+		{"bind DN with a control character", identityObject("LDAPServer", ldapSpec(map[string]string{"dn": "  bindDN: \"CN=svc\\tceph\"\n"})), "api.value", "$.spec.bindDN", ""},
+		{"missing bind password", identityObject("LDAPServer", ldapSpec(map[string]string{"bind": ""})), "api.required", "$.spec.bindPasswordRef", ""},
+		{"bind password of the wrong type", identityObject("LDAPServer", ldapSpec(map[string]string{"bind": "  bindPasswordRef: directory-login\n"})), "api.reference", "$.spec.bindPasswordRef", ""},
 		{"empty base DN", identityObject("LDAPServer", ldapSpec(map[string]string{"users": "  users: {baseDN: \"\", nameAttribute: uid}\n"})), "", "$.spec.users.baseDN", ""},
 		{"base DN over 1024 bytes", identityObject("LDAPServer", ldapSpec(map[string]string{"users": "  users: {baseDN: \"DC=" + strings.Repeat("a", 1030) + "\", nameAttribute: uid}\n"})), "api.value", "$.spec.users.baseDN", ""},
 		{"name attribute with a space", identityObject("LDAPServer", ldapSpec(map[string]string{"users": "  users: {baseDN: \"DC=example\", nameAttribute: \"sam account\"}\n"})), "api.value", "$.spec.users.nameAttribute", ""},
@@ -125,7 +134,7 @@ func TestIdentityServiceRefusalsNameTheirFieldAndNeverTheValue(t *testing.T) {
 				t.Fatalf("no %s diagnostic at %s: %#v", test.code, test.field, sink)
 			}
 			for _, d := range sink {
-				for _, leaked := range []string{"secret@", "admin:secret", "@USERNAME@", "memberOf", "OU=People"} {
+				for _, leaked := range []string{"secret@", "admin:secret", "@USERNAME@", "memberOf", "OU=People", "Service Accounts"} {
 					if strings.Contains(d.Message+d.Remediation, leaked) {
 						t.Errorf("a diagnostic echoes %q: %s / %s", leaked, d.Message, d.Remediation)
 					}

@@ -1,0 +1,20 @@
+apiVersion: bootwright.io/v1alpha1
+kind: LDAPServer
+metadata:
+  name: lab-directory
+
+spec:
+  management: external
+
+  urls:
+    - ldaps://dc-01.lab.example.test:636
+  bindDN: CN=svc ceph,OU=Service Accounts,DC=lab,DC=example,DC=test
+  bindPasswordRef: lab-directory-bind
+
+  users:
+    baseDN: OU=People,DC=lab,DC=example,DC=test
+    nameAttribute: sAMAccountName
+    filter: (memberOf=CN=ceph-object-users,OU=Groups,DC=lab,DC=example,DC=test)
+
+  activeDirectory:
+    realm: LAB.EXAMPLE.TEST

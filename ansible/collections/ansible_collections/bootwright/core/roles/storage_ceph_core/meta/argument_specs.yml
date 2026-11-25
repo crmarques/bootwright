@@ -164,6 +164,20 @@ argument_specs:
           gateway:
             type: dict
             options:
+              authentication:
+                type: dict
+                options:
+                  ldap:
+                    type: dict
+                    options:
+                      bindSecretRef:
+                        type: str
+                        required: true
+                      server:
+                        type: str
+                        required: true
+                      trustSecretRef:
+                        type: str
               bindings:
                 type: list
                 elements: dict

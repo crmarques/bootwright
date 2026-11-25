@@ -10,7 +10,8 @@ spec:
     - ldaps://dc-01.corp.example.com:636
     - ldaps://dc-02.corp.example.com:636
   trustBundleRef: custom-ca-bundle
-  bindCredentialsRef: corp-directory-bind-credentials
+  bindDN: CN=svc ceph,OU=Service Accounts,DC=corp,DC=example,DC=com
+  bindPasswordRef: corp-directory-bind-password
 
   users:
     baseDN: OU=People,DC=corp,DC=example,DC=com

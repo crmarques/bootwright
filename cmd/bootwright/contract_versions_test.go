@@ -399,6 +399,8 @@ func automationIdentities() map[string]automationFormat {
 		"/etc/bootwright/host-key.pub":               validated("the host key path every installation request must name, and the guest agent may read"),
 		"/etc/bootwright/network.yml":                validated("the network document path every installation request must name"),
 		"/etc/bootwright/network-marker.json":        validated("the network marker path every installation request must name"),
+		"/etc/bootwright/rgw-ldap-bind":              validated("the bind password mount path every LDAP object gateway request must name"),
+		"/etc/bootwright/rgw-ldap-ca.pem":            validated("the CA bundle mount path an LDAP object gateway request with a trust bundle must name"),
 		"bootwright-%s-%s-firewalld-ready.service":   validated("the readiness unit name a libvirt host request must carry"),
 		"bootwright-%s-%s-vlan-refusal.service":      validated("the VLAN refusal unit name a libvirt host request must carry"),
 		"bootwright-%s-%s":                           validated("the VLAN leg connection name a libvirt host request must carry"),

@@ -45,6 +45,8 @@ SSO_PAUSE = 10
 ROUTE_CALL = 120
 ROUTE_ENTRY = "route@mgmt-gateway"
 ROUTES = frozenset(ceph_native_observability.GATEWAY_ROUTES)
+# One read-only round over the rgw hosts of a gateway with LDAP authentication, inside its readiness wait.
+MOUNT_CALL = 120
 # One diff observation's host reading (state-reconciliation.md, Reading the real side live): the `hosts` reading of a resource block reads
 # each host's state once, and every resource block of the same scope replays it in place of its own host reads. Its Go caller
 # (decodeHostReading in internal/storage/ceph) decodes the same closed members; it lives within that one diff and is never stored.
@@ -82,7 +84,8 @@ CLUSTER_REASONS = (
     "remote-refusal", "adapter-exception", "foreign-client", "foreign-pool", "foreign-profile", "foreign-rule", "crush-capacity", "pg-budget",
     "foreign-rbd-image", "rbd-image-identity", "foreign-filesystem", "filesystem-identity", "filesystem-multiple-disabled", "foreign-subvolume-group",
     "mds-coverage", "foreign-subvolume", "subvolume-identity", "foreign-image", "nfs-module-disabled", "nfs-pool-foreign", "object-realm-foreign",
-    "object-zone-pools", "object-endpoint-certificate", "object-user-foreign", "object-user-identity", "object-bucket-foreign",
+    "object-zone-pools", "object-endpoint-certificate", "object-auth-credential", "object-auth-config", "object-user-foreign", "object-user-identity",
+    "object-bucket-foreign",
     "object-bucket-identity", "object-bucket-s3", "nfs-export-foreign", "nfs-export-apply", "nfs-export-path-escape", "nfs-export-realm-default",
     "nvmeof-native", "nvmeof-identity", "nvmeof-foreign", "nvmeof-budget",
     "monitoring-login-unsupported",
@@ -1024,6 +1027,33 @@ class GrafanaRoutes:
         return daemons, served
 
 
+class GatewayMounts:
+    """One apply's proof that every placed rgw daemon of a gateway with LDAP authentication runs with its derived files mounted, inside the
+    readiness wait once the gateway reads ready, so it never shortens or extends that wait: each call asks every rgw host concurrently."""
+
+    def __init__(self, request, transport):
+        self.request, self.transport = request, transport
+
+    def __call__(self, deadline, now):
+        """The blocking entries: none once each placed daemon proved its mounts; None when the window closed first."""
+        remaining = deadline - now()
+        if remaining <= 0:
+            return None
+        document = self.request["gateway"]["documents"][0]
+        hosts = {host["name"]: host for host in self.request["hosts"]}
+        daemons = proved = 0
+        for result in host_round(self.transport, [hosts[name] for name in document["placement"]["hosts"]], "gateway_auth_mounts",
+                                 timeout=min(MOUNT_CALL, remaining)):
+            ceph_native.require(isinstance(result, dict) and set(result) == {"changed", "daemons", "proved"} and result["changed"] is False
+                                and type(result["daemons"]) is int and type(result["proved"]) is int
+                                and 0 <= result["proved"] <= result["daemons"], "evidence")
+            daemons += result["daemons"]
+            proved += result["proved"]
+        if proved == daemons == ceph_native_observability.placed_count(document):
+            return []
+        return ["mount@" + ceph_native_units.service_name(document)]
+
+
 def wait_unit(request, request_digest, bootstrap, transport, now, pause, *, private=None, remedy=None, routes=None):
     """Poll the unit's own observation until ready and, with an ingress, until each virtual IP has exactly one holder; a timeout names the
     daemons, endpoint, holder or health checks still blocking. While an observation names lagging MGR ports, an apply's remedy runs
@@ -1284,16 +1314,20 @@ def execute_gateway(request, operation, request_digest, transport, bootstrap, *,
     host first, then zone, placement and its services. With TLS the certificate reaches every observation and removal, and the private key only
     the service apply."""
     seen = transport.gateway_material(False) if request["gateway"]["bindings"] else None
+    authenticated = "authentication" in request["gateway"]
     changed, pending = False, []
     if operation == "apply":
         transport.call(bootstrap, "prerequisites")
         ingress_firewall(request, transport, ingress_fronts(request))
         for phase in ceph_native_object.APPLY_PHASES:
-            private = transport.gateway_material(True) if seen and phase == "gateway_service" else None
+            private = None
+            if phase == "gateway_service" and (seen or authenticated):
+                private = dict(transport.gateway_material(True) if seen else {}, **(transport.gateway_auth_material() if authenticated else {}))
             produced = transport.call(bootstrap, phase, private) if private else transport.call(bootstrap, phase)
             ceph_native.require(isinstance(produced, dict) and set(produced) == {"changed"} and type(produced["changed"]) is bool, "evidence")
             changed = produced["changed"] or changed
-        observation = wait_unit(request, request_digest, bootstrap, transport, now, pause, private=seen)
+        mounts = GatewayMounts(request, transport) if authenticated else None
+        observation = wait_unit(request, request_digest, bootstrap, transport, now, pause, private=seen, routes=mounts)
         ceph_native.require(observation["ready"], "not-ready")
     elif operation == "destroy":
         changed = (transport.call(bootstrap, "destroy", seen) if seen else transport.call(bootstrap, "destroy"))["changed"]

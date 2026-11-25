@@ -170,7 +170,7 @@ func contractRecipes() map[string]digestRecipe {
 			partVersion(ceph.RetirementVersion), partVersion(ceph.TiebreakerEvidenceVersion), partVersion(ceph.ManagersEvidenceVersion),
 			partPin("managers-stopped-before-fsid-removal"), partPin("selected-tunnel-image-v1"),
 			partPin("health-scoped-to-owned-pools-and-filesystems-v1"), partPin("gateway-dashboard-cephadm-client-tls-v1"), partPin("gateway-native-ca-endpoint-proof-v1"), partPin("gateway-monitoring-logins-v1"),
-			partPin("gateway-generated-monitoring-logins-v1"), partPin("positive-pool-creation-and-typed-keys"), partPin("registry-inode-before-link"), partPin("independent-native-removal-absence")),
+			partPin("gateway-generated-monitoring-logins-v1"), partPin("positive-pool-creation-and-typed-keys"), partPin("registry-inode-before-link"), partPin("independent-native-removal-absence"), partPin("gateway-ldap-authentication-v1")),
 		ceph.ImageImplementation: digestOf(partImplementation(ceph.ImageImplementation), partRequest(ceph.ImageVersion), partPin("selected-artifact-manifest-v1")),
 		ceph.HostImplementation: digestOf(partImplementation(ceph.HostImplementation), partRequest(ceph.HostVersion), partVersion(ceph.HostEvidenceVersion),
 			partPin("selected-packages-repository-proxy-runtime-placement-pulls-profile-route-devices-v1"), partPin("pull-registration-and-joined-cancellation-v1"), partPin("exclusive-podman-proxy-default"), partPin("registered-retained-root-removal")),

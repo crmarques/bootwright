@@ -12,3 +12,7 @@ spec:
 
   endpoint:
     fqdn: s3.lab.example.test
+
+  authentication:
+    ldap:
+      ldapServerRef: lab-directory

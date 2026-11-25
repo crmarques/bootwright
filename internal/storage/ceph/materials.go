@@ -139,15 +139,25 @@ func gatewayMaterial(e lifecycle.Execution, r Request, operation string) ([]life
 	if r.Action == "object-bucket" && r.ObjectBucket != nil {
 		secret, key = r.ObjectBucket.CertificateRef, false
 	}
-	if secret == "" {
-		return nil, nil
+	files := []lifecycle.MaterialFile{}
+	if secret != "" {
+		files = append(files, lifecycle.MaterialFile{Name: "gateway-certificate", Secret: secret, Part: secrets.CertificatePart, Variable: "gatewayCertificate"})
 	}
-	files := []lifecycle.MaterialFile{{Name: "gateway-certificate", Secret: secret, Part: secrets.CertificatePart, Variable: "gatewayCertificate"}}
-	if key {
+	if secret != "" && key {
 		files = append(files, lifecycle.MaterialFile{Name: "gateway-key", Secret: secret, Part: secrets.PrivateKeyPart, Variable: "gatewayKey"})
 	}
+	if r.Action == "gateway" && operation == "apply" && r.Gateway != nil && r.Gateway.Authentication != nil && r.Gateway.Authentication.LDAP != nil {
+		ldap := r.Gateway.Authentication.LDAP
+		files = append(files, lifecycle.MaterialFile{Name: "rgw-ldap-bind-password", Secret: ldap.BindSecretRef, Part: secrets.ValuePart, Variable: "rgwLDAPBindPassword"})
+		if ldap.TrustSecretRef != "" {
+			files = append(files, lifecycle.MaterialFile{Name: "rgw-ldap-ca-bundle", Secret: ldap.TrustSecretRef, Part: secrets.CertificatePart, Variable: "rgwLDAPCABundle"})
+		}
+	}
+	if len(files) == 0 {
+		return nil, nil
+	}
 	for _, file := range files {
-		value, err := materialPart(e.Material, secret, file.Part)
+		value, err := materialPart(e.Material, file.Secret, file.Part)
 		if err != nil {
 			return nil, err
 		}
@@ -432,6 +442,8 @@ func adapterRefusals() map[string]error {
 	out["nfs-pool-foreign"] = cephForeign.Fail("a Ceph pool named .nfs exists that this operation's NFS services did not create, or it is not the pool they recorded", "find the .nfs pool with ceph osd pool ls detail; if nothing uses it, remove it outside Bootwright and apply again, or take back what this context owns with bootwright destroy --context <context>, then apply; Bootwright never adopts a .nfs pool it did not create")
 	out["object-realm-foreign"] = cephForeign.Fail("the cluster holds RGW configuration this operation did not create: a .rgw.root pool without this operation's claim, or a realm, zone group or zone of the CephObjectGateway's names without its creation record, or one it created that is gone or changed", "find what the native error names with ceph osd pool ls and radosgw-admin realm list, zonegroup list and zone list; for a foreign name, rename spec.realm, spec.zoneGroup or spec.zone of the CephObjectGateway, or remove the foreign configuration outside Bootwright, then apply again; when the native error says one this operation created is gone or changed, take back what this context owns with bootwright destroy --context <context>, then apply; Bootwright never adopts RGW configuration it did not create")
 	out["object-zone-pools"] = cephDrifted.Fail("the zone a CephObjectGateway created names a pool Bootwright did not plan, or its default placement does not hold the pools the gateway froze", "inspect the zone with radosgw-admin zone get --rgw-realm <realm> --rgw-zone <zone>; the native error names the pool; take back what this context owns with bootwright destroy --context <context>, then apply; Bootwright creates every zone pool before RGW starts and never lets RGW create a pool it did not plan")
+	out["object-auth-credential"] = cephDrifted.Fail("the stored rgw service of a CephObjectGateway holds an LDAP bind password or CA bundle other than the one its LDAPServer's Secret holds", "find the service the native error names with ceph orch ls --export; Bootwright never replaces a credential of a deployed gateway service: store the deployed value again in the Secret the LDAPServer's spec.bindPasswordRef or spec.trustBundleRef names with bootwright secret set, or take back what this context owns with bootwright destroy --context <context>, then apply")
+	out["object-auth-config"] = cephDrifted.Fail("an RGW option a CephObjectGateway's authentication sets differs from its frozen value: the configuration database held it for the gateway's daemons before this operation's first attempt, holds it at another section or mask, or a running rgw daemon's sign-in order no longer ends in its local users", "find the option the native error names with ceph config dump and ceph config show client.rgw.<daemon>; remove a foreign entry with ceph config rm, or set rgw_s3_auth_order back so it holds local, outside Bootwright, then apply again; or take back what this context owns with bootwright destroy --context <context>, then apply")
 	out["object-endpoint-certificate"] = cephDrifted.Fail("a TLS service of a CephObjectGateway holds a certificate or private key other than the one its bound Secret holds", "find the service the native error names with ceph orch ls; Bootwright never replaces the certificate of a deployed gateway service: store the deployed certificate and key in the Secret again with bootwright secret set --name <secret> --certificate-file <path> --private-key-file <path>, or take back what this context owns with bootwright destroy --context <context>, then apply")
 	out["object-user-foreign"] = cephForeign.Fail("an RGW user of the CephObjectUser's ID exists in its CephObjectGateway's realm that this operation did not create, or the user this operation created is gone", "find the user the native error names with radosgw-admin user list --rgw-realm <realm> on the bootstrap host; for a user this operation did not create, rename the CephObjectUser or remove the foreign user outside Bootwright, then apply again; when the native error says the user this operation created is gone, take back what this context owns with bootwright destroy --context <context>, then apply; Bootwright never adopts an RGW user it did not create")
 	out["object-user-identity"] = cephDrifted.Fail("the RGW user this operation created no longer matches its CephObjectUser or the S3 key pair this context's custody retains: its display name, keys, subusers, Swift keys, capabilities or suspension changed, or the retained key pair is missing or unreadable", "inspect the user with radosgw-admin user info --uid <user> --rgw-realm <realm> on the bootstrap host and restore its display name, its one S3 key and its unsuspended state, removing any key, subuser or capability added outside Bootwright, then apply again; or take back what this context owns with bootwright destroy --context <context>, then apply; Bootwright never rotates or regenerates the keys of a user it created")

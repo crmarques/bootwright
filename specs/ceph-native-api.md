@@ -846,7 +846,7 @@ The core cluster request never carries a binding. Planning routes each
 
 | Service type | Executing block | Bound leaves |
 | --- | --- | --- |
-| `rgw` that a CephObjectGateway binds, and the `ingress` that fronts it | gateway block | its TLS leaves |
+| `rgw` that a CephObjectGateway binds, and the `ingress` that fronts it | gateway block | its TLS leaves, and the derived LDAP leaves `/custom_configs/0/content` and `/custom_configs/2/content` from the gateway's `authentication`, never a `serviceBindings` entry |
 | `grafana`, `snmp-gateway` | monitoring unit | grafana's `/spec/initial_admin_password`; snmp-gateway's `/spec/credentials/` `snmp_community`, `snmp_v3_auth_username`, `snmp_v3_auth_password` and `snmp_v3_priv_password` |
 | `mgmt-gateway`, `oauth2-proxy` | management gateway unit | the gateway's `/spec/ssl_cert` and `/spec/ssl_key`; the proxy's `/spec/client_secret`, `/spec/cookie_secret`, `/spec/ssl_cert`, `/spec/ssl_key` and `/custom_configs/0/content` |
 | `nvmeof` | nvmeof unit | the five mTLS leaves of the [rows below](#secret-bindings), as effect material |
@@ -910,7 +910,11 @@ leaf refuses because IBM's python3-ceph-common 20.2.1-405 ServiceSpec schema mig
 and the ingress that fronts one take no bindings: NFS over TLS and kmip are
 parked by D160 (OD26). The adapter
 never guesses from a field's suffix or permits an operator
-to splice arbitrary secrets into command arguments or custom config.
+to splice arbitrary secrets into command arguments or custom config. An
+authored `config` or `custom_configs` on an rgw service refuses as on any other
+service; the gateway block derives both, with the secret only at its fixed
+leaves, from its CephObjectGateway's
+[`authentication`](ceph-resources.md#cephobjectgateway-authentication).
 
 The services below bind their credentials and
 TLS material through these rows. "Value" means the value part of an `opaque`

@@ -77,7 +77,7 @@ Effective service fields emit in this order, omitting inapplicable fields:
 | Registry | `management`, `machineRef`, `image`, `implementation`, `bindAddress`, `port`, `endpoints`, `tls`, `url`, `credentialsRef`, `trustBundleRef`, `tlsVerification`. |
 | LoadBalancer | `management`, `machineRef`, `image`, `implementation`, `bindAddresses`. |
 | OIDCProvider | `management`, `issuerURL`, `trustBundleRef`. |
-| LDAPServer | `management`, `urls`, `trustBundleRef`, `bindCredentialsRef`, `users`, `activeDirectory`. |
+| LDAPServer | `management`, `urls`, `trustBundleRef`, `bindDN`, `bindPasswordRef`, `users`, `activeDirectory`. |
 
 ## Proxy, DNS, NTP and registry deployment
 
@@ -289,9 +289,11 @@ runs. Both are external: `spec.management: managed` is refused at admission,
 external; Bootwright does not run an identity provider`. Each plans no block and
 no readiness edge, and an unconsumed one is retained by
 [Environment selection](environment.md#cluster-selection) like every other
-service. A `CephSignOn`, a `CephObjectGateway`'s authentication and an Active
-Directory SMB cluster consume them; their consumers' pages own the effects, and
-neither kind claims that a consumer exists or that the service answers.
+service. A `CephSignOn`, a
+[`CephObjectGateway`'s authentication](../ceph-resources.md#cephobjectgateway-field-record)
+and an Active Directory SMB cluster consume them; their consumers' pages own
+the effects, and neither kind claims that a consumer exists or that the service
+answers.
 
 | Field | Type | Required | Default or rule |
 | --- | --- | --- | --- |
@@ -299,7 +301,8 @@ neither kind claims that a consumer exists or that the service answers.
 | `issuerURL` | string | OIDCProvider | The issuer's `https` URL, exactly the `iss` value its tokens carry: at most 2048 bytes, no userinfo, query, fragment or trailing slash. A value outside that form refuses at the field, naming the field and never the value. |
 | `urls` | array | LDAPServer | Non-empty ordered set of `ldaps://host[:port]` URIs, host a DNS name or IP address, with no path, userinfo, query or fragment; a duplicate refuses. An `ldap://` entry refuses at its index with the remedy `use ldaps://`, because a bind password never travels in cleartext and no StartTLS option exists. |
 | `trustBundleRef` | string | no | `caBundle` or `trustBundle` Secret: the only anchor a consumer verifies the service's TLS with; omitted, each consumer's system trust store. A trust anchor, the class of a [Registry's](#managed-registry) `trustBundleRef`; no `tlsVerification` exists, because verification is always `full`. |
-| `bindCredentialsRef` | string | LDAPServer | `usernamePassword` Secret: the username is the bind DN and the password its password. An access credential, the class of a Registry's `credentialsRef`. |
+| `bindDN` | string | LDAPServer | The DN a consumer binds as, such as `CN=svc ceph,OU=Service Accounts,DC=example,DC=com`: non-empty, at most 1024 bytes, spaces allowed, no control characters. It is a plain field, so it is frozen with its consumer's input and shown in plans; a bind password belongs in `bindPasswordRef`. |
+| `bindPasswordRef` | string | LDAPServer | `opaque` or `token` Secret whose value part is the bind DN's password. An access credential at the directory, the class of a Registry's `credentialsRef`; a consumer that places it on a host holds it as effect material. A consumer checks the value when the apply binds it. |
 | `users` | object | LDAPServer | Closed record locating the users. |
 | `users.baseDN` | string | yes | The search base DN, non-empty, at most 1024 bytes, without control characters. |
 | `users.nameAttribute` | string | yes | The attribute a sign-in name matches: letters, digits and hyphens, starting with a letter, such as `uid` for an LDAP directory and `sAMAccountName` or `cn` for Active Directory. |
@@ -310,6 +313,7 @@ neither kind claims that a consumer exists or that the service answers.
 An OIDC provider carries no client credential, because each consumer registers
 its own client. A consumer binds the trust anchor and the access credential above
 under those classes; one that places either on a host states that in its own page.
+The object gateway does, so both are effect material in its block.
 Admission reads no Secret, resolves no name and contacts no service.
 
 ## Consumer selections

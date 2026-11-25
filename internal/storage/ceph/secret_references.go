@@ -85,6 +85,7 @@ func (Capability) SecretClasses(block reconciliation.Block) (secrets.Classes, er
 		for _, binding := range r.Gateway.Bindings {
 			classes.Add(secrets.EffectMaterial, binding.SecretRef)
 		}
+		classes.Add(secrets.EffectMaterial, r.Gateway.authSecrets()...)
 	}
 	if r.Service != nil {
 		for _, binding := range r.Service.Bindings {

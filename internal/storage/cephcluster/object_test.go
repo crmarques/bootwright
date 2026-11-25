@@ -253,3 +253,45 @@ func TestGatewayEndpointFQDNUniqueAcrossNodesAndGateways(t *testing.T) {
 		t.Fatalf("diagnostic echoed the endpoint FQDN: %#v", issues[0])
 	}
 }
+
+func TestGatewayAuthenticationNeedsAMethodAndATLSEndpoint(t *testing.T) {
+	const field, tls = "$.spec.authentication", "an LDAP user's S3 access key carries the user's directory password, so the gateway's endpoint must terminate TLS"
+	ldap := m("ldap", m("ldapServerRef", "directory"))
+	secure := rgwService(qualifiedRGWSpec().With("ssl", api.BoolValue(true)))
+	for _, test := range []struct {
+		name     string
+		services []api.Value
+		auth     api.Value
+		message  string
+	}{
+		{"an empty block", nil, m(), "spec.authentication declares no sign-in method"},
+		{"a plaintext rgw", nil, ldap, tls},
+		{"a plaintext ingress", []api.Value{ingressService(m("frontend_port", 443, "monitor_port", 1967))}, ldap, tls},
+		{"one plaintext ingress of two", []api.Value{ingressService(m("frontend_port", 443, "monitor_port", 1967, "ssl", true)),
+			ingressService(m("frontend_port", 443, "monitor_port", 1967)).With("service_id", api.StringValue("rgw.objects-b"))}, ldap, tls},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			gateway, catalog := editGateway(t, gatewayCatalog(t, test.services...), "authentication", test.auth)
+			exactlyOne(t, Validate(gateway, catalog), field, test.message, "")
+		})
+	}
+	for _, test := range []struct {
+		name    string
+		catalog func(*testing.T) api.Catalog
+	}{
+		{"a TLS rgw", func(t *testing.T) api.Catalog {
+			_, catalog := withMDSService(t, fixtureCatalog(), secure)
+			return catalog
+		}},
+		{"a TLS ingress", func(t *testing.T) api.Catalog {
+			return gatewayCatalog(t, ingressService(m("frontend_port", 443, "monitor_port", 1967, "ssl", true)))
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			gateway, catalog := editGateway(t, test.catalog(t), "authentication", ldap)
+			if found := issuesAt(Validate(gateway, catalog), field); len(found) != 0 {
+				t.Fatalf("an LDAP gateway behind TLS was refused: %#v", found)
+			}
+		})
+	}
+}

@@ -27,6 +27,35 @@ func (a *admission) gateway(cluster api.Object) {
 	if spec.Get("endpoint").Present() {
 		a.gatewayEndpoint(spec.Get("endpoint"))
 	}
+	if spec.Has("authentication") {
+		a.gatewayAuthentication(cluster, spec)
+	}
+}
+
+func (a *admission) gatewayAuthentication(cluster api.Object, spec api.Value) {
+	const field = "$.spec.authentication"
+	if !spec.Has("authentication", "ldap") {
+		a.issue("api.invariant", field, "spec.authentication declares no sign-in method", "declare spec.authentication.ldap with the LDAPServer RGW authenticates S3 users against, or omit spec.authentication")
+		return
+	}
+	if service, ok := NativeService(cluster, textOf(spec, "serviceRef")); ok && !gatewayTerminatesTLS(cluster, service) {
+		a.issue("api.invariant", field, "an LDAP user's S3 access key carries the user's directory password, so the gateway's endpoint must terminate TLS",
+			"set spec.ssl: true and certificate_source: inline on the rgw service, or on every ingress that fronts it, with its /spec/ssl_cert and /spec/ssl_key serviceBindings, and declare spec.endpoint on the CephObjectGateway")
+	}
+}
+
+func gatewayTerminatesTLS(cluster api.Object, service api.Value) bool {
+	fronting := 0
+	for _, ingress := range cluster.Spec().Get("services").Items() {
+		if textOf(ingress, "service_type") != "ingress" || ingress.Get("spec", "backend_service").Text() != NativeServiceName(service) {
+			continue
+		}
+		fronting++
+		if !ingress.Get("spec", "ssl").Bool() {
+			return false
+		}
+	}
+	return fronting > 0 || service.Get("spec", "ssl").Bool()
 }
 
 func (a *admission) peerGateways(cluster api.Object) []api.Object {

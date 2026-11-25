@@ -323,6 +323,7 @@ func (r Request) SecretReferences() []string {
 		for _, binding := range r.Gateway.Bindings {
 			references = append(references, binding.SecretRef)
 		}
+		references = append(references, r.Gateway.authSecrets()...)
 	}
 	if r.Service != nil {
 		for _, binding := range r.Service.Bindings {

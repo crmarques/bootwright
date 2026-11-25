@@ -112,6 +112,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 				for _, b := range r.Gateway.Bindings {
 					plan.Secrets = append(plan.Secrets, b.SecretRef)
 				}
+				plan.Secrets = append(plan.Secrets, r.Gateway.authSecrets()...)
 			}
 			if r.Service != nil {
 				for _, b := range r.Service.Bindings {
@@ -170,6 +171,9 @@ func (c Capability) definition(verb reconciliation.Verb, object api.Object, requ
 	description := impacts[0]
 	if request.Service != nil && verb == reconciliation.Apply && unitTypes[request.Service.Type].impacts != nil {
 		impacts = append(impacts, unitTypes[request.Service.Type].impacts(object, *request.Service)...)
+	}
+	if request.Gateway != nil && verb == reconciliation.Apply {
+		impacts = append(impacts, objectGatewayImpacts(*request.Gateway)...)
 	}
 	requires, dependencies, err := placement(object, request)
 	if err != nil {

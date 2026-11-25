@@ -145,6 +145,8 @@ spec:
 | `pools.dataPoolRef` | Optional CephPool of role `rgw`, replicated or erasure-coded; omitted derives `<zone>.rgw.buckets.data`. | STANDARD storage class `data_pool`. |
 | `pools.dataExtraPoolRef` | Optional replicated CephPool of role `rgw`; omitted derives `<zone>.rgw.buckets.non-ec`. | Zone placement `data_extra_pool`. |
 | `endpoint.fqdn` | DNS name of the public endpoint; an `endpoint` mapping without it defaults to `<gateway>.<cluster>.<storage domain>`. | None; scheme, port and TLS come from the terminating service. |
+| `authentication` | Optional record of the sign-in methods RGW adds to its local users; it must declare one. | None itself. |
+| `authentication.ldap.ldapServerRef` | Required [`LDAPServer`](api/infrastructure-services.md#oidcprovider-and-ldapserver), Active Directory included, that RGW authenticates S3 users against. | The rgw document's derived `spec.config` LDAP options and `custom_configs` files ([authentication](#cephobjectgateway-authentication)). |
 
 The DNS-label grammar of `realm`, `zoneGroup` and `zone` is an explicit
 effect restriction of Bootwright; Ceph accepts more. Bootwright never passes
@@ -196,8 +198,9 @@ bindings ([native services](ceph-native-api.md)). A terminating service with
 TLS needs `spec.endpoint`: the certificate must name its FQDN, and readiness
 proves the served leaf by SHA-256 with that FQDN as SNI.
 
-The gateway has no per-service RGW configuration options, because they have
-no qualified effect contract.
+The gateway has no authored per-service RGW configuration option, because
+they have no qualified effect contract; `authentication.ldap` derives the one
+set the gateway applies ([authentication](#cephobjectgateway-authentication)).
 
 Admission refuses, before any effect: a `serviceRef` that resolves to no
 declared service, names a non-rgw service or is bound by another gateway; a
@@ -207,9 +210,55 @@ role or cluster, an erasure-coded index or data-extra pool, a pool bound by
 another gateway or one pool in two placement roles; derived pools the declared
 OSD-bearing hosts cannot hold; an endpoint without a derivable FQDN, with an
 invalid one or with one that equals a storage node hostname or another
-gateway's FQDN; and, on the cluster, an rgw service no gateway of the cluster
+gateway's FQDN; an `authentication` its
+[rules](#cephobjectgateway-authentication) refuse; and, on the cluster, an rgw service no gateway of the cluster
 binds, because cephadm would deploy it before its realm, zone group and zone
 exist.
+
+### CephObjectGateway authentication
+
+`authentication.ldap` is the one derived RGW configuration of a gateway: the
+gateway block writes it into the rgw document it applies
+([realization](ceph.md#object-gateway-authentication)), so cephadm sets each option at
+`client.rgw.<service_id>` before it deploys a daemon and removes them with the
+service.
+
+| Option or file | Value |
+| --- | --- |
+| `rgw_ldap_uri` | the server's `urls`, joined by one space, tried in order |
+| `rgw_ldap_binddn` | the server's `bindDN` |
+| `rgw_ldap_searchdn` | `users.baseDN` |
+| `rgw_ldap_dnattr` | `users.nameAttribute` |
+| `rgw_ldap_searchfilter` | only with `users.filter`: `(&<filter>(<nameAttribute>=@USERNAME@))`, because without the token RGW wraps the filter in parentheses again; omitted, RGW searches `(<nameAttribute>=<name>)` |
+| `rgw_ldap_secret` | `/etc/bootwright/rgw-ldap-bind`, the bind password file below |
+| `rgw_s3_auth_use_ldap` | `true` |
+| `custom_configs[0]` | `/etc/bootwright/rgw-ldap-bind`: the value of the server's `bindPasswordRef` |
+| `custom_configs[1]` | `/etc/openldap/ldap.conf`: `TLS_CACERT` the CA file below, else the image's `/etc/pki/tls/certs/ca-bundle.crt`, `TLS_REQCERT demand`, `NETWORK_TIMEOUT 5` and `TIMEOUT 10`, because RGW sets no LDAP TLS option or timeout itself |
+| `custom_configs[2]` | only with the server's `trustBundleRef`: `/etc/bootwright/rgw-ldap-ca.pem`, its certificates |
+
+RGW's default sign-in order `sts, external, local` keeps local users last: the
+LDAP engine only denies, so a request signed with a CephObjectUser's key never
+contacts the directory, and local users keep working while it is down. An LDAP
+user whose sign-in name equals a CephObjectUser's ID acts as that user, so keep
+directory names and CephObjectUser names disjoint. The bind password and the CA
+bundle are effect material of the gateway block; the bind password must be one
+line of 1 to 1023 bytes without leading or trailing whitespace, which RGW would
+trim or cut, and the bundle parsable PEM certificates, or the apply refuses
+`ceph.secret-invalid` when it binds them, naming the Secret and never the
+value. Both are stored in cephadm's service specification, which `ceph orch ls
+--export` and the dashboard's service API show to Ceph administrators, as the
+plan's impact lines say; use a least-privilege bind account
+([Q154](milestones/m2.md#identity-program-open-decisions)). The block is the
+gateway's frozen input: adding, changing or removing `authentication`, or
+changing the server's values or Secrets, on a completed gateway is an input
+change, a destroy and a fresh apply, and so is rotating the bind password or
+bundle ([B1839](milestones/backlog.md#b1839)).
+
+Admission refuses an `authentication` that declares no method, and one whose
+terminating service does not terminate TLS (`ssl: true` on the rgw service, or
+on every ingress that fronts it), because an LDAP user's access key carries the
+user's directory password; with an ingress, the hop from haproxy to RGW stays
+plaintext on the cluster network, as the plan's impact lines say.
 
 ## CephPlacementPolicy
 
