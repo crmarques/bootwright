@@ -69,14 +69,24 @@ func (d decider) decide(ctx context.Context, view View, verb reconciliation.Verb
 func (d decider) decideAs(ctx context.Context, view View, verb reconciliation.Verb, selection reconciliation.Selection) (operationPlan, reconciliation.Verb, error) {
 	decided, chosen, err := d.decideFrom(ctx, view, verb, selection)
 	decided.basis.context = view.Identity().Name
-	return d.withPhases(decided, err), chosen, err
+	decided, err = d.withPhases(decided, err)
+	return decided, chosen, err
 }
 
-func (d decider) withPhases(decided operationPlan, err error) operationPlan {
-	if err == nil && decided.verb == reconciliation.Destroy {
-		decided.phases = d.planner.computePhases(decided.plan)
+func (d decider) withPhases(decided operationPlan, err error) (operationPlan, error) {
+	if err != nil || decided.verb != reconciliation.Destroy {
+		return decided, err
 	}
-	return decided
+	decided.phases = d.planner.computePhases(decided.plan)
+	if decided.noop || decided.finalize {
+		return decided, nil
+	}
+	phases, err := proveInverse(decided.plan, decided.phases, decided.operation)
+	if err != nil {
+		return decided, err
+	}
+	decided.phases = phases
+	return decided, nil
 }
 
 func (d decider) decideFrom(ctx context.Context, view View, verb reconciliation.Verb, selection reconciliation.Selection) (operationPlan, reconciliation.Verb, error) {
@@ -635,6 +645,11 @@ func (d decider) supersede(ctx context.Context, view View, store decisionRecords
 		return operationPlan{}, err
 	}
 	decided.replacedPhases = d.planner.computePhases(frozen)
+	if len(unprovedOutside(frozen, states, nil)) != 0 {
+		if decided.replacedPhases, err = proveInverse(frozen, decided.replacedPhases, operation); err != nil {
+			return operationPlan{}, err
+		}
+	}
 	return plannedFrom(decided, operation, states, attempts), nil
 }
 

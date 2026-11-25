@@ -33,12 +33,16 @@ type planStepPresentation struct {
 	PreviousFailure *statusFailure `json:"previousFailure,omitempty"`
 	Wave            int            `json:"wave"`
 	Consumes        []string       `json:"consumes"`
+	Retains         []string       `json:"retains,omitempty"`
+	LeavesWith      []string       `json:"leavesWith,omitempty"`
+	Nothing         string         `json:"nothing,omitempty"`
 }
 
 func displayPlanSteps(steps []lifecycle.PlanStep) []planStepPresentation {
 	shown := make([]planStepPresentation, 0, len(steps))
 	for _, s := range steps {
-		shown = append(shown, planStepPresentation{ID: escapeDisplayLine(s.ID), Description: escapeDisplayLine(s.Description), Kind: escapeDisplayLine(s.Kind), Object: escapeDisplayLine(s.Object), Stage: escapeDisplayLine(s.Stage), Impacts: displayLines(s.Impacts), State: escapeDisplayLine(s.State), Selection: escapeDisplayLine(s.Selection), WaitsOn: escapeDisplayLine(s.WaitsOn), After: append([]int{}, s.After...), Wave: s.Wave, PreviousFailure: displayFailure(s.PreviousFailure), Consumes: displayLines(s.Consumes)})
+		shown = append(shown, planStepPresentation{ID: escapeDisplayLine(s.ID), Description: escapeDisplayLine(s.Description), Kind: escapeDisplayLine(s.Kind), Object: escapeDisplayLine(s.Object), Stage: escapeDisplayLine(s.Stage), Impacts: displayLines(s.Impacts), State: escapeDisplayLine(s.State), Selection: escapeDisplayLine(s.Selection), WaitsOn: escapeDisplayLine(s.WaitsOn), After: append([]int{}, s.After...), Wave: s.Wave, PreviousFailure: displayFailure(s.PreviousFailure), Consumes: displayLines(s.Consumes),
+			Retains: displayLines(s.Retains), LeavesWith: displayLines(s.LeavesWith), Nothing: escapeDisplayLine(s.Nothing)})
 	}
 	return shown
 }

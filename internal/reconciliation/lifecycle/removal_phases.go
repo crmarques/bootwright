@@ -16,6 +16,7 @@ type removalPhases struct {
 	machines         map[string]bool
 	retired          map[string]bool
 	retirementProofs map[string][][]string
+	leavesWith       map[string][]string
 	preStop          map[string]bool
 	preStopMachines  map[string]bool
 	survivors        map[string][]SurvivingConsumer
@@ -29,10 +30,11 @@ func (s Service) computePhases(plan reconciliation.Plan) removalPhases {
 	if s.keepGoing {
 		proofs = map[string][][]string{}
 	}
-	retired, consumerHosts, survivors := s.retiredWithHosts(plan, proofs)
+	retired, consumerHosts, survivors, witnesses := s.retiredWithHosts(plan, proofs)
 	for {
 		boundary := s.deferral(plan, retired)
 		boundary.retired, boundary.survivors, boundary.retirementProofs = retired, survivors, proofs
+		boundary.leavesWith = map[string][]string{}
 		unretired := false
 		for _, block := range plan.Blocks {
 			if retired[block.ID] && (s.hostsDeferred(block, plan, boundary.machines) || machinesDeferred(consumerHosts[block.ID], plan, boundary.machines)) {
@@ -41,6 +43,11 @@ func (s Service) computePhases(plan reconciliation.Plan) removalPhases {
 			}
 		}
 		if !unretired {
+			for id, retires := range retired {
+				if retires {
+					boundary.leavesWith[id] = witnesses[id]
+				}
+			}
 			s.preStopRemoval(plan, &boundary)
 			return boundary
 		}
@@ -118,7 +125,7 @@ func (s Service) deferral(plan reconciliation.Plan, retired map[string]bool) rem
 	return boundary
 }
 
-func (s Service) retiredWithHosts(plan reconciliation.Plan, proofs map[string][][]string) (map[string]bool, map[string][]string, map[string][]SurvivingConsumer) {
+func (s Service) retiredWithHosts(plan reconciliation.Plan, proofs map[string][][]string) (map[string]bool, map[string][]string, map[string][]SurvivingConsumer, map[string][]string) {
 	before := map[string]map[string]bool{}
 	for _, block := range plan.Blocks {
 		reach := map[string]bool{}
@@ -144,7 +151,7 @@ func (s Service) retiredWithHosts(plan reconciliation.Plan, proofs map[string][]
 		removal, removes := capability.(HostRemoval)
 		return removes && block.Kind == string(api.Machine) && block.Object == machine && removal.RemovesHost(block)
 	}
-	retired := map[string]bool{}
+	retired, witnessed := map[string]bool{}, map[string][]string{}
 	for _, block := range plan.Blocks {
 		capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
 		bound, binds := capability.(HostBound)
@@ -173,7 +180,16 @@ func (s Service) retiredWithHosts(plan reconciliation.Plan, proofs map[string][]
 			}
 			perHost = append(perHost, witnesses)
 		}
-		if proofs != nil && retired[block.ID] {
+		if !retired[block.ID] {
+			continue
+		}
+		var first []string
+		for _, witnesses := range perHost {
+			first = append(first, witnesses[0])
+		}
+		slices.Sort(first)
+		witnessed[block.ID] = slices.Compact(first)
+		if proofs != nil {
 			proofs[block.ID] = perHost
 		}
 	}
@@ -196,7 +212,7 @@ func (s Service) retiredWithHosts(plan reconciliation.Plan, proofs map[string][]
 		survivors[block.ID] = slices.Compact(found)
 		retired[block.ID] = false
 	}
-	return retired, consumerHosts, survivors
+	return retired, consumerHosts, survivors, witnessed
 }
 
 func (s Service) consumers(plan reconciliation.Plan, bound map[string]bool, before map[string]map[string]bool) (map[string][]string, map[string][]SurvivingConsumer) {
@@ -322,7 +338,7 @@ func (s Service) removalWarnings(plan reconciliation.Plan) []diagnostics.Diagnos
 	if err != nil {
 		return nil
 	}
-	_, _, survivors := s.retiredWithHosts(inverse, nil)
+	_, _, survivors, _ := s.retiredWithHosts(inverse, nil)
 	var found []SurvivingConsumer
 	for _, block := range inverse.Blocks {
 		found = append(found, survivors[block.ID]...)

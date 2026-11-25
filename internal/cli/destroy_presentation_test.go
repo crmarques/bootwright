@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -33,6 +34,39 @@ func TestADestroyPlanTextNamesTheMachinesToStopFirst(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "Stop first") {
 		t.Fatalf("a plan that stops nothing named Machines to stop: %q", out.String())
+	}
+}
+
+// Each destroy step states its inverse beside its impacts: what it keeps, the
+// steps it leaves with and why it has nothing to take back, in text and JSON.
+func TestADestroyPlanStatesEachStepsInverse(t *testing.T) {
+	result := previewResult()
+	result.Verb = "destroy"
+	result.Steps = []lifecycle.PlanStep{
+		{ID: "ceph-cluster-lab", Description: "remove Ceph cluster lab", Stage: "storage", State: "pending", Impacts: []string{"remove Ceph cluster lab"}, LeavesWith: []string{"machine-rhel-01", "machine-rhel-02"}},
+		{ID: "os-hostname-rhel-01", Description: "retain the hostname of rhel-01", Stage: "machines", State: "pending", Retains: []string{"the hostname of rhel-01"}},
+		{ID: "substrate-host-kv", Description: "release the proof of the host cluster", Stage: "machines", State: "pending", Nothing: "its apply only proved the host cluster"},
+	}
+	var out bytes.Buffer
+	if err := writeLifecyclePlan(&out, result); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"      remove Ceph cluster lab\n      leaves with machine-rhel-01, machine-rhel-02\n", "      keeps the hostname of rhel-01\n", "      nothing to take back: its apply only proved the host cluster\n"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("plan text = %q, missing %q", out.String(), want)
+		}
+	}
+	encoded, err := json.Marshal(displayPlanSteps(result.Steps))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"leavesWith":["machine-rhel-01","machine-rhel-02"]`, `"retains":["the hostname of rhel-01"]`, `"nothing":"its apply only proved the host cluster"`} {
+		if !strings.Contains(string(encoded), want) {
+			t.Fatalf("plan steps = %s, missing %s", encoded, want)
+		}
+	}
+	if encoded, err = json.Marshal(displayPlanSteps(previewResult().Steps)); err != nil || strings.Contains(string(encoded), "retains") || strings.Contains(string(encoded), "leavesWith") || strings.Contains(string(encoded), "nothing") {
+		t.Fatalf("a step stating no inverse encodes %s (%v)", encoded, err)
 	}
 }
 

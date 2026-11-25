@@ -96,9 +96,14 @@ func (s Service) removalOf(ctx context.Context, owned reconciliation.Plan, execu
 		definition.Requires = nil
 		definition.Description, definition.Impacts = removal.Description, removal.Impacts
 		definition.Consumes, definition.Groups = removal.Consumes, removal.Groups
+		definition.Inverse = inverseOf(removal.Retains, removal.Nothing, nil)
 		definitions = append(definitions, definition)
 	}
-	return reconciliation.NewPlan(reconciliation.Destroy, definitions)
+	plan, err := reconciliation.NewPlan(reconciliation.Destroy, definitions)
+	if err != nil {
+		return reconciliation.Plan{}, err
+	}
+	return s.freezeInverse(plan)
 }
 
 // invertOwned shapes the owned set as a removal. An apply's plan is inverted so
@@ -110,8 +115,10 @@ func invertOwned(owned reconciliation.Plan) (reconciliation.Plan, error) {
 		return owned.Inverse()
 	}
 	identities := make([]string, 0, len(owned.Blocks))
-	for _, block := range owned.Blocks {
+	owned.Blocks = slices.Clone(owned.Blocks)
+	for index, block := range owned.Blocks {
 		identities = append(identities, block.ID)
+		owned.Blocks[index].Inverse = nil
 	}
 	return owned.Retain(identities)
 }

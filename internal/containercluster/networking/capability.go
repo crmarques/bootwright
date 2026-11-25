@@ -65,7 +65,8 @@ func (c Capability) Removal(ctx context.Context, block reconciliation.Block) (li
 	if err != nil {
 		return lifecycle.Removal{}, err
 	}
-	return lifecycle.Removal{Description: "retire secondary networks with " + r.Cluster + "; objects leave with cluster disks or stay on a running cluster", Impacts: []string{}}, nil
+	return lifecycle.Removal{Description: "retire secondary networks with " + r.Cluster + "; objects leave with cluster disks or stay on a running cluster", Impacts: []string{},
+		Retains: []string{"the secondary-network objects of " + r.Cluster + ", which leave with the cluster disks or stay on a running cluster"}}, nil
 }
 func (c Capability) Destroy(ctx context.Context, e lifecycle.Execution) (lifecycle.Result, error) {
 	if err := ctx.Err(); err != nil {

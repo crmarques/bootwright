@@ -152,6 +152,68 @@ func TestOnlyARemovalFreezesARelaxationAndOnlyASetOneEncodes(t *testing.T) {
 	}
 }
 
+// An inverse is frozen only on a removal, names only blocks of its own plan,
+// states nothing to take back only beside no effect, is cloned with its block
+// and enters the plan digest, never the request digest.
+func TestOnlyARemovalFreezesAnInverseAndTheDigestCoversIt(t *testing.T) {
+	stated := func(inverse Inverse, impacts ...string) []BlockDefinition {
+		alpha, bravo := definition("alpha"), definition("bravo", "alpha")
+		alpha.Impacts, alpha.Inverse = append([]string{}, impacts...), &inverse
+		return []BlockDefinition{alpha, bravo}
+	}
+	valid := stated(Inverse{Retains: []string{"the unit of alpha"}, LeavesWith: []string{"bravo"}})
+	if _, err := NewPlan(Apply, valid); err == nil {
+		t.Fatal("an apply froze an inverse")
+	}
+	for name, definitions := range map[string][]BlockDefinition{
+		"empty":                  stated(Inverse{}),
+		"unsafe retains":         stated(Inverse{Retains: []string{"line\nbreak"}}),
+		"outside the plan":       stated(Inverse{LeavesWith: []string{"charlie"}}),
+		"itself":                 stated(Inverse{LeavesWith: []string{"alpha"}}),
+		"unordered":              stated(Inverse{LeavesWith: []string{"bravo", "alpha"}}),
+		"repeated":               stated(Inverse{LeavesWith: []string{"bravo", "bravo"}}),
+		"nothing beside retains": stated(Inverse{Retains: []string{"the unit"}, Nothing: "nothing"}),
+		"nothing beside leaves":  stated(Inverse{LeavesWith: []string{"bravo"}, Nothing: "nothing"}),
+		"nothing beside impacts": stated(Inverse{Nothing: "nothing"}, "remove-unit alpha"),
+	} {
+		if _, err := NewPlan(Destroy, definitions); err == nil {
+			t.Errorf("a removal froze the %s inverse", name)
+		}
+	}
+	frozen, err := NewPlan(Destroy, valid)
+	if err != nil {
+		t.Fatalf("a removal refused a valid inverse: %v", diagnostics.Of(err))
+	}
+	if _, err := NewPlan(Destroy, stated(Inverse{Nothing: "its apply changed nothing"})); err != nil {
+		t.Fatalf("a removal refused a reason to take nothing back: %v", diagnostics.Of(err))
+	}
+	plain, err := NewPlan(Destroy, []BlockDefinition{definition("alpha"), definition("bravo", "alpha")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if encoded, err := json.Marshal(plain); err != nil || strings.Contains(string(encoded), "inverse") {
+		t.Fatalf("a removal stating no inverse encodes %s (%v)", encoded, err)
+	}
+	encoded, err := json.Marshal(frozen)
+	if err != nil || !strings.Contains(string(encoded), `"inverse":{"retains":["the unit of alpha"],"leavesWith":["bravo"]}`) {
+		t.Fatalf("a removal stating its inverse encodes %s (%v)", encoded, err)
+	}
+	block, _ := frozen.Block("alpha")
+	block.Inverse.Retains[0], block.Inverse.LeavesWith[0] = "changed", "changed"
+	if again, _ := frozen.Block("alpha"); again.Inverse.Retains[0] != "the unit of alpha" || again.Inverse.LeavesWith[0] != "bravo" {
+		t.Fatal("a block's inverse aliases the frozen plan")
+	}
+	first, _ := plain.Digest()
+	if second, err := frozen.Digest(); err != nil || second == first {
+		t.Fatal("the inverse does not participate in the plan digest")
+	}
+	for index := range plain.Blocks {
+		if plain.Blocks[index].RequestDigest != frozen.Blocks[index].RequestDigest {
+			t.Fatal("the inverse moves a request digest")
+		}
+	}
+}
+
 func TestPlanRefusesInvalidGraphs(t *testing.T) {
 	cyclic := []BlockDefinition{definition("alpha", "bravo"), definition("bravo", "alpha")}
 	duplicate := []BlockDefinition{definition("alpha"), definition("alpha")}

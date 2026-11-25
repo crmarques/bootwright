@@ -196,12 +196,14 @@ func (Capability) Removal(ctx context.Context, block reconciliation.Block) (life
 	if err != nil {
 		return lifecycle.Removal{}, err
 	}
-	return lifecycle.Removal{Description: retentionDescription(request.Identity.Object)}, nil
+	return lifecycle.Removal{Description: retentionDescription(request.Identity.Object), Retains: []string{retained(request.Identity.Object)}}, nil
 }
 
 func retentionDescription(machine string) string {
 	return "retain the Satellite registration of " + machine
 }
+
+func retained(machine string) string { return "the Satellite registration of " + machine }
 
 func (Capability) Quiescent(ctx context.Context, _ lifecycle.Probe) (lifecycle.Quiescence, error) {
 	if err := ctx.Err(); err != nil {

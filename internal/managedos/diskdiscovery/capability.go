@@ -484,7 +484,7 @@ func (c Capability) Removal(ctx context.Context, b reconciliation.Block) (lifecy
 	if err != nil {
 		return lifecycle.Removal{}, err
 	}
-	return lifecycle.Removal{Description: "remove only an unfinished discovery boot of " + r.Identity.Object + " and retain its disk inventory", Impacts: []string{"cleanup-owned-discovery-media " + r.Identity.Object}, Groups: discoveryRemovalGroups(b.Groups), ReplaySafe: true}, ctx.Err()
+	return lifecycle.Removal{Description: "remove only an unfinished discovery boot of " + r.Identity.Object + " and retain its disk inventory", Impacts: []string{"cleanup-owned-discovery-media " + r.Identity.Object}, Retains: []string{"the disk inventory of " + r.Identity.Object}, Groups: discoveryRemovalGroups(b.Groups), ReplaySafe: true}, ctx.Err()
 }
 func (Capability) Quiescent(ctx context.Context, _ lifecycle.Probe) (lifecycle.Quiescence, error) {
 	return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: "discovery cleanup independently proves its own temporary boot and never stops a later installed OS"}, ctx.Err()

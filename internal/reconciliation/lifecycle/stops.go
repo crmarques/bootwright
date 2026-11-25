@@ -115,6 +115,12 @@ var (
 	engineOtherBuild = diagnostics.Stop{Code: "engine.other-build", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseBuild, Recovery: diagnostics.RecoveryRegisteringBuild,
 		Meaning: "this executable cannot prove it would continue or remove the operation as the build that registered it", Remedy: "repeat the command with the build that registered the operation"}
+	destroyInverseMoved = diagnostics.Stop{Code: "destroy.inverse-moved", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseBuild, Recovery: diagnostics.RecoveryRegisteringBuild,
+		Meaning: "this executable computes another answer than the removal plan froze for which blocks a step's effect leaves with, so it performed no effect", Remedy: "continue or replace the removal with the build that registered it"}
+	destroyInverseUnstated = diagnostics.Stop{Code: "destroy.inverse-unstated", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseDefect, Recovery: diagnostics.RecoveryNone,
+		Meaning: "a removal step states no effect, nothing it keeps, no step it leaves with and no reason it has nothing to take back, or nothing to take back beside steps it leaves with, so nothing was registered", Remedy: "report the message as a defect"}
 	enginePlanMoved = diagnostics.Stop{Code: "engine.plan-moved", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseConcurrency, Recovery: diagnostics.RecoveryRepeat,
 		Meaning: "the context changed between the plan and the transition, so nothing was registered", Remedy: "repeat the command to plan from what the context holds now"}
@@ -308,7 +314,7 @@ var stops = []diagnostics.Stop{engineRecordsFull, engineRecordsReadOnly, engineR
 	engineFinalizationDue, engineRecordsContradict, engineOtherVerbIncomplete, applyRecordsMissing, destroyRecordsMissing, applyInputChanged,
 	applyNotAnAddition, applyPrerequisiteLost, applyNothingDeclared, applyStageEmpty, applyStageExcludesRetry, applyUntilUnknown,
 	planInputUncompilable, planCapabilityMissing, planCapabilityDefect, planHostKeyUnbound, planEnvironmentInvalid,
-	engineUnindexedRecords, engineRequestDefect, engineOtherBuild, enginePlanMoved, engineInputMoved, engineBindingLost, authorizeUnneeded,
+	engineUnindexedRecords, engineRequestDefect, engineOtherBuild, destroyInverseMoved, destroyInverseUnstated, enginePlanMoved, engineInputMoved, engineBindingLost, authorizeUnneeded,
 	authorizeMissing, authorizeStale, authorizeRebindInvalid, destroyStageSelected, applyUntilBeforePreparation, applyTargetBeforePreparation,
 	engineRecordsDamaged, applyProducedInputMissing, engineRecaptureMismatch, engineResolvedUnperformed, engineResolvedPartial, destroyPostconditionUnknown,
 	prepareRefused, prepareUnsupported,

@@ -200,6 +200,7 @@ func (c InstallCapability) Removal(ctx context.Context, block reconciliation.Blo
 	return lifecycle.Removal{
 		Description: installDescription(reconciliation.Destroy, request),
 		Impacts:     installImpacts(reconciliation.Destroy, request),
+		Retains:     []string{"the installed cluster " + request.Identity.Cluster + " on its nodes' disks, which leaves with node Machines this removal deletes"},
 		Groups:      installGroups(reconciliation.Destroy, request),
 	}, nil
 }

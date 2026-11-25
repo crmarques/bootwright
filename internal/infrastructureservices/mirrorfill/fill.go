@@ -48,6 +48,7 @@ type fill[R, E any] struct {
 	definition  func(verb reconciliation.Verb, request R, canonical []byte) reconciliation.BlockDefinition
 	describe    func(verb reconciliation.Verb, request R) string
 	impacts     func(verb reconciliation.Verb, request R) []string
+	nothing     func(R) string
 	references  func(R) []string
 	classes     func(R) secrets.Classes
 	deadline    func(R) time.Duration
@@ -101,7 +102,11 @@ func (c fill[R, E]) Removal(ctx context.Context, block reconciliation.Block) (li
 	if err != nil {
 		return lifecycle.Removal{}, err
 	}
-	return lifecycle.Removal{Description: c.describe(reconciliation.Destroy, request), Impacts: c.impacts(reconciliation.Destroy, request), Consumes: []string{}}, nil
+	removal := lifecycle.Removal{Description: c.describe(reconciliation.Destroy, request), Impacts: c.impacts(reconciliation.Destroy, request), Consumes: []string{}}
+	if c.nothing != nil {
+		removal.Nothing = c.nothing(request)
+	}
+	return removal, nil
 }
 
 func (c fill[R, E]) run(ctx context.Context, execution lifecycle.Execution, operation string) (lifecycle.RunResult, R, error) {

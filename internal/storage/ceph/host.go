@@ -399,7 +399,7 @@ func (HostCapability) Removal(ctx context.Context, block reconciliation.Block) (
 		description = "remove the owned Ceph FSID from " + host.Machine
 		impacts = append(impacts, "remove-owned-ceph-native-state "+host.Machine)
 	}
-	return lifecycle.Removal{Description: description, Impacts: impacts, Consumes: []string{}}, nil
+	return lifecycle.Removal{Description: description, Impacts: impacts, Retains: []string{"the Ceph packages, image, host runtime and package records on " + r.Host + ", which leave only with its Machine's own removal or erase"}, Consumes: []string{}}, nil
 }
 
 func (c HostCapability) prepare(ctx context.Context, e lifecycle.Execution) (HostRequest, error) {

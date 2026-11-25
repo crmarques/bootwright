@@ -162,7 +162,11 @@ func (Capability) Removal(ctx context.Context, block reconciliation.Block) (life
 	if err != nil {
 		return lifecycle.Removal{}, err
 	}
-	return lifecycle.Removal{Description: firewallDescription(reconciliation.Destroy, request), Impacts: firewallImpacts(reconciliation.Destroy, request)}, nil
+	removal := lifecycle.Removal{Description: firewallDescription(reconciliation.Destroy, request), Impacts: firewallImpacts(reconciliation.Destroy, request)}
+	if request.Preparation {
+		removal.Retains = []string{"the shared host firewall daemon of " + request.Identity.Object}
+	}
+	return removal, nil
 }
 
 func (Capability) ProveBinding(_ context.Context, contextName string, block reconciliation.Block, material map[string]secrets.Material) error {

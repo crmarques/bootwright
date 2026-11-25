@@ -379,7 +379,14 @@ place in plan order. In an `apply` or `destroy` result, `steps` lists the
 frozen blocks in plan order, each with `id`, `description`, `kind`, `object`,
 `stage`, `impacts`, `state`, `selection`, `waitsOn`, `after` (the places of the
 steps it waits for), `wave` (the earliest round it can start in, counted from
-one) and `consumes` (the authorizations its consequence needs). `blocks` lists
+one) and `consumes` (the authorizations its consequence needs). A `destroy`
+step also carries the [inverse](../state-reconciliation.md#frozen-requests-and-contract-guards)
+its block froze, each member only when it states something: `retains` (what it
+keeps), `leavesWith` (the IDs of the steps its effect leaves with) and
+`nothing` (why it has nothing to take back). The human plan lists them under
+the step's impacts as `keeps <retained>`, `leaves with <step>, <step>` and
+`nothing to take back: <reason>` (`TestADestroyPlanStatesEachStepsInverse`).
+`blocks` lists
 what an `apply` or `destroy` reached for those blocks: `id`, `description`,
 `stage`, `state`, `outcome`, `attempts`, for an unproved block `unresolved`, and
 for a block that is not `done` whose latest attempt recorded a cause `failure`,
@@ -398,8 +405,9 @@ block carries the original proof's `unresolved` reason and remedy. A preview ste
 removal being retried. Its effect still needs to be attempted. A
 `destroy-admission` check with status `failed` says no cleanup would start.
 In an executed result, `remaining` lists the IDs of unfinished blocks in
-frozen order. `retiringWithHosts` names steps in the current removal whose
-recorded retirement still relies on unfinished host cleanup. A failed or
+frozen order. Under `--keep-going`, `retiringWithHosts` names each done step
+that leaves with its hosts while one of those hosts has no finished step that
+removes or retires it. A failed or
 unproved block establishes unfinished cleanup and carries no inventory claim
 about physical presence. The human result shows `Remaining cleanup` before
 the retry command and receipt. Incomplete cleanup exits `1`, including a

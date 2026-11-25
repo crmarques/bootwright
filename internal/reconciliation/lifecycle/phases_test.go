@@ -4,8 +4,10 @@ import (
 	"context"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -216,8 +218,10 @@ func TestPhasesAfterAFinalization(t *testing.T) {
 	}
 }
 
-func TestReplacementObservesTheReplacedRemovalWithItsOwnPhases(t *testing.T) {
-	t.Parallel()
+// failedRetiringRemoval leaves a failed removal whose retired storage block is
+// unproved, so the removal that replaces it resolves that block first.
+func failedRetiringRemoval(t *testing.T) (*harness, *retiringTestCapability, operationstore.Operation) {
+	t.Helper()
 	h, c := retiringHarness(t, hostedDefinitions(stagedDefinition("other", reconciliation.StageClusters, "installation")), []string{"rhel-01"})
 	completeApply(t, h)
 	h.service.options.Concurrency = 1
@@ -226,13 +230,17 @@ func TestReplacementObservesTheReplacedRemovalWithItsOwnPhases(t *testing.T) {
 	requireFired(t, err)
 	removal, _ := durableOperation(t, h)
 	leaveRunning(t, h, "storage")
-	c.online["other"] = true
-	want := h.service.computePhases(frozenPlan(t, h, removal.ID)).retired["storage"]
-	if own := decidedDestroy(t, h).phases.retired["storage"]; own == want {
-		t.Fatalf("the replacement retires storage as the replaced removal does (%v): the fixture cannot tell them apart", want)
+	if frozen := leavesWith(frozenPlan(t, h, removal.ID)); !slices.Equal(frozen["storage"], []string{"machine"}) {
+		t.Fatalf("the replaced removal froze leaves-with %v", frozen)
 	}
 	h.capability.outcomes = nil
 	h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted}}
+	return h, c, removal
+}
+
+func TestReplacementObservesTheReplacedRemovalWithItsOwnPhases(t *testing.T) {
+	t.Parallel()
+	h, _, _ := failedRetiringRemoval(t)
 	before := len(h.capability.executions)
 	if result, err := destroy(h); err != nil || result.Receipt.State != string(reconciliation.OperationDone) {
 		t.Fatalf("replacement = %+v (%v)", result, err)
@@ -244,10 +252,27 @@ func TestReplacementObservesTheReplacedRemovalWithItsOwnPhases(t *testing.T) {
 		if execution.Block.ID != "storage" {
 			continue
 		}
-		if execution.RetiredWithHosts != want {
-			t.Fatalf("the replaced removal's storage was observed with RetiredWithHosts %v, want %v", execution.RetiredWithHosts, want)
+		if !execution.RetiredWithHosts {
+			t.Fatal("the replaced removal's storage was observed without the leaves-with answer its plan froze")
 		}
 		return
 	}
 	t.Fatal("no storage execution followed the replacement")
+}
+
+func TestAReplacementRefusesBeforeResolvingARemovalWhoseRuleMoved(t *testing.T) {
+	t.Parallel()
+	h, c, removal := failedRetiringRemoval(t)
+	c.removes["machine"] = false
+	calls := len(h.capability.calls)
+	_, err := destroy(h)
+	if firstCode(err) != "destroy.inverse-moved" || len(h.capability.calls) != calls {
+		t.Fatalf("a replacement over a moved rule = %v after calls %v", diagnostics.Of(err), h.capability.calls[calls:])
+	}
+	if !strings.Contains(diagnostics.Of(err)[0].Remediation, removal.ID) {
+		t.Fatalf("refusal = %+v, want the replaced removal named", diagnostics.Of(err)[0])
+	}
+	if current, _ := durableOperation(t, h); current.ID != removal.ID {
+		t.Fatalf("the refusal registered %s", current.ID)
+	}
 }

@@ -117,6 +117,7 @@ func (c MachineCapability) Removal(ctx context.Context, block reconciliation.Blo
 	return lifecycle.Removal{
 		Description: description(reconciliation.Destroy, request),
 		Impacts:     impacts(reconciliation.Destroy, request),
+		Retains:     []string{"the physical machine " + request.Identity.Object + ", left as it is"},
 		Groups:      groups(reconciliation.Destroy, request),
 	}, nil
 }

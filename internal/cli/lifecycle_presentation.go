@@ -45,6 +45,8 @@ func (p *lifecyclePresentation) seed(result lifecycle.PlanResult) {
 		p.steps[i].After = append([]int(nil), step.After...)
 		p.steps[i].Impacts = append([]string(nil), step.Impacts...)
 		p.steps[i].Consumes = append([]string(nil), step.Consumes...)
+		p.steps[i].Retains = append([]string(nil), step.Retains...)
+		p.steps[i].LeavesWith = append([]string(nil), step.LeavesWith...)
 		p.states[step.ID] = step.State
 	}
 }
@@ -165,6 +167,15 @@ func (d *display) lifecycleSteps(result lifecycle.PlanResult) {
 			}
 			for _, impact := range planned.Impacts {
 				r.paragraph(impact, "      ", "muted")
+			}
+			for _, retained := range planned.Retains {
+				r.paragraph("keeps "+retained, "      ", "muted")
+			}
+			if len(planned.LeavesWith) != 0 {
+				r.paragraph("leaves with "+strings.Join(planned.LeavesWith, ", "), "      ", "muted")
+			}
+			if planned.Nothing != "" {
+				r.paragraph("nothing to take back: "+planned.Nothing, "      ", "muted")
 			}
 		}
 	})

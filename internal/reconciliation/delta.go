@@ -106,6 +106,12 @@ func effects(block Block) []byte {
 		groups = append(groups, group)
 	}
 	block.Groups = groups
+	if block.Inverse != nil {
+		block.Inverse = &Inverse{LeavesWith: block.Inverse.LeavesWith}
+		if !block.Inverse.Stated() {
+			block.Inverse = nil
+		}
+	}
 	encoded, err := json.Marshal(block)
 	if err != nil {
 		return nil

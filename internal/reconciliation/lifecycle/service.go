@@ -355,11 +355,15 @@ func steps(plan reconciliation.Plan, states map[string]reconciliation.BlockState
 			}
 		}
 		slices.Sort(after)
-		out = append(out, PlanStep{
+		step := PlanStep{
 			ID: block.ID, Description: block.Description, Implementation: block.Implementation, Kind: block.Kind, Object: block.Object, Stage: string(block.Stage),
 			Impacts: slices.Clone(block.Impacts), State: state,
 			After: after, Wave: schedule.Waves[block.ID] + 1, Consumes: slices.Clone(block.Consumes),
-		})
+		}
+		if block.Inverse != nil {
+			step.Retains, step.LeavesWith, step.Nothing = slices.Clone(block.Inverse.Retains), slices.Clone(block.Inverse.LeavesWith), block.Inverse.Nothing
+		}
+		out = append(out, step)
 	}
 	return out
 }

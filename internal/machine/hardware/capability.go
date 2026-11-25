@@ -96,7 +96,8 @@ func (Capability) Removal(ctx context.Context, block reconciliation.Block) (life
 		return lifecycle.Removal{}, err
 	}
 	return lifecycle.Removal{Description: description(reconciliation.Destroy, request), Impacts: impacts(reconciliation.Destroy, request),
-		Groups: groups(reconciliation.Destroy, request), Consumes: []string{}}, nil
+		Retains: []string{"the server behind " + request.Identity.Object + ", left as it is"},
+		Groups:  groups(reconciliation.Destroy, request), Consumes: []string{}}, nil
 }
 
 func (c Capability) PromptApplyStart(ctx context.Context, p lifecycle.Probe) error {

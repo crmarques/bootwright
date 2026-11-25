@@ -29,6 +29,16 @@ The contract states each one; the rows only point at the rule that owns it.
 owns what `bootwright diff` reports about the difference, and states that a
 settled apply proves nothing about the host.
 
+## Direction for scenarios that change a realized object
+
+The owner's direction of 2026-11-24 ([D288](../milestones/backlog.md#d288)) is
+that a later scenario, such as changing one attribute of a realized object and
+applying the change, builds on the same step contract as the
+[staged destroy](staged-destroy.md): each destroy step states its inverse,
+identity follows the creation of an effect, and an admission classifies the
+fresh plan against what the context owns and refuses by default. This page
+adds no seam for it, because a seam needs a present consumer.
+
 ## The seam a scenario plugs into
 
 The seam lets a new scenario change one branch, one table row, one guard and

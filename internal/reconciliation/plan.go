@@ -75,11 +75,22 @@ type BlockDefinition struct {
 	Consumes       []string        `json:"consumes"`
 	Groups         []Group         `json:"groups"`
 	Relaxation     string          `json:"relaxation,omitempty"`
+	Inverse        *Inverse        `json:"inverse,omitempty"`
 	Kind           string          `json:"kind"`
 	Object         string          `json:"object"`
 	Implementation string          `json:"implementation"`
 	ContentDigest  string          `json:"contentDigest"`
 	Request        json.RawMessage `json:"request"`
+}
+
+type Inverse struct {
+	Retains    []string `json:"retains,omitempty"`
+	LeavesWith []string `json:"leavesWith,omitempty"`
+	Nothing    string   `json:"nothing,omitempty"`
+}
+
+func (i *Inverse) Stated() bool {
+	return i != nil && (len(i.Retains) != 0 || len(i.LeavesWith) != 0 || i.Nothing != "")
 }
 
 type Block struct {
@@ -109,6 +120,9 @@ func NewPlan(verb Verb, definitions []BlockDefinition) (Plan, error) {
 	for _, definition := range definitions {
 		if definition.Relaxation != "" && verb != Destroy {
 			return Plan{}, planError("lifecycle plan relaxes a block it does not remove")
+		}
+		if definition.Inverse != nil && verb != Destroy {
+			return Plan{}, planError("lifecycle plan states the inverse of a block it does not remove")
 		}
 		requestBytes += len(definition.Request)
 		if requestBytes > MaxPlanRequestBytes {
@@ -334,6 +348,16 @@ func order(definitions []BlockDefinition) ([]BlockDefinition, error) {
 		}
 		known[definition.ID] = definition
 	}
+	for _, definition := range definitions {
+		if definition.Inverse == nil {
+			continue
+		}
+		for _, id := range definition.Inverse.LeavesWith {
+			if _, found := known[id]; !found {
+				return nil, planError("lifecycle block leaves with a block the plan does not contain")
+			}
+		}
+	}
 	wave, err := waves(known)
 	if err != nil {
 		return nil, err
@@ -500,6 +524,9 @@ func validateDefinition(definition BlockDefinition) error {
 	if definition.Relaxation != "" && !validRelaxation(definition.Relaxation) {
 		return planError("lifecycle block relaxation must be a bounded letter-only method")
 	}
+	if err := validateInverse(definition); err != nil {
+		return err
+	}
 	if definition.Throttle != "" && !safeDescription(definition.Throttle) {
 		return planError("lifecycle block throttle must be safe single-line text")
 	}
@@ -544,6 +571,42 @@ func validateDefinition(definition BlockDefinition) error {
 		return planError("lifecycle group identities must be unique within their block")
 	}
 	return canonicalRequest(definition.Request)
+}
+
+func validateInverse(definition BlockDefinition) error {
+	inverse := definition.Inverse
+	if inverse == nil {
+		return nil
+	}
+	if !inverse.Stated() {
+		return planError("lifecycle block inverse must state what it retains, what it leaves with or why it has nothing to take back")
+	}
+	if len(inverse.Retains) > MaxImpacts {
+		return planError("lifecycle block exceeds its retained limit")
+	}
+	for _, retained := range inverse.Retains {
+		if !safeDescription(retained) {
+			return planError("lifecycle block retains must be safe single-line text")
+		}
+	}
+	if len(inverse.LeavesWith) > MaxImpacts || !uniqueSorted(inverse.LeavesWith) {
+		return planError("lifecycle block leaves-with blocks must be bounded, unique and ordered")
+	}
+	for _, id := range inverse.LeavesWith {
+		if !ValidSegment(id) || id == definition.ID {
+			return planError("lifecycle block leaves with a block that is not another safe block identity")
+		}
+	}
+	if inverse.Nothing == "" {
+		return nil
+	}
+	if !safeDescription(inverse.Nothing) {
+		return planError("lifecycle block nothing-to-take-back reason must be safe single-line text")
+	}
+	if len(definition.Impacts) != 0 || len(inverse.Retains) != 0 || len(inverse.LeavesWith) != 0 {
+		return planError("lifecycle block states nothing to take back beside an effect it performs, retains or leaves with")
+	}
+	return nil
 }
 
 // canonicalRequest rejects anything a later reader could decode differently:
@@ -628,6 +691,11 @@ func clone(definition BlockDefinition) BlockDefinition {
 		definition.Groups[index].Machines = slices.Clone(definition.Groups[index].Machines)
 	}
 	definition.Request = slices.Clone(definition.Request)
+	if definition.Inverse != nil {
+		inverse := *definition.Inverse
+		inverse.Retains, inverse.LeavesWith = slices.Clone(inverse.Retains), slices.Clone(inverse.LeavesWith)
+		definition.Inverse = &inverse
+	}
 	return definition
 }
 

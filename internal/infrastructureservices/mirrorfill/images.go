@@ -41,6 +41,7 @@ func NewImages(runner Runner, images Images) ImageFill {
 		definition:  imagesDefinition,
 		describe:    imagesDescription,
 		impacts:     imagesImpacts,
+		nothing:     imagesNothing,
 		references:  ImagesRequest.SecretReferences,
 		classes:     ImagesRequest.SecretClasses,
 		deadline:    imagesDeadline,
@@ -122,6 +123,10 @@ func imagesDescription(verb reconciliation.Verb, request ImagesRequest) string {
 		return "release the image mirror of " + request.Identity.Environment + " on " + request.Placement.Machine + ", whose Registry's removal deletes its images"
 	}
 	return "fill the image mirror of " + request.Identity.Environment + " on " + request.Placement.Machine
+}
+
+func imagesNothing(request ImagesRequest) string {
+	return "the removal of Registry " + request.Identity.Registry + " deletes the images this fill pushed into it"
 }
 
 func imagesImpacts(verb reconciliation.Verb, request ImagesRequest) []string {

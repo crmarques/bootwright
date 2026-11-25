@@ -125,7 +125,8 @@ func (c Capability) Removal(ctx context.Context, block reconciliation.Block) (li
 	if err != nil {
 		return lifecycle.Removal{}, err
 	}
-	return lifecycle.Removal{Description: "retire add-on " + request.Package + " with " + request.Cluster + "; its objects leave with the cluster disks or stay on a cluster that keeps running", Impacts: []string{}}, nil
+	return lifecycle.Removal{Description: "retire add-on " + request.Package + " with " + request.Cluster + "; its objects leave with the cluster disks or stay on a cluster that keeps running", Impacts: []string{},
+		Retains: []string{"the objects of add-on " + request.Package + " on " + request.Cluster + ", which leave with the cluster disks or stay on a cluster that keeps running"}}, nil
 }
 func (c Capability) Apply(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
 	result, request, err := c.run(ctx, execution, "apply")

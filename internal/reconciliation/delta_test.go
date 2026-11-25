@@ -251,3 +251,35 @@ func TestObjectsFoldsBlocksByObject(t *testing.T) {
 		t.Fatal("an empty delta must fold to no objects")
 	}
 }
+
+// A removal's continuation reads its inverse's words as presentation and what
+// its effect leaves with as part of the effect.
+func TestCompareReadsAnInversesWordsAsSameAndItsLeavesWithAsChanged(t *testing.T) {
+	removal := func(inverse *Inverse, impacts ...string) Plan {
+		alpha, bravo := definition("alpha"), definition("bravo", "alpha")
+		alpha.Impacts, alpha.Inverse = append([]string{}, impacts...), inverse
+		built, err := NewPlan(Destroy, []BlockDefinition{alpha, bravo})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return built
+	}
+	frozen := removal(&Inverse{Retains: []string{"the unit of alpha"}, LeavesWith: []string{"bravo"}})
+	for name, tc := range map[string]struct {
+		fresh Plan
+		want  Change
+	}{
+		"other retained words":      {removal(&Inverse{Retains: []string{"the alpha unit"}, LeavesWith: []string{"bravo"}}), Same},
+		"no retained words":         {removal(&Inverse{LeavesWith: []string{"bravo"}}), Same},
+		"leaves with nothing":       {removal(&Inverse{Retains: []string{"the unit of alpha"}}), Changed},
+		"no inverse and no leaving": {removal(nil, "remove-unit alpha"), Changed},
+	} {
+		if got := changeOf(Compare(frozen, tc.fresh), "alpha"); got != tc.want {
+			t.Errorf("%s reads %s, want %s", name, got, tc.want)
+		}
+	}
+	nothing := removal(&Inverse{Nothing: "its apply changed nothing"})
+	if got := changeOf(Compare(nothing, removal(&Inverse{Nothing: "it changed nothing"})), "alpha"); got != Same {
+		t.Errorf("other nothing words read %s", got)
+	}
+}

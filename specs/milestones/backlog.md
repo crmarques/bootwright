@@ -50,7 +50,6 @@ Alias cell.
 | [B162](#b162) | new, 2026-09-30 (X28) | enabling | Architecture | The diagnostic registry follows every call shape | Parked under the 2026-09-30 triage rule: test tooling |
 | [B163](#b163) | new, 2026-09-30 (X28) | enabling | Architecture | Test-loop wording and counts | Parked under the 2026-09-30 triage rule: tooling polish |
 | [B164](#b164) | new, 2026-09-30 (X28) | enabling | Architecture | Only the privilege supervisor subscribes to signals | Parked under the 2026-09-30 triage rule: test tooling |
-| [B166](#b166) | split from B45 on 2026-09-30 (D41) | safety | State reconciliation | Scoped removal | A state-contract candidate (D41) |
 | [B167](#b167) | split from B34 on 2026-09-30 (D28) | safety | Substrate and Controller | Frozen remote package transactions | The SSH-host install contract was narrowed instead (D28) |
 | [B171](#b171) | new, 2026-09-30 (X21) | enabling | State reconciliation and Secrets | Custody checks each held by its own test | Parked under the 2026-09-30 triage rule: test depth |
 | [B180](#b180) | new, 2026-09-30 (X30) | enabling | Workspace, Controller setup and State reconciliation | Storage fixtures that can fail | Parked under the 2026-09-30 triage rule: test depth |
@@ -345,6 +344,8 @@ Alias cell.
 | [B1837](#b1837) | new, 2026-11-25 (D287) | product | Storage | An object gateway's STS trusts an `OIDCProvider` whose certificate chains to a private CA | RGW can only replace its whole curl CA bundle, so admitting the provider's bundle would drop every public anchor |
 | [B1838](#b1838) | new, 2026-11-25 (D287) | product | Storage | A `CephSignOn` names the claim path its users' dashboard roles come from | cephadm loses a `roles_path` set on a fresh single sign-on database when a manager restarts |
 | [B1839](#b1839) | new, 2026-11-25 (X739) | product | Storage | A completed object gateway rotates its LDAP bind password, its directory's CA bundle or its STS key in place | The leaves are effect material the gateway block placed; revive when an owner asks for in-place rotation |
+| [B1864](#b1864) | new, 2026-11-25 (D288) | product | Reconciliation, with Managed OS | A staged destroy takes back a physical Machine's installation and its erase, and the restoring apply rebuilds them through disk discovery | After the restoring apply ([B1858](m1.md#b1858)); a physical install in a staged scope refuses |
+| [B1865](#b1865) | new, 2026-11-25 (D288) | product | Reconciliation and CLI | `destroy --stage` narrows to the selected clusters with `--clusters` | After the restoring apply ([B1858](m1.md#b1858)); a staged destroy takes the whole stage |
 
 ### B82
 
@@ -527,10 +528,6 @@ The Makefile's `quick` comment and the Go reference still describe `make quick` 
 ### B164
 
 Nothing checks that `os/signal` is granted to the privilege supervisor alone, although the spec calls its `Begin` the process's one signal subscription; and the composition-root signal test X28 kept repeats what the boundary tests refuse. **Exit evidence:** a grant check and one test.
-
-### B166
-
-`destroy` admits no stage or block scope, so a recovery removes every block the context owns rather than the one whose digest moved. **Exit evidence:** the authorization and journey of a scoped removal, proof that a scope never leaves a dependent behind, and crash and replay tests.
 
 ### B167
 
@@ -3759,6 +3756,30 @@ asks for in-place rotation. **Exit evidence:** a rotation that re-applies the
 stored service with the new leaf under its own attempt record, proves every
 daemon restarted with it, and leaves local users working throughout.
 
+### B1864
+
+**Owner:** Reconciliation, with Managed OS. **Kind:** product.
+**Requires:** [B1858](m1.md#b1858). **Definition:** Candidate. **Outcome:** a
+staged destroy whose scope holds a physical Machine's installation or erase
+takes them back, and the restoring apply rebuilds them through the disk
+discovery a preparation apply owns. The
+[staged destroy design](../deferred/staged-destroy.md#the-scope-rule) refuses
+such a scope, because an erased host would rest trimmed with a restore that
+cannot discover its disks. **Exit evidence:** the restore over a physical
+Machine on real hardware, and the refusal that stays for a host whose disks
+the discovery cannot read.
+
+### B1865
+
+**Owner:** Reconciliation and CLI. **Kind:** product.
+**Requires:** [B1858](m1.md#b1858). **Definition:** Candidate. **Outcome:**
+`destroy --stage` accepts `--clusters`, so one cluster of a stage is taken back
+and the others stay kept. The scope, the proof that no dependent stays behind
+and the trimmed standing each hold per cluster. **Exit evidence:** a journey
+over two clusters of one context, and the proofs of the
+[staged destroy design](../deferred/staged-destroy.md#floor-and-scope) for the
+narrowed scope.
+
 ## Audit remediation (2026-10-26)
 
 The [2026-10-26 spec audit](../../audits/001-spec/report-final.md) ordered its
@@ -4458,6 +4479,10 @@ holding such a clause, the clauses pending and the work they enable.
 - [D287](#d287): clauses (7) to (12), the Ceph identity program's kind names,
   RGW placement, `ldaps://` only, Grafana role, provider pre-check and parked
   items (X733 to X741).
+- [D288](#d288): clauses (1) to (8), the `destroy --stage` program: the floor,
+  the widening of a plain `destroy`, the restoring apply's power check, the
+  identity of a re-created effect, the stated inverse of every step, the
+  earlier-build refusal, and the two questions left to the owner (X753).
 
 ### D1
 
@@ -4642,6 +4667,8 @@ that exits without a result reports `runtime.internal` with exit status 1;
 ### D41
 
 **owner** (2026-09-30, accepted by the owner from the session's recommendations): B45: a continuation freezes its Python and Ansible closure and refuses when it moves; scoped removal is parked (B166).
+
+Revised by [D288](#d288): B166 is attached to M1 at the owner's request.
 
 ### D42
 
@@ -9998,3 +10025,72 @@ authorizes X733 to X741 on M2, items B1827 to B1838 and
 [B1809](m2.md#b1809), no more than two slices active at once, then the
 ceph-stretch chart and its `prd.yaml`, with integration into local main; no
 push.
+### D288
+
+**owner** (2026-11-25): the owner asked for a way to take back the latest stage
+of a context and keep the Machines below it, then widened the scope, then asked
+for the work. The words, in order:
+
+- 2026-11-24: "let's add a new flag for bootwright destroy: --stage / this
+  should allow operator to destroy the latest/"upper" stage performed / it would
+  be useful when apply fail and operator could destroy latest stage (for
+  instance, cluster provisioning), but reusing the machines already provisioned,
+  avoiding operator losing time to rebuild all from scratch / think of impacts,
+  all important requisites, then evaluate scenarios and corner cases / then
+  propose a plan considering best ux, well-designed system, good architecture,
+  elegancy and safety"
+- 2026-11-24: "review plan under the scope that all apply and destroy flows must
+  be backed by a state machine and predictable steps, where one apply step would
+  have a equivalent destroy step (that could be do nothing in some situations,
+  but this must be clear and explicit in logic and plan) / although we are not
+  going to implement it now, those flow should consider and prepare code for in
+  a future, bootwright woudl support more advanced and complex reconciliation
+  (for instance, operator change one attribute/CR in the desired state and
+  bootwright would apply those change to real state)"
+- 2026-11-25: "proceed with implementation, making code, logic and archictecture
+  as good, safe and well-designed as possible"
+
+[B166](m1.md#b166), which [D41](#d41) parked, is revived and attached to M1 at
+the owner's request, out of sequence. The program, in order, is the items of the
+[staged destroy design](../deferred/staged-destroy.md#program): the frozen
+inverse of every destroy step ([B1855](delivered.md#x753--every-destroy-step-states-its-inverse), [B1856](m1.md#b1856)), one
+ownership fold ([B1857](m1.md#b1857)), `destroy --stage` (B166), the restoring
+apply ([B1858](m1.md#b1858), [B1859](m1.md#b1859)), and the per-capability
+unlocks ([B1860](m1.md#b1860), [B1861](m1.md#b1861),
+[B1862](m2.md#b1862)). This decision authorizes X753, the slice of B1855, and
+no other slice. Each later slice needs its own authorization, and the
+restoring apply is the fifth apply scenario, which
+[D153](#d153) and the
+[scenario guard](../deferred/reconciliation-scenarios.md#the-seam-a-scenario-plugs-into)
+give its own decision. The design records what the owner's words add to
+[frozen requests and contract guards](../state-reconciliation.md#frozen-requests-and-contract-guards): a step
+contract that pairs every apply step with a stated destroy step, and a
+reconciliation direction written on the
+[scenarios page](../deferred/reconciliation-scenarios.md#direction-for-scenarios-that-change-a-realized-object)
+with no seam built for it.
+
+Taken by the session from its own recommendations, pending the owner's review:
+
+1. `--stage` takes one value, meaning that stage and everything built on it.
+   A list of stages is not admitted.
+2. Plain `destroy` over an unfinished staged destroy widens to the whole
+   context behind an explicit confirmation.
+3. The restoring apply checks power only for the Machines it touches. This
+   narrows the rule that an apply checks its managed fleet, so it lands only in
+   its own named slice.
+4. A re-created effect takes the identity of the operation that creates it, as
+   the additive apply does. The alternative, to settle one identity per context
+   first through [B568](backlog.md#b568) and [B79](m2.md#b79), stays open.
+5. Every destroy step states its inverse, frozen with the removal plan, and a
+   destroy step that does nothing still calls its capability.
+6. A destroy that an earlier build left unfinished, and that the frozen inverse
+   contradicts, refuses and is finished with the build that registered it.
+7. Which capability follows the restoring apply stays open for the owner. The
+   session recommends Ceph on kept hosts first, through
+   [B491](m2.md#b491)'s definition for a cluster no client can use yet.
+8. Physical OpenShift nodes after a boot stay open for the owner.
+
+Rejected: one closed mode per destroy step with the engine recording some steps
+`done` without calling their capability, which skips removals and proofs that
+those capabilities perform; and update or replace seams built now, because a
+seam needs a present consumer.

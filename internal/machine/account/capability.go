@@ -167,7 +167,7 @@ func (Capability) Removal(_ context.Context, block reconciliation.Block) (lifecy
 
 func removal(request Request) lifecycle.Removal {
 	return lifecycle.Removal{Description: "remove the owned login " + request.Placement.User + " and keep its home data",
-		Impacts: []string{"withdraw the managed SSH and sudo grants"}, Consumes: []string{},
+		Impacts: []string{"withdraw the managed SSH and sudo grants"}, Retains: []string{"the home data of " + request.Placement.User}, Consumes: []string{},
 		Groups: []reconciliation.Group{{ID: "withdraw", Description: "remove and verify the managed SSH login", Machines: []string{request.Placement.Machine}}}}
 }
 
@@ -183,7 +183,8 @@ func (Capability) Abandon(_ context.Context, block reconciliation.Block) (lifecy
 	}
 	place := request.Placement
 	return lifecycle.Removal{Description: "leave the owned login " + place.User + " on " + place.Machine + " in place, contacting nothing",
-		Impacts: []string{"abandon root-equivalent SSH access for " + place.User}, Consumes: []string{}}, nil
+		Impacts: []string{"abandon root-equivalent SSH access for " + place.User},
+		Retains: []string{"the owned login " + place.User + " on " + place.Machine + ", left in place unmanaged"}, Consumes: []string{}}, nil
 }
 
 func (Capability) Quiescent(context.Context, lifecycle.Probe) (lifecycle.Quiescence, error) {

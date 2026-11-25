@@ -294,9 +294,16 @@ func TestOperationRecordsMatchTheirGoldens(t *testing.T) {
 	}
 
 	// The removal of that apply plans the inverse, names the apply as its source
-	// and reopens the binding the apply made.
+	// and reopens the binding the apply made. Its blocks state every member of
+	// their inverse between them.
 	inverse, err := apply.Inverse()
 	if err != nil {
+		t.Fatal(err)
+	}
+	stated := definitions(inverse)
+	stated[0].Inverse = &reconciliation.Inverse{Retains: []string{"the installed operating system of node-01"}, LeavesWith: []string{"server-lab"}}
+	stated[1].Impacts, stated[1].Inverse = []string{}, &reconciliation.Inverse{Nothing: "the removal of node-01 takes back the unit lab"}
+	if inverse, err = reconciliation.NewPlan(reconciliation.Destroy, stated); err != nil {
 		t.Fatal(err)
 	}
 	removal := testOperation(t, inverse)

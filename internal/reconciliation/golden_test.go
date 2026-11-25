@@ -209,15 +209,26 @@ func TestPlanDigestsMatchTheirGolden(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	definitions := []BlockDefinition{inverse.Blocks[0].BlockDefinition, inverse.Blocks[1].BlockDefinition}
+	definitions[0].Inverse = &Inverse{Retains: []string{"the installed operating system of node-01"}, LeavesWith: []string{"server-lab"}}
+	definitions[1].Impacts, definitions[1].Inverse = []string{}, &Inverse{Nothing: "the removal of node-01 takes back the unit lab"}
+	stated, err := NewPlan(Destroy, definitions)
+	if err != nil {
+		t.Fatalf("stating the inverse: %v", diagnostics.Of(err))
+	}
 	var digests struct {
 		InverseDigest  string            `json:"inverseDigest"`
 		PlanDigest     string            `json:"planDigest"`
 		RequestDigests map[string]string `json:"requestDigests"`
+		StatedDigest   string            `json:"statedDigest"`
 	}
 	if digests.PlanDigest, err = plan.Digest(); err != nil {
 		t.Fatal(err)
 	}
 	if digests.InverseDigest, err = inverse.Digest(); err != nil {
+		t.Fatal(err)
+	}
+	if digests.StatedDigest, err = stated.Digest(); err != nil {
 		t.Fatal(err)
 	}
 	digests.RequestDigests = map[string]string{}

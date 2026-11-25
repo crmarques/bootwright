@@ -505,12 +505,15 @@ and an apply that adds to a completed one names it (`predecessor`), each an
 optional member, below. `plan.json` is the
 immutable frozen plan: every block with its
 description, dependencies, impacts, presentation groups, resolved
-implementation identity, content digest and canonical secret-free request.
+implementation identity, content digest and canonical secret-free request, and
+for a removal block the inverse it states.
 A block's dependencies, impacts, consumed authorizations and groups are always
 lists, `[]` when empty and never `null`. A block may carry `prerequisites`, an optional member: predecessor
 blocks it waits for, which scheduling never counts and the plan digest covers
 only when present; one beside a record naming no `predecessor` refuses
-`operations.record-invalid`.
+`operations.record-invalid`. A removal block may carry `inverse`, an optional
+member: `retains`, `leavesWith` and `nothing`, each present only when it states
+something, which the plan digest covers and the request digest does not.
 Block records carry the block state and the number of attempts started, one
 less than the next attempt's number; attempt and
 resolution records carry their block, attempt and resolution numbers, phase,
@@ -1008,9 +1011,9 @@ Every apply or destroy decision, and every plan preview, yields one in-memory
 operation plan: the frozen block DAG with the bound selection, the decided
 mode, the durable basis the executor re-proves, the capability bindings and the
 [removal phases](#quiescence-before-removal). The executor acts only on that plan and the ports, after
-re-proving its basis, and never plans again. Facts derived from the frozen plan,
-the removal phases included, are recomputed by each invocation from the running
-build and are never persisted.
+re-proving its basis, and never plans again. Each invocation recomputes the
+removal phases from the frozen plan, persisting none; a removal block freezes
+its `leavesWith` answer.
 
 A plan is a dependency DAG of stable blocks. Each block has an ID, description,
 stage, dependencies, the host resources it will not share, an optional
@@ -1915,12 +1918,42 @@ keyring listing fails as its reopen would, as below.
 A frozen block records what creating it did; removing it is the other half of
 the same request. Each capability therefore reads its own frozen request and
 states what removing that block does: the words it is planned and reported in,
-the impacts it lists, its groups and the authorization it consumes. Nothing
+the impacts it lists, its inverse, its groups and the authorization it consumes. Nothing
 else of the block may change, so planning a removal can never alter what is
 removed, and a removal acknowledges the consequences of removing rather than
 the consequences its apply acknowledged. A relaxation, an
 [erase](#erase-relaxation) or an [abandonment](#abandoned-removal), is the one
 exception.
+
+Every removal block states its inverse: its impacts are the effects it
+performs, and its `inverse`, frozen with the plan and covered by its digest,
+states what it keeps by design (`retains`), the blocks of the same removal its
+effect leaves with (`leavesWith`), or why it has nothing to take back
+(`nothing`), which a capability states through `lifecycle.Removal`. `nothing`
+stands alone, and only a removal plan carries the member
+(`TestOnlyARemovalFreezesAnInverseAndTheDigestCoversIt`). A removal whose
+block states none of these refuses `destroy.inverse-unstated` before
+registration (`TestARemovalStepThatStatesNoInverseRefusesBeforeRegistration`,
+`TestEveryExampleRemovalStepStatesItsInverse`).
+
+The engine alone decides `leavesWith`, once, as it freezes the removal plan,
+by the retirement rule of [quiescence before removal](#quiescence-before-removal):
+a host-bound block leaves with the first block that removes or retires each of
+its hosts, ordered and unique, unless a surviving consumer or a deferral keeps
+it online. Every later invocation of that removal, its preview included,
+computes the rule only to prove it equal. A different answer refuses
+`destroy.inverse-moved` before any effect, naming the block, the frozen and the
+computed answer, with the remedy to continue or replace the removal with the
+build that registered it. An earlier build's removal froze no `leavesWith`, so
+its continuation refuses once this build retires a block; a failed one is
+replaced by a removal this build freezes, after proving the failed one's answer
+the same way when it resolves that one's unproved blocks
+(`TestAReplacementRefusesBeforeResolvingARemovalWhoseRuleMoved`). `Execution.RetiredWithHosts` and
+`Probe.RetiredWithHosts` are true exactly when the frozen `leavesWith` is
+non-empty (`TestARemovalFreezesWhatEachStepLeavesWithAndHandsThatToItsCapability`,
+`TestARecomputedLeavesWithThatDiffersRefusesBeforeAnyEffect`,
+`TestAFailedRemovalWithoutTheFrozenMemberIsReplacedByOneThatFreezesIt`). A
+continuation compares `retains` and `nothing` as words, like impacts.
 
 Reading a frozen request is what makes a context removable without re-deriving
 it. A capability reads exactly the request version it writes; the frozen digest

@@ -223,7 +223,8 @@ func (c PhysicalRetirementCapability) Plan(ctx context.Context, input lifecycle.
 
 func (PhysicalRetirementCapability) Removal(ctx context.Context, block reconciliation.Block) (lifecycle.Removal, error) {
 	request, err := DecodePhysicalRetirementRequest(block.Request)
-	return lifecycle.Removal{Description: "verify physical Ceph retirement before releasing " + request.Cluster}, err
+	return lifecycle.Removal{Description: "verify physical Ceph retirement before releasing " + request.Cluster,
+		Nothing: "its apply only recorded the physical retirement policy of " + request.Cluster + ", which this removal verifies against the erase receipts"}, err
 }
 
 func (PhysicalRetirementCapability) Quiescent(ctx context.Context, _ lifecycle.Probe) (lifecycle.Quiescence, error) {

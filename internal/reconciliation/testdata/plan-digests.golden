@@ -4,5 +4,6 @@
   "requestDigests": {
     "install-node-01": "e5d17ebbdb261bba90b6ac6bed1515fcef82451553e90a19b571e0ab6ab8d117",
     "server-lab": "3de9e0e72c29b8efe28cf27ea601b18bc96b29af7f7916fedbe2060bda665772"
-  }
+  },
+  "statedDigest": "620744b410808faded1f97315e8f468215938f0824e765286d88f242d386ba3e"
 }

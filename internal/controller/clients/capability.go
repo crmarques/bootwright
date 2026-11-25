@@ -201,6 +201,7 @@ func (c Capability) Removal(ctx context.Context, block reconciliation.Block) (li
 	return lifecycle.Removal{
 		Description: description(reconciliation.Destroy, block.Object, request),
 		Impacts:     impacts(reconciliation.Destroy, request),
+		Retains:     []string{"the shared clients of " + block.Object + " on " + request.Machine + ", which outlive the context that selected them"},
 		Groups:      groups(reconciliation.Destroy, request.Machine),
 	}, nil
 }

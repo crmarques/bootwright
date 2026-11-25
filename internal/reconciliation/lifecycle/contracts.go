@@ -340,6 +340,8 @@ type SurvivingConsumer struct {
 type Removal struct {
 	Description string
 	Impacts     []string
+	Retains     []string
+	Nothing     string
 	Consumes    []string
 	Groups      []reconciliation.Group
 	ReplaySafe  bool

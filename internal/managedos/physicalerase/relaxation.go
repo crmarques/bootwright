@@ -58,6 +58,7 @@ func eraseRemoval(request EraseRequest, relaxation string) lifecycle.Removal {
 	switch relaxation {
 	case lifecycle.EraseRetain:
 		removal.Description = retainDescription + machine + " without erasing them; power and media state unproved"
+		removal.Retains = []string{"the data, installed OS and Ceph host state on the declared disks of " + machine}
 		return removal
 	case lifecycle.EraseMetadataClear:
 		removal.Description = metadataClearDescription + machine

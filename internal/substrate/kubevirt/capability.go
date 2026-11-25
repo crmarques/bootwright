@@ -149,6 +149,7 @@ func (c HostCapability) Removal(_ context.Context, block reconciliation.Block) (
 	return lifecycle.Removal{
 		Description: hostDescription(reconciliation.Destroy, request),
 		Impacts:     hostImpacts(reconciliation.Destroy, request),
+		Nothing:     "its apply only proved the host cluster of " + request.Identity.Object + " and changed nothing there",
 		Groups:      hostGroups(reconciliation.Destroy, request),
 	}, nil
 }

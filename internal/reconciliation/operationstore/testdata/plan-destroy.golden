@@ -37,6 +37,14 @@
           ]
         }
       ],
+      "inverse": {
+        "retains": [
+          "the installed operating system of node-01"
+        ],
+        "leavesWith": [
+          "server-lab"
+        ]
+      },
       "kind": "Machine",
       "object": "node-01",
       "implementation": "os-install-anaconda-v1",
@@ -54,9 +62,7 @@
       "dependencies": [
         "install-node-01"
       ],
-      "impacts": [
-        "create-container-unit lab"
-      ],
+      "impacts": [],
       "consumes": [],
       "groups": [
         {
@@ -67,6 +73,9 @@
           ]
         }
       ],
+      "inverse": {
+        "nothing": "the removal of node-01 takes back the unit lab"
+      },
       "kind": "ArtifactServer",
       "object": "lab",
       "implementation": "artifact-server-nginx-v1",

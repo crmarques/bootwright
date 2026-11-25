@@ -314,6 +314,7 @@ func (c Capability) Removal(ctx context.Context, block reconciliation.Block) (li
 	return lifecycle.Removal{
 		Description: description(reconciliation.Destroy, request),
 		Impacts:     impacts(reconciliation.Destroy, request),
+		Retains:     []string{"the installed operating system of " + request.Identity.Object + ", which leaves only with its Machine's own removal or erase"},
 		Groups:      groups(reconciliation.Destroy, request),
 		ReplaySafe:  true,
 	}, nil

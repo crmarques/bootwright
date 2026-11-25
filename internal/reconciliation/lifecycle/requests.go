@@ -148,7 +148,10 @@ type PlanStep struct {
 	Wave int
 	// Consumes names the authorizations this step's consequence needs, which
 	// the invocation acknowledges if it can attempt that effect.
-	Consumes []string
+	Consumes   []string
+	Retains    []string
+	LeavesWith []string
+	Nothing    string
 }
 
 // A stage selection's marker for one step. StepResolve marks the unproved

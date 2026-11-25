@@ -37,6 +37,7 @@ func NewReleases(runner Runner, releases Releases, auth ReleaseAuth) ReleaseFill
 		definition:  releaseDefinition,
 		describe:    releaseDescription,
 		impacts:     releaseImpacts,
+		nothing:     releaseNothing,
 		references:  ReleaseRequest.SecretReferences,
 		classes:     ReleaseRequest.SecretClasses,
 		deadline:    func(ReleaseRequest) time.Duration { return releaseDeadline() },
@@ -121,6 +122,10 @@ func releaseDescription(verb reconciliation.Verb, request ReleaseRequest) string
 		return "release the copy of " + request.Identity.Cluster + "'s release in the image mirror on " + request.Placement.Machine + ", whose Registry's removal deletes it"
 	}
 	return "copy the release " + request.Release.Version + " of " + request.Identity.Cluster + " into the image mirror on " + request.Placement.Machine
+}
+
+func releaseNothing(request ReleaseRequest) string {
+	return "the removal of Registry " + request.Identity.Registry + " deletes the release of " + request.Identity.Cluster + " this fill copied into it"
 }
 
 func releaseImpacts(verb reconciliation.Verb, request ReleaseRequest) []string {

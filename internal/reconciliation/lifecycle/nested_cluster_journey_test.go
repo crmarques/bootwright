@@ -63,7 +63,7 @@ func (nestedHostBlocks) Plan(context.Context, lifecycle.PlanInput) (lifecycle.Ca
 func (nestedHostBlocks) Claimed(api.Catalog) []string { return nil }
 
 func (nestedHostBlocks) Removal(_ context.Context, block reconciliation.Block) (lifecycle.Removal, error) {
-	return lifecycle.Removal{Description: "retire " + block.Object}, nil
+	return lifecycle.Removal{Description: "retire " + block.Object, Retains: []string{"the host cluster " + block.Object}}, nil
 }
 
 func (c nestedHostBlocks) record(block reconciliation.Block, verb string) {

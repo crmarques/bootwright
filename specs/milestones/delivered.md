@@ -18310,3 +18310,42 @@ The command tests exercise read-only admission, exact-byte import, updates
 and frozen replay without sibling discovery. The delivering commit records
 the verification results. The independent coverage run found pre-existing
 shortfalls tracked in [B1854](backlog.md#b1854).
+
+## X753 — Every destroy step states its inverse
+
+**Item:** B1855. **Kind:** safety. **Owner:** Reconciliation, with each
+capability. **Authorization:** [D288](backlog.md#d288), the first slice of the
+[staged destroy design](../deferred/staged-destroy.md).
+
+**Outcome:** every removal block states its inverse, as
+[frozen requests and contract guards](../state-reconciliation.md#frozen-requests-and-contract-guards)
+states: what it retains by design, the blocks its effect leaves with, or why it
+has nothing to take back. The member is frozen with the removal plan and covered
+by its digest, and only a removal plan carries it. The engine decides the
+blocks an effect leaves with once, as it freezes the plan, and every later
+invocation computes the rule only to prove the answer equal. A removal whose
+block states no inverse refuses `destroy.inverse-unstated` before it registers,
+and a recomputed answer that differs refuses `destroy.inverse-moved` before any
+effect. The destroy preview states each step's inverse. A destroy that an
+earlier build registered without the member refuses its continuation once this
+build retires a block, and a failed one is replaced by a removal that freezes
+it. The removal plan and its digest move with the member, and a destroy the
+earlier build left unfinished is finished with that build. The behavior of a
+completed destroy does not change.
+
+**Guard tests:** `TestEveryExampleRemovalStepStatesItsInverse`,
+`TestARemovalStepThatStatesNoInverseRefusesBeforeRegistration`,
+`TestARecomputedLeavesWithThatDiffersRefusesBeforeAnyEffect`,
+`TestAReplacementRefusesBeforeResolvingARemovalWhoseRuleMoved`,
+`TestAStepWithNothingToTakeBackThatLeavesWithItsHostsRefusesBeforeRegistration`,
+`TestOnlyARemovalFreezesAnInverseAndTheDigestCoversIt`,
+`TestCompareReadsAnInversesWordsAsSameAndItsLeavesWithAsChanged` and
+`TestADestroyPlanStatesEachStepsInverse`, with the earlier-build refusal in
+`internal/reconciliation/lifecycle`.
+
+**Gates:** `make check` and `make race`; the delivering commit records the
+command and result of each.
+
+**Limits:** the branches decided at run time stay with
+[B1856](m1.md#b1856), and one fold of what a context owns with
+[B1857](m1.md#b1857).
