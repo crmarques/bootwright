@@ -396,7 +396,16 @@ func validateOperationLinks(operation Operation) error {
 type Stage struct {
 	Floor     reconciliation.Stage `json:"floor"`
 	TakenBack []string             `json:"takenBack"`
+	KeptPower []KeptPower          `json:"keptPower,omitempty"`
 }
+
+type KeptPower struct {
+	Block   string `json:"block"`
+	Machine string `json:"machine"`
+	Power   string `json:"power"`
+}
+
+const PoweredOff = "off"
 
 func validateStage(verb reconciliation.Verb, stage *Stage) error {
 	if stage == nil {
@@ -414,16 +423,38 @@ func validateStage(verb reconciliation.Verb, stage *Stage) error {
 			return recordError("a staged destroy's taken-back steps name an invalid block")
 		}
 	}
+	if len(stage.KeptPower) > reconciliation.MaxBlocks || !slices.IsSortedFunc(stage.KeptPower, func(x, y KeptPower) int { return strings.Compare(x.Block, y.Block) }) {
+		return recordError("a staged destroy's kept power targets must form a bounded ordered set")
+	}
+	for index, target := range stage.KeptPower {
+		if !reconciliation.ValidSegment(target.Block) || !reconciliation.ValidSegment(target.Machine) || target.Power != PoweredOff ||
+			index != 0 && stage.KeptPower[index-1].Block == target.Block {
+			return recordError("a staged destroy's kept power target is invalid")
+		}
+	}
 	return nil
 }
 
 func checkStage(operation Operation, plan reconciliation.Plan) error {
 	if operation.Stage == nil {
+		for _, block := range plan.Blocks {
+			if block.Inverse != nil && len(block.Inverse.KeptHosts) != 0 {
+				return recordError("only a staged destroy keeps the hosts of a step it takes back")
+			}
+		}
 		return nil
 	}
 	for _, block := range plan.Blocks {
 		if _, held := slices.BinarySearch(operation.Stage.TakenBack, block.ID); !held {
 			return recordError("a staged destroy's plan holds a step its taken-back set does not name")
+		}
+		if block.Inverse == nil {
+			continue
+		}
+		for _, machine := range block.Inverse.KeptHosts {
+			if !slices.ContainsFunc(operation.Stage.KeptPower, func(target KeptPower) bool { return target.Machine == machine }) {
+				return recordError("a staged destroy keeps a host no kept power target proves")
+			}
 		}
 	}
 	return nil

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
@@ -198,6 +200,9 @@ func (s Service) removalStart(ctx context.Context, tx Transaction, store Operati
 	if err := survivorRefusal(decided.plan.Blocks, decided.phases.survivors); err != nil {
 		return nil, nil, err
 	}
+	if err := s.proveKeptPower(ctx, store, tx.Identity().Name, located, decided, material); err != nil {
+		return nil, nil, err
+	}
 	skip := maps.Clone(decided.phases.machines)
 	maps.Copy(skip, decided.phases.preStopMachines)
 	abandoned := abandonedBlocks(decided.plan)
@@ -254,4 +259,81 @@ func heldRemovalBlocks(plan reconciliation.Plan, deferred map[string]error) map[
 		}
 	}
 	return held
+}
+
+func (s Service) proveKeptPower(ctx context.Context, store recordReader, name string, located approved, decided operationPlan, material map[string]secrets.Material) error {
+	stage, source := decided.stage, decided.source
+	if !decided.fresh {
+		stage, source = decided.operation.Stage, decided.operation.Source
+	}
+	if stage == nil || len(stage.KeptPower) == 0 {
+		return nil
+	}
+	held, err := sourceLineage(ctx, store, source)
+	if err != nil {
+		return err
+	}
+	owned := held.owners()
+	var blocked, stops []string
+	err = s.withPython(ctx, located, func(launch prerequisites.PythonLaunch) error {
+		for index, target := range stage.KeptPower {
+			member, original, found := owned.of(target.Block)
+			reader, reads := s.capabilityOf(original).(MachineStartPower)
+			if !found || original.Kind != string(api.Machine) || original.Object != target.Machine || !reads {
+				return engineRecordsDamaged.Fail("the staged destroy keeps Machine/"+target.Machine+", which no step of its lineage can read the power of", "restore the context store")
+			}
+			event := ProgressEvent{Phase: CheckPhase, Block: "kept-power-" + target.Block, Position: index + 1, Total: len(stage.KeptPower),
+				Description: "prove the kept Machine/" + target.Machine + " is powered off, changing nothing", Status: "running"}
+			s.report(ctx, event)
+			state, err := s.readKeptPower(ctx, store, name, member.operation.ID, original, reader, launch, material)
+			event.Status = "ok"
+			if err != nil || !state.Settled() {
+				event.Status = "failed"
+			}
+			s.report(ctx, event)
+			if err != nil {
+				return err
+			}
+			if !state.Settled() {
+				blocked = append(blocked, "Machine/"+target.Machine+" ("+state.Reason+")")
+				if state.Stop != "" && !slices.Contains(stops, state.Stop) {
+					stops = append(stops, state.Stop)
+				}
+			}
+		}
+		return nil
+	})
+	if err != nil || len(blocked) == 0 {
+		return err
+	}
+	repeat := contextCommand(name, string(reconciliation.Destroy), invocationFlags(stage.Floor, reconciliation.Selection{}, authorizingUnfixed(decided.plan))...)
+	remedy := "power them off, then repeat " + repeat
+	if len(stops) != 0 {
+		remedy = "stop them with " + strings.Join(stops, ", then ") + ", then repeat " + repeat
+	}
+	return destroyInUse.Fail("the staged destroy takes back steps on kept Machines that must stay powered off: "+strings.Join(blocked, ", "), remedy)
+}
+
+func (s Service) readKeptPower(ctx context.Context, store recordReader, name, owner string, original reconciliation.Block, reader MachineStartPower, launch prerequisites.PythonLaunch, material map[string]secrets.Material) (Quiescence, error) {
+	references, err := reader.StartPowerSecrets(original)
+	if err != nil {
+		return Quiescence{}, err
+	}
+	lent := map[string]secrets.Material{}
+	for _, reference := range references {
+		value, found := material[reference]
+		if !found {
+			return Quiescence{}, startPowerRefused.Fail("the staged destroy's binding holds no access for the kept Machine/"+original.Object, "restore its frozen credentials")
+		}
+		lent[reference] = value
+	}
+	deps, err := s.applyDependencies(ctx, store, owner, original.ID)
+	if err != nil {
+		return Quiescence{}, err
+	}
+	previous, err := previousBlockEvidence(ctx, store, owner, original.ID)
+	if err != nil {
+		return Quiescence{}, err
+	}
+	return reader.StartPower(ctx, Probe{ApplyOperation: owner, Context: name, Block: original, ApplyProved: deps, PreviousEvidence: previous, Launch: launch, Material: lent})
 }

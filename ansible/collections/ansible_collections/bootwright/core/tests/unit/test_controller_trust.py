@@ -270,7 +270,7 @@ def test_cluster_media_calls_carry_each_nodes_frozen_trust(physical, enable):
     }
     variables = {
         **invocation["vars"], "bootwright_cluster_install_request": {"deliveryKind": "fetch"}, "containercluster_install_agent_node": node,
-        "bootwright_run_scratch": "/run/private", "containercluster_install_agent_index": 2,
+        "bootwright_run_scratch": "/run/private", "containercluster_install_agent_index": 2, "containercluster_install_agent_keeps_hosts": False,
         "bootwright_cluster_install_material": {"artifactCertificate": "/run/certificate", "controllerUserNode2": "/run/user",
                                                 "controllerPasswordNode2": "/run/password", "controllerCANode2": "/run/ca"},
     }

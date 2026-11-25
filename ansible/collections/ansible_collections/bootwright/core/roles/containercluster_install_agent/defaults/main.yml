@@ -15,6 +15,15 @@ containercluster_install_agent_client: '{{ bootwright_cluster_install_material.o
 # not read.
 containercluster_install_agent_observes_removal: >-
   {{ bootwright_cluster_install_material.observes | default('') == 'removal' }}
+# A removal whose node Machines stay: it ejects only the image this cluster
+# published, which a node's read proved its own, and restores nothing
+# controller-wide, because a kept controller's other media and settings are
+# not this removal's to change.
+containercluster_install_agent_keeps_hosts: >-
+  {{ bootwright_cluster_install_material.keeps | default('') == 'hosts' }}
+containercluster_install_agent_node_ejects: >-
+  {{ not (containercluster_install_agent_keeps_hosts | bool)
+     or (containercluster_install_agent_node_identity | default({})).own | default(false) | bool }}
 # The nodes whose frozen request declares labels or taints, which the request
 # omits on a node that declares neither, and what a placement read that did
 # not run proves of them: nothing.

@@ -33,8 +33,12 @@
 
       media_eject:
         certificate: '{{ bootwright_cluster_install_material.artifactCertificate | default("") }}'
-        restore_verification: '{{ containercluster_install_agent_node.controller.virtualMedia.restoreVerification }}'
-        remove_certificate: '{{ containercluster_install_agent_node.controller.virtualMedia.removeCertificate }}'
+        restore_verification: >-
+          {{ containercluster_install_agent_node.controller.virtualMedia.restoreVerification | bool
+             and not (containercluster_install_agent_keeps_hosts | bool) }}
+        remove_certificate: >-
+          {{ containercluster_install_agent_node.controller.virtualMedia.removeCertificate | bool
+             and not (containercluster_install_agent_keeps_hosts | bool) }}
 
       power:
         power: 'off'

@@ -87,10 +87,11 @@ type Inverse struct {
 	Retains    []string `json:"retains,omitempty"`
 	LeavesWith []string `json:"leavesWith,omitempty"`
 	Nothing    string   `json:"nothing,omitempty"`
+	KeptHosts  []string `json:"keptHosts,omitempty"`
 }
 
 func (i *Inverse) Stated() bool {
-	return i != nil && (len(i.Retains) != 0 || len(i.LeavesWith) != 0 || i.Nothing != "")
+	return i != nil && (len(i.Retains) != 0 || len(i.LeavesWith) != 0 || i.Nothing != "" || len(i.KeptHosts) != 0)
 }
 
 type Block struct {
@@ -597,14 +598,25 @@ func validateInverse(definition BlockDefinition) error {
 			return planError("lifecycle block leaves with a block that is not another safe block identity")
 		}
 	}
+	if len(inverse.KeptHosts) > MaxImpacts || !uniqueSorted(inverse.KeptHosts) {
+		return planError("lifecycle block kept hosts must be bounded, unique and ordered")
+	}
+	for _, machine := range inverse.KeptHosts {
+		if !ValidSegment(machine) {
+			return planError("lifecycle block keeps a host that is not a safe Machine name")
+		}
+	}
+	if len(inverse.KeptHosts) != 0 && len(definition.Impacts) == 0 {
+		return planError("lifecycle block keeps hosts for a removal that names no effect it performs")
+	}
 	if inverse.Nothing == "" {
 		return nil
 	}
 	if !safeDescription(inverse.Nothing) {
 		return planError("lifecycle block nothing-to-take-back reason must be safe single-line text")
 	}
-	if len(definition.Impacts) != 0 || len(inverse.Retains) != 0 || len(inverse.LeavesWith) != 0 {
-		return planError("lifecycle block states nothing to take back beside an effect it performs, retains or leaves with")
+	if len(definition.Impacts) != 0 || len(inverse.Retains) != 0 || len(inverse.LeavesWith) != 0 || len(inverse.KeptHosts) != 0 {
+		return planError("lifecycle block states nothing to take back beside an effect it performs, retains, leaves with or keeps hosts for")
 	}
 	return nil
 }
@@ -693,7 +705,7 @@ func clone(definition BlockDefinition) BlockDefinition {
 	definition.Request = slices.Clone(definition.Request)
 	if definition.Inverse != nil {
 		inverse := *definition.Inverse
-		inverse.Retains, inverse.LeavesWith = slices.Clone(inverse.Retains), slices.Clone(inverse.LeavesWith)
+		inverse.Retains, inverse.LeavesWith, inverse.KeptHosts = slices.Clone(inverse.Retains), slices.Clone(inverse.LeavesWith), slices.Clone(inverse.KeptHosts)
 		definition.Inverse = &inverse
 	}
 	return definition

@@ -14,6 +14,7 @@ type removalInputs struct {
 	relaxations  map[string]string
 	unregistered map[string]bool
 	nothing      func(context.Context, reconciliation.Block) (bool, error)
+	keptHosts    map[string][]string
 }
 
 func (s Service) selectedRemoval(ctx context.Context, capability Capability, block reconciliation.Block, removal Removal, inputs removalInputs) (Removal, string, error) {
@@ -75,7 +76,20 @@ func frozenNothing(plan reconciliation.Plan) func(context.Context, reconciliatio
 }
 
 func frozenInputs(plan reconciliation.Plan) removalInputs {
-	return removalInputs{relaxations: frozenRelaxations(plan), unregistered: frozenUnregistered(plan), nothing: frozenNothing(plan)}
+	return removalInputs{relaxations: frozenRelaxations(plan), unregistered: frozenUnregistered(plan), nothing: frozenNothing(plan), keptHosts: frozenKept(plan)}
+}
+
+func frozenKept(plan reconciliation.Plan) map[string][]string {
+	var kept map[string][]string
+	for _, block := range plan.Blocks {
+		if hosts := frozenKeptHosts(block); len(hosts) != 0 {
+			if kept == nil {
+				kept = map[string][]string{}
+			}
+			kept[block.ID] = slices.Clone(hosts)
+		}
+	}
+	return kept
 }
 
 func (s Service) recordsNothing(block reconciliation.Block) bool {
@@ -112,12 +126,19 @@ func applyRecordsOf(ctx context.Context, store recordReader, operation operation
 	if err != nil {
 		return RemovalRecords{}, err
 	}
-	return RemovalRecords{State: record.State, Previous: previous, Dependents: dependents}, nil
+	preparations, err := applyPreparations(ctx, store, owner.operation.ID, block)
+	if err != nil {
+		return RemovalRecords{}, err
+	}
+	return RemovalRecords{State: record.State, Previous: previous, Dependents: dependents, Preparations: preparations}, nil
 }
 
 func proveRecorded(ctx context.Context, capabilities CapabilityResolver, store recordReader, plan reconciliation.Plan, operation operationstore.Operation) error {
 	for _, block := range plan.Blocks {
 		capability, _ := capabilities.Resolve(block.Kind, block.Implementation)
+		if err := proveKeptHosts(ctx, capability, store, block, operation); err != nil {
+			return err
+		}
 		recorded, ok := capability.(RecordedRemoval)
 		if !ok {
 			continue
@@ -137,6 +158,32 @@ func proveRecorded(ctx context.Context, capabilities CapabilityResolver, store r
 		return destroyInverseMoved.Fail(message, "continue or replace the removal "+operation.ID+" with "+registeredWith(operation.Executable))
 	}
 	return nil
+}
+
+func proveKeptHosts(ctx context.Context, capability Capability, store recordReader, block reconciliation.Block, operation operationstore.Operation) error {
+	if len(frozenKeptHosts(block)) == 0 {
+		return nil
+	}
+	refusal := "this executable cannot remove it on kept Machines"
+	if kept, keeps := capability.(KeptHostRemoval); keeps {
+		read, err := applyRecordsOf(ctx, store, operation, block.ID)
+		if err != nil {
+			return err
+		}
+		refusal = kept.KeptHostsRefusal(block, read)
+	}
+	if refusal == "" {
+		return nil
+	}
+	return destroyInverseMoved.Fail("the removal plan froze that the step "+block.ID+" is taken back while Machine/"+strings.Join(frozenKeptHosts(block), ", Machine/")+" stay, and now "+refusal,
+		"continue or replace the removal "+operation.ID+" with "+registeredWith(operation.Executable))
+}
+
+func frozenKeptHosts(block reconciliation.Block) []string {
+	if block.Inverse == nil {
+		return nil
+	}
+	return block.Inverse.KeptHosts
 }
 
 func frozenUnregistered(plan reconciliation.Plan) map[string]bool {

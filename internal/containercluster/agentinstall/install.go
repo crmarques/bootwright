@@ -205,6 +205,41 @@ func (c InstallCapability) Removal(ctx context.Context, block reconciliation.Blo
 	}, nil
 }
 
+// KeptHostsRefusal admits taking the installation back on nodes that stay only
+// while its apply recorded no boot, which it records before any node is handed the image.
+func (InstallCapability) KeptHostsRefusal(_ reconciliation.Block, records lifecycle.RemovalRecords) string {
+	if len(records.Preparations) != 0 {
+		return "its installation recorded a boot, so a node may have been handed the image and hold the installed system on its disk"
+	}
+	return ""
+}
+
+func (c InstallCapability) KeptHostsRemoval(ctx context.Context, block reconciliation.Block) (lifecycle.Removal, error) {
+	removal, err := c.Removal(ctx, block)
+	removal.Retains = nil
+	return removal, err
+}
+
+const keepsHosts = "hosts"
+
+func kept(block reconciliation.Block) bool {
+	return block.Inverse != nil && len(block.Inverse.KeptHosts) != 0
+}
+
+// refuseHandedKeptNodes stops a kept removal before the media's removal discards that proof.
+func refuseHandedKeptNodes(execution lifecycle.Execution, request InstallRequest, evidence []byte) error {
+	handed, err := handedOnKeptNodes(evidence, execution.Block.RequestDigest)
+	if err != nil || handed == "" {
+		return err
+	}
+	remedy := "take back the whole context with bootwright destroy --context " + execution.Context
+	if !request.Physical() {
+		remedy = "take back from the machines stage with bootwright destroy --dry-run --context " + execution.Context + " --stage machines, or " + remedy
+	}
+	return openshiftKeptNodeHanded.Fail("the staged destroy takes back the installation of "+request.Identity.Cluster+" while Machine/"+strings.Join(execution.Block.Inverse.KeptHosts, ", Machine/")+
+		" stay, and "+handed+", so the work area proves a node was handed the image and may hold the installed system on its disk", remedy)
+}
+
 func (c InstallCapability) Apply(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
 	return c.mutate(ctx, execution, "apply")
 }
@@ -236,9 +271,14 @@ func (c InstallCapability) mutate(ctx context.Context, execution lifecycle.Execu
 		return unknown, openshiftOutcomeUnusable.Fail("the installation adapter reported no usable outcome", "")
 	}
 	digest := execution.Block.RequestDigest
-	if operation == "apply" {
+	switch {
+	case operation == "apply":
 		err = ValidateInstallPresence(result.Evidence, request, digest)
-	} else {
+	case kept(execution.Block):
+		if err = refuseHandedKeptNodes(execution, request, result.Evidence); err == nil {
+			err = ValidateInstallKeptAbsence(result.Evidence, digest)
+		}
+	default:
 		err = ValidateInstallAbsence(result.Evidence, digest)
 	}
 	if err != nil {
@@ -294,8 +334,8 @@ func (c InstallCapability) ObserveRemoval(ctx context.Context, execution lifecyc
 
 // installEffect reads an installation observation for the verb the block was
 // frozen for; a removal has no unremoved form. bootRecorded says the apply's
-// records hold a boot of this block.
-func installEffect(verb reconciliation.Verb, evidence []byte, request InstallRequest, digest string, bootRecorded bool) (reconciliation.EffectState, error) {
+// records hold a boot of this block, and keeps that its removal keeps the nodes.
+func installEffect(verb reconciliation.Verb, evidence []byte, request InstallRequest, digest string, bootRecorded, keeps bool) (reconciliation.EffectState, error) {
 	reading := lifecycle.EffectReading{
 		Presence:   func(evidence []byte) error { return ValidateInstallPresence(evidence, request, digest) },
 		Absence:    func(evidence []byte) error { return ValidateInstallNoEffect(evidence, digest, bootRecorded) },
@@ -304,6 +344,10 @@ func installEffect(verb reconciliation.Verb, evidence []byte, request InstallReq
 	}
 	if verb == reconciliation.Destroy {
 		reading.Absence = func(evidence []byte) error { return ValidateInstallReleased(evidence, digest) }
+	}
+	if verb == reconciliation.Destroy && keeps {
+		reading.Absence = func(evidence []byte) error { return ValidateInstallKeptReleased(evidence, digest) }
+		reading.Unfinished = func(evidence []byte) error { return ValidateInstallKeptReleasePartial(evidence, request, digest) }
 	}
 	return lifecycle.ReadEffect(reading, verb, evidence)
 }
@@ -329,7 +373,12 @@ func (c InstallCapability) observe(ctx context.Context, execution lifecycle.Exec
 		lifecycle.ClearProduced(result.Produced)
 		return unknown, err
 	}
-	effect, _ := installEffect(verb, result.Evidence, request, execution.Block.RequestDigest, len(execution.ApplyPreparations) != 0)
+	if verb == reconciliation.Destroy && kept(execution.Block) {
+		if err := refuseHandedKeptNodes(execution, request, result.Evidence); err != nil {
+			return unknown, err
+		}
+	}
+	effect, _ := installEffect(verb, result.Evidence, request, execution.Block.RequestDigest, len(execution.ApplyPreparations) != 0, kept(execution.Block))
 	produced := offered(result.Produced, len(outputs) != 0 && effect == reconciliation.EffectCompleted)
 	return lifecycle.Observation{Effect: effect, Evidence: result.Evidence, Produced: produced}, nil
 }
@@ -389,6 +438,9 @@ func (c InstallCapability) runWithOutputs(ctx context.Context, execution lifecyc
 	values := map[string]string{}
 	if observes != "" {
 		values["observes"] = observes
+	}
+	if kept(execution.Block) {
+		values["keeps"] = keepsHosts
 	}
 	for _, selected := range []struct {
 		executable string

@@ -18470,7 +18470,7 @@ takes back, so a destroy digest an earlier build printed refuses
 
 **Limits:** over an unfinished staged destroy only its own floor is admitted
 ([B1867](#x758--a-destroy-widens-an-unfinished-staged-destroy)); no scoped step may act on a kept Machine, so the kept
-power targets stay empty until [B1860](m1.md#b1860); a done staged destroy
+power targets stay empty until [B1860](#x760--an-agent-installation-no-node-booted-is-taken-back-on-kept-nodes); a done staged destroy
 names next `none` until the restoring apply ([B1858](#x757--the-restoring-apply-restores-what-a-staged-destroy-took-back)).
 
 ## X757 — The restoring apply restores what a staged destroy took back
@@ -18520,7 +18520,7 @@ started. One state-machine row, two stops and two kill-harness journeys land;
 `apply.context-trimmed`, and an added step whose Secret the reopened binding
 does not pin, as an additive member's, refuses `apply.restore-unbound`
 ([B1859](#x759--a-restore-admits-changed-input-inside-what-a-staged-destroy-took-back)); a restore reads no kept Machine's power, since no
-scope yet keeps a Machine a taken-back step acts on ([B1860](m1.md#b1860));
+scope yet keeps a Machine a taken-back step acts on ([B1860](#x760--an-agent-installation-no-node-booted-is-taken-back-on-kept-nodes));
 the example-wide restore is proved at the plan and fold, not by a run.
 
 ## X758 — A destroy widens an unfinished staged destroy
@@ -18602,3 +18602,54 @@ Secret while trimmed, so a Secret replaced since the staged destroy is
 presented at its pinned version, and a whole removal reopens one binding
 ([B1868](m1.md#b1868)); an input that drops what the staged destroy took back
 refuses rather than settles ([B1869](backlog.md#b1869)).
+
+## X760 — An agent installation no node booted is taken back on kept nodes
+
+**Items:** B1860. **Kind:** product. **Owner:** Container cluster, with
+Reconciliation. **Authorization:** [D288](backlog.md#d288) (7, 8), the sixth
+slice of the [staged destroy design](../deferred/staged-destroy.md#program).
+
+**Outcome:** a staged destroy at `clusters` takes back an OpenShift agent
+installation and its media on node Machines it keeps while the apply holding
+the installation recorded no boot, with its add-ons and secondary networks,
+which retire offline ([removal on kept nodes](../openshift-clusters.md#removal-on-kept-nodes)).
+The capability answers through `lifecycle.KeptHostRemoval`; the removal
+freezes the kept Machines as each step's `keptHosts` and as `stage.keptPower`
+targets, which every invocation proves off before any effect
+([staged destroy](../state-reconciliation.md#staged-destroy)). Completion
+discards the installation's custody, and the restore installs on the kept
+nodes under its own identity after proving them off. A recorded boot refuses
+`destroy.stage-keeps-host`, naming B1861 for virtual nodes and B1864 for
+physical ones. The installation's removal and its resolution on kept nodes
+also read the work area: an insert or boot mark, or a node running, refuses
+`openshift.kept-node-handed` before the media's removal discards that work
+area, naming the whole destroy (or `--stage machines` on virtual nodes). On
+kept nodes the adapter, told `keeps: hosts`, ejects only this cluster's own
+image and restores no BMC-wide verification or certificate. A kept inverse
+names an effect beside its hosts. The frozen targets are part of the
+registration write, so no kill-harness journey is added.
+
+**Guard tests:** `TestAStagedDestroyTakesBackAnInstallationNoNodeBootedOnItsKeptNodes`,
+`TestAKeptNodeThatIsOnRefusesEveryInvocationOfTheStagedDestroy`,
+`TestAStagedDestroyRefusesAnInstallationThatRecordedABoot`,
+`TestAnOfflineStepIsTakenBackOnKeptNodesOnlyWithItsInstallation`,
+`TestAKeptAnswerTheRecordsNoLongerProveRefusesBeforeAnyEffect`,
+`TestATakenBackInstallationsCustodyGivesWayToTheRestoresNewCluster`,
+`TestAnInstallationReachingAKeptMachineThroughAServiceRefuses`,
+`TestAnInstallationIsTakenBackOnKeptNodesOnlyBeforeItRecordedABoot`,
+`TestAStagedDestroyProvesEveryKeptHostByAPowerTarget`,
+`TestAStagedDestroyAdmitsAPhysicalNodeBeforeAnyBootAndReadsItsPower`,
+`TestAKeptInstallationThatStopsLeavesItsMediaUnremoved`,
+`TestAStagedDestroyKeepsTheCustodyOfAKeptStep`,
+`TestAKeptNodeRemovalStopsWhereTheWorkAreaProvesANodeWasHandedTheImage`,
+`TestARemovalThatDeletesItsNodesStillRequiresEveryImageEjected`,
+`test_containercluster_kept_eject.py`,
+`TestOnlyARemovalFreezesAnInverseAndTheDigestCoversIt` and
+`TestCompareReadsAnInversesWordsAsSameAndItsLeavesWithAsChanged`.
+
+**Gates:** `make focus`; the delivering commit records the command and result.
+
+**Limits:** a kept Machine a step reaches only through what it depends on (the
+hosts of its DNS, NTP, Proxy and artifact services, a KubeVirt node's host
+cluster, a nested libvirt host) still refuses ([B1875](m1.md#b1875)); the proof is in-tree, over the engine's
+doubles and the capability's own answer, not a live run.

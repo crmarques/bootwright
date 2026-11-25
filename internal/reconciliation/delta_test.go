@@ -278,6 +278,10 @@ func TestCompareReadsAnInversesWordsAsSameAndItsLeavesWithAsChanged(t *testing.T
 			t.Errorf("%s reads %s, want %s", name, got, tc.want)
 		}
 	}
+	effect := removal(&Inverse{LeavesWith: []string{"bravo"}}, "remove-unit alpha")
+	if got := changeOf(Compare(effect, removal(&Inverse{LeavesWith: []string{"bravo"}, KeptHosts: []string{"node-1"}}, "remove-unit alpha")), "alpha"); got != Changed {
+		t.Errorf("the same effect complete on kept hosts reads %s", got)
+	}
 	nothing := removal(&Inverse{Nothing: "its apply changed nothing"})
 	if got := changeOf(Compare(nothing, removal(&Inverse{Nothing: "it changed nothing"})), "alpha"); got != Same {
 		t.Errorf("other nothing words read %s", got)

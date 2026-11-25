@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"slices"
+	"strings"
 
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
@@ -279,6 +280,69 @@ func ValidateInstallReleasePartial(data []byte, request InstallRequest, digest s
 		}
 	}
 	return nil
+}
+
+// ValidateInstallKeptAbsence is ValidateInstallAbsence on kept nodes, whose other images are not the removal's.
+func ValidateInstallKeptAbsence(data []byte, digest string) error {
+	evidence, err := decodeInstallEvidence(data, digest)
+	if err != nil {
+		return err
+	}
+	if !evidence.Postcondition || !evidence.Absent {
+		return openshiftEvidenceUnsettled.Fail("the installation adapter did not prove removal", "")
+	}
+	if len(evidence.OwnMedia) != 0 {
+		return openshiftEvidenceUnsettled.Fail("the installation removal evidence still reports this cluster's image inserted", "")
+	}
+	return nil
+}
+
+// ValidateInstallKeptReleased is ValidateInstallReleased on kept nodes.
+func ValidateInstallKeptReleased(data []byte, digest string) error {
+	evidence, err := decodeInstallEvidence(data, digest)
+	if err != nil {
+		return err
+	}
+	if len(evidence.OwnMedia) != 0 {
+		return openshiftEvidenceUnsettled.Fail("a node still presents this cluster's image", "")
+	}
+	return nil
+}
+
+// ValidateInstallKeptReleasePartial is ValidateInstallReleasePartial on kept nodes.
+func ValidateInstallKeptReleasePartial(data []byte, request InstallRequest, digest string) error {
+	evidence, err := decodeInstallEvidence(data, digest)
+	if err != nil {
+		return err
+	}
+	if len(evidence.OwnMedia) == 0 {
+		return openshiftEvidenceUnsettled.Fail("no node presents this cluster's image", "")
+	}
+	declared := request.Machines()
+	for _, node := range evidence.OwnMedia {
+		if !slices.Contains(declared, node) {
+			return openshiftEvidenceMismatch.Fail("a Machine presenting this cluster's image is not one of its nodes", "")
+		}
+	}
+	return nil
+}
+
+// handedOnKeptNodes names the work-area mark or running node proving a kept node was handed the image.
+func handedOnKeptNodes(data []byte, digest string) (string, error) {
+	evidence, err := decodeInstallEvidence(data, digest)
+	if err != nil {
+		return "", err
+	}
+	switch {
+	case evidence.Inserted:
+		return "its work area records an insert of its image", nil
+	case evidence.Booted:
+		return "its work area carries the mark a boot of its nodes writes", nil
+	case len(evidence.Powered) != 0:
+		powered := slices.Sorted(slices.Values(evidence.Powered))
+		return "Machine/" + strings.Join(slices.Compact(powered), ", Machine/") + " runs", nil
+	}
+	return "", nil
 }
 
 // ValidateInstallNoEffect accepts evidence only when it positively proves that

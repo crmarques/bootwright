@@ -19,8 +19,8 @@ func RemovalOf(ctx context.Context, capabilities CapabilityResolver, applied rec
 	return removal, planner.computePhases(removal).leavesWith, nil
 }
 
-func inverseOf(retains []string, nothing string, leavesWith []string) *reconciliation.Inverse {
-	inverse := &reconciliation.Inverse{Retains: slices.Clone(retains), Nothing: nothing, LeavesWith: slices.Clone(leavesWith)}
+func inverseOf(retains []string, nothing string, leavesWith, keptHosts []string) *reconciliation.Inverse {
+	inverse := &reconciliation.Inverse{Retains: slices.Clone(retains), Nothing: nothing, LeavesWith: slices.Clone(leavesWith), KeptHosts: slices.Clone(keptHosts)}
 	if !inverse.Stated() {
 		return nil
 	}
@@ -33,12 +33,12 @@ func (s Service) freezeInverse(plan reconciliation.Plan) (reconciliation.Plan, e
 	var unstated, contradicted []string
 	for _, block := range plan.Blocks {
 		definition := block.BlockDefinition
-		var retains []string
+		var retains, keptHosts []string
 		nothing := ""
 		if definition.Inverse != nil {
-			retains, nothing = definition.Inverse.Retains, definition.Inverse.Nothing
+			retains, nothing, keptHosts = definition.Inverse.Retains, definition.Inverse.Nothing, definition.Inverse.KeptHosts
 		}
-		definition.Inverse = inverseOf(retains, nothing, phases.leavesWith[block.ID])
+		definition.Inverse = inverseOf(retains, nothing, phases.leavesWith[block.ID], keptHosts)
 		if len(definition.Impacts) == 0 && definition.Inverse == nil {
 			unstated = append(unstated, block.ID)
 		}

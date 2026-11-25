@@ -100,7 +100,7 @@ def test_each_install_port_request_matches_the_selected_arm_entrypoint():
                                  'virtualMedia': {'trust': 'importCertificate', 'enableVerification': arm == 'baremetal',
                                                   'restoreVerification': False, 'removeCertificate': True}}},
                          bootwright_cluster_install_request={'deliveryKind': 'fetch'},
-                         containercluster_install_agent_index=0, bootwright_run_scratch='/scratch',
+                         containercluster_install_agent_index=0, bootwright_run_scratch='/scratch', containercluster_install_agent_keeps_hosts=False,
                          bootwright_cluster_install_material={'artifactCertificate': '/material/certificate', 'controllerUserNode0': '/material/user',
                                                               'controllerPasswordNode0': '/material/password', 'controllerCANode0': '/material/ca'})
             request = Templar(loader=loader, variables=scope).template(port['vars']['bootwright_machine_port'])

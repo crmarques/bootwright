@@ -31,7 +31,7 @@ func (s Service) freshDestroy(ctx context.Context, contextName string, frozenBy 
 	if err := s.proveContracts(scope.owned, scope.contracts); err != nil {
 		return operationPlan{}, engineOtherBuild.Fail(contractMessage(err), removeWith(frozenBy))
 	}
-	plan, err := s.removalOf(ctx, scope.owned, frozenBy, removalInputs{relaxations: s.relaxing.methods, unregistered: s.relaxing.unregistered, nothing: s.nothingRecorded(scope.records)})
+	plan, err := s.removalOf(ctx, scope.owned, frozenBy, removalInputs{relaxations: s.relaxing.methods, unregistered: s.relaxing.unregistered, nothing: s.nothingRecorded(scope.records), keptHosts: scope.keptHosts})
 	if err != nil {
 		return operationPlan{}, err
 	}
@@ -83,7 +83,12 @@ func (s Service) removalOf(ctx context.Context, owned reconciliation.Plan, execu
 			return reconciliation.Plan{}, unreadable(block, executable, err)
 		}
 		block.Relaxation = ""
-		removal, relaxation, err := s.selectedRemoval(ctx, capability, block, removal, inputs)
+		hosts, relaxation := inputs.keptHosts[block.ID], ""
+		if len(hosts) != 0 {
+			removal, err = keptRemoval(ctx, capability, block, executable)
+		} else {
+			removal, relaxation, err = s.selectedRemoval(ctx, capability, block, removal, inputs)
+		}
 		if err != nil {
 			return reconciliation.Plan{}, err
 		}
@@ -96,7 +101,7 @@ func (s Service) removalOf(ctx context.Context, owned reconciliation.Plan, execu
 		definition.Requires = nil
 		definition.Description, definition.Impacts = removal.Description, removal.Impacts
 		definition.Consumes, definition.Groups = removal.Consumes, removal.Groups
-		definition.Inverse = inverseOf(removal.Retains, removal.Nothing, nil)
+		definition.Inverse = inverseOf(removal.Retains, removal.Nothing, nil, hosts)
 		definitions = append(definitions, definition)
 	}
 	plan, err := reconciliation.NewPlan(reconciliation.Destroy, definitions)
@@ -104,6 +109,18 @@ func (s Service) removalOf(ctx context.Context, owned reconciliation.Plan, execu
 		return reconciliation.Plan{}, err
 	}
 	return s.freezeInverse(plan)
+}
+
+func keptRemoval(ctx context.Context, capability Capability, block reconciliation.Block, executable operationstore.Executable) (Removal, error) {
+	kept, keeps := capability.(KeptHostRemoval)
+	if !keeps {
+		return Removal{}, engineOtherBuild.Fail("this executable cannot take back the block "+block.ID+" while the Machines it runs on stay", removeWith(executable))
+	}
+	removal, err := kept.KeptHostsRemoval(ctx, block)
+	if err != nil {
+		return Removal{}, unreadable(block, executable, err)
+	}
+	return removal, nil
 }
 
 // invertOwned shapes the owned set as a removal. An apply's plan is inverted so

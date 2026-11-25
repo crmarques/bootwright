@@ -47,7 +47,7 @@ func (InstallCapability) Unresolved(verb reconciliation.Verb, block reconciliati
 	if verb == reconciliation.Apply && decoded.Cluster == "" && len(decoded.Powered) == 0 && len(decoded.Media) == 0 && (decoded.Inserted || !decoded.Booted) {
 		return bootedSilence(subject+" on "+lifecycle.PlacedOn(request.Placement), request), true
 	}
-	effect, refused := installEffect(verb, evidence, request, block.RequestDigest, false)
+	effect, refused := installEffect(verb, evidence, request, block.RequestDigest, false, kept(block))
 	if effect != reconciliation.EffectUnknown {
 		return lifecycle.Unresolved{}, false
 	}

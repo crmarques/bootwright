@@ -397,3 +397,58 @@ func firstMessage(err error) string {
 	}
 	return ""
 }
+
+// A staged destroy freezes every kept host its steps are taken back on as a
+// power target that proves it off: a plan keeping a host no target names, a
+// target in another state or out of order, and a destroy without a stage
+// keeping hosts are each refused as damaged records.
+func TestAStagedDestroyProvesEveryKeptHostByAPowerTarget(t *testing.T) {
+	ctx := context.Background()
+	root := goldenPlan(t)
+	applied := testOperation(t, root)
+	scoped, err := root.Retain([]string{"install-node-01"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	inverse, err := scoped.Inverse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	definition := inverse.Blocks[0].BlockDefinition
+	definition.Inverse = &reconciliation.Inverse{KeptHosts: []string{"node-01"}}
+	kept, err := reconciliation.NewPlan(reconciliation.Destroy, []reconciliation.BlockDefinition{definition})
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := func(block, power string) KeptPower {
+		return KeptPower{Block: block, Machine: strings.TrimPrefix(block, "machine-"), Power: power}
+	}
+	for name, test := range map[string]struct {
+		stage  *Stage
+		admits bool
+	}{
+		"proved off":           {stage: &Stage{KeptPower: []KeptPower{target("machine-node-01", PoweredOff)}}, admits: true},
+		"no target":            {stage: &Stage{}},
+		"another host":         {stage: &Stage{KeptPower: []KeptPower{target("machine-node-02", PoweredOff)}}},
+		"another power state":  {stage: &Stage{KeptPower: []KeptPower{target("machine-node-01", "on")}}},
+		"targets out of order": {stage: &Stage{KeptPower: []KeptPower{target("machine-node-02", PoweredOff), target("machine-node-01", PoweredOff)}}},
+		"no stage":             {},
+	} {
+		store, _ := newStore(t)
+		if _, err := store.Index(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.Register(ctx, applied, root); err != nil {
+			t.Fatal(err)
+		}
+		removal := testOperation(t, kept)
+		removal.ID, removal.Source = "op-"+strings.Repeat("cd", 16), applied.ID
+		if test.stage != nil {
+			test.stage.Floor, test.stage.TakenBack = reconciliation.StageMachines, []string{"install-node-01"}
+			removal.Stage = test.stage
+		}
+		if err := store.Register(ctx, removal, kept); (err == nil) != test.admits {
+			t.Errorf("registering a staged destroy whose kept host is %s returned %v", name, diagnostics.Of(err))
+		}
+	}
+}

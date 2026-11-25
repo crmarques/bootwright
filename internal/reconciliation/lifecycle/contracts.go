@@ -298,9 +298,15 @@ type RecordedRemoval interface {
 }
 
 type RemovalRecords struct {
-	State      reconciliation.BlockState
-	Previous   json.RawMessage
-	Dependents []BlockEvidence
+	State        reconciliation.BlockState
+	Previous     json.RawMessage
+	Dependents   []BlockEvidence
+	Preparations []json.RawMessage
+}
+
+type KeptHostRemoval interface {
+	KeptHostsRefusal(reconciliation.Block, RemovalRecords) string
+	KeptHostsRemoval(context.Context, reconciliation.Block) (Removal, error)
 }
 
 type RemovalUnregisterer interface {
@@ -606,7 +612,7 @@ type decisionPlanner interface {
 	refuseUnsupported(*compilation.State, *reconciliation.PreparationScope) error
 	freshDestroy(context.Context, string, operationstore.Executable, string, removalScope, bool) (operationPlan, error)
 	computePhases(reconciliation.Plan) removalPhases
-	stagedScope(string, reconciliation.Stage, liveState) ([]string, error)
+	stagedScope(context.Context, string, reconciliation.Stage, liveState) ([]string, keptAnswer, error)
 	keptChanges(string, reconciliation.Plan, reconciliation.Plan) ([]reconciliation.BlockChange, string)
 }
 

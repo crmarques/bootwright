@@ -43,10 +43,13 @@ var (
 	openshiftKubeconfigUnnamed = diagnostics.Stop{Code: "openshift.kubeconfig-unnamed", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyPossible,
 		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
 		Meaning: "an administrator kubeconfig the cluster produced names no single cluster authority and principal", Remedy: "repeat the operation, which reads the cluster's kubeconfig again"}
+	openshiftKeptNodeHanded = diagnostics.Stop{Code: "openshift.kept-node-handed", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyPossible,
+		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryOtherVerb,
+		Meaning: "a staged destroy that keeps a cluster's nodes found its work area proving a node was handed the image, so it stopped before that work area is discarded", Remedy: "take back the nodes with the destroy the message names"}
 )
 
 var stops = []diagnostics.Stop{openshiftPlanStateMissing, openshiftInputUnprojectable, openshiftSelectionUnsupported, openshiftAdapterUnconfigured,
 	openshiftOutcomeUnusable, openshiftRequestInvalid, openshiftMachineProofMissing, openshiftEvidenceInvalid, openshiftEvidenceUnsettled,
-	openshiftEvidenceMismatch, openshiftNodeRefused, openshiftKubeconfigUnnamed}
+	openshiftEvidenceMismatch, openshiftNodeRefused, openshiftKubeconfigUnnamed, openshiftKeptNodeHanded}
 
 func Stops() []diagnostics.Stop { return slices.Clone(stops) }

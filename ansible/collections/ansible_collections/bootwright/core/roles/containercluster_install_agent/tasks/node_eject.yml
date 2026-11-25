@@ -3,16 +3,18 @@
 # opened is the media each node presents, so that is all it takes back: a
 # removal selects no boot device and composes no substrate entry point. Every
 # node ejects at once within the frozen fan-out; the controller's play reports
-# each refusal together.
+# each refusal together. A removal that keeps the nodes leaves a node that does
+# not present this cluster's own image as it is.
 - name: Eject through the node's substrate
   ansible.builtin.include_tasks: port.yml
   vars:
     containercluster_install_agent_port_operation: media_eject
+  when: containercluster_install_agent_node_ejects | bool
 
 - name: Keep this node's eject answer
   ansible.builtin.set_fact:
     containercluster_install_agent_node_ejected: >-
-      {{ containercluster_install_agent_port_result
+      {{ (containercluster_install_agent_port_result if containercluster_install_agent_node_ejects | bool else {})
          | combine({'containercluster_install_agent_node': containercluster_install_agent_node}) }}
   no_log: true
 
@@ -24,5 +26,6 @@
     operation: remove
   when:
     - containercluster_install_agent_before.observation.url | default('') | length > 0
+    - containercluster_install_agent_node_ejects | bool
     - containercluster_install_agent_node_ejected.msg is not defined
   no_log: true

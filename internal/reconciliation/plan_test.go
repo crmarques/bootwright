@@ -153,7 +153,8 @@ func TestOnlyARemovalFreezesARelaxationAndOnlyASetOneEncodes(t *testing.T) {
 }
 
 // An inverse is frozen only on a removal, names only blocks of its own plan,
-// states nothing to take back only beside no effect, is cloned with its block
+// states nothing to take back only beside no effect and kept hosts only beside
+// one, is cloned with its block
 // and enters the plan digest, never the request digest.
 func TestOnlyARemovalFreezesAnInverseAndTheDigestCoversIt(t *testing.T) {
 	stated := func(inverse Inverse, impacts ...string) []BlockDefinition {
@@ -175,6 +176,10 @@ func TestOnlyARemovalFreezesAnInverseAndTheDigestCoversIt(t *testing.T) {
 		"nothing beside retains": stated(Inverse{Retains: []string{"the unit"}, Nothing: "nothing"}),
 		"nothing beside leaves":  stated(Inverse{LeavesWith: []string{"bravo"}, Nothing: "nothing"}),
 		"nothing beside impacts": stated(Inverse{Nothing: "nothing"}, "remove-unit alpha"),
+		"unordered kept hosts":   stated(Inverse{KeptHosts: []string{"node-2", "node-1"}}, "remove-unit alpha"),
+		"unsafe kept host":       stated(Inverse{KeptHosts: []string{"node/1"}}, "remove-unit alpha"),
+		"nothing beside kept":    stated(Inverse{KeptHosts: []string{"node-1"}, Nothing: "nothing"}),
+		"kept with no impacts":   stated(Inverse{KeptHosts: []string{"node-1"}}),
 	} {
 		if _, err := NewPlan(Destroy, definitions); err == nil {
 			t.Errorf("a removal froze the %s inverse", name)
@@ -186,6 +191,10 @@ func TestOnlyARemovalFreezesAnInverseAndTheDigestCoversIt(t *testing.T) {
 	}
 	if _, err := NewPlan(Destroy, stated(Inverse{Nothing: "its apply changed nothing"})); err != nil {
 		t.Fatalf("a removal refused a reason to take nothing back: %v", diagnostics.Of(err))
+	}
+	kept, err := NewPlan(Destroy, stated(Inverse{KeptHosts: []string{"node-1", "node-2"}}, "remove-unit alpha"))
+	if encoded, _ := json.Marshal(kept); err != nil || !strings.Contains(string(encoded), `"inverse":{"keptHosts":["node-1","node-2"]}`) {
+		t.Fatalf("a removal complete on kept hosts encodes %s (%v)", encoded, diagnostics.Of(err))
 	}
 	plain, err := NewPlan(Destroy, []BlockDefinition{definition("alpha"), definition("bravo", "alpha")})
 	if err != nil {

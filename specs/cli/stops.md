@@ -370,6 +370,7 @@ The OpenShift agent-based installation capability's stops (`internal/containercl
 | `openshift.evidence-mismatch` | block | possible | target | - | fix-then-repeat | the evidence of an OpenShift cluster adapter names another cluster, release, image or node than its block froze | find what replaced the cluster the block installed, then repeat the operation |
 | `openshift.node-refused` | adapter-run | possible | target | - | fix-then-repeat | the installation adapter stopped on a node whose management controller, boot image or network refused it | read the message, repair what it names, then repeat the operation |
 | `openshift.kubeconfig-unnamed` | block | possible | target | - | fix-then-repeat | an administrator kubeconfig the cluster produced names no single cluster authority and principal | repeat the operation, which reads the cluster's kubeconfig again |
+| `openshift.kept-node-handed` | block | possible | target | - | other-verb | a staged destroy that keeps a cluster's nodes found its work area proving a node was handed the image, so it stopped before that work area is discarded | take back the nodes with the destroy the message names |
 
 ## Managed service stops
 

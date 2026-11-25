@@ -1053,12 +1053,13 @@ cluster's nodes to be destroyed and applied again.
 
 **Inverse.** Destroy proves each node's media ejected before the media block
 removes its work area and publication. Administrator access leaves when
-removal completes. Physical disks and secondary networks stay. A fresh
-destroy requires every managed target Machine off, an unreadable power state
-refusing it ([power](state-reconciliation.md#power-before-a-new-apply-or-destroy)).
-This inverse leaves power as it found it and consumes no authorization of its
-own. Before a physical media read, eject or disk selection, it repeats the
-[target proof](substrates.md#physical-machine-realization).
+removal completes. Physical disks and secondary networks stay. Destroy proves
+the nodes off first
+([power](state-reconciliation.md#power-before-a-new-apply-or-destroy)); it
+leaves power as found, consumes no authorization and, before a physical
+media read, eject or disk selection, repeats the
+[target proof](substrates.md#physical-machine-realization). A staged destroy
+keeping the nodes removes it only [before a boot](#removal-on-kept-nodes).
 
 **Unknown resolution.** Observation is read-only against the frozen request. A
 cluster answering with this operation's identity at the declared release,
@@ -1093,6 +1094,36 @@ follows the Machines under the
 [removal gate](state-reconciliation.md#quiescence-before-removal). An
 installation already under way continues on the nodes after cancellation; the
 attempt becomes unknown and is resolved by observing the cluster.
+
+## Removal on kept nodes
+
+A [staged destroy](state-reconciliation.md#staged-destroy) that keeps the node
+Machines takes the installation and media blocks back
+(`lifecycle.KeptHostRemoval`) only while the apply holding the installation
+block recorded no boot, which the installation records before it hands any
+node the image. No node then holds the cluster, so the removal retains none:
+it ejects only this cluster's own image from each node, restoring no BMC-wide
+verification or certificate, since a kept controller's other media and
+settings are not its to change; it removes the media, and freezes the nodes,
+which every invocation proves off. The records alone do not prove that no node
+was handed the image: an apply can write the work area's insert or boot mark
+before it records a boot. So the installation's removal and its resolution on
+kept nodes also read the work area, as the [no-effect check](#installation)
+does, and an insert or boot mark, or a node running, refuses
+`openshift.kept-node-handed` before the media's removal, which waits on the
+installation's, discards that work area; it names the whole destroy, or
+`--stage machines` on virtual nodes
+(`TestAKeptNodeRemovalStopsWhereTheWorkAreaProvesANodeWasHandedTheImage`).
+The cluster's add-ons and secondary
+networks retire offline with it, and every custody entry of the installation
+block, the kept kubeconfig copy included, leaves at completion. A recorded
+boot refuses `destroy.stage-keeps-host` naming why: a kept virtual node waits
+for its root disk to be blanked ([B1861](milestones/m1.md#b1861)), a physical
+one for [B1864](milestones/backlog.md#b1864). The restoring apply then
+installs on the kept nodes under its own identity, reading no earlier boot,
+after proving them off
+(`TestAStagedDestroyTakesBackAnInstallationNoNodeBootedOnItsKeptNodes`,
+`TestAnInstallationIsTakenBackOnKeptNodesOnlyBeforeItRecordedABoot`).
 
 ## Installation budgets
 

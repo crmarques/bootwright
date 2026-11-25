@@ -2210,9 +2210,21 @@ set, its own scope with what every staged destroy it `replaces` took back.
   nodes, to a Machine the scope keeps: any Machine a step of this
   context names, a substrate machine or the hardware or enrollment step of a
   physical, provided or bootstrap Machine, whose deletion step
-  (`lifecycle.MachineDeletion`) is outside the scope. A physical Machine is
-  always kept, since its own step only releases a claim. Every frozen
-  leaves-with names a scoped step. An empty scope settles keeping everything,
+  (`lifecycle.MachineDeletion`) is outside the scope. A step whose capability
+  answers from its apply's records that its removal is complete while those
+  Machines stay (`lifecycle.KeptHostRemoval`) is admitted instead, freezing
+  them as its inverse's `keptHosts`, and a step that retires offline where a
+  step it depends on keeps every Machine it reaches; a refusal names the
+  capability's reason. A physical Machine is always kept, since its own step
+  only releases a claim. Every frozen leaves-with names a scoped step.
+- **Kept power targets.** The record freezes in `stage.keptPower` each Machine
+  a `keptHosts` names, by its managed Machine step, with the state `off`.
+  Every invocation, fresh, replacing or continuing, proves each off through
+  its holder's records before any effect, or refuses `destroy.in-use` with its
+  stop command, so a step taken back there may derive its quiescence from
+  them (`TestAKeptNodeThatIsOnRefusesEveryInvocationOfTheStagedDestroy`).
+  Every later decision reads the records again and refuses
+  `destroy.inverse-moved` once they no longer admit a frozen `keptHosts`. An empty scope settles keeping everything,
   and refuses an `--unregistered` acknowledgement `authorize.unneeded`.
 - **Completion** releases no Secret binding and collects none on any path, and
   runs no context-wide release check at registration. In the transaction that
@@ -2274,8 +2286,8 @@ exception.
 Every removal block states its inverse: its impacts are the effects it
 performs, and its `inverse`, frozen with the plan and covered by its digest,
 states what it keeps by design (`retains`), the blocks of the same removal its
-effect leaves with (`leavesWith`), or why it has nothing to take back
-(`nothing`), which a capability states through `lifecycle.Removal`. `nothing`
+effect leaves with (`leavesWith`), the kept Machines a staged removal is
+complete on (`keptHosts`), or why it has nothing to take back (`nothing`), which a capability states through `lifecycle.Removal`. `nothing`
 stands alone, and only a removal plan carries the member
 (`TestOnlyARemovalFreezesAnInverseAndTheDigestCoversIt`). A removal whose
 block states none of these refuses `destroy.inverse-unstated` before
@@ -2929,10 +2941,14 @@ A staged or additive apply checks its managed fleet. A
 kept Machine an added step names by its dependencies, hosts or nodes; any
 other kept Machine reads in either state, as a continuation of its lineage
 reads it. A staged destroy refuses a step it takes back, started or not, that
-is bound to a Machine it keeps, and a restore refuses a step new to the
-lineage (`apply.restore-adds-new`, `TestARestoreRefusesAStepNoStagedDestroyTookBack`),
-so no added step acts on a kept one; [B1860](milestones/m1.md#b1860)
-and [B1861](milestones/m1.md#b1861) take steps back on kept Machines (D288). A destroy derives its
+is bound to a Machine it keeps unless its removal is complete there and that
+Machine is a [kept power target](#staged-destroy), and a restore refuses a step
+new to the lineage (`apply.restore-adds-new`,
+`TestARestoreRefusesAStepNoStagedDestroyTookBack`), so only a step the restore
+re-creates acts on a kept one, and the restore proves that Machine off first
+(D288, `TestAStagedDestroyTakesBackAnInstallationNoNodeBootedOnItsKeptNodes`);
+[B1861](milestones/m1.md#b1861) takes steps back on kept virtual Machines whose
+nodes booted. A destroy derives its
 targets from the frozen work it takes back. Destroy over an incomplete apply
 starts a new flow. Continuing the same registered flow, including replacing
 a failed destroy over its remaining work, proceeds from the durable records

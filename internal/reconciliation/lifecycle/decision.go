@@ -659,12 +659,16 @@ func (d decider) supersede(ctx context.Context, view View, store decisionRecords
 	if err != nil {
 		return operationPlan{}, err
 	}
+	scope.keptHosts = frozenKept(frozen)
 	decided, err := d.planner.freshDestroy(ctx, name, operation.Executable, operation.Source, scope, false)
 	if err != nil {
 		return operationPlan{}, err
 	}
 	if staged(operation) {
-		decided.stage = &operationstore.Stage{Floor: operation.Stage.Floor, TakenBack: slices.Clone(operation.Stage.TakenBack)}
+		decided.stage = &operationstore.Stage{Floor: operation.Stage.Floor, TakenBack: slices.Clone(operation.Stage.TakenBack), KeptPower: slices.Clone(operation.Stage.KeptPower)}
+		if err := proveRecorded(ctx, d.capabilities, store, decided.plan, operation); err != nil {
+			return operationPlan{}, err
+		}
 		decided.release = nil
 		if decided.kept, err = keptSteps(ctx, store, operation, frozen, states); err != nil {
 			return operationPlan{}, err

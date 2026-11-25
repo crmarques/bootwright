@@ -291,7 +291,7 @@ def test_partial_destroy_retires_only_successfully_ejected_tokens():
     assert task['bootwright.core.containercluster_media_token']['operation'] == 'remove'
     for result, expected in [({'changed': True}, True), ({'msg': 'unknown eject'}, False)]:
         scope = {'containercluster_install_agent_node_ejected': result}
-        assert Templar(loader=LOADER, variables=scope).evaluate_expression(task['when'][1]) is expected
+        assert Templar(loader=LOADER, variables=scope).evaluate_expression(task['when'][-1]) is expected
     release = next(t for t in tasks('destroy_release.yml') if 'always' in t)
     assert 'ansible.builtin.fail' in release['block'][2]
     assert release['always'][0]['bootwright.core.containercluster_media_token']['operation'] == 'sweep'

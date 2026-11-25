@@ -132,7 +132,7 @@ func TestInstallEvidenceGoldenProvesThePlacement(t *testing.T) {
 			}
 			evidence.Postcondition = false
 			data, _ = json.Marshal(evidence)
-			if effect, _ := installEffect(reconciliation.Apply, data, install, testDigest, false); effect != reconciliation.EffectPartial {
+			if effect, _ := installEffect(reconciliation.Apply, data, install, testDigest, false, false); effect != reconciliation.EffectPartial {
 				t.Fatalf("the observation reads %s, not a partial realization", effect)
 			}
 		})

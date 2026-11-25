@@ -12,6 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -193,6 +194,104 @@ func TestInstallDestroyPlanDescribesOnlyRelease(t *testing.T) {
 	}
 	if removal.Description != definition.Description || len(removal.Consumes) != 0 {
 		t.Fatalf("removal = %+v", removal)
+	}
+}
+
+// B1860: the installation is taken back on nodes that stay only while its
+// apply recorded no boot; its kept removal ejects as its removal does and
+// retains no cluster, since no node was handed the image. The media's removal
+// never refuses it, because its installation's answer decides.
+func TestAnInstallationIsTakenBackOnKeptNodesOnlyBeforeItRecordedABoot(t *testing.T) {
+	ctx := context.Background()
+	block := reconciliation.Block{BlockDefinition: installPlan(t, singleNodeCatalog(), reconciliation.Apply).Definitions[0]}
+	install := NewInstall(nil)
+	if refusal := install.KeptHostsRefusal(block, lifecycle.RemovalRecords{State: reconciliation.BlockFailed}); refusal != "" {
+		t.Fatalf("an installation that recorded no boot refuses %q", refusal)
+	}
+	booted := lifecycle.RemovalRecords{State: reconciliation.BlockFailed, Preparations: []json.RawMessage{json.RawMessage(`{"boot":true}`)}}
+	if refusal := install.KeptHostsRefusal(block, booted); !strings.Contains(refusal, "recorded a boot") {
+		t.Fatalf("an installation that recorded a boot refuses %q", refusal)
+	}
+	removal, err := install.Removal(ctx, block)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kept, err := install.KeptHostsRemoval(ctx, block)
+	if err != nil || len(removal.Retains) == 0 || len(kept.Retains) != 0 || !slices.Equal(kept.Impacts, removal.Impacts) || kept.Description != removal.Description {
+		t.Fatalf("the kept removal reads %+v beside %+v (%v)", kept, removal, err)
+	}
+	if refusal := NewMedia(nil, nil).KeptHostsRefusal(applyRequest(t), booted); refusal != "" {
+		t.Fatalf("the media refuses %q", refusal)
+	}
+}
+
+// A removal on kept nodes reads the work area as the no-effect check does:
+// with no boot in the engine's records, an insert or boot mark there, or a
+// node running, proves a node was handed the image, so both the removal and
+// its resolution stop before the media's removal discards that work area.
+// Unmarked, it is complete once no node presents this cluster's own image,
+// whatever other image a kept node presents, and it tells the adapter so.
+func TestAKeptNodeRemovalStopsWhereTheWorkAreaProvesANodeWasHandedTheImage(t *testing.T) {
+	for name, test := range map[string]struct {
+		mutate func(*InstallEvidence)
+		proof  string
+	}{
+		"booted mark":    {func(e *InstallEvidence) { e.Booted = true }, "the mark a boot of its nodes writes"},
+		"inserted mark":  {func(e *InstallEvidence) { e.Inserted = true }, "an insert of its image"},
+		"a node running": {func(e *InstallEvidence) { e.Powered = []string{"sno-01"} }, "Machine/sno-01 runs"},
+		"unmarked":       {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			execution, _ := installExecution(t, singleNodeCatalog(), testDigest)
+			execution.Context = testContext
+			execution.Block.Inverse = &reconciliation.Inverse{KeptHosts: []string{"sno-01"}}
+			evidence := installEvidence(t, testDigest, func(e *InstallEvidence) {
+				e.Absent, e.Postcondition, e.Cluster, e.Powered = true, true, "", []string{}
+				e.Media, e.OwnMedia = []string{"sno-01"}, []string{}
+				if test.mutate != nil {
+					test.mutate(e)
+				}
+			})
+			runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: evidence}}
+			result, err := NewInstall(runner).Destroy(context.Background(), execution)
+			observation, observed := NewInstall(runner).ObserveRemoval(context.Background(), execution)
+			if len(runner.requests) != 2 || runner.requests[0].MaterialValues["keeps"] != "hosts" || runner.requests[1].MaterialValues["keeps"] != "hosts" {
+				t.Fatalf("the adapter was not told the removal keeps its nodes: %+v", runner.requests)
+			}
+			if test.proof == "" {
+				if err != nil || result.Outcome != reconciliation.OutcomeChanged || observed != nil || observation.Effect != reconciliation.EffectCompleted {
+					t.Fatalf("an unmarked kept removal reads %+v (%v) and %+v (%v)", result, err, observation, observed)
+				}
+				return
+			}
+			for _, refused := range []error{err, observed} {
+				reported := diagnostics.Of(refused)
+				if len(reported) == 0 || reported[0].Code != openshiftKeptNodeHanded.Code || !strings.Contains(reported[0].Message, test.proof) ||
+					!strings.Contains(reported[0].Message, "proves a node was handed the image") || !strings.Contains(reported[0].Remediation, "--stage machines") ||
+					!strings.Contains(reported[0].Remediation, "bootwright destroy --context "+testContext) {
+					t.Fatalf("the kept removal over a %s returned %v", name, reported)
+				}
+			}
+			if result.Outcome != reconciliation.OutcomeUnknown || observation.Effect != reconciliation.EffectUnknown {
+				t.Fatalf("the refused kept removal reads %+v and %+v", result, observation)
+			}
+		})
+	}
+}
+
+// A removal that deletes its nodes still ejects whatever each presents, so
+// another image left on one of them is no completed removal, and the adapter
+// is not told it keeps them.
+func TestARemovalThatDeletesItsNodesStillRequiresEveryImageEjected(t *testing.T) {
+	execution, _ := installExecution(t, singleNodeCatalog(), testDigest)
+	runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: installEvidence(t, testDigest, func(e *InstallEvidence) {
+		e.Absent, e.Postcondition, e.Media, e.OwnMedia, e.Booted = true, true, []string{"sno-01"}, []string{}, true
+	})}}
+	if _, err := NewInstall(runner).Destroy(context.Background(), execution); err == nil || diagnostics.Of(err)[0].Code == openshiftKeptNodeHanded.Code {
+		t.Fatalf("a removal left another image on a node it deletes: %v", diagnostics.Of(err))
+	}
+	if _, keeps := runner.requests[0].MaterialValues["keeps"]; keeps {
+		t.Fatalf("a removal that deletes its nodes told the adapter it keeps them: %v", runner.requests[0].MaterialValues)
 	}
 }
 

@@ -19,6 +19,7 @@ type removalScope struct {
 	operations []string
 	contracts  map[string]string
 	records    func(context.Context, string) (RemovalRecords, error)
+	keptHosts  map[string][]string
 }
 
 func removalOver(ctx context.Context, store recordReader, applied operationstore.Operation, frozen, started reconciliation.Plan) (removalScope, error) {
