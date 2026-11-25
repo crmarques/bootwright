@@ -339,7 +339,8 @@ Alias cell.
 | [B1588](#b1588) | new, 2026-11-18 (X597 review) | safety | Substrate | A libvirt guest listing reads each domain by its UUID, so no domain name is read as another domain's ID | Low confidence that libvirt admits an all-digit domain name; the fix touches every guest-listing fixture |
 | [B1612](#b1612) | new, 2026-11-18 (D277) | product | Storage, with Add-ons | An omitted CephConsumer key type defaults to one the cluster's MONs allow | An explicit `aes256k` already works; the default needs an owner decision |
 | [B1805](#b1805) | new, 2026-11-24 (an operator run) | product | Storage | The management gateway listens only on its virtual IP, so it can share hosts and port 443 with an object gateway ingress | The gateway can use a separate port; it needs an owned cephadm template override |
-| [B1809](#b1809) | new, 2026-11-25 (X721) | product | Storage | An oauth2-proxy added to a management gateway an earlier apply realized switches the gateway and its Grafanas to single sign-on through the identity provider | The owner wants OIDC once the identity provider exists; Keycloak is not deployed yet |
+| [B1837](#b1837) | new, 2026-11-25 (D287) | product | Storage | An object gateway's STS trusts an `OIDCProvider` whose certificate chains to a private CA | RGW can only replace its whole curl CA bundle, so admitting the provider's bundle would drop every public anchor |
+| [B1838](#b1838) | new, 2026-11-25 (D287) | product | Storage | A `CephSignOn` names the claim path its users' dashboard roles come from | cephadm loses a `roles_path` set on a fresh single sign-on database when a manager restarts |
 
 ### B82
 
@@ -3713,20 +3714,32 @@ The `external_server.conf` key is now owned by the
 [Grafana routes](../ceph.md#grafana-routes) override, so the definition extends
 that one owned override.
 
-### B1809
+### B1837
 
-**Owner:** Storage. **Kind:** product. **Requires:** an identity provider the
-owner deploys. **Definition:** Candidate. **Outcome:** a management gateway
-realized with password sign-in takes an oauth2-proxy declared later: the unit
-re-applies the gateway with `enable_auth`, deploys the proxy and enables the
-dashboard's single sign-on, and the gateway's Grafanas sign users in through
-the proxy. On 2026-11-25 the owner chose password sign-in now and OIDC when
-Keycloak arrives. Today the changed gateway document refuses
-([management gateway](../ceph.md#management-gateway)); the
-[Grafana routes](../ceph.md#grafana-routes) already render cephadm's own Host
-line once a proxy exists. **Exit evidence:** a gateway apply over a realized
-password gateway that adds a proxy, its readiness with `sso` `oauth2`, and the
-route proof passing over the proxied files.
+**Owner:** Storage. **Kind:** product. **Requires:** [B1834](m2.md#b1834).
+**Definition:** Candidate. **Outcome:** an object gateway's STS verifies an
+issuer whose certificate chains to a private CA named by the
+`OIDCProvider`'s trust bundle. RGW verifies the issuer with libcurl, whose
+only override, `CURL_CA_BUNDLE`, replaces the whole bundle, so B1834 refuses
+such a provider at admission
+([CephObjectGateway](../ceph-resources.md#cephobjectgateway-field-record)).
+Parked by [D287](#d287): Keycloak and AD are the qualification providers, and
+a merged bundle needs its own custody and refresh rule. **Exit evidence:** a
+gateway whose STS references such a provider admitted, the mounted bundle
+holding the system anchors and the provider's, and an STS token exchange in
+the owner's run.
+
+### B1838
+
+**Owner:** Storage. **Kind:** product. **Requires:** [B1831](m2.md#b1831).
+**Definition:** Candidate. **Outcome:** a `CephSignOn` names the token claim
+path its users' dashboard roles come from, and the path survives a manager
+restart. The dashboard's default path already reads Keycloak's client and
+realm roles; a `roles_path` cephadm sets on a fresh single sign-on database is
+lost when a manager restarts
+([management gateway](../ceph.md#management-gateway)). Parked by
+[D287](#d287) until a build keeps the setting. **Exit evidence:** a sign-on
+with a declared path whose roles map after a manager failover.
 
 ## Audit remediation (2026-10-26)
 
@@ -4399,6 +4412,9 @@ holding such a clause, the clauses pending and the work they enable.
 - [D286](#d286): clauses (1) to (4), which blocks a scoped health check holds,
   the malformed-detail fallback, the two unscoped checks (X410) and the
   stretch OSD-host count.
+- [D287](#d287): clauses (7) to (12), the Ceph identity program's kind names,
+  RGW placement, `ldaps://` only, Grafana role, provider pre-check and parked
+  items (X733 to X741).
 
 ### D1
 
@@ -9878,3 +9894,64 @@ recorded here; the clauses are pending the owner's review): the clauses that
 4. [D200](#d200) (8) says exactly four OSD hosts; the code admits four or more
    under stretch (`internal/storage/ceph/resources.go`,
    `internal/storage/cephcluster/pools.go`); pending the owner's review.
+
+### D287
+
+**owner** (2026-11-25; the clauses marked as the session's are pending the
+owner's review): the owner asked "let's support integrating ceph services to
+ldap and oidc when supported by ibm as defined in docs / think if would be good
+to have a new infra services for ldap or oidc server or if only attributes
+would be fine / the solution should be generic, but we will start supporting
+integration with microsoft ad and keycloak / the solution must consider
+fallback scenarios where ldap or oidc server are down and operator would need
+to access ceph with local user / evaluate good alternatives and pick the best
+one in term of ux, well-designed systems, elegancy and safety / then propose a
+plan to implement it and add support for integrating all supported services
+with ldap and oidc, all with fallback to local user", and, shown the session's
+proposal, answered "proceed with plan implementation / then update
+ceph-stretch template to use them and prd.yaml for new format. i will fill the
+value when you are done / merge to main at the end". The answer accepts every
+recommendation of the proposal:
+
+1. An identity provider is an external infrastructure service, an
+   `OIDCProvider` or an `LDAPServer` (Active Directory included), that
+   consumers reference, rather than attributes repeated on each consumer. The
+   management gateway's sign-on is its own Storage object, `CephSignOn`; RGW
+   LDAP and STS are day-1 input of the object gateway; an AD-mode SMB cluster
+   references its `LDAPServer`
+   ([infrastructure services](../api/infrastructure-services.md#kinds),
+   [management gateway](../ceph.md#management-gateway),
+   [CephObjectGateway](../ceph-resources.md#cephobjectgateway-field-record),
+   [CephSMBResource](../ceph-resources.md#cephsmbresource)).
+2. Fallback: `bootwright cluster sign-on suspend|resume` removes and restores
+   the gateway's sign-on over the administrative channel without contacting the
+   identity provider ([cluster access](../cli/cluster-access.md)). Local logins
+   are never removed, RGW local users always come last in its sign-in order,
+   and an AD-mode SMB cluster has no local fallback.
+3. The forged dashboard token is proved before anything relies on sign-on; the
+   direct exposure of a manager's dashboard port is left to owner question
+   Q153.
+4. A `CephSignOn` may be added to a cluster an earlier apply realized, through
+   the [additive apply](../state-reconciliation.md#additive-apply) (B1809).
+5. Bootwright never registers RGW OIDC providers or roles; the operator does,
+   through the IAM API ([D246](#d246)).
+6. A managed identity provider is declined for now; `management: managed`
+   refuses.
+
+The session took, pending the owner's review:
+
+7. The kind names `OIDCProvider`, `LDAPServer` and `CephSignOn`.
+8. RGW integrations as `CephObjectGateway.spec.authentication`, not a binding
+   kind, because each one changes the gateway's own service document.
+9. `ldaps://` only, since RGW has no StartTLS option.
+10. A signed-in user is a Grafana `Viewer` through the gateway.
+11. The `sign-on-provider-unreachable` refusal before any effect, instead of an
+    automatic rollback of a sign-on whose proxies cannot start.
+12. Parking [B1837](#b1837) and [B1838](#b1838).
+
+Rejected: attributes on each consumer, which repeat one directory per
+service; a separate binding kind for RGW; an automatic rollback. This
+authorizes X733 to X741 on M2, items B1827 to B1838 and
+[B1809](m2.md#b1809), no more than two slices active at once, then the
+ceph-stretch chart and its `prd.yaml`, with integration into local main; no
+push.

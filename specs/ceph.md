@@ -2353,7 +2353,7 @@ to whole-cluster retirement; per-resource removal is
 Not yet met: an oauth2-proxy added to a management gateway that an earlier
 apply realized without one changes the gateway's completed document, so the
 unit refuses instead of switching the gateway to single sign-on; tracked as
-[B1809](milestones/backlog.md#b1809).
+[B1809](milestones/m2.md#b1809).
 
 ## Grafana routes
 
