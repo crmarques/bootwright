@@ -1872,121 +1872,6 @@ its consumer block, which mints the consumer's own principals and produces its
 external-cluster details in custody; it installs nothing on the consuming
 cluster.
 
-### Management gateway
-
-The management gateway unit `ceph-service-<cluster>-mgmt-gateway` runs its
-apply phase only on the bootstrap host, after the firewall check below on each
-host of its keepalive-only ingress when it declares a `virtual_ip`. Before any
-write it proves the cluster's ownership record and FSID and reads, never
-writes, the frozen `container_image_nginx` setting and, with its ingress,
-`container_image_keepalived` (`foreign-image` names one the settings block no
-longer holds). The gateway's bound `ssl_cert` and `ssl_key` are placeholders in
-the normalization input, the inputs record and every attempt and completion
-record; the leaves are spliced in memory into the one `ceph orch apply -i -`
-stream, the ingress document first, so the gateway document is never applied
-without its bound leaves. The private key is lent to that apply phase alone,
-the certificate also to every observation and removal. Stored leaves follow
-the monitoring credential rule above (`service-credential-foreign`), and
-without a binding cephadm signs the certificate. Readiness needs both
-documents completed, the `mgmt-gateway` and `keepalived` daemon counts running
-on their frozen images, and an endpoint proof from the bootstrap host: the
-virtual IP at the gateway `port` (TLS name the address, the `Host` header
-bracketing an IPv6 one), else every running gateway daemon at that port with
-TLS name its host. Each endpoint must serve, with a binding, a leaf whose
-SHA-256 equals the bound certificate's, and then an HTTP status line. Without
-a binding, the worker retrieves `cephadm_root_ca_cert` through native
-`orch certmgr cert get` over the verified administrative channel and checks
-the chain, validity and TLS identity against that CA alone before sending HTTP.
-A generated certificate lacking the endpoint identity remains not ready; supply
-an operator certificate covering every endpoint or use a covered virtual IP.
-Evidence's `endpoint` holds that SHA-256 once every endpoint passed, or without
-a binding the SHA-256 of the cephadm-signed leaf the first endpoint served, and
-the coordinator refuses `evidence` for any other digest of a bound unit. A
-readiness timeout names `mgmt-gateway@mgmt-gateway`, `keepalived@ingress.<id>`,
-`tls@mgmt-gateway`, `http@mgmt-gateway` and `standby@mgmt-gateway` beside the
-blocking health checks. For the gateway Bootwright writes no dashboard setting
-and runs no `dashboard` or `mgr module` command but the sign-on enable below.
-cephadm sets the standby options after the daemons deploy, so readiness waits
-until `config get mgr` reads `mgr/dashboard/standby_behaviour` as `error` and
-`mgr/dashboard/standby_error_status_code` as `503` (a JSON string or integer,
-else `native-output`), and no standby redirects to the active manager. The
-cluster's dashboard phase keeps its own publication and readback.
-
-A running management gateway turns on cephadm's monitoring security, which
-puts Prometheus and Alertmanager behind basic authentication, with the login
-`admin`/`admin` for a service cephadm holds none for. So that a cluster never
-serves that default, the unit's first apply claims a login for each listed
-`prometheus` or `alertmanager` before the gateway deploys, while the unit's
-attempt record is absent, it sets the user `admin` and a
-generated password of 32 login-alphabet characters with `orch <service>
-set-credentials -i -`, on standard input only, replacing any default an earlier
-Prometheus deploy stored. Cephadm keeps it until the read below captures it.
-
-When the unit's
-frozen `monitoring` lists `prometheus` or `alertmanager`, its apply runs, after
-readiness on the bootstrap host, `orch <service> get-credentials` over the
-verified administrative channel for those services only, because that command
-stores the default `admin`/`admin` for a service cephadm holds no login for.
-A recorded, non-removal observation proving the unit ready asks only when
-`orch ps` shows a daemon proving cephadm already stores each login; otherwise
-it reads and recaptures none. A login that still holds cephadm's default is
-replaced with `bootwright cluster update-admin-creds --name <cluster> --login
-prometheus,alertmanager`. A `user` or
-`password` that is not a nonempty string, or an empty answer (security off),
-refuses `material`; one outside 1 to 128 visible ASCII characters other than
-`&`, `<` and `>` refuses `monitoring-login-unsupported`, naming the service and
-member, never the value, with the remedy `ceph orch <service>
-set-credentials`. The logins reach only the produced output `monitoring`, the
-canonical JSON `{"<service>":{"password","user"}}` of exactly those services,
-never evidence, a refusal, a record or a diagnostic. A unit listing neither
-service, and a removal's observation, declare no output.
-
-With an oauth2-proxy, the unit also reads `container_image_oauth2_proxy`, and
-the proxy's five bound leaves (`client_secret`, `cookie_secret`, `ssl_cert`,
-`ssl_key` and `/custom_configs/0/content`) are lent to its apply phase only
-and spliced, like the gateway's, into the one apply stream after the
-`mgmt-gateway` document. Their placeholders pass cephadm's spec validation,
-so the `cookie_secret` one holds 32 bytes; a bound `cookie_secret` that
-validation refuses, neither 16, 24 nor 32 bytes after URL-safe base64
-decoding when it decodes, else as text, refuses `material` before any effect.
-The identity provider's public trust bundle, held by a `caBundle` or
-`trustBundle` Secret, reaches the container only through that document's `custom_configs` entry, which cephadm
-mounts at `/etc/pki/tls/certs/oauth2-proxy-idp-ca.pem`; no plan, record,
-argument, evidence or diagnostic carries a bundle or secret byte or a hash of
-one. After the apply, and before any dashboard write, each host of the proxy's
-placement proves read-only, within one native call of the block's deadline
-(each round calls every proxy host concurrently, so a round lasts one call of
-at most 120 s whatever the host count; rounds 10 s apart, a 600 s window), that
-every running oauth2-proxy container of this cluster there skips no identity
-provider certificate verification: neither its arguments
-(`--ssl-insecure-skip-verify`) nor its environment
-(`OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY`) nor the configuration file its
-`--config` argument names, read through its mount beneath
-`/var/lib/ceph/<fsid>/` without following a link, sets the skip (a line
-naming the key other than as its bare assignment leaves the daemon unproved),
-and, with a bound bundle, its CA mount holds exactly that bundle. The deployed
-container's rendered configuration is the postcondition, never one release's
-template. A skip refuses `sso-unverified`, naming the host, the daemon and
-whether the argument, environment or configuration skips; this is the unit's
-one refusal after its apply's effect, and the dashboard's single sign-on is
-never enabled through an unproved proxy. Until the placed daemon count runs
-proved, the window's exhaustion refuses `not-ready`. Then the bootstrap host
-runs the unit's one dashboard write, `ceph dashboard sso enable oauth2`, only
-when the dashboard module option `mgr/dashboard/sso_oauth2` is not already
-true and once `ceph orch ps --daemon_type oauth2-proxy` lists a running
-daemon, which the enable requires; until then it writes nothing and asks
-again 10 s apart, each call begun within the proof's window, whose
-exhaustion refuses `not-ready`. Then it reads the option back. cephadm's only
-dashboard single sign-on write disables it when it removes the last running
-oauth2-proxy daemon, so readiness turns not-ready until the next apply enables
-it again. Readiness also needs the `oauth2-proxy` daemon count on its frozen image and
-that option true, which it reads and never writes (`dashboard sso status` is
-never run, because it answers EPERM without python3-saml); evidence's `sso`
-is then `"oauth2"`. A readiness timeout also names `oauth2-proxy@oauth2-proxy`
-and `sso@oauth2-proxy`. Destroy leaves the dashboard's single sign-on setting
-to whole-cluster retirement; per-resource removal is
-[B491](milestones/m2.md#b491)'s.
-
 ### Object users and buckets
 
 A CephObjectUser is realized by its user block `ceph-object-user-<user>`
@@ -2323,6 +2208,121 @@ implicitly. Remote probes receive only needed bound credentials through
 custody. Access resolves the selected owned cluster, native tool and trust under
 [the access contract](cli.md#resource-inspection-and-explicit-access). Health
 inspection never mutates or reveals keys.
+
+## Management gateway
+
+The management gateway unit `ceph-service-<cluster>-mgmt-gateway` runs its
+apply phase only on the bootstrap host, after the firewall check below on each
+host of its keepalive-only ingress when it declares a `virtual_ip`. Before any
+write it proves the cluster's ownership record and FSID and reads, never
+writes, the frozen `container_image_nginx` setting and, with its ingress,
+`container_image_keepalived` (`foreign-image` names one the settings block no
+longer holds). The gateway's bound `ssl_cert` and `ssl_key` are placeholders in
+the normalization input, the inputs record and every attempt and completion
+record; the leaves are spliced in memory into the one `ceph orch apply -i -`
+stream, the ingress document first, so the gateway document is never applied
+without its bound leaves. The private key is lent to that apply phase alone,
+the certificate also to every observation and removal. Stored leaves follow
+the monitoring credential rule above (`service-credential-foreign`), and
+without a binding cephadm signs the certificate. Readiness needs both
+documents completed, the `mgmt-gateway` and `keepalived` daemon counts running
+on their frozen images, and an endpoint proof from the bootstrap host: the
+virtual IP at the gateway `port` (TLS name the address, the `Host` header
+bracketing an IPv6 one), else every running gateway daemon at that port with
+TLS name its host. Each endpoint must serve, with a binding, a leaf whose
+SHA-256 equals the bound certificate's, and then an HTTP status line. Without
+a binding, the worker retrieves `cephadm_root_ca_cert` through native
+`orch certmgr cert get` over the verified administrative channel and checks
+the chain, validity and TLS identity against that CA alone before sending HTTP.
+A generated certificate lacking the endpoint identity remains not ready; supply
+an operator certificate covering every endpoint or use a covered virtual IP.
+Evidence's `endpoint` holds that SHA-256 once every endpoint passed, or without
+a binding the SHA-256 of the cephadm-signed leaf the first endpoint served, and
+the coordinator refuses `evidence` for any other digest of a bound unit. A
+readiness timeout names `mgmt-gateway@mgmt-gateway`, `keepalived@ingress.<id>`,
+`tls@mgmt-gateway`, `http@mgmt-gateway` and `standby@mgmt-gateway` beside the
+blocking health checks. For the gateway Bootwright writes no dashboard setting
+and runs no `dashboard` or `mgr module` command but the sign-on enable below.
+cephadm sets the standby options after the daemons deploy, so readiness waits
+until `config get mgr` reads `mgr/dashboard/standby_behaviour` as `error` and
+`mgr/dashboard/standby_error_status_code` as `503` (a JSON string or integer,
+else `native-output`), and no standby redirects to the active manager. The
+cluster's dashboard phase keeps its own publication and readback.
+
+A running management gateway turns on cephadm's monitoring security, which
+puts Prometheus and Alertmanager behind basic authentication, with the login
+`admin`/`admin` for a service cephadm holds none for. So that a cluster never
+serves that default, the unit's first apply claims a login for each listed
+`prometheus` or `alertmanager` before the gateway deploys, while the unit's
+attempt record is absent, it sets the user `admin` and a
+generated password of 32 login-alphabet characters with `orch <service>
+set-credentials -i -`, on standard input only, replacing any default an earlier
+Prometheus deploy stored. Cephadm keeps it until the read below captures it.
+
+When the unit's
+frozen `monitoring` lists `prometheus` or `alertmanager`, its apply runs, after
+readiness on the bootstrap host, `orch <service> get-credentials` over the
+verified administrative channel for those services only, because that command
+stores the default `admin`/`admin` for a service cephadm holds no login for.
+A recorded, non-removal observation proving the unit ready asks only when
+`orch ps` shows a daemon proving cephadm already stores each login; otherwise
+it reads and recaptures none. A login that still holds cephadm's default is
+replaced with `bootwright cluster update-admin-creds --name <cluster> --login
+prometheus,alertmanager`. A `user` or
+`password` that is not a nonempty string, or an empty answer (security off),
+refuses `material`; one outside 1 to 128 visible ASCII characters other than
+`&`, `<` and `>` refuses `monitoring-login-unsupported`, naming the service and
+member, never the value, with the remedy `ceph orch <service>
+set-credentials`. The logins reach only the produced output `monitoring`, the
+canonical JSON `{"<service>":{"password","user"}}` of exactly those services,
+never evidence, a refusal, a record or a diagnostic. A unit listing neither
+service, and a removal's observation, declare no output.
+
+With an oauth2-proxy, the unit also reads `container_image_oauth2_proxy`, and
+the proxy's five bound leaves (`client_secret`, `cookie_secret`, `ssl_cert`,
+`ssl_key` and `/custom_configs/0/content`) are lent to its apply phase only
+and spliced, like the gateway's, into the one apply stream after the
+`mgmt-gateway` document. Their placeholders pass cephadm's spec validation,
+so the `cookie_secret` one holds 32 bytes; a bound `cookie_secret` that
+validation refuses, neither 16, 24 nor 32 bytes after URL-safe base64
+decoding when it decodes, else as text, refuses `material` before any effect.
+The identity provider's public trust bundle, held by a `caBundle` or
+`trustBundle` Secret, reaches the container only through that document's `custom_configs` entry, which cephadm
+mounts at `/etc/pki/tls/certs/oauth2-proxy-idp-ca.pem`; no plan, record,
+argument, evidence or diagnostic carries a bundle or secret byte or a hash of
+one. After the apply, and before any dashboard write, each host of the proxy's
+placement proves read-only, within one native call of the block's deadline
+(each round calls every proxy host concurrently, so a round lasts one call of
+at most 120 s whatever the host count; rounds 10 s apart, a 600 s window), that
+every running oauth2-proxy container of this cluster there skips no identity
+provider certificate verification: neither its arguments
+(`--ssl-insecure-skip-verify`) nor its environment
+(`OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY`) nor the configuration file its
+`--config` argument names, read through its mount beneath
+`/var/lib/ceph/<fsid>/` without following a link, sets the skip (a line
+naming the key other than as its bare assignment leaves the daemon unproved),
+and, with a bound bundle, its CA mount holds exactly that bundle. The deployed
+container's rendered configuration is the postcondition, never one release's
+template. A skip refuses `sso-unverified`, naming the host, the daemon and
+whether the argument, environment or configuration skips; this is the unit's
+one refusal after its apply's effect, and the dashboard's single sign-on is
+never enabled through an unproved proxy. Until the placed daemon count runs
+proved, the window's exhaustion refuses `not-ready`. Then the bootstrap host
+runs the unit's one dashboard write, `ceph dashboard sso enable oauth2`, only
+when the dashboard module option `mgr/dashboard/sso_oauth2` is not already
+true and once `ceph orch ps --daemon_type oauth2-proxy` lists a running
+daemon, which the enable requires; until then it writes nothing and asks
+again 10 s apart, each call begun within the proof's window, whose
+exhaustion refuses `not-ready`. Then it reads the option back. cephadm's only
+dashboard single sign-on write disables it when it removes the last running
+oauth2-proxy daemon, so readiness turns not-ready until the next apply enables
+it again. Readiness also needs the `oauth2-proxy` daemon count on its frozen image and
+that option true, which it reads and never writes (`dashboard sso status` is
+never run, because it answers EPERM without python3-saml); evidence's `sso`
+is then `"oauth2"`. A readiness timeout also names `oauth2-proxy@oauth2-proxy`
+and `sso@oauth2-proxy`. Destroy leaves the dashboard's single sign-on setting
+to whole-cluster retirement; per-resource removal is
+[B491](milestones/m2.md#b491)'s.
 
 ## Monitoring scrape templates
 
