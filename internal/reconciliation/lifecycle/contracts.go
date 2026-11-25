@@ -269,9 +269,6 @@ type OnlineRemoval interface {
 	RequiresOnlineRemoval(reconciliation.Block) bool
 }
 
-// OnlineRetirement names installed Machines whose registered retirement still
-// needs the guest. A resumed destroy defers their automatic stop until the
-// frozen retirement block is done. This does not grant power or erase authority.
 type OnlineRetirement interface {
 	OnlineRetirementHosts(reconciliation.Block) ([]string, error)
 }

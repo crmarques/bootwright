@@ -16,6 +16,11 @@ def completion(arguments):
     if type(observed) is not bool or type(removed) is not bool:
         raise ValueError("operation")
     value = arguments.get("evidence")
+    if isinstance(value, dict) and value.get("version") == ceph_evidence.MANAGERS_EVIDENCE:
+        result = ceph_evidence.managers_evidence(value, arguments.get("digest"))
+        if observed != removed and (observed or result["stopped"]):
+            return result, None
+        return result, "the Ceph operation has not proved its postcondition"
     if isinstance(value, dict) and value.get("version") == ceph_evidence.TIEBREAKER_EVIDENCE:
         result = ceph_evidence.tiebreaker_evidence(value, arguments.get("digest"))
         if observed or removed and result["removed"]:

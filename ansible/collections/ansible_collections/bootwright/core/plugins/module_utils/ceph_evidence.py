@@ -333,11 +333,14 @@ def tiebreaker_evidence(value, request_digest, request=None):
     return value
 
 
-def managers_evidence(value, request_digest, request):
+def managers_evidence(value, request_digest, request=None):
     """The closed evidence of the managers' retirement round or its observation: whether no data host runs or enables one of them."""
     ceph_native.require(isinstance(value, dict) and set(value) == MANAGERS_MEMBERS and value["version"] == MANAGERS_EVIDENCE, "evidence")
     ceph_native.require(ceph_native.digest(request_digest) and value["request"] == request_digest, "evidence")
-    ceph_native.require(value["owner"] == request["owner"] and value["fsid"] == request["fsid"] and type(value["stopped"]) is bool, "evidence")
+    ceph_native.require(ceph_native.named(value["owner"]) and isinstance(value["fsid"], str)
+                        and ceph_native.SUBVOLUME_UUID.fullmatch(value["fsid"]) is not None and type(value["stopped"]) is bool, "evidence")
+    if request is not None:
+        ceph_native.require(value["owner"] == request["owner"] and value["fsid"] == request["fsid"], "evidence")
     return value
 
 

@@ -249,11 +249,11 @@ def test_the_protocol_publishes_a_tiebreaker_removal_only_when_it_proves_absence
         protocol.completion({"evidence": dict(evidence, extra=1), "digest": digest, "observed": True, "removed": False})
 
 
-def masked(monkeypatch, capsys, operation, execute):
-    """What the real module entry point returns through AnsibleModule's own no_log masking, with a tiebreaker retirement's material."""
+def masked(monkeypatch, capsys, operation, execute, retirement="tiebreaker"):
+    """What the real module entry point returns through AnsibleModule's own no_log masking, with retirement material."""
     from ansible.module_utils import basic
-    arguments = {"request": {"cluster": "ceph-stretch"}, "operation": operation, "digest": "d" * 64,
-                 "material": {"retirement": "tiebreaker", "knownHosts": "/run/bootwright/known-hosts"}, "outputs": {}}
+    arguments = {"request": {"cluster": "example"}, "operation": operation, "digest": "d" * 64,
+                 "material": {"retirement": retirement, "knownHosts": "/run/bootwright/known-hosts"}, "outputs": {}}
     monkeypatch.setattr(basic, "_ANSIBLE_ARGS", json.dumps({"ANSIBLE_MODULE_ARGS": arguments}).encode())
     monkeypatch.setattr(basic, "_ANSIBLE_PROFILE", "legacy")
     monkeypatch.setattr(ceph_transport, "Transport", lambda *arguments, **keywords: None)
@@ -283,6 +283,41 @@ def test_the_tiebreaker_selector_never_masks_the_tiebreaker_evidence_version(mon
     result = masked(monkeypatch, capsys, "destroy", lambda *arguments, **keywords: {"changed": True, "evidence": dict(evidence)})
     assert result["evidence"] == evidence
     assert protocol.completion({"evidence": result["evidence"], "digest": digest, "observed": False, "removed": True}) == (evidence, None)
+
+
+@pytest.mark.parametrize("operation,stopped,admitted", [
+    ("destroy", True, True), ("destroy", False, False),
+    ("observe", True, True), ("observe", False, True), ("apply", True, False),
+])
+def test_the_core_role_publishes_manager_retirement_evidence(monkeypatch, capsys, operation, stopped, admitted):
+    digest = "d" * 64
+    evidence = {"version": ceph_evidence.MANAGERS_EVIDENCE, "request": digest, "owner": "apply-123",
+                "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "stopped": stopped}
+    result = masked(monkeypatch, capsys, operation, lambda *arguments, **keywords: {"changed": stopped, "evidence": dict(evidence)},
+                    retirement="managers")
+    assert result["evidence"] == evidence
+    tasks = LOADER.load_from_file(str(ROLES / "storage_ceph_core" / "tasks" / (operation + ".yml")), trusted_as_template=True)
+    completion = next(task[PROTOCOL] for task in tasks if task.get(PROTOCOL, {}).get("phase") == "completed")
+    rendering = Templar(loader=LOADER, variables={"storage_ceph_core_result": result, "bootwright_ceph_digest": digest})
+    records = []
+    outcome = adapter_protocol.publish(rendering.template(completion), protocol.CAPABILITY, lambda record, acknowledge=False: records.append(record))
+    if admitted:
+        assert not outcome.get("failed") and len(records) == 1 and records[0]["evidence"] == evidence
+    else:
+        assert outcome.get("failed") and not records
+
+
+@pytest.mark.parametrize("defect", [
+    {"request": "b" * 64}, {"owner": "a path/to/private"}, {"fsid": "arbitrary native output"},
+    {"stopped": "true"}, {"extra": "not evidence"},
+])
+def test_manager_retirement_publication_refuses_malformed_evidence(defect):
+    digest = "d" * 64
+    evidence = {"version": ceph_evidence.MANAGERS_EVIDENCE, "request": digest, "owner": "apply-123",
+                "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "stopped": True}
+    evidence.update(defect)
+    with pytest.raises(ceph_native.Refusal, match="^evidence$"):
+        protocol.completion({"evidence": evidence, "digest": digest, "observed": False, "removed": True})
 
 
 def test_the_material_paths_stay_masked_beside_the_selector(monkeypatch, capsys):

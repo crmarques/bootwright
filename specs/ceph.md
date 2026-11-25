@@ -3009,7 +3009,10 @@ the FSID's layout back onto one just cleaned
   powers that host on. Nothing else of the FSID changes.
 - **Absence.** A second round, after every host's stop, reads on each
   physical host that no such unit runs or is enabled and that Podman runs no
-  `ceph-<fsid>-mgr-` container. Only then does the cluster block reach the
+  `ceph-<fsid>-mgr-` container. The controller publishes the closed manager
+  proof for the frozen request. A destroy publishes success only when the
+  proof affirms the stop. An observation may publish either state. Only
+  after a successful stop does the cluster block reach the
   tiebreaker and record its retirement. A manager still running or enabled
   refuses `managers-running`, and a host that does not answer refuses
   `transport`; both stop `ceph.boundary-unproved` with an unknown outcome and

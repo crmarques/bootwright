@@ -43,9 +43,6 @@ func (c *scheduler) deferMachineGroup(skip map[string]bool) {
 	}
 }
 
-// retirementStopGroups partitions the retry's own native stops by the
-// retirement blocks that still need the guest. The frozen dependency narrows
-// where to run a deferred stop, but the durable state admits it.
 func (s Service) retirementStopGroups(decided operationPlan, skip map[string]bool) ([]*removalMachineGroup, error) {
 	waitFor := map[string][]string{}
 	for _, block := range decided.plan.Blocks {
