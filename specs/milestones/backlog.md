@@ -17,6 +17,8 @@ Alias cell.
 
 | ID | Alias | Kind | Owner | Outcome | Why parked |
 | --- | --- | --- | --- | --- | --- |
+| [B1846](#b1846) | new, 2026-11-25 (X746 dependency audit) | enabling | Verification tooling | Retire vulnerable Ansible test-only pip, Pylint and floor pytest pins | The qualified ansible-test owns the pip and Pylint pins, and fixed pytest releases require Python 3.10 or newer |
+| [B1848](#b1848) | new, 2026-11-25 (X746 image scan) | enabling | Infrastructure services and Substrate | Qualify updated managed-service and emulated-BMC images with fewer high and critical findings | Digest changes move execution contracts and need capability-specific validation |
 | [B1611](#b1611) | new, 2026-11-18 (proxy audit) | product | Managed OS, Container cluster and State reconciliation | Observe installed proxy drift and support an owned transition between direct and proxy | Changing a completed installation needs a separate rollout and recovery contract |
 | [B1619](#b1619) | new, 2026-11-18 (proxy review) | defect | Infrastructure services | One bypass grammar with one address comparison in Go and Python | Fails closed: a non-canonical address rule sends a request through the proxy |
 | [B1622](#b1622) | new, 2026-11-18 (X627 review) | product | Substrate and Reconciliation | Prove a hosted KubeVirt Machine off or absent without creating access on its host cluster | Fails closed: a context with a hosted KubeVirt Machine refuses every new apply and destroy |
@@ -4166,6 +4168,23 @@ disable lists that converge on every apply, as an installation's
 
 **Exit evidence:** a provided host whose enabled repositories follow the
 declared lists across two applies.
+
+### B1846
+
+Refresh the offline Ansible test artifacts when the qualified ansible-test
+supplies fixed pip and Pylint pins and the managed-host floor permits a fixed
+pytest. The current artifacts are confined to isolated test environments
+with a digest-verified wheelhouse. Scope and exit evidence are the
+[Ansible check](../../scripts/tools/ansible-check.md) and a clean advisory scan
+of these test tools with the full Ansible gate passing.
+
+### B1848
+
+Use the [image vulnerability report](../security.md#the-vulnerability-gate)
+to select publisher digests that reduce reported exposure. A finding in an
+image is not proof that its affected code is reachable. **Exit evidence:**
+reviewed before-and-after scans and the affected service and substrate
+contracts, compatibility checks and operator gates.
 
 ## Retired
 

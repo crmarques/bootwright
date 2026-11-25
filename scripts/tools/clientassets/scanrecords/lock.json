@@ -1,6 +1,6 @@
 {
   "format": "bootwright.client-scan-records-v1",
-  "scanner": "v1.9.0",
+  "scanner": "v1.10.0",
   "records": [
     {
       "kind": "govc",
@@ -18,10 +18,10 @@
     },
     {
       "kind": "kubectl",
-      "version": "1.37.2",
-      "releaseSHA256": "c04487523e7aa7d1493f7808174c899db93d7a9cf57531420cd76b9bd415f8f4",
-      "recordSHA256": "7573f613e6969263d69dd329df503c1630f8271ba0f4e6f5a8ce38dee7d0ff23",
-      "bytes": 1651
+      "version": "1.37.3",
+      "releaseSHA256": "9a1b55af2795b25dd288dbef62387db9b5530087ab918d28c6ad067f2e3cb07c",
+      "recordSHA256": "4e28e888f13a0335d06ec9c134be9fb4c929c3a5fae4bec063d7947c1bcfc7e1",
+      "bytes": 1653
     },
     {
       "kind": "virtctl",

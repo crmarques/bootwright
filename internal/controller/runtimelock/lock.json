@@ -1,6 +1,6 @@
 {
   "format": "bootwright.controller.runtime-lock-v1",
-  "ansibleCore": "2.21.5",
+  "ansibleCore": "2.21.6",
   "pythonABIs": [
     "3.14",
     "3.12"
@@ -24,21 +24,21 @@
   ],
   "installer": {
     "name": "pip",
-    "version": "26.2.1",
-    "filename": "pip-26.2.1-py3-none-any.whl",
-    "url": "https://files.pythonhosted.org/packages/f3/6e/1736e5b4ae2b778ef2f81c47d797de9f891d4d8acb047a24ca37a60294dd/pip-26.2.1-py3-none-any.whl",
-    "sha256": "71138adf1f4ca900cdb7d289c21b7494329f2332b6d85f0e1c42108c0384ed3e",
-    "size": 1816632
+    "version": "26.3",
+    "filename": "pip-26.3-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/07/25/ee8c38ae72d66b844ce8eb9711ba905dba21ca1a8a0c960057c41cd23337/pip-26.3-py3-none-any.whl",
+    "sha256": "f3b60b20ffaadd4415ed7957212a38ac63fa4c5fa375bd0f4a797777940fad13",
+    "size": 1950951
   },
   "abis": {
     "3.12": [
       {
         "name": "ansible-core",
-        "version": "2.21.5",
-        "filename": "ansible_core-2.21.5-py3-none-any.whl",
-        "url": "https://files.pythonhosted.org/packages/57/6f/7321059b2d1a5ea3c7e60807a5269942d93b2c11a2fc89ba8e4a3e827891/ansible_core-2.21.5-py3-none-any.whl",
-        "sha256": "08886f9f3e23d129aa98a01271c4a47833516e1cb7c737a246788cb474f41222",
-        "size": 2457267
+        "version": "2.21.6",
+        "filename": "ansible_core-2.21.6-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/20/5a/9e6cc7686b40bec066211200b6c393a7a333dfcfa91aa67a07c031df87c8/ansible_core-2.21.6-py3-none-any.whl",
+        "sha256": "c1fc3cbe821176ba4227b1cae8c748e1d28d42dde605e807d23c58f71b6d1a74",
+        "size": 2457874
       },
       {
         "name": "jinja2",
@@ -58,19 +58,19 @@
       },
       {
         "name": "packaging",
-        "version": "26.3",
-        "filename": "packaging-26.3-py3-none-any.whl",
-        "url": "https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl",
-        "sha256": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c",
-        "size": 129956
+        "version": "26.4",
+        "filename": "packaging-26.4-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/ba/7b/5504f91c9c2733f693d7759e50ede5d27119d4da7e5836c46d3b5ff81d56/packaging-26.4-py3-none-any.whl",
+        "sha256": "81383611a09c1bc0b08b76e0fd5829d7c6824c65b27a6aee339da133f4233ea2",
+        "size": 140049
       },
       {
         "name": "pyyaml",
-        "version": "6.0.3",
-        "filename": "pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
-        "url": "https://files.pythonhosted.org/packages/8b/9d/b3589d3877982d4f2329302ef98a8026e7f4443c765c46cfecc8858c6b4b/pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
-        "sha256": "ba1cc08a7ccde2d2ec775841541641e4548226580ab850948cbfda66a1befcdc",
-        "size": 807870
+        "version": "6.0.4",
+        "filename": "pyyaml-6.0.4-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+        "url": "https://files.pythonhosted.org/packages/94/80/1d27f7084b983b7cfd1fb35e65a38276d9eddfdcdabc0922bb26cf9521bc/pyyaml-6.0.4-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+        "sha256": "93bfb2459195406a518e2f487a9bbf01df240175f31e06f5a252ac6734c7bbf0",
+        "size": 849249
       },
       {
         "name": "urllib3",
@@ -84,11 +84,11 @@
     "3.14": [
       {
         "name": "ansible-core",
-        "version": "2.21.5",
-        "filename": "ansible_core-2.21.5-py3-none-any.whl",
-        "url": "https://files.pythonhosted.org/packages/57/6f/7321059b2d1a5ea3c7e60807a5269942d93b2c11a2fc89ba8e4a3e827891/ansible_core-2.21.5-py3-none-any.whl",
-        "sha256": "08886f9f3e23d129aa98a01271c4a47833516e1cb7c737a246788cb474f41222",
-        "size": 2457267
+        "version": "2.21.6",
+        "filename": "ansible_core-2.21.6-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/20/5a/9e6cc7686b40bec066211200b6c393a7a333dfcfa91aa67a07c031df87c8/ansible_core-2.21.6-py3-none-any.whl",
+        "sha256": "c1fc3cbe821176ba4227b1cae8c748e1d28d42dde605e807d23c58f71b6d1a74",
+        "size": 2457874
       },
       {
         "name": "jinja2",
@@ -108,19 +108,19 @@
       },
       {
         "name": "packaging",
-        "version": "26.3",
-        "filename": "packaging-26.3-py3-none-any.whl",
-        "url": "https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl",
-        "sha256": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c",
-        "size": 129956
+        "version": "26.4",
+        "filename": "packaging-26.4-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/ba/7b/5504f91c9c2733f693d7759e50ede5d27119d4da7e5836c46d3b5ff81d56/packaging-26.4-py3-none-any.whl",
+        "sha256": "81383611a09c1bc0b08b76e0fd5829d7c6824c65b27a6aee339da133f4233ea2",
+        "size": 140049
       },
       {
         "name": "pyyaml",
-        "version": "6.0.3",
-        "filename": "pyyaml-6.0.3-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
-        "url": "https://files.pythonhosted.org/packages/88/f9/16491d7ed2a919954993e48aa941b200f38040928474c9e85ea9e64222c3/pyyaml-6.0.3-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
-        "sha256": "c458b6d084f9b935061bc36216e8a69a7e293a2f1e68bf956dcd9e6cbcd143f5",
-        "size": 794175
+        "version": "6.0.4",
+        "filename": "pyyaml-6.0.4-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+        "url": "https://files.pythonhosted.org/packages/ef/1b/54ce11b40c8fa1883f14eef46525c3c329509dcc268164074fbe60add8ed/pyyaml-6.0.4-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+        "sha256": "c604dc2613c417130479cdd6e55c2faa691b6365aa82b3dafddfcecc2eaf1ac7",
+        "size": 819491
       },
       {
         "name": "urllib3",

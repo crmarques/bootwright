@@ -1033,9 +1033,9 @@ def recorded_gate(
 
 
 def main() -> int:
-    if sys.version_info[:3] != (3, 13, 16):
+    if sys.version_info[:3] != (3, 13, 18):
         raise SystemExit(
-            "Ansible checks require the pinned CPython 3.13.16 interpreter."
+            "Ansible checks require the pinned CPython 3.13.18 interpreter."
         )
     coverage = coverage_directory(sys.argv[1:])
     if coverage is None:
@@ -1058,7 +1058,7 @@ def main() -> int:
             raise SystemExit(
                 "Ansible check dependencies differ from the reviewed lock. "
                 "Install scripts/tools/ansible-requirements.txt into an isolated "
-                "CPython 3.13.16 environment with pip --require-hashes, then set "
+                "CPython 3.13.18 environment with pip --require-hashes, then set "
                 "BOOTWRIGHT_ANSIBLE_CHECK_PYTHON to that interpreter."
             )
 

@@ -18251,3 +18251,41 @@ The [power admission rule](../state-reconciliation.md#power-before-a-new-apply-o
 uses the invocation bound. In-tree evidence covers overlapping checks on both
 verbs, stable refusals without lifecycle writes, cancellation, and adapter
 job isolation. The delivering commit records the verification results.
+
+## X747 — Ansible gate cache follows its locks
+
+**Owner:** Verification tooling. **Item:** B1847 (defect).
+**Discovered by:** X746's check against an existing development cache.
+
+The [Ansible check](../../scripts/tools/ansible-check.md) prepares a separate
+interpreter environment when a dependency lock changes. The regression keeps
+the old environment intact and proves that an unchanged lock reuses its
+prepared interpreter. The delivering commit records verification.
+
+## X748 — Disk inventory fixture isolates descriptor calls
+
+**Owner:** Verification tooling. **Item:** B1849 (defect).
+**Discovered by:** X746's Ansible unit suite on pytest 9.2.
+
+The disk inventory fixture replaces only the inventory module's descriptor
+calls, so pytest can still inspect its own descriptors. The read-only
+open flags and size ioctl assertions are unchanged.
+
+## X746 — Dependency version and vulnerability refresh
+
+**Owner:** Architecture and Verification tooling. **Item:** B1845 (enabling).
+**Authority:** explicit request to audit and refresh compatible dependency pins.
+
+Refresh the Go module graphs, controller wheels, Ansible development tools,
+CI's Go setup action, the Go build image and the standalone kubectl default
+and minimum. Reproduce the client records with the updated scanner.
+The kubectl patch removes one linked finding
+but retains vulnerable `golang.org/x/net` and `golang.org/x/text` versions;
+its remaining exceptions keep their original expiry dates. The Go and Ansible
+minor lines and the managed product image digests stay fixed.
+
+The [dependency selection rule](../architecture.md#dependency-selection-and-reuse)
+and [vulnerability gate](../security.md#the-vulnerability-gate) hold the new
+pins. Residual test-only findings and managed-image requalification are tracked
+by [B1846](backlog.md#b1846) and [B1848](backlog.md#b1848).
+The delivering commit records publisher checks and the full gate results.

@@ -3,7 +3,7 @@
   "distributions": [
     {
       "name": "ansible-core",
-      "version": "2.21.5",
+      "version": "2.21.6",
       "license": "GPL-3.0-or-later",
       "source": "License-Expression"
     },
@@ -21,19 +21,19 @@
     },
     {
       "name": "packaging",
-      "version": "26.3",
+      "version": "26.4",
       "license": "Apache-2.0 OR BSD-2-Clause",
       "source": "License-Expression"
     },
     {
       "name": "pip",
-      "version": "26.2.1",
+      "version": "26.3",
       "license": "MIT",
       "source": "License-Expression"
     },
     {
       "name": "pyyaml",
-      "version": "6.0.3",
+      "version": "6.0.4",
       "license": "MIT",
       "source": "Classifier"
     },
