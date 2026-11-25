@@ -205,7 +205,7 @@ func (s Service) run(ctx context.Context, tx Transaction, decided operationPlan,
 	}
 	run := invocation{
 		stopGroups: stopGroups, deferredSource: deferred, tx: tx, store: store, approved: located, boundary: logging,
-		operation: operation, plan: plan, material: material,
+		operation: operation, plan: plan, material: material, unregistered: frozenUnregistered(decided.plan),
 	}
 	var refusal error
 	if operation.Verb == reconciliation.Apply {

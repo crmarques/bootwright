@@ -320,6 +320,24 @@ func (c Capability) Removal(ctx context.Context, block reconciliation.Block) (li
 	}, nil
 }
 
+// Unregistered is the removal of a registering installation whose consumer the operator removed with the subscription service's own tools.
+func (c Capability) Unregistered(ctx context.Context, block reconciliation.Block) (lifecycle.Removal, bool, error) {
+	removal, err := c.Removal(ctx, block)
+	if err != nil {
+		return lifecycle.Removal{}, false, err
+	}
+	request, err := DecodeRequest(block.Request)
+	if err != nil || request.Registration == nil {
+		return lifecycle.Removal{}, false, err
+	}
+	machine := request.Identity.Object
+	removal.Description = "remove the installer media of " + machine + "; its consumer was unregistered with the subscription service's own tools, so its guest is not read"
+	removal.Impacts = slices.DeleteFunc(removal.Impacts, func(impact string) bool {
+		return slices.Contains([]string{"power-on ", "power-off ", "unregister-subscription "}, strings.TrimSuffix(impact, machine))
+	})
+	return removal, true, nil
+}
+
 func (c Capability) Apply(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
 	return c.mutate(ctx, execution, "apply")
 }

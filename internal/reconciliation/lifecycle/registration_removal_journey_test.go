@@ -297,10 +297,19 @@ func TestUnregisteredFlagLetsTheRerunProceed(t *testing.T) {
 	}
 	holdInstallationSecrets(journey, runner.request)
 	setRunning(machines, false)
+	preview, err := journey.Service.Plan(context.Background(), lifecycle.PlanRequest{ContextName: lifecycle.JourneyContext, Verb: reconciliation.Destroy, Unregistered: []string{"rhel-01"}})
+	if err != nil || !slices.ContainsFunc(preview.Steps, func(step lifecycle.PlanStep) bool {
+		return step.ID == installation.BlockID("rhel-01") && strings.Contains(step.Description, "unregistered with the subscription service's own tools") && !slices.Contains(step.Impacts, "unregister-subscription rhel-01")
+	}) {
+		t.Fatalf("the acknowledged preview = %+v (%v)", preview, err)
+	}
 	destroy.Unregistered = []string{"rhel-01"}
 	result, err := journey.Service.Destroy(context.Background(), destroy)
 	if err != nil || result.Receipt.State != string(reconciliation.OperationDone) {
 		t.Fatalf("the acknowledged destroy = %+v, %+v (%v)", result, diagnostics.Of(err), err)
+	}
+	if block, _ := journey.FrozenPlan(t).Block(installation.BlockID("rhel-01")); block.Relaxation != lifecycle.Unregistered {
+		t.Fatalf("the acknowledged removal froze %q, want the unregistered relaxation", block.Relaxation)
 	}
 	if runs := runner.took(); len(runs) == 0 || slices.ContainsFunc(runs, func(run string) bool { return !strings.HasSuffix(run, ":skip") }) ||
 		!slices.Equal(machines.removed, []string{"rhel-01"}) {

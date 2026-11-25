@@ -113,11 +113,25 @@ func (r sharedResolver) Resolve(kind, implementation string) (Capability, bool) 
 	if position == 0 {
 		p.plan, p.peers = r.plan, r.bound
 	}
-	if reader, ok := p.Capability.(MachineStartPower); ok {
+	reader, reads := p.Capability.(MachineStartPower)
+	recorded, records := p.Capability.(RecordedRemoval)
+	switch {
+	case reads && records:
+		return struct {
+			plannedCapability
+			MachineStartPower
+			RecordedRemoval
+		}{p, reader, recorded}, true
+	case reads:
 		return struct {
 			plannedCapability
 			MachineStartPower
 		}{p, reader}, true
+	case records:
+		return struct {
+			plannedCapability
+			RecordedRemoval
+		}{p, recorded}, true
 	}
 	return p, true
 }
@@ -258,6 +272,12 @@ func (j *CapabilityJourney) Operation(t *testing.T) operationstore.Operation {
 	t.Helper()
 	operation, _ := durableOperation(t, j.harness)
 	return operation
+}
+
+// FrozenPlan is the plan the context's current operation froze.
+func (j *CapabilityJourney) FrozenPlan(t *testing.T) reconciliation.Plan {
+	t.Helper()
+	return frozenPlan(t, j.harness, j.Operation(t).ID)
 }
 
 // Records are one block's attempts of the current operation in order, each

@@ -521,3 +521,41 @@ func TestPhysicalEraseFreshRemovalBootsUnderItsOwnLineageAndRefusesASupersededRe
 		t.Fatalf("the fresh removal's original attempt = %q, want %q", got, want)
 	}
 }
+
+func TestPhysicalEraseFreezesAnInstallationThatNeverStartedAsNothingToTakeBack(t *testing.T) {
+	machine := eraseMachine()
+	install := requestOf(t, labCatalog(metalProvider(), machine, sshKeySecret(api.MapValue(field("generated", api.MapValue())))), machine.Name())
+	request, err := eraseRequest(machine, install)
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonical, _ := request.Canonical()
+	unstarted, _ := originalPhysicalErase(t)
+	started := unstarted
+	started.State = reconciliation.BlockDone
+	block := reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{Request: canonical}, RequestDigest: strings.Repeat("a", 64)}
+	runner := &fakeRunner{}
+	capability := New(runner)
+	if !capability.NothingRecorded(block, lifecycle.RemovalRecords{Dependents: []lifecycle.BlockEvidence{unstarted}}) {
+		t.Fatal("an installation that never started was not read as nothing to take back")
+	}
+	if capability.NothingRecorded(block, lifecycle.RemovalRecords{Dependents: []lifecycle.BlockEvidence{started}}) || capability.NothingRecorded(block, lifecycle.RemovalRecords{}) || capability.DecidedAtRun() {
+		t.Fatal("a started installation, missing records or a run-time decision read as nothing to take back")
+	}
+	removal, err := capability.NothingRemoval(context.Background(), block)
+	if err != nil || removal.Nothing == "" || len(removal.Impacts) != 0 || len(removal.Consumes) != 0 || len(removal.Groups) != 0 {
+		t.Fatalf("the frozen removal = %+v (%v), want nothing to take back without data-loss", removal, err)
+	}
+	block.Inverse = &reconciliation.Inverse{Nothing: removal.Nothing}
+	execution := lifecycle.Execution{Block: block, OriginalRemovalDependents: []lifecycle.BlockEvidence{started}}
+	if _, err := capability.Destroy(context.Background(), execution); err == nil || len(runner.requests) != 0 {
+		t.Fatalf("a frozen nothing whose installation started ran %d requests (%v)", len(runner.requests), err)
+	}
+	if _, err := capability.ObserveRemoval(context.Background(), execution); err == nil || len(runner.requests) != 0 {
+		t.Fatalf("a frozen nothing whose installation started was observed (%v)", err)
+	}
+	execution.OriginalRemovalDependents = []lifecycle.BlockEvidence{unstarted}
+	if result, err := capability.Destroy(context.Background(), execution); err != nil || result.Outcome != reconciliation.OutcomeUnchanged || len(runner.requests) != 0 {
+		t.Fatalf("the frozen nothing = %+v (%v)", result, err)
+	}
+}

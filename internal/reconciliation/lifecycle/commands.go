@@ -48,7 +48,7 @@ func (s Service) resolutionRemedy(contextName string, verb reconciliation.Verb, 
 	}
 	continuation := s.preparationRetry(contextName, planCommand(contextName, frozen, authorizing(frozen)...))
 	if !selection.Empty() {
-		continuation = contextCommand(contextName, "apply --dry-run", invocationFlags(selection, nil, nil)...)
+		continuation = contextCommand(contextName, "apply --dry-run", invocationFlags(selection, nil)...)
 		if partial {
 			return "review the continuation with " + continuation + ", or take back what it owns with " + contextCommand(contextName, string(reconciliation.Destroy))
 		}
@@ -97,7 +97,7 @@ func boundFlags(plan reconciliation.Plan, digest func(string) string) []string {
 	for _, token := range tokens {
 		flags = append(flags, "--authorize", token+"="+digest(token))
 	}
-	return append(flags, relaxationFlags(frozenRelaxations(plan))...)
+	return slices.Concat(flags, relaxationFlags(frozenRelaxations(plan)), unregisteredFlags(plan))
 }
 
 // requiredTokens are the authorizations a plan's blocks consume, in the order
@@ -128,7 +128,7 @@ func continuationCommand(contextName string, operation operationstore.Operation,
 		return contextCommand(contextName, action, authorizingUnfixed(reconciliation.RemainingSubset(frozen, states))...)
 	}
 	if !pendingRemains(frozen, states) {
-		return planCommand(contextName, frozen)
+		return planCommand(contextName, frozen, slices.Concat(relaxationFlags(frozenRelaxations(frozen)), unregisteredFlags(frozen))...)
 	}
 	return planCommand(contextName, frozen, authorizing(authorizationPlan(frozen, states, reconciliation.Selection{}))...)
 }

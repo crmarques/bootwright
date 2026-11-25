@@ -18347,5 +18347,38 @@ completed destroy does not change.
 command and result of each.
 
 **Limits:** the branches decided at run time stay with
-[B1856](m1.md#b1856), and one fold of what a context owns with
+[B1856](#x754--run-time-inverse-branches-frozen), and one fold of what a context owns with
 [B1857](m1.md#b1857).
+
+## X754 — Run-time inverse branches frozen
+
+**Item:** B1856. **Kind:** safety. **Owner:** Reconciliation, with Managed OS.
+**Authorization:** [D288](backlog.md#d288), the program's second slice under
+the owner's delegation of 2026-11-25.
+
+**Outcome:** the inverse branches X753 left to run time are decided as the
+removal plan freezes, as
+[frozen requests and contract guards](../state-reconciliation.md#frozen-requests-and-contract-guards)
+and [rerun after manual unregistration](../managed-os.md#rerun-after-manual-unregistration)
+state. A physical erase whose installation never started, and a disk discovery
+whose settled apply record proves its boot completed and cleaned up, freeze
+`nothing` and consume no authorization; every later invocation reads the
+original apply's records again and refuses `destroy.inverse-moved` before any
+effect when they moved. `--unregistered` freezes as the relaxation
+`unregistered` of the named installation block, which `destroy --dry-run`
+previews and every continuation and next step carries. A disk discovery whose
+apply record was running or unknown as the plan froze keeps its run-time skip,
+because the check of that apply runs after the plan freezes and settles it.
+
+**Guard tests:** `TestARemovalFreezesWhatTheApplyRecordsProveAndEveryContinuationProvesIt`,
+`TestARecordedAnswerThatMovedRefusesBeforeAnyEffect`,
+`TestARelaxationOfAStepWithNothingToTakeBackIsUnneeded`,
+`TestAFrozenUnregisteredNameSelectsTheContinuationAsARelaxationDoes`,
+`TestUnregisteredFlagLetsTheRerunProceed`,
+`TestPhysicalEraseFreezesAnInstallationThatNeverStartedAsNothingToTakeBack`
+and the discovery case of `TestDiscoveryInventoryBecomesAnExactInstallerTarget`.
+
+**Gates:** the delivering commit records each gate's command and result.
+
+**Limits:** whether a registering installation's removal reads its guest also
+depends on the apply's preparation records, which stay read at run time.

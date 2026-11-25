@@ -10,14 +10,14 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
-func (s Service) authorized(name string, decided operationPlan, authorizations, unregistered []string, unattended bool) error {
-	if err := authorize(name, decided.verb, decided.selection, decided.plan, decided.authorizationPlan(), authorizations, unregistered, unattended); err != nil {
+func (s Service) authorized(name string, decided operationPlan, authorizations []string, unattended bool) error {
+	if err := authorize(name, decided.verb, decided.selection, decided.plan, decided.authorizationPlan(), authorizations, unattended); err != nil {
 		return err
 	}
 	if err := s.refuseUnattendedAbandonment(name, unattended); err != nil {
 		return err
 	}
-	return acknowledgedReleases(name, decided.plan, decided.phases.preStop, unregistered)
+	return s.acknowledgedReleases(name, decided)
 }
 
 // authorize compares the tokens this invocation supplied with the tokens the
@@ -28,7 +28,7 @@ func (s Service) authorized(name string, decided operationPlan, authorizations, 
 // consuming steps by their place in the presented plan and the exact command
 // that passes, which keeps the Machines the invocation names unregistered.
 // An unattended invocation must bind each token to its steps' digest (Q117).
-func authorize(contextName string, verb reconciliation.Verb, selection reconciliation.Selection, plan, scoped reconciliation.Plan, authorizations, unregistered []string, unattended bool) error {
+func authorize(contextName string, verb reconciliation.Verb, selection reconciliation.Selection, plan, scoped reconciliation.Plan, authorizations []string, unattended bool) error {
 	consumers := map[string][]string{}
 	required := requiredTokens(scoped)
 	digests := map[string]string{}
@@ -57,9 +57,9 @@ func authorize(contextName string, verb reconciliation.Verb, selection reconcili
 		}
 		authFlags = append(authFlags, "--authorize", token)
 	}
-	authFlags = append(authFlags, relaxationFlags(frozenRelaxations(plan))...)
-	passing := contextCommand(contextName, string(verb), invocationFlags(selection, authFlags, unregistered)...)
-	preview := contextCommand(contextName, string(verb)+" --dry-run", invocationFlags(selection, relaxationFlags(frozenRelaxations(plan)), nil)...)
+	selected := slices.Concat(relaxationFlags(frozenRelaxations(plan)), unregisteredFlags(plan))
+	passing := contextCommand(contextName, string(verb), invocationFlags(selection, append(authFlags, selected...))...)
+	preview := contextCommand(contextName, string(verb)+" --dry-run", invocationFlags(selection, selected)...)
 	supplied := slices.Compact(slices.Sorted(slices.Values(authorizations)))
 	for _, token := range supplied {
 		if !slices.Contains(required, token) {
@@ -89,8 +89,8 @@ func authorize(contextName string, verb reconciliation.Verb, selection reconcili
 	return nil
 }
 
-// invocationFlags are the flags a remedy repeats: stage, until, authorizations, unregistered.
-func invocationFlags(selection reconciliation.Selection, authorizing, unregistered []string) []string {
+// invocationFlags are the flags a remedy repeats: stage, until, then authorizations and the plan's frozen selections.
+func invocationFlags(selection reconciliation.Selection, authorizing []string) []string {
 	var flags []string
 	if len(selection.Stages) != 0 {
 		flags = append(flags, "--stage", strings.Join(selection.Stages.Names(), ","))
@@ -104,11 +104,7 @@ func invocationFlags(selection reconciliation.Selection, authorizing, unregister
 	if selection.Until != "" {
 		flags = append(flags, "--until", selection.Until)
 	}
-	flags = append(flags, authorizing...)
-	if len(unregistered) != 0 {
-		flags = append(flags, "--unregistered", strings.Join(slices.Compact(slices.Sorted(slices.Values(unregistered))), ","))
-	}
-	return flags
+	return append(flags, authorizing...)
 }
 
 // AuthorizationDigest hashes the identity and digests of a token's steps, in frozen order.

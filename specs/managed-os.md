@@ -1286,16 +1286,21 @@ Unregistration's session is 330 seconds.
 
 `bootwright destroy --context <context>
 --unregistered <machine>` states that the operator removed the Machine's
-consumer with the subscription service's own tools. On that invocation
-Bootwright neither reads nor unregisters that Machine's guest, records an empty
-`registration` for it, and withdraws its published content, in the removal and
-in every resolution the invocation runs against that installation. The flag is
-accepted only for a Machine whose installation the destroy plan unregisters;
-any other name refuses `authorize.unneeded` before confirmation, as
-[the command contract](cli/commands.md) states. It holds for that invocation
-only: nothing persists it, and no next step names it except the authorization
-refusal of that invocation, whose command keeps it beside the tokens the plan
-requires, as [the command contract](cli/commands.md) states.
+consumer with the subscription service's own tools. The removal plan freezes
+the name as the relaxation `unregistered` of that Machine's installation block,
+whose description and impacts say its guest is not read, and the
+`destroy --dry-run` naming it previews that plan. Bootwright then neither reads
+nor unregisters that Machine's guest, records an empty `registration` for it,
+and withdraws its published content, in the removal and in every resolution
+that removal runs against that installation. The flag is accepted only for a
+Machine whose installation the destroy plan unregisters; any other name refuses
+`authorize.unneeded` before confirmation, as
+[the command contract](cli/commands.md) states. A continuation names the frozen
+set as it names an [erase relaxation](state-reconciliation.md#erase-relaxation):
+the same set continues, a new name replaces the removal, and a missing one
+refuses `authorize.relaxation-changed`; a failed removal's replacement applies
+only the names its own invocation gives. Every next step the removal names
+repeats the frozen names.
 
 ## Physical Machines
 
@@ -1810,7 +1815,9 @@ context's full removal with `bootwright destroy --dry-run`. After a completed
 destroy, the historical report remains in the original operation. Inspection
 and a fresh apply use only the current apply lineage. The next discovery
 collects a new report. Temporary-boot cleanup is part of discovery completion,
-and removal of an interrupted discovery uses the ownership checks above.
+and removal of an interrupted discovery uses the ownership checks above. A
+removal planned over a settled completed discovery freezes that its step has
+nothing to take back ([frozen inverse](state-reconciliation.md#frozen-requests-and-contract-guards)).
 
 ## Root-disk encryption
 

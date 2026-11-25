@@ -14,6 +14,7 @@ const (
 	eraseLogical         = "logicalOverwrite"
 	AbandonAuthorization = "abandon="
 	Abandon              = "abandon"
+	Unregistered         = "unregistered"
 )
 
 func IsEraseAuthorization(token string) bool {

@@ -6,8 +6,10 @@ active slice does, and the owner's decision
 [D288](../milestones/backlog.md#d288) names the program. Each slice promotes
 its part into the owning spec in its own commit and deletes that part from this
 page. A rule that the code already holds is not stated here: slice 0, the
-frozen inverse of every destroy step, is implemented and is owned by
-[B1855](../milestones/delivered.md#x753--every-destroy-step-states-its-inverse) and
+frozen inverse of every destroy step, and slice 1, its branches once decided at
+run time, are implemented and are owned by
+[B1855](../milestones/delivered.md#x753--every-destroy-step-states-its-inverse),
+[B1856](../milestones/delivered.md#x754--run-time-inverse-branches-frozen) and
 [state reconciliation](../state-reconciliation.md#frozen-requests-and-contract-guards).
 
 Words used below:
@@ -42,7 +44,7 @@ causes.
 | Order | Item | Outcome |
 | --- | --- | --- |
 | 0 | [B1855](../milestones/delivered.md#x753--every-destroy-step-states-its-inverse) | Every destroy step states its inverse, frozen with the removal plan |
-| 1 | [B1856](../milestones/m1.md#b1856) | The remaining inverse branches decided at run time are frozen |
+| 1 | [B1856](../milestones/delivered.md#x754--run-time-inverse-branches-frozen) | The remaining inverse branches decided at run time are frozen |
 | 2 | [B1857](../milestones/m1.md#b1857) | One ownership fold answers what a context owns |
 | 3 | [B166](../milestones/m1.md#b166) | `destroy --stage` and the trimmed resting state |
 | 4 | [B1858](../milestones/m1.md#b1858) | The restoring apply over unchanged input |

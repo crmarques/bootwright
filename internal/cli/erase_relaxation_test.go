@@ -28,7 +28,7 @@ func TestEraseRelaxationUsageErrors(t *testing.T) {
 		{[]string{"destroy", "--dry-run", "--authorize", "data-loss"}, "destroy --dry-run accepts only --authorize erase="},
 		{[]string{"destroy", "--dry-run", "--authorize", "rebind=bmc"}, "destroy --dry-run accepts only --authorize erase="},
 		{[]string{"apply", "--dry-run", "--authorize", "data-loss"}, "--authorize is used when executing apply"},
-		{[]string{"destroy", "--dry-run", "--unregistered", "srv-01"}, "--unregistered is used when executing destroy"},
+		{[]string{"destroy", "--dry-run", "--unregistered", "srv-01,"}, "--unregistered must not contain an empty member"},
 		{[]string{"destroy", "--authorize", "abandon"}, "must be abandon=<machine>"},
 		{[]string{"destroy", "--authorize", "abandon=Srv_01"}, `"Srv_01" is not a Machine name`},
 		{[]string{"destroy", "--authorize", "abandon=srv-01,erase=srv-01:retain"}, "an abandoned Machine is neither erased nor relaxed"},
@@ -48,6 +48,7 @@ func TestEraseRelaxationsAreCarriedBesideTheOtherAuthorizations(t *testing.T) {
 		{"destroy", "--dry-run", "--authorize", "erase=srv-01:retain,erase=srv-02:metadataClear"},
 		{"destroy", "--keep-going", "--authorize", "abandon=srv-03", "--authorize", "erase=srv-01:retain"},
 		{"destroy", "--dry-run", "--authorize", "abandon=srv-03"},
+		{"destroy", "--dry-run", "--unregistered", "srv-01"},
 		{"apply", "--dry-run"},
 	} {
 		code, _, errOut, record := runRecorded(args)

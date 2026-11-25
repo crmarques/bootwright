@@ -16,8 +16,9 @@ const (
 )
 
 type eraseRelaxing struct {
-	command string
-	methods map[string]string
+	command      string
+	methods      map[string]string
+	unregistered map[string]bool
 }
 
 type relaxationChange int
@@ -28,27 +29,46 @@ const (
 	relaxationDiffers
 )
 
-func (s Service) relaxingFor(command string, methods map[string]string) Service {
+func (s Service) relaxingFor(command string, methods map[string]string, unregistered []string) Service {
 	s.relaxing = eraseRelaxing{command: command, methods: maps.Clone(methods)}
+	for _, name := range unregistered {
+		if s.relaxing.unregistered == nil {
+			s.relaxing.unregistered = map[string]bool{}
+		}
+		s.relaxing.unregistered[name] = true
+	}
 	return s
 }
 
-func (r eraseRelaxing) over(frozen map[string]string) relaxationChange {
-	if r.command != relaxingDestroy && len(r.methods) == 0 || maps.Equal(r.methods, frozen) {
+func (r eraseRelaxing) over(frozen reconciliation.Plan) relaxationChange {
+	methods, unregistered := frozenRelaxations(frozen), frozenUnregistered(frozen)
+	if r.command != relaxingDestroy && len(r.methods) == 0 && len(r.unregistered) == 0 || maps.Equal(r.methods, methods) && maps.Equal(r.unregistered, unregistered) {
 		return relaxationSame
 	}
 	for machine, method := range r.methods {
-		if frozen[machine] != method {
+		if methods[machine] != method {
+			return relaxationAdded
+		}
+	}
+	for machine := range r.unregistered {
+		if !unregistered[machine] {
 			return relaxationAdded
 		}
 	}
 	return relaxationDiffers
 }
 
+func (r eraseRelaxing) unregisteredFlags() []string {
+	if len(r.unregistered) == 0 {
+		return nil
+	}
+	return []string{"--unregistered", strings.Join(slices.Sorted(maps.Keys(r.unregistered)), ",")}
+}
+
 func frozenRelaxations(plan reconciliation.Plan) map[string]string {
 	var methods map[string]string
 	for _, block := range plan.Blocks {
-		if block.Relaxation == "" {
+		if block.Relaxation == "" || block.Relaxation == Unregistered {
 			continue
 		}
 		if methods == nil {
@@ -134,12 +154,15 @@ func (s Service) refuseInapplicableRelaxations(contextName string, decided opera
 		delete(others, machine)
 		token := relaxationToken(machine, methods[machine])
 		reason := "declares no spec.hardware.rootDisk.onRemoval or spec.hardware.dataDisks[].onRemoval this destroy performs, so the relaxation changes nothing"
+		if slices.ContainsFunc(decided.plan.Blocks, func(block reconciliation.Block) bool { return block.Object == machine && s.recordsNothing(block) }) {
+			reason = "holds a removal step whose apply records prove it has nothing to take back, so the relaxation changes nothing"
+		}
 		if methods[machine] == Abandon {
 			reason = "holds no step this destroy can leave in place, so the abandonment changes nothing"
 		}
 		return authorizeUnneeded.Fail(
 			"--authorize "+token+" names Machine/"+machine+", which "+reason,
-			"repeat "+contextCommand(contextName, s.relaxing.command, relaxationFlags(others)...)+" without --authorize "+token)
+			"repeat "+contextCommand(contextName, s.relaxing.command, append(relaxationFlags(others), s.relaxing.unregisteredFlags()...)...)+" without --authorize "+token)
 	}
 	return nil
 }
@@ -154,18 +177,21 @@ func (s Service) refuseUnattendedAbandonment(contextName string, unattended bool
 		}
 		return authorizeAbandonUnattended.Fail(
 			"an unattended destroy cannot leave the steps of Machine/"+machine+" in place, because --authorize "+relaxationToken(machine, Abandon)+" takes a confirmation an operator answers",
-			"run "+contextCommand(contextName, s.relaxing.command, relaxationFlags(s.relaxing.methods)...)+" in a terminal without --yes, and confirm its plan")
+			"run "+contextCommand(contextName, s.relaxing.command, append(relaxationFlags(s.relaxing.methods), s.relaxing.unregisteredFlags()...)...)+" in a terminal without --yes, and confirm its plan")
 	}
 	return nil
 }
 
 func refuseChangedRelaxations(contextName string, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) error {
-	held := "none"
-	if methods := frozenRelaxations(frozen); len(methods) != 0 {
-		held = strings.Join(relaxationTokens(methods), ", ")
+	held := relaxationTokens(frozenRelaxations(frozen))
+	if flags := unregisteredFlags(frozen); len(flags) != 0 {
+		held = append(held, strings.Join(flags, " "))
+	}
+	if len(held) == 0 {
+		held = []string{"none"}
 	}
 	return authorizeRelaxationChanged.Fail(
-		"the "+string(operation.Verb)+" "+operation.ID+" continues only under the relaxations its plan froze ("+held+"), and this invocation names a different set",
+		"the "+string(operation.Verb)+" "+operation.ID+" continues only under the relaxations its plan froze ("+strings.Join(held, ", ")+"), and this invocation names a different set",
 		"continue it with "+continuationCommand(contextName, operation, frozen, states)+", or replace it with a fresh destroy by naming a relaxation its plan does not hold")
 }
 

@@ -488,14 +488,15 @@ refused with the remedy `write --install=install-000003`.
 
 `--unregistered` names a Machine whose subscription consumer the operator
 removed with the subscription service's own tools, and is accepted only on
-`destroy`. On that invocation the Machine's installation neither reads nor
-unregisters its guest and records no registration, as
-[managed OS](../managed-os.md#registration) states; nothing persists the name,
-and only the `authorize.missing` or `authorize.unneeded` refusal of a missing or inapplicable
-token carries it: its command repeats the invocation's own `--unregistered`
-names, sorted and joined by commas, after the tokens the plan requires, so the
-manual unregistration's printed next steps complete a destroy whose plan
-consumes `data-loss`. A name whose installation the destroy plan does
+`destroy` and `destroy --dry-run`. The removal plan freezes the name, and the
+Machine's installation neither reads nor unregisters its guest and records no
+registration, as
+[managed OS](../managed-os.md#rerun-after-manual-unregistration) states. Every
+command a removal names, the `authorize.missing` or `authorize.unneeded`
+refusal's included, repeats its frozen `--unregistered` names, sorted and
+joined by commas, after the tokens the plan requires, so the manual
+unregistration's printed next steps complete a destroy whose plan consumes
+`data-loss`. A name whose installation the destroy plan does
 not unregister refuses `authorize.unneeded` before confirmation and
 registration: `this destroy removes no subscription registration from
 Machine/<name>, so --unregistered <name> acknowledges nothing`, remedied by
@@ -524,8 +525,8 @@ and requires `--output-dir`. A non-empty `--context` or
 
 A lifecycle preview checks the work selected by the same verb.
 `apply --dry-run` refuses every `--authorize`. `destroy --dry-run` accepts only
-`erase=` and `abandon=` tokens and refuses `--unregistered`. `data-loss`,
-`rebind=` and `--unregistered` are consumed only on execution
+`erase=` and `abandon=` tokens and `--unregistered`, which select the plan it
+previews. `data-loss` and `rebind=` are consumed only on execution
 (`TestEraseRelaxationUsageErrors`).
 
 `machine list --short=true` emits only sorted names as text and conflicts

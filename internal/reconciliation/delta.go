@@ -107,7 +107,11 @@ func effects(block Block) []byte {
 	}
 	block.Groups = groups
 	if block.Inverse != nil {
-		block.Inverse = &Inverse{LeavesWith: block.Inverse.LeavesWith}
+		nothing := ""
+		if block.Inverse.Nothing != "" {
+			nothing = "stated"
+		}
+		block.Inverse = &Inverse{LeavesWith: block.Inverse.LeavesWith, Nothing: nothing}
 		if !block.Inverse.Stated() {
 			block.Inverse = nil
 		}

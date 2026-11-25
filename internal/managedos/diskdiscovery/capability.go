@@ -444,30 +444,34 @@ func (c Capability) Observe(ctx context.Context, e lifecycle.Execution) (lifecyc
 }
 func (c Capability) Destroy(ctx context.Context, e lifecycle.Execution) (lifecycle.Result, error) {
 	// Completed discovery must never power off an OS installed later.
-	proof, _, err := discoveryEvidence(e.PreviousEvidence, e.Block.RequestDigest)
-	if err == nil && proof.Completed && proof.Cleaned {
+	if completedDiscovery(e.PreviousEvidence, e.Block.RequestDigest) {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeUnchanged, Evidence: e.PreviousEvidence}, nil
+	}
+	if err := frozenCompletion(e.Block); err != nil {
+		return lifecycle.Result{}, err
 	}
 	r, err := c.run(ctx, e, "destroy")
 	if err != nil {
 		return lifecycle.Result{}, err
 	}
-	proof, _, err = discoveryEvidence(r.Evidence, e.Block.RequestDigest)
+	proof, _, err := discoveryEvidence(r.Evidence, e.Block.RequestDigest)
 	if err != nil || !proof.Cleaned {
 		return lifecycle.Result{}, discoveryIncomplete.Fail("disk discovery cleanup is incomplete", "")
 	}
 	return lifecycle.Result{Outcome: reconciliation.OutcomeChanged, Evidence: r.Evidence}, nil
 }
 func (c Capability) ObserveRemoval(ctx context.Context, e lifecycle.Execution) (lifecycle.Observation, error) {
-	proof, _, err := discoveryEvidence(e.PreviousEvidence, e.Block.RequestDigest)
-	if err == nil && proof.Completed && proof.Cleaned {
+	if completedDiscovery(e.PreviousEvidence, e.Block.RequestDigest) {
 		return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: e.PreviousEvidence}, nil
+	}
+	if err := frozenCompletion(e.Block); err != nil {
+		return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, err
 	}
 	r, err := c.run(ctx, e, "observe")
 	if err != nil {
 		return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, err
 	}
-	proof, _, err = discoveryEvidence(r.Evidence, e.Block.RequestDigest)
+	proof, _, err := discoveryEvidence(r.Evidence, e.Block.RequestDigest)
 	if err == nil && proof.Cleaned {
 		return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: r.Evidence}, nil
 	}
@@ -478,6 +482,33 @@ func (c Capability) ObserveRemoval(ctx context.Context, e lifecycle.Execution) (
 	// external boundary. Cleanup must be allowed before inventory completes.
 	return lifecycle.Observation{Effect: reconciliation.EffectPartial, Evidence: r.Evidence}, nil
 }
+
+func completedDiscovery(evidence json.RawMessage, digest string) bool {
+	proof, _, err := discoveryEvidence(evidence, digest)
+	return err == nil && proof.Completed && proof.Cleaned
+}
+
+func frozenCompletion(block reconciliation.Block) error {
+	if !lifecycle.TakesNothingBack(block) {
+		return nil
+	}
+	return discoveryRecordsMismatch.Fail("the removal plan froze that the discovery boot of "+block.Object+" completed and cleaned up, and its apply evidence no longer proves it", "restore the original apply records before continuing removal")
+}
+
+func (Capability) NothingRecorded(block reconciliation.Block, records lifecycle.RemovalRecords) bool {
+	settled := records.State != reconciliation.BlockRunning && records.State != reconciliation.BlockUnknown
+	return settled && completedDiscovery(records.Previous, block.RequestDigest)
+}
+
+func (Capability) NothingRemoval(ctx context.Context, b reconciliation.Block) (lifecycle.Removal, error) {
+	r, err := DecodeDiscoveryRequest(b.Request)
+	if err != nil {
+		return lifecycle.Removal{}, err
+	}
+	return lifecycle.Removal{Description: "remove nothing of the completed discovery boot of " + r.Identity.Object, Nothing: "the discovery boot of " + r.Identity.Object + " completed and cleaned up after itself, and its disk inventory stays recorded", ReplaySafe: true}, ctx.Err()
+}
+
+func (Capability) DecidedAtRun() bool { return true }
 
 func (c Capability) Removal(ctx context.Context, b reconciliation.Block) (lifecycle.Removal, error) {
 	r, err := DecodeDiscoveryRequest(b.Request)

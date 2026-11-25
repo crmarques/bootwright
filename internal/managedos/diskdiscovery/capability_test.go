@@ -246,6 +246,33 @@ func TestDiscoveryInventoryBecomesAnExactInstallerTarget(t *testing.T) {
 			t.Fatalf("owned unfinished removal is %v (%v), want partial", observation.Effect, err)
 		}
 	})
+	t.Run("the removal freezes a completed discovery as nothing to take back", func(t *testing.T) {
+		completed := runner.evidence
+		if !owner.NothingRecorded(block, lifecycle.RemovalRecords{State: reconciliation.BlockDone, Previous: completed}) {
+			t.Fatal("a settled completed discovery was not read as nothing to take back")
+		}
+		if owner.NothingRecorded(block, lifecycle.RemovalRecords{State: reconciliation.BlockUnknown, Previous: completed}) || !owner.DecidedAtRun() {
+			t.Fatal("an unfinished apply's discovery was decided before the check that settles it ran")
+		}
+		removal, err := owner.NothingRemoval(ctx, block)
+		if err != nil || removal.Nothing == "" || len(removal.Impacts) != 0 || len(removal.Groups) != 0 {
+			t.Fatalf("the frozen removal = %+v (%v)", removal, err)
+		}
+		frozen := block
+		frozen.Inverse = &reconciliation.Inverse{Nothing: removal.Nothing}
+		calls := runner.calls
+		for name, run := range map[string]func() error{
+			"destroy": func() error { _, err := owner.Destroy(ctx, lifecycle.Execution{Block: frozen}); return err },
+			"observe": func() error { _, err := owner.ObserveRemoval(ctx, lifecycle.Execution{Block: frozen}); return err },
+		} {
+			if reported := diagnostics.Of(run()); len(reported) == 0 || reported[0].Code != "discovery.records-mismatch" || runner.calls != calls {
+				t.Fatalf("%s of a frozen nothing whose evidence moved = %+v after %d runs", name, reported, runner.calls-calls)
+			}
+		}
+		if result, err := owner.Destroy(ctx, lifecycle.Execution{Block: frozen, PreviousEvidence: completed}); err != nil || result.Outcome != reconciliation.OutcomeUnchanged || runner.calls != calls {
+			t.Fatalf("the frozen nothing = %+v (%v)", result, err)
+		}
+	})
 }
 
 func TestDiscoveryRefinementChangesOnlyUninstalledSelectionPolicy(t *testing.T) {

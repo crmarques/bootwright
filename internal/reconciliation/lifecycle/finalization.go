@@ -69,7 +69,7 @@ func (d decider) afterFinalization(ctx context.Context, view View, verb reconcil
 	operation := marked.operation
 	operation.State = next
 	decided, err := d.decideOver(ctx, view, d.store(view), verb, selection, operation, marked.plan, marked.states, marked.basis.attempts, nil)
-	return d.withPhases(decided, err)
+	return d.withPhases(ctx, d.store(view), decided, err)
 }
 
 // finalState is the state a finalization records: the one the operation's

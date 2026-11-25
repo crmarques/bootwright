@@ -12,7 +12,7 @@ import (
 // RemovalOf plans an apply's whole removal beside the leaves-with its phases compute.
 func RemovalOf(ctx context.Context, capabilities CapabilityResolver, applied reconciliation.Plan, relaxations map[string]string) (reconciliation.Plan, map[string][]string, error) {
 	planner := Service{capabilities: capabilities}
-	removal, err := planner.removalOf(ctx, applied, operationstore.Executable{}, relaxations)
+	removal, err := planner.removalOf(ctx, applied, operationstore.Executable{}, removalInputs{relaxations: relaxations})
 	if err != nil {
 		return reconciliation.Plan{}, nil, err
 	}

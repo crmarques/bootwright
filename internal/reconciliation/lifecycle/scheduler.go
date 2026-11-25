@@ -83,6 +83,7 @@ type scheduler struct {
 type invocation struct {
 	deferredSource map[string]error
 	abandoned      map[string]bool
+	unregistered   map[string]bool
 	effects        map[string]bool
 	selection      reconciliation.Selection
 	stopGroups     []*removalMachineGroup
@@ -405,7 +406,7 @@ func (c *scheduler) observingCommand() string {
 		return contextCommand(name, string(reconciliation.Destroy), authorizingUnfixed(*c.removal)...)
 	}
 	if c.operation.Verb == reconciliation.Apply && !c.selection.Empty() {
-		return contextCommand(name, "apply --dry-run", invocationFlags(c.selection, nil, nil)...)
+		return contextCommand(name, "apply --dry-run", invocationFlags(c.selection, nil)...)
 	}
 	if command := continuationCommand(name, c.operation, c.plan, c.states); command != "" {
 		if c.operation.Verb == reconciliation.Apply {

@@ -83,9 +83,6 @@ func validateDestroyFlags(command *cobra.Command) string {
 		if problem := validatePlanFlags(command); problem != "" {
 			return problem
 		}
-		if len(arrayValue(command.Flags(), "unregistered")) > 0 {
-			return "--unregistered is used when executing destroy"
-		}
 	}
 	return validateAuthorizations(command, true)
 }

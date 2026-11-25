@@ -24,7 +24,7 @@ func lifecycleFileClasses() map[string]string {
 		"additive.go": "planner", "apply_scope.go": "planner", "authorization.go": "planner", "authorization_grammar.go": "planner", "erase_relaxation.go": "planner", "erase_relaxation_grammar.go": "planner", "claims.go": "planner", "commands.go": "planner",
 		"contradictions.go": "planner", "decision.go": "planner", "lineage.go": "planner", "lineage_removal.go": "planner",
 		"operation_plan.go": "planner", "other_build.go": "planner", "planning.go": "planner", "presentation.go": "planner",
-		"removal_inverse.go": "planner", "removal_phases.go": "planner", "removal_plan.go": "planner", "reservations.go": "planner", "secret_references.go": "planner",
+		"removal_inverse.go": "planner", "removal_phases.go": "planner", "removal_plan.go": "planner", "removal_recorded.go": "planner", "reservations.go": "planner", "secret_references.go": "planner",
 		"stage_tails.go": "planner", "target_owners.go": "planner", "transitions.go": "planner",
 		"access_tool.go": "reader", "apply_start.go": "executor", "destroy_start.go": "executor", "attempts.go": "executor", "evidence.go": "executor", "executor.go": "executor", "frozenbinding.go": "executor",
 		"installed_placement.go": "executor", "invocation.go": "executor", "logging.go": "executor", "mutation.go": "executor", "online_gates.go": "executor", "produced.go": "executor",

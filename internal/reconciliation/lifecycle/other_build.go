@@ -26,7 +26,7 @@ func (s Service) proveExecution(ctx context.Context, view View, operation operat
 	fresh := frozen
 	var err error
 	if operation.Verb == reconciliation.Destroy {
-		fresh, err = s.removalOf(ctx, frozen, operation.Executable, frozenRelaxations(frozen))
+		fresh, err = s.removalOf(ctx, frozen, operation.Executable, frozenInputs(frozen))
 	} else {
 		for _, block := range frozen.Blocks {
 			capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
@@ -71,7 +71,7 @@ func (s Service) canTakeBack(ctx context.Context, operation operationstore.Opera
 	if s.proveContracts(owned, operation.Contracts) != nil {
 		return false
 	}
-	_, err := s.removalOf(ctx, owned, operation.Executable, nil)
+	_, err := s.removalOf(ctx, owned, operation.Executable, removalInputs{})
 	return err == nil
 }
 

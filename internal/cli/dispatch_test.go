@@ -66,7 +66,7 @@ func TestDispatchEveryApplicationCommand(t *testing.T) {
 		{"cluster rsh", environmentaccess.ClusterRshRequest{ContextName: "example", Name: "demo", Node: "node-a", SSH: account}},
 		{"cluster exec", environmentaccess.ClusterExecRequest{ContextName: "example", Names: []string{"demo"}, Nodes: []string{"node-a"}, SSH: account, Command: []string{"get", "--help", ""}}},
 		{"apply --dry-run", lifecycle.PlanRequest{Readiness: true, Parallelism: 16, Verb: "apply", ContextName: "example", Stages: []string{"infrastructure-services", "substrates"}, Clusters: []string{"first", "second"}, Until: "compact.gitops"}},
-		{"destroy --dry-run", lifecycle.PlanRequest{Readiness: true, KeepGoing: true, Parallelism: 16, Verb: "destroy", ContextName: "example", Relaxations: map[string]string{"srv-01": "retain", "srv-02": "metadataClear"}}},
+		{"destroy --dry-run", lifecycle.PlanRequest{Readiness: true, KeepGoing: true, Parallelism: 16, Verb: "destroy", ContextName: "example", Relaxations: map[string]string{"srv-01": "retain", "srv-02": "metadataClear"}, Unregistered: []string{"rhel-01", "rhel-02", "rhel-03"}}},
 		{"status", lifecycle.StatusRequest{ContextName: "example"}},
 		{"diff", lifecycle.DiffRequest{ContextName: "example", Observe: true}},
 		{"apply", lifecycle.ApplyRequest{ContextName: "example", Parallelism: 16, Stages: []string{"infrastructure-services", "substrates"}, Clusters: []string{"first", "second"}, Until: "compact.gitops", Authorizations: []string{"data-loss"}, SkipConfirmation: true, Unattended: true, SSH: ssh}},

@@ -290,6 +290,22 @@ type RemovalRelaxer interface {
 	Relax(context.Context, reconciliation.Block, string) (Removal, error)
 }
 
+type RecordedRemoval interface {
+	NothingRecorded(reconciliation.Block, RemovalRecords) bool
+	NothingRemoval(context.Context, reconciliation.Block) (Removal, error)
+	DecidedAtRun() bool
+}
+
+type RemovalRecords struct {
+	State      reconciliation.BlockState
+	Previous   json.RawMessage
+	Dependents []BlockEvidence
+}
+
+type RemovalUnregisterer interface {
+	Unregistered(context.Context, reconciliation.Block) (Removal, bool, error)
+}
+
 // RemovalAbandoner opts in only a block whose effect lives on the host of the
 // Machine its Object names, and whose next apply refuses, never adopts, what
 // that effect leaves there.

@@ -138,7 +138,7 @@ func (s Service) retiredWithHosts(plan reconciliation.Plan, proofs map[string][]
 		before[block.ID] = reach
 	}
 	removesHost := func(block, after reconciliation.Block, machine string) bool {
-		if !before[block.ID][after.ID] {
+		if !before[block.ID][after.ID] || s.recordsNothing(block) {
 			return false
 		}
 		capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
@@ -155,7 +155,7 @@ func (s Service) retiredWithHosts(plan reconciliation.Plan, proofs map[string][]
 	for _, block := range plan.Blocks {
 		capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
 		bound, binds := capability.(HostBound)
-		if !ok || !binds {
+		if !ok || !binds || s.recordsNothing(block) {
 			continue
 		}
 		machines, err := bound.HostMachines(block)

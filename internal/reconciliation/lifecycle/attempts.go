@@ -472,47 +472,10 @@ func removalEffect(observed reconciliation.EffectState) reconciliation.EffectSta
 	return reconciliation.EffectUnknown
 }
 
-type releasedNames struct{}
-
-func releasing(ctx context.Context, names []string) context.Context {
-	if len(names) == 0 {
-		return ctx
-	}
-	set := map[string]bool{}
-	for _, name := range names {
-		set[name] = true
-	}
-	return context.WithValue(ctx, releasedNames{}, set)
-}
-
-func (s Service) released(ctx context.Context, block reconciliation.Block) bool {
-	if names, _ := ctx.Value(releasedNames{}).(map[string]bool); !names[block.Object] {
-		return false
-	}
+func (s Service) released(run invocation, block reconciliation.Block) bool {
 	capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
 	removal, opts := capability.(PreStopRemoval)
-	return ok && opts && removal.RequiresPreStopRemoval(block)
-}
-
-func acknowledgedReleases(contextName string, plan reconciliation.Plan, preStop map[string]bool, names []string) error {
-	if len(names) == 0 {
-		return nil
-	}
-	objects := map[string]bool{}
-	for _, block := range plan.Blocks {
-		if preStop[block.ID] {
-			objects[block.Object] = true
-		}
-	}
-	passing := contextCommand(contextName, string(plan.Verb), authorizing(plan)...)
-	for _, name := range slices.Compact(slices.Sorted(slices.Values(names))) {
-		if !objects[name] {
-			return authorizeUnneeded.Fail(
-				"this destroy removes no subscription registration from Machine/"+name+", so --unregistered "+name+" acknowledges nothing",
-				"repeat "+passing+" without --unregistered "+name)
-		}
-	}
-	return nil
+	return run.unregistered[block.Object] && ok && opts && removal.RequiresPreStopRemoval(block)
 }
 
 // invoke runs the capability inside the controller runtime. The approved
@@ -572,7 +535,7 @@ func (s Service) invoke(ctx context.Context, run invocation, block reconciliatio
 				name := tx.Identity().Name
 				continuation = s.preparationRetry(name, contextCommand(name, string(reconciliation.Apply), authorizing(plan)...))
 			} else {
-				continuation = contextCommand(tx.Identity().Name, "apply --dry-run", invocationFlags(run.selection, nil, nil)...)
+				continuation = contextCommand(tx.Identity().Name, "apply --dry-run", invocationFlags(run.selection, nil)...)
 			}
 		}
 		if operation.Verb == reconciliation.Apply && resolution == 0 && attempt > 0 {
@@ -586,7 +549,7 @@ func (s Service) invoke(ctx context.Context, run invocation, block reconciliatio
 		}
 		execution := Execution{
 			Operation: operation.ID, Context: tx.Identity().Name, Incarnation: tx.Identity().Incarnation, Continuation: continuation, Attempt: attempt, Resolution: resolution, Block: block,
-			ApplyOperation: owner, ApplyProved: records.applyProved, ApplyPreparations: clonedPreparations(records.preparations), Prepare: prepare, Released: s.released(ctx, block),
+			ApplyOperation: owner, ApplyProved: records.applyProved, ApplyPreparations: clonedPreparations(records.preparations), Prepare: prepare, Released: s.released(run, block),
 			Launch: launch, Material: run.material, Proved: records.proved,
 			LocateTool: func(inner context.Context, tool evidence.InstalledTool) (string, error) {
 				return s.locateTool(inner, store, view, tx.Identity().Name, operation, plan, tool)
@@ -834,7 +797,7 @@ func (s Service) finish(ctx context.Context, tx Transaction, store OperationStor
 		if next == reconciliation.OperationPaused {
 			command = contextCommand(name, "apply --dry-run")
 		} else {
-			command = contextCommand(name, "apply --dry-run", invocationFlags(selection, nil, nil)...)
+			command = contextCommand(name, "apply --dry-run", invocationFlags(selection, nil)...)
 		}
 	}
 	result.Blocks, err = s.recordedBlockResults(ctx, store, current, plan, states, command)

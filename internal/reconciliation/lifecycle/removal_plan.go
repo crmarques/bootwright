@@ -31,7 +31,7 @@ func (s Service) freshDestroy(ctx context.Context, contextName string, frozenBy 
 	if err := s.proveContracts(scope.owned, scope.contracts); err != nil {
 		return operationPlan{}, engineOtherBuild.Fail(contractMessage(err), removeWith(frozenBy))
 	}
-	plan, err := s.removalOf(ctx, scope.owned, frozenBy, s.relaxing.methods)
+	plan, err := s.removalOf(ctx, scope.owned, frozenBy, removalInputs{relaxations: s.relaxing.methods, unregistered: s.relaxing.unregistered, nothing: s.nothingRecorded(scope.records)})
 	if err != nil {
 		return operationPlan{}, err
 	}
@@ -65,7 +65,7 @@ func (s Service) stopsFirst(plan reconciliation.Plan, phases removalPhases) []st
 // and request its apply froze; its capability supplies only what removing it
 // decides, so the plan describes the effects that exist rather than the effects
 // this executable would create from the same input today.
-func (s Service) removalOf(ctx context.Context, owned reconciliation.Plan, executable operationstore.Executable, relaxations map[string]string) (reconciliation.Plan, error) {
+func (s Service) removalOf(ctx context.Context, owned reconciliation.Plan, executable operationstore.Executable, inputs removalInputs) (reconciliation.Plan, error) {
 	inverted, err := invertOwned(owned)
 	if err != nil {
 		return reconciliation.Plan{}, err
@@ -83,7 +83,7 @@ func (s Service) removalOf(ctx context.Context, owned reconciliation.Plan, execu
 			return reconciliation.Plan{}, unreadable(block, executable, err)
 		}
 		block.Relaxation = ""
-		removal, relaxation, err := relaxedRemoval(ctx, capability, block, removal, relaxations)
+		removal, relaxation, err := s.selectedRemoval(ctx, capability, block, removal, inputs)
 		if err != nil {
 			return reconciliation.Plan{}, err
 		}

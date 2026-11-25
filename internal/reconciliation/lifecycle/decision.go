@@ -69,11 +69,11 @@ func (d decider) decide(ctx context.Context, view View, verb reconciliation.Verb
 func (d decider) decideAs(ctx context.Context, view View, verb reconciliation.Verb, selection reconciliation.Selection) (operationPlan, reconciliation.Verb, error) {
 	decided, chosen, err := d.decideFrom(ctx, view, verb, selection)
 	decided.basis.context = view.Identity().Name
-	decided, err = d.withPhases(decided, err)
+	decided, err = d.withPhases(ctx, d.store(view), decided, err)
 	return decided, chosen, err
 }
 
-func (d decider) withPhases(decided operationPlan, err error) (operationPlan, error) {
+func (d decider) withPhases(ctx context.Context, store recordReader, decided operationPlan, err error) (operationPlan, error) {
 	if err != nil || decided.verb != reconciliation.Destroy {
 		return decided, err
 	}
@@ -86,7 +86,10 @@ func (d decider) withPhases(decided operationPlan, err error) (operationPlan, er
 		return decided, err
 	}
 	decided.phases = phases
-	return decided, nil
+	if !decided.fresh {
+		err = proveRecorded(ctx, d.capabilities, store, decided.plan, decided.operation)
+	}
+	return decided, err
 }
 
 func (d decider) decideFrom(ctx context.Context, view View, verb reconciliation.Verb, selection reconciliation.Selection) (operationPlan, reconciliation.Verb, error) {
@@ -236,7 +239,7 @@ func (d decider) decideBy(ctx context.Context, view View, store decisionRecords,
 		return plannedFrom(decided, operation, states, attempts), nil
 	}
 	if verb == reconciliation.Destroy && operation.Verb == reconciliation.Destroy {
-		switch d.relaxing.over(frozenRelaxations(frozen)) {
+		switch d.relaxing.over(frozen) {
 		case relaxationAdded:
 			return d.supersede(ctx, view, store, operation, frozen, states, attempts)
 		case relaxationDiffers:
@@ -490,7 +493,7 @@ func targetedBoundary(name string, plan reconciliation.Plan, states map[string]r
 			wider.Stages = append(slices.Clone(selection.Stages), block.Stage)
 			wider.Stages, _ = reconciliation.ParseStages(wider.Stages.Names())
 			return applyStageEmpty.Fail("the selected stages leave prerequisite "+block.ID+" outside this invocation",
-				"review "+contextCommand(name, "apply --dry-run", invocationFlags(wider, nil, nil)...))
+				"review "+contextCommand(name, "apply --dry-run", invocationFlags(wider, nil)...))
 		}
 	}
 	if kind == StepRetry {
@@ -548,7 +551,7 @@ func widenedApply(name string, plan reconciliation.Plan, states map[string]recon
 	stages := append(slices.Clone(selection.Stages), needed)
 	selection.Stages, _ = reconciliation.ParseStages(stages.Names())
 	bound, _ := selection.Bind(plan)
-	return contextCommand(name, "apply", invocationFlags(bound, authorizing(authorizationPlan(plan, states, bound)), nil)...)
+	return contextCommand(name, "apply", invocationFlags(bound, authorizing(authorizationPlan(plan, states, bound)))...)
 }
 
 // freshApply is the one fresh-plan decision: apply registers the transition it
@@ -647,6 +650,9 @@ func (d decider) supersede(ctx context.Context, view View, store decisionRecords
 	decided.replacedPhases = d.planner.computePhases(frozen)
 	if len(unprovedOutside(frozen, states, nil)) != 0 {
 		if decided.replacedPhases, err = proveInverse(frozen, decided.replacedPhases, operation); err != nil {
+			return operationPlan{}, err
+		}
+		if err = proveRecorded(ctx, d.capabilities, store, frozen, operation); err != nil {
 			return operationPlan{}, err
 		}
 	}

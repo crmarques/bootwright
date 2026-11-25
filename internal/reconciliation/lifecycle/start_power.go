@@ -312,7 +312,7 @@ func (s Service) finishBeforeStart(ctx context.Context, identity ContextIdentity
 	marked.verb = marked.operation.Verb
 	result := settled(identity, marked, RecoveredBeforeStart)
 	result.Receipt.Next = string(next)
-	result.NextCommand = s.preparationRetry(identity.Name, contextCommand(identity.Name, "apply --dry-run", invocationFlags(selection, nil, nil)...), "--dry-run")
+	result.NextCommand = s.preparationRetry(identity.Name, contextCommand(identity.Name, "apply --dry-run", invocationFlags(selection, nil)...), "--dry-run")
 	return result, nil
 }
 

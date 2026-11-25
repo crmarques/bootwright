@@ -149,7 +149,7 @@ func (s Service) abandonExit(contextName string, plan reconciliation.Plan, left 
 		return ""
 	}
 	return "; or, to leave what they left in place unmanaged, review " +
-		contextCommand(contextName, string(reconciliation.Destroy)+" --dry-run", relaxationFlags(added)...) +
+		contextCommand(contextName, string(reconciliation.Destroy)+" --dry-run", slices.Concat(relaxationFlags(frozenRelaxations(plan)), relaxationFlags(added), unregisteredFlags(plan))...) +
 		" and run " + contextCommand(contextName, string(reconciliation.Destroy), append(authorizingUnfixed(plan), relaxationFlags(added)...)...)
 }
 
@@ -199,7 +199,7 @@ func (s Service) resolveMember(ctx context.Context, tx Transaction, store Operat
 	if removal {
 		removalPlan = &decided.plan
 	}
-	causes, cause := s.observe(work, invocation{tx: tx, store: store, approved: approved, boundary: logging, operation: replaced, plan: frozen, material: material, abandoned: abandoned}, phases, states, removalPlan, decided.phases)
+	causes, cause := s.observe(work, invocation{tx: tx, store: store, approved: approved, boundary: logging, operation: replaced, plan: frozen, material: material, abandoned: abandoned, unregistered: frozenUnregistered(decided.plan)}, phases, states, removalPlan, decided.phases)
 	logging.close(ctx, log)
 	if err := s.recordFromBlocks(recordingContext(ctx), tx, store, replaced, frozen, states); err != nil {
 		return memberResolution{}, err

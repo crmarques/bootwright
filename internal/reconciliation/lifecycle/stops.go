@@ -117,7 +117,7 @@ var (
 		Meaning: "this executable cannot prove it would continue or remove the operation as the build that registered it", Remedy: "repeat the command with the build that registered the operation"}
 	destroyInverseMoved = diagnostics.Stop{Code: "destroy.inverse-moved", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseBuild, Recovery: diagnostics.RecoveryRegisteringBuild,
-		Meaning: "this executable computes another answer than the removal plan froze for which blocks a step's effect leaves with, so it performed no effect", Remedy: "continue or replace the removal with the build that registered it"}
+		Meaning: "this executable computes another answer than the removal plan froze for which blocks a step's effect leaves with, or for whether the original apply's records leave the step nothing to take back, so it performed no effect", Remedy: "continue or replace the removal with the build that registered it"}
 	destroyInverseUnstated = diagnostics.Stop{Code: "destroy.inverse-unstated", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseDefect, Recovery: diagnostics.RecoveryNone,
 		Meaning: "a removal step states no effect, nothing it keeps, no step it leaves with and no reason it has nothing to take back, or nothing to take back beside steps it leaves with, so nothing was registered", Remedy: "report the message as a defect"}

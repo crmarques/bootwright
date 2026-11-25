@@ -282,4 +282,7 @@ func TestCompareReadsAnInversesWordsAsSameAndItsLeavesWithAsChanged(t *testing.T
 	if got := changeOf(Compare(nothing, removal(&Inverse{Nothing: "it changed nothing"})), "alpha"); got != Same {
 		t.Errorf("other nothing words read %s", got)
 	}
+	if got := changeOf(Compare(nothing, removal(nil, "remove-unit alpha")), "alpha"); got != Changed {
+		t.Errorf("an effect where the plan froze nothing to take back reads %s", got)
+	}
 }

@@ -4483,6 +4483,8 @@ holding such a clause, the clauses pending and the work they enable.
   the widening of a plain `destroy`, the restoring apply's power check, the
   identity of a re-created effect, the stated inverse of every step, the
   earlier-build refusal, and the two questions left to the owner (X753).
+- [D288](#d288): clauses (1) to (8) of the `destroy --stage` program (X753);
+  moot since the delegated clauses of the same day replace each of them (X754).
 
 ### D1
 
@@ -10053,7 +10055,7 @@ for the work. The words, in order:
 [B166](m1.md#b166), which [D41](#d41) parked, is revived and attached to M1 at
 the owner's request, out of sequence. The program, in order, is the items of the
 [staged destroy design](../deferred/staged-destroy.md#program): the frozen
-inverse of every destroy step ([B1855](delivered.md#x753--every-destroy-step-states-its-inverse), [B1856](m1.md#b1856)), one
+inverse of every destroy step ([B1855](delivered.md#x753--every-destroy-step-states-its-inverse), [B1856](delivered.md#x754--run-time-inverse-branches-frozen)), one
 ownership fold ([B1857](m1.md#b1857)), `destroy --stage` (B166), the restoring
 apply ([B1858](m1.md#b1858), [B1859](m1.md#b1859)), and the per-capability
 unlocks ([B1860](m1.md#b1860), [B1861](m1.md#b1861),
@@ -10094,3 +10096,40 @@ Rejected: one closed mode per destroy step with the engine recording some steps
 `done` without calling their capability, which skips removals and proofs that
 those capabilities perform; and update or replace seams built now, because a
 seam needs a present consumer.
+
+**delegated** (2026-11-25, later the same day): the owner delegated the open
+clauses and the rest of the program: "implement all slices on this temp branch
+and rebase main as it moves / the decisions that depends on me that have a
+clear best alternative in term of well-designed architecture, elegancy and ux,
+even if not cheap, you can choose this one". This authorizes the slices of
+B1856 to B1863 in the design's order, starting with
+[X754](delivered.md#x754--run-time-inverse-branches-frozen) for B1856, and the
+slices of [B1864](#b1864) and [B1865](#b1865) only once they are promoted. Each
+clause below is taken by the session under the owner's delegation of
+2026-11-25, binding and outside the review queue, and replaces the clause of the
+same number above:
+
+1. `--stage` takes one value, a floor: that stage and everything built on it.
+2. Plain `destroy` over an unfinished staged destroy supersedes it with a whole
+   removal of what the context still owns, behind a confirmation that names the
+   widening; unattended, it needs the whole removal's digest.
+3. The restoring apply checks power only for the Machines its own blocks
+   realize or act on, and reads a kept Machine nothing of the restore names at
+   either power state. This narrows the rule that a staged or additive apply
+   checks its managed fleet for that one scenario and lands only in its slice.
+4. A re-created effect takes the identity of the operation that creates it, as
+   the additive apply does, so what an earlier incarnation left reads as foreign
+   and is never adopted; identity is carried by the creating incarnation, never
+   by the newest record of the step.
+5. Every step's inverse is stated and frozen, and a step that does nothing
+   still calls its capability (X753).
+6. An unfinished destroy an earlier build registered that the frozen inverse
+   contradicts refuses and is finished with its build (X753).
+7. After the restoring apply: the OpenShift agent installation before boot
+   ([B1860](m1.md#b1860)), then the blank root disks of kept virtual nodes
+   ([B1861](m1.md#b1861)), then Ceph on kept hosts for a cluster no data client
+   was ever handed access to ([B1862](m2.md#b1862)), which defines that part of
+   [B491](m2.md#b491).
+8. Physical OpenShift nodes after a boot are refused unless the step that
+   blanks their disks, a declared physical erase, is in the scope; nothing is
+   recorded as removed while it is still there.

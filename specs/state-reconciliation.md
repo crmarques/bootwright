@@ -1913,95 +1913,6 @@ removal, beside no operation, each state no index accounts for, and an
 operation whose frozen Secret binding the keyring no longer lists, or whose
 keyring listing fails as its reopen would, as below.
 
-### Frozen requests and contract guards
-
-A frozen block records what creating it did; removing it is the other half of
-the same request. Each capability therefore reads its own frozen request and
-states what removing that block does: the words it is planned and reported in,
-the impacts it lists, its inverse, its groups and the authorization it consumes. Nothing
-else of the block may change, so planning a removal can never alter what is
-removed, and a removal acknowledges the consequences of removing rather than
-the consequences its apply acknowledged. A relaxation, an
-[erase](#erase-relaxation) or an [abandonment](#abandoned-removal), is the one
-exception.
-
-Every removal block states its inverse: its impacts are the effects it
-performs, and its `inverse`, frozen with the plan and covered by its digest,
-states what it keeps by design (`retains`), the blocks of the same removal its
-effect leaves with (`leavesWith`), or why it has nothing to take back
-(`nothing`), which a capability states through `lifecycle.Removal`. `nothing`
-stands alone, and only a removal plan carries the member
-(`TestOnlyARemovalFreezesAnInverseAndTheDigestCoversIt`). A removal whose
-block states none of these refuses `destroy.inverse-unstated` before
-registration (`TestARemovalStepThatStatesNoInverseRefusesBeforeRegistration`,
-`TestEveryExampleRemovalStepStatesItsInverse`).
-
-The engine alone decides `leavesWith`, once, as it freezes the removal plan,
-by the retirement rule of [quiescence before removal](#quiescence-before-removal):
-a host-bound block leaves with the first block that removes or retires each of
-its hosts, ordered and unique, unless a surviving consumer or a deferral keeps
-it online. Every later invocation of that removal, its preview included,
-computes the rule only to prove it equal. A different answer refuses
-`destroy.inverse-moved` before any effect, naming the block, the frozen and the
-computed answer, with the remedy to continue or replace the removal with the
-build that registered it. An earlier build's removal froze no `leavesWith`, so
-its continuation refuses once this build retires a block; a failed one is
-replaced by a removal this build freezes, after proving the failed one's answer
-the same way when it resolves that one's unproved blocks
-(`TestAReplacementRefusesBeforeResolvingARemovalWhoseRuleMoved`). `Execution.RetiredWithHosts` and
-`Probe.RetiredWithHosts` are true exactly when the frozen `leavesWith` is
-non-empty (`TestARemovalFreezesWhatEachStepLeavesWithAndHandsThatToItsCapability`,
-`TestARecomputedLeavesWithThatDiffersRefusesBeforeAnyEffect`,
-`TestAFailedRemovalWithoutTheFrozenMemberIsReplacedByOneThatFreezesIt`). A
-continuation compares `retains` and `nothing` as words, like impacts.
-
-Reading a frozen request is what makes a context removable without re-deriving
-it. A capability reads exactly the request version it writes; the frozen digest
-identifies the bytes that were frozen. Changes to the current request shape follow the
-[development policy](project.md#design-priorities-and-non-goals): keep its
-version fixed, regenerate its golden and support only that shape. There is no
-conversion or historical reader. Canonical decoding and digest checks still
-refuse bytes the current shape cannot read. A decoder reads the version before
-the shape and refuses an unsupported version without decoding it. A request of any other version, or one whose implementation this
-executable no longer provides, refuses before anything is registered and names
-the block, the version it holds and the executable identity its operation
-recorded, so the remedy is the command to run rather than the obstacle that
-stopped it.
-
-A capability's current contract records what a block's effect is: the objects it creates, their
-names and places, the mark that proves them this context's own, the host
-resources it claims, or what its observation proves. An apply continuation compares execution-contract fingerprints and never automation bytes, so automation
-that moves no content digest reaches the blocks a continuation still runs, and a
-removal still reads the request its apply froze. A mechanical guard,
-`TestEveryImplementationContractMatchesItsGolden`, pins each implementation's
-current request and evidence schemas, persisted automation formats, fixed
-marks, proofs and places, effect pins (whose recipe reproduces the content
-digest), and request identity members. Intentional changes require explicit
-review and golden regeneration, with versions fixed under the development
-policy; no previous golden or build becomes a supported compatibility target.
-`TestEveryAutomationVersionLiteralIsClassified` requires every quoted literal
-ending in a version, every token naming a `bootwright.io` URI or key or a
-Bootwright host path, name prefix or mark, and every capitalized `Bootwright`
-token with up to three words after it, in every automation file of the
-collection, to be classified with its reason: persisted, fixed, transient,
-validated (it only bounds what a request may carry), mirrored, controller or
-documentation; an automation file of an extension it does not read fails it.
-`TestEveryCephMarkerNameIsDeclared` holds the declared Ceph marker record
-names, each a proof identifier of the Ceph implementations whose sources carry
-it, to the quoted record names and name fragments those sources carry. The
-guard fingerprints a
-raw-JSON member, such as the cluster services the Ceph core and host requests
-carry, as an opaque leaf, and sees no dynamically built value, no value naming
-no Bootwright token, no marker name built only from values and no unversioned
-format; the schema nested in such a
-member, and what a record or mark means beyond its shape and declared version,
-stay the author's to review and record in the current contract. A mark changed without moving the
-digest fails closed: a removal under the new build reads the objects the old
-mark proves as foreign and refuses, leaving them in place, so its cost is a
-stuck or partial destroy. A change loosening what an observation accepts as
-this context's own has no such backstop, so it requires explicit safety review
-and updated current contract evidence under the development policy.
-
 ### Bindings of a removal
 
 A fresh removal uses the secret material its apply bound, by reopening that
@@ -2141,6 +2052,113 @@ The removal reopens one Secret binding: its own if an
 the first binding of the root apply, never the head's. A rebind may name only
 Secrets that binding holds. Its completion releases the bindings of every
 apply of the lineage.
+
+## Frozen requests and contract guards
+
+A frozen block records what creating it did; removing it is the other half of
+the same request. Each capability therefore reads its own frozen request and
+states what removing that block does: the words it is planned and reported in,
+the impacts it lists, its inverse, its groups and the authorization it consumes. Nothing
+else of the block may change, so planning a removal can never alter what is
+removed, and a removal acknowledges the consequences of removing rather than
+the consequences its apply acknowledged. A relaxation, an
+[erase](#erase-relaxation) or an [abandonment](#abandoned-removal), is the one
+exception.
+
+Every removal block states its inverse: its impacts are the effects it
+performs, and its `inverse`, frozen with the plan and covered by its digest,
+states what it keeps by design (`retains`), the blocks of the same removal its
+effect leaves with (`leavesWith`), or why it has nothing to take back
+(`nothing`), which a capability states through `lifecycle.Removal`. `nothing`
+stands alone, and only a removal plan carries the member
+(`TestOnlyARemovalFreezesAnInverseAndTheDigestCoversIt`). A removal whose
+block states none of these refuses `destroy.inverse-unstated` before
+registration (`TestARemovalStepThatStatesNoInverseRefusesBeforeRegistration`,
+`TestEveryExampleRemovalStepStatesItsInverse`).
+
+The engine alone decides `leavesWith`, once, as it freezes the removal plan,
+by the retirement rule of [quiescence before removal](#quiescence-before-removal):
+a host-bound block leaves with the first block that removes or retires each of
+its hosts, ordered and unique, unless a surviving consumer or a deferral keeps
+it online. Every later invocation of that removal, its preview included,
+computes the rule only to prove it equal. A different answer refuses
+`destroy.inverse-moved` before any effect, naming the block, the frozen and the
+computed answer, with the remedy to continue or replace the removal with the
+build that registered it. An earlier build's removal froze no `leavesWith`, so
+its continuation refuses once this build retires a block; a failed one is
+replaced by a removal this build freezes, after proving the failed one's answer
+the same way when it resolves that one's unproved blocks
+(`TestAReplacementRefusesBeforeResolvingARemovalWhoseRuleMoved`). `Execution.RetiredWithHosts` and
+`Probe.RetiredWithHosts` are true exactly when the frozen `leavesWith` is
+non-empty (`TestARemovalFreezesWhatEachStepLeavesWithAndHandsThatToItsCapability`,
+`TestARecomputedLeavesWithThatDiffersRefusesBeforeAnyEffect`,
+`TestAFailedRemovalWithoutTheFrozenMemberIsReplacedByOneThatFreezesIt`). A
+continuation compares `retains` as words, like impacts, and `nothing` only by
+whether it is stated.
+
+A step whose inverse its original apply's records decide reads them as the
+removal plan freezes, through `lifecycle.RecordedRemoval`, and states `nothing`
+when they prove it has nothing to take back: a physical erase whose
+installation never started, and a disk discovery whose settled apply record
+proves its boot completed and cleaned up. That step consumes no authorization,
+and the retirement rule reads it as neither leaving with a host nor removing
+one. Every later decision that continues the removal, its preview included,
+and a replacement that resolves its unproved blocks, reads the records again and
+refuses `destroy.inverse-moved` before any effect when they no longer prove a
+frozen `nothing`, or prove it for a step frozen with its effect. A disk
+discovery whose apply record was running or unknown as the plan froze keeps its
+effect and its run-time skip, because the check of that apply runs after the
+plan freezes and can still prove the boot completed
+(`TestARemovalFreezesWhatTheApplyRecordsProveAndEveryContinuationProvesIt`,
+`TestARecordedAnswerThatMovedRefusesBeforeAnyEffect`). The capability still
+runs and refuses a frozen `nothing` its records contradict.
+
+Reading a frozen request is what makes a context removable without re-deriving
+it. A capability reads exactly the request version it writes; the frozen digest
+identifies the bytes that were frozen. Changes to the current request shape follow the
+[development policy](project.md#design-priorities-and-non-goals): keep its
+version fixed, regenerate its golden and support only that shape. There is no
+conversion or historical reader. Canonical decoding and digest checks still
+refuse bytes the current shape cannot read. A decoder reads the version before
+the shape and refuses an unsupported version without decoding it. A request of any other version, or one whose implementation this
+executable no longer provides, refuses before anything is registered and names
+the block, the version it holds and the executable identity its operation
+recorded, so the remedy is the command to run rather than the obstacle that
+stopped it.
+
+A capability's current contract records what a block's effect is: the objects it creates, their
+names and places, the mark that proves them this context's own, the host
+resources it claims, or what its observation proves. An apply continuation compares execution-contract fingerprints and never automation bytes, so automation
+that moves no content digest reaches the blocks a continuation still runs, and a
+removal still reads the request its apply froze. A mechanical guard,
+`TestEveryImplementationContractMatchesItsGolden`, pins each implementation's
+current request and evidence schemas, persisted automation formats, fixed
+marks, proofs and places, effect pins (whose recipe reproduces the content
+digest), and request identity members. Intentional changes require explicit
+review and golden regeneration, with versions fixed under the development
+policy; no previous golden or build becomes a supported compatibility target.
+`TestEveryAutomationVersionLiteralIsClassified` requires every quoted literal
+ending in a version, every token naming a `bootwright.io` URI or key or a
+Bootwright host path, name prefix or mark, and every capitalized `Bootwright`
+token with up to three words after it, in every automation file of the
+collection, to be classified with its reason: persisted, fixed, transient,
+validated (it only bounds what a request may carry), mirrored, controller or
+documentation; an automation file of an extension it does not read fails it.
+`TestEveryCephMarkerNameIsDeclared` holds the declared Ceph marker record
+names, each a proof identifier of the Ceph implementations whose sources carry
+it, to the quoted record names and name fragments those sources carry. The
+guard fingerprints a
+raw-JSON member, such as the cluster services the Ceph core and host requests
+carry, as an opaque leaf, and sees no dynamically built value, no value naming
+no Bootwright token, no marker name built only from values and no unversioned
+format; the schema nested in such a
+member, and what a record or mark means beyond its shape and declared version,
+stay the author's to review and record in the current contract. A mark changed without moving the
+digest fails closed: a removal under the new build reads the objects the old
+mark proves as foreign and refuses, leaving them in place, so its cost is a
+stuck or partial destroy. A change loosening what an observation accepts as
+this context's own has no such backstop, so it requires explicit safety review
+and updated current contract evidence under the development policy.
 
 ## Keep-going removal
 
@@ -2804,9 +2822,9 @@ removal before any other inverse runs. Pre-stop deferral never defers a host
 for retirement: a storage effect retired with its hosts stays retired and its
 retirement runs after the stop proof. A destroy may name, with
 `--unregistered`, Machines whose guest-side pre-stop removal the operator
-performed outside Bootwright; for that invocation only, the pre-stop inverse of
-those Machines' blocks removes nothing from their guest
-([managed OS](managed-os.md#registration)).
+performed outside Bootwright; the removal plan freezes that name, and the
+pre-stop inverse of those Machines' blocks removes nothing from their guest
+([managed OS](managed-os.md#rerun-after-manual-unregistration)).
 
 Every execution and quiescence probe carries its immutable owning apply
 identity. `ApplyProved` supplies detached frozen blocks and durable completion
@@ -2971,8 +2989,10 @@ impact per target, `serial:<serialNumber>` standing for the `deviceName` of a
 target without one, unless a [removal-time relaxation](#removal-time-relaxation)
 changes them. It never chooses disks from authorization or discovery.
 An original installation block proved never started is retained without booting
-or writing disks; the policy's removal records retention, never an erase receipt.
-Missing original records refuse rather than imply that no installation started.
+or writing disks: the removal plan freezes that proof as the policy step's
+`nothing` ([frozen inverse](#frozen-requests-and-contract-guards)), which then
+consumes no `data-loss`, and its removal records retention, never an erase
+receipt. Missing original records refuse rather than imply that no installation started.
 The original system UUID, exact complete physical MAC set, any declared WWN, serial and size
 must agree immediately before media insertion and in the RAM worker. Missing
 identity is unknown. The worker then
@@ -3307,7 +3327,10 @@ removal as a failed one is superseded, resolving every unproved block of it
 first and refusing, registering nothing, when it cannot, and then removes what
 that removal has not recorded removed under the relaxations it names
 ([state machine](#state-machine)). A `destroy --dry-run` naming no relaxation previews that
-continuation.
+continuation. A removal holds its `--unregistered` names by the same rules, as
+the relaxation `unregistered` of each named Machine's installation block
+([managed OS](managed-os.md#rerun-after-manual-unregistration),
+`TestAFrozenUnregisteredNameSelectsTheContinuationAsARelaxationDoes`).
 
 ### Access-credential rebind
 

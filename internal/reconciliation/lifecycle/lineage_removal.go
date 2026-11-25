@@ -18,10 +18,11 @@ type removalScope struct {
 	release    []string
 	operations []string
 	contracts  map[string]string
+	records    func(context.Context, string) (RemovalRecords, error)
 }
 
 func removalOver(ctx context.Context, store recordReader, applied operationstore.Operation, frozen, started reconciliation.Plan) (removalScope, error) {
-	scope := removalScope{contracts: applied.Contracts, owned: started, started: len(started.Blocks), reopen: firstBinding(applied.Bindings), release: applied.Bindings}
+	scope := removalScope{contracts: applied.Contracts, owned: started, started: len(started.Blocks), reopen: firstBinding(applied.Bindings), release: applied.Bindings, records: recordsFrom(store, applied)}
 	if applied.Predecessor == "" {
 		return scope, nil
 	}
@@ -59,7 +60,7 @@ func unremovable(applied operationstore.Operation, cause error) error {
 }
 
 func replacementOf(ctx context.Context, store recordReader, removal operationstore.Operation, remaining reconciliation.Plan) (removalScope, error) {
-	scope := removalScope{contracts: removal.Contracts, owned: remaining, started: len(remaining.Blocks), reopen: firstBinding(removal.Bindings), release: slices.Clone(removal.Bindings)}
+	scope := removalScope{contracts: removal.Contracts, owned: remaining, started: len(remaining.Blocks), reopen: firstBinding(removal.Bindings), release: slices.Clone(removal.Bindings), records: recordsFrom(store, removal)}
 	if removal.Source == "" {
 		return scope, nil
 	}

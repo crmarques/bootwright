@@ -203,6 +203,9 @@ func (c Capability) Destroy(ctx context.Context, execution lifecycle.Execution) 
 	if err != nil {
 		return lifecycle.Result{}, err
 	}
+	if err := frozenUnstarted(execution.Block, request, needed); err != nil {
+		return lifecycle.Result{}, err
+	}
 	if !needed {
 		proof, _ := json.Marshal(EraseEvidence{Version: EraseImplementation, Request: execution.Block.RequestDigest, Prepared: true, Removed: true, Retained: true})
 		return lifecycle.Result{Outcome: reconciliation.OutcomeUnchanged, Evidence: proof}, nil
@@ -233,6 +236,9 @@ func (c Capability) ObserveRemoval(ctx context.Context, execution lifecycle.Exec
 	if err != nil {
 		return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, err
 	}
+	if err := frozenUnstarted(execution.Block, request, needed); err != nil {
+		return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, err
+	}
 	if !needed {
 		proof, _ := json.Marshal(EraseEvidence{Version: EraseImplementation, Request: execution.Block.RequestDigest, Prepared: true, Removed: true, Retained: true})
 		return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: proof}, nil
@@ -260,6 +266,36 @@ func (c Capability) ObserveRemoval(ctx context.Context, execution lifecycle.Exec
 func eraseUnfinished(data json.RawMessage, digest string) bool {
 	proof, err := reconciliation.DecodeEvidence[EraseEvidence](data, 32768, "physical erase")
 	return err == nil && proof.Version == EraseImplementation && proof.Request == digest && !proof.Removed && !proof.Retained
+}
+
+func (Capability) NothingRecorded(block reconciliation.Block, records lifecycle.RemovalRecords) bool {
+	request, err := DecodeEraseRequest(block.Request)
+	if err != nil {
+		return false
+	}
+	started, err := installationStarted(lifecycle.Execution{OriginalRemovalDependents: records.Dependents}, request)
+	return err == nil && !started
+}
+
+func (Capability) NothingRemoval(ctx context.Context, block reconciliation.Block) (lifecycle.Removal, error) {
+	request, err := DecodeEraseRequest(block.Request)
+	if err != nil {
+		return lifecycle.Removal{}, err
+	}
+	machine := request.Install.Identity.Object
+	return lifecycle.Removal{
+		Description: "erase nothing on the declared physical disks of " + machine + ", whose installation never started",
+		Nothing:     "the installation of " + machine + " never started, so it wrote nothing to the declared disks",
+	}, ctx.Err()
+}
+
+func (Capability) DecidedAtRun() bool { return false }
+
+func frozenUnstarted(block reconciliation.Block, request EraseRequest, started bool) error {
+	if !started || !lifecycle.TakesNothingBack(block) {
+		return nil
+	}
+	return stopRecordsMissing.Fail("the removal plan froze that the installation of "+request.Install.Identity.Object+" never started, and its original apply records now show it started", "restore the original apply records before continuing removal")
 }
 
 func installationStarted(execution lifecycle.Execution, request EraseRequest) (bool, error) {

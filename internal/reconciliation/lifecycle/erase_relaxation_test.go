@@ -253,7 +253,7 @@ func decisionUnder(t *testing.T, h *harness, command string, relaxations map[str
 	t.Helper()
 	ctx := context.Background()
 	var decided operationPlan
-	service := h.service.relaxingFor(command, relaxations)
+	service := h.service.relaxingFor(command, relaxations, nil)
 	err := h.workspace.ReadLifecycle(ctx, testContextName, func(view View) error {
 		var err error
 		decided, _, err = service.decider(nil).decideAs(ctx, view, reconciliation.Destroy, reconciliation.Selection{})
@@ -389,5 +389,35 @@ func TestOnlyARemovalRelaxationRefusalPassesThroughUnchanged(t *testing.T) {
 	completeApply(t, h)
 	if _, err := destroyRelaxed(h, map[string]string{"bravo": EraseRetain}, reconciliation.AuthorizationDataLoss); !errors.Is(err, cause) {
 		t.Fatalf("the capability's refusal was replaced by %v", err)
+	}
+}
+
+func TestAFrozenUnregisteredNameSelectsTheContinuationAsARelaxationDoes(t *testing.T) {
+	t.Parallel()
+	install := definition("os-install-rhel-01")
+	install.Object, install.Relaxation = "rhel-01", Unregistered
+	frozen, err := reconciliation.NewPlan(reconciliation.Destroy, []reconciliation.BlockDefinition{install})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, tc := range map[string]struct {
+		command string
+		names   []string
+		want    relaxationChange
+	}{
+		"the same names":           {relaxingDestroy, []string{"rhel-01"}, relaxationSame},
+		"no name":                  {relaxingDestroy, nil, relaxationDiffers},
+		"another name":             {relaxingDestroy, []string{"rhel-01", "rhel-02"}, relaxationAdded},
+		"a preview without a name": {relaxingPlan, nil, relaxationSame},
+	} {
+		if got := (Service{}).relaxingFor(tc.command, nil, tc.names).relaxing.over(frozen); got != tc.want {
+			t.Errorf("%s reads %v, want %v", name, got, tc.want)
+		}
+	}
+	if methods := frozenRelaxations(frozen); len(methods) != 0 {
+		t.Fatalf("the unregistered name reads as an --authorize relaxation: %v", methods)
+	}
+	if flags := boundFlags(frozen, func(string) string { return "" }); !slices.Equal(flags, []string{"--unregistered", "rhel-01"}) {
+		t.Fatalf("a remedy repeats %q, want the frozen --unregistered name", flags)
 	}
 }

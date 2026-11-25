@@ -35,7 +35,7 @@ func (s Service) applyWithin(ctx context.Context, request ApplyRequest, scope *r
 // Destroy removes what an apply recorded as owned. It accepts no stage
 // selection: a removal covers exactly the effects that exist.
 func (s Service) Destroy(ctx context.Context, request DestroyRequest) (*OperationResult, error) {
-	s, err := s.relaxingFor(relaxingDestroy, request.Relaxations).withParallelism(request.Parallelism)
+	s, err := s.relaxingFor(relaxingDestroy, request.Relaxations, request.Unregistered).withParallelism(request.Parallelism)
 	if err != nil {
 		return nil, err
 	}
@@ -45,10 +45,10 @@ func (s Service) Destroy(ctx context.Context, request DestroyRequest) (*Operatio
 		ctx, end = s.options.BeginPrompts(ctx)
 		defer end()
 	}
-	return s.mutate(ctx, reconciliation.Destroy, request.ContextName, reconciliation.Selection{}, request.Authorizations, request.Unregistered, request.SkipConfirmation, request.Unattended, request.SSH.Borrowed(), nil)
+	return s.mutate(ctx, reconciliation.Destroy, request.ContextName, reconciliation.Selection{}, request.Authorizations, request.SkipConfirmation, request.Unattended, request.SSH.Borrowed(), nil)
 }
 
-func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextName string, selection reconciliation.Selection, authorizations, unregistered []string, skipConfirmation, unattended, borrowed bool, scope *reconciliation.PreparationScope) (*OperationResult, error) {
+func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextName string, selection reconciliation.Selection, authorizations []string, skipConfirmation, unattended, borrowed bool, scope *reconciliation.PreparationScope) (*OperationResult, error) {
 	if err := s.available(ctx); err != nil {
 		return nil, err
 	}
@@ -116,7 +116,7 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 	if prompts, reports := s.options.Confirmer.(InteractiveConfirmer); reports && !prompts.Interactive() {
 		unattended = true
 	}
-	if err := s.authorized(name, decided, tokens, unregistered, unattended); err != nil {
+	if err := s.authorized(name, decided, tokens, unattended); err != nil {
 		return nil, err
 	}
 	if decided, err = s.admitRebinds(ctx, name, decided, rebinds); err != nil {
@@ -126,7 +126,7 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 		if s.options.Confirmer == nil {
 			remedy := "review the plan and repeat with --yes"
 			if len(requiredTokens(decided.authorizationPlan())) != 0 {
-				remedy = "review the plan, then repeat " + contextCommand(name, string(verb), invocationFlags(decided.selection, authorizing(decided.authorizationPlan()), unregistered)...) + " with --yes"
+				remedy = "review the plan, then repeat " + contextCommand(name, string(verb), invocationFlags(decided.selection, authorizing(decided.authorizationPlan()))...) + " with --yes"
 			}
 			return nil, engineConfirmationRequired.Fail("this operation requires confirmation", remedy)
 		}
@@ -143,7 +143,7 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 			return nil, err
 		}
 	}
-	return s.execute(releasing(ctx, unregistered), name, decided)
+	return s.execute(ctx, name, decided)
 }
 
 func (s Service) admitApply(ctx context.Context, name string, decided operationPlan) error {

@@ -136,7 +136,7 @@ func (s Service) Plan(ctx context.Context, request PlanRequest) (*PlanResult, er
 		return nil, err
 	}
 	s.keepGoing = request.KeepGoing && request.Verb == reconciliation.Destroy
-	result, err := s.relaxingFor(relaxingPlan, request.Relaxations).planWithin(ctx, request, nil)
+	result, err := s.relaxingFor(relaxingPlan, request.Relaxations, request.Unregistered).planWithin(ctx, request, nil)
 	if s.keepGoing && result != nil && err != nil {
 		result.Checks = append(result.Checks, PlanCheck{
 			ID: "destroy-admission", Status: "failed", Summary: "No cleanup would start under the current checks",
@@ -250,7 +250,7 @@ func (s Service) previewReadiness(ctx context.Context, view View, decided operat
 // returns that decision and the durable state it was read from, before any
 // finalization it previews.
 func (s Service) preview(ctx context.Context, decision decider, view View, previewed reconciliation.Verb, selection reconciliation.Selection) (*PlanResult, operationPlan, basis, error) {
-	if previewed == "" && len(decision.relaxing.methods) != 0 {
+	if previewed == "" && (len(decision.relaxing.methods) != 0 || len(decision.relaxing.unregistered) != 0) {
 		previewed = reconciliation.Destroy
 	}
 	decided, verb, err := decision.decideAs(ctx, view, previewed, selection)
@@ -283,6 +283,9 @@ func (s Service) preview(ctx context.Context, decision decider, view View, previ
 			"repeat "+contextCommand(view.Identity().Name, "destroy --dry-run")+" without "+strings.Join(given, " and "))
 	}
 	if err := s.refuseInapplicableRelaxations(view.Identity().Name, decided); err != nil {
+		return nil, operationPlan{}, basis{}, err
+	}
+	if err := s.acknowledgedReleases(view.Identity().Name, decided); err != nil {
 		return nil, operationPlan{}, basis{}, err
 	}
 	guardedFinalization := false

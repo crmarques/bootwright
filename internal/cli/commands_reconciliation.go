@@ -131,7 +131,7 @@ func (s Services) checkApplyPreview(ctx context.Context, values *requestValues, 
 func (s Services) invokePlanDestroy(ctx context.Context, values *requestValues, _ []string) (commandResult, error) {
 	return s.invokePlan(ctx, values, lifecycle.PlanRequest{
 		Verb: "destroy", ContextName: values.text("context"),
-		Relaxations: values.relaxations(), Readiness: true, Parallelism: values.parallelism(), KeepGoing: values.boolean("keep-going"),
+		Relaxations: values.relaxations(), Unregistered: values.unregistered(), Readiness: true, Parallelism: values.parallelism(), KeepGoing: values.boolean("keep-going"),
 	})
 }
 

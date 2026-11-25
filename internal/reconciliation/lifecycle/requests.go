@@ -9,16 +9,17 @@ import (
 )
 
 type PlanRequest struct {
-	Verb        reconciliation.Verb
-	Readiness   bool
-	KeepGoing   bool
-	Parallelism int
-	ContextName string
-	Stages      []string
-	Clusters    []string
-	Machines    []string
-	Until       string
-	Relaxations map[string]string
+	Verb         reconciliation.Verb
+	Readiness    bool
+	KeepGoing    bool
+	Parallelism  int
+	ContextName  string
+	Stages       []string
+	Clusters     []string
+	Machines     []string
+	Until        string
+	Relaxations  map[string]string
+	Unregistered []string
 }
 
 type StatusRequest struct {

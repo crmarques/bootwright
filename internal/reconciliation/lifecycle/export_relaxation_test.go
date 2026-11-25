@@ -7,6 +7,14 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
+func (p plannedCapability) Unregistered(ctx context.Context, block reconciliation.Block) (Removal, bool, error) {
+	unregisterer, ok := p.Capability.(RemovalUnregisterer)
+	if !ok {
+		return Removal{}, false, nil
+	}
+	return unregisterer.Unregistered(ctx, block)
+}
+
 func (p plannedCapability) RelaxesMachine(block reconciliation.Block) bool {
 	relaxer, ok := p.Capability.(RemovalRelaxer)
 	return ok && relaxer.RelaxesMachine(block)
