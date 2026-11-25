@@ -3,11 +3,14 @@ package lifecycle
 import (
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"path"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -214,5 +217,156 @@ func TestReplacementDestroyStopsAProvedLiveMachineInsideARegisteredAttempt(t *te
 	}
 	if err := destroyWith(h); err != nil || stops != 1 {
 		t.Fatalf("replacement issued %d registered stops: %v", stops, err)
+	}
+}
+
+type concurrentPowerMachine struct {
+	*testCapability
+	read func(context.Context, Probe) (Quiescence, error)
+}
+
+func (m *concurrentPowerMachine) StartPower(ctx context.Context, probe Probe) (Quiescence, error) {
+	if m.read == nil {
+		return m.testCapability.StartPower(ctx, probe)
+	}
+	return m.read(ctx, probe)
+}
+
+func TestInvocationParallelismBoundsApplyAndDestroyStartPower(t *testing.T) {
+	t.Parallel()
+	for _, verb := range []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy} {
+		for _, limit := range []int{0, 1, 2} {
+			t.Run(fmt.Sprintf("%s/%d", verb, limit), func(t *testing.T) {
+				t.Parallel()
+				h := newHarness(t)
+				nodes := make([]string, MaxRunningBlocks+1)
+				for i := range nodes {
+					nodes[i] = fmt.Sprintf("node-%02d", i)
+				}
+				bindings := claimResolver{}.Bindings()
+				machine := &concurrentPowerMachine{testCapability: claimingCapability("machine-first-v1", nodes...)}
+				h.service.capabilities = claimResolver{
+					bindings[0]: machine, bindings[1]: claimingCapability("machine-second-v1"), bindings[2]: claimingCapability("os-install-v1"),
+				}
+				if verb == reconciliation.Destroy {
+					completeApply(t, h)
+				}
+				h.service.options.Concurrency = 0
+				checks := &testProgress{}
+				h.service.options.Progress = checks
+				type scopeKey struct{}
+				var released bool
+				h.service.options.BeginInvocation = func(ctx context.Context) (context.Context, func()) {
+					return context.WithValue(ctx, scopeKey{}, true), func() { released = true }
+				}
+				watch := newOverlap(len(nodes))
+				t.Cleanup(watch.open)
+				machine.read = func(ctx context.Context, probe Probe) (Quiescence, error) {
+					watch.enter(probe.Block.Object)
+					defer watch.leave(probe.Block.Object)
+					if !probe.Admission || ctx.Value(scopeKey{}) != true {
+						return Quiescence{}, errors.New("power proof lacked its read-only invocation scope")
+					}
+					if slices.Contains(nodes[:2], probe.Block.Object) {
+						return Quiescence{State: Live, Reason: "native state", Remedy: "stop the machines"}, nil
+					}
+					return Quiescence{State: Quiescent}, nil
+				}
+
+				mutations := h.workspace.mutations
+				finished := make(chan error, 1)
+				go func() {
+					var err error
+					if verb == reconciliation.Apply {
+						_, err = h.service.Apply(t.Context(), ApplyRequest{SkipConfirmation: true, Parallelism: limit})
+					} else {
+						_, err = h.service.Destroy(t.Context(), DestroyRequest{SkipConfirmation: true, Parallelism: limit})
+					}
+					finished <- err
+				}()
+				bound := limit
+				if bound == 0 {
+					bound = MaxRunningBlocks
+				}
+				for remaining := len(nodes); remaining > 0; remaining -= bound {
+					watch.gather(t, min(bound, remaining))
+					if remaining > bound {
+						watch.admit()
+					}
+				}
+				watch.open()
+				ds := diagnostics.Of(returnedWithin(t, finished))
+				want := "cannot start " + string(verb) + ": Machine/" + nodes[0] + " (native state), Machine/" + nodes[1] + " (native state)"
+				if len(ds) != 1 || ds[0].Code != "lifecycle.start-power" || ds[0].Message != want ||
+					strings.Count(ds[0].Remediation, "stop the machines") != 1 {
+					t.Fatalf("power refusal = %+v, want %q", ds, want)
+				}
+				if watch.highest() != bound || !released || h.workspace.mutations != mutations {
+					t.Fatalf("peak = %d, scope released = %v, writes = %d", watch.highest(), released, h.workspace.mutations-mutations)
+				}
+				rows := checks.reported()
+				if len(rows) != 2*len(nodes) {
+					t.Fatalf("checks reported %v", rows)
+				}
+				for i, node := range nodes {
+					prefix := "check:prove Machine/" + node + " is powered off, changing nothing::"
+					suffix := fmt.Sprintf(":%d/%d", i+1, len(nodes))
+					status := "ok"
+					if i < 2 {
+						status = "failed"
+					}
+					running, settled := slices.Index(rows, prefix+"running"+suffix), slices.Index(rows, prefix+status+suffix)
+					if running < 0 || settled <= running {
+						t.Fatalf("no matching start and outcome for %s in %v", node, rows)
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestCanceledStartPowerJoinsInFlightReadingsWithoutAdmittingMore(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	entered, exited := make(chan string, 3), make(chan string, 3)
+	joined := 0
+	h.service.options.BeginInvocation = func(ctx context.Context) (context.Context, func()) {
+		return ctx, func() { joined = len(exited) }
+	}
+	bindings := claimResolver{}.Bindings()
+	machine := &concurrentPowerMachine{
+		testCapability: claimingCapability("machine-first-v1", "node-a", "node-b", "node-c"),
+		read: func(ctx context.Context, probe Probe) (Quiescence, error) {
+			node := probe.Block.Object
+			entered <- node
+			<-ctx.Done()
+			exited <- node
+			// Even positive in-flight results cannot admit a canceled invocation.
+			return Quiescence{State: Quiescent}, nil
+		},
+	}
+	h.service.capabilities = claimResolver{
+		bindings[0]: machine, bindings[1]: claimingCapability("machine-second-v1"), bindings[2]: claimingCapability("os-install-v1"),
+	}
+	finished := make(chan error, 1)
+	go func() {
+		_, err := h.service.Apply(ctx, ApplyRequest{SkipConfirmation: true, Parallelism: 2})
+		finished <- err
+	}()
+	for range 2 {
+		select {
+		case <-entered:
+		case <-time.After(gatherWithin):
+			t.Fatal("two power readings did not enter")
+		}
+	}
+	cancel()
+	if err := returnedWithin(t, finished); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled apply: %v", err)
+	}
+	if joined != 2 || len(entered) != 0 || h.workspace.mutations != 0 {
+		t.Fatalf("joined %d readings, admitted %d more and wrote %d times", joined, len(entered), h.workspace.mutations)
 	}
 }

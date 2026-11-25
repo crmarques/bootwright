@@ -46,8 +46,8 @@ type startTarget struct {
 	references []string
 }
 
-// prepareStart freezes the fleet and the recorded identity of every member from
-// the read snapshot. The native readings run under the exclusive context lease.
+// prepareStart freezes the fleet and recorded identities. Native readings
+// share one observer scope under the exclusive context lease.
 func (s Service) prepareStart(ctx context.Context, view View, decided operationPlan, before basis) (func(View) error, error) {
 	if !s.startsFlow(decided) {
 		return nil, nil
@@ -109,41 +109,79 @@ func (s Service) prepareStart(ctx context.Context, view View, decided operationP
 			return err
 		}
 		return s.withPython(ctx, located, func(launch prerequisites.PythonLaunch) error {
-			var blocked, remedies []string
-			for position, target := range targets {
-				if err := ctx.Err(); err != nil {
-					return err
-				}
-				event := ProgressEvent{Phase: CheckPhase, Block: "start-power-" + target.probe.Block.ID, Position: position + 1, Total: len(targets),
-					Description: "prove Machine/" + target.probe.Block.Object + " is powered off, changing nothing", Status: "running"}
-				s.report(ctx, event)
-				q, err := s.readStartPower(ctx, target, launch, decided.rebinds)
-				event.Status = "ok"
-				if err != nil || !q.Settled() {
-					event.Status = "failed"
-				}
-				s.report(ctx, event)
-				if err != nil {
-					return err
-				}
-				if q.Settled() {
-					continue
-				}
-				blocked = append(blocked, "Machine/"+target.probe.Block.Object+" ("+q.Reason+")")
-				if q.Stop != "" {
-					remedies = append(remedies, q.Stop)
-				}
-				if q.Remedy != "" && !slices.Contains(remedies, q.Remedy) {
-					remedies = append(remedies, q.Remedy)
-				}
-			}
-			if len(blocked) != 0 {
-				remedies = append(remedies, "prove the named machines powered off or absent and repeat "+contextCommand(identity.Name, string(decided.verb)))
-				return startPowerRefused.Fail("cannot start "+string(decided.verb)+": "+strings.Join(blocked, ", "), strings.Join(remedies, "; "))
-			}
-			return nil
+			return s.proveStartPower(ctx, identity.Name, decided, targets, launch)
 		})
 	}, nil
+}
+
+type startReading struct {
+	event ProgressEvent
+	power Quiescence
+	err   error
+}
+
+func (s Service) proveStartPower(ctx context.Context, name string, decided operationPlan, targets []startTarget, launch prerequisites.PythonLaunch) error {
+	if s.options.BeginInvocation != nil {
+		var release func()
+		ctx, release = s.options.BeginInvocation(ctx)
+		defer release()
+	}
+
+	finished := make(chan startReading, min(s.Concurrency(), len(targets)))
+	readings := make([]startReading, len(targets))
+	next, running, failed := 0, 0, false
+	for {
+		for running < cap(finished) && next < len(targets) && !failed && ctx.Err() == nil {
+			target := targets[next]
+			event := ProgressEvent{Phase: CheckPhase, Block: "start-power-" + target.probe.Block.ID, Position: next + 1, Total: len(targets),
+				Description: "prove Machine/" + target.probe.Block.Object + " is powered off, changing nothing", Status: "running"}
+			s.report(ctx, event)
+			go func() {
+				power, err := s.readStartPower(ctx, target, launch, decided.rebinds)
+				finished <- startReading{event: event, power: power, err: err}
+			}()
+			next++
+			running++
+		}
+		if running == 0 {
+			break
+		}
+		reading := <-finished
+		running--
+		failed = failed || reading.err != nil
+		reading.event.Status = "ok"
+		if reading.err != nil || !reading.power.Settled() {
+			reading.event.Status = "failed"
+		}
+		s.report(ctx, reading.event)
+		readings[reading.event.Position-1] = reading
+	}
+
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	var blocked, remedies []string
+	for i, reading := range readings[:next] {
+		if reading.err != nil {
+			return reading.err
+		}
+		q := reading.power
+		if q.Settled() {
+			continue
+		}
+		blocked = append(blocked, "Machine/"+targets[i].probe.Block.Object+" ("+q.Reason+")")
+		if q.Stop != "" {
+			remedies = append(remedies, q.Stop)
+		}
+		if q.Remedy != "" && !slices.Contains(remedies, q.Remedy) {
+			remedies = append(remedies, q.Remedy)
+		}
+	}
+	if len(blocked) != 0 {
+		remedies = append(remedies, "prove the named machines powered off or absent and repeat "+contextCommand(name, string(decided.verb)))
+		return startPowerRefused.Fail("cannot start "+string(decided.verb)+": "+strings.Join(blocked, ", "), strings.Join(remedies, "; "))
+	}
+	return nil
 }
 
 func (s Service) startBlocks(ctx context.Context, view View, decided operationPlan) ([]reconciliation.Block, error) {
@@ -194,6 +232,9 @@ func (s Service) startBlocks(ctx context.Context, view View, decided operationPl
 }
 
 func (s Service) readStartPower(ctx context.Context, target startTarget, launch prerequisites.PythonLaunch, rebinds []string) (Quiescence, error) {
+	if err := ctx.Err(); err != nil {
+		return Quiescence{}, err
+	}
 	probe := target.probe
 	probe.Launch = launch
 	material := map[string]secrets.Material{}

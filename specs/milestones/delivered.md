@@ -18241,3 +18241,13 @@ shared fixture state. The original failure was a test read racing the
 cancelled reader's final write. The shared host-reading contract is
 unchanged. The focused race regression and the Ceph package race check
 exercise the correction.
+
+## X745 — Concurrent entry power checks
+
+**Owner:** Reconciliation. **Item:** B1844 (safety).
+**Authority:** explicit request to parallelize apply and destroy entry checks.
+
+The [power admission rule](../state-reconciliation.md#power-before-a-new-apply-or-destroy)
+uses the invocation bound. In-tree evidence covers overlapping checks on both
+verbs, stable refusals without lifecycle writes, cancellation, and adapter
+job isolation. The delivering commit records the verification results.

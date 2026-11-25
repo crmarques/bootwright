@@ -2660,6 +2660,13 @@ first collects the bootstrap passwords
 [the Machine contract selects](api/machines.md#managed-lifecycle-enrollment)
 before the first reading.
 
+The engine runs entry readings concurrently up to the
+[invocation limit](cli/commands.md#command-and-flag-catalog). It does not admit a
+write until every target is proved. Cancellation stops further readings from
+starting, and the engine waits for in-flight readings before releasing the
+context lease. Refusal details list the targets in their planned check order
+regardless of completion order.
+
 A staged or additive apply checks its managed fleet. A destroy derives its
 targets from the frozen work it takes back. Destroy over an incomplete apply
 starts a new flow. Continuing the same registered flow, including replacing

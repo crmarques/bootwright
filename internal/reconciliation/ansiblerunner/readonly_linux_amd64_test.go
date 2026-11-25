@@ -5,6 +5,8 @@ package ansiblerunner
 import (
 	"bytes"
 	"context"
+	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -205,5 +207,38 @@ func TestAdmissionHonorsExistingAdapterLocksBeforeStaging(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(path, "id")); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+func TestAdmissionRunsBesideItsOwnObserversWithoutCollecting(t *testing.T) {
+	runner, started := readOnlyRunner(t)
+	runner.stagingParent = filepath.Join(t.TempDir(), "staging")
+	runner.scratchParent = filepath.Join(runner.stagingParent, "runs")
+	runner.stager = stagelocal.NewAutomationStager(runner.stagingParent)
+	stale := plantJob(t, runner.jobParent, jobPrefix+"1")
+	request := adapterRequest(t, io.Discard)
+	request.Operation, request.Admission, request.ReadOnly, request.Unrecorded = lifecycle.ObserveOperation, true, true, true
+
+	ctx, release := runner.BeginInvocation(t.Context())
+	defer release()
+	stop := runHeldIn(t, ctx, runner, request)
+	if _, err := runner.Run(ctx, request); err != nil {
+		t.Fatalf("sibling observer refused: %v", err)
+	}
+	result, err := runner.Run(t.Context(), request)
+	if code, _ := codeOf(err); code != "runner.adapter-running" || !result.NotStarted || *started != 1 {
+		t.Fatalf("foreign observer = %+v, %v, started %d", result, err, *started)
+	}
+	if err := stop(); !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
+	}
+	if names := runNames(t, runner.jobParent); !slices.Equal(names, []string{filepath.Base(stale)}) {
+		t.Fatalf("remaining jobs %v", names)
+	}
+	if got, err := os.ReadFile(filepath.Join(stale, "id")); err != nil || string(got) != "PRIVATE KEY" {
+		t.Fatalf("stale job changed: %q %v", got, err)
+	}
+	if _, err := os.Lstat(runner.stagingParent); !os.IsNotExist(err) {
+		t.Fatalf("shared staging created: %v", err)
 	}
 }

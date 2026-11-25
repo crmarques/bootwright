@@ -433,11 +433,13 @@ What it gates, and its refusals, are owned by
 integer and defaults to eight; zero, negative, empty, non-integer and overflowing
 values are usage errors before elevation or service dispatch. The last supplied
 value wins, but an empty occurrence is always refused. It bounds running steps
-for this invocation, including continuation and removal checks, without changing
-the frozen plan. Dependencies, exclusive claims and the executable's group
-throttle still apply, so a larger value need not increase concurrency. Use
-`--parallelism 1` to run steps serially, or `--parallelism 16` to admit up to
-sixteen independent steps. Higher values can increase controller and target load.
+for this invocation, including continuation, removal checks and
+[entry power readings](../state-reconciliation.md#power-before-a-new-apply-or-destroy),
+without changing the frozen plan. Dependencies, exclusive claims and the
+executable's group throttle still apply, so a larger value need not increase
+concurrency. Use `--parallelism 1` to run steps serially, or `--parallelism 16`
+to admit up to sixteen independent steps. Higher values can increase controller
+and target load.
 
 `--authorize` accepts only `data-loss`, `data-loss=<digest>` with the 16
 lowercase hexadecimal digits a plan prints for the steps it authorizes,
