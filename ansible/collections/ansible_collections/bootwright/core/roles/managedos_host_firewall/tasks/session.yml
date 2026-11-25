@@ -71,6 +71,6 @@
     managedos_host_firewall_cause: >-
       {{ ' (' ~ managedos_host_firewall_answer.cause ~ ')'
          if managedos_host_firewall_answer.cause | default('') in
-         ['tooling', 'reload', 'zone', 'write', 'address', 'timeout', 'session', 'host-key', 'exit', 'answer', 'unreachable']
+         ['tooling', 'reload', 'zone', 'write', 'address', 'timeout', 'session', 'host-key', 'exit', 'answer', 'unreachable', 'authentication']
          else '' }}
   when: not (managedos_host_firewall_answer.ok | default(false) | bool)

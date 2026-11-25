@@ -570,9 +570,67 @@ def test_the_worker_source_runs_alone_with_only_the_standard_library():
 
 @pytest.mark.parametrize("operation", ["inspect", "remove"])
 def test_each_operation_reaches_the_worker_by_name(tmp_path, operation):
-    popen = FakePopen(stdout=encoded({"ok": True, "result": {"changed": False, "services": evidence(RGW)}}))
-    module.execute(params(tmp_path, operation), run=session(popen))
-    assert json.loads(popen.calls[0]["stdin"])["operation"] == operation
+    operations = []
+
+    def run(_argv, data, _timeout):
+        if not data:
+            return managedos_guest_ssh.Outcome(0, b"", False, False)
+        operations.append(json.loads(data)["operation"])
+        return managedos_guest_ssh.Outcome(0, encoded({"ok": True, "result": {"changed": False, "services": evidence(RGW)}}), False, False)
+
+    assert module.execute(params(tmp_path, operation), run=run)["ok"]
+    assert operations == [operation]
+
+
+def test_firewall_removal_waits_for_pinned_ssh_and_never_resends_the_worker(tmp_path):
+    clock, calls = [0.0], []
+    answers = iter([
+        managedos_guest_ssh.Outcome(255, b"", False, False),
+        managedos_guest_ssh.Outcome(0, b"", False, False),
+        managedos_guest_ssh.Outcome(None, b"", False, True),
+    ])
+
+    def run(argv, data, timeout):
+        calls.append((argv, data, timeout))
+        clock[0] += 1
+        return next(answers)
+
+    def pause(seconds):
+        clock[0] += seconds
+
+    outcome = module.execute(params(tmp_path, "remove"), run=run, now=lambda: clock[0], sleep=pause)
+    assert outcome["reason"] == "transport" and outcome["cause"] == "timeout"
+    assert len(calls) == 3
+    first, second, native = calls
+    assert first[0] == second[0] and first[0][:-1] == native[0][:-1]
+    assert first[0][-1] == "/usr/bin/true" and first[1] == second[1] == b""
+    assert "StrictHostKeyChecking=yes" in first[0]
+    assert json.loads(native[1])["operation"] == "remove" and 0 < native[2] < 300
+
+
+@pytest.mark.parametrize("host_key,expected", [(False, "unreachable"), (True, "host-key")])
+def test_firewall_removal_never_crosses_an_unproved_boot_boundary(tmp_path, host_key, expected):
+    clock, calls = [0.0], []
+
+    def run(argv, data, timeout):
+        calls.append((argv[-1], data))
+        clock[0] += timeout
+        return managedos_guest_ssh.Outcome(255, b"", host_key, False)
+
+    def pause(seconds):
+        clock[0] += seconds
+
+    outcome = module.execute(params(tmp_path, "remove"), run=run, now=lambda: clock[0], sleep=pause)
+    assert outcome["reason"] == "transport" and outcome["cause"] == expected
+    assert calls and set(calls) == {("/usr/bin/true", b"")}
+    assert len(calls) == 1 if host_key else 1 < len(calls) and clock[0] <= 120
+
+
+def test_firewall_readiness_does_not_retry_rejected_credentials(tmp_path):
+    popen = FakePopen(code=255, stderr=b"operator@example.test: Permission denied (publickey).")
+    outcome = module.execute(params(tmp_path, "remove"), run=session(popen), sleep=pytest.fail)
+    assert outcome == {"changed": False, "ok": False, "reason": "transport", "cause": "authentication"}
+    assert len(popen.calls) == 1 and popen.calls[0]["argv"][-1] == "/usr/bin/true" and popen.calls[0]["stdin"] == b""
 
 
 @pytest.mark.parametrize("override, message", [

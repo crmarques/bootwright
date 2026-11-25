@@ -202,6 +202,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import managedos_f
 from ansible_collections.bootwright.core.plugins.module_utils.canonical_json import canonical
 
 MAX_TIMEOUT = 900
+REMOVE_READY_SECONDS, REMOVE_PROBE_SECONDS, REMOVE_PROBE_INTERVAL = 120, 12, 2
 
 
 class ArgumentError(ValueError):
@@ -288,7 +289,7 @@ def parse_answer(operation, names, stdout):
     return value if valid_refusal(value, names) else None
 
 
-def interpret(operation, names, outcome):
+def transport_refusal(outcome):
     if outcome.timed_out:
         return refusal("transport", "timeout")
     if outcome.cause is not None:
@@ -297,6 +298,13 @@ def interpret(operation, names, outcome):
         return refusal("transport", "host-key" if outcome.host_key else "unreachable")
     if outcome.code != 0:
         return refusal("transport", "exit")
+    return None
+
+
+def interpret(operation, names, outcome):
+    problem = transport_refusal(outcome)
+    if problem is not None:
+        return problem
     value = parse_answer(operation, names, outcome.stdout)
     if value is None:
         return refusal("transport", "answer")
@@ -308,6 +316,30 @@ def interpret(operation, names, outcome):
     if value["reason"] == "transport":
         return refusal("transport", "answer")
     return refusal(value["reason"], value.get("cause"), value.get("detail"))
+
+
+def await_remove_session(argv, timeout, run, now, sleep):
+    """Before a mutating removal, wait on the same pinned SSH destination with a fixed no-op."""
+    started = now()
+    deadline = started + min(REMOVE_READY_SECONDS, timeout / 2)
+    probe = argv[:-1] + [remote_command.remote_command(("/usr/bin/true",))]
+    refused = refusal("transport", "timeout")
+    while (remaining := deadline - now()) > 0:
+        outcome = run(probe, b"", min(REMOVE_PROBE_SECONDS, remaining))
+        refused = transport_refusal(outcome)
+        if refused is None:
+            if outcome.stdout != b"":
+                return 0, refusal("transport", "answer")
+            remaining = started + timeout - now()
+            return (remaining, None) if remaining > 0 else (0, refusal("transport", "timeout"))
+        if refused["cause"] == "unreachable" and outcome.auth_rejected:
+            return 0, refusal("transport", "authentication")
+        if refused["cause"] not in ("unreachable", "timeout"):
+            break
+        remaining = deadline - now()
+        if remaining > 0:
+            sleep(min(REMOVE_PROBE_INTERVAL, remaining))
+    return 0, refused
 
 
 def execute(params, run=managedos_guest_ssh.run, now=time.monotonic, sleep=time.sleep):
@@ -335,6 +367,11 @@ def execute(params, run=managedos_guest_ssh.run, now=time.monotonic, sleep=time.
             identity=params["identity"], user=params["user"], address=params["address"], remote_argv=remote_argv)
     except managedos_guest_ssh.SessionError as error:
         return refusal("transport", "session", str(error))
+    timeout = params["timeout"]
+    if params["operation"] == "remove":
+        timeout, refused = await_remove_session(argv, timeout, run, now, sleep)
+        if refused is not None:
+            return refused
     arming = bool(sources) and params["operation"] == "apply"
     armed = now()
 
@@ -344,7 +381,7 @@ def execute(params, run=managedos_guest_ssh.run, now=time.monotonic, sleep=time.
         if remaining > 0:
             sleep(remaining)
 
-    outcome = interpret(params["operation"], names, run(argv, canonical(payload), params["timeout"]))
+    outcome = interpret(params["operation"], names, run(argv, canonical(payload), timeout))
     if not arming:
         if outcome["ok"] and outcome["evidence"].get("sshPolicy") == "pending":
             return refusal("transport", "answer")

@@ -55,10 +55,11 @@ HOST_KEY_MARKERS = (
     b"REMOTE HOST IDENTIFICATION HAS CHANGED",
     b"no matching host key type found",
 )
+AUTH_REJECT_MARKERS = (b"Permission denied (", b"Too many authentication failures")
 USER = re.compile(r"[a-z_][a-z0-9_-]{0,31}")
 LABEL = re.compile(r"[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?")
 
-Outcome = collections.namedtuple("Outcome", ("code", "stdout", "host_key", "timed_out", "cause"), defaults=(None,))
+Outcome = collections.namedtuple("Outcome", ("code", "stdout", "host_key", "timed_out", "cause", "auth_rejected"), defaults=(None, False))
 Answer = collections.namedtuple("Answer", ("code", "stdout", "stderr", "failure"))
 
 
@@ -148,7 +149,7 @@ def guest_argv(*, ssh_config, known_hosts, host_key_algorithms, policy_host_key_
 
 
 def run(argv, data, timeout, runner=bounded_process.run):
-    """Run the session once; stderr only reports whether the pinned key refused it."""
+    """Run the session once; stderr yields only fixed refusal flags."""
     try:
         code, stdout, stderr = runner(argv, data, timeout, MAX_OUTPUT + MAX_DIAGNOSTIC, environment=dict(ENVIRONMENT), cwd="/")
     except bounded_process.Failure as failure:
@@ -157,7 +158,8 @@ def run(argv, data, timeout, runner=bounded_process.run):
         # The runner drains stderr itself, so a refused key cannot be told from a start or overrun failure.
         return Outcome(None, None, False, False, "answer" if failure.kind == "output" else "session")
     host_key = any(marker in stderr for marker in HOST_KEY_MARKERS)
-    return Outcome(code, None if len(stdout) > MAX_OUTPUT else stdout, host_key, False)
+    auth_rejected = code == 255 and any(marker in stderr for marker in AUTH_REJECT_MARKERS)
+    return Outcome(code, None if len(stdout) > MAX_OUTPUT else stdout, host_key, False, auth_rejected=auth_rejected)
 
 
 def require_directory(directory):

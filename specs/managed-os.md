@@ -2633,6 +2633,8 @@ ships, does not.
 Ambiguous or unproved access refuses `host-firewall-failed` with detail `ssh-admission`. Destroy retains the shared package and daemon enablement.
 Preflight, plan and observation never prepare a daemon or change a rule.
 
+### Firewall requests and removal
+
 The frozen `hostfirewall.FirewallRequest` carries either direct local or
 pinned lifecycle SSH placement, or the installation's fleet session reached
 through its original placement and pinned host-key proof. It freezes the
@@ -2641,6 +2643,13 @@ Removal waits for consumers, deletes only owned service memberships and
 files, and runs before the installation or Machine is removed. A provided host is
 never powered, and an unreachable one keeps removal incomplete. A host deleted or erased by the same
 removal takes its services with its disks and needs no contact.
+
+An installed Machine's removal waits for the same pinned fleet SSH session
+to run a fixed no-op before it sends the firewall worker. It retries only
+the unreachable or timed-out no-op within half the frozen session budget,
+up to two minutes. A wrong host key or explicit authentication denial
+refuses immediately. The removal worker
+runs at most once and uses what remains of the frozen budget.
 
 A provided host's reload compares complete runtime and permanent zones,
 policies, direct rules and chains, and service, ICMP, helper and IP-set
