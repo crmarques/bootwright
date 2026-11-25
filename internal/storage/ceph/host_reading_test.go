@@ -288,10 +288,11 @@ func TestAWaiterWhoseReaderWasCanceledReadsItsOwnHosts(t *testing.T) {
 		waiter <- observation
 	}()
 	cancel()
-	if observation := <-waiter; observation.Effect != reconciliation.EffectCompleted || runner.replayed[executions[1].Block.RequestDigest] != "" {
+	observation := <-waiter
+	<-leader
+	if observation.Effect != reconciliation.EffectCompleted || runner.replayed[executions[1].Block.RequestDigest] != "" {
 		t.Fatalf("the waiter observed %+v, replaying %q", observation, runner.replayed[executions[1].Block.RequestDigest])
 	}
-	<-leader
 	if runner.readings["example"] != 1 {
 		t.Fatalf("the hosts were read %d times", runner.readings["example"])
 	}

@@ -18230,3 +18230,14 @@ Troubleshooting notes and milestone records retain the commands, native
 symptoms and expected results using generic deployment names. Regression tests
 use synthetic host and OSD identities for the same comparisons. The collection
 unit tests and the Go privilege and lifecycle tests exercise the revised fixtures.
+
+## X730 — Ceph host-reading fixture synchronization
+
+**Owner:** Storage. **Item:** B1819 (defect). **Discovered by:** X728's
+package race check.
+
+The cancellation regression joins both goroutines before checking their
+shared fixture state. The original failure was a test read racing the
+cancelled reader's final write. The shared host-reading contract is
+unchanged. The focused race regression and the Ceph package race check
+exercise the correction.
