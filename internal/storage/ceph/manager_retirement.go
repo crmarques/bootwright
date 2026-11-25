@@ -40,6 +40,10 @@ func (Capability) OnlineRetirementHosts(block reconciliation.Block) ([]string, e
 	if err != nil || !retiresManagers(r) {
 		return nil, err
 	}
+	return managerRetirementMachines(r), nil
+}
+
+func managerRetirementMachines(r Request) []string {
 	var machines []string
 	for _, host := range r.Hosts {
 		if host.Physical && !host.Provided {
@@ -47,7 +51,85 @@ func (Capability) OnlineRetirementHosts(block reconciliation.Block) ([]string, e
 		}
 	}
 	slices.Sort(machines)
-	return slices.Compact(machines), nil
+	return slices.Compact(machines)
+}
+
+func (Capability) CarryRemovalPreparation() bool { return true }
+
+func savedManagerRetirement(e lifecycle.Execution, r Request) (bool, error) {
+	for _, data := range e.RemovalPreparations {
+		proof, err := decodeManagersEvidence(data, r, e.Block.RequestDigest)
+		if err != nil || !proof.Stopped {
+			return false, evidenceFailure()
+		}
+	}
+	return len(e.RemovalPreparations) != 0, nil
+}
+
+func managerRetirementPowerError() error {
+	return cephUnconfigured.Fail("physical Ceph manager retirement needs the original Machines' registered power control and proof custody",
+		"continue the destroy on its controller with the original Machine and apply records")
+}
+
+func setManagerRetirementPower(ctx context.Context, e lifecycle.Execution, r Request, on bool) error {
+	for _, machine := range managerRetirementMachines(r) {
+		if err := e.PowerMachine(ctx, machine, on); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c Capability) retireManagers(ctx context.Context, e lifecycle.Execution) error {
+	r, err := c.prepare(ctx, e)
+	if err != nil {
+		return err
+	}
+	if c.runner == nil || e.PowerMachine == nil || e.PrepareRemoval == nil || lifecycle.ReadOnlyRun(e) {
+		return managerRetirementPowerError()
+	}
+	saved, err := savedManagerRetirement(e, r)
+	if err != nil {
+		return err
+	}
+	if !saved {
+		if err := setManagerRetirementPower(ctx, e, r, true); err != nil {
+			return err
+		}
+		stopped, err := c.managerRound(ctx, e, r, "destroy")
+		if err != nil {
+			return err
+		}
+		data, err := json.Marshal(stopped)
+		if err != nil {
+			return evidenceFailure()
+		}
+		if err := e.PrepareRemoval(ctx, data); err != nil {
+			return err
+		}
+	}
+	return setManagerRetirementPower(ctx, e, r, false)
+}
+
+type managerPower struct {
+	allOn  bool
+	allOff bool
+}
+
+func observeManagerPower(ctx context.Context, e lifecycle.Execution, r Request) (managerPower, error) {
+	if e.MachineStopped == nil {
+		return managerPower{}, managerRetirementPowerError()
+	}
+	state := managerPower{allOn: true, allOff: true}
+	for _, machine := range managerRetirementMachines(r) {
+		stopped, err := e.MachineStopped(ctx, machine)
+		if err != nil {
+			return managerPower{}, err
+		}
+		state.allOn = state.allOn && !stopped
+		state.allOff = state.allOff && stopped
+	}
+	return state, nil
 }
 
 func (c Capability) managers(ctx context.Context, e lifecycle.Execution, operation string) (ManagersEvidence, error) {
@@ -55,6 +137,10 @@ func (c Capability) managers(ctx context.Context, e lifecycle.Execution, operati
 	if err != nil {
 		return ManagersEvidence{}, err
 	}
+	return c.managerRound(ctx, e, r, operation)
+}
+
+func (c Capability) managerRound(ctx context.Context, e lifecycle.Execution, r Request, operation string) (ManagersEvidence, error) {
 	if !retiresManagers(r) {
 		return ManagersEvidence{}, cephRequestInvalid.Fail("only a cluster block on physical hosts whose retirement removes an FSID from a host stops its managers", "")
 	}

@@ -11,13 +11,29 @@ import copy
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_evidence, ceph_native, ceph_native_stretch as stretch
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_evidence, ceph_native, ceph_native_stretch as stretch, ceph_transport
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_tiebreaker_removal
 
 FSID = test_ceph_tiebreaker_removal.FSID
 DIGEST = test_ceph_tiebreaker_removal.DIGEST
 UNIT = "ceph-" + FSID + "@mgr.node-1.abcdef.service"
 WANTS = stretch.UNIT_ROOT + "/ceph-" + FSID + ".target.wants"
+
+
+def test_only_the_manager_stop_waits_for_the_guest_boot(monkeypatch):
+    request = physical_request()
+    transport = ceph_transport.Transport(request, {})
+    host = next(host for host in request["hosts"] if host.get("physical"))
+    calls = []
+    monkeypatch.setattr(transport, "wait_for_guest", lambda target: calls.append(("wait", target["name"])))
+
+    def call(target, _source, payload, _timeout, **_):
+        calls.append((payload["payload"]["phase"], target["name"]))
+
+    monkeypatch.setattr(transport, "_call", call)
+    transport.call(host, "managers_stop")
+    transport.call(host, "managers_observe")
+    assert calls == [("wait", host["name"]), ("managers_stop", host["name"]), ("managers_observe", host["name"])]
 
 
 def physical_request():

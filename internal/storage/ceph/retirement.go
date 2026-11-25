@@ -142,8 +142,8 @@ func (c Capability) retire(ctx context.Context, e lifecycle.Execution) (lifecycl
 		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
 	}
 	if retiresManagers(r) {
-		if _, err := c.managers(ctx, e, "destroy"); err != nil {
-			return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
+		if err := c.retireManagers(ctx, e); err != nil {
+			return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, err
 		}
 	}
 	if _, removes := removesTiebreaker(r); removes {
@@ -163,25 +163,41 @@ func (c Capability) observeRetirement(ctx context.Context, e lifecycle.Execution
 	if err != nil {
 		return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, err
 	}
-	attempted := false
+	needsManagers := retiresManagers(r)
+	managerProof := false
+	if needsManagers {
+		managerProof, err = savedManagerRetirement(e, r)
+		if err != nil {
+			return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, err
+		}
+	}
+	attempted := managerProof
 	if _, removes := removesTiebreaker(r); removes {
 		observed, err := c.tiebreaker(ctx, e, "observe")
 		if err != nil {
 			return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, err
 		}
 		if !observed.Removed {
-			return lifecycle.Observation{Effect: retirementEffect(observed.Attempted)}, nil
+			return lifecycle.Observation{Effect: retirementEffect(attempted || observed.Attempted)}, nil
 		}
-		attempted = observed.Attempted
+		attempted = attempted || observed.Attempted
 	}
-	if retiresManagers(r) {
+	if needsManagers {
+		power, err := observeManagerPower(ctx, e, r)
+		if err != nil {
+			return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, err
+		}
+		if managerProof && power.allOff {
+			return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: evidence}, nil
+		}
+		if managerProof || !power.allOn {
+			return lifecycle.Observation{Effect: reconciliation.EffectPartial}, nil
+		}
 		observed, err := c.managers(ctx, e, "observe")
 		if err != nil {
 			return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, err
 		}
-		if !observed.Stopped {
-			return lifecycle.Observation{Effect: retirementEffect(attempted)}, nil
-		}
+		return lifecycle.Observation{Effect: retirementEffect(attempted || observed.Stopped)}, nil
 	}
 	return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: evidence}, nil
 }

@@ -243,8 +243,44 @@ func TestARetainedRootClusterRetirementStopsEveryManagerBeforeAnyHostCleanup(t *
 		}, false},
 	} {
 		t.Run(name, func(t *testing.T) {
-			runner := &tiebreakerRunner{managers: test.answer}
-			result, err := New(api.CephCluster, runner).WithProofs(capability.proofs).Destroy(context.Background(), execution)
+			e := execution
+			hosts := installedMachines(cluster)
+			running := map[string]bool{}
+			var calls []string
+			e.PowerMachine = func(_ context.Context, name string, on bool) error {
+				if !slices.Contains(hosts, name) {
+					t.Fatalf("unexpected power target %q", name)
+				}
+				calls = append(calls, fmt.Sprintf("%s:%t", name, on))
+				running[name] = on
+				return nil
+			}
+			e.MachineStopped = func(_ context.Context, name string) (bool, error) { return !running[name], nil }
+			e.PrepareRemoval = func(_ context.Context, receipt json.RawMessage) error {
+				calls = append(calls, "receipt")
+				e.RemovalPreparations = append(e.RemovalPreparations, receipt)
+				return nil
+			}
+			runner := &tiebreakerRunner{managers: func(request lifecycle.RunRequest) (lifecycle.RunResult, error) {
+				if slices.ContainsFunc(hosts, func(name string) bool { return !running[name] }) {
+					t.Fatal("Ceph contacted the fleet before every installed Machine was powered on")
+				}
+				calls = append(calls, request.Operation)
+				return test.answer(request)
+			}}
+			core := New(api.CephCluster, runner).WithProofs(capability.proofs)
+			ctx := context.Background()
+			if name == "stopped" {
+				for _, powered := range []bool{false, true} {
+					running[hosts[0]] = powered
+					observed, err := core.ObserveRemoval(ctx, e)
+					if err != nil || observed.Effect != reconciliation.EffectPartial || len(calls) != 0 {
+						t.Fatalf("a power-on interruption was not safely retriable: %+v (%v), calls %v", observed, err, calls)
+					}
+				}
+				running[hosts[0]] = false
+			}
+			result, err := core.Destroy(ctx, e)
 			if len(runner.runs) != 1 || runner.runs[0].Operation != "destroy" || runner.runs[0].MaterialValues["retirement"] != managersRetirement || runner.runs[0].ReadOnly {
 				t.Fatalf("the managers did not stop before any host cleanup: %d runs", len(runner.runs))
 			}
@@ -254,12 +290,31 @@ func TestARetainedRootClusterRetirementStopsEveryManagerBeforeAnyHostCleanup(t *
 			if !test.retired && (result.Outcome == reconciliation.OutcomeChanged || len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != "ceph.boundary-unproved") {
 				t.Fatalf("a running manager retired the cluster: %+v %+v", result, diagnostics.Of(err))
 			}
-			observed, err := New(api.CephCluster, runner).WithProofs(capability.proofs).ObserveRemoval(context.Background(), execution)
+			var wantCalls []string
+			for _, name := range hosts {
+				wantCalls = append(wantCalls, name+":true")
+			}
+			wantCalls = append(wantCalls, "destroy")
+			if test.retired {
+				wantCalls = append(wantCalls, "receipt")
+				for _, name := range hosts {
+					wantCalls = append(wantCalls, name+":false")
+				}
+			}
+			if !slices.Equal(calls, wantCalls) {
+				t.Fatalf("retirement performed %v, want %v", calls, wantCalls)
+			}
+			observed, err := core.ObserveRemoval(ctx, e)
 			want := reconciliation.EffectCompleted
 			if !test.retired {
 				want = reconciliation.EffectNoEffect
 			}
-			if name == "stopped" || name == "running" {
+			if name == "stopped" {
+				if err != nil || observed.Effect != want || len(runner.runs) != 1 || !slices.Equal(calls, wantCalls) {
+					t.Fatalf("a recorded proof did not settle with read-only power: %+v %+v, calls %v", observed, diagnostics.Of(err), calls)
+				}
+				assertManagerShutdownReplay(t, e, hosts, running, &calls, core)
+			} else if name == "running" {
 				if err != nil || observed.Effect != want || runner.runs[1].Operation != "observe" || runner.runs[1].MaterialValues["retirement"] != managersRetirement {
 					t.Fatalf("observation %+v %+v", observed, diagnostics.Of(err))
 				}
@@ -267,6 +322,30 @@ func TestARetainedRootClusterRetirementStopsEveryManagerBeforeAnyHostCleanup(t *
 				t.Fatalf("an unanswered observation %+v proved an effect", observed)
 			}
 		})
+	}
+}
+
+func assertManagerShutdownReplay(t *testing.T, e lifecycle.Execution, hosts []string, running map[string]bool, calls *[]string, core Capability) {
+	t.Helper()
+	ctx := context.Background()
+	running[hosts[0]] = true
+	*calls = nil
+	observation, err := core.ObserveRemoval(ctx, e)
+	if err != nil || observation.Effect != reconciliation.EffectPartial || len(*calls) != 0 {
+		t.Fatalf("a pending shutdown did not stay read-only and partial: %+v (%v), %v", observation, err, *calls)
+	}
+	result, err := core.Destroy(ctx, e)
+	var want []string
+	for _, host := range hosts {
+		want = append(want, host+":false")
+	}
+	if err != nil || !result.Outcome.Settled() || !slices.Equal(*calls, want) {
+		t.Fatalf("replay did more than finish shutdown: %+v (%v), %v", result, err, *calls)
+	}
+	*calls = nil
+	e.RemovalPreparations = []json.RawMessage{json.RawMessage(`{}`)}
+	if result, err := core.Destroy(ctx, e); err == nil || result.Outcome.Settled() || len(*calls) != 0 {
+		t.Fatalf("an invalid receipt reached the guests or power control: %+v (%v), %v", result, err, *calls)
 	}
 }
 

@@ -218,6 +218,8 @@ class Transport:
         ceph_native.require((names is not None) == (phase == "profile") and (names is None or isinstance(names, list)), "transport")
         ceph_native.require(authorization is None or phase == "observe" and ceph_evidence.signon(self.request)
                             and ceph_signon_native.authorization(authorization) is not None, "transport")
+        if phase == "managers_stop":
+            self.wait_for_guest(host)
         budget = min(ceiling, timeout - 2) if timeout > 2 else timeout / 2
         payload = {"request": self.request, "host": host["name"], "phase": phase, "private": private or {}}
         if names is not None:

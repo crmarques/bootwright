@@ -2999,9 +2999,12 @@ opened past the removal of its cluster-key line and, refreshing a host, writes
 the FSID's layout back onto one just cleaned
 ([cleanup facts](../.agents/knowledge/ibm-ceph-cleanup.md#a-live-manager-writes-a-cleaned-host-again)).
 
-- **Effect.** One round reaches every physical host. A virtual host is shut
-  off before its cluster retires, and the provided tiebreaker runs a MON
-  alone, so neither is reached. On each host, every unit
+- **Effect.** The registered retirement starts each original installed
+  physical Machine through its proved management-controller identity. One
+  bounded round waits for SSH and reaches each with its frozen fleet key
+  and host key. A virtual host is shut off before its cluster retires, and
+  the provided tiebreaker runs a MON alone, so neither is reached. On each
+  installed physical host, every unit
   `ceph-<fsid>@mgr.<id>.service` that systemd lists in a running state, or
   that `ceph-<fsid>.target.wants` names, is disabled and stopped by its
   validated name with `systemctl disable --now`, as `rm-cluster` later does
@@ -3011,23 +3014,28 @@ the FSID's layout back onto one just cleaned
   physical host that no such unit runs or is enabled and that Podman runs no
   `ceph-<fsid>-mgr-` container. The controller publishes the closed manager
   proof for the frozen request. A destroy publishes success only when the
-  proof affirms the stop. An observation may publish either state. Only
-  after a successful stop does the cluster block reach the
-  tiebreaker and record its retirement. A manager still running or enabled
-  refuses `managers-running`, and a host that does not answer refuses
-  `transport`; both stop `ceph.boundary-unproved` with an unknown outcome and
-  no retirement record, and the next destroy repeats the round first.
-- **Recovery.** The stop is idempotent: a host with no manager of the FSID
-  changes nothing. The retirement's observation reads only the second round,
-  and a manager running or enabled there reads no effect, or partial once the
-  tiebreaker's removal recorded an attempt. The installed physical hosts
-  defer the resumed removal's [automatic stop](state-reconciliation.md#quiescence-before-removal)
-  until this retirement is proved done.
+  proof affirms the stop. An observation may publish either state. The
+  cluster block durably records the positive proof
+  before shutting the installed physical Machines down. Only after shutdown
+  does it reach the tiebreaker and record its retirement. A manager still
+  running or enabled refuses `managers-running`, and a host that does not
+  answer refuses `transport`. Both stop `ceph.boundary-unproved` with an
+  unknown outcome and no retirement record.
+- **Recovery.** A recorded manager proof leaves shutdown to complete without
+  booting or changing any manager again. Read-only resolution checks the
+  original Machines' native power. Without the manager proof, an original
+  Machine proved off lets the retirement retry startup, never count its
+  managers absent. If all answer on power, read-only resolution checks the
+  manager postcondition through pinned SSH and leaves proof custody and
+  shutdown to the next attempt. Unproved identity, power or SSH never
+  completes retirement. The resumed removal's [automatic stop](state-reconciliation.md#quiescence-before-removal)
+  waits for this retirement.
 - A cluster with no physical host, or with no retained root and no provided
   tiebreaker, makes no native call when it retires.
 
-Not yet met: a physical host whose operating system does not answer but whose
-BMC proves it powered off still refuses `transport` here; tracked as
+Not yet met: a physical host whose installed operating system cannot be
+reached for the first manager proof cannot retire on power proof alone;
+tracked as
 [B1811](milestones/m2.md#b1811).
 
 `TestARetainedRootClusterRetirementStopsEveryManagerBeforeAnyHostCleanup`,
