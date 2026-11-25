@@ -69,6 +69,44 @@ def random_parts() -> list[str]:
     return parts
 
 
+class BootstrapCacheTest(unittest.TestCase):
+    def test_changed_locks_prepare_a_separate_environment(self):
+        path = Path(__file__).with_name("ansible_check_bootstrap.py")
+        spec = importlib.util.spec_from_file_location("ansible_check_bootstrap", path)
+        bootstrap = importlib.util.module_from_spec(spec)
+        with mock.patch.dict(sys.modules, {"_acquire": mock.Mock()}):
+            spec.loader.exec_module(bootstrap)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            tools = root / "tools"
+            cache = root / "cache"
+            tools.mkdir()
+            for name in bootstrap.LOCK_FILES:
+                (tools / name).write_text(name)
+            legacy = cache / "ansible-check/venv/bin/python"
+            legacy.parent.mkdir(parents=True)
+            legacy.write_text("previous interpreter")
+
+            def materialize(_tools, _area, interpreter):
+                interpreter.parent.mkdir(parents=True)
+                interpreter.write_text("new interpreter")
+
+            with mock.patch.object(
+                bootstrap, "prepare", side_effect=materialize
+            ) as prepare:
+                first = bootstrap.resolve(tools, cache)
+                self.assertEqual(bootstrap.resolve(tools, cache), first)
+                self.assertEqual(prepare.call_count, 1)
+                (tools / "ansible-requirements.txt").write_text("changed lock")
+                second = bootstrap.resolve(tools, cache)
+                self.assertEqual(prepare.call_count, 2)
+
+            self.assertNotEqual(first, second)
+            self.assertEqual(first.read_text(), "new interpreter")
+            self.assertEqual(second.read_text(), "new interpreter")
+            self.assertEqual(legacy.read_text(), "previous interpreter")
+
+
 class CheckAreaTest(unittest.TestCase):
     def test_the_gate_runs_in_an_area_named_with_the_prefix(self):
         # The gate names the area it made and gave its processes as HOME; a

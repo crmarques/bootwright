@@ -55,8 +55,13 @@ DOCS = (".agents/", ".claude/", "docs/", "specs/")
 # The Ansible harness's own tests, which no Go test runs; Go tests run the
 # other helper tests and quick-test selects them as readers of scripts/. They
 # import the harness's locked tools.
-HARNESS = ("scripts/tools/ansible_check.py", "scripts/tools/ansible_check_test.py", "scripts/tools/_acquire.py")
-HARNESS_TESTS = '"$(./scripts/cache-dir)/ansible-check/venv/bin/python" -I -B scripts/tools/ansible_check_test.py'
+HARNESS = (
+    "scripts/tools/ansible_check.py",
+    "scripts/tools/ansible_check_test.py",
+    "scripts/tools/_acquire.py",
+    "scripts/tools/ansible_check_bootstrap.py",
+)
+HARNESS_TESTS = '"$(./scripts/ansible-check --print-python)" -I -B scripts/tools/ansible_check_test.py'
 
 # The inputs every Ansible check reads beside the collection: its
 # configuration, the harness, and the locks of the tools it runs. A change to
@@ -80,13 +85,8 @@ ANSIBLE_INPUTS = (
 LISTS = re.compile(r"\.r?glob\(|os\.walk\(|\.iterdir\(|os\.listdir\(|scandir\(")
 PLUGINS = re.compile("[\"']plugins[\"'/]")
 
-# Makes the locked environment every Ansible lane shares before the lanes
-# start, as two first runs at once would each try to bootstrap it.
-PREPARE = (
-    'test -n "${BOOTWRIGHT_ANSIBLE_CHECK_PYTHON:-}" || '
-    'test -x "$(./scripts/cache-dir)/ansible-check/venv/bin/python" || '
-    "python3 scripts/tools/ansible_check_bootstrap.py"
-)
+# Prepare the locked environment before the lanes start.
+PREPARE = "./scripts/ansible-check --print-python"
 
 
 def module_name(relative: str) -> str:

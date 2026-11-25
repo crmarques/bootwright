@@ -1,8 +1,8 @@
-The Ansible gate runs on CPython 3.13.16 and builds that interpreter itself, so
-no development host is required to provide it. `./scripts/ansible-check`
-bootstraps on first use: it acquires the interpreter pinned by
-`ansible-check-interpreter.json`, verifies its byte count and SHA-256, extracts
-it under `.cache/ansible-check`, creates an isolated environment, installs
+The Ansible gate prepares its exact CPython patch, so no development host
+needs to provide that patch. `./scripts/ansible-check` bootstraps on first use:
+it acquires the interpreter pinned by `ansible-check-interpreter.json`, verifies
+its byte count and SHA-256, extracts it into a cache directory keyed by the
+interpreter and dependency locks, creates an isolated environment, installs
 `ansible-requirements.txt` with `--require-hashes --only-binary=:all:`, and
 acquires the pinned sanity artifacts. That lock qualifies Linux amd64 wheels
 separately from the product runtime.
@@ -10,7 +10,9 @@ separately from the product runtime.
 First use needs network access and takes a few minutes; later runs reuse the
 prepared environment. The environment lives in the directory `scripts/cache-dir`
 prints, which every worktree of one clone shares, so a new worktree does not
-bootstrap again. Run the bootstrap on its own with:
+bootstrap again. A changed lock selects a new environment without rewriting
+the old one. Use `./scripts/ansible-check --print-python` to resolve the prepared
+interpreter for another tool. Run the bootstrap on its own with:
 
 ```sh
 python3 scripts/tools/ansible_check_bootstrap.py

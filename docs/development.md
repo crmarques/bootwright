@@ -69,7 +69,7 @@ check tracked examples with its pinned yamllint (ignored local inputs are
 excluded):
 
 ```sh
-yaml_python="$(./scripts/cache-dir)/ansible-check/venv/bin/python"
+yaml_python="$(./scripts/ansible-check --print-python)"
 git ls-files -z 'examples/**/*.yaml' | xargs -0 "$yaml_python" -I -m yamllint --strict -c examples/.yamllint
 ```
 
