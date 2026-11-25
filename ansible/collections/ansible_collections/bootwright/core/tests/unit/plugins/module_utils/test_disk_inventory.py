@@ -14,13 +14,20 @@ def test_only_a_read_only_descriptor_and_size_ioctl_reach_the_disk(monkeypatch):
     seen = []
     number = os.makedev(8, 0)
     info = SimpleNamespace(st_mode=stat.S_IFBLK | 0o600, st_dev=1, st_ino=2, st_rdev=number)
-    monkeypatch.setattr(inventory.os, "open", lambda path, flags: seen.append((path, flags)) or 123)
-    monkeypatch.setattr(inventory.os, "fstat", lambda fd: info)
-    monkeypatch.setattr(inventory.os, "close", seen.append)
+    flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW
+    descriptors = SimpleNamespace(
+        O_RDONLY=os.O_RDONLY,
+        O_CLOEXEC=os.O_CLOEXEC,
+        O_NOFOLLOW=os.O_NOFOLLOW,
+        open=lambda path, opened_flags: seen.append((path, opened_flags)) or 123,
+        fstat=lambda fd: info,
+        close=seen.append,
+    )
+    monkeypatch.setattr(inventory, "os", descriptors)
     calls = []
     monkeypatch.setattr(inventory, "size_ioctl", lambda fd: (calls.append(fd), 8192)[1])
     assert inventory.descriptor_size(Path("/dev/sda")) == (8192, number)
-    assert seen == [(Path("/dev/sda"), os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW), 123]
+    assert seen == [(Path("/dev/sda"), flags), 123]
     assert calls == [123]
 
 
