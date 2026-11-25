@@ -22,7 +22,7 @@ import json
 import re
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    ceph_native, ceph_native_nfs, ceph_native_nvmeof, ceph_native_observability, ceph_native_resources,
+    ceph_monitoring_template, ceph_native, ceph_native_nfs, ceph_native_nvmeof, ceph_native_observability, ceph_native_resources,
 )
 from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import NativeFailure, Refusal, canonical, named, require
 
@@ -129,7 +129,8 @@ UNIT_TYPES = {
                            {"rbd-mirror": None}, {}, frozenset(MIRROR_TYPES), None),
 }
 PHASES = frozenset(("unit", "ingress_firewall", "vip_holder", "sso_config", "sso", "manager_ports", "manager_ports_unrecorded",
-                    "nvmeof_unit_observe", "monitoring_credentials", "monitoring_credentials_held"))
+                    "nvmeof_unit_observe", "monitoring_credentials", "monitoring_credentials_held", "grafana_route", "grafana_route_proof",
+                    "grafana_reconfig"))
 READ_ONLY_PHASES = frozenset(("nvmeof_unit_observe", "monitoring_credentials_held"))
 # The daemon types whose deployment proves cephadm v20.2.1 already stores a service's login: it stores both logins before it configures a
 # Prometheus daemon (PrometheusService.generate_config) and Prometheus's before it configures a Grafana daemon
@@ -161,7 +162,7 @@ DOCUMENT_MEMBERS = frozenset(("networks", "placement", "service_id", "service_ty
 PROXY_MEMBERS = DOCUMENT_MEMBERS | {"custom_configs"}
 INPUTS_VERSION = "ceph-service-inputs-v1"
 MAX_DAEMONS = 256
-ENDPOINT_ENTRIES = frozenset(("vip", "noholder", "holders", "module", "sso", "standby"))
+ENDPOINT_ENTRIES = frozenset(("vip", "noholder", "holders", "module", "sso", "standby", "route"))
 PENDING = re.compile(r"(?:(?:" + "|".join(sorted({name for unit in UNIT_TYPES.values() for name in unit.daemon_types} | ENDPOINT_ENTRIES))
                      + r")@(?:(?:nfs|ingress)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}|"
                      + "|".join(ceph_native_observability.MONITORING_TYPES + ceph_native_observability.GATEWAY_TYPES + MIRROR_TYPES + CRASH_TYPES)
@@ -187,6 +188,7 @@ PODMAN = "/usr/bin/podman"
 SSO_TIMEOUT = 30
 MAX_PROXY_CONTAINERS = 16
 CONTAINER_ID = re.compile(r"[0-9a-f]{12,64}\Z")
+MAX_GATEWAY_CONTAINERS = 16
 INDEX = re.compile(r"(?:0|[1-9][0-9]{0,3})\Z")
 
 
@@ -755,6 +757,63 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
         self.manager_declare(enable, module=("dashboard", "ac-user-show"))
         require(ceph_native_observability.sso_enabled(self), "not-ready")
         return {"changed": True, "pending": False}
+
+    def grafana_gateway(self):
+        """The unit's mgmt-gateway document: only a management gateway unit fronting a declared Grafana has Grafana routes."""
+        unit = self.request["service"]
+        require(ceph_native_observability.grafana_fronted(unit))
+        return ceph_native_observability.gateway_documents(unit)[1]
+
+    def grafana_route(self):
+        """Read-only, on the bootstrap host once the unit reads ready: whether the seam selected a Grafana routing override, each of
+        which is then complete, so every running gateway daemon must serve the Grafana routes."""
+        require(self.markers.owned(), "ownership")
+        require(self.ceph("fsid") == {"fsid": self.request["fsid"]}, "ownership")
+        self.grafana_gateway()
+        plans = [(descriptor, plan) for descriptor, plan in ceph_monitoring_template.gateway_plans(self, self.request["service"]) if plan is not None]
+        require(all(ceph_monitoring_template.ready(self, plan, descriptor) for descriptor, plan in plans), "not-ready")
+        return {"changed": False, "routes": sorted(ceph_monitoring_template.ROUTES[descriptor] for descriptor, unused in plans)}
+
+    def grafana_route_proof(self):
+        """Read-only, on one gateway host: the running mgmt-gateway containers of this cluster here, and for each Grafana route how many
+        serve it in the files they mount and started after those files were written. No path or byte is returned."""
+        gateway = self.grafana_gateway()
+        require(self.host["name"] in gateway["placement"]["hosts"])
+        fsid = self.request["fsid"]
+        prefix = "ceph-" + fsid + "-mgmt-gateway"
+        rows = self.command([PODMAN, "ps", "--all", "--format", "json", "--filter", "name=^" + prefix + "[.-]"], timeout=SSO_TIMEOUT)
+        require(isinstance(rows, list) and len(rows) <= MAX_GATEWAY_CONTAINERS and all(isinstance(row, dict) for row in rows), "native-output")
+        daemons, served = 0, {"external": 0, "nginx": 0}
+        for row in rows:
+            names = row.get("Names")
+            require(isinstance(names, list) and len(names) == 1 and isinstance(names[0], str)
+                    and re.fullmatch(re.escape(prefix) + r"[.-][A-Za-z0-9][A-Za-z0-9_.-]{0,127}", names[0]) is not None, "native-output")
+            if row.get("State") != "running":
+                continue
+            identifier = row.get("Id")
+            require(isinstance(identifier, str) and CONTAINER_ID.fullmatch(identifier) is not None, "native-output")
+            inspected = self.command([PODMAN, "inspect", "--type", "container", identifier], timeout=SSO_TIMEOUT)
+            require(isinstance(inspected, list) and len(inspected) == 1 and isinstance(inspected[0], dict), "native-output")
+            daemons += 1
+            for name, routed in ceph_native_observability.gateway_routed(fsid, inspected[0]).items():
+                served[name] += routed
+        return {"changed": False, "daemons": daemons, "served": served}
+
+    def grafana_reconfig(self):
+        """The Grafana routes' one effect, on the bootstrap host once a gateway host proved a running daemon without them: with the unit's
+        documents and every selected override complete, ask cephadm to reconfigure the mgmt-gateway service, which re-renders each
+        daemon's files from the stored overrides and restarts it. cephadm schedules the action durably and coalesces a repeat, so the
+        request keeps no record; the controller asks it at most once per apply, and only on that proof."""
+        require(self.markers.owned(), "ownership")
+        require(self.ceph("fsid") == {"fsid": self.request["fsid"]}, "ownership")
+        self.grafana_gateway()
+        require(all(self.markers.read("service-" + name + "-complete.json") is not None for name in self.unit_names()), "not-ready")
+        plans = [(descriptor, plan) for descriptor, plan in ceph_monitoring_template.gateway_plans(self, self.request["service"]) if plan is not None]
+        require(bool(plans) and all(ceph_monitoring_template.ready(self, plan, descriptor) for descriptor, plan in plans), "not-ready")
+        proof = self.transport_hold()
+        with proof, self.cache_hold():
+            self.ceph("orch", "reconfig", "mgmt-gateway", json_result=False)
+        return {"changed": True}
 
     def manager_ports(self):
         """An apply's first evaluated call of the MGR port remedy, which may ask a recorded target again."""

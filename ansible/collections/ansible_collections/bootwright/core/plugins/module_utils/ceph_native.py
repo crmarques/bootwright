@@ -1349,8 +1349,9 @@ class Worker:
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_monitoring_template, native_specializations
         self.selection = native_specializations.Selection(
             {"host-cephadm": self.verified_tool, "image-cephadm": self.image_payload,
-             "image-monitoring": lambda: ceph_monitoring_template.image_sources(self)},
-            {"image-monitoring": ceph_monitoring_template.blanket_https})
+             "image-monitoring": lambda: ceph_monitoring_template.image_sources(self),
+             "image-gateway": lambda: ceph_monitoring_template.image_sources(self, ceph_monitoring_template.GATEWAY_SOURCES)},
+            {"image-monitoring": ceph_monitoring_template.blanket_https, "image-gateway": ceph_monitoring_template.grafana_unrouted})
         self._tool_bytes = None
         self.packages = None
         if self.host.get("physical"):

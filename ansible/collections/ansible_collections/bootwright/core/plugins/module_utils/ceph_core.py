@@ -40,6 +40,11 @@ HOLDER_CALL = 60
 SSO_CALL = 120
 SSO_WINDOW = 600
 SSO_PAUSE = 10
+# The Grafana route proof of a management gateway fronting Grafana runs inside the unit's readiness wait: every gateway host in one
+# concurrent round of calls of at most ROUTE_CALL, each round after an observation reads the unit ready.
+ROUTE_CALL = 120
+ROUTE_ENTRY = "route@mgmt-gateway"
+ROUTES = frozenset(("external", "nginx"))
 # One diff observation's host reading (state-reconciliation.md, Reading the real side live): the `hosts` reading of a resource block reads
 # each host's state once, and every resource block of the same scope replays it in place of its own host reads. Its Go caller
 # (decodeHostReading in internal/storage/ceph) decodes the same closed members; it lives within that one diff and is never stored.
@@ -935,10 +940,65 @@ class ManagerPorts:
         self.changed = self.changed or produced["changed"]
 
 
-def wait_unit(request, request_digest, bootstrap, transport, now, pause, *, private=None, remedy=None):
+class GrafanaRoutes:
+    """One apply's Grafana route proof, inside the readiness wait once the unit reads ready, so it never shortens or extends that wait:
+    the bootstrap host names the selected routes once, then each call proves them on every gateway host. A running daemon without a
+    selected route, as one cephadm rendered before the manager held the stored overrides, makes the bootstrap host ask cephadm once in
+    this apply to reconfigure the gateway."""
+
+    def __init__(self, request, bootstrap, transport):
+        self.request, self.bootstrap, self.transport = request, bootstrap, transport
+        self.routes, self.asked = None, False
+
+    def __call__(self, deadline, now):
+        """The blocking entries: none once every placed gateway daemon serves each selected route; None when the window closed first."""
+        remaining = deadline - now()
+        if remaining <= 0:
+            return None
+        if self.routes is None:
+            produced = self.transport.call(self.bootstrap, "grafana_route", timeout=min(READ_BUDGET, remaining))
+            ceph_native.require(isinstance(produced, dict) and set(produced) == {"changed", "routes"} and produced["changed"] is False
+                                and isinstance(produced["routes"], list) and set(produced["routes"]) <= ROUTES
+                                and produced["routes"] == sorted(set(produced["routes"])), "evidence")
+            self.routes = produced["routes"]
+        if not self.routes:
+            return []
+        daemons, served = self.round(deadline, now)
+        if daemons is None:
+            return None
+        gateway = ceph_native_observability.gateway_documents(self.request["service"])[1]
+        if daemons == ceph_native_observability.placed_count(gateway) and all(served[name] == daemons for name in self.routes):
+            return []
+        remaining = deadline - now()
+        if any(served[name] < daemons for name in self.routes) and not self.asked and remaining > 0:
+            produced = self.transport.call(self.bootstrap, "grafana_reconfig", timeout=min(READ_BUDGET, remaining))
+            ceph_native.require(produced == {"changed": True}, "evidence")
+            self.asked = True
+        return [ROUTE_ENTRY]
+
+    def round(self, deadline, now):
+        remaining = deadline - now()
+        if remaining <= 0:
+            return None, None
+        hosts = {host["name"]: host for host in self.request["hosts"]}
+        gateway = ceph_native_observability.gateway_documents(self.request["service"])[1]
+        daemons, served = 0, dict.fromkeys(ROUTES, 0)
+        for result in host_round(self.transport, [hosts[name] for name in gateway["placement"]["hosts"]], "grafana_route_proof",
+                                 timeout=min(ROUTE_CALL, remaining)):
+            ceph_native.require(isinstance(result, dict) and set(result) == {"changed", "daemons", "served"} and result["changed"] is False
+                                and type(result["daemons"]) is int and result["daemons"] >= 0 and isinstance(result["served"], dict)
+                                and set(result["served"]) == ROUTES and all(type(count) is int and 0 <= count <= result["daemons"]
+                                                                            for count in result["served"].values()), "evidence")
+            daemons += result["daemons"]
+            for name in ROUTES:
+                served[name] += result["served"][name]
+        return daemons, served
+
+
+def wait_unit(request, request_digest, bootstrap, transport, now, pause, *, private=None, remedy=None, routes=None):
     """Poll the unit's own observation until ready and, with an ingress, until each virtual IP has exactly one holder; a timeout names the
     daemons, endpoint, holder or health checks still blocking. While an observation names lagging MGR ports, an apply's remedy runs
-    within the same window before the next poll."""
+    within the same window before the next poll, and a management gateway fronting Grafana proves its routes once the unit reads ready."""
     call_timeout = unit_observation_timeout(request)
     deadline = now() + READINESS_TIMEOUT + (call_timeout if ceph_transport.nvmeof_unit(request) else 0)
     blocking, unheld = [], []
@@ -955,6 +1015,8 @@ def wait_unit(request, request_digest, bootstrap, transport, now, pause, *, priv
             observed = None
         if observed is not None and observed["ready"]:
             held = vip_holders(request, observed, transport, deadline, now)
+            if held == [] and routes is not None:
+                held = routes(deadline, now)
             if held == []:
                 return observed
             if held is None:
@@ -1095,10 +1157,11 @@ def execute_nvmeof(request, operation, request_digest, transport, bootstrap, *, 
 def execute_unit(request, operation, request_digest, transport, bootstrap, *, now, pause, phases=("unit",), outputs=None):
     """A service unit runs its apply phases only on the bootstrap host: its preparation proof, with an ingress the firewall check on each
     ingress host, its apply phases in order, with an oauth2-proxy the rendered-configuration proof on each proxy host and then the one
-    single sign-on write, then its own readiness wait, in which a monitoring unit with prometheus asks cephadm to reconfigure each MGR whose
-    deployment ports lag the published module endpoints. Its apply phase holds every bound leaf; each observation and
-    removal holds the observed ones, and a management gateway's served leaf must be the bound certificate's. A ready management gateway
-    that declares its output then writes its monitoring logins there."""
+    single sign-on write, then its own readiness wait, which for a gateway fronting Grafana includes the route proof on each gateway host,
+    and in which a monitoring unit with prometheus asks cephadm to reconfigure each MGR whose deployment ports lag the published module
+    endpoints. Its apply phase holds every bound leaf; each observation and removal holds the observed ones, and a management gateway's
+    served leaf must be the bound certificate's. A ready management gateway that declares its output then writes its monitoring logins
+    there."""
     changed, pending = False, []
     bound_unit = request["action"] == "service" and bool(request["service"].get("bindings"))
     seen = transport.unit_material("observe") if bound_unit else {}
@@ -1116,8 +1179,10 @@ def execute_unit(request, operation, request_digest, transport, bootstrap, *, no
             changed = sso_enable(bootstrap, transport, deadline, now, pause) or changed
         remedy = ManagerPorts(bootstrap, transport) if (
             request["action"] == "service" and ceph_native_observability.prometheus_declared(request["service"])) else None
-        observation = wait_unit(request, request_digest, bootstrap, transport, now, pause, private=seen, remedy=remedy)
-        changed = remedy is not None and remedy.changed or changed
+        routes = GrafanaRoutes(request, bootstrap, transport) if (
+            request["action"] == "service" and ceph_native_observability.grafana_fronted(request["service"])) else None
+        observation = wait_unit(request, request_digest, bootstrap, transport, now, pause, private=seen, remedy=remedy, routes=routes)
+        changed = remedy is not None and remedy.changed or routes is not None and routes.asked or changed
         ceph_native.require(observation["ready"], "not-ready")
     elif operation == "destroy" and ceph_transport.nvmeof_unit(request):
         observation = observe_unit(request, request_digest, bootstrap, transport)

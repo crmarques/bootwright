@@ -2,6 +2,7 @@
 
 The fixed sources are read inside the held image, through HostRuntime's confined executor. A conservative fingerprint
 recognizes the complete qualified native rendering/discovery/exporter contract; unfamiliar source bytes stay general.
+The management gateway's Grafana routing templates use the same ownership protocol under an exact-anchor witness instead.
 No provider source is shipped, and no release label or component-version pairing selects the correction.
 """
 
@@ -42,6 +43,34 @@ QUALIFIED = {
     'smb': 'aba61b29639d66c731d24d1e349eee7972ad810f3d67799d4b723266fc01a4ab',
 }
 ANCHOR = "    {% if service == 'ceph' %}\n"
+# The management gateway's two Grafana routing templates, owned by its unit. A structural witness on exact anchors, never a digest, selects
+# each template's own correction, so every build still carrying a defect is corrected and any other bytes keep the native template.
+
+
+def owned(key):
+    """An owned override's records, named after its key in the declared attempt and completion record families, as a unit's inputs
+    record is named after its unit."""
+    name = key.replace("/", ".")
+    return Template(key, name + "-attempt.json", name + "-complete.json")
+
+
+NGINX = owned("mgr/cephadm/services/mgmt-gateway/nginx.conf")
+EXTERNAL = owned("mgr/cephadm/services/mgmt-gateway/external_server.conf")
+# Each override's Grafana route, by its source name.
+ROUTES = {NGINX: "nginx", EXTERNAL: "external"}
+GATEWAY_SOURCES = {
+    "nginx": "/usr/share/ceph/mgr/cephadm/templates/services/mgmt-gateway/nginx.conf.j2",
+    "external": "/usr/share/ceph/mgr/cephadm/templates/services/mgmt-gateway/external_server.conf.j2",
+}
+UPSTREAM = "    upstream grafana_servers {\n"
+AFFINITY = "     ip_hash;\n"
+LOCATION = "    location /grafana {\n"
+PASS = "        proxy_pass {{ grafana_scheme }}://grafana_servers;\n"
+HOST = "        {% if not enable_oauth2_proxy %}\n        proxy_set_header Host $host;\n        {% endif %}\n"
+PROXIED = "        {% if enable_oauth2_proxy %}\n"
+BRANCH_END = "        {% endif %}\n"
+BLOCK_END = "\n    }\n"
+BALANCING = ("ip_hash", "hash ", "sticky", "least_conn", "random")
 SOURCE_SCRIPT = """import json,os,stat,sys,sysconfig
 paths=json.loads(sys.argv[1]); result={}
 for name,path in paths.items():
@@ -128,12 +157,97 @@ def plans(worker, unit):
     return ((PROMETHEUS, prometheus), (HAPROXY, haproxy))
 
 
-def image_sources(worker):
+def block(text, anchor):
+    """The body after the one exact anchor up to its block's first closing line; None when the anchor is absent, repeated or unclosed."""
+    if text.count(anchor) != 1 or BLOCK_END not in text.partition(anchor)[2]:
+        return None
+    return text.partition(anchor)[2].partition(BLOCK_END)[0] + "\n"
+
+
+def gateway_shape(value):
+    if not isinstance(value, dict) or set(value) != set(GATEWAY_SOURCES):
+        raise ValueError("source shape")
+    if not all(isinstance(text, str) and 0 < len(text.encode()) <= MAX_SOURCE for text in value.values()):
+        raise ValueError("source bound")
+
+
+def upstream_unpinned(template):
+    """True when Grafana's one upstream names no balancing directive, False when it names one, None when its anchor is absent or repeated."""
+    upstream = block(template, UPSTREAM)
+    if upstream is None:
+        return None
+    return not any(line.strip().lower().startswith(BALANCING) for line in upstream.splitlines())
+
+
+def location_unhosted(template):
+    """True when Grafana's one location opens with its proxy_pass and sets Host only inside its one oauth2-proxy branch, False when it
+    sets Host outside it, None for any other shape."""
+    location = block(template, LOCATION)
+    if location is None or not location.startswith(PASS) or location.count(PASS) != 1 or location.count(PROXIED) != 1:
+        return None
+    before, unused, rest = location.partition(PROXIED)
+    branch, closed, after = rest.partition(BRANCH_END)
+    if not closed or "{%" in branch or "{%" in before + after:
+        return None
+    return "proxy_set_header host" not in (before + after).lower()
+
+
+def gateway_witness(value):
+    """Each gateway template's own defect witness, by source name: True, False or None (unknown)."""
+    gateway_shape(value)
+    return {"nginx": upstream_unpinned(value["nginx"]), "external": location_unhosted(value["external"])}
+
+
+def grafana_unrouted(value):
+    """True when either template witnesses its own defect; each is then corrected alone. False when neither does and both anchors were
+    read; None otherwise, which keeps the native templates."""
+    witness = gateway_witness(value)
+    if True in witness.values():
+        return True
+    return False if None not in witness.values() else None
+
+
+def routed_upstream(template):
+    """Pin each client to one Grafana: one affinity line opens Grafana's upstream; every other byte stays native."""
+    upstream = block(template, UPSTREAM)
+    if upstream is None or "ip_hash" in upstream:
+        raise ValueError("ambiguous native gateway template")
+    data = template.replace(UPSTREAM, UPSTREAM + AFFINITY).encode()
+    if len(data) > MAX_TEMPLATE:
+        raise ValueError("template bound")
+    return data
+
+
+def routed_location(template):
+    """Forward the client's Host to Grafana without an oauth2-proxy, whose native branch already sets it, so one Host header is ever sent."""
+    if template.count(LOCATION + PASS) != 1 or template.count(HOST) != 0:
+        raise ValueError("ambiguous native gateway template")
+    data = template.replace(LOCATION + PASS, LOCATION + PASS + HOST).encode()
+    if len(data) > MAX_TEMPLATE:
+        raise ValueError("template bound")
+    return data
+
+
+def gateway_plans(worker, unit):
+    """The gateway's two Grafana overrides: each wanted only when the gateway fronts a declared Grafana, the seam selects the correction
+    and that template witnesses its own defect."""
+    wanted = {"nginx": None, "external": None}
+    if "grafana" in unit.get("monitoring", []) and worker.selection.variant("ceph.gateway.grafana-route") == "host-and-affinity":
+        sources, unused = worker.selection.source("image-gateway")
+        digests, witness = source_digests(sources), gateway_witness(sources)
+        for name, correct in (("nginx", routed_upstream), ("external", routed_location)):
+            if witness[name] is True:
+                wanted[name] = correct(sources[name]), digests
+    return ((NGINX, wanted["nginx"]), (EXTERNAL, wanted["external"]))
+
+
+def image_sources(worker, sources=None):
     from ansible_collections.bootwright.core.plugins.module_utils import ceph_host_runtime as runtime
     profile = worker.runtime_profile()
     cluster = {key: value for key, value in worker.request.items() if key not in ("service", "gateway")}
     runner = runtime.HostRuntime(dict(cluster, action="cluster"), worker.host["name"], command=worker.run)
-    return runner.contained(profile["imageID"], (profile["uid"], profile["gid"]), SOURCE_SCRIPT, (canonical(SOURCES).decode(),), limit=8 << 20)
+    paths = canonical(SOURCES if sources is None else sources).decode()
+    return runner.contained(profile["imageID"], (profile["uid"], profile["gid"]), SOURCE_SCRIPT, (paths,), limit=8 << 20)
 
 
 def desired(worker, unit):

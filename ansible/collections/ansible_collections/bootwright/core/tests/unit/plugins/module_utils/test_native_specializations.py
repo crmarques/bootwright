@@ -20,12 +20,16 @@ PLUGINS = pathlib.Path(ns.__file__).resolve().parent
 ANCHOR = ("bootstrap", "check-host", "deploy", "--image", "--fsid")
 FEATURES = ("--automatically-accept-license", "--disable-ibm-call-home", "setup-ssh-user")
 IBM_OVERRIDE = "IBM_BUILD = True\n"
+# Facts read from raw image source text, which the zipapp-shaped selections below never hold.
+RAW_SOURCE_FACTS = ("image-monitoring.", "image-gateway.")
 OVERRIDE_FORMS = {"assign True": IBM_OVERRIDE}
 BUILDS = {"20.1.0-221.el9cp": False, "20.2.1-405.el9cp": True, "20.2.2-349.el9cp": True, "20.2.2-349.el10cp": True}
-GENERAL = {"ceph.monitoring.scrape-template": "native", "ceph.bootstrap.license-flag": "pass", "ceph.mgr.license-contract": "ibm",
+GENERAL = {"ceph.monitoring.scrape-template": "native", "ceph.gateway.grafana-route": "native", "ceph.bootstrap.license-flag": "pass",
+           "ceph.mgr.license-contract": "ibm",
            "ceph.call-home-model": "opt-out",
            "ceph.mgr.set-user-pre-steps": "skip", "ceph.bootstrap.license-call-refusal": "fail"}
-SPECIALIZED = {"ceph.monitoring.scrape-template": "native", "ceph.bootstrap.license-flag": "omit", "ceph.mgr.license-contract": "absent",
+SPECIALIZED = {"ceph.monitoring.scrape-template": "native", "ceph.gateway.grafana-route": "native", "ceph.bootstrap.license-flag": "omit",
+               "ceph.mgr.license-contract": "absent",
                "ceph.call-home-model": "opt-in",
                "ceph.mgr.set-user-pre-steps": "absent", "ceph.bootstrap.license-call-refusal": "fail"}
 LICENSE_CALL_ID = "ceph-bootstrap-license-call-continues"
@@ -80,7 +84,7 @@ def selection(host, image=None):
 
 
 def facts(value):
-    return {name: value.fact(name) for name in ns.FACTS if not name.startswith("image-monitoring.")}
+    return {name: value.fact(name) for name in ns.FACTS if not name.startswith(RAW_SOURCE_FACTS)}
 
 
 def variants(value):
@@ -94,14 +98,15 @@ def committed(build):
 
 def test_twenty_one_shaped_artifacts_take_every_specialized_variant():
     chosen = selection(old_shaped())
-    assert facts(chosen) == dict.fromkeys([name for name in ns.FACTS if not name.startswith("image-monitoring.")], False)
+    assert facts(chosen) == dict.fromkeys([name for name in ns.FACTS if not name.startswith(RAW_SOURCE_FACTS)], False)
     assert variants(chosen) == SPECIALIZED
-    assert chosen.applied == {record.id for record in ns.SPECIALIZATIONS} - {LICENSE_CALL_ID, "ceph-monitoring-plaintext-exporters"}
+    raw = {"ceph-monitoring-plaintext-exporters", "ceph-gateway-grafana-sessions"}
+    assert chosen.applied == {record.id for record in ns.SPECIALIZATIONS} - {LICENSE_CALL_ID} - raw
 
 
 def test_twenty_two_shaped_artifacts_keep_the_general_flow_but_continue_the_license_call_refusal():
     chosen = selection(new_shaped())
-    assert facts(chosen) == dict.fromkeys([name for name in ns.FACTS if not name.startswith("image-monitoring.")], True)
+    assert facts(chosen) == dict.fromkeys([name for name in ns.FACTS if not name.startswith(RAW_SOURCE_FACTS)], True)
     assert variants(chosen) == CURRENT_VARIANTS
     assert chosen.applied == {LICENSE_CALL_ID}
 
@@ -136,7 +141,7 @@ def test_unreadable_or_unanchored_artifacts_are_unknown_and_general(shape):
     data = UNREADABLE[shape]()
     chosen = selection(data)
     assert chosen.declared("host-cephadm") is None
-    assert facts(chosen) == dict.fromkeys([name for name in ns.FACTS if not name.startswith("image-monitoring.")])
+    assert facts(chosen) == dict.fromkeys([name for name in ns.FACTS if not name.startswith(RAW_SOURCE_FACTS)])
     assert variants(chosen) == GENERAL
     assert chosen.applied == set()
 
@@ -210,7 +215,7 @@ def test_synthesized_artifacts_keep_identical_bytes_across_zip_clock_values(buil
 @pytest.mark.parametrize("build", sorted(BUILDS))
 def test_each_signed_build_list_gives_its_recorded_facts(build):
     chosen = selection(synthesized(build))
-    assert facts(chosen) == dict.fromkeys([name for name in ns.FACTS if not name.startswith("image-monitoring.")], BUILDS[build])
+    assert facts(chosen) == dict.fromkeys([name for name in ns.FACTS if not name.startswith(RAW_SOURCE_FACTS)], BUILDS[build])
     assert variants(chosen) == (CURRENT_VARIANTS if BUILDS[build] else SPECIALIZED)
 
 
@@ -347,7 +352,7 @@ def test_refusal_seams_are_pinned():
 
 def test_facts_never_key_on_a_release_tag_or_label():
     for name, (source, unused) in ns.FACTS.items():
-        assert source in ("host-cephadm", "image-cephadm", "image-monitoring") and name.startswith(source + ".")
+        assert source in ("host-cephadm", "image-cephadm", "image-monitoring", "image-gateway") and name.startswith(source + ".")
         assert not re.search(r"release|tag|label|version", name), name
 
 

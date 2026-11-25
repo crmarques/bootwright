@@ -696,6 +696,9 @@ func gatewayImpacts(_ api.Object, unit ServiceUnit) []string {
 	if !unitBinds(unit, "mgmt-gateway", "/spec/ssl_cert") {
 		impacts = append(impacts, "cephadm signs the management gateway's TLS certificate; the readiness proof reports its SHA-256")
 	}
+	if unitFrontsGrafana(unit) {
+		impacts = append(impacts, grafanaRouteImpact)
+	}
 	if unitProxied(unit) {
 		impacts = append(impacts, "the management gateway signs users in through oauth2-proxy and its identity provider, and Bootwright enables the Ceph dashboard's OAuth2 single sign-on")
 		if !unitBinds(unit, "oauth2-proxy", "/spec/ssl_cert") {
@@ -710,6 +713,12 @@ func gatewayImpacts(_ api.Object, unit ServiceUnit) []string {
 
 func unitBinds(unit ServiceUnit, ref, path string) bool {
 	return slices.ContainsFunc(unit.Bindings, func(b ServiceBinding) bool { return b.ServiceRef == ref && b.Path == path })
+}
+
+const grafanaRouteImpact = "on a Ceph build whose gateway loses Grafana sign-ins, Bootwright overrides its templates: one Grafana per client address, a new sign-in after a failover"
+
+func unitFrontsGrafana(unit ServiceUnit) bool {
+	return unit.Type == "mgmt-gateway" && slices.Contains(unit.Monitoring, "grafana")
 }
 
 func unitProxied(unit ServiceUnit) bool {

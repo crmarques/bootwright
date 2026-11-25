@@ -328,6 +328,68 @@ of the apply's binding
 The IBM Storage Ceph build has not been checked live; the owner's acceptance of
 the update is owed under [B1632](../../specs/milestones/m2.md#b1632).
 
+## Grafana behind the gateway
+
+Observation (2026-11-25, the owner's ceph-stretch run of `ceph-prd-01` on
+`cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-27200`): signing in to Grafana
+through the management gateway answered "Login failed - origin not allowed".
+cephadm's gateway templates, read in the image at
+`/usr/share/ceph/mgr/cephadm/templates/services/mgmt-gateway/`, are byte
+identical in the local images `cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-25074`
+and `ceph-9-rhel10:v9.9.2-26947` and in the `20.2.1-405` source tree:
+
+- `external_server.conf.j2` (sha256
+  `fec000edde5fba3db28f953601188f87c6a4a3ae2a4e237ceacbb59807cba444`), lines
+  117-147: `location /grafana` sets `proxy_pass {{ grafana_scheme }}://grafana_servers;`
+  and sets `proxy_set_header Host $host;` only inside
+  `{% if enable_oauth2_proxy %}`, so without an oauth2-proxy nginx sends
+  `Host: grafana_servers`;
+- `nginx.conf.j2` (sha256
+  `589d8e1a802b0d1adb26d27ccff99cb7cfd67d3c36de027ab06730a261f2f990`), lines
+  45-51: `upstream grafana_servers` has no `ip_hash;`, which the Prometheus and
+  Alertmanager upstreams have.
+
+Upstream Ceph `main` still has both (checked 2026-11-25, last change to the file
+c0aad3773a of 2026-10-30). cephadm reads a stored override named after the
+template less `.j2` under `mgr/cephadm/` (`TemplateMgr.render`) and renders it
+through the same Jinja environment (trim_blocks, lstrip_blocks,
+StrictUndefined); `services/mgmt_gateway.py` renders `SVC_TEMPLATE_PATH` and
+`EXTERNAL_SVC_TEMPLATE_PATH` into the files `nginx.conf` and
+`nginx_external_server.conf`, which the daemon form mounts at
+`/etc/nginx/nginx.conf` and `/etc/nginx_external_server.conf`, running nginx as
+their owner. `ceph orch reconfig mgmt-gateway` re-renders the files, and a
+reconfigured non-Ceph daemon restarts (`restart_reconfigured_daemon` in
+`cephadm.py`); a file bind mount keeps the inode the container started with.
+Grafana 11.6's CSRF middleware (`pkg/middleware/csrf/csrf.go`, `check`)
+answers 403 `origin not allowed` to a request that carries `grafana_session`,
+or to any with `csrf_always_check`, whose `Origin` host differs from the
+request's `Host` host and is not in `csrf_trusted_origins`. Each cephadm
+Grafana keeps its own sqlite database, so a session one Grafana issued is
+unknown to another.
+
+A local reproduction (two Grafana 11.6.0 behind nginx with exactly the
+gateway's non-oauth2 `/grafana` location and a round-robin upstream): as is,
+`POST /login` answers 200 and every later request with the cookie, and a second
+sign-in, 403 `origin not allowed`; with trusted origins set, requests
+alternate 200 and 401, since the session is valid on one Grafana only. Both
+corrections are needed for password sign-in on several Grafanas: the Host line
+in the non-oauth2 location, and `ip_hash;` in Grafana's upstream. With an
+oauth2-proxy the native branch already sets Host, and a second
+`proxy_set_header Host` would send two Host headers, which Go's server refuses.
+The `v9.9.1-27200` image bytes were not readable here (no entitlement).
+
+Decision: the [Grafana routes](../../specs/ceph.md#grafana-routes) override
+each template whose own defect is witnessed, the Host line only
+`{% if not enable_oauth2_proxy %}`. Because the run's own image could not be
+read, the fact `image-gateway.grafana-unrouted` is a structural witness on the
+exact anchors, not a digest: the insertions refuse ambiguity as the monitoring
+corrections refuse an ambiguous anchor, but an absent or repeated anchor is
+unknown and keeps that native template rather than refusing
+([record](version-specializations.md#ceph-gateway-grafana-sessions)). The
+overrides reach a gateway block the fixed build runs; a gateway an earlier
+build already completed keeps its native templates until its context is
+realized afresh.
+
 ## Alertmanager webhooks
 
 [`generate_config`](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/monitoring.py#L312-L324)

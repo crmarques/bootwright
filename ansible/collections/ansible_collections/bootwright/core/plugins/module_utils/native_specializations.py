@@ -77,6 +77,7 @@ SOURCE_PARSERS = {"host-cephadm": declared, "image-cephadm": declared}
 
 FACTS = {
     "image-monitoring.blanket-https-scrapes": ("image-monitoring", lambda data, witness: witness),
+    "image-gateway.grafana-unrouted": ("image-gateway", lambda data, witness: witness),
     "host-cephadm.license-flag": ("host-cephadm", lambda data, names: "--automatically-accept-license" in names),
     "host-cephadm.call-home-opt-out": ("host-cephadm", lambda data, names: "--disable-ibm-call-home" in names),
     "image-cephadm.ibm-build": ("image-cephadm", ibm_build),
@@ -86,6 +87,7 @@ FACTS = {
 
 SEAMS = {
     "ceph.monitoring.scrape-template": Seam("native", frozenset(("native", "plaintext-exporters")), False),
+    "ceph.gateway.grafana-route": Seam("native", frozenset(("native", "host-and-affinity")), False),
     "ceph.bootstrap.license-flag": Seam("pass", frozenset(("pass", "omit")), False),
     "ceph.mgr.license-contract": Seam("ibm", frozenset(("ibm", "absent")), False),
     "ceph.call-home-model": Seam("opt-out", frozenset(("opt-out", "opt-in")), True),
@@ -99,6 +101,12 @@ SPECIALIZATIONS = (
         seam="ceph.monitoring.scrape-template",
         variant="plaintext-exporters",
         when={"image-monitoring.blanket-https-scrapes": True},
+    ),
+    Specialization(
+        id="ceph-gateway-grafana-sessions",
+        seam="ceph.gateway.grafana-route",
+        variant="host-and-affinity",
+        when={"image-gateway.grafana-unrouted": True},
     ),
     Specialization(
         id="ceph-bootstrap-without-license-flag",

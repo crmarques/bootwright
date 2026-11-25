@@ -96,7 +96,7 @@ def test_gateway_apply_writes_monitoring_output(tmp_path):
     result = run(request, "apply", transport, {"monitoring": path})
     with open(path, "rb") as handle:
         assert handle.read() == canonical(("alertmanager", "prometheus"))
-    assert phases(transport)[-2:] == ["vip_holder", "monitoring_credentials"] and phases(transport).count("monitoring_credentials") == 1
+    assert phases(transport)[-3:] == ["vip_holder", "grafana_route", "monitoring_credentials"] and phases(transport).count("monitoring_credentials") == 1
     assert result["evidence"]["ready"] is True and not any(value in json.dumps(result) for value in VALUES)
     transport = CredentialTransport(request)
     recorded = str(tmp_path / "recorded")

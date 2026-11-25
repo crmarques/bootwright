@@ -2349,6 +2349,71 @@ and `sso@oauth2-proxy`. Destroy leaves the dashboard's single sign-on setting
 to whole-cluster retirement; per-resource removal is
 [B491](milestones/m2.md#b491)'s.
 
+Not yet met: an oauth2-proxy added to a management gateway that an earlier
+apply realized without one changes the gateway's completed document, so the
+unit refuses instead of switching the gateway to single sign-on; tracked as
+[B1809](milestones/backlog.md#b1809).
+
+## Grafana routes
+
+A management gateway unit whose frozen `monitoring` lists `grafana` owns up to
+two cephadm template overrides, each when the
+[artifact specialization catalog](../.agents/knowledge/version-specializations.md#ceph-gateway-grafana-sessions)
+selects it: `mgr/cephadm/services/mgmt-gateway/nginx.conf` and
+`mgr/cephadm/services/mgmt-gateway/external_server.conf`, each through an
+attempt and a completion record named after its key. The first opens
+Grafana's upstream with `ip_hash;`, so each client address reaches one Grafana
+and keeps the session that Grafana issued. The second forwards the client's
+`Host` in the `/grafana` location when no oauth2-proxy is declared, whose own
+native branch already sets it, so Grafana's cross-origin check compares the
+address the browser signed in at and nginx sends one Host header. Every other
+byte stays native. When a Grafana fails, nginx sends its clients to another,
+where they sign in again, and a Grafana that returns takes back the client
+addresses that hash to it. The gateway block's plan states this impact
+whenever the unit fronts Grafana. Each template is overridden only when its
+own exact defect anchor is witnessed: a template that lacks its anchor, holds
+it twice or already routes Grafana keeps its native bytes, and an image that
+fixed one template keeps the other's override. No digest, release or tag
+selects them.
+
+Both follow the [monitoring template](#monitoring-scrape-templates) protocol
+and its `monitoring-template-identity` refusal: the unit's check proves them
+before any write, its apply completes each selected override before the
+gateway's `ceph orch apply -i -` stream, so a gateway cephadm deploys after
+the stream renders with them, and readiness needs each one completed. The
+overrides reach a gateway block this build runs: a fresh apply, or the
+continuation of an operation whose gateway block has not completed. A gateway
+block an earlier build completed is not run again, so its cluster keeps the
+native templates and nothing changes them implicitly; it takes the overrides
+only when its context is realized afresh (`bootwright destroy`, then
+`bootwright apply`), since a gateway's per-resource removal is
+[B491](milestones/m2.md#b491)'s.
+
+Inside the unit's readiness wait, once an observation reads the unit ready
+(its placed gateway daemons running and its endpoint served), the bootstrap
+host names the selected overrides, and then each round, called concurrently
+on every gateway host, proves read-only how many running `mgmt-gateway`
+containers of this cluster there serve each selected route: the files each
+container mounts at `/etc/nginx/nginx.conf` and
+`/etc/nginx_external_server.conf`, read beneath `/var/lib/ceph/<fsid>/` without
+following a link, owned by root or by the container's user and writable by
+their owner alone, hold `ip_hash;` in Grafana's upstream, or exactly one
+`proxy_set_header Host $host;` in its location, and the container started after
+both were written, because a file bind mount keeps the inode a container
+started with and a reconfigure rewrites the files before it restarts the
+daemon. A running daemon without a selected route, as one cephadm rendered
+before the manager held the stored overrides, makes the bootstrap host run
+`ceph orch reconfig mgmt-gateway` once in that apply. cephadm schedules the
+action durably and coalesces a repeat, so the request keeps no record. Until
+the placed gateway count serves every selected route the wait goes on, within
+its own deadline, and its timeout names `route@mgmt-gateway`. No file byte or
+path leaves a host.
+
+Removal follows the monitoring templates: the overrides and their records stay
+until whole-cluster retirement. A gateway that stops listing `grafana`, or an
+artifact that no longer selects an owned override, while that override remains
+refuses `monitoring-template-identity`.
+
 ## Monitoring scrape templates
 
 The monitoring request freezes `scrapeIngress`, a map of every admitted native

@@ -513,6 +513,25 @@ func TestGatewayUnitDeadline(t *testing.T) {
 	}
 }
 
+func TestGrafanaFrontingGatewayKeepsItsDeadlineAndStatesTheRouteImpact(t *testing.T) {
+	fronting := mgmtGatewayRequest(t)
+	if !slices.Contains(fronting.Service.Monitoring, "grafana") {
+		t.Fatalf("the gateway fronts %v", fronting.Service.Monitoring)
+	}
+	unfronted := mgmtGatewayRequest(t)
+	unit := *unfronted.Service
+	unit.Monitoring = slices.DeleteFunc(slices.Clone(unit.Monitoring), func(service string) bool { return service == "grafana" })
+	unfronted.Service = &unit
+	for _, request := range []*Request{&fronting, &unfronted} {
+		if got, err := cephDeadline(*request, "apply"); err != nil || got != time.Duration(4*nativeCall+readinessWait+60)*time.Second {
+			t.Fatalf("the gateway fronting %v applies within %v (%v)", request.Service.Monitoring, got, err)
+		}
+	}
+	if !slices.Contains(gatewayImpacts(api.Object{}, *fronting.Service), grafanaRouteImpact) || slices.Contains(gatewayImpacts(api.Object{}, unit), grafanaRouteImpact) {
+		t.Fatalf("the route impact is %q fronting Grafana and %q without", gatewayImpacts(api.Object{}, *fronting.Service), gatewayImpacts(api.Object{}, unit))
+	}
+}
+
 func TestGatewayUnitLendsCertificateToEveryOperationAndKeyToApply(t *testing.T) {
 	r := runtimeRequest()
 	unit := gatewayUnitOf(t, delegatedCatalog(vipGateway("192.0.2.60"), []api.Value{tlsBinding("mgmt-gateway", "mgmt-tls")}))

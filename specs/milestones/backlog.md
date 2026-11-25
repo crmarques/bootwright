@@ -339,6 +339,7 @@ Alias cell.
 | [B1588](#b1588) | new, 2026-11-18 (X597 review) | safety | Substrate | A libvirt guest listing reads each domain by its UUID, so no domain name is read as another domain's ID | Low confidence that libvirt admits an all-digit domain name; the fix touches every guest-listing fixture |
 | [B1612](#b1612) | new, 2026-11-18 (D277) | product | Storage, with Add-ons | An omitted CephConsumer key type defaults to one the cluster's MONs allow | An explicit `aes256k` already works; the default needs an owner decision |
 | [B1805](#b1805) | new, 2026-11-24 (the owner's ceph-stretch run) | product | Storage | The management gateway listens only on its virtual IP, so it can share hosts and port 443 with an object gateway ingress | The owner kept the gateway on 9443 for the next run; it needs an owned cephadm template override |
+| [B1809](#b1809) | new, 2026-11-25 (X721) | product | Storage | An oauth2-proxy added to a management gateway an earlier apply realized switches the gateway and its Grafanas to single sign-on through the identity provider | The owner wants OIDC once the identity provider exists; Keycloak is not deployed yet |
 
 ### B82
 
@@ -3708,6 +3709,24 @@ gateway host needs, and how readiness probes a listener bound to an address its
 host may not hold. **Exit evidence:** a stretch plan placing the gateway and
 an object gateway ingress on the same hosts at 443 admitted, the rendered
 listener bound to the virtual IP, and the readiness probe over that address.
+The `external_server.conf` key is now owned by the
+[Grafana routes](../ceph.md#grafana-routes) override, so the definition extends
+that one owned override.
+
+### B1809
+
+**Owner:** Storage. **Kind:** product. **Requires:** an identity provider the
+owner deploys. **Definition:** Candidate. **Outcome:** a management gateway
+realized with password sign-in takes an oauth2-proxy declared later: the unit
+re-applies the gateway with `enable_auth`, deploys the proxy and enables the
+dashboard's single sign-on, and the gateway's Grafanas sign users in through
+the proxy. On 2026-11-25 the owner chose password sign-in now and OIDC when
+Keycloak arrives. Today the changed gateway document refuses
+([management gateway](../ceph.md#management-gateway)); the
+[Grafana routes](../ceph.md#grafana-routes) already render cephadm's own Host
+line once a proxy exists. **Exit evidence:** a gateway apply over a realized
+password gateway that adds a proxy, its readiness with `sso` `oauth2`, and the
+route proof passing over the proxied files.
 
 ## Audit remediation (2026-10-26)
 

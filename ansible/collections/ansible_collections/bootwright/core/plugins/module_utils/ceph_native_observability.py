@@ -31,6 +31,7 @@ from __future__ import annotations
 # Exact type identity is the validation here: a bool is not an int and a capability object is never a subclass.
 # pylint: disable=unidiomatic-typecheck
 
+import calendar
 import hashlib
 import hmac
 import ipaddress
@@ -140,6 +141,13 @@ INSECURE_KEY = "ssl_insecure_skip_verify"
 # Rendered files are read only beneath the cluster's data directory, bounded.
 DATA_ROOT = "/var/lib/ceph"
 MAX_RENDERED = 65536
+# Where cephadm's mgmt-gateway daemon form mounts its rendered nginx files (src/cephadm/cephadmlib/daemons/mgmt_gateway.py,
+# customize_container_mounts), and the two lines its corrected templates render inside Grafana's upstream and location.
+GATEWAY_NGINX = "/etc/nginx/nginx.conf"
+GATEWAY_EXTERNAL = "/etc/nginx_external_server.conf"
+GRAFANA_AFFINITY = "ip_hash;"
+GRAFANA_HOST = "proxy_set_header Host $host;"
+STARTED_AT = re.compile(r"([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\.([0-9]{1,9}))?(Z|[+-][0-9]{2}:[0-9]{2})")
 GATEWAY_MEMBERS = frozenset(("enable_auth", "enable_health_check_endpoint", "port", "ssl", "ssl_ciphers", "ssl_protocols", "virtual_ip"))
 GATEWAY_INGRESS_MEMBERS = frozenset(("backend_service", "first_virtual_router_id", "health_check_interval", "keepalive_only", "virtual_interface_networks",
                                      "virtual_ip"))
@@ -536,8 +544,11 @@ def gateway_validate(unit, request, hosts):
 
 
 def gateway_check(worker, unit):
-    """Read-only, before any write: the frozen nginx setting and, with the ingress, keepalived's."""
+    """Read-only, before any write: the frozen nginx setting and, with the ingress, keepalived's, and the Grafana routing overrides'
+    ownership proofs."""
     check_images(worker, gateway_needed(unit))
+    for descriptor, plan in ceph_monitoring_template.gateway_plans(worker, unit):
+        ceph_monitoring_template.state(worker, plan, descriptor)
 
 
 def gateway_claim(worker, unit, checked):
@@ -546,12 +557,12 @@ def gateway_claim(worker, unit, checked):
     Alertmanager require the login cephadm holds, which is admin/admin when none was set (src/pybind/mgr/cephadm/module.py,
     _get_prometheus_credentials and _get_alertmanager_credentials), so a cluster never serves the default. `set-credentials` reads its
     {"username", "password"} only from standard input (src/pybind/mgr/orchestrator/module.py, _get_credentials) and stores it; cephadm
-    keeps it until the unit's post-readiness read captures it. A repeat after the attempt record is written sets nothing."""
+    keeps it until the unit's post-readiness read captures it. A repeat after the attempt record is written sets nothing. Then, before the
+    stream too, the owned Grafana routing overrides the seam selects complete, so a fresh gateway renders with them."""
     del checked
-    if worker.markers.read("service-" + GATEWAY_TYPES[0] + "-attempt.json") is not None:
-        return False
     changed = False
-    for service in credential_services(unit):
+    first = worker.markers.read("service-" + GATEWAY_TYPES[0] + "-attempt.json") is None
+    for service in credential_services(unit) if first else []:
         password = dashboard_password()
         data = bytearray(canonical({"password": password, "username": GENERATED_USER}))
         try:
@@ -560,6 +571,8 @@ def gateway_claim(worker, unit, checked):
         finally:
             data[:] = bytes(len(data))
         changed = True
+    for descriptor, plan in ceph_monitoring_template.gateway_plans(worker, unit):
+        changed = ceph_monitoring_template.prepare(worker, plan, descriptor) or changed
     return changed
 
 
@@ -611,6 +624,8 @@ def standby_settled(worker):
 def gateway_readiness(worker, unit, blocking):
     """Beyond the daemons, whose served leaf the endpoint hook proves: cephadm's dashboard standby options are set, and with the proxy the
     dashboard's OAuth2 single sign-on is enabled. It never writes."""
+    if not all(ceph_monitoring_template.ready(worker, plan, descriptor) for descriptor, plan in ceph_monitoring_template.gateway_plans(worker, unit)):
+        return False
     ready = True
     if not standby_settled(worker):
         if "standby@mgmt-gateway" not in blocking:
@@ -702,6 +717,12 @@ def opened_beneath(parts):
 def rendered_file(fsid, source, owners, limit=MAX_RENDERED):
     """A host file's bytes beneath DATA_ROOT/<fsid>/, opened component by component without following a link: a regular file with one
     link, owned by one of owners, writable by its owner alone and at most limit bytes, whose identity holds across the read; else None."""
+    found = stamped_file(fsid, source, owners, limit)
+    return None if found is None else found[0]
+
+
+def stamped_file(fsid, source, owners, limit=MAX_RENDERED):
+    """rendered_file's bytes with the file's modification time in nanoseconds; else None."""
     prefix = DATA_ROOT + "/" + fsid + "/"
     if not isinstance(source, str) or not source.startswith(prefix):
         return None
@@ -723,7 +744,7 @@ def rendered_file(fsid, source, owners, limit=MAX_RENDERED):
             same = file_identity(os.fstat(handle.fileno())) == file_identity(before) == file_identity(after)
             if len(value) != before.st_size or not same:
                 return None
-            return value
+            return value, before.st_mtime_ns
     except OSError:
         return None
     finally:
@@ -776,6 +797,75 @@ def proxy_verdict(fsid, inspected, bundle):
         if mounted is None or not hmac.compare_digest(mounted, bundle.encode("utf-8")):
             return "unproved", "CA bundle mount"
     return "verified", ""
+
+
+def grafana_fronted(unit):
+    """Whether a management gateway unit fronts a declared Grafana, the only case its Grafana routing overrides can apply."""
+    return unit.get("type") == "mgmt-gateway" and "grafana" in unit.get("monitoring", [])
+
+
+def config_block(text, opening):
+    """The stripped lines of the one nginx block a line reading exactly `opening` opens, up to its closing brace; None when it is absent,
+    repeated or unclosed."""
+    lines = text.splitlines()
+    starts = [index for index, line in enumerate(lines) if line.strip() == opening]
+    if len(starts) != 1:
+        return None
+    depth, body = 1, []
+    for line in lines[starts[0] + 1:]:
+        depth += line.count("{") - line.count("}")
+        if depth <= 0:
+            return body if depth == 0 and line.strip() == "}" else None
+        body.append(line.strip())
+    return None
+
+
+def routes_grafana(nginx, external):
+    """Which Grafana routes a deployed gateway's two rendered files carry, by override source name: `nginx` when Grafana's upstream pins
+    each client to one Grafana, `external` when its location forwards the client's Host exactly once."""
+    upstream, location = config_block(nginx, "upstream grafana_servers {"), config_block(external, "location /grafana {")
+    return {"nginx": upstream is not None and GRAFANA_AFFINITY in upstream,
+            "external": location is not None and location.count(GRAFANA_HOST) == 1}
+
+
+def started_ns(value):
+    """podman's RFC 3339 StartedAt as nanoseconds since the epoch; None for any other form."""
+    found = STARTED_AT.fullmatch(value) if isinstance(value, str) else None
+    if found is None:
+        return None
+    year, month, day, hour, minute, second, fraction, zone = found.groups()
+    try:
+        seconds = calendar.timegm(time.struct_time((int(year), int(month), int(day), int(hour), int(minute), int(second), 0, 0, 0)))
+    except (OverflowError, ValueError):
+        return None
+    if zone != "Z":
+        seconds -= (1 if zone[0] == "+" else -1) * (int(zone[1:3]) * 3600 + int(zone[4:6]) * 60)
+    return seconds * 1000000000 + int((fraction or "").ljust(9, "0"))
+
+
+def gateway_routed(fsid, inspected):
+    """Which Grafana routes one running gateway container serves (routes_grafana), read from the two files it mounts beneath
+    DATA_ROOT/<fsid>/ without following a link, each owned by root or the container's user and writable by its owner alone; none unless
+    the container started after both were written, since a file bind mount keeps the inode it started with and cephadm's reconfigure
+    rewrites the files before it restarts the daemon. No path or byte leaves this function."""
+    unserved = {"nginx": False, "external": False}
+    unused, unused_environment, user, mounts = proxy_container(inspected)
+    state = inspected.get("State")
+    started = started_ns(state.get("StartedAt")) if isinstance(state, dict) else None
+    found = []
+    for destination in (GATEWAY_NGINX, GATEWAY_EXTERNAL):
+        sources = [source for target, source in mounts if target == destination]
+        read = stamped_file(fsid, sources[0], proxy_owners(user)) if len(sources) == 1 else None
+        if read is None:
+            return unserved
+        found.append(read)
+    try:
+        nginx, external = (value.decode("utf-8") for value, unused in found)
+    except UnicodeError:
+        return unserved
+    if started is None or not all(stamp <= started for unused, stamp in found):
+        return unserved
+    return routes_grafana(nginx, external)
 
 
 def gateway_targets(worker, unit, running):

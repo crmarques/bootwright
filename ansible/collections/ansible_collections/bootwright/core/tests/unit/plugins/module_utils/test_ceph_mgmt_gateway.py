@@ -360,6 +360,8 @@ class MaterialTransport(units.Transport):
 
     def call(self, host, phase, private=None, *, timeout=None):  # pylint: disable=arguments-renamed
         self.private.append((phase, sorted(private or {})))
+        if phase == "grafana_route":
+            return {"changed": False, "routes": []}
         result = super().call(host, phase, timeout=timeout)
         return {"changed": False} if phase == "ingress_firewall" else result
 
