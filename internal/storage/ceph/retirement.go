@@ -141,6 +141,11 @@ func (c Capability) retire(ctx context.Context, e lifecycle.Execution) (lifecycl
 	if err != nil {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
 	}
+	if retiresManagers(r) {
+		if _, err := c.managers(ctx, e, "destroy"); err != nil {
+			return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
+		}
+	}
 	if _, removes := removesTiebreaker(r); removes {
 		removal, err := c.tiebreaker(ctx, e, "destroy")
 		if err != nil {
@@ -158,20 +163,34 @@ func (c Capability) observeRetirement(ctx context.Context, e lifecycle.Execution
 	if err != nil {
 		return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, err
 	}
+	attempted := false
 	if _, removes := removesTiebreaker(r); removes {
 		observed, err := c.tiebreaker(ctx, e, "observe")
 		if err != nil {
 			return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, err
 		}
 		if !observed.Removed {
-			effect := reconciliation.EffectNoEffect
-			if observed.Attempted {
-				effect = reconciliation.EffectPartial
-			}
-			return lifecycle.Observation{Effect: effect}, nil
+			return lifecycle.Observation{Effect: retirementEffect(observed.Attempted)}, nil
+		}
+		attempted = observed.Attempted
+	}
+	if retiresManagers(r) {
+		observed, err := c.managers(ctx, e, "observe")
+		if err != nil {
+			return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, err
+		}
+		if !observed.Stopped {
+			return lifecycle.Observation{Effect: retirementEffect(attempted)}, nil
 		}
 	}
 	return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: evidence}, nil
+}
+
+func retirementEffect(attempted bool) reconciliation.EffectState {
+	if attempted {
+		return reconciliation.EffectPartial
+	}
+	return reconciliation.EffectNoEffect
 }
 
 func EvaluateRetirement(data []byte, r Request, retired bool) (reconciliation.EffectState, error) {

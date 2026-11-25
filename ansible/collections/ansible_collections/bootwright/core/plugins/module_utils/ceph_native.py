@@ -87,9 +87,9 @@ CORE_PHASES = frozenset(("prerequisites", "claim", "devices", "osd_prepare", "tu
                          "tunnel_configure", "tunnel_mount",
                          "cache", "enroll", "license", "services", "stretch_locate", "stretch_enable", "dashboard", "dashboard_read", "dashboard_present",
                          "observe", "unrecorded_observe", "bootstrap_state", "host_state", "destroy", "tiebreaker_observe", "tiebreaker_remove",
-                         "physical_host_observe", "physical_host_remove"))
+                         "physical_host_observe", "physical_host_remove", "managers_observe", "managers_stop"))
 CORE_READ_ONLY_PHASES = frozenset(("prerequisites", "devices", "tunnel_preflight", "observe", "unrecorded_observe", "bootstrap_state", "host_state",
-                                   "dashboard_read", "dashboard_present", "tiebreaker_observe", "physical_host_observe"))
+                                   "dashboard_read", "dashboard_present", "tiebreaker_observe", "physical_host_observe", "managers_observe"))
 # The cluster observation of a read no operation records, such as `bootwright diff --observe`: the only phase that lists the cluster's
 # pools and reports an OSD no declared service places instead of refusing it foreign-osd.
 UNRECORDED_OBSERVE = "unrecorded_observe"
@@ -2570,6 +2570,14 @@ class Worker:
     def tiebreaker_remove(self):
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_stretch
         return ceph_native_stretch.TiebreakerRemoval(self).remove()
+
+    def managers_observe(self):
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_stretch
+        return ceph_native_stretch.ManagerStop(self).observe()
+
+    def managers_stop(self):
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_stretch
+        return ceph_native_stretch.ManagerStop(self).stop()
 
     def dashboard_scope(self):
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_dashboard

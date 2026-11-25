@@ -68,6 +68,8 @@ HOST_REASONS = (
     "unknown", "transport", "remote-refusal", "adapter-exception", "ssh-policy-host-excluded", "ssh-policy-unavailable",
     "tiebreaker-foreign", "not-removed", "native-option-undeclared",
 )
+# The retirement selector of the round that stops every data host's managers before any FSID removal.
+MANAGERS_RETIREMENT = "managers"
 CLUSTER_REASONS = (
     "fips-policy", "cephx-policy",
     "unsupported-release", "runtime-profile", "device-identity", "cache-unproved", "enrollment-budget",
@@ -86,7 +88,7 @@ CLUSTER_REASONS = (
     "monitoring-login-unsupported",
     "ingress-firewall", "service-credential-foreign", "ssh-policy-host-excluded", "ssh-policy-unavailable", "tunnel-host-key-excluded",
     "sso-unverified", "stretch-intent", "stretch-interrupted", "stretch-location", "stretch-weight", "stretch-rule", "stretch-foreign", "stretch-pools",
-    "stretch-drift", "tiebreaker-foreign", "tiebreaker-unreachable", "device-not-empty", "foreign-osd",
+    "stretch-drift", "tiebreaker-foreign", "tiebreaker-unreachable", "managers-running", "device-not-empty", "foreign-osd",
     "osd-partial", "osd-clear-failed", "osd-clear-unproved", "osd-orphan-booted", "osd-orphan-unproved", "osd-class-drift",
 )
 # The refusals an administrator login's module may publish, each one its Go caller names (loginRefusals in internal/storage/ceph).
@@ -691,10 +693,35 @@ def execute_tiebreaker(request, operation, request_digest, transport, outputs):
     return {"changed": result.get("changed", False), "evidence": ceph_evidence.tiebreaker_evidence(value, request_digest, request)}
 
 
+def execute_managers(request, operation, request_digest, transport, outputs):
+    """Every physical host's managers of this FSID stopped and disabled in one round, then read back in a second, so a manager one host
+    stopped is proved not started again by another host's manager before that one stopped; an observation reads only the second round.
+
+    The cluster retires its managers before the tiebreaker or any host removes its FSID: a running manager keeps its SSH connections past
+    the removal of its key line and writes the FSID's layout back onto a host just cleaned. A virtual host is shut off before its cluster
+    retires and the provided tiebreaker runs a MON alone, so neither is reached. A host that does not answer refuses `transport`.
+    """
+    ceph_native.require(operation in ("observe", "destroy") and request["action"] == "cluster" and not outputs, "request")
+    hosts = [host for host in request["hosts"] if host.get("physical") is True]
+    ceph_native.require(bool(hosts), "request")
+    changed = False
+    if operation == "destroy":
+        stops = host_round(transport, hosts, "managers_stop")
+        ceph_native.require(all(isinstance(stop, dict) and set(stop) == {"changed"} and type(stop["changed"]) is bool for stop in stops), "evidence")
+        changed = any(stop["changed"] for stop in stops)
+    readings = host_round(transport, hosts, "managers_observe")
+    ceph_native.require(all(isinstance(read, dict) and set(read) == {"stopped"} and type(read["stopped"]) is bool for read in readings), "evidence")
+    stopped = all(read["stopped"] for read in readings)
+    ceph_native.require(operation == "observe" or stopped, "managers-running")
+    value = {"version": ceph_evidence.MANAGERS_EVIDENCE, "request": request_digest, "owner": request["owner"], "fsid": request["fsid"],
+             "stopped": stopped}
+    return {"changed": changed, "evidence": ceph_evidence.managers_evidence(value, request_digest, request)}
+
+
 def admit_selectors(request, operation, outputs, retirement, reading, shared=None):
-    """The closed selectors beside the material: a tiebreaker's retirement; the unrecorded reading only a cluster observation with no
-    output takes; and the host reading a resource observation with no output either takes or replays, never both."""
-    ceph_native.require(retirement in (None, "tiebreaker"), "request")
+    """The closed selectors beside the material: a tiebreaker's or the managers' retirement; the unrecorded reading only a cluster
+    observation with no output takes; and the host reading a resource observation with no output either takes or replays, never both."""
+    ceph_native.require(retirement in (None, "tiebreaker", MANAGERS_RETIREMENT), "request")
     ceph_native.require(reading in (None, HOSTS_READING) or reading == UNRECORDED_READING and operation == "observe" and retirement is None
                         and request["action"] == "cluster" and not outputs, "request")
     hosts = reading == HOSTS_READING or shared is not None
@@ -733,6 +760,8 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
             transport.applied.update(shared["specializations"])
     if operation != "observe":
         ceph_native.require(ceph_native.supported_transport(request), "unsupported-release")
+    if retirement == MANAGERS_RETIREMENT:
+        return execute_managers(request, operation, request_digest, transport, outputs)
     if retirement is not None:
         return execute_tiebreaker(request, operation, request_digest, transport, outputs)
     bootstrap = next(h for h in request["hosts"] if h["name"] == request["bootstrap"])

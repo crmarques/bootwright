@@ -13,6 +13,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 func retirementBlock(t *testing.T, id, kind, object, implementation string, data []byte) reconciliation.Block {
@@ -189,6 +190,83 @@ func TestPhysicalCephRetirementRecordsPendingDispositionWithoutNativeEffects(t *
 	}
 	if _, err := pendingPhysicalClusters(execution, []string{cluster.Cluster}, []string{cluster.Hosts[0].Machine}); err == nil {
 		t.Fatal("a physical consumer admitted partial host removal")
+	}
+}
+
+// A retained root's cleanup runs rm-cluster while the cluster's other hosts still run, so a live manager would write the FSID's layout
+// back onto the cleaned host through the SSH connection it kept: the cluster block, which every host block's removal follows, stops
+// every physical host's managers first and records no retirement until no manager runs or stays enabled.
+func TestARetainedRootClusterRetirementStopsEveryManagerBeforeAnyHostCleanup(t *testing.T) {
+	capability, execution, cluster, _ := physicalRetirementFixture(t)
+	policy, err := DecodePhysicalRetirementRequest(execution.Block.Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy.Hosts[0].RetainRoot = true
+	data, _ := policy.Canonical()
+	execution.Block = retirementBlock(t, execution.Block.ID, execution.Block.Kind, execution.Block.Object, execution.Block.Implementation, data)
+	prepared, err := capability.Apply(context.Background(), execution)
+	if err != nil {
+		t.Fatal(err)
+	}
+	execution.ApplyProved = append(execution.ApplyProved, retirementRecord(execution.Block, reconciliation.Apply, prepared.Evidence),
+		imageProof(t, cluster.Cluster, cluster.Image, resolvedDigest))
+	for _, pair := range execution.RemovalProved {
+		if pair.Applied.Implementation == HostImplementation {
+			execution.ApplyProved = append(execution.ApplyProved, pair.Applied)
+		}
+	}
+	cluster.Hosts[0].RetainRoot, cluster.Controller = true, "controller"
+	if execution.Material == nil {
+		execution.Material = map[string]secrets.Material{}
+	}
+	for i := range cluster.Hosts {
+		if cluster.Hosts[i].HostKeyRef == "" {
+			cluster.Hosts[i].HostKeyRef = cluster.Hosts[i].Name + "-host-key"
+		}
+		execution.Material[cluster.Hosts[i].HostKeyRef] = secrets.NewMaterial(map[secrets.Part][]byte{secrets.PublicKeyPart: hostPublicKey()})
+	}
+	canonical, _ := cluster.Canonical()
+	execution.Block, execution.RetiredWithHosts = retirementBlock(t, ClusterBlockID(cluster.Cluster), string(api.CephCluster), cluster.Cluster, Implementation, canonical), true
+	execution.Operation, execution.Attempt = "destroy-later", 1
+	for name, test := range map[string]struct {
+		answer  func(lifecycle.RunRequest) (lifecycle.RunResult, error)
+		retired bool
+	}{
+		"stopped": {func(request lifecycle.RunRequest) (lifecycle.RunResult, error) { return managersAnswer(request, true) }, true},
+		"running": {func(request lifecycle.RunRequest) (lifecycle.RunResult, error) { return managersAnswer(request, false) }, false},
+		"refused": {func(request lifecycle.RunRequest) (lifecycle.RunResult, error) {
+			return lifecycle.RunResult{}, request.Refusals["managers-running"]
+		}, false},
+		"unreachable": {func(request lifecycle.RunRequest) (lifecycle.RunResult, error) {
+			return lifecycle.RunResult{}, request.Refusals["transport"]
+		}, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			runner := &tiebreakerRunner{managers: test.answer}
+			result, err := New(api.CephCluster, runner).WithProofs(capability.proofs).Destroy(context.Background(), execution)
+			if len(runner.runs) != 1 || runner.runs[0].Operation != "destroy" || runner.runs[0].MaterialValues["retirement"] != managersRetirement || runner.runs[0].ReadOnly {
+				t.Fatalf("the managers did not stop before any host cleanup: %d runs", len(runner.runs))
+			}
+			if test.retired != (err == nil && result.Evidence != nil) {
+				t.Fatalf("destroy %+v %+v", result, diagnostics.Of(err))
+			}
+			if !test.retired && (result.Outcome == reconciliation.OutcomeChanged || len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != "ceph.boundary-unproved") {
+				t.Fatalf("a running manager retired the cluster: %+v %+v", result, diagnostics.Of(err))
+			}
+			observed, err := New(api.CephCluster, runner).WithProofs(capability.proofs).ObserveRemoval(context.Background(), execution)
+			want := reconciliation.EffectCompleted
+			if !test.retired {
+				want = reconciliation.EffectNoEffect
+			}
+			if name == "stopped" || name == "running" {
+				if err != nil || observed.Effect != want || runner.runs[1].Operation != "observe" || runner.runs[1].MaterialValues["retirement"] != managersRetirement {
+					t.Fatalf("observation %+v %+v", observed, diagnostics.Of(err))
+				}
+			} else if err == nil || observed.Effect != reconciliation.EffectUnknown {
+				t.Fatalf("an unanswered observation %+v proved an effect", observed)
+			}
+		})
 	}
 }
 

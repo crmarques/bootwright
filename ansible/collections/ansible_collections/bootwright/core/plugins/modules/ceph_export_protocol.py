@@ -121,6 +121,7 @@ options:
       - stretch-drift
       - tiebreaker-foreign
       - tiebreaker-unreachable
+      - managers-running
       - device-not-empty
       - foreign-osd
       - osd-partial

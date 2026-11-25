@@ -982,3 +982,70 @@ class PhysicalHostRemoval(TiebreakerRemoval):
             require(daemon.get("style") == "cephadm:v1" and daemon.get("fsid") == self.fsid
                     and isinstance(name, str) and re.fullmatch(r"[a-z][a-z0-9-]*\.[A-Za-z0-9_.-]{1,256}", name), "tiebreaker-foreign")
         return sorted(daemon["name"] for daemon in daemons)
+
+
+# The systemd states in which a unit's process may still run; any other state, failed included, runs none.
+MANAGER_RUNNING = frozenset(("active", "activating", "deactivating", "reloading", "refreshing"))
+MANAGER_STOP_TIMEOUT = 180
+
+
+class ManagerStop:
+    """This FSID's managers on one physical host, stopped and disabled before the tiebreaker's or any host's FSID removal starts.
+
+    A running manager keeps the SSH connections it opened past the removal of its key line and, refreshing a host, writes the FSID's
+    layout back onto one just cleaned; an enabled one starts again with a host that a retained-root cleanup powers on. cephadm names
+    each unit ceph-<fsid>@mgr.<daemon id>.service, wanted by ceph-<fsid>.target; rm-cluster stops and disables it the same way later.
+    """
+
+    def __init__(self, worker):
+        require(worker.request["action"] == "cluster" and worker.host.get("physical") is True, "request")
+        self.worker = worker
+        self.fsid = worker.request["fsid"]
+        self.prefix = "ceph-" + self.fsid + "@mgr."
+        self.unit = re.compile(re.escape(self.prefix) + r"[A-Za-z0-9][A-Za-z0-9_.-]{0,250}\.service\Z")
+
+    def running(self):
+        listing_output = self.worker.command(["/usr/bin/systemctl", "list-units", "--all", "--no-legend", "--plain", "--no-pager",
+                                              self.prefix + "*.service"], timeout=15, json_result=False)
+        try:
+            lines = listing_output.decode("ascii").splitlines()
+        except UnicodeError:
+            raise Refusal("native-output") from None
+        running = []
+        for line in lines:
+            fields = line.split()
+            if not fields:
+                continue
+            require(len(fields) >= 4 and self.unit.fullmatch(fields[0]) is not None, "native-output")
+            if fields[2] in MANAGER_RUNNING:
+                running.append(fields[0])
+        return running
+
+    def enabled(self):
+        """The manager units the FSID's target wants; a name systemd would not read as such a unit is no enablement."""
+        try:
+            names = listing(UNIT_ROOT + "/ceph-" + self.fsid + ".target.wants")
+        except Refusal:
+            # A link or an unbounded listing where systemd keeps this FSID's wants is no layout the manager stop can read.
+            raise Refusal("native-output") from None
+        return [name for name in names if self.unit.fullmatch(name) is not None]
+
+    def containers(self):
+        found = self.worker.command(["/usr/bin/podman", "ps", "--format", "json", "--filter", "name=^ceph-" + self.fsid + "-mgr-"], timeout=15)
+        require(isinstance(found, list), "native-output")
+        return found
+
+    def stopped(self):
+        return not self.running() and not self.enabled() and not self.containers()
+
+    def observe(self):
+        return {"stopped": self.stopped()}
+
+    def stop(self):
+        """Each running or enabled manager unit, disabled and stopped by its validated name; then none may run or stay enabled."""
+        units = sorted(set(self.running()) | set(self.enabled()))
+        for unit in units:
+            require(self.unit.fullmatch(unit) is not None, "native-output")
+            self.worker.command(["/usr/bin/systemctl", "disable", "--now", unit], timeout=MANAGER_STOP_TIMEOUT, json_result=False)
+        require(self.stopped(), "managers-running")
+        return {"changed": bool(units)}

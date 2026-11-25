@@ -84,7 +84,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, 
 
 # The closed, non-secret values material may carry beside its paths. AnsibleModule masks every leaf of a no_log option as a
 # substring of each result string, so a selector left masked would censor the refusal names and evidence versions that contain it.
-SELECTORS = frozenset(("tiebreaker", "unrecorded", "hosts"))
+SELECTORS = frozenset(("tiebreaker", "managers", "unrecorded", "hosts"))
 
 
 def main():

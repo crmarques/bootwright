@@ -20,15 +20,64 @@ type tiebreakerRunner struct {
 	runs     []lifecycle.RunRequest
 	answer   func(lifecycle.RunRequest) (lifecycle.RunResult, error)
 	evidence TiebreakerEvidence
+	managers func(lifecycle.RunRequest) (lifecycle.RunResult, error)
 }
 
 func (r *tiebreakerRunner) Run(_ context.Context, request lifecycle.RunRequest) (lifecycle.RunResult, error) {
 	r.runs = append(r.runs, request)
+	if request.MaterialValues["retirement"] == managersRetirement {
+		if r.managers != nil {
+			return r.managers(request)
+		}
+		return managersAnswer(request, true)
+	}
 	if r.answer != nil {
 		return r.answer(request)
 	}
 	data, _ := json.Marshal(r.evidence)
 	return lifecycle.RunResult{Outcome: "changed", Evidence: data}, nil
+}
+
+func managersAnswer(request lifecycle.RunRequest, stopped bool) (lifecycle.RunResult, error) {
+	var frozen Request
+	if err := json.Unmarshal(request.Canonical, &frozen); err != nil {
+		return lifecycle.RunResult{}, err
+	}
+	data, _ := json.Marshal(ManagersEvidence{FSID: frozen.FSID, Owner: frozen.Owner, Request: request.Digest, Stopped: stopped, Version: ManagersEvidenceVersion})
+	outcome := reconciliation.OutcomeChanged
+	if request.Operation == "observe" {
+		outcome = ""
+	}
+	return lifecycle.RunResult{Outcome: outcome, Evidence: data}, nil
+}
+
+// A virtual host is shut off before its cluster retires and the provided tiebreaker runs a MON alone, so neither has a manager to
+// stop: only a cluster on physical hosts stops its managers, and only when a host or its tiebreaker removes the FSID.
+func TestOnlyAPhysicalClusterThatRemovesAnFSIDStopsItsManagers(t *testing.T) {
+	stretch := providedStretchRequest(t)
+	if retiresManagers(stretch) {
+		t.Fatal("a virtual stretch cluster stops its managers")
+	}
+	physical := func(r Request, retain bool) Request {
+		r.Hosts = slices.Clone(r.Hosts)
+		for i := range r.Hosts {
+			if !r.Hosts[i].Provided {
+				r.Hosts[i].Physical, r.Hosts[i].RetainRoot = true, retain
+			}
+		}
+		return r
+	}
+	if !retiresManagers(physical(stretch, false)) || !retiresManagers(physical(coreRequest(), true)) {
+		t.Fatal("a physical cluster that removes an FSID does not stop its managers")
+	}
+	if retiresManagers(physical(coreRequest(), false)) {
+		t.Fatal("a physical cluster whose hosts all erase their roots stops its managers")
+	}
+	pool := physical(coreRequest(), true)
+	pool.Action = "pool"
+	if retiresManagers(pool) {
+		t.Fatal("a pool block stops the managers")
+	}
 }
 
 func tiebreakerExecution(t *testing.T, r Request) lifecycle.Execution {

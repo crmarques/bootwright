@@ -1353,6 +1353,7 @@ A token's stop depends on the block that raises it:
 ## Devices and destructive ownership
 
 When the original policy retains the root, the registered Ceph host inverse
+runs after the cluster block's [manager retirement](#manager-retirement) and
 starts the original Machine. It uses the original cluster block's delegated
 service placement to prove its daemon layout and removes its FSID, cluster-key
 entry, sshd drop-in and bound registry credential without disk zap, each as
@@ -2732,6 +2733,50 @@ the selected build; tracked as [B488](milestones/m2.md#b488).
 Native principal or pool absence alone cannot prove
 withdrawal of retained confidential material or sessions. B70 owns offline
 physical erase; removing services or releasing claims proves no erasure.
+
+### Manager retirement
+
+A cluster block on physical hosts whose retirement precedes a removal of its
+FSID from a host, because a host retains its root or the cluster has a
+provided tiebreaker, first stops every manager of the FSID on each physical
+host. Every host block's
+removal follows the cluster block in the frozen DAG, so no host removes its
+FSID while a manager runs. A running manager keeps the SSH connections it
+opened past the removal of its cluster-key line and, refreshing a host, writes
+the FSID's layout back onto one just cleaned
+([cleanup facts](../.agents/knowledge/ibm-ceph-cleanup.md#a-live-manager-writes-a-cleaned-host-again)).
+
+- **Effect.** One round reaches every physical host. A virtual host is shut
+  off before its cluster retires, and the provided tiebreaker runs a MON
+  alone, so neither is reached. On each host, every unit
+  `ceph-<fsid>@mgr.<id>.service` that systemd lists in a running state, or
+  that `ceph-<fsid>.target.wants` names, is disabled and stopped by its
+  validated name with `systemctl disable --now`, as `rm-cluster` later does
+  to it. A disabled manager stays stopped when a retained-root host's cleanup
+  powers that host on. Nothing else of the FSID changes.
+- **Absence.** A second round, after every host's stop, reads on each
+  physical host that no such unit runs or is enabled and that Podman runs no
+  `ceph-<fsid>-mgr-` container. Only then does the cluster block reach the
+  tiebreaker and record its retirement. A manager still running or enabled
+  refuses `managers-running`, and a host that does not answer refuses
+  `transport`; both stop `ceph.boundary-unproved` with an unknown outcome and
+  no retirement record, and the next destroy repeats the round first.
+- **Recovery.** The stop is idempotent: a host with no manager of the FSID
+  changes nothing. The retirement's observation reads only the second round,
+  and a manager running or enabled there reads no effect, or partial once the
+  tiebreaker's removal recorded an attempt.
+- A cluster with no physical host, or with no retained root and no provided
+  tiebreaker, makes no native call when it retires.
+
+Not yet met: a physical host whose operating system does not answer but whose
+BMC proves it powered off still refuses `transport` here; tracked as
+[B1811](milestones/m2.md#b1811).
+
+`TestARetainedRootClusterRetirementStopsEveryManagerBeforeAnyHostCleanup`,
+`TestACompleteTiebreakerDestroyRemovesItsFootprintBeforeTheRetirementRecordGolden`
+and `test_ceph_manager_stop.py` hold these rules; `ManagerStop` in
+`plugins/module_utils/ceph_native_stretch.py` and `execute_managers` in
+`plugins/module_utils/ceph_core.py` realize them.
 
 ### A provided tiebreaker's removal
 

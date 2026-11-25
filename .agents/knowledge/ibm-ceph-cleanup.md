@@ -33,3 +33,32 @@ pool/client blocks to report removal while their native objects remain.
 An eventual grouped inverse needs its own explicit lifecycle contract.
 
 This source review executes no cleanup and qualifies no provider artifact.
+
+## A live manager writes a cleaned host again
+
+On 2026-11-25 (`op-083b58cc`) every destroy of the ceph-stretch environment
+stopped on its two hosts that run no MGR, `srv4205` and `srv4502`, with
+`native-refusal:not-removed@ceph_native_stretch.remove:960`: the absence read
+after `rm-cluster` still found a part of the FSID. The other four hosts passed,
+and a second destroy completed. The adapter output was not read; the cause
+below comes from the cephadm v20.2.1 manager source
+(`src/pybind/mgr/cephadm/serve.py`, `ssh.py`) and the failure pattern.
+
+- The serve loop refreshes every host while paused or not, at least once a
+  minute (`facts_cache_timeout` 60 s). In `root` mode it runs the binary
+  `/var/lib/ceph/<fsid>/cephadm.<sha256>`, and when that is missing
+  `_deploy_cephadm_binary` writes it again through `_write_remote_file`,
+  which runs `mkdir -p` and stages under `/tmp/cephadm-<fsid>`.
+- `SSHManager.cons` keeps one connection per host and closes it only on an
+  error, a host removal or an SSH reconfiguration. Public-key authentication
+  happens at connect time, so removing the cluster-key line leaves that
+  connection working.
+- Unpaused, `_apply_all_services` also redeploys a placed daemon that
+  vanished, which writes units and data again.
+
+The hosts that run a manager stop it during their own `rm-cluster`; a host
+that runs none can finish while the managers elsewhere still run, which fits
+the two hosts that failed. Stopping
+the managers before any host cleans, as
+[manager retirement](../../specs/ceph.md#manager-retirement) states, removes
+the writer; a per-host retry or a longer wait does not.
