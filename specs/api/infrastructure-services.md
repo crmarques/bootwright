@@ -290,10 +290,12 @@ external; Bootwright does not run an identity provider`. Each plans no block and
 no readiness edge, and an unconsumed one is retained by
 [Environment selection](environment.md#cluster-selection) like every other
 service. A `CephSignOn`, a
-[`CephObjectGateway`'s authentication](../ceph-resources.md#cephobjectgateway-field-record)
-and an Active Directory SMB cluster consume them; their consumers' pages own
-the effects, and neither kind claims that a consumer exists or that the service
-answers.
+[`CephObjectGateway`'s authentication](../ceph-resources.md#cephobjectgateway-authentication)
+(its LDAP sign-in names an `LDAPServer`; its STS trust lists `OIDCProvider`
+objects for the plan only and refuses one with `trustBundleRef`, because RGW
+verifies an issuer against the image's system trust store alone) and an Active
+Directory SMB cluster consume them; their consumers' pages own the effects, and
+neither kind claims that a consumer exists or that the service answers.
 
 | Field | Type | Required | Default or rule |
 | --- | --- | --- | --- |

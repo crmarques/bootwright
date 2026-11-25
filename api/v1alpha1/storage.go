@@ -106,7 +106,7 @@ func storageSubvolumeSchema() *Shape {
 }
 
 func storageObjectGatewaySchema() *Shape {
-	return record(required("clusterRef", ref(CephCluster)), required("serviceRef", nativeServiceOf("clusterRef")), required("realm", name()), required("zoneGroup", name()), required("zone", name()), field("pools", record(field("indexPoolRef", ref(CephPool)), field("dataPoolRef", ref(CephPool)), field("dataExtraPoolRef", ref(CephPool)))), field("endpoint", record(field("fqdn", dns()))), field("authentication", record(field("ldap", record(required("ldapServerRef", ref(LDAPServer)))))))
+	return record(required("clusterRef", ref(CephCluster)), required("serviceRef", nativeServiceOf("clusterRef")), required("realm", name()), required("zoneGroup", name()), required("zone", name()), field("pools", record(field("indexPoolRef", ref(CephPool)), field("dataPoolRef", ref(CephPool)), field("dataExtraPoolRef", ref(CephPool)))), field("endpoint", record(field("fqdn", dns()))), field("authentication", record(field("ldap", record(required("ldapServerRef", ref(LDAPServer)))), field("sts", record(required("keyRef", secret("opaque", "token")), field("oidcProviderRefs", set(ref(OIDCProvider))))))))
 }
 
 func storageObjectUserSchema() *Shape {

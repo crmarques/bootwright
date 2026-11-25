@@ -1,0 +1,9 @@
+apiVersion: bootwright.io/v1alpha1
+kind: OIDCProvider
+metadata:
+  name: lab-sso
+
+spec:
+  management: external
+
+  issuerURL: https://sso.lab.example.test/realms/ceph

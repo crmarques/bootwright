@@ -147,6 +147,8 @@ spec:
 | `endpoint.fqdn` | DNS name of the public endpoint; an `endpoint` mapping without it defaults to `<gateway>.<cluster>.<storage domain>`. | None; scheme, port and TLS come from the terminating service. |
 | `authentication` | Optional record of the sign-in methods RGW adds to its local users; it must declare one. | None itself. |
 | `authentication.ldap.ldapServerRef` | Required [`LDAPServer`](api/infrastructure-services.md#oidcprovider-and-ldapserver), Active Directory included, that RGW authenticates S3 users against. | The rgw document's derived `spec.config` LDAP options and `custom_configs` files ([authentication](#cephobjectgateway-authentication)). |
+| `authentication.sts.keyRef` | Required `opaque` or `token` Secret whose value is exactly 16 letters and digits, the AES-128 key RGW's STS signs temporary credentials with; not a generated Secret. | `spec.config` `rgw_sts_key` and `rgw_s3_auth_use_sts: true` ([authentication](#cephobjectgateway-authentication)). |
+| `authentication.sts.oidcProviderRefs` | Optional set of [`OIDCProvider`](api/infrastructure-services.md#oidcprovider-and-ldapserver) objects whose web identities the operator means RGW to trust, each without `trustBundleRef`. | None: recorded for the plan only; the operator registers each provider and its roles. |
 
 The DNS-label grammar of `realm`, `zoneGroup` and `zone` is an explicit
 effect restriction of Bootwright; Ceph accepts more. Bootwright never passes
@@ -199,8 +201,8 @@ TLS needs `spec.endpoint`: the certificate must name its FQDN, and readiness
 proves the served leaf by SHA-256 with that FQDN as SNI.
 
 The gateway has no authored per-service RGW configuration option, because
-they have no qualified effect contract; `authentication.ldap` derives the one
-set the gateway applies ([authentication](#cephobjectgateway-authentication)).
+they have no qualified effect contract; `authentication` derives the one set
+the gateway applies ([authentication](#cephobjectgateway-authentication)).
 
 Admission refuses, before any effect: a `serviceRef` that resolves to no
 declared service, names a non-rgw service or is bound by another gateway; a
@@ -217,8 +219,9 @@ exist.
 
 ### CephObjectGateway authentication
 
-`authentication.ldap` is the one derived RGW configuration of a gateway: the
-gateway block writes it into the rgw document it applies
+`authentication.ldap` and `authentication.sts` are the one derived RGW
+configuration of a gateway, each optional and combinable: the gateway block
+writes them into the rgw document it applies
 ([realization](ceph.md#object-gateway-authentication)), so cephadm sets each option at
 `client.rgw.<service_id>` before it deploys a daemon and removes them with the
 service.
@@ -235,6 +238,8 @@ service.
 | `custom_configs[0]` | `/etc/bootwright/rgw-ldap-bind`: the value of the server's `bindPasswordRef` |
 | `custom_configs[1]` | `/etc/openldap/ldap.conf`: `TLS_CACERT` the CA file below, else the image's `/etc/pki/tls/certs/ca-bundle.crt`, `TLS_REQCERT demand`, `NETWORK_TIMEOUT 5` and `TIMEOUT 10`, because RGW sets no LDAP TLS option or timeout itself |
 | `custom_configs[2]` | only with the server's `trustBundleRef`: `/etc/bootwright/rgw-ldap-ca.pem`, its certificates |
+| `rgw_sts_key` | `sts` only: the value of `keyRef` |
+| `rgw_s3_auth_use_sts` | `sts` only: `true` |
 
 RGW's default sign-in order `sts, external, local` keeps local users last: the
 LDAP engine only denies, so a request signed with a CephObjectUser's key never
@@ -254,11 +259,41 @@ changing the server's values or Secrets, on a completed gateway is an input
 change, a destroy and a fresh apply, and so is rotating the bind password or
 bundle ([B1839](milestones/backlog.md#b1839)).
 
+`authentication.sts` lets RGW answer `AssumeRoleWithWebIdentity` with
+temporary S3 credentials for a web identity token an OpenID Connect provider
+issued. Bootwright registers no OpenID Connect provider and no role: after
+handoff the operator creates each provider (`CreateOpenIDConnectProvider` with
+its thumbprints) and each role with its trust policy through RGW's IAM API
+under an RGW account, because IBM Storage Ceph 9.9.1 deprecates tenant-level
+OIDC, and both are objects the operator keeps in its own GitOps configuration
+([D246](milestones/backlog.md#d246)). `oidcProviderRefs` names the providers the
+operator means to register, and the plan lists each; it changes nothing on the
+cluster. RGW verifies an issuer's HTTPS only against the image's system trust
+store, which only the `CURL_CA_BUNDLE` environment variable replaces as a
+whole, so a referenced OIDCProvider with `trustBundleRef` refuses at its
+reference ([B1837](milestones/backlog.md#b1837)), and each RGW host reaches the
+issuer directly, without a proxy. The STS and LDAP engines only deny, so a
+request signed with a CephObjectUser's key never contacts the identity
+provider; credentials STS already issued keep working through a provider
+outage until they expire, and new `AssumeRoleWithWebIdentity` calls fail until
+it returns. The key is effect material of the gateway block and is the same on
+every daemon of the zone by construction: one gateway owns one rgw service and
+its zone, and a second gateway of that zone refuses as the zone's owner. A
+value other than 16 letters and digits refuses `ceph.secret-invalid` when the
+apply binds it, naming the Secret and never the value (an opaque Secret keeps
+its exact bytes, so store it without a final newline); a generated Secret
+refuses at admission, because a generated token is base64url of at least 22
+characters. The key is stored in cephadm's service specification and in the
+configuration database, readable by every Ceph administrator
+([Q154](milestones/m2.md#identity-program-open-decisions)), and rotating it is
+an input change, a destroy and a fresh apply ([B1839](milestones/backlog.md#b1839)).
+
 Admission refuses an `authentication` that declares no method, and one whose
 terminating service does not terminate TLS (`ssl: true` on the rgw service, or
 on every ingress that fronts it), because an LDAP user's access key carries the
-user's directory password; with an ingress, the hop from haproxy to RGW stays
-plaintext on the cluster network, as the plan's impact lines say.
+user's directory password and STS returns temporary credentials in its
+response; with an ingress, the hop from haproxy to RGW stays plaintext on the
+cluster network, as the plan's impact lines say.
 
 ## CephPlacementPolicy
 

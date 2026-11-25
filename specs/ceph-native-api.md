@@ -834,7 +834,7 @@ The core cluster request never carries a binding. Planning routes each
 
 | Service type | Executing block | Bound leaves |
 | --- | --- | --- |
-| `rgw` that a CephObjectGateway binds, and the `ingress` that fronts it | gateway block | its TLS leaves, and the derived LDAP leaves `/custom_configs/0/content` and `/custom_configs/2/content` from the gateway's `authentication`, never a `serviceBindings` entry |
+| `rgw` that a CephObjectGateway binds, and the `ingress` that fronts it | gateway block | its TLS leaves, and the derived LDAP leaves `/custom_configs/0/content` and `/custom_configs/2/content` and the STS key leaf `/spec/config/rgw_sts_key` from the gateway's `authentication`, never a `serviceBindings` entry |
 | `grafana`, `snmp-gateway` | monitoring unit | grafana's `/spec/initial_admin_password`; snmp-gateway's `/spec/credentials/` `snmp_community`, `snmp_v3_auth_username`, `snmp_v3_auth_password` and `snmp_v3_priv_password` |
 | `mgmt-gateway` | management gateway unit | the gateway's `/spec/ssl_cert` and `/spec/ssl_key` |
 | `nvmeof` | nvmeof unit | the five mTLS leaves of the [rows below](#secret-bindings), as effect material |

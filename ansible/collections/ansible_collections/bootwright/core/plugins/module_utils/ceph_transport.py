@@ -292,7 +292,7 @@ class Transport:
             raise ceph_native.Refusal("material") from None
 
     def gateway_auth_material(self):
-        """A gateway's LDAP bind password and its optional CA bundle for the service apply, read from the runner's private files."""
+        """A gateway's LDAP bind password, its optional CA bundle and its STS key for the service apply, read from the runner's private files."""
         names = sorted(ceph_native_object.auth_variables(self.request["gateway"]).values())
         ceph_native.require(isinstance(self.material, dict) and all(name in self.material for name in names), "material")
         try:

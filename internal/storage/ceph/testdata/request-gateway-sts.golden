@@ -1,0 +1,245 @@
+{
+  "action": "gateway",
+  "ansiblePackageVersion": "5.0.3-1",
+  "bootstrap": "node-1",
+  "callHome": "enabled",
+  "cephadm": {
+    "packageVersion": "20.2.1-405.el9cp",
+    "path": "/usr/sbin/cephadm"
+  },
+  "cluster": "example",
+  "clusterKeyRef": "cluster-key",
+  "clusterNetworks": [],
+  "clusterSSHTransport": "verifiedTunnel",
+  "clusterSSHUser": "operator",
+  "config": {
+    "global": {
+      "osd_pool_default_min_size": "2",
+      "osd_pool_default_size": "2"
+    },
+    "osd": {
+      "osd_memory_target": "2147483648",
+      "osd_memory_target_autotune": "false"
+    }
+  },
+  "controller": "controller",
+  "delegated": [
+    {
+      "hosts": [
+        "node-1",
+        "node-2",
+        "node-3"
+      ],
+      "name": "crash"
+    },
+    {
+      "hosts": [
+        "node-1",
+        "node-2",
+        "node-3"
+      ],
+      "name": "rgw.objects"
+    }
+  ],
+  "gateway": {
+    "authentication": {
+      "ldap": {
+        "bindSecretRef": "directory-bind",
+        "server": "directory"
+      },
+      "sts": {
+        "keySecretRef": "gateway-sts-key",
+        "providers": [
+          {
+            "issuerURL": "https://sso.example.test/realms/ceph",
+            "name": "public-sso"
+          }
+        ]
+      }
+    },
+    "bindings": [
+      {
+        "path": "/spec/ssl_cert",
+        "secretRef": "gateway-tls",
+        "serviceRef": "rgw.objects"
+      },
+      {
+        "path": "/spec/ssl_key",
+        "secretRef": "gateway-tls",
+        "serviceRef": "rgw.objects"
+      }
+    ],
+    "dataExtraPool": "objects.rgw.buckets.non-ec",
+    "dataPool": "objects.rgw.buckets.data",
+    "documents": [
+      {
+        "custom_configs": [
+          {
+            "mount_path": "/etc/bootwright/rgw-ldap-bind"
+          },
+          {
+            "content": "TLS_CACERT /etc/pki/tls/certs/ca-bundle.crt\nTLS_REQCERT demand\nNETWORK_TIMEOUT 5\nTIMEOUT 10\n",
+            "mount_path": "/etc/openldap/ldap.conf"
+          }
+        ],
+        "placement": {
+          "count": 2,
+          "hosts": [
+            "node-1",
+            "node-2",
+            "node-3"
+          ]
+        },
+        "service_id": "objects",
+        "service_type": "rgw",
+        "spec": {
+          "config": {
+            "rgw_ldap_binddn": "CN=svc ceph,OU=Service Accounts,DC=example,DC=test",
+            "rgw_ldap_dnattr": "sAMAccountName",
+            "rgw_ldap_searchdn": "OU=People,DC=example,DC=test",
+            "rgw_ldap_searchfilter": "(\u0026(memberOf=CN=ceph,DC=example,DC=test)(sAMAccountName=@USERNAME@))",
+            "rgw_ldap_secret": "/etc/bootwright/rgw-ldap-bind",
+            "rgw_ldap_uri": "ldaps://dc-01.example.test:636 ldaps://dc-02.example.test",
+            "rgw_s3_auth_use_ldap": "true",
+            "rgw_s3_auth_use_sts": "true"
+          },
+          "rgw_realm": "objects",
+          "rgw_zone": "objects",
+          "rgw_zonegroup": "objects",
+          "ssl": true
+        }
+      }
+    ],
+    "endpoint": "s3.example.test",
+    "indexPool": "objects.rgw.buckets.index",
+    "name": "objects",
+    "realm": "objects",
+    "zone": "objects",
+    "zoneGroup": "objects",
+    "zonePools": [
+      "objects.rgw.buckets.data",
+      "objects.rgw.buckets.index",
+      "objects.rgw.buckets.non-ec",
+      "objects.rgw.control",
+      "objects.rgw.dedup",
+      "objects.rgw.log",
+      "objects.rgw.meta",
+      "objects.rgw.otp"
+    ]
+  },
+  "hosts": [
+    {
+      "address": "192.0.2.1",
+      "devices": [
+        {
+          "path": "/dev/vdb",
+          "serial": "bwdfe74888b831437e0a",
+          "sizeBytes": 1073741824
+        }
+      ],
+      "labels": [
+        "mon",
+        "storage"
+      ],
+      "location": {},
+      "machine": "node-1",
+      "name": "node-1",
+      "port": 22,
+      "sshKeyRef": "fleet-key",
+      "user": "operator"
+    },
+    {
+      "address": "192.0.2.2",
+      "devices": [
+        {
+          "path": "/dev/vdb",
+          "serial": "bwb915b15101775327fa",
+          "sizeBytes": 1073741824
+        }
+      ],
+      "labels": [
+        "mon",
+        "storage"
+      ],
+      "location": {},
+      "machine": "node-2",
+      "name": "node-2",
+      "port": 22,
+      "sshKeyRef": "fleet-key",
+      "user": "operator"
+    },
+    {
+      "address": "192.0.2.3",
+      "devices": [
+        {
+          "path": "/dev/vdb",
+          "serial": "bwc3fb2249231be58313",
+          "sizeBytes": 1073741824
+        }
+      ],
+      "labels": [
+        "mon",
+        "storage"
+      ],
+      "location": {},
+      "machine": "node-3",
+      "name": "node-3",
+      "port": 22,
+      "sshKeyRef": "fleet-key",
+      "user": "operator"
+    }
+  ],
+  "image": "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-25074",
+  "monIP": "192.0.2.1",
+  "packageRepository": "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64",
+  "packageRepositoryKey": "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/RPM-GPG-KEY-IBM-CEPH",
+  "publicNetworks": [
+    "192.0.2.0/24"
+  ],
+  "registry": "cp.icr.io",
+  "registryRef": "registry",
+  "release": "9.9.1.2",
+  "services": [
+    {
+      "placement": {
+        "count": 3,
+        "hosts": [
+          "node-1",
+          "node-2",
+          "node-3"
+        ]
+      },
+      "service_type": "mon"
+    },
+    {
+      "placement": {
+        "count": 2,
+        "hosts": [
+          "node-1",
+          "node-2",
+          "node-3"
+        ]
+      },
+      "service_type": "mgr"
+    },
+    {
+      "placement": {
+        "hosts": [
+          "node-1",
+          "node-2",
+          "node-3"
+        ]
+      },
+      "service_id": "data",
+      "service_type": "osd",
+      "spec": {
+        "data_devices": {
+          "paths": [
+            "/dev/vdb"
+          ]
+        }
+      }
+    }
+  ],
+  "version": "ceph-core-v1"
+}

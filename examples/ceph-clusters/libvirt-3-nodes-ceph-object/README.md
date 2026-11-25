@@ -19,6 +19,13 @@ RGW binds as `CN=svc ceph` with the password stored in the context Secret
 system trust store. Local CephObjectUser keys keep working while the directory
 is down.
 
+Its RGW also trusts web identities through STS: the key comes from the context
+Secret `rgw-objects-sts-key`, and the gateway lists the Keycloak
+[`OIDCProvider`](../../../specs/api/infrastructure-services.md#oidcprovider-and-ldapserver)
+`lab-sso`, whose issuer chains to a public CA. Bootwright registers neither the
+provider nor any role: after handoff, register both through RGW's IAM API under
+an account ([STS](../../../specs/ceph-resources.md#cephobjectgateway-authentication)).
+
 ## Worth noting
 
 - Topology: `rhel-01` to `rhel-03`, each 4 vCPU, 8 GiB RAM, 60 GiB root and
@@ -33,9 +40,11 @@ is down.
 - Required inputs: RHEL 9.8 boot and DVD ISOs from your Red Hat subscription,
   the IBM entitlement key for Secret `ibm-registry` and the directory bind
   password for Secret `lab-directory-bind`, stored with `bootwright secret set
-  --name lab-directory-bind --value-stdin`. Point `lab-directory` at your own
-  directory, or remove `spec.authentication` from the gateway and the
-  `LDAPServer` with its Secret. The Entitlement
+  --name lab-directory-bind --value-stdin`, and exactly 16 letters and digits
+  for Secret `rgw-objects-sts-key`, stored the same way without a final
+  newline. Point `lab-directory` and `lab-sso` at your own services, or remove
+  `spec.authentication` from the gateway and the `LDAPServer` and
+  `OIDCProvider` with their Secrets. The Entitlement
   `license.accept: true` is a placeholder; review IBM's terms before use.
 - Release coordinates are the three-node example's authored choices.
 

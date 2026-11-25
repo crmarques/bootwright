@@ -178,6 +178,22 @@ argument_specs:
                         required: true
                       trustSecretRef:
                         type: str
+                  sts:
+                    type: dict
+                    options:
+                      keySecretRef:
+                        type: str
+                        required: true
+                      providers:
+                        type: list
+                        elements: dict
+                        options:
+                          issuerURL:
+                            type: str
+                            required: true
+                          name:
+                            type: str
+                            required: true
               bindings:
                 type: list
                 elements: dict

@@ -35,6 +35,17 @@ type Gateway struct {
 
 type GatewayAuthentication struct {
 	LDAP *GatewayLDAP `json:"ldap,omitempty"`
+	STS  *GatewaySTS  `json:"sts,omitempty"`
+}
+
+type GatewaySTS struct {
+	KeySecretRef string                `json:"keySecretRef"`
+	Providers    []GatewayOIDCProvider `json:"providers,omitempty"`
+}
+
+type GatewayOIDCProvider struct {
+	IssuerURL string `json:"issuerURL"`
+	Name      string `json:"name"`
 }
 
 type GatewayLDAP struct {
@@ -50,6 +61,7 @@ const (
 	rgwSystemBundle   = "/etc/pki/tls/certs/ca-bundle.crt"
 	maxLDAPBindSecret = 1023
 	maxLDAPCABundle   = 65536
+	rgwSTSKeyLength   = 16
 )
 
 func rgwLDAPConf(trusted bool) string {
@@ -88,29 +100,69 @@ func gatewayLDAP(c api.Catalog, gateway api.Object) (*GatewayLDAP, map[string]st
 	return &GatewayLDAP{BindSecretRef: server.Spec().Get("bindPasswordRef").Text(), Server: server.Name(), TrustSecretRef: trust}, rgwLDAPOptions(server.Spec()), mounts, nil
 }
 
+func gatewaySTS(c api.Catalog, gateway api.Object) (*GatewaySTS, error) {
+	sts := gateway.Spec().Get("authentication", "sts")
+	if !sts.Present() {
+		return nil, nil
+	}
+	out := &GatewaySTS{KeySecretRef: sts.Get("keyRef").Text()}
+	for _, ref := range sts.Get("oidcProviderRefs").Strings() {
+		provider, found := c.Find(api.OIDCProvider, ref)
+		if !found {
+			return nil, failure("api.invariant", "CephObjectGateway "+gateway.Name()+" names OIDCProvider "+ref+", which is not declared", "declare OIDCProvider "+ref+", or remove it from spec.authentication.sts.oidcProviderRefs")
+		}
+		out.Providers = append(out.Providers, GatewayOIDCProvider{IssuerURL: provider.Spec().Get("issuerURL").Text(), Name: provider.Name()})
+	}
+	slices.SortFunc(out.Providers, func(a, b GatewayOIDCProvider) int { return strings.Compare(a.Name, b.Name) })
+	return out, nil
+}
+
 func (g *Gateway) authSecrets() []string {
-	if g == nil || g.Authentication == nil || g.Authentication.LDAP == nil {
+	if g == nil || g.Authentication == nil {
 		return nil
 	}
-	ldap := g.Authentication.LDAP
-	if ldap.TrustSecretRef == "" {
-		return []string{ldap.BindSecretRef}
+	out := []string{}
+	if ldap := g.Authentication.LDAP; ldap != nil {
+		out = append(out, ldap.BindSecretRef)
+		if ldap.TrustSecretRef != "" {
+			out = append(out, ldap.TrustSecretRef)
+		}
 	}
-	return []string{ldap.BindSecretRef, ldap.TrustSecretRef}
+	if sts := g.Authentication.STS; sts != nil {
+		out = append(out, sts.KeySecretRef)
+	}
+	return out
 }
 
 func objectGatewayImpacts(g Gateway) []string {
-	if g.Authentication == nil || g.Authentication.LDAP == nil {
+	if g.Authentication == nil {
 		return nil
 	}
-	out := []string{
-		"RGW of object gateway " + g.Name + " authenticates S3 users against LDAPServer " + g.Authentication.LDAP.Server + "; its local object users keep working while the directory is down",
-		"an LDAP user named like a CephObjectUser acts as that object user: keep directory names and CephObjectUser names disjoint",
-		"the directory bind password is stored in cephadm's service specification, which ceph orch ls --export and the dashboard's service API show to Ceph administrators; use a least-privilege bind account",
-		"rotating the directory bind password or trust bundle of the completed gateway needs bootwright destroy and a fresh apply",
+	out := []string{}
+	if ldap := g.Authentication.LDAP; ldap != nil {
+		out = append(out,
+			"RGW of object gateway "+g.Name+" authenticates S3 users against LDAPServer "+ldap.Server+"; its local object users keep working while the directory is down",
+			"an LDAP user named like a CephObjectUser acts as that object user: keep directory names and CephObjectUser names disjoint",
+			"the directory bind password is stored in cephadm's service specification, which ceph orch ls --export and the dashboard's service API show to Ceph administrators; use a least-privilege bind account",
+			"rotating the directory bind password or trust bundle of the completed gateway needs bootwright destroy and a fresh apply")
+		if len(g.Documents) > 1 {
+			out = append(out, "the ingress of object gateway "+g.Name+" forwards each S3 request, whose LDAP access key carries the user's directory password, to RGW without TLS on the cluster network")
+		}
 	}
-	if len(g.Documents) > 1 {
-		out = append(out, "the ingress of object gateway "+g.Name+" forwards each S3 request, whose LDAP access key carries the user's directory password, to RGW without TLS on the cluster network")
+	if sts := g.Authentication.STS; sts != nil {
+		out = append(out,
+			"RGW of object gateway "+g.Name+" issues temporary S3 credentials to web identities through STS; Bootwright registers no identity provider or role",
+			"register each identity provider and its roles through RGW's IAM API under an account after handoff",
+			"the STS key is stored in cephadm's service specification and the configuration database, which every Ceph administrator can read",
+			"credentials STS already issued outlive an identity provider outage until they expire; local object users never contact it",
+			"each RGW host reaches the identity provider's issuer directly over HTTPS verified by the image's system trust store",
+			"rotating the STS key of the completed gateway needs bootwright destroy and a fresh apply")
+		for _, provider := range sts.Providers {
+			out = append(out, "object gateway "+g.Name+" lists OIDCProvider "+provider.Name+": register it and its roles through RGW's IAM API after handoff")
+		}
+		if len(g.Documents) > 1 {
+			out = append(out, "the ingress of object gateway "+g.Name+" forwards each STS request and its temporary credentials to RGW without TLS on the cluster network")
+		}
 	}
 	return out
 }
@@ -241,7 +293,40 @@ func (c Capability) ProveBinding(ctx context.Context, contextName string, block 
 	if err := proveGatewayTLS(contextName, r, material); err != nil {
 		return err
 	}
-	return proveGatewayLDAP(contextName, r, material)
+	if err := proveGatewayLDAP(contextName, r, material); err != nil {
+		return err
+	}
+	return proveGatewaySTS(contextName, r, material)
+}
+
+func proveGatewaySTS(contextName string, r Request, material map[string]secrets.Material) error {
+	if r.Gateway == nil || r.Gateway.Authentication == nil || r.Gateway.Authentication.STS == nil {
+		return nil
+	}
+	ref := r.Gateway.Authentication.STS.KeySecretRef
+	value, found := material[ref]
+	if !found {
+		return cephUnconfigured.Fail("the STS key Secret a CephObjectGateway names is not bound to this apply", "")
+	}
+	key, _ := value.Part(secrets.ValuePart)
+	defer clear(key)
+	if !rgwSTSKey(key) {
+		return cephSecretInvalid.Fail("the Secret "+ref+" that CephObjectGateway "+r.Gateway.Name+" names as its STS key is not exactly 16 letters and digits, the AES-128 key RGW's STS needs",
+			"store exactly 16 letters and digits, without a final newline, in Secret "+ref+" with "+secrets.Command(contextName, "set")+" --name "+ref+" --value-stdin, then apply again")
+	}
+	return nil
+}
+
+func rgwSTSKey(value []byte) bool {
+	if len(value) != rgwSTSKeyLength {
+		return false
+	}
+	for _, b := range value {
+		if !('a' <= b && b <= 'z' || 'A' <= b && b <= 'Z' || '0' <= b && b <= '9') {
+			return false
+		}
+	}
+	return true
 }
 
 func proveGatewayTLS(contextName string, r Request, material map[string]secrets.Material) error {
@@ -447,6 +532,16 @@ func gatewayRequest(c api.Catalog, cluster, gateway api.Object, base Request) (R
 	if err != nil {
 		return Request{}, err
 	}
+	sts, err := gatewaySTS(c, gateway)
+	if err != nil {
+		return Request{}, err
+	}
+	if sts != nil {
+		if options == nil {
+			options = map[string]string{}
+		}
+		options["rgw_s3_auth_use_sts"] = "true"
+	}
 	value, err := unitDocumentValue(cluster, svc, rgwSpecOf(spec, options))
 	if err != nil {
 		return Request{}, err
@@ -482,8 +577,8 @@ func gatewayRequest(c api.Catalog, cluster, gateway api.Object, base Request) (R
 	r.Gateway = &Gateway{Bindings: bindings, DataExtraPool: nativePoolRef(c, placementPool(spec, "buckets.non-ec")), DataPool: nativePoolRef(c, placementPool(spec, "buckets.data")), Documents: documents,
 		Endpoint: endpoint, IndexPool: nativePoolRef(c, placementPool(spec, "buckets.index")), Name: gateway.Name(), Realm: spec.Get("realm").Text(),
 		Zone: spec.Get("zone").Text(), ZoneGroup: spec.Get("zoneGroup").Text(), ZonePools: slices.Compact(zonePools)}
-	if ldap != nil {
-		r.Gateway.Authentication = &GatewayAuthentication{LDAP: ldap}
+	if ldap != nil || sts != nil {
+		r.Gateway.Authentication = &GatewayAuthentication{LDAP: ldap, STS: sts}
 	}
 	return r, nil
 }

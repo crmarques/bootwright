@@ -2225,7 +2225,8 @@ inspection never mutates or reveals keys.
 
 ## Object gateway authentication
 
-The [object gateway](#object-gateway) block realizes a gateway's LDAP sign-in.
+The [object gateway](#object-gateway) block realizes a gateway's LDAP sign-in
+and its STS trust of web identities.
 
 A gateway with [`authentication.ldap`](ceph-resources.md#cephobjectgateway-authentication)
 carries in its request the LDAPServer's name and the Secret references of its
@@ -2263,6 +2264,29 @@ SELinux label of the daemon's keyring, `ldap.conf` holding its frozen bytes, and
 was started after every file was written; the round answers counts only, never
 a path or byte, and readiness waits on `mount@rgw.<id>` until the placement
 count proves.
+
+A gateway with [`authentication.sts`](ceph-resources.md#cephobjectgateway-authentication)
+carries in its request the Secret reference of its key and the name and
+`issuerURL` of each OIDCProvider it lists, and its rgw document carries
+`rgw_s3_auth_use_sts: "true"` but never `rgw_sts_key`: the worker places
+`bootwright-bound:/spec/config/rgw_sts_key` in the normalized document and in
+the inputs, attempt and completion records, and splices the key, bound to
+`gateway_service` only, into the one apply stream. Readback compares the stored
+key with the held one, or in observation requires 16 letters and digits, by
+`hmac`, and refuses `object-auth-credential` otherwise; the key is never
+compared with `==`, never recorded and never in a refusal, and every native
+diagnostic of a command whose output may hold it (`ceph config dump`, `ceph
+config show`) redacts it. The foreign-entry check before the first attempt
+covers `rgw_sts_key` and `rgw_s3_auth_use_sts` by name. Readiness and
+observation need `rgw_s3_auth_use_sts` once with its frozen value and
+`rgw_sts_key` once equal by `hmac` to the stored service's key, which
+`gateway_service` proved equal to the bound one (`sts@rgw.<id>` while cephadm
+has not set them, `object-auth-config` naming option and section only for
+another value, section or mask); each running daemon reading both, its key
+equal by `hmac` (`sts@rgw.<id>` until it does); and its `rgw_s3_auth_order`
+holding `sts` as well as `local`, else `object-auth-config`. An STS-only gateway
+mounts no file, so no `gateway_auth_mounts` round runs. Readiness never
+contacts the identity provider, and Bootwright never calls RGW's IAM API.
 
 ## Management gateway
 

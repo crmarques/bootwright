@@ -16,3 +16,7 @@ spec:
   authentication:
     ldap:
       ldapServerRef: lab-directory
+    sts:
+      keyRef: rgw-objects-sts-key
+      oidcProviderRefs:
+        - lab-sso

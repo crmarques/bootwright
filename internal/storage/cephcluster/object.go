@@ -2,6 +2,7 @@ package cephcluster
 
 import (
 	"math/big"
+	"strconv"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -34,13 +35,34 @@ func (a *admission) gateway(cluster api.Object) {
 
 func (a *admission) gatewayAuthentication(cluster api.Object, spec api.Value) {
 	const field = "$.spec.authentication"
-	if !spec.Has("authentication", "ldap") {
-		a.issue("api.invariant", field, "spec.authentication declares no sign-in method", "declare spec.authentication.ldap with the LDAPServer RGW authenticates S3 users against, or omit spec.authentication")
+	ldap, sts := spec.Has("authentication", "ldap"), spec.Has("authentication", "sts")
+	if !ldap && !sts {
+		a.issue("api.invariant", field, "spec.authentication declares no sign-in method", "declare spec.authentication.ldap with the LDAPServer RGW authenticates S3 users against, or spec.authentication.sts with the key RGW's STS signs temporary credentials with, or omit spec.authentication")
 		return
 	}
 	if service, ok := NativeService(cluster, textOf(spec, "serviceRef")); ok && !gatewayTerminatesTLS(cluster, service) {
-		a.issue("api.invariant", field, "an LDAP user's S3 access key carries the user's directory password, so the gateway's endpoint must terminate TLS",
+		message := "an LDAP user's S3 access key carries the user's directory password, so the gateway's endpoint must terminate TLS"
+		if !ldap {
+			message = "STS answers each web identity's AssumeRoleWithWebIdentity with temporary S3 credentials in the response, so the gateway's endpoint must terminate TLS"
+		}
+		a.issue("api.invariant", field, message,
 			"set spec.ssl: true and certificate_source: inline on the rgw service, or on every ingress that fronts it, with its /spec/ssl_cert and /spec/ssl_key serviceBindings, and declare spec.endpoint on the CephObjectGateway")
+	}
+	if sts {
+		a.gatewaySTS(spec.Get("authentication", "sts"))
+	}
+}
+
+func (a *admission) gatewaySTS(sts api.Value) {
+	if key, found := a.catalog.Find(api.Secret, textOf(sts, "keyRef")); found && key.Spec().Has("source", "generated") {
+		a.issue("api.invariant", "$.spec.authentication.sts.keyRef", "Secret "+key.Name()+" is generated, and a generated token is unpadded base64url of at least 22 characters that may hold - and _, never the 16 letters and digits RGW's STS key is",
+			"declare Secret "+key.Name()+" without spec.source.generated and store 16 letters and digits in it with bootwright secret set --name "+key.Name()+" --value-stdin")
+	}
+	for i, ref := range sts.Get("oidcProviderRefs").Strings() {
+		if provider, found := a.catalog.Find(api.OIDCProvider, ref); found && provider.Spec().Has("trustBundleRef") {
+			a.issue("api.invariant", "$.spec.authentication.sts.oidcProviderRefs["+strconv.Itoa(i)+"]", "OIDCProvider "+ref+" declares spec.trustBundleRef, but RGW verifies an identity provider's HTTPS only against the image's system trust store, which only an environment variable can replace as a whole",
+				"remove spec.trustBundleRef from OIDCProvider "+ref+" when its issuer chains to a CA the system trust store holds, or remove "+ref+" from spec.authentication.sts.oidcProviderRefs")
+		}
 	}
 }
 

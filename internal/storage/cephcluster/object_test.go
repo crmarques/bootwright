@@ -295,3 +295,51 @@ func TestGatewayAuthenticationNeedsAMethodAndATLSEndpoint(t *testing.T) {
 		})
 	}
 }
+
+func stsCatalog(t *testing.T) api.Catalog {
+	t.Helper()
+	_, catalog := withMDSService(t, fixtureCatalog(), rgwService(qualifiedRGWSpec().With("ssl", api.BoolValue(true))))
+	for _, extra := range []api.Object{
+		object(api.Secret, "sts-key", m("type", "token")),
+		object(api.Secret, "sts-generated", m("type", "token", "source", m("generated", m("bytes", 16)))),
+		object(api.OIDCProvider, "public-sso", m("management", "external", "issuerURL", "https://sso.example.test")),
+		object(api.OIDCProvider, "private-sso", m("management", "external", "issuerURL", "https://sso.corp.test", "trustBundleRef", "corp-ca")),
+	} {
+		catalog = replace(catalog, extra)
+	}
+	return catalog
+}
+
+func TestGatewaySTSAdmission(t *testing.T) {
+	catalog := stsCatalog(t)
+	gateway, changed := editGateway(t, catalog, "authentication", m("sts", m("keyRef", "sts-key", "oidcProviderRefs", api.ListValue(api.StringValue("public-sso")))))
+	if issues := issuesAt(Validate(gateway, changed), "$.spec.authentication.sts.keyRef"); len(issues) != 0 || len(issuesAt(Validate(gateway, changed), "$.spec.authentication")) != 0 {
+		t.Fatalf("a TLS gateway with an STS key and a public issuer was refused: %#v", Validate(gateway, changed))
+	}
+	gateway, changed = editGateway(t, catalog, "authentication", m("sts", m("keyRef", "sts-generated")))
+	exactlyOne(t, Validate(gateway, changed), "$.spec.authentication.sts.keyRef",
+		"Secret sts-generated is generated, and a generated token is unpadded base64url of at least 22 characters that may hold - and _, never the 16 letters and digits RGW's STS key is",
+		"declare Secret sts-generated without spec.source.generated and store 16 letters and digits in it with bootwright secret set --name sts-generated --value-stdin")
+	gateway, changed = editGateway(t, catalog, "authentication", m("sts", m("keyRef", "sts-key", "oidcProviderRefs", api.ListValue(api.StringValue("public-sso"), api.StringValue("private-sso")))))
+	exactlyOne(t, Validate(gateway, changed), "$.spec.authentication.sts.oidcProviderRefs[1]",
+		"OIDCProvider private-sso declares spec.trustBundleRef, but RGW verifies an identity provider's HTTPS only against the image's system trust store, which only an environment variable can replace as a whole",
+		"remove spec.trustBundleRef from OIDCProvider private-sso when its issuer chains to a CA the system trust store holds, or remove private-sso from spec.authentication.sts.oidcProviderRefs")
+	if found := issuesAt(Validate(gateway, changed), "$.spec.authentication.sts.oidcProviderRefs[0]"); len(found) != 0 {
+		t.Fatalf("a public issuer was refused: %#v", found)
+	}
+}
+
+func TestGatewaySTSNeedsATLSEndpoint(t *testing.T) {
+	gateway, catalog := editGateway(t, gatewayCatalog(t), "authentication", m("sts", m("keyRef", "sts-key")))
+	exactlyOne(t, Validate(gateway, catalog), "$.spec.authentication",
+		"STS answers each web identity's AssumeRoleWithWebIdentity with temporary S3 credentials in the response, so the gateway's endpoint must terminate TLS", "")
+}
+
+func TestASecondSTSGatewayOfOneZoneIsRefusedByZoneOwnership(t *testing.T) {
+	catalog := gatewayCatalog(t, moreRGW())
+	gateway, catalog := editGateway(t, catalog, "authentication", m("sts", m("keyRef", "sts-key")))
+	second := secondGateway("zone", "zone", "authentication", m("sts", m("keyRef", "another-sts-key")))
+	catalog = replace(replace(catalog, gateway), second)
+	exactlyOne(t, Validate(second, catalog), "$.spec.zone", "zone is already owned by CephObjectGateway objects of this cluster",
+		"choose a zone no other gateway of CephCluster storage uses; peer zones of one realm are not realized by Bootwright yet")
+}

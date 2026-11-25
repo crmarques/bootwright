@@ -1416,7 +1416,7 @@ def execute_gateway(request, operation, request_digest, transport, bootstrap, *,
             produced = transport.call(bootstrap, phase, private) if private else transport.call(bootstrap, phase)
             ceph_native.require(isinstance(produced, dict) and set(produced) == {"changed"} and type(produced["changed"]) is bool, "evidence")
             changed = produced["changed"] or changed
-        mounts = GatewayMounts(request, transport) if authenticated else None
+        mounts = GatewayMounts(request, transport) if "ldap" in request["gateway"].get("authentication", {}) else None
         observation = wait_unit(request, request_digest, bootstrap, transport, now, pause, private=seen, routes=mounts)
         ceph_native.require(observation["ready"], "not-ready")
     elif operation == "destroy":

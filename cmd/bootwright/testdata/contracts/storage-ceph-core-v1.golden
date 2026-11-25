@@ -1,5 +1,5 @@
 implementation: storage-ceph-core-v1
-content-digest: 984a7897d0d3883b4a3471af271c14f04ffb0f8ea5119efba9a180edd95588ac
+content-digest: 3561cc59224eb6d963cc4573008e9947c9ef54ec1e5a2f21182df28df17c8228
 request-version: ceph-core-v1
 automation-formats: -custody-v1, ceph-bootstrap-recovery-v1, ceph-bootstrap-state-v1, ceph-client-auth-v1, ceph-cluster-device-identities-v1, ceph-dashboard-port-attempt-v1, ceph-dashboard-port-repair-v1, ceph-dashboard-redeploy-v1, ceph-dashboard-tls-v1, ceph-dashboard-user-v1, ceph-device-identities-v1, ceph-filesystem-attempt-v1, ceph-host-cache-v1, ceph-manager-ports-attempt-v1, ceph-monitoring-template-v1, ceph-native-route-v1, ceph-native-teardown-v1, ceph-osd-device-clear-v1, ceph-osd-device-intent-v1, ceph-physical-device-binding-v1, ceph-policy-attempt-v1, ceph-pool-attempt-v1, ceph-rbd-image-attempt-v1, ceph-registry-v1, ceph-runtime-profile-v1, ceph-service-inputs-v1, ceph-subvolume-attempt-v1, ceph-subvolume-group-attempt-v1, ceph-tiebreaker-removal-v1, ceph-tunnel-custody-v1, ceph-tunnel-redeploy-v1, ceph-tunnel-relabel-v1, ceph-tunnel-stage-v1, ceph-tunnel-v1
 mark-formats: .bootwright-registry-, Bootwright: this host, bootwright-owner, bootwright:
@@ -17,6 +17,7 @@ effect-pins:
   registry-inode-before-link
   independent-native-removal-absence
   gateway-ldap-authentication-v1
+  gateway-sts-authentication-v1
 request-identity:
   cluster
   fsid
@@ -95,6 +96,11 @@ request-schema:
   gateway.authentication.ldap.bindSecretRef string
   gateway.authentication.ldap.server string
   gateway.authentication.ldap.trustSecretRef string omitempty
+  gateway.authentication.sts *struct ceph.GatewaySTS omitempty
+  gateway.authentication.sts.keySecretRef string
+  gateway.authentication.sts.providers []struct ceph.GatewayOIDCProvider omitempty
+  gateway.authentication.sts.providers[].issuerURL string
+  gateway.authentication.sts.providers[].name string
   gateway.bindings []struct ceph.GatewayBinding
   gateway.bindings[].path string
   gateway.bindings[].secretRef string

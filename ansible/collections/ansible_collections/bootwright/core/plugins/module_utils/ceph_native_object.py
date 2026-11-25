@@ -76,7 +76,7 @@ PLACEMENT = "default-placement"
 # RGWSpec.get_port: 443 with ssl, else 80 (IBM python3-ceph-common 20.2.1 service_spec.py:1888-1909).
 HTTP_PORT = 80
 HTTPS_PORT = 443
-PENDING = re.compile(r"(?:(?:rgw|http|tls|site|ldap|mount)@rgw|tls@ingress|default@realm|stretch@)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\Z")
+PENDING = re.compile(r"(?:(?:rgw|http|tls|site|ldap|sts|mount)@rgw|tls@ingress|default@realm|stretch@)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\Z")
 MEMBERS = frozenset(("bindings", "dataExtraPool", "dataPool", "documents", "endpoint", "indexPool", "name", "realm", "zone", "zoneGroup", "zonePools"))
 # The files and options a gateway's LDAP authentication derives (internal/storage/ceph gateway.go): RGW reads its bind password from a file
 # path (rgw_ldap_secret, src/rgw/rgw_ldap.cc parse_rgw_ldap_bindpw) and its LDAP client sets no TLS option or timeout, so libldap reads them from
@@ -89,6 +89,15 @@ AUTH_MEMBERS = frozenset(("bindSecretRef", "server", "trustSecretRef"))
 LDAP_OPTIONS = frozenset(("rgw_ldap_binddn", "rgw_ldap_dnattr", "rgw_ldap_searchdn", "rgw_ldap_secret", "rgw_ldap_uri", "rgw_s3_auth_use_ldap"))
 LDAP_FILTER = "rgw_ldap_searchfilter"
 LDAP_TOKEN = "@USERNAME@"
+# RGW's STS key: the raw AES-128 key of 16 letters and digits every RGW of the zone shares (src/rgw/rgw_sts.cc); the gateway binds it, never
+# freezes it, so only its placeholder reaches a request, record or comparison.
+STS_KEY = "rgw_sts_key"
+STS_KEY_PATH = "/spec/config/" + STS_KEY
+STS_OPTIONS = frozenset(("rgw_s3_auth_use_sts",))
+STS_KEY_FORM = re.compile(r"[A-Za-z0-9]{16}\Z")
+STS_MEMBERS = frozenset(("keySecretRef", "providers"))
+MAX_PROVIDERS = 64
+MAX_ISSUER = 2048
 MAX_OPTION = 4096
 # RGW trims the bind password file and reads at most 1023 bytes of it (src/rgw/rgw_ldap.cc parse_rgw_ldap_bindpw).
 MAX_BIND = 1023
@@ -212,15 +221,26 @@ def option_text(value):
 
 
 def validate_authentication(gateway):
-    """No authentication, or an LDAP block naming its server and the Secrets its bind password and optional trust bundle come from."""
+    """No authentication, or (ldap, sts): an LDAP block naming its server and the Secrets its bind password and optional trust bundle come
+    from, an STS block naming its key's Secret and the OpenID Connect providers it presents, or both."""
     if "authentication" not in gateway:
-        return None
+        return None, None
     authentication = gateway["authentication"]
-    require(isinstance(authentication, dict) and set(authentication) == {"ldap"})
-    ldap = authentication["ldap"]
-    require(isinstance(ldap, dict) and {"bindSecretRef", "server"} <= set(ldap) <= AUTH_MEMBERS)
-    require(all(named(ldap[key]) for key in ldap))
-    return ldap
+    require(isinstance(authentication, dict) and authentication and set(authentication) <= {"ldap", "sts"})
+    ldap, sts = authentication.get("ldap"), authentication.get("sts")
+    if ldap is not None:
+        require(isinstance(ldap, dict) and {"bindSecretRef", "server"} <= set(ldap) <= AUTH_MEMBERS)
+        require(all(named(ldap[key]) for key in ldap))
+    if sts is not None:
+        require(isinstance(sts, dict) and "keySecretRef" in sts and set(sts) <= STS_MEMBERS and named(sts["keySecretRef"]))
+        providers = sts.get("providers", [])
+        require(isinstance(providers, list) and len(providers) <= MAX_PROVIDERS and ("providers" not in sts or providers))
+        for provider in providers:
+            require(isinstance(provider, dict) and set(provider) == {"issuerURL", "name"} and named(provider["name"]))
+            issuer = provider["issuerURL"]
+            require(isinstance(issuer, str) and issuer.startswith("https://") and option_text(issuer) and len(issuer) <= MAX_ISSUER)
+        require([provider["name"] for provider in providers] == sorted({provider["name"] for provider in providers}))
+    return ldap, sts
 
 
 def validate_auth_document(document, ldap):
@@ -234,13 +254,22 @@ def validate_auth_document(document, ldap):
     require(document.get("custom_configs") == mounts)
 
 
-def validate_auth_spec(spec, ldap):
-    """The rgw spec's derived config: exactly the LDAP options, the bind file path and a search filter holding the user token once."""
-    if ldap is None:
+def validate_auth_spec(spec, ldap, sts):
+    """The rgw spec's derived config: exactly the LDAP options, the bind file path and a search filter holding the user token once, and
+    with STS its switch; the STS key itself is bound, so the request never holds it."""
+    if ldap is None and sts is None:
         require("config" not in spec)
         return
     config = spec.get("config")
-    require(isinstance(config, dict) and set(config) in (LDAP_OPTIONS, LDAP_OPTIONS | {LDAP_FILTER}) and all(option_text(value) for value in config.values()))
+    require(isinstance(config, dict) and all(option_text(value) for value in config.values()))
+    keys = set(config)
+    if sts is not None:
+        require(STS_OPTIONS <= keys and config["rgw_s3_auth_use_sts"] == "true")
+        keys -= STS_OPTIONS
+    if ldap is None:
+        require(not keys)
+        return
+    require(keys in (LDAP_OPTIONS, LDAP_OPTIONS | {LDAP_FILTER}))
     require(config["rgw_ldap_secret"] == LDAP_BIND and config["rgw_s3_auth_use_ldap"] == "true")
     require(all(url.startswith("ldaps://") for url in config["rgw_ldap_uri"].split(" ")))
     require(LDAP_FILTER not in config or config[LDAP_FILTER].count(LDAP_TOKEN) == 1)
@@ -268,7 +297,7 @@ def validate(request, hosts):
     """One gateway: its native names, its frozen pools and endpoint, its rgw document, the ingress that fronts it and their TLS bindings."""
     gateway = request.get("gateway")
     require(isinstance(gateway, dict) and MEMBERS <= set(gateway) <= MEMBERS | {"authentication"})
-    ldap = validate_authentication(gateway)
+    ldap, sts = validate_authentication(gateway)
     require(named(gateway["name"]) and label(gateway["name"]))
     require(all(label(gateway[key]) for key in ("realm", "zoneGroup", "zone")))
     placement = [gateway[key] for key in ("indexPool", "dataPool", "dataExtraPool")]
@@ -284,7 +313,7 @@ def validate(request, hosts):
     validate_document(documents[0], "rgw", request, hosts)
     validate_spec(documents[0]["spec"], gateway)
     validate_auth_document(documents[0], ldap)
-    validate_auth_spec(documents[0]["spec"], ldap)
+    validate_auth_spec(documents[0]["spec"], ldap, sts)
     for ingress in documents[1:]:
         validate_document(ingress, "ingress", request, hosts)
         validate_ingress(ingress["spec"], documents[0])
@@ -301,7 +330,7 @@ def validate(request, hosts):
         require(stretched or per_site)
     validate_bindings(gateway, documents)
     front = documents[1:] or documents[:1]
-    require(ldap is None or all(document["spec"].get("ssl") is True for document in front))
+    require(ldap is None and sts is None or all(document["spec"].get("ssl") is True for document in front))
 
 
 def site_of(request, name):
@@ -513,14 +542,23 @@ def frontends(request):
 
 
 def auth_variables(gateway):
-    """The material variables of the gateway's LDAP leaves: the bind password and, with a trust bundle, the CA bundle."""
-    ldap = gateway.get("authentication", {}).get("ldap")
-    if ldap is None:
-        return {}
-    leaves = {"/custom_configs/0/content": "rgwLDAPBindPassword"}
-    if "trustSecretRef" in ldap:
-        leaves["/custom_configs/2/content"] = "rgwLDAPCABundle"
+    """The material variables of the gateway's authentication leaves: the LDAP bind password and, with a trust bundle, the CA bundle; the
+    STS key."""
+    authentication = gateway.get("authentication", {})
+    ldap = authentication.get("ldap")
+    leaves = {}
+    if ldap is not None:
+        leaves["/custom_configs/0/content"] = "rgwLDAPBindPassword"
+        if "trustSecretRef" in ldap:
+            leaves["/custom_configs/2/content"] = "rgwLDAPCABundle"
+    if "sts" in authentication:
+        leaves[STS_KEY_PATH] = "rgwSTSKey"
     return leaves
+
+
+def sts_key(value):
+    """An STS key RGW accepts: exactly 16 letters and digits."""
+    return isinstance(value, str) and STS_KEY_FORM.match(value) is not None
 
 
 def bind_password(value):
@@ -545,6 +583,8 @@ def material(request, phase, private):
     require(set(private) == expected, "material")
     if "rgwLDAPBindPassword" in private:
         require(bind_password(private["rgwLDAPBindPassword"]), "material")
+    if "rgwSTSKey" in private:
+        require(sts_key(private["rgwSTSKey"]), "material")
     if "rgwLDAPCABundle" in private:
         bundle = private["rgwLDAPCABundle"]
         require(isinstance(bundle, str) and 0 < len(bundle.encode("utf-8")) <= MAX_CERTIFICATE, "material")
@@ -603,6 +643,7 @@ class ObjectWorker(ceph_native_units.UnitWorker):
     OWN_MEMBER = "gateway"
 
     tls = None
+    stored_sts_key = None
 
     def gateway(self):
         return self.request["gateway"]
@@ -691,8 +732,10 @@ class ObjectWorker(ceph_native_units.UnitWorker):
         for path, variable, unused, current in found:
             same = bool(current) and (variable not in held or hmac.compare_digest(
                 current.encode("utf-8", "surrogatepass"), held[variable].encode("utf-8", "surrogatepass")))
-            if not same:
-                raise NativeFailure("object-auth-credential", self.native_coordinate(), name + " " + path, secrets=tuple(held.values()))
+            if not same or path == STS_KEY_PATH and not sts_key(current):
+                raise NativeFailure("object-auth-credential", self.native_coordinate(), name + " " + path, secrets=tuple(held.values()) + (current,))
+            if path == STS_KEY_PATH:
+                self.stored_sts_key = current
         return dict(stored, **{name: ceph_native_units.placed(value, sorted(leaves))})
 
     def tls_spec(self, stored, bound):
@@ -990,45 +1033,73 @@ class ObjectWorker(ceph_native_units.UnitWorker):
         return {"changed": bool(missing)}
 
     def auth_options(self):
-        """The RGW options the rgw document's spec.config freezes, or none without LDAP authentication."""
+        """The RGW options the rgw document's spec.config freezes, or none without authentication; never the bound STS key."""
         return self.gateway()["documents"][0]["spec"].get("config", {})
+
+    def auth_bound_options(self):
+        """The RGW options the gateway binds rather than freezes: the STS key with STS."""
+        return (STS_KEY,) if "sts" in self.gateway().get("authentication", {}) else ()
+
+    def sts_reference(self):
+        """The STS key a stored option must equal: the held one in the service apply, else the stored service's, which the apply proved
+        equal to the held one; None before either is read."""
+        held = (self.tls or {}).get("rgwSTSKey") if isinstance(self.tls, dict) else None
+        return held if held is not None else self.stored_sts_key
+
+    def auth_secrets(self):
+        """Every bound value this worker holds or read, which a native diagnostic redacts."""
+        held = tuple(value for key, value in (self.tls or {}).items() if key in self.auth_leaves().values()) if isinstance(self.tls, dict) else ()
+        return held + ((self.stored_sts_key,) if self.stored_sts_key is not None else ())
+
+    def same_bound(self, value):
+        """Whether a stored or running STS key equals the reference, compared in constant time and never echoed."""
+        reference = self.sts_reference()
+        return isinstance(value, str) and isinstance(reference, str) and hmac.compare_digest(
+            value.encode("utf-8", "surrogatepass"), reference.encode("utf-8", "surrogatepass"))
+
+    def auth_token(self, name):
+        """The readiness entry an option that is not read yet blocks: sts@ for STS's, else ldap@."""
+        return ("sts@" if name == STS_KEY or name in STS_OPTIONS else "ldap@") + self.unit_names()[0]
 
     def auth_section(self):
         return "client." + self.unit_names()[0]
 
     def auth_entries(self):
-        """The configuration database's entries of the frozen options for this service's daemons: its section or a daemon's below it."""
-        options, section = self.auth_options(), self.auth_section()
-        rows = self.ceph("config", "dump")
+        """The configuration database's entries of the frozen and bound options for this service's daemons: its section or a daemon's below
+        it. The dump holds the STS key, which stays in this worker's memory and is redacted from any native diagnostic."""
+        names, section = set(self.auth_options()) | set(self.auth_bound_options()), self.auth_section()
+        rows = self.ceph("config", "dump", secrets=self.auth_secrets())
         require(isinstance(rows, list) and all(isinstance(row, dict) for row in rows), "native-output")
-        return [row for row in rows if row.get("name") in options and isinstance(row.get("section"), str)
+        return [row for row in rows if row.get("name") in names and isinstance(row.get("section"), str)
                 and (row["section"] == section or row["section"].startswith(section + "."))]
 
     def foreign_auth_config(self):
-        """Before the rgw service's first attempt: no frozen option is set for its daemons yet, since cephadm would then keep a value this
-        operation never wrote and the gateway never adopts one. Names and sections only reach the refusal, never a value."""
+        """Before the rgw service's first attempt: no frozen or bound option is set for its daemons yet, since cephadm would then keep a value
+        this operation never wrote and the gateway never adopts one. Names and sections only reach the refusal, never a value."""
         if self.auth_options() and self.markers.read("service-" + self.unit_names()[0] + "-attempt.json") is None:
             entries = self.auth_entries()
             if entries:
                 raise NativeFailure("object-auth-config", self.native_coordinate(),
-                                    ", ".join(sorted({row["name"] + " at " + row["section"] for row in entries})))
+                                    ", ".join(sorted({row["name"] + " at " + row["section"] for row in entries})), secrets=self.auth_secrets())
 
     def auth_config_ready(self):
-        """Read-only: every frozen option once at the service's section without a mask and with its frozen value, as cephadm sets spec.config;
-        an absent one is pending, and another value, section or mask is drift."""
-        options, section = self.auth_options(), self.auth_section()
+        """Read-only: every frozen option once at the service's section without a mask and with its frozen value, and the STS key equal to
+        the bound one by constant-time comparison, as cephadm sets spec.config; an absent one is pending, and another value, section or mask
+        is drift. A refusal names the option and section only."""
+        options, bound, section = self.auth_options(), self.auth_bound_options(), self.auth_section()
         entries = self.auth_entries()
         held = {}
         for row in entries:
             name = row["name"]
-            if row["section"] != section or row.get("mask") or name in held or row.get("value") != options[name] or any(
+            same = self.same_bound(row.get("value")) if name in bound else row.get("value") == options[name]
+            if row["section"] != section or row.get("mask") or name in held or not same or any(
                     field in row for field in ("location_type", "location_value", "device_class")):
-                raise NativeFailure("object-auth-config", self.native_coordinate(), name + " at " + row["section"])
+                raise NativeFailure("object-auth-config", self.native_coordinate(), name + " at " + row["section"], secrets=self.auth_secrets())
             held[name] = True
-        if set(held) != set(options):
-            self.pending("ldap@" + self.unit_names()[0])
-            return False
-        return True
+        missing = (set(options) | set(bound)) - set(held)
+        for name in sorted(missing):
+            self.pending(self.auth_token(name))
+        return not missing
 
     def auth_ready(self, running):
         """Without LDAP authentication nothing; with it, the stored options and each running rgw daemon's readback."""
@@ -1049,7 +1120,8 @@ class ObjectWorker(ceph_native_units.UnitWorker):
             return absent[-1]
 
         with self.bootstrap_hold():
-            output = self.command([*self.admin_argv("/usr/bin/ceph"), "config", "show", who, option], json_result=False, recover=recover)
+            output = self.command([*self.admin_argv("/usr/bin/ceph"), "config", "show", who, option], json_result=False, recover=recover,
+                                  secrets=self.auth_secrets())
         if absent and absent[-1]:
             return None
         require(isinstance(output, bytes) and len(output) <= MAX_OPTION + 1 and output.endswith(b"\n"), "native-output")
@@ -1065,13 +1137,16 @@ class ObjectWorker(ceph_native_units.UnitWorker):
         for row in rows:
             who = "client.rgw." + row["daemon_id"]
             with self.manager_served():
-                lagging = any(self.daemon_option(who, option) != value for option, value in sorted(self.auth_options().items()))
+                lagging = sorted({option for option, value in sorted(self.auth_options().items()) if self.daemon_option(who, option) != value}
+                                 | {option for option in self.auth_bound_options() if not self.same_bound(self.daemon_option(who, option))})
                 order, rados = self.daemon_option(who, "rgw_s3_auth_order"), self.daemon_option(who, "rgw_s3_auth_use_rados")
-            if order is not None and "local" not in re.split(r"[\s,]+", order) or rados not in (None, "true"):
-                raise NativeFailure("object-auth-config", self.native_coordinate(), who + " rgw_s3_auth_order or rgw_s3_auth_use_rados")
-            if lagging:
+            engines = re.split(r"[\s,]+", order) if order is not None else None
+            if engines is not None and ("local" not in engines or self.auth_bound_options() and "sts" not in engines) or rados not in (None, "true"):
+                raise NativeFailure("object-auth-config", self.native_coordinate(), who + " rgw_s3_auth_order or rgw_s3_auth_use_rados",
+                                    secrets=self.auth_secrets())
+            for option in lagging:
                 ready = False
-                self.pending("ldap@" + self.unit_names()[0])
+                self.pending(self.auth_token(option))
         return ready
 
     def gateway_auth_mounts(self):

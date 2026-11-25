@@ -56,11 +56,34 @@ as `config get` does ([monitoring](ibm-ceph-monitoring.md)).
 bind password shows in `ceph orch ls --export` and in the dashboard's
 `GET /api/service/<name>` to every user with `hosts` read
 (`dashboard/controllers/service.py`), as inline `ssl_key` and the oauth2-proxy
-secrets already do; owner question Q154 holds the alternative.
+secrets already do; owner question Q154 holds the alternative. The STS key is
+worse: `rgw_sts_key` has no file option, so it sits in `spec.config`, in the
+configuration database (`ceph config dump`) and in each daemon's `ceph config
+show`, readable by every Ceph administrator.
+
+## STS
+
+`rgw_sts_key` is the raw AES-128 key, 16 letters and digits (`rgw_sts.cc`), and
+its built-in default is the literal `sts`, so a daemon that has not read the
+spec's key yet reports `sts`, never nothing; readiness treats any value other
+than the stored one as pending (`sts@rgw.<id>`). A generated `token` Secret is
+unpadded base64url of at least 22 characters and never fits, so the key is a
+context-stored opaque or token Secret, and an opaque one keeps a final newline
+a shell `echo` adds. Every read of the key is compared with `hmac` and every
+native diagnostic of `config dump` or `config show` carries the key as a
+redaction secret, because `ceph_native.command` puts stdout into the diagnostic
+when stderr is empty (`test_a_failing_native_read_of_the_key_is_redacted`).
+RGW's STS engine only denies, like LDAP, so local keys never reach the
+identity provider; it fetches the issuer's JWKS with libcurl, whose CA bundle
+only `CURL_CA_BUNDLE` replaces as a whole (B1837), with no proxy option.
+Providers and roles exist only through the IAM API (`CreateOpenIDConnectProvider`
+needs thumbprints; radosgw-admin has no oidc-provider command), and IBM 9.9.1
+deprecates tenant-level OIDC in favour of accounts.
 
 ## Live rows owed
 
 The owner's B1833 gate records: the mount round passing on SELinux-enforcing
-hosts, `ceph log last 200 audit` holding no bind password, and whether
+hosts, `ceph log last 200 audit` holding no bind password (B1834 adds: and no
+STS key), and whether
 cephadm re-sets the boolean `rgw_s3_auth_use_ldap` on every serve loop because
 it compares the typed option with the string `true`.
