@@ -25,9 +25,12 @@ No live execution or operator acceptance is claimed.
   `mgr.ceph-lab.lab.example.test`, the name normalization derives, so
   `management-tls` and the CephSignOn's `redirect_url` name it; publish its DNS
   record pointing at the VIP.
-- While sign-on is on, a manager's dashboard port 8443 accepts a forged token
-  (an upstream defect): keep it reachable only from the management gateway
-  hosts.
+- While sign-on is on, any client that reaches port 8443 of a manager host
+  acts as the dashboard admin without signing in (an upstream defect): keep
+  that port reachable only from the management gateway hosts. Grafana's login
+  form and Prometheus and Alertmanager basic authentication are off while
+  sign-on is on, and every user the identity provider signs in for the client
+  reaches Prometheus and Alertmanager: restrict the client to Ceph operators.
 - Required operator inputs: a trusted OIDC IdP with client registration and
   role mapping (`oidc-client`, `oidc-cookie`, and `oidc-ca`, the
   OIDCProvider's trust bundle), an SNMPv3 receiver

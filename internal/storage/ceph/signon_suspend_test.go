@@ -106,7 +106,7 @@ func TestSignOnResumeReappliesWithEveryLeafAndProvesSignOn(t *testing.T) {
 	if err != nil || !proof.Changed || proof.Provider != "corp-sso" {
 		t.Fatalf("the resume proved %+v (%+v)", proof, diagnostics.Of(err))
 	}
-	if runner.request.Operation != "resume" || runner.request.Deadline != 4920*time.Second ||
+	if runner.request.Operation != "resume" || runner.request.Deadline != 5580*time.Second ||
 		!slices.Equal(lentVariables(runner.request), []string{"sshKey", "knownHosts", "oauth2ProxyCABundle", "oauth2ProxyClientSecret", "oauth2ProxyCookieSecret", "oauth2ProxyCertificate", "oauth2ProxyKey"}) {
 		t.Fatalf("the resume ran %s for %v lending %q", runner.request.Operation, runner.request.Deadline, lentVariables(runner.request))
 	}

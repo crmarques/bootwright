@@ -17,7 +17,8 @@ The gateway also signs S3 users in through the Active Directory
 RGW binds as `CN=svc ceph` with the password stored in the context Secret
 `lab-directory-bind` and verifies `dc-01.lab.example.test` against the image's
 system trust store. Local CephObjectUser keys keep working while the directory
-is down.
+is down, though requests can wait out the 3-second LDAP timeouts first. Keep
+directory names disjoint from every RGW user ID, `dashboard` included.
 
 Its RGW also trusts web identities through STS: the key comes from the context
 Secret `rgw-objects-sts-key`, and the gateway lists the Keycloak

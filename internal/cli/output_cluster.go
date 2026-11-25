@@ -572,6 +572,9 @@ func managedCephTopology(ceph *inspection.ManagedCeph) []field {
 func signOnFields(contextName, cluster, state string) []field {
 	fields := []field{{Label: "Sign-on", Value: escapeDisplayLine(state), Tone: "state"}}
 	switch state {
+	case lifecycle.SignOnActive:
+		fields = append(fields, field{Label: "Local logins", Value: "off: Grafana's login form and Prometheus and Alertmanager basic authentication gate nothing until bootwright cluster sign-on suspend"},
+			field{Label: "Audience", Value: "every user the identity provider signs in for the client reaches Prometheus and Alertmanager, silences included; restrict the client in the provider"})
 	case lifecycle.SignOnSuspended:
 		fields = append(fields, field{Label: "Local logins", Value: "bootwright cluster info --context " + contextName + " --name " + cluster + " --secrets", Tone: "command"},
 			field{Label: "Restore", Value: "bootwright cluster sign-on resume --context " + contextName + " --name " + cluster, Tone: "command"})

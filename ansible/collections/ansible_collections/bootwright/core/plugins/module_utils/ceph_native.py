@@ -1340,6 +1340,18 @@ class Custody:
         return binding
 
 
+# The native reads whose standard output carries configuration values or keys, secret ones included (rgw_sts_key, a config-key value,
+# a CephX key, a service specification's bound leaves): a failure's diagnostic never falls back to their output.
+CONFIGURATION_READS = (("config", "dump"), ("config", "show"), ("config", "get"), ("config", "show-with-defaults"), ("config-key", "get"),
+                       ("config-key", "dump"), ("config", "generate-minimal-conf"), ("auth", "get"), ("auth", "get-key"), ("auth", "export"),
+                       ("auth", "print-key"), ("auth", "ls"), ("ls", "--export"))
+
+
+def configuration_read(argv):
+    """Whether a native command line runs one of CONFIGURATION_READS."""
+    return any(tuple(argv[index:index + 2]) in CONFIGURATION_READS for index in range(len(argv) - 1))
+
+
 class Worker:
     """One native host boundary. The controller supplies only fixed phases."""
 
@@ -1394,7 +1406,8 @@ class Worker:
             timeout = max(1, min(timeout, self.command_deadline - self.clock()))
         code, output = self.run(argv, data=data, timeout=timeout)
         if code != 0 and (recover is None or not recover(code, output)):
-            raise NativeFailure("native-command", self.native_coordinate(), getattr(output, "stderr", b"") or output, secrets=(data,) + tuple(secrets))
+            cause = getattr(output, "stderr", b"") or (b"" if configuration_read(argv) else output)
+            raise NativeFailure("native-command", self.native_coordinate(), cause, secrets=(data,) + tuple(secrets))
         if not json_result:
             return output
         try:
@@ -3055,7 +3068,15 @@ PHYSICAL_PHASES = ("physical_host_observe", "physical_host_remove")
 
 
 def services_arguments(phase, envelope):
-    """The services phase's optional device, service and orphan selections, taken out of the envelope before its exact key check."""
+    """The services phase's optional device, service and orphan selections, and the authorization endpoint origin a sign-on's apply lends
+    its observation, taken out of the envelope before its exact key check."""
+    if phase == "observe" and isinstance(envelope, dict) and "authorization" in envelope:
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_signon_native
+        found = envelope["authorization"]
+        require(ceph_signon_native.authorization(found) is not None and isinstance(envelope.get("request"), dict)
+                and envelope["request"].get("action") == "service" and isinstance(envelope["request"].get("service"), dict)
+                and envelope["request"]["service"].get("type") == ceph_signon_native.TYPE, "request")
+        return {key: value for key, value in envelope.items() if key != "authorization"}, {"authorization": ceph_signon_native.authorization(found)}
     if phase != "services":
         return envelope, {}
     options = {name: envelope[name] for name in SERVICES_OPTIONS if name in envelope}
@@ -3134,6 +3155,7 @@ def run_services(worker, phase, envelope, options):
 def run_observe(worker, phase, envelope, options):
     require(phase == "observe" or worker.request["action"] == "cluster", "request")
     worker.reading = phase == UNRECORDED_OBSERVE
+    worker.authorization = options.get("authorization")
     # The health checks that kept readiness unproved travel beside the closed evidence, for the refusal's detail only.
     result = dict(worker.observe(), blocking=list(worker.blocking))
     if worker.request["action"] == "cluster" and "stretch" in worker.request:

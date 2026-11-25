@@ -212,13 +212,15 @@ def location_unhosted(template):
 
 def cookie_forwarded(template):
     """True when the dashboard's one location forwards the client's cookies to the dashboard: it sets no Cookie header and its oauth2-proxy
-    branch holds the template's one X-Access-Token line. False when the location sets a Cookie header, None for any other shape."""
+    branch holds the template's one X-Access-Token line. False only when the one Cookie header the location sets is, inside that branch,
+    the empty one; None for any other shape, another Cookie value included."""
     shape = proxied_branch(template, DASHBOARD, DASHBOARD_PASS)
     if shape is None:
         return None
     outside, branch = shape
-    if "proxy_set_header cookie" in (outside + branch).lower():
-        return False
+    cookies = [line for line in (outside + branch).splitlines() if "proxy_set_header cookie" in line.lower()]
+    if cookies:
+        return False if cookies == [COOKIE.rstrip("\n")] and branch.count(COOKIE) == 1 else None
     return True if branch.count(TOKEN) == 1 and template.count(TOKEN) == 1 else None
 
 

@@ -61,7 +61,8 @@ normalization = gateway.normalization
 sources = routes.sources
 root = routes.root
 CONTEXT = dict(routes.CONTEXT, dashboard_endpoints=["192.0.2.11:8443"], dashboard_scheme="https")
-FIXED_COOKIE = SIGNED.replace(template.TOKEN, template.TOKEN + "        proxy_set_header Cookie $filtered;\n")
+FIXED_COOKIE = SIGNED.replace(template.TOKEN, template.TOKEN + template.COOKIE)
+FORWARDED_COOKIE = SIGNED.replace(template.TOKEN, template.TOKEN + "        proxy_set_header Cookie $http_cookie;\n")
 FIXED_ROLE = SIGNED.replace(template.ROLE, "        proxy_set_header X-WEBAUTH-ROLE $role;\n")
 DOCUMENTS = [{"service_type": "mgmt-gateway"}]
 FRONTED = {"documents": DOCUMENTS, "monitoring": ["grafana", "prometheus"], "type": "mgmt-gateway"}
@@ -115,6 +116,9 @@ def test_each_sign_on_defect_selects_its_own_correction():
     assert template.sign_on_witness(SOURCES) == {"cookie": True, "role": True}
     assert template.sign_on_witness(dict(SOURCES, external=FIXED_COOKIE)) == {"cookie": False, "role": True}
     assert template.sign_on_witness(dict(SOURCES, external=FIXED_ROLE)) == {"cookie": True, "role": False}
+    for text in (FORWARDED_COOKIE, SIGNED.replace(template.DASHBOARD_PASS, template.DASHBOARD_PASS + template.COOKIE),
+                 FIXED_COOKIE.replace(template.COOKIE, template.COOKIE + template.COOKIE)):
+        assert template.sign_on_witness(dict(SOURCES, external=text))["cookie"] is None
     both = FIXED_COOKIE.replace(template.ROLE, "        proxy_set_header X-WEBAUTH-ROLE $role;\n")
     assert template.gateway_facts(dict(SOURCES, external=both))["sign-on-forwarded"] is False
     unknown = {
@@ -160,6 +164,77 @@ def test_the_rendered_corrections_are_what_the_route_proof_counts():
     both = PROXIED_CORRECTED.replace('X-WEBAUTH-ROLE "Viewer";', 'X-WEBAUTH-ROLE "Viewer";\n        proxy_set_header X-Role $http_x_auth_request_role;')
     assert observability.routes_grafana(pinned, both)["role"] is False
     assert observability.routes_grafana(pinned, UNPROXIED_CORRECTED) == {"cookie": False, "external": True, "nginx": True, "role": False}
+    for name, text in UNPROTECTED.items():
+        assert observability.routes_grafana(pinned, text)["cookie"] is False, name
+    for name, text in UNPINNED.items():
+        assert observability.routes_grafana(pinned, text)["role"] is False, name
+    spaced = PROXIED_CORRECTED.replace('proxy_set_header Cookie "";', 'proxy_set_header   Cookie   ""  ;  # cleared')
+    assert observability.routes_grafana(pinned, spaced)["cookie"] is True
+
+
+# Rendered gateway files a sign-on must never enable single sign-on over: a dashboard location that signs no request in, or forwards any
+# client cookie, and a Grafana location that sends a client role.
+UNPROTECTED = {
+    "native template": PROXIED_NATIVE,
+    "unknown shape": PROXIED_CORRECTED.replace("    location / {", "    location /dashboard {"),
+    "no auth_request": PROXIED_CORRECTED.replace("auth_request /oauth2/auth;\n        auth_request_set", "auth_request_set"),
+    "auth_request off": PROXIED_CORRECTED.replace("auth_request /oauth2/auth;\n        auth_request_set", "auth_request off;\n        auth_request_set"),
+    "client cookie": PROXIED_CORRECTED.replace('proxy_set_header Cookie "";', "proxy_set_header Cookie $http_cookie;"),
+    "a second cookie line": PROXIED_CORRECTED.replace('proxy_set_header Cookie "";',
+                                                      'proxy_set_header Cookie "";\n        proxy_set_header cookie $http_cookie;'),
+    "two statements on a line": PROXIED_CORRECTED.replace('proxy_set_header Cookie "";', 'proxy_set_header Cookie ""; proxy_set_header Cookie $http_cookie;'),
+    "plain location": UNPROXIED_NATIVE,
+    "a nested location": (
+        PROXIED_CORRECTED.replace('proxy_set_header Cookie "";', 'proxy_set_header Cookie "";\n        location /api { proxy_pass https://x; }')),
+    "an include": PROXIED_CORRECTED.replace('proxy_set_header Cookie "";', 'proxy_set_header Cookie "";\n        include /etc/nginx/extra.conf;'),
+    "satisfy any": PROXIED_CORRECTED.replace('proxy_set_header Cookie "";', 'proxy_set_header Cookie "";\n        satisfy any;'),
+    "a hash inside quotes": PROXIED_CORRECTED.replace('proxy_set_header Cookie "";', 'proxy_set_header Cookie ""; proxy_set_header A "x#"; auth_request off;'),
+    "a client access token": PROXIED_CORRECTED.replace("proxy_set_header X-Access-Token $token;", "proxy_set_header X-Access-Token $http_x_access_token;"),
+    "no access token": PROXIED_CORRECTED.replace("proxy_set_header X-Access-Token $token;", ""),
+    "a second dashboard location": PROXIED_CORRECTED.replace(
+        "    location /grafana {", "    location /api {\n        proxy_pass https://dashboard_servers;\n    }\n\n    location /grafana {"),
+}
+UNPINNED = {
+    "client role": PROXIED_NATIVE,
+    "a client role beside Viewer": PROXIED_CORRECTED.replace(
+        'X-WEBAUTH-ROLE "Viewer";', 'X-WEBAUTH-ROLE "Viewer";\n        proxy_set_header X-WEBAUTH-ROLE $http_x_auth_request_role;'),
+    "no auth_request": PROXIED_CORRECTED.replace("auth_request /oauth2/auth;\n        proxy_set_header X-WEBAUTH-USER", "proxy_set_header X-WEBAUTH-USER"),
+}
+
+
+@pytest.mark.parametrize("name", sorted(UNPROTECTED))
+def test_a_sign_on_never_enables_single_sign_on_over_a_gateway_that_does_not_protect_the_dashboard(tmp_path, root, name):
+    request = signon.sso_request()
+    pinned = routes.render("nginx", True, True)
+    containers = [("ceph-" + routes.FSID + "-mgmt-gateway-node-1", "running", routes.files(root, "node-1", pinned, UNPROTECTED[name]))]
+    proof = units.worker(routes.GatewayMonitor(request, containers), units.markers_for(tmp_path, request)).signon_route_proof()
+    assert proof["daemons"] == 1 and proof["served"]["cookie"] == 0
+    one = {"changed": False, "daemons": 1, "proved": True}
+    for corrected in ((), ("cookie",)):
+        now, pause, clock = signon.ticking()
+        transport = SignedGateway(request, [one, one], proof, routes=corrected, advance=lambda: clock.__setitem__(0, clock[0] + 100))
+        with pytest.raises(ceph_native.NativeFailure, match="^sign-on-unprotected$") as caught:
+            ceph_core.execute(request, "apply", "d" * 64, transport, now=now, pause=pause)
+        assert caught.value.native_error["cause"].startswith("host node-1: route cookie")
+        called = [phase for unused, phase, unused_private in transport.private]
+        assert "signon_route_proof" in called and "sso" not in called and "sso_withdraw" not in called and "observe" not in called
+
+
+class SignedGateway(signon.SSOTransport):
+    """A sign-on transport whose gateway hosts answer the route proof a real worker read from rendered files."""
+
+    def __init__(self, request, proofs, proof, **options):
+        super().__init__(request, proofs, **options)
+        self.proof = proof
+
+    def call(self, host, phase, private=None, *, timeout=None, authorization=None):
+        if phase == "signon_route_proof":
+            with self.lock:
+                self.private.append((host["name"], phase, []))
+            if self.advance is not None:
+                self.advance()
+            return dict(self.proof)
+        return super().call(host, phase, private, timeout=timeout, authorization=authorization)
 
 
 def test_an_ambiguous_or_oversized_template_refuses_each_sign_on_correction():
@@ -294,13 +369,14 @@ def test_each_gateway_host_of_a_sign_on_counts_its_daemons_and_each_sign_on_corr
 
 def test_a_sign_on_apply_refuses_a_gateway_that_does_not_render_the_corrections_before_its_one_write():
     request = signon.sso_request()
+    request["service"]["signOn"]["grafana"] = True
     one = {"changed": False, "daemons": 1, "proved": True}
     now, pause, clock = signon.ticking()
     transport = signon.SSOTransport(request, [one, one], routes=("cookie", "role"), lacking={"node-2": ("role",)},
                                     advance=lambda: clock.__setitem__(0, clock[0] + 100))
     with pytest.raises(ceph_native.NativeFailure, match="^sign-on-unprotected$") as caught:
         ceph_core.execute(request, "apply", "d" * 64, transport, now=now, pause=pause)
-    assert caught.value.native_error["cause"] == "host node-2: correction role"
+    assert caught.value.native_error["cause"] == "host node-2: route role"
     called = [phase for unused, phase, unused_private in transport.private]
     assert "sso" not in called and "observe" not in called and "grafana_route" not in called
 

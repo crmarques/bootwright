@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import inspect
 import json
 import os
@@ -144,3 +145,32 @@ def test_actual_shipped_command_works_inside_supervised_remote_group(tmp_path):
     assert result.stderr == b""
     time.sleep(0.4)
     assert not effect.exists()
+
+
+def test_a_failed_configuration_read_never_falls_back_to_its_output_for_a_diagnostic(tmp_path):
+    from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_service_units as units
+    secret = "STSKEYSENTINEL01"
+    ran = []
+
+    def failing(argv, data=b"", timeout=60):
+        ran.append(list(argv))
+        return 1, ceph_native.NativeOutput(("client.rgw  advanced  rgw_sts_key  " + secret + "\n").encode(), b"")
+
+    request = units.cluster()
+    worker = ceph_native.Worker(request, request["bootstrap"], run=failing, markers=units.markers_for(tmp_path, request))
+    worker.bootstrap_hold = contextlib.nullcontext
+    reads = (lambda: worker.ceph("config", "dump"), lambda: worker.ceph_text("config", "show", "client.rgw.objects", "rgw_sts_key"),
+             lambda: worker.ceph("config", "get", "client.rgw", "rgw_sts_key"), lambda: worker.ceph_text("config-key", "get", "mgr/x"),
+             lambda: worker.ceph("config-key", "dump"), lambda: worker.ceph("auth", "get", "client.admin"),
+             lambda: worker.ceph("orch", "ls", "--export"))
+    for read in reads:
+        with pytest.raises(ceph_native.NativeFailure, match="^native-command$") as caught:
+            read()
+        assert secret not in json.dumps(caught.value.native_error)
+        assert caught.value.native_error["cause"] == "native command failed without a public error message"
+    assert len(ran) == len(reads)
+    with pytest.raises(ceph_native.NativeFailure, match="^native-command$") as caught:
+        worker.ceph("orch", "ps")
+    assert "rgw_sts_key" in caught.value.native_error["cause"]
+    assert ceph_native.configuration_read(["/usr/bin/ceph", "--conf", "/x/config", "config", "dump"])
+    assert not ceph_native.configuration_read(["/usr/bin/ceph", "--conf", "config", "orch", "ps"])

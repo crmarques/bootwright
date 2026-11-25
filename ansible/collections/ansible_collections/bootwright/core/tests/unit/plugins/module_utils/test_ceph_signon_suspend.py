@@ -304,17 +304,19 @@ def test_the_suspension_phases_run_only_on_the_bootstrap_host_of_a_sign_on_unit(
 
 
 def test_only_the_gateways_own_sign_in_proves_local_sign_in():
-    assert signon.local(200, None, signon_tests.ISSUER)
-    assert signon.local(302, "/#/login", signon_tests.ISSUER)
-    assert not signon.local(302, "https://idp.example.test/realms/ceph/protocol/openid-connect/auth?x=1", signon_tests.ISSUER)
-    assert not signon.local(302, "/oauth2/sign_in", signon_tests.ISSUER)
-    assert not signon.local(302, "//idp.example.test/realms/ceph/protocol/openid-connect/auth", signon_tests.ISSUER)
-    assert not signon.local(302, "http://idp.example.test/x", signon_tests.ISSUER)
-    assert not signon.local(302, "relative", signon_tests.ISSUER)
-    assert signon.local(303, "https://gateway.lab.test:9443/#/login", signon_tests.ISSUER)
-    assert not signon.local(302, None, signon_tests.ISSUER)
+    own = {"gateway.lab.test", "192.0.2.60"}
+    assert signon.local(200, None, own)
+    assert signon.local(302, "/#/login", own)
+    assert signon.local(303, "https://gateway.lab.test:9443/#/login", own)
+    assert signon.local(302, "https://GATEWAY.lab.test/#/login", own) and signon.local(302, "https://192.0.2.60:9443/", own)
+    for location in ("https://idp.example.test/realms/ceph/protocol/openid-connect/auth?x=1", "https://login.example.test/oauth2/authorize?x=1",
+                     "/oauth2/sign_in", "https://gateway.lab.test/oauth2/sign_in", "//idp.example.test/realms/ceph/protocol/openid-connect/auth",
+                     "http://gateway.lab.test/#/login", "http://idp.example.test/x", "relative", "https://[::1", None):
+        assert not signon.local(302, location, own), location
     for status in (401, 403, 500, 502):
-        assert not signon.local(status, None, signon_tests.ISSUER)
+        assert not signon.local(status, None, own)
+    assert signon.own_hosts({"endpoint": "Mgr.Example.Test", "virtualIP": "2001:db8::60"}, [("a", "node-1", "[2001:db8::60]")]) == {
+        "mgr.example.test", "2001:db8::60", "node-1", "a"}
 
 
 class LocalWorker:

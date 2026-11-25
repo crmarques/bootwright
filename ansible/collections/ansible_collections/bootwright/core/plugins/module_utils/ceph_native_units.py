@@ -133,7 +133,7 @@ UNIT_TYPES = {
                            {"rbd-mirror": None}, {}, frozenset(MIRROR_TYPES), None),
 }
 PHASES = frozenset(("unit", "ingress_firewall", "vip_holder", "signon_discovery", "signon_routes", "signon_route_proof", "sso_config", "sso",
-                    "signon_baseline", "signon_remove", "signon_state", "signon_sso_disable", "signon_local", "signon_resume_unit",
+                    "signon_baseline", "signon_remove", "signon_state", "signon_sso_disable", "signon_local", "signon_resume_unit", "sso_withdraw",
                     "manager_ports", "manager_ports_unrecorded",
                     "nvmeof_unit_observe", "monitoring_credentials", "monitoring_credentials_held", "grafana_route", "grafana_route_proof",
                     "grafana_reconfig"))
@@ -827,6 +827,32 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
         require(not ceph_signon_native.sso_enabled(self), "not-ready")
         return {"changed": True, "pending": False}
 
+    def sso_withdraw(self):
+        """The sign-on apply's undo of its one write, on the bootstrap host once its readiness wait ended without proving sign-on enforced:
+        `dashboard sso disable` unless the option already reads false, then read back false. A repeat across a manager restart reads the
+        option first, so it is never sent twice. A disable the dashboard refuses, as without python3-saml, refuses sign-on-unenforced naming
+        the dashboard as still in OAuth2 mode and the dashboard's own answer."""
+        ceph_signon_native.require_signon(self)
+        if not ceph_signon_native.sso_enabled(self):
+            return {"changed": False}
+        sent = []
+
+        def disable():
+            if sent and not ceph_signon_native.sso_enabled(self):
+                return
+            sent.append(True)
+            self.tunnel_effect("dashboard", "sso", "disable", json_result=False)
+
+        try:
+            self.manager_declare(disable, module=("dashboard", "ac-user-show"))
+        except NativeFailure as error:
+            if str(error) != "native-command":
+                raise
+            raise NativeFailure("sign-on-unenforced", self.native_coordinate(),
+                                "the dashboard stays in OAuth2 single sign-on, dashboard sso disable refused: " + error.native_error["cause"]) from None
+        require(not ceph_signon_native.sso_enabled(self), "not-ready")
+        return {"changed": True}
+
     def signon_local(self):
         """Read-only: local sign-in through the gateway, ceph_signon_native.local_sign_in."""
         return ceph_signon_native.local_sign_in(self)
@@ -858,7 +884,8 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
 
     def signon_routes(self):
         """Read-only, on the bootstrap host of a sign-on: the sign-on corrections this build's gateway-identity record selects for the
-        cluster's management gateway, which every running gateway daemon must then render."""
+        cluster's management gateway. Every running gateway daemon must render the protected routes whatever this names; it tells the
+        refusal only whether this build can correct a route a gateway lacks."""
         require(self.markers.owned(), "ownership")
         require(self.ceph("fsid") == {"fsid": self.request["fsid"]}, "ownership")
         unit = self.request["service"]

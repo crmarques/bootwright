@@ -236,16 +236,19 @@ service.
 | `rgw_ldap_secret` | `/etc/bootwright/rgw-ldap-bind`, the bind password file below |
 | `rgw_s3_auth_use_ldap` | `true` |
 | `custom_configs[0]` | `/etc/bootwright/rgw-ldap-bind`: the value of the server's `bindPasswordRef` |
-| `custom_configs[1]` | `/etc/openldap/ldap.conf`: `TLS_CACERT` the CA file below, else the image's `/etc/pki/tls/certs/ca-bundle.crt`, `TLS_REQCERT demand`, `NETWORK_TIMEOUT 5` and `TIMEOUT 10`, because RGW sets no LDAP TLS option or timeout itself |
+| `custom_configs[1]` | `/etc/openldap/ldap.conf`: `TLS_CACERT` the CA file below, else the image's `/etc/pki/tls/certs/ca-bundle.crt`, `TLS_REQCERT demand`, `NETWORK_TIMEOUT 3` and `TIMEOUT 3`, because RGW sets no LDAP TLS option or timeout itself |
 | `custom_configs[2]` | only with the server's `trustBundleRef`: `/etc/bootwright/rgw-ldap-ca.pem`, its certificates |
 | `rgw_sts_key` | `sts` only: the value of `keyRef` |
 | `rgw_s3_auth_use_sts` | `sts` only: `true` |
 
 RGW's default sign-in order `sts, external, local` keeps local users last: the
 LDAP engine only denies, so a request signed with a CephObjectUser's key never
-contacts the directory, and local users keep working while it is down. An LDAP
-user whose sign-in name equals a CephObjectUser's ID acts as that user, so keep
-directory names and CephObjectUser names disjoint. The bind password and the CA
+contacts the directory, and local users keep working while it is down, though
+an unreachable directory can delay requests while LDAP-token requests wait out
+their bounded 3-second LDAP timeouts. An LDAP user whose sign-in name equals
+any existing RGW user ID acts as that RGW user: CephObjectUser names, the
+dashboard's RGW system user `dashboard` and any multisite system user
+included, so keep directory names disjoint from every RGW user ID. The bind password and the CA
 bundle are effect material of the gateway block; the bind password must be one
 line of 1 to 1023 bytes without leading or trailing whitespace, which RGW would
 trim or cut, and the bundle parsable PEM certificates, or the apply refuses
@@ -1438,9 +1441,14 @@ gateway signs users in through oauth2-proxy and OIDCProvider <name>"; "Bootwrigh
 enables the dashboard's OAuth2 single sign-on; local sign-in returns only after
 bootwright cluster sign-on suspend" ([sign-on suspension](cli/cluster-sign-on.md)); "cephadm reconfigures the management
 gateway, Grafana, Prometheus and Alertmanager for single sign-on; their blocks
-do not change"; "while sign-on is on, a manager's dashboard port 8443 accepts a
-forged token (an upstream defect); keep it reachable only from the management
-gateway hosts" ([B1829](milestones/m2.md#b1829)); without the TLS pair
+do not change"; "while sign-on is on, cephadm turns off Grafana's login form
+and Prometheus and Alertmanager basic authentication: their local logins gate
+nothing until bootwright cluster sign-on suspend"; "every user the identity
+provider signs in for this client reaches Prometheus and Alertmanager, silences
+included: restrict the client to Ceph operators in the provider"; "while
+sign-on is on, any client that reaches port 8443 of a manager host acts as the
+dashboard admin without signing in (an upstream defect); keep it reachable only
+from the management gateway hosts" ([B1829](milestones/m2.md#b1829)); without the TLS pair
 "cephadm signs oauth2-proxy's TLS certificate"; and without a trust bundle
 "oauth2-proxy verifies the issuer of OIDCProvider <name> with its image's
 system trust store".

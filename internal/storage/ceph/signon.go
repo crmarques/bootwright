@@ -237,13 +237,15 @@ func signOnRequest(c api.Catalog, object api.Object, base Request, controller st
 
 const (
 	signOnEnableImpact   = "Bootwright enables the dashboard's OAuth2 single sign-on; local sign-in returns only after bootwright cluster sign-on suspend"
-	signOnPortImpact     = "while sign-on is on, a manager's dashboard port 8443 accepts a forged token (an upstream defect); keep it reachable only from the management gateway hosts"
+	signOnPortImpact     = "while sign-on is on, any client that reaches port 8443 of a manager host acts as the dashboard admin without signing in (an upstream defect); keep it reachable only from the management gateway hosts"
 	signOnDelegateImpact = "cephadm reconfigures the management gateway, Grafana, Prometheus and Alertmanager for single sign-on; their blocks do not change"
+	signOnLoginsImpact   = "while sign-on is on, cephadm turns off Grafana's login form and Prometheus and Alertmanager basic authentication: their local logins gate nothing until bootwright cluster sign-on suspend"
+	signOnAudienceImpact = "every user the identity provider signs in for this client reaches Prometheus and Alertmanager, silences included: restrict the client to Ceph operators in the provider"
 )
 
 func signOnImpacts(r SignOnRequest) []string {
 	impacts := []string{"realize Ceph sign-on " + r.Object + " of " + r.Cluster, "the management gateway signs users in through oauth2-proxy and OIDCProvider " + r.Provider.Name,
-		signOnEnableImpact, signOnDelegateImpact, signOnPortImpact}
+		signOnEnableImpact, signOnDelegateImpact, signOnLoginsImpact, signOnAudienceImpact, signOnPortImpact}
 	if !slices.ContainsFunc(r.Bindings, func(b ServiceBinding) bool { return b.Path == cephcluster.SignOnCertificate }) {
 		impacts = append(impacts, "cephadm signs oauth2-proxy's TLS certificate")
 	}
@@ -419,9 +421,9 @@ func signOnDeadline(operation string) (time.Duration, error) {
 	calls, waits := 0, 0
 	switch operation {
 	case "apply", "resume":
-		calls, waits = 6, 1
+		calls, waits = 7, 1
 	case "observe":
-		calls = 1
+		calls = 2
 	case "suspend_prepare":
 		calls = 2
 	case "suspend":

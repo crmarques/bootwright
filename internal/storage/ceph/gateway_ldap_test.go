@@ -65,7 +65,7 @@ func TestAGatewayWithLDAPFreezesItsOptionsAndMountsWithoutSecretBytes(t *testing
 			if !reflect.DeepEqual(config, want) {
 				t.Fatalf("the rgw document's config %v, want %v", config, want)
 			}
-			conf := "TLS_CACERT " + test.ca + "\nTLS_REQCERT demand\nNETWORK_TIMEOUT 5\nTIMEOUT 10\n"
+			conf := "TLS_CACERT " + test.ca + "\nTLS_REQCERT demand\nNETWORK_TIMEOUT 3\nTIMEOUT 3\n"
 			if len(mounts) != test.mounts || mounts[0] != (customConfig{MountPath: rgwLDAPBindPath}) || mounts[1] != (customConfig{Content: conf, MountPath: rgwLDAPConfPath}) ||
 				test.mounts == 3 && mounts[2] != (customConfig{MountPath: rgwLDAPCAPath}) {
 				t.Fatalf("the rgw document mounts %+v", mounts)
@@ -178,14 +178,17 @@ func TestGatewayMaterialLendsLDAPLeavesOnlyToApply(t *testing.T) {
 func TestGatewayLDAPPlanImpacts(t *testing.T) {
 	d := gatewayBlock(t, ldapCatalog(ldapServer()))
 	for _, line := range []string{
-		"RGW of object gateway objects authenticates S3 users against LDAPServer directory; its local object users keep working while the directory is down",
-		"an LDAP user named like a CephObjectUser acts as that object user: keep directory names and CephObjectUser names disjoint",
+		"RGW of object gateway objects authenticates S3 users against LDAPServer directory; a request signed with a local object user's key never contacts the directory",
+		ldapOutageImpact, ldapCollisionImpact,
 		"the directory bind password is stored in cephadm's service specification, which ceph orch ls --export and the dashboard's service API show to Ceph administrators; use a least-privilege bind account",
 		"rotating the directory bind password or trust bundle of the completed gateway needs bootwright destroy and a fresh apply",
 	} {
 		if !slices.Contains(d.Impacts, line) {
 			t.Fatalf("the gateway's impacts %q lack %q", d.Impacts, line)
 		}
+	}
+	if slices.ContainsFunc(d.Impacts, func(impact string) bool { return len(impact) > 200 }) {
+		t.Fatalf("an impact of %q exceeds 200 bytes", d.Impacts)
 	}
 	fronted := gatewayOf(t, d).Gateway
 	fronted.Documents = append(fronted.Documents, []byte(`{}`))

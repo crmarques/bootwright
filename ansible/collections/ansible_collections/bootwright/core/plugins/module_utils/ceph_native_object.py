@@ -211,7 +211,7 @@ def validate_bindings(gateway, documents):
 
 def ldap_conf(trusted):
     """The libldap client file the gateway mounts: the directory's CA bundle, else the image's system bundle, verified in full, with bounds."""
-    return "TLS_CACERT " + (LDAP_CA if trusted else SYSTEM_BUNDLE) + "\nTLS_REQCERT demand\nNETWORK_TIMEOUT 5\nTIMEOUT 10\n"
+    return "TLS_CACERT " + (LDAP_CA if trusted else SYSTEM_BUNDLE) + "\nTLS_REQCERT demand\nNETWORK_TIMEOUT 3\nTIMEOUT 3\n"
 
 
 def option_text(value):

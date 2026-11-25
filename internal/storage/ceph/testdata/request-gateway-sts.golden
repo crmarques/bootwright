@@ -78,7 +78,7 @@
             "mount_path": "/etc/bootwright/rgw-ldap-bind"
           },
           {
-            "content": "TLS_CACERT /etc/pki/tls/certs/ca-bundle.crt\nTLS_REQCERT demand\nNETWORK_TIMEOUT 5\nTIMEOUT 10\n",
+            "content": "TLS_CACERT /etc/pki/tls/certs/ca-bundle.crt\nTLS_REQCERT demand\nNETWORK_TIMEOUT 3\nTIMEOUT 3\n",
             "mount_path": "/etc/openldap/ldap.conf"
           }
         ],

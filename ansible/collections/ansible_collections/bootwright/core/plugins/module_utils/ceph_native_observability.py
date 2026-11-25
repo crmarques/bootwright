@@ -130,6 +130,14 @@ GRAFANA_HOST = "proxy_set_header Host $host;"
 DASHBOARD_COOKIE = 'proxy_set_header Cookie "";'
 GRAFANA_ROLE = 'proxy_set_header X-WEBAUTH-ROLE "Viewer";'
 CLIENT_ROLE = "$http_x_auth_request_role"
+# The statement the template's oauth2-proxy branch opens each protected location with, and the two statements the protected routes allow
+# for the headers they pin, each compared with its whitespace collapsed and its semicolon removed.
+SIGN_IN = "auth_request /oauth2/auth"
+# The dashboard location's token pin: the access token oauth2-proxy answered, never a client's X-Access-Token header.
+TOKEN_SET = "auth_request_set $token $upstream_http_x_auth_request_access_token"
+TOKEN_PIN = "proxy_set_header X-Access-Token $token"
+# Statements that would let a protected location skip its own statements: another file's, or a satisfied access phase.
+UNPROVABLE = ("include", "satisfy")
 GATEWAY_ROUTES = ("cookie", "external", "nginx", "role")
 # The routes a gateway renders without an oauth2-proxy, which its own readiness proves; the sign-on routes render only inside the
 # oauth2-proxy branches, so the CephSignOn's block proves them once its proxy runs.
@@ -702,16 +710,59 @@ def config_block(text, opening):
     return None
 
 
+def statements(lines):
+    """A flat block's statements, each with its comment removed, its whitespace collapsed and no semicolon; None for a block that nests
+    another, holds a `#` inside quotes, or names a statement in UNPROVABLE, whose effect this reading cannot prove."""
+    kept = []
+    for line in lines:
+        code, mark, unused = line.partition("#")
+        if "{" in code or "}" in code or mark and code.count('"') % 2:
+            return None
+        kept.append(code)
+    found = [" ".join(part.split()) for part in "\n".join(kept).split(";") if part.strip()]
+    return None if any(entry.split()[0].lower() in UNPROVABLE for entry in found) else found
+
+
+def pinned(lines, header, wanted, extra=()):
+    """Whether a flat location signs every request in through oauth2-proxy, sets the header only to the one wanted value, sets each extra
+    statement's header only so, and names no client role header."""
+    found = statements(lines)
+    if found is None:
+        return False
+    signed = [entry for entry in found if entry.split()[0] == "auth_request"]
+    for statement in (wanted.rstrip(";"),) + tuple(extra):
+        key = [part.lower() for part in statement.split()[:2]]
+        if [entry for entry in found if [part.lower() for part in entry.split()[:2]] == key] != [statement]:
+            return False
+    return signed == [SIGN_IN] and not any(CLIENT_ROLE in entry.lower() for entry in found)
+
+
+def dashboard_only(external):
+    """Whether the dashboard's servers are proxied from no location but `location /`, which the dashboard route proves."""
+    passes = [line for line in external.splitlines() if "dashboard_servers" in line.partition("#")[0]]
+    dashboard = config_block(external, "location / {")
+    return len(passes) == 1 and dashboard is not None and passes[0].strip() in dashboard
+
+
 def routes_grafana(nginx, external):
     """Which routes a deployed gateway's two rendered files carry, by correction name: `nginx` when Grafana's upstream pins each client to
-    one Grafana, `external` when its location forwards the client's Host exactly once, `cookie` when the dashboard's location clears the
-    client's cookies once, `role` when Grafana's location sends the role Viewer once and no client role header."""
+    one Grafana, `external` when its location forwards the client's Host exactly once, `cookie` when the dashboard's servers are proxied
+    from `location /` alone, which signs every request in through oauth2-proxy, sends the dashboard only the access token oauth2-proxy
+    answered as X-Access-Token and whose only Cookie header is the empty one, `role` when Grafana's location signs every request in and
+    its only role header is the fixed Viewer, with no client role header anywhere in it. A sign-on route needs no correction of this
+    build: a template that already renders it so passes, and any other shape fails."""
     upstream, location = config_block(nginx, "upstream grafana_servers {"), config_block(external, "location /grafana {")
     dashboard = config_block(external, "location / {")
     return {"nginx": upstream is not None and GRAFANA_AFFINITY in upstream,
             "external": location is not None and location.count(GRAFANA_HOST) == 1,
-            "cookie": dashboard is not None and dashboard.count(DASHBOARD_COOKIE) == 1,
-            "role": location is not None and location.count(GRAFANA_ROLE) == 1 and not any(CLIENT_ROLE in line for line in location)}
+            "cookie": dashboard is not None and dashboard_only(external) and pinned(dashboard, "cookie", DASHBOARD_COOKIE, (TOKEN_SET, TOKEN_PIN)),
+            "role": location is not None and pinned(location, "x-webauth-role", GRAFANA_ROLE)}
+
+
+def sign_on_routes(target):
+    """The routes every running gateway container of a sign-on must render, whatever this build's corrections selected: the dashboard's,
+    and Grafana's when the gateway fronts it."""
+    return ["cookie", "role"] if target.get("grafana") else ["cookie"]
 
 
 def started_ns(value):

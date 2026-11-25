@@ -79,8 +79,11 @@ operation it belongs to; no later lineage reads it.
    `dashboard-drift`. Then an unauthenticated `GET /` of the gateway's virtual
    IP, else each running gateway daemon, over TLS pinned to the certificate
    the gateway's apply proved, must answer the gateway's own sign-in: a 200,
-   or a redirect to an absolute path, or to an `http` or `https` URL on a host
-   other than the identity provider's, that is not under `/oauth2/`.
+   or a redirect that stays on the gateway and is not under `/oauth2/`: an
+   absolute path, or an `https` URL on a host the gateway answers as (its
+   endpoint name, virtual IP, or a probed daemon's address or name). A redirect
+   to any other host, the identity provider's authorization endpoint on any
+   origin included, is not local sign-in.
 5. The command writes the record `suspended`.
 
 Suspend never contacts the identity provider and lends no sign-on Secret: the
@@ -107,7 +110,7 @@ A crash between the remote run and the clear is finished by the repeat. A
 resume with no record runs the same protocol, which proves and repairs an
 active sign-on. A resume the provider pre-check refuses changed nothing, so it
 puts back the record it read, and the cluster stays `suspended`. Its deadline is
-the sign-on apply's, 4920 s. The block's apply
+the sign-on apply's, 5580 s. The block's apply
 record is never rewritten.
 
 ## While suspended
@@ -122,7 +125,12 @@ to suspend again or resume. A record in `suspending` or `resuming` reads the
 block `unknown` without any host call, its remedy the interrupted command.
 `cluster info` shows the cluster's `signOn.state` (`active`, `suspending`,
 `suspended` or `resuming`) and, while suspended, points at `cluster info
---secrets` for the local logins.
+--secrets` for the local logins. While `active`, its text output also says
+that the local logins are off, Grafana's login form and Prometheus and
+Alertmanager basic authentication gating nothing until a suspend, and that
+every user the identity provider signs in for the client reaches Prometheus
+and Alertmanager, silences included, so the client is restricted in the
+provider; the JSON output and `--secrets` stay unchanged.
 
 `apply` over the completed lineage settles without running the sign-on block,
 because it runs only in its own apply, and a continuation of that apply cannot

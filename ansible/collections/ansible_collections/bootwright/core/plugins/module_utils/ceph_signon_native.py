@@ -268,11 +268,26 @@ def answer(data):
     return int(found.group(1)), (locations[0] if len(locations) == 1 else None)
 
 
-def enforced(status, location, issuer):
+def serialized(found):
+    """An https origin as the canonical text the controller lends an observation: scheme, lower-case host (an IPv6 one bracketed), port."""
+    scheme, host, port = found
+    return scheme + "://" + ("[" + host + "]" if ":" in host else host) + ":" + str(port)
+
+
+def authorization(value):
+    """The https origin a lent authorization endpoint text names exactly, else None."""
+    found = origin(value) if isinstance(value, str) and 0 < len(value) <= MAX_ISSUER else None
+    return found if found is not None and found[0] == "https" and serialized(found) == value else None
+
+
+def enforced(status, location, authorized, own):
     """The one answer the pinned image's gateway and oauth2-proxy give an unauthenticated `GET /` when sign-on is enforced: a 302 to an
-    https URL on the issuer's origin, its authorization endpoint."""
-    wanted = origin(issuer)
-    return status == ENFORCED_STATUS and location is not None and wanted is not None and wanted[0] == "https" and origin(location) == wanted
+    https URL on the origin of the authorization endpoint the issuer's discovery named. An observation no apply lent that origin accepts
+    a 302 to any https URL off the gateway's own hosts, since only oauth2-proxy sends a client away from the gateway."""
+    found = origin(location) if location is not None else None
+    if status != ENFORCED_STATUS or found is None or found[0] != "https":
+        return False
+    return found == authorized if authorized is not None else found[1] not in own
 
 
 def read_head(channel, deadline):
@@ -289,13 +304,13 @@ def read_head(channel, deadline):
     return data
 
 
-def probe(address, number, name, host, pinned, issuer):
+def probe(address, number, name, host, pinned, authorized, own):
     """One unauthenticated `GET /` of a gateway endpoint without a cookie or an authorization header: "tls" unless it serves the leaf whose
     SHA-256 is pinned, "enforced" for the enforced answer, else "pending". No byte of the answer leaves this function."""
     parsed = probe_answer(address, number, name, host, pinned)
     if parsed == "tls":
         return "tls"
-    return "enforced" if parsed is not None and enforced(parsed[0], parsed[1], issuer) else "pending"
+    return "enforced" if parsed is not None and enforced(parsed[0], parsed[1], authorized, own) else "pending"
 
 
 def probe_answer(address, number, name, host, pinned):
@@ -318,18 +333,30 @@ def probe_answer(address, number, name, host, pinned):
     return answer(data) if data is not None else None
 
 
-def local(status, location, issuer):
-    """Whether an unauthenticated `GET /` reached the gateway's own sign-in: a 200, or a redirect neither to the issuer's origin nor under
-    /oauth2/; the enforced redirect, an error and anything else are not."""
+def local(status, location, own):
+    """Whether an unauthenticated `GET /` reached the gateway's own sign-in: a 200, or a redirect that stays on the gateway, a path or an
+    https URL on one of its own hosts, and not under /oauth2/. A redirect anywhere else, the identity provider's authorization endpoint on
+    any origin included, an error and anything else are not."""
     if status == 200:
         return True
     if status not in REDIRECTS or location is None:
         return False
-    target = urllib.parse.urlsplit(location)
-    wanted = origin(issuer)
-    return not target.scheme and not target.netloc and target.path.startswith("/") and not target.path.startswith("/oauth2/") or (
-        target.scheme in ("http", "https") and origin(location) is not None and origin(location) != wanted and not target.path.startswith("/oauth2/")
-        and (target.hostname or "") != (urllib.parse.urlsplit(issuer).hostname or ""))
+    try:
+        target = urllib.parse.urlsplit(location)
+    except ValueError:
+        return False
+    if target.path.startswith("/oauth2/"):
+        return False
+    if not target.scheme and not target.netloc:
+        return target.path.startswith("/")
+    found = origin(location)
+    return found is not None and found[0] == "https" and found[1] in own
+
+
+def own_hosts(gateway, targets):
+    """The lower-case host names and addresses a gateway answers as: its endpoint name, virtual IP and each probed endpoint's address and names."""
+    names = {gateway.get("endpoint"), gateway.get("virtualIP")} | {part for target in targets for part in target}
+    return {name.strip("[]").lower() for name in names if isinstance(name, str) and name}
 
 
 def gateway_targets(worker, gateway):
@@ -355,8 +382,9 @@ def endpoint(worker, unit, running):
     targets = gateway_targets(worker, gateway)
     wanted = 1 if gateway.get("virtualIP") is not None else gateway["count"]
     passed = 0
+    own, authorized = own_hosts(gateway, targets), getattr(worker, "authorization", None)
     for address, name, host in targets:
-        verdict = "pending" if address is None else probe(address, gateway["port"], name, host, gateway["certificateSHA256"], issuer_of(unit))
+        verdict = "pending" if address is None else probe(address, gateway["port"], name, host, gateway["certificateSHA256"], authorized, own)
         if verdict == "tls":
             worker.pending("tls@mgmt-gateway")
         elif verdict != "enforced":
@@ -399,9 +427,16 @@ def discovered(data, issuer):
     return None if value.get("issuer") == issuer else "issuer-mismatch"
 
 
+def endpoint_origin(data):
+    """The canonical https origin of the authorization endpoint of a discovery answer `discovered` passed."""
+    value = json.loads(data.partition(b"\r\n\r\n")[2])
+    return serialized(origin(value["authorization_endpoint"]))
+
+
 def discover(issuer, bundle, *, connect=socket.create_connection):
-    """The stage at which reading `<issuer>/.well-known/openid-configuration` fails: dns, connect, tls, status <n>, content, issuer-mismatch
-    or oversize; None when the document proves the issuer. One HTTP/1.0 request, no proxy, no redirect followed."""
+    """(the stage at which reading `<issuer>/.well-known/openid-configuration` fails: dns, connect, tls, status <n>, content,
+    issuer-mismatch or oversize, None) or (None, the canonical origin of its authorization endpoint) when the document proves the issuer.
+    One HTTP/1.0 request, no proxy, no redirect followed."""
     parts = urllib.parse.urlsplit(issuer)
     host, port = parts.hostname, parts.port or 443
     request = ("GET " + parts.path + DISCOVERY_PATH + " HTTP/1.0\r\nHost: " + parts.netloc + "\r\nAccept: application/json\r\n\r\n").encode("ascii")
@@ -409,13 +444,13 @@ def discover(issuer, bundle, *, connect=socket.create_connection):
     try:
         context = discovery_context(bundle)
     except (ssl.SSLError, ValueError):
-        return "tls"
+        return "tls", None
     try:
         raw = connect((host, port), timeout=CONNECT_TIMEOUT)
     except socket.gaierror:
-        return "dns"
+        return "dns", None
     except OSError:
-        return "connect"
+        return "connect", None
     data = b""
     with raw:
         try:
@@ -424,19 +459,20 @@ def discover(issuer, bundle, *, connect=socket.create_connection):
                 while len(data) <= DISCOVERY_LIMIT:
                     remaining = deadline - time.monotonic()
                     if remaining <= 0:
-                        return "connect"
+                        return "connect", None
                     channel.settimeout(min(CONNECT_TIMEOUT, remaining))
                     block = channel.recv(DISCOVERY_LIMIT + 1 - len(data))
                     if not block:
                         break
                     data += block
         except (ssl.SSLError, ssl.CertificateError):
-            return "tls"
+            return "tls", None
         except OSError:
-            return "connect"
+            return "connect", None
     if len(data) > DISCOVERY_LIMIT:
-        return "oversize"
-    return discovered(data, issuer)
+        return "oversize", None
+    stage = discovered(data, issuer)
+    return (stage, None) if stage is not None else (None, endpoint_origin(data))
 
 
 def discovery(worker):
@@ -445,10 +481,10 @@ def discovery(worker):
     unit = worker.request["service"]
     require(unit["type"] == TYPE and worker.host["name"] in document_of(unit)["placement"]["hosts"])
     bundle = worker.bound.get(CA_VARIABLE) if isinstance(worker.bound, dict) else None
-    stage = discover(issuer_of(unit), bundle)
+    stage, found = discover(issuer_of(unit), bundle)
     if stage is not None:
         raise NativeFailure("sign-on-provider-unreachable", worker.native_coordinate(), "host " + worker.host["name"] + ": " + stage + " " + issuer_of(unit))
-    return {"changed": False}
+    return {"authorization": found, "changed": False}
 
 
 def insecure_flag(args, environment):
@@ -620,6 +656,6 @@ def local_sign_in(worker):
     served = 0
     for address, name, host in targets:
         parsed = None if address is None else probe_answer(address, gateway["port"], name, host, gateway["certificateSHA256"])
-        if parsed is not None and parsed != "tls" and local(parsed[0], parsed[1], issuer_of(unit)):
+        if parsed is not None and parsed != "tls" and local(parsed[0], parsed[1], own_hosts(gateway, targets)):
             served += 1
     return {"changed": False, "local": served == len(targets) >= wanted}

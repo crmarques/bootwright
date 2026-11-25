@@ -44,6 +44,8 @@ SSO_PAUSE = 10
 # gateway host in one concurrent round of calls of at most ROUTE_CALL, each round after an observation reads the unit ready.
 ROUTE_CALL = 120
 ROUTE_ENTRY = "route@mgmt-gateway"
+# The readiness entries that prove a sign-on's gateway does not enforce it, after which its single sign-on goes back off.
+UNENFORCED = ("enforce@mgmt-gateway", "tls@mgmt-gateway", ROUTE_ENTRY)
 ROUTES = frozenset(ceph_native_observability.GATEWAY_ROUTES)
 # One read-only round over the rgw hosts of a gateway with LDAP authentication, inside its readiness wait.
 MOUNT_CALL = 120
@@ -899,13 +901,16 @@ def unit_observation_timeout(request):
     return ceph_native_nvmeof.phase_budget(request, "nvmeof_unit_observe") + 20 if ceph_transport.nvmeof_unit(request) else 660
 
 
-def observe_unit(request, request_digest, bootstrap, transport, timeout=None, blocking=None, *, private=None):
-    """One read-only observation of a service unit on the bootstrap host; no other host is called."""
+def observe_unit(request, request_digest, bootstrap, transport, timeout=None, blocking=None, *, private=None, authorization=None):
+    """One read-only observation of a service unit on the bootstrap host; no other host is called. A sign-on's apply lends it the
+    authorization endpoint origin its discovery read."""
     if timeout is None and ceph_transport.nvmeof_unit(request):
         timeout = unit_observation_timeout(request)
     options = {} if timeout is None else {"timeout": timeout}
     if private:
         options["private"] = private
+    if authorization is not None:
+        options["authorization"] = authorization
     observed = transport.call(bootstrap, "nvmeof_unit_observe" if ceph_transport.nvmeof_unit(request) else "observe", **options)
     ceph_native.require(isinstance(observed, dict), "evidence")
     observed = dict(observed)
@@ -1067,7 +1072,7 @@ class GatewayMounts:
         return ["mount@" + ceph_native_units.service_name(document)]
 
 
-def wait_unit(request, request_digest, bootstrap, transport, now, pause, *, private=None, remedy=None, routes=None):
+def wait_unit(request, request_digest, bootstrap, transport, now, pause, *, private=None, remedy=None, routes=None, authorization=None):
     """Poll the unit's own observation until ready and, with an ingress, until each virtual IP has exactly one holder; a timeout names the
     daemons, endpoint, holder or health checks still blocking. While an observation names lagging MGR ports, an apply's remedy runs
     within the same window before the next poll, and a management gateway fronting Grafana or declaring an oauth2-proxy proves its routes
@@ -1080,7 +1085,8 @@ def wait_unit(request, request_digest, bootstrap, transport, now, pause, *, priv
         if remaining <= 0:
             raise ReadinessRefusal(blocking)
         try:
-            observed = observe_unit(request, request_digest, bootstrap, transport, min(call_timeout, remaining), blocking, private=private)
+            observed = observe_unit(request, request_digest, bootstrap, transport, min(call_timeout, remaining), blocking, private=private,
+                                    authorization=authorization)
         except ceph_native.RemoteRefusal as error:
             if not unsettled(error):
                 raise
@@ -1173,34 +1179,43 @@ def sso_enable(bootstrap, transport, deadline, now, pause):
 
 
 def signon_discovery(request, transport):
-    """Before any effect of a sign-on's apply: each oauth2-proxy host reads, read-only and concurrently, its issuer's discovery document."""
+    """Before any effect of a sign-on's apply: each oauth2-proxy host reads, read-only and concurrently, its issuer's discovery document;
+    the origin of the authorization endpoint they all read, which this apply's enforcement proof compares the gateway's redirect with.
+    Hosts that read different origins refuse sign-on-provider-unreachable."""
     hosts = {host["name"]: host for host in request["hosts"]}
     proxy = ceph_signon_native.document_of(request["service"])
-    results = host_round(transport, [hosts[name] for name in proxy["placement"]["hosts"]], "signon_discovery", transport.unit_material("signon_discovery"),
-                         timeout=SSO_CALL)
-    ceph_native.require(all(result == {"changed": False} for result in results), "evidence")
+    names = proxy["placement"]["hosts"]
+    results = host_round(transport, [hosts[name] for name in names], "signon_discovery", transport.unit_material("signon_discovery"), timeout=SSO_CALL)
+    ceph_native.require(all(isinstance(result, dict) and set(result) == {"authorization", "changed"} and result["changed"] is False
+                            and ceph_signon_native.authorization(result["authorization"]) is not None for result in results), "evidence")
+    found = sorted({result["authorization"] for result in results})
+    if len(found) != 1:
+        raise ceph_native.NativeFailure("sign-on-provider-unreachable", "sign-on issuer discovery", "hosts " + ", ".join(names)
+                                        + ": authorization endpoints on " + str(len(found)) + " origins " + ceph_signon_native.issuer_of(request["service"]))
+    return found[0]
 
 
 class SignOnRoutes:
-    """A sign-on's gateway route proof: the bootstrap host names the sign-on corrections this build selects once, then each round proves
-    on every gateway host that each running gateway daemon renders them. Before the single sign-on write a window of rounds must prove
-    them or refuse sign-on-unprotected, naming the host and correction; inside the readiness wait each call is one more round."""
+    """A sign-on's gateway route proof, whatever this build's corrections selected: each round proves on every gateway host that each
+    running gateway daemon renders the protected sign-on routes (ceph_native_observability.sign_on_routes). Before the single sign-on
+    write the bootstrap host names, once, the corrections this build can apply to the image's gateway template, which only the refusal
+    reads, and a window of rounds must prove the routes or refuse sign-on-unprotected, naming the host, the route and whether this build
+    can correct it; inside the readiness wait and an observation each call is one more round."""
 
     def __init__(self, request, bootstrap, transport):
         self.request, self.bootstrap, self.transport = request, bootstrap, transport
-        self.routes, self.lacking = None, None
+        self.routes = ceph_native_observability.sign_on_routes(request["service"]["signOn"])
+        self.corrected, self.lacking = None, None
 
-    def selected(self, timeout):
-        if self.routes is None:
-            produced = self.transport.call(self.bootstrap, "signon_routes", timeout=timeout)
-            ceph_native.require(isinstance(produced, dict) and set(produced) == {"changed", "routes"} and produced["changed"] is False
-                                and isinstance(produced["routes"], list) and set(produced["routes"]) <= set(ceph_native_observability.SIGN_ON_ROUTES)
-                                and produced["routes"] == sorted(set(produced["routes"])), "evidence")
-            self.routes = produced["routes"]
-        return self.routes
+    def correctable(self, timeout):
+        produced = self.transport.call(self.bootstrap, "signon_routes", timeout=timeout)
+        ceph_native.require(isinstance(produced, dict) and set(produced) == {"changed", "routes"} and produced["changed"] is False
+                            and isinstance(produced["routes"], list) and set(produced["routes"]) <= set(ceph_native_observability.SIGN_ON_ROUTES)
+                            and produced["routes"] == sorted(set(produced["routes"])), "evidence")
+        self.corrected = produced["routes"]
 
     def round(self, timeout):
-        """Whether every placed gateway daemon renders each selected correction; the first host lacking one is kept for the refusal."""
+        """Whether every placed gateway daemon renders each protected route; the first host lacking one is kept for the refusal."""
         target = self.request["service"]["signOn"]
         hosts = {host["name"]: host for host in self.request["hosts"]}
         daemons, self.lacking = 0, None
@@ -1217,23 +1232,19 @@ class SignOnRoutes:
         return daemons == target["count"] and self.lacking is None
 
     def prove(self, now, pause):
-        """Before the single sign-on write: rounds until every gateway daemon renders each selected correction, within one window."""
+        """Before the single sign-on write: rounds until every gateway daemon renders each protected route, within one window."""
         deadline = now() + SSO_WINDOW
-        if not self.selected(window_call(SSO_CALL, deadline, now)):
-            return
+        self.correctable(window_call(SSO_CALL, deadline, now))
         while not self.round(window_call(ROUTE_CALL, deadline, now)):
             remaining = deadline - now()
             if remaining <= 0:
                 host, route = self.lacking if self.lacking is not None else ("none", "daemon count")
-                raise ceph_native.NativeFailure("sign-on-unprotected", "sign-on gateway route proof", "host " + host + ": correction " + route)
+                if route in ceph_native_observability.SIGN_ON_ROUTES and route not in self.corrected:
+                    route += ", which this build cannot correct in the image's gateway template"
+                raise ceph_native.NativeFailure("sign-on-unprotected", "sign-on gateway route proof", "host " + host + ": route " + route)
             pause(min(SSO_PAUSE, remaining))
 
     def __call__(self, deadline, now):
-        remaining = deadline - now()
-        if remaining <= 0:
-            return None
-        if not self.selected(min(READ_BUDGET, remaining)):
-            return []
         remaining = deadline - now()
         if remaining <= 0:
             return None
@@ -1245,7 +1256,7 @@ def execute_signon(request, request_digest, transport, bootstrap, bound, seen, *
     rendered-configuration proof on every proxy host, the gateway route proof on every gateway host, the one single sign-on write, then
     its readiness wait, which proves the gateway enforces sign-on and renders the corrections; a wait that ends still unenforced refuses
     sign-on-unenforced. A resume runs the same phases, its stream admitting the document its suspension removed."""
-    signon_discovery(request, transport)
+    authorization = signon_discovery(request, transport)
     produced = transport.call(bootstrap, "signon_resume_unit" if resume else "unit", bound)
     ceph_native.require(isinstance(produced, dict) and set(produced) == {"changed"} and type(produced["changed"]) is bool, "evidence")
     sso_proof(request, transport, now, pause)
@@ -1253,13 +1264,40 @@ def execute_signon(request, request_digest, transport, bootstrap, bound, seen, *
     routes.prove(now, pause)
     changed = sso_enable(bootstrap, transport, now() + SSO_WINDOW, now, pause) or produced["changed"]
     try:
-        observation = wait_unit(request, request_digest, bootstrap, transport, now, pause, private=seen, routes=routes)
-    except ReadinessRefusal as error:
-        if error.checks and all(check in ("enforce@mgmt-gateway", "tls@mgmt-gateway") for check in error.checks):
-            raise ceph_native.Refusal("sign-on-unenforced") from None
+        observation = wait_unit(request, request_digest, bootstrap, transport, now, pause, private=seen, routes=routes, authorization=authorization)
+        ceph_native.require(observation["ready"], "not-ready")
+    except ceph_native.Refusal as error:
+        state = sso_withdraw(bootstrap, transport, now, pause)
+        if isinstance(error, ReadinessRefusal) and any(check in UNENFORCED for check in error.checks):
+            raise ceph_native.NativeFailure("sign-on-unenforced", "sign-on enforcement proof", state) from None
         raise
-    ceph_native.require(observation["ready"], "not-ready")
     return changed, observation
+
+
+SSO_OFF = "the dashboard's single sign-on is off again; local dashboard sign-in works"
+SSO_UNKNOWN = "the dashboard may still be in OAuth2 single sign-on: run ceph dashboard sso disable on a manager host"
+
+
+def sso_withdraw(bootstrap, transport, now, pause):
+    """After the write enabled the dashboard's single sign-on, on any end of the readiness wait but a proved-ready observation: the
+    single sign-on goes back off, read back false, so no unsigned token signs anyone in through a gateway nobody proved enforces sign-on;
+    the dashboard's state, for the refusal. Calls repeat 10 s apart within a 600 s window while the bootstrap host answers not-ready, as
+    while its manager restarts. The bootstrap host's own sign-on-unenforced, naming the dashboard as still in OAuth2 mode because it
+    refused the disable, propagates; any other failure refuses sign-on-unenforced naming the dashboard's state unknown."""
+    deadline = now() + SSO_WINDOW
+    while True:
+        try:
+            produced = transport.call(bootstrap, "sso_withdraw", timeout=window_call(READ_BUDGET, deadline, now))
+        except ceph_native.Refusal as error:
+            if isinstance(error, ceph_native.RemoteRefusal) and str(error.detail or "").partition("@")[0].endswith(":sign-on-unenforced"):
+                raise
+            remaining = deadline - now()
+            if unsettled(error) and remaining > 0:
+                pause(min(SSO_PAUSE, remaining))
+                continue
+            raise ceph_native.NativeFailure("sign-on-unenforced", "sign-on enforcement proof", SSO_UNKNOWN) from None
+        ceph_native.require(isinstance(produced, dict) and set(produced) == {"changed"} and type(produced["changed"]) is bool, "evidence")
+        return SSO_OFF
 
 
 def observe_nvmeof(request, request_digest, bootstrap, transport, timeout, now, blocking):
@@ -1400,6 +1438,15 @@ def execute_suspension(request, operation, request_digest, transport, bootstrap,
             pause(min(READINESS_INTERVAL, remaining))
 
 
+def observed_routes(request, request_digest, bootstrap, transport, observation, pending, now):
+    """A ready sign-on's observation also proves, in one round, that every running gateway daemon still renders the protected routes;
+    a gateway re-rendered without them reads not ready, route@mgmt-gateway pending."""
+    if SignOnRoutes(request, bootstrap, transport)(now() + ROUTE_CALL, now) == []:
+        return observation
+    pending[:] = (pending + [ROUTE_ENTRY])[:16]
+    return ceph_evidence.evidence(dict(observation, ready=False, partial=True), request_digest, request)
+
+
 def execute_unit(request, operation, request_digest, transport, bootstrap, *, now, pause, phases=("unit",), outputs=None, resume=False):
     """A service unit runs its apply phases only on the bootstrap host: its preparation proof, with an ingress the firewall check on each
     ingress host, its apply phases in order (a sign-on's are execute_signon's), then its own readiness wait, which for a management
@@ -1439,6 +1486,8 @@ def execute_unit(request, operation, request_digest, transport, bootstrap, *, no
         ceph_native.require(observation["removed"], "not-removed")
     else:
         observation = observe_unit(request, request_digest, bootstrap, transport, blocking=pending, private=seen)
+        if ceph_evidence.signon(request) and observation["ready"]:
+            observation = observed_routes(request, request_digest, bootstrap, transport, observation, pending, now)
     if "mgmtGatewayCertificate" in seen:
         bound = hashlib.sha256(ceph_native_observability.leaf(seen["mgmtGatewayCertificate"])).hexdigest()
         ceph_native.require(observation["endpoint"]["certificateSHA256"] in ("", bound), "evidence")

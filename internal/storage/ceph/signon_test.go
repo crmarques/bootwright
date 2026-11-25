@@ -76,7 +76,7 @@ func TestSignOnPlansItsOwnBlockAfterTheGateway(t *testing.T) {
 		t.Fatalf("the sign-on block is %+v", definition)
 	}
 	want := []string{"realize Ceph sign-on ceph-sso of example",
-		"the management gateway signs users in through oauth2-proxy and OIDCProvider corp-sso", signOnEnableImpact, signOnDelegateImpact, signOnPortImpact}
+		"the management gateway signs users in through oauth2-proxy and OIDCProvider corp-sso", signOnEnableImpact, signOnDelegateImpact, signOnLoginsImpact, signOnAudienceImpact, signOnPortImpact}
 	if !slices.Equal(definition.Impacts, want) || slices.ContainsFunc(definition.Impacts, func(impact string) bool { return len(impact) > 200 }) {
 		t.Fatalf("the sign-on impacts are %q", definition.Impacts)
 	}
@@ -187,7 +187,7 @@ func signOnRefused(t *testing.T, state *compilation.State, reason, remedy string
 }
 
 func TestSignOnDeadline(t *testing.T) {
-	for operation, want := range map[string]time.Duration{"apply": 4920 * time.Second, "observe": 720 * time.Second} {
+	for operation, want := range map[string]time.Duration{"apply": 5580 * time.Second, "observe": 1380 * time.Second} {
 		if got, err := signOnDeadline(operation); err != nil || got != want {
 			t.Fatalf("the sign-on %s deadline is %v (%v), want %v", operation, got, err, want)
 		}
@@ -324,7 +324,7 @@ func TestSignOnApplyLendsItsLeavesAndProvesSignOn(t *testing.T) {
 	if err != nil || got.Outcome != reconciliation.OutcomeChanged {
 		t.Fatalf("a ready sign-on applies as %+v (%+v)", got, diagnostics.Of(err))
 	}
-	if runner.request.Implementation != SignOnImplementation || runner.request.Variable != "bootwright_ceph" || runner.request.Deadline != 4920*time.Second {
+	if runner.request.Implementation != SignOnImplementation || runner.request.Variable != "bootwright_ceph" || runner.request.Deadline != 5580*time.Second {
 		t.Fatalf("the sign-on runs %s %s %v", runner.request.Implementation, runner.request.Variable, runner.request.Deadline)
 	}
 	variables := []string{}
@@ -347,7 +347,7 @@ func TestSignOnApplyLendsItsLeavesAndProvesSignOn(t *testing.T) {
 	}
 	observer := &recordingRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: signOnReady(t, e, unit, nil)}}
 	observation, err := NewSignOn(observer).Observe(context.Background(), e)
-	if err != nil || observation.Effect != reconciliation.EffectCompleted || len(observer.request.Materials) != 2 || observer.request.Deadline != 720*time.Second {
+	if err != nil || observation.Effect != reconciliation.EffectCompleted || len(observer.request.Materials) != 2 || observer.request.Deadline != 1380*time.Second {
 		t.Fatalf("the sign-on observes %+v (%+v), lending %+v", observation, diagnostics.Of(err), observer.request.Materials)
 	}
 }

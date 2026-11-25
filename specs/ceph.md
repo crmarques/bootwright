@@ -2376,7 +2376,15 @@ its bindings and the gateway target (its hosts, port, virtual IP, endpoint
 name, daemon count, whether it fronts Grafana, and the certificate SHA-256 its
 own apply proof reports). The owner and FSID are the cluster creation proof's
 operation, never the operation that runs the sign-on block. Its deadline is
-apply 4920 s (six native calls and one readiness wait) and observe 720 s.
+apply 5580 s (seven native calls and one readiness wait) and observe 1380 s
+(the observation and one gateway route round).
+
+While sign-on is on, cephadm turns off Grafana's login form and Prometheus and
+Alertmanager basic authentication, so their local logins gate nothing until
+[`cluster sign-on suspend`](cli/cluster-sign-on.md); every user the identity
+provider signs in for the sign-on's client reaches Prometheus and Alertmanager,
+silences included, so the operator restricts that client to Ceph operators in
+the provider. The plan states both as impacts of the block.
 
 Its apply, in order:
 
@@ -2386,10 +2394,14 @@ Its apply, in order:
    15 s, over TLS verified against the OIDCProvider's trust bundle alone, or
    the host's system store without one, its host name checked. A 200 JSON
    document whose `issuer` is exactly `issuerURL` and whose
-   `authorization_endpoint` is an absolute URL passes; otherwise the block
-   refuses `sign-on-provider-unreachable`, naming the host, the stage (`dns`,
-   `connect`, `tls`, `status <n>`, `content`, `issuer-mismatch` or
+   `authorization_endpoint` is an absolute `https` URL passes; otherwise the
+   block refuses `sign-on-provider-unreachable`, naming the host, the stage
+   (`dns`, `connect`, `tls`, `status <n>`, `content`, `issuer-mismatch` or
    `oversize`) and the issuer URL, never a byte of the bundle or the answer.
+   Each host returns only the origin (scheme, host, port) of that
+   authorization endpoint; hosts that read different origins refuse
+   `sign-on-provider-unreachable` naming them, and this apply's enforcement
+   proof compares the gateway's redirect with the one origin.
    oauth2-proxy discovers its issuer when it starts and exits when it cannot.
    The container adds the bundle to its image's own trust store, so the host
    check approximates the container's trust; the readiness proof that every
@@ -2422,24 +2434,37 @@ Its apply, in order:
    daemon count runs proved, the window's exhaustion refuses `not-ready`.
 4. Each management gateway host proves, in the same kind of rounds within its
    own 600 s window, that every running gateway container renders the
-   [gateway sign-on headers](#gateway-sign-on-headers) corrections this
-   build's record selects; a gateway that still lacks one when the window
-   closes refuses `sign-on-unprotected`, naming the host and the correction,
-   with the remedy to realize the gateway with this build (destroy, then a
-   fresh apply). The dashboard's single sign-on is never enabled over an
-   unprotected gateway.
+   protected sign-on routes, whatever the
+   [gateway sign-on headers](#gateway-sign-on-headers) record selected: in the
+   `external_server.conf` it mounts, no location but `/` proxies
+   `dashboard_servers`, and `/` signs every request in with `auth_request
+   /oauth2/auth;`, sends only the token oauth2-proxy answered
+   (`auth_request_set $token $upstream_http_x_auth_request_access_token;`,
+   `proxy_set_header X-Access-Token $token;`) and its only Cookie header is
+   `proxy_set_header Cookie "";`, and, when the gateway fronts Grafana,
+   `/grafana` signs every request in, its only role header is
+   `proxy_set_header X-WEBAUTH-ROLE "Viewer";` and no statement names
+   `$http_x_auth_request_role`. A gateway that still lacks a route when the
+   window closes refuses `sign-on-unprotected`, naming the host and the route
+   and, when this build's record selects no correction for it, that this
+   build cannot correct the image's gateway template, which then never gets
+   sign-on; otherwise the remedy is to realize the gateway with this build
+   (destroy, then a fresh apply). The dashboard's single sign-on is never
+   enabled over an unprotected gateway.
 5. The bootstrap host runs the block's one dashboard write, `ceph dashboard sso
    enable oauth2`, only when `mgr/dashboard/sso_oauth2` is not already true and
    once `ceph orch ps --daemon_type oauth2-proxy` lists a running daemon, which
    the enable requires; until then it asks again 10 s apart within a 600 s
    window, whose exhaustion refuses `not-ready`. Then it reads the option back.
 
+#### Sign-on readiness
+
 Readiness needs the placed `oauth2-proxy` daemons running on their frozen
 image, each one seen running by cephadm's last refresh at least 30 s after it
 started (cephadm's own clock, so it did not exit on discovery), the option true,
 read and never written (`dashboard sso status` is never run, because it answers
 EPERM without python3-saml), every running gateway container still rendering
-the selected corrections, and the enforcement proof. That proof, run from the
+the protected routes, and the enforcement proof. That proof, run from the
 bootstrap host against the virtual IP, else every running gateway daemon at
 its own address, at the gateway port (as many as the gateway's placed count), sends an unauthenticated `GET /` with no cookie or authorization header
 over TLS pinned to the gateway certificate's SHA-256. It passes only on the
@@ -2448,22 +2473,40 @@ answer the pinned image's templates give when sign-on is enforced: nginx's
 hands the request to oauth2-proxy, and with `skip_provider_button= true`
 oauth2-proxy answers a 302 to the issuer's authorization endpoint
 (`templates/services/mgmt-gateway/external_server.conf.j2`, `location /`;
-`templates/services/oauth2-proxy/oauth2-proxy.conf.j2`), so the proof accepts
-exactly a 302 whose `Location` is an `https` URL on the issuer's origin. Any
-other answer, the dashboard's own page included, stays pending, never a pass.
+`templates/services/oauth2-proxy/oauth2-proxy.conf.j2`), so the apply's proof
+accepts exactly a 302 whose `Location` is an `https` URL on the origin of the
+authorization endpoint its discovery read, lent to each readiness
+observation. An observation no apply lent that origin accepts a 302 to an
+`https` URL on no host the gateway answers as (its endpoint name, virtual IP
+and probed daemons), since only oauth2-proxy sends a client off the gateway.
+Any other answer, the dashboard's own page included, stays pending, never a
+pass.
 Evidence's `sso` is then `"oauth2"` and its `endpoint` holds the pinned
 SHA-256 once every endpoint passed. A readiness timeout names
 `oauth2-proxy@oauth2-proxy`, `stable@oauth2-proxy`, `sso@oauth2-proxy`,
-`route@mgmt-gateway`, `tls@mgmt-gateway` and `enforce@mgmt-gateway`; one that
-ends with only the enforcement entries refuses `sign-on-unenforced`.
-Observation reads the daemons, their stability, the option and the enforcement proof once; the gateway route proof runs only in apply. cephadm's only dashboard
+`route@mgmt-gateway`, `tls@mgmt-gateway` and `enforce@mgmt-gateway`. Any end of the readiness wait but a ready
+observation turns the dashboard's single sign-on back off on the bootstrap
+host, `dashboard sso disable` unless the option already reads false, read back
+false, asked again 10 s apart within 600 s while the host answers not-ready.
+A wait that names any `route@mgmt-gateway`, `tls@mgmt-gateway` or
+`enforce@mgmt-gateway` entry then refuses `sign-on-unenforced`, its native
+error saying the dashboard's single sign-on is off again and local dashboard
+sign-in works; any other keeps its own refusal. A disable the dashboard
+refuses refuses `sign-on-unenforced` naming the dashboard as still in OAuth2
+single sign-on and its answer, and a disable that cannot be proved names the
+dashboard as possibly still in OAuth2 single sign-on.
+Observation reads the daemons, their stability, the option and the
+enforcement proof once and, once those read ready, one gateway route round:
+a gateway re-rendered without the protected routes reads not ready with
+`route@mgmt-gateway` pending. A suspended block's observation runs no route
+round. cephadm's only dashboard
 single sign-on write disables it when it removes the last running oauth2-proxy
 daemon, so observation then reads the block not ready, unless
 [`cluster sign-on suspend`](cli/cluster-sign-on.md) removed it: a suspended
 block observes that the proxy and the single sign-on stay off and reads
 present, never drift, and `cluster sign-on resume` runs this apply protocol
 again over the frozen request. The block's suspension operations are
-`suspend_prepare` (1380 s), `suspend` (3600 s) and `resume` (4920 s); their
+`suspend_prepare` (1380 s), `suspend` (3600 s) and `resume` (5580 s); their
 evidence is `ceph-signon-suspension-v1`, closed `version`, `request`, `state`
 (`prepared` or `suspended`), `changed` and `baseline`. The block retires
 offline with its cluster's hosts; while the hosts survive its removal refuses
@@ -2587,7 +2630,10 @@ holds the template's one `X-Access-Token` line in its one oauth2-proxy branch;
 Grafana's location holds the template's one client-role line there and sets
 no other role. A template that lacks an anchor, holds it twice or already sets
 the header keeps that line native, and no digest, release or tag selects
-them. The selected corrections join the [Grafana routes](#grafana-routes)
+them. A dashboard location whose only Cookie header is already the empty one
+inside its branch witnesses no defect; one that sets any other Cookie header
+is an unknown shape, never a fixed one, so the template stays native and a
+CephSignOn's route proof refuses it. The selected corrections join the [Grafana routes](#grafana-routes)
 host correction in the one owned `external_server.conf` override, applied in
 that order, under the same records, check, completion before the stream and
 removal. A gateway override an earlier build completed without them keeps its
@@ -2595,17 +2641,23 @@ bytes and refuses `monitoring-template-identity` on its next run; realize the
 context afresh to take them.
 
 The gateway's own route proof counts only the lines it renders without a
-proxy (the Grafana routes). A CephSignOn's block proves the sign-on
-corrections in the file each running gateway container mounts at
-`/etc/nginx_external_server.conf` before it enables single sign-on and again
-in its readiness: exactly one `proxy_set_header Cookie "";` in the dashboard
-location, and in Grafana's exactly one `proxy_set_header X-WEBAUTH-ROLE
-"Viewer";` and no `$http_x_auth_request_role`.
+proxy (the Grafana routes). A CephSignOn's block proves the protected sign-on
+routes in the file each running gateway container mounts at
+`/etc/nginx_external_server.conf`, whatever this record selected, before it
+enables single sign-on, in its readiness and in its observation
+([management sign-on](#management-sign-on)): the dashboard location's one
+`auth_request /oauth2/auth;` and its only Cookie header
+`proxy_set_header Cookie "";`, and, fronting Grafana, Grafana's one
+`auth_request /oauth2/auth;`, its only role header `proxy_set_header
+X-WEBAUTH-ROLE "Viewer";` and no `$http_x_auth_request_role`. Statements are
+compared with comments dropped and whitespace collapsed; a location that nests
+a block, names `include` or `satisfy`, or holds a `#` inside quotes is never
+proved.
 
-Not yet met: while a management gateway signs users in, each manager's own
-dashboard port (8443 by default) still answers any network the host admits,
-and there the dashboard accepts an unsigned token naming a local user, since
-the gateway's corrections cannot reach a request that bypasses the gateway;
+Not yet met: while sign-on is on, any client that reaches port 8443 of a
+manager host acts as the dashboard admin without signing in (an upstream
+defect), since the gateway's corrections cannot reach a request that bypasses
+the gateway; keep that port reachable only from the management gateway hosts;
 tracked as [B1829](milestones/m2.md#b1829).
 
 ## Monitoring scrape templates

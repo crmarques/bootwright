@@ -69,7 +69,7 @@ func rgwLDAPConf(trusted bool) string {
 	if trusted {
 		ca = rgwLDAPCAPath
 	}
-	return "TLS_CACERT " + ca + "\nTLS_REQCERT demand\nNETWORK_TIMEOUT 5\nTIMEOUT 10\n"
+	return "TLS_CACERT " + ca + "\nTLS_REQCERT demand\nNETWORK_TIMEOUT 3\nTIMEOUT 3\n"
 }
 
 func rgwLDAPOptions(server api.Value) map[string]string {
@@ -134,6 +134,11 @@ func (g *Gateway) authSecrets() []string {
 	return out
 }
 
+const (
+	ldapOutageImpact    = "while the directory is unreachable, each LDAP-token request waits out its 3-second LDAP timeouts and can delay other requests, local object users' included"
+	ldapCollisionImpact = "an LDAP user named like any RGW user ID acts as that RGW user (CephObjectUser names, the dashboard's RGW system user dashboard and multisite system users included): keep directory names disjoint"
+)
+
 func objectGatewayImpacts(g Gateway) []string {
 	if g.Authentication == nil {
 		return nil
@@ -141,8 +146,8 @@ func objectGatewayImpacts(g Gateway) []string {
 	out := []string{}
 	if ldap := g.Authentication.LDAP; ldap != nil {
 		out = append(out,
-			"RGW of object gateway "+g.Name+" authenticates S3 users against LDAPServer "+ldap.Server+"; its local object users keep working while the directory is down",
-			"an LDAP user named like a CephObjectUser acts as that object user: keep directory names and CephObjectUser names disjoint",
+			"RGW of object gateway "+g.Name+" authenticates S3 users against LDAPServer "+ldap.Server+"; a request signed with a local object user's key never contacts the directory",
+			ldapOutageImpact, ldapCollisionImpact,
 			"the directory bind password is stored in cephadm's service specification, which ceph orch ls --export and the dashboard's service API show to Ceph administrators; use a least-privilege bind account",
 			"rotating the directory bind password or trust bundle of the completed gateway needs bootwright destroy and a fresh apply")
 		if len(g.Documents) > 1 {

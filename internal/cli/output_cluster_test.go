@@ -221,6 +221,11 @@ func clusterGoldens() []cliGolden {
 			ceph.SignOn = lifecycle.SignOnSuspended
 			r.result.clusterInfo = storageOnly(ceph)
 		}},
+		{golden: "cli-cluster-info-sign-on-active", args: "cluster info --name storage", record: func(r *dispatchRecord) {
+			ceph := gatewayCeph()
+			ceph.SignOn = lifecycle.SignOnActive
+			r.result.clusterInfo = storageOnly(ceph)
+		}},
 		{golden: "cli-cluster-info-sign-on-active-json", args: "cluster info --name storage --output json", record: func(r *dispatchRecord) {
 			ceph := gatewayCeph()
 			ceph.SignOn = lifecycle.SignOnActive

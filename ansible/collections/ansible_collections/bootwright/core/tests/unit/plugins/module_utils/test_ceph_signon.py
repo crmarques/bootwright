@@ -49,6 +49,7 @@ from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import 
 FSID = units.FSID
 OAUTH2 = "registry.example.test/ceph/oauth2-proxy@sha256:" + "e" * 64
 ISSUER = "https://idp.example.test/realms/ceph"
+AUTHORIZATION = "https://idp.example.test:443"
 CA = gateway.pem("CERTIFICATE", b"synthetic identity provider authority for the proxy")
 OTHER_CA = gateway.pem("CERTIFICATE", b"a bundle the bound Secret does not hold")
 CLIENT = "client-secret-sentinel-0123456789"
@@ -183,8 +184,9 @@ class Probes:
         self.verdicts, self.targets = verdicts, []
         monkeypatch.setattr(signon, "probe", self.probe)
 
-    def probe(self, address, number, name, host_header, pinned, issuer):
-        self.targets.append((address, number, name, host_header, pinned, issuer))
+    def probe(self, address, number, name, host_header, pinned, authorized, own):
+        assert name.strip("[]").lower() in own
+        self.targets.append((address, number, name, host_header, pinned, authorized))
         return self.verdicts[address] if isinstance(self.verdicts, dict) else self.verdicts
 
 
@@ -380,7 +382,7 @@ def test_sso_evidence_has_no_secret(tmp_path, monkeypatch):
     ready, blocking, evidence = observing(monitor, markers)
     assert ready is False and blocking == ["sso@oauth2-proxy"] and evidence["sso"] == ""
     assert evidence["endpoint"] == {"certificateSHA256": PIN, "reachable": True}
-    assert probes.targets == [(gateway.VIP, gateway.PORT, gateway.VIP, gateway.VIP, PIN, ISSUER)]
+    assert probes.targets == [(gateway.VIP, gateway.PORT, gateway.VIP, gateway.VIP, PIN, None)]
     monitor.enabled = True
     ready, blocking, evidence = observing(monitor, markers)
     assert ready is True and blocking == [] and evidence["sso"] == "oauth2"
@@ -488,19 +490,19 @@ def test_endpoint_probes_the_virtual_ip_or_each_running_gateway_daemon(tmp_path,
     worker = units.worker(SSOMonitor(request), markers)
     probes = Probes(monkeypatch, "enforced")
     assert signon.endpoint(worker, request["service"], []) == {"certificateSHA256": PIN, "reachable": True}
-    assert probes.targets == [(gateway.VIP, gateway.PORT, gateway.VIP, gateway.VIP, PIN, ISSUER)]
+    assert probes.targets == [(gateway.VIP, gateway.PORT, gateway.VIP, gateway.VIP, PIN, None)]
     v6 = sso_request()
     v6["service"]["signOn"].update(virtualIP="2001:db8::60")
     probes = Probes(monkeypatch, "enforced")
     signon.endpoint(units.worker(SSOMonitor(v6), units.markers_for(tmp_path / "v6", v6)), v6["service"], [])
-    assert probes.targets == [("2001:db8::60", gateway.PORT, "2001:db8::60", "[2001:db8::60]", PIN, ISSUER)]
+    assert probes.targets == [("2001:db8::60", gateway.PORT, "2001:db8::60", "[2001:db8::60]", PIN, None)]
     direct = sso_request()
     direct["service"]["signOn"].pop("virtualIP")
     addresses = {item["name"]: item["address"] for item in direct["hosts"]}
     probes = Probes(monkeypatch, {addresses["node-1"]: "enforced", addresses["node-2"]: "pending"})
     worker = with_gateway_rows(units.worker(SSOMonitor(direct), units.markers_for(tmp_path / "direct", direct)), gateway_rows(*gateway.TWO))
     assert signon.endpoint(worker, direct["service"], []) == {"certificateSHA256": "", "reachable": False}
-    assert probes.targets == [(addresses[name], gateway.PORT, name, name, PIN, ISSUER) for name in gateway.TWO]
+    assert probes.targets == [(addresses[name], gateway.PORT, name, name, PIN, None) for name in gateway.TWO]
     assert worker.blocking == ["enforce@mgmt-gateway"]
     probes = Probes(monkeypatch, {addresses["node-1"]: "tls", addresses["node-2"]: "pending"})
     worker = with_gateway_rows(units.worker(SSOMonitor(direct), units.markers_for(tmp_path / "direct2", direct)), gateway_rows(*gateway.TWO))
@@ -509,7 +511,7 @@ def test_endpoint_probes_the_virtual_ip_or_each_running_gateway_daemon(tmp_path,
     one = with_gateway_rows(units.worker(SSOMonitor(direct), units.markers_for(tmp_path / "one", direct)),
                             gateway_rows(gateway.TWO[0]) + gateway_rows(gateway.TWO[1], status=0) + gateway_rows("node-9"))
     assert signon.endpoint(one, direct["service"], [])["reachable"] is (direct["service"]["signOn"]["count"] == 1)
-    assert probes.targets == [(addresses[gateway.TWO[0]], gateway.PORT, gateway.TWO[0], gateway.TWO[0], PIN, ISSUER)]
+    assert probes.targets == [(addresses[gateway.TWO[0]], gateway.PORT, gateway.TWO[0], gateway.TWO[0], PIN, None)]
 
 
 def head(status, *headers):
@@ -517,9 +519,11 @@ def head(status, *headers):
 
 
 AUTHORIZE = ISSUER + "/protocol/openid-connect/auth?client_id=ceph&response_type=code"
+AUTHORIZED = signon.authorization(AUTHORIZATION)
+OWN = {"node-1", gateway.VIP}
 
 
-def test_only_a_302_to_the_issuers_https_origin_is_enforcement():
+def test_only_a_302_to_the_authorization_endpoints_https_origin_is_enforcement():
     cases = (
         (head("302 Found", "Location: " + AUTHORIZE), True),
         (head("302 Found", "location:" + AUTHORIZE, "Content-Length: 0"), True),
@@ -539,14 +543,24 @@ def test_only_a_302_to_the_issuers_https_origin_is_enforcement():
     )
     for data, passes in cases:
         found = signon.answer(data)
-        assert found is not None and signon.enforced(found[0], found[1], ISSUER) is passes, data
+        assert found is not None and signon.enforced(found[0], found[1], AUTHORIZED, OWN) is passes, data
     assert signon.answer(head("302 Found", "Location: " + AUTHORIZE)) == (302, AUTHORIZE)
     assert signon.answer(head("302 Found", "Location: a", "Location: b")) == (302, None)
     for data in (b"", b"HTTP/1.1 302 Found\r\nLocation: " + AUTHORIZE.encode(), b"garbage\r\n\r\n", b"HTTP/2 302\r\n\r\n",
                  b"HTTP/1.1 302 Found\r\nbroken\r\n\r\n"):
         assert signon.answer(data) is None, data
-    assert signon.enforced(302, AUTHORIZE, "http://idp.example.test/realms/ceph") is False and signon.enforced(302, AUTHORIZE, "not a url") is False
-    assert signon.enforced(302, None, ISSUER) is False
+    assert signon.enforced(302, None, AUTHORIZED, OWN) is False
+    split = signon.authorization("https://login.example.test:443")
+    assert signon.enforced(302, "https://login.example.test/oauth2/authorize?client_id=ceph", split, OWN) is True
+    assert signon.enforced(302, AUTHORIZE, split, OWN) is False
+    assert signon.enforced(302, "https://login.example.test/authorize", None, OWN) is True
+    for location in ("https://node-1/", "https://NODE-1:9443/#/login", "https://" + gateway.VIP + "/x", "http://login.example.test/authorize",
+                     "/oauth2/sign_in"):
+        assert signon.enforced(302, location, None, OWN) is False, location
+    assert signon.enforced(200, AUTHORIZE, None, OWN) is False
+    for text in ("https://idp.example.test", "https://IDP.example.test:443", "http://idp.example.test:80", "https://idp.example.test:443/x", 7, ""):
+        assert signon.authorization(text) is None, text
+    assert signon.authorization("https://[2001:db8::1]:8443") == ("https", "2001:db8::1", 8443)
 
 
 class Wire:
@@ -608,20 +622,20 @@ def wired(monkeypatch, wire, failure=None):
 def test_the_enforcement_probe_sends_one_cookieless_request_and_returns_only_its_verdict(monkeypatch):
     wire = Wire(head("302 Found", "Location: " + AUTHORIZE))
     wired(monkeypatch, wire)
-    assert signon.probe(gateway.VIP, gateway.PORT, "node-1", gateway.VIP, PIN, ISSUER) == "enforced"
+    assert signon.probe(gateway.VIP, gateway.PORT, "node-1", gateway.VIP, PIN, AUTHORIZED, OWN) == "enforced"
     assert wire.sent == b"GET / HTTP/1.1\r\nHost: " + gateway.VIP.encode() + b"\r\nAccept: text/html\r\nConnection: close\r\n\r\n"
     assert b"Cookie" not in wire.sent and b"Authorization" not in wire.sent
     for reply, verdict in ((head("200 OK", "Content-Type: text/html"), "pending"), (head("401 Unauthorized"), "pending"), (b"", "pending"),
                            (b"HTTP/1.1 302 Found\r\nLocation: " + AUTHORIZE.encode(), "pending")):
         wired(monkeypatch, Wire(reply))
-        assert signon.probe(gateway.VIP, gateway.PORT, "node-1", gateway.VIP, PIN, ISSUER) == verdict
+        assert signon.probe(gateway.VIP, gateway.PORT, "node-1", gateway.VIP, PIN, AUTHORIZED, OWN) == verdict
     wire = Wire(head("302 Found", "Location: " + AUTHORIZE), certificate=b"another leaf the pin does not name")
     wired(monkeypatch, wire)
-    assert signon.probe(gateway.VIP, gateway.PORT, "node-1", gateway.VIP, PIN, ISSUER) == "tls" and wire.sent == b""
+    assert signon.probe(gateway.VIP, gateway.PORT, "node-1", gateway.VIP, PIN, AUTHORIZED, OWN) == "tls" and wire.sent == b""
     wired(monkeypatch, Wire(b""), failure=OSError("refused"))
-    assert signon.probe(gateway.VIP, gateway.PORT, "node-1", gateway.VIP, PIN, ISSUER) == "pending"
+    assert signon.probe(gateway.VIP, gateway.PORT, "node-1", gateway.VIP, PIN, AUTHORIZED, OWN) == "pending"
     wired(monkeypatch, Wire(b"", failure=socket.timeout("timed out")))
-    assert signon.probe(gateway.VIP, gateway.PORT, "node-1", gateway.VIP, PIN, ISSUER) == "pending"
+    assert signon.probe(gateway.VIP, gateway.PORT, "node-1", gateway.VIP, PIN, AUTHORIZED, OWN) == "pending"
 
 
 def document(**changes):
@@ -636,7 +650,9 @@ def answered(status="200 OK", body=None, types=("application/json",)):
 
 
 def test_discovery_answer_stages():
-    assert signon.discovered(answered(), ISSUER) is None
+    assert signon.discovered(answered(), ISSUER) is None and signon.endpoint_origin(answered()) == AUTHORIZATION
+    split = answered(body=json.dumps(document(authorization_endpoint="https://Login.example.test:8443/oauth2/authorize")))
+    assert signon.discovered(split, ISSUER) is None and signon.endpoint_origin(split) == "https://login.example.test:8443"
     assert signon.discovered(answered(types=("application/json; charset=utf-8",)), ISSUER) is None
     cases = {
         "status 404": answered("404 Not Found"),
@@ -673,7 +689,9 @@ def discovering(monkeypatch, wire=None, failure=None, bundle=None):
             raise failure
         return wire
 
-    return signon.discover(ISSUER, bundle, connect=connect), calls
+    stage, found = signon.discover(ISSUER, bundle, connect=connect)
+    assert (found == AUTHORIZATION) is (stage is None) and (found is None) is (stage is not None)
+    return stage, calls
 
 
 def test_discover_reads_the_one_document_and_names_the_stage_it_fails_at(monkeypatch):
@@ -698,7 +716,7 @@ def test_discover_without_a_usable_bundle_never_connects():
     def connect(address, timeout):
         pytest.fail("connected")
 
-    assert signon.discover(ISSUER, "not a bundle", connect=connect) == "tls"
+    assert signon.discover(ISSUER, "not a bundle", connect=connect) == ("tls", None)
     context = signon.discovery_context(None)
     assert context.minimum_version == ssl.TLSVersion.TLSv1_2 and context.check_hostname is True and context.verify_mode == ssl.CERT_REQUIRED
 
@@ -710,13 +728,13 @@ def test_discovery_phase_refuses_the_stage_it_names_and_never_returns_a_byte(tmp
 
     def discover(issuer, bundle):
         seen.append((issuer, bundle))
-        return stage[0]
+        return stage[0], AUTHORIZATION if stage[0] is None else None
 
     stage = [None]
     monkeypatch.setattr(signon, "discover", discover)
     native = units.worker(SSOMonitor(request), markers)
     native.bound = ceph_native_units.material(request, "signon_discovery", {"oauth2ProxyCABundle": CA})
-    assert native.signon_discovery() == {"changed": False} and seen == [(ISSUER, CA)]
+    assert native.signon_discovery() == {"authorization": AUTHORIZATION, "changed": False} and seen == [(ISSUER, CA)]
     for failing in ("dns", "connect", "tls", "status 404", "content", "issuer-mismatch", "oversize"):
         stage[0] = failing
         with pytest.raises(ceph_native.NativeFailure, match="^sign-on-provider-unreachable$") as caught:
@@ -727,7 +745,7 @@ def test_discovery_phase_refuses_the_stage_it_names_and_never_returns_a_byte(tmp
     unbound.bound = {}
     stage[0] = None
     seen.clear()
-    assert unbound.signon_discovery() == {"changed": False} and seen == [(ISSUER, None)]
+    assert unbound.signon_discovery() == {"authorization": AUTHORIZATION, "changed": False} and seen == [(ISSUER, None)]
     outside = units.worker(SSOMonitor(request), markers)
     outside.host = dict(outside.host, name="node-9")
     with pytest.raises(ceph_native.Refusal, match="^request$"):
@@ -758,18 +776,28 @@ class SSOTransport(units.Transport):
         self.daemons_per_host = daemons
         self.enables = list(enables or [{"changed": True, "pending": False}])
         self.refusals, self.lock = {}, threading.Lock()
+        self.origins, self.authorizations, self.withdrawals = {}, [], [{"changed": True}]
 
     def unit_material(self, phase="unit"):
         return {name: SSO_MATERIAL[name] for name in ceph_native_units.material_names(self.request, phase)}
 
-    def call(self, host, phase, private=None, *, timeout=None):  # pylint: disable=arguments-renamed
+    def call(self, host, phase, private=None, *, timeout=None, authorization=None):  # pylint: disable=arguments-renamed
         with self.lock:
             self.private.append((host["name"], phase, sorted(private or {})))
+            if authorization is not None:
+                assert phase == "observe"
+                self.authorizations.append(authorization)
         if phase == "signon_discovery":
             assert 0 < timeout <= ceph_core.SSO_CALL
             if host["name"] in self.refusals:
                 raise self.refusals[host["name"]]
-            return {"changed": False}
+            return {"authorization": self.origins.get(host["name"], AUTHORIZATION), "changed": False}
+        if phase == "sso_withdraw":
+            assert 0 < timeout <= ceph_core.READ_BUDGET
+            answer = self.withdrawals.pop(0) if len(self.withdrawals) > 1 else self.withdrawals[0]
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
         if phase == "sso_config":
             assert 0 < timeout <= ceph_core.SSO_CALL
             result = self.proofs.pop(0)
@@ -924,21 +952,128 @@ def test_sso_enable_whose_reply_a_restart_lost_is_read_back_and_never_sent_again
     assert monitor.mutations.count(("dashboard", "sso", "enable", "oauth2")) == 1
 
 
-def test_a_sign_on_readiness_wait_that_ends_unenforced_refuses_sign_on_unenforced():
+def test_a_sign_on_readiness_wait_that_ends_unenforced_turns_single_sign_on_back_off_and_refuses_sign_on_unenforced():
     request = sso_request()
     one = {"changed": False, "daemons": 1, "proved": True}
     for blocking in (["enforce@mgmt-gateway"], ["tls@mgmt-gateway"], ["tls@mgmt-gateway", "enforce@mgmt-gateway"]):
         now, pause, unused = ticking()
         transport = SSOTransport(request, [one, one], ready_after=10 ** 6, blocking=blocking)
-        with pytest.raises(ceph_native.Refusal, match="^sign-on-unenforced$"):
+        with pytest.raises(ceph_native.NativeFailure, match="^sign-on-unenforced$") as caught:
             ceph_core.execute(request, "apply", "d" * 64, transport, now=now, pause=pause)
-        assert [phase for unused_name, phase, unused_private in transport.private].count("sso") == 1
-    for blocking in (["stable@oauth2-proxy"], ["enforce@mgmt-gateway", "sso@oauth2-proxy"], ["enforce@mgmt-gateway", "stable@oauth2-proxy"], []):
+        assert caught.value.native_error["cause"] == "the dashboard's single sign-on is off again; local dashboard sign-in works"
+        called = [phase for unused_name, phase, unused_private in transport.private]
+        assert called.count("sso") == 1 and called.count("sso_withdraw") == 1 and called.index("sso_withdraw") > called.index("sso")
+    now, pause, unused = ticking()
+    transport = SSOTransport(request, [one, one], ready_after=10 ** 6, blocking=["enforce@mgmt-gateway"])
+    refused = ceph_native.RemoteRefusal("native-refusal:sign-on-unenforced@ceph_native_units.sso_withdraw:1")
+    refused.native_error = {"coordinate": "image", "cause": "the dashboard stays in OAuth2 single sign-on, dashboard sso disable refused: EPERM"}
+    transport.withdrawals = [refused]
+    with pytest.raises(ceph_native.RemoteRefusal) as caught:
+        ceph_core.execute(request, "apply", "d" * 64, transport, now=now, pause=pause)
+    assert caught.value is refused
+    unsettled = ceph_native.RemoteRefusal("native-refusal:not-ready@ceph_native_units.sso_withdraw:1")
+    for answers, cause in (([unsettled, unsettled, {"changed": True}], ceph_core.SSO_OFF), ([unsettled], ceph_core.SSO_UNKNOWN),
+                           ([ceph_native.Refusal("transport")], ceph_core.SSO_UNKNOWN)):
+        now, pause, unused = ticking()
+        transport = SSOTransport(request, [one, one], ready_after=10 ** 6, blocking=["enforce@mgmt-gateway"])
+        transport.withdrawals = list(answers)
+        with pytest.raises(ceph_native.NativeFailure, match="^sign-on-unenforced$") as caught:
+            ceph_core.execute(request, "apply", "d" * 64, transport, now=now, pause=pause)
+        assert caught.value.native_error["cause"] == cause
+        assert [phase for unused_name, phase, unused_private in transport.private].count("sso_withdraw") >= min(len(answers), 3)
+    for blocking in (["stable@oauth2-proxy"], ["sso@oauth2-proxy"], []):
         now, pause, unused = ticking()
         transport = SSOTransport(request, [one, one], ready_after=10 ** 6, blocking=blocking)
         with pytest.raises(ceph_core.ReadinessRefusal, match="^not-ready$") as refused:
             ceph_core.execute(request, "apply", "d" * 64, transport, now=now, pause=pause)
         assert refused.value.checks == blocking
+        assert [phase for unused_name, phase, unused_private in transport.private].count("sso_withdraw") == 1
+    for blocking in (["enforce@mgmt-gateway", "sso@oauth2-proxy"], ["route@mgmt-gateway", "oauth2-proxy@oauth2-proxy"]):
+        now, pause, unused = ticking()
+        transport = SSOTransport(request, [one, one], ready_after=10 ** 6, blocking=blocking)
+        with pytest.raises(ceph_native.NativeFailure, match="^sign-on-unenforced$"):
+            ceph_core.execute(request, "apply", "d" * 64, transport, now=now, pause=pause)
+        assert [phase for unused_name, phase, unused_private in transport.private].count("sso_withdraw") == 1
+    transport = SSOTransport(request, [one, one])
+    base = transport.call
+
+    def failing(host, phase, private=None, *, timeout=None, **options):
+        if phase == "observe":
+            raise ceph_native.Refusal("evidence")
+        return base(host, phase, private, timeout=timeout, **options)
+
+    transport.call = failing
+    with pytest.raises(ceph_native.Refusal, match="^evidence$"):
+        ceph_core.execute(request, "apply", "d" * 64, transport, now=lambda: 0, pause=lambda seconds: None)
+    assert [phase for unused_name, phase, unused_private in transport.private].count("sso_withdraw") == 1
+
+
+class WithdrawMonitor(SSOMonitor):
+    """The sign-on monitor with the dashboard's disable, which may refuse as the dashboard does without python3-saml."""
+
+    def __init__(self, request, enabled=True, refusal=None):
+        super().__init__(request, enabled=enabled)
+        self.refusal = refusal
+
+    def run(self, argv, data=b"", timeout=60):
+        command = tuple(argv[argv.index("--format") + 2:]) if "--format" in argv else ()
+        if command == ("dashboard", "sso", "disable"):
+            self.log.append(list(argv))
+            self.mutations.append(command)
+            if self.refusal is not None:
+                return 1, ceph_native.NativeOutput(b"", self.refusal)
+            self.enabled = False
+            return 0, b"SSO is \"disabled\"."
+        if command == ("mgr", "dump"):
+            return 0, json.dumps({"available": True, "active_gid": 4100}).encode()
+        return super().run(argv, data, timeout)
+
+
+def test_the_bootstrap_hosts_withdraw_disables_single_sign_on_once_and_reads_it_back(tmp_path):
+    request = sso_request()
+    markers = units.markers_for(tmp_path, request)
+    monitor = WithdrawMonitor(request)
+    native = applying(monitor, markers)
+    native.unit()
+    native.bound = ceph_native_units.material(request, "sso_withdraw", {})
+    assert native.sso_withdraw() == {"changed": True} and monitor.enabled is False
+    assert native.sso_withdraw() == {"changed": False}
+    assert monitor.mutations.count(("dashboard", "sso", "disable")) == 1
+    refusing = WithdrawMonitor(request, refusal=b"Error EPERM: python3-saml is not installed")
+    native = applying(refusing, units.markers_for(tmp_path / "refusing", request))
+    native.unit()
+    with pytest.raises(ceph_native.NativeFailure, match="^sign-on-unenforced$") as caught:
+        native.sso_withdraw()
+    assert caught.value.native_error["cause"].startswith("the dashboard stays in OAuth2 single sign-on, dashboard sso disable refused: Error EPERM")
+    assert refusing.enabled is True and refusing.mutations.count(("dashboard", "sso", "disable")) >= 1
+    assert "sso_withdraw" in ceph_native_units.PHASES and "sso_withdraw" not in ceph_native_units.READ_ONLY_PHASES
+
+
+def test_only_a_sign_on_observation_takes_a_lent_canonical_authorization_origin():
+    request = sso_request()
+    envelope = {"request": request, "host": "node-1", "phase": "observe", "private": {}, "authorization": AUTHORIZATION}
+    stripped, options = ceph_native.services_arguments("observe", envelope)
+    assert set(stripped) == {"request", "host", "phase", "private"} and options == {"authorization": AUTHORIZED}
+    for value in ("https://IDP.example.test:443", "http://idp.example.test:80", "https://idp.example.test", 7, None):
+        with pytest.raises(ceph_native.Refusal, match="^request$"):
+            ceph_native.services_arguments("observe", dict(envelope, authorization=value))
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_native.services_arguments("observe", dict(envelope, request=gateway.gateway_request()))
+    assert ceph_native.services_arguments("unit", dict(envelope))[1] == {}
+    with pytest.raises(ceph_native.Refusal):
+        ceph_native.dispatch(dict(envelope, phase="unit"))
+
+
+def test_the_readiness_wait_lends_the_discovered_authorization_endpoint_to_every_observation():
+    request = sso_request()
+    one = {"changed": False, "daemons": 1, "proved": True}
+    transport = SSOTransport(request, [one, one], ready_after=3)
+    ceph_core.execute(request, "apply", "d" * 64, transport, now=lambda: 0, pause=lambda seconds: None)
+    observed = [phase for unused, phase, unused_private in transport.private].count("observe")
+    assert observed == 3 and transport.authorizations == [AUTHORIZATION] * observed
+    standalone = SSOTransport(request, [])
+    ceph_core.execute(request, "observe", "d" * 64, standalone, now=lambda: 0, pause=lambda seconds: None)
+    assert standalone.authorizations == []
 
 
 def prove(transport, request=None, now=lambda: 0, pause=lambda seconds: None):
@@ -949,17 +1084,17 @@ def prove(transport, request=None, now=lambda: 0, pause=lambda seconds: None):
     return routes
 
 
-def test_the_sign_on_route_proof_passes_when_every_gateway_daemon_renders_each_selected_correction():
+def test_the_sign_on_route_proof_needs_the_protected_routes_whatever_this_build_corrects():
     request = sso_request()
-    transport = SSOTransport(request, [], routes=("cookie", "role"))
-    routes = prove(transport)
-    assert routes.routes == ["cookie", "role"] and routes.lacking is None
-    assert phases_of(transport)[0] == ("node-1", "signon_routes")
-    assert sorted(phases_of(transport)[1:]) == [("node-1", "signon_route_proof"), ("node-2", "signon_route_proof")]
-    assert routes(100, lambda: 0) == [] and routes(0, lambda: 0) is None
-    quiet = SSOTransport(request, [], routes=())
-    prove(quiet)
-    assert phases_of(quiet) == [("node-1", "signon_routes")]
+    for grafana, wanted in ((False, ["cookie"]), (True, ["cookie", "role"])):
+        request["service"]["signOn"]["grafana"] = grafana
+        for corrected in ((), ("cookie",), ("cookie", "role")):
+            transport = SSOTransport(request, [], routes=corrected)
+            routes = prove(transport)
+            assert routes.routes == wanted and routes.corrected == list(corrected) and routes.lacking is None
+            assert phases_of(transport)[0] == ("node-1", "signon_routes")
+            assert sorted(phases_of(transport)[1:]) == [("node-1", "signon_route_proof"), ("node-2", "signon_route_proof")]
+            assert routes(100, lambda: 0) == [] and routes(0, lambda: 0) is None
     for produced in ({"changed": False, "routes": ["token"]}, {"changed": False, "routes": ["role", "cookie"]},
                      {"changed": False, "routes": ["cookie", "cookie"]}, {"changed": True, "routes": []}, {"routes": []}, {"changed": False}):
         bad = SSOTransport(request, [])
@@ -968,42 +1103,45 @@ def test_the_sign_on_route_proof_passes_when_every_gateway_daemon_renders_each_s
             prove(bad)
 
 
-def test_the_sign_on_route_proof_refuses_sign_on_unprotected_naming_the_host_and_correction_after_the_window(tmp_path):
+def test_the_sign_on_route_proof_refuses_sign_on_unprotected_naming_the_host_route_and_whether_this_build_corrects_it(tmp_path):
     request = sso_request()
+    request["service"]["signOn"]["grafana"] = True
     now, pause, clock = ticking()
     transport = SSOTransport(request, [], routes=("cookie", "role"), lacking={"node-2": ("role",), "node-1": ("cookie",)},
                              advance=lambda: clock.__setitem__(0, clock[0] + 100))
     with pytest.raises(ceph_native.NativeFailure, match="^sign-on-unprotected$") as caught:
         prove(transport, now=now, pause=pause)
-    assert caught.value.native_error["cause"] == "host node-1: correction cookie"
+    assert caught.value.native_error["cause"] == "host node-1: route cookie"
     assert clock[0] > ceph_core.SSO_WINDOW and phases_of(transport).count(("node-1", "signon_routes")) == 1
     assert phases_of(transport).count(("node-2", "signon_route_proof")) >= 2
-    now, pause, clock = ticking()
-    transport = SSOTransport(request, [], routes=("cookie",), lacking={"node-2": ("cookie",)}, advance=lambda: clock.__setitem__(0, clock[0] + 100))
-    with pytest.raises(ceph_native.NativeFailure) as caught:
-        prove(transport, now=now, pause=pause)
-    assert caught.value.native_error["cause"] == "host node-2: correction cookie"
+    for corrected in ((), ("cookie",)):
+        now, pause, clock = ticking()
+        transport = SSOTransport(request, [], routes=corrected, lacking={"node-2": ("role",)}, advance=lambda: clock.__setitem__(0, clock[0] + 100))
+        with pytest.raises(ceph_native.NativeFailure) as caught:
+            prove(transport, now=now, pause=pause)
+        assert caught.value.native_error["cause"] == "host node-2: route role, which this build cannot correct in the image's gateway template"
     now, pause, clock = ticking()
     transport = SSOTransport(request, [], routes=("cookie",), daemons=0, advance=lambda: clock.__setitem__(0, clock[0] + 100))
     with pytest.raises(ceph_native.NativeFailure, match="^sign-on-unprotected$") as caught:
         prove(transport, now=now, pause=pause)
-    assert caught.value.native_error["cause"] == "host none: correction daemon count"
+    assert caught.value.native_error["cause"] == "host none: route daemon count"
 
 
-def test_an_unprotected_gateway_is_refused_before_the_single_sign_on_write():
+def test_a_gateway_this_build_selects_no_correction_for_is_proved_and_refused_before_the_single_sign_on_write():
     request = sso_request()
     one = {"changed": False, "daemons": 1, "proved": True}
-    now, pause, clock = ticking()
-    transport = SSOTransport(request, [one, one], routes=("cookie",), lacking={"node-1": ("cookie",)},
-                             advance=lambda: clock.__setitem__(0, clock[0] + 100))
-    with pytest.raises(ceph_native.NativeFailure, match="^sign-on-unprotected$"):
-        ceph_core.execute(request, "apply", "d" * 64, transport, now=now, pause=pause)
-    called = [phase for unused, phase, unused_private in transport.private]
-    assert "sso" not in called and "observe" not in called and "unit" in called and "signon_route_proof" in called
-    assert called.index("signon_routes") > max(index for index, phase in enumerate(called) if phase == "sso_config")
+    for corrected in ((), ("cookie",)):
+        now, pause, clock = ticking()
+        transport = SSOTransport(request, [one, one], routes=corrected, lacking={"node-1": ("cookie",)},
+                                 advance=lambda: clock.__setitem__(0, clock[0] + 100))
+        with pytest.raises(ceph_native.NativeFailure, match="^sign-on-unprotected$"):
+            ceph_core.execute(request, "apply", "d" * 64, transport, now=now, pause=pause)
+        called = [phase for unused, phase, unused_private in transport.private]
+        assert "sso" not in called and "observe" not in called and "unit" in called and "signon_route_proof" in called
+        assert called.index("signon_routes") > max(index for index, phase in enumerate(called) if phase == "sso_config")
 
 
-def test_a_gateway_that_renders_the_corrections_late_is_waited_for_within_the_window():
+def test_a_gateway_that_renders_the_routes_late_is_waited_for_within_the_window():
     request = sso_request()
     one = {"changed": False, "daemons": 1, "proved": True}
     now, pause, clock = ticking()
@@ -1022,7 +1160,7 @@ def test_a_gateway_that_renders_the_corrections_late_is_waited_for_within_the_wi
     assert called.index("sso") > max(index for index, phase in enumerate(called) if phase == "signon_route_proof" and index < called.index("sso"))
 
 
-def test_a_ready_sign_on_whose_gateway_renders_nothing_is_refused_within_the_readiness_wait():
+def test_a_ready_sign_on_whose_gateway_renders_nothing_turns_single_sign_on_back_off_within_the_readiness_wait():
     request = sso_request()
     one = {"changed": False, "daemons": 1, "proved": True}
     now, pause, clock = ticking()
@@ -1030,18 +1168,33 @@ def test_a_ready_sign_on_whose_gateway_renders_nothing_is_refused_within_the_rea
     state = {"rounds": 0}
     base = transport.call
 
-    def call(host, phase, private=None, *, timeout=None):
+    def call(host, phase, private=None, *, timeout=None, **options):
         if phase == "signon_route_proof":
             state["rounds"] += 1
             if state["rounds"] > 2:
                 clock[0] += 100
                 return {"changed": False, "daemons": 1, "served": dict.fromkeys(observability.GATEWAY_ROUTES, 0)}
-        return base(host, phase, private, timeout=timeout)
+        return base(host, phase, private, timeout=timeout, **options)
 
     transport.call = call
-    with pytest.raises(ceph_core.ReadinessRefusal) as refused:
+    with pytest.raises(ceph_native.NativeFailure, match="^sign-on-unenforced$"):
         ceph_core.execute(request, "apply", "d" * 64, transport, now=now, pause=pause)
-    assert refused.value.checks == [ceph_core.ROUTE_ENTRY]
+    assert [phase for unused, phase, unused_private in transport.private].count("sso_withdraw") == 1
+
+
+def test_an_observation_of_a_ready_sign_on_reads_a_gateway_without_its_routes_not_ready():
+    request = sso_request()
+    transport = SSOTransport(request, [])
+    result = ceph_core.execute(request, "observe", "d" * 64, transport, now=lambda: 0, pause=lambda seconds: None)
+    called = [phase for unused, phase, unused_private in transport.private]
+    assert result["evidence"]["ready"] is True and sorted(phase for phase in called if phase != "observe") == ["signon_route_proof"] * 2
+    assert "signon_routes" not in called and "sso" not in called and "sso_withdraw" not in called
+    transport = SSOTransport(request, [], lacking={"node-2": ("cookie",)})
+    result = ceph_core.execute(request, "observe", "d" * 64, transport, now=lambda: 0, pause=lambda seconds: None)
+    assert result["evidence"]["ready"] is False and result["evidence"]["partial"] is True and result["pending"] == [ceph_core.ROUTE_ENTRY]
+    unready = SSOTransport(request, [], ready_after=10 ** 6, blocking=["sso@oauth2-proxy"])
+    ceph_core.execute(request, "observe", "d" * 64, unready, now=lambda: 0, pause=lambda seconds: None)
+    assert "signon_route_proof" not in [phase for unused, phase, unused_private in unready.private]
 
 
 def upstream_oauth2_proxy(spec):
@@ -1155,11 +1308,26 @@ def test_the_proof_of_the_largest_placement_is_one_concurrent_round_within_the_w
 
 def test_the_discovery_of_the_largest_placement_is_one_concurrent_round():
     request, bound = largest()
-    transport = Concurrent(request, bound, {"changed": False}, phase="signon_discovery")
-    ceph_core.signon_discovery(request, transport)
+    transport = Concurrent(request, bound, {"authorization": AUTHORIZATION, "changed": False}, phase="signon_discovery")
+    assert ceph_core.signon_discovery(request, transport) == AUTHORIZATION
     assert transport.timeouts == [ceph_core.SSO_CALL] * bound
     assert [phase for unused, phase, unused_private in transport.private] == ["signon_discovery"] * bound
     assert all(private == ["oauth2ProxyCABundle"] for unused, unused_phase, private in transport.private)
+
+
+def test_proxy_hosts_that_read_different_authorization_endpoints_refuse_before_any_effect():
+    request = sso_request()
+    transport = SSOTransport(request, [])
+    transport.origins = {"node-2": "https://login.example.test:443"}
+    with pytest.raises(ceph_native.NativeFailure, match="^sign-on-provider-unreachable$") as caught:
+        ceph_core.execute(request, "apply", "d" * 64, transport, now=lambda: 0, pause=lambda seconds: None)
+    assert caught.value.native_error["cause"] == "hosts node-1, node-2: authorization endpoints on 2 origins " + ISSUER
+    assert "unit" not in [phase for unused, phase, unused_private in transport.private]
+    for value in ("https://IDP.example.test:443", "http://idp.example.test:80", None):
+        bad = SSOTransport(request, [])
+        bad.origins = {"node-1": value}
+        with pytest.raises(ceph_native.Refusal, match="^evidence$"):
+            ceph_core.execute(request, "apply", "d" * 64, bad, now=lambda: 0, pause=lambda seconds: None)
 
 
 def test_the_route_proof_of_the_largest_gateway_is_one_concurrent_round():

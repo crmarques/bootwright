@@ -207,7 +207,7 @@ class Transport:
                 time.sleep(2)
         raise ceph_native.Refusal("transport")
 
-    def call(self, host, phase, private=None, *, timeout=660, devices=None, service=None, names=None, orphans=None):
+    def call(self, host, phase, private=None, *, timeout=660, devices=None, service=None, names=None, orphans=None, authorization=None):
         nvme_long = (self.request.get("action") == "nvmeof" and phase in ("nvmeof", "nvmeof_observe")
                      or nvmeof_unit(self.request) and phase == "nvmeof_unit_observe")
         ceiling = ceph_native_nvmeof.phase_budget(self.request, phase) if nvme_long else 640
@@ -216,6 +216,8 @@ class Transport:
         ceph_native.require(service is None or phase == "services" and type(service) is int and 0 <= service < len(self.request["services"]), "transport")
         ceph_native.require(orphans is None or phase == "services" and isinstance(orphans, list) and orphans, "transport")
         ceph_native.require((names is not None) == (phase == "profile") and (names is None or isinstance(names, list)), "transport")
+        ceph_native.require(authorization is None or phase == "observe" and ceph_evidence.signon(self.request)
+                            and ceph_signon_native.authorization(authorization) is not None, "transport")
         budget = min(ceiling, timeout - 2) if timeout > 2 else timeout / 2
         payload = {"request": self.request, "host": host["name"], "phase": phase, "private": private or {}}
         if names is not None:
@@ -226,6 +228,8 @@ class Transport:
             payload["service"] = service
         if orphans is not None:
             payload["orphans"] = orphans
+        if authorization is not None:
+            payload["authorization"] = authorization
         if phase == "bootstrap":
             # The cluster's one long call: cephadm restarts its manager several times before bootstrap returns.
             source = bootstrap_launcher(inspect.getsource(ceph_native_worker), inspect.getsource(ceph_host_worker))

@@ -177,7 +177,7 @@ def test_ldap_request_admits_the_frozen_shapes(trusted, ingress):
 
 
 def test_ldap_conf_verifies_the_directory_against_its_bundle_or_the_system_store():
-    assert ceph_native_object.ldap_conf(True) == "TLS_CACERT /etc/bootwright/rgw-ldap-ca.pem\nTLS_REQCERT demand\nNETWORK_TIMEOUT 5\nTIMEOUT 10\n"
+    assert ceph_native_object.ldap_conf(True) == "TLS_CACERT /etc/bootwright/rgw-ldap-ca.pem\nTLS_REQCERT demand\nNETWORK_TIMEOUT 3\nTIMEOUT 3\n"
     assert ceph_native_object.ldap_conf(False).startswith("TLS_CACERT /etc/pki/tls/certs/ca-bundle.crt\n")
 
 
