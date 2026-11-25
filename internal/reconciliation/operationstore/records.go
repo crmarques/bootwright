@@ -168,6 +168,7 @@ type Operation struct {
 	Stage                *Stage                        `json:"stage,omitempty"`
 	DeferredSourceProofs []string                      `json:"deferredSourceProofs,omitempty"`
 	Predecessor          string                        `json:"predecessor,omitempty"`
+	Restores             string                        `json:"restores,omitempty"`
 	Bindings             []string                      `json:"bindings"`
 	State                reconciliation.OperationState `json:"state"`
 	LogFault             bool                          `json:"logFault"`
@@ -385,6 +386,9 @@ func validateOperationLinks(operation Operation) error {
 	}
 	if operation.Predecessor != "" && (operation.Verb != reconciliation.Apply || !reconciliation.ValidOperationID(operation.Predecessor) || operation.Predecessor == operation.ID) {
 		return recordError("lifecycle operation predecessor is invalid")
+	}
+	if operation.Restores != "" && (operation.Predecessor == "" || !reconciliation.ValidOperationID(operation.Restores) || operation.Restores == operation.ID || operation.Restores == operation.Predecessor) {
+		return recordError("lifecycle operation restore is invalid")
 	}
 	return validateStage(operation.Verb, operation.Stage)
 }

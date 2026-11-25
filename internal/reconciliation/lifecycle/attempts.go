@@ -812,7 +812,11 @@ func (s Service) finish(ctx context.Context, tx Transaction, store OperationStor
 	if err == nil {
 		result.Logs = logs
 	}
-	result.Receipt = Receipt{Operation: operation.ID, Verb: string(operation.Verb), State: string(next), Next: nextAction(current, plan, states)}
+	action, err := nextOver(ctx, tx, store, current, plan, states)
+	if err != nil {
+		return result, err
+	}
+	result.Receipt = Receipt{Operation: operation.ID, Verb: string(operation.Verb), State: string(next), Next: action}
 	if next == reconciliation.OperationDone {
 		return result, nil
 	}
@@ -861,6 +865,21 @@ func terminalFailure(contextName string, operation operationstore.Operation, pla
 // are all done is finalized, which completes that same removal. In any other
 // incomplete operation a block that reads unknown is resolved before anything
 // else starts, whatever state the operation records.
+func nextOver(ctx context.Context, view View, store recordReader, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) (string, error) {
+	if !trimmed(operation) || pendingRemains(frozen, states) {
+		return nextAction(operation, frozen, states), nil
+	}
+	if restores, err := restorable(ctx, view, store, operation); err != nil || !restores {
+		return string(reconciliation.Destroy), err
+	}
+	return string(reconciliation.Apply), nil
+}
+
+func restorable(ctx context.Context, view View, store recordReader, removal operationstore.Operation) (bool, error) {
+	head, err := store.ReadOperation(ctx, removal.Source)
+	return err == nil && inputDrift(view, head) == "", err
+}
+
 func nextAction(operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) string {
 	switch classify(operation.Verb, standingOf(operation, frozen, states)) {
 	case transitionSettle, transitionRefuse:

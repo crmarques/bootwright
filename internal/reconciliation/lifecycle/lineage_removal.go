@@ -31,7 +31,7 @@ func removalOver(ctx context.Context, store recordReader, applied operationstore
 		return removalScope{}, err
 	}
 	scope.contracts = map[string]string{}
-	for _, member := range held {
+	for _, member := range held.applies() {
 		for implementation, contract := range member.operation.Contracts {
 			if previous, ok := scope.contracts[implementation]; ok && previous != contract {
 				return removalScope{}, engineOtherBuild.Fail("the lineage holds conflicting execution contracts for "+implementation, removeWith(applied.Executable))
@@ -39,12 +39,21 @@ func removalOver(ctx context.Context, store recordReader, applied operationstore
 			scope.contracts[implementation] = contract
 		}
 	}
-	if scope.owned, err = held[:len(held)-1].merged(started); err != nil {
+	if scope.owned, err = held.removalPlan(started); err != nil {
 		return removalScope{}, unremovable(applied, err)
 	}
-	scope.reopen, scope.release = firstBinding(held[0].operation.Bindings), held.bindings()
-	scope.operations = held.operationIDs()
+	scope.reopen, scope.release = held.reopened(), held.bindings()
+	scope.operations = held.applies().operationIDs()
 	return scope, nil
+}
+
+func (l lineage) reopened() string {
+	for index := len(l) - 1; index >= 0; index-- {
+		if l[index].operation.Restores != "" {
+			return firstBinding(l[index].operation.Bindings)
+		}
+	}
+	return firstBinding(l[0].operation.Bindings)
 }
 
 func unremovable(applied operationstore.Operation, cause error) error {
@@ -74,7 +83,7 @@ func replacementOf(ctx context.Context, store recordReader, removal operationsto
 	scope.release = joinBindings(scope.release, held.released()...)
 	scope.operations = held.operationIDs()
 	if scope.reopen == "" {
-		scope.reopen = firstBinding(held[0].operation.Bindings)
+		scope.reopen = held.reopened()
 	}
 	return scope, nil
 }
@@ -94,7 +103,7 @@ func removalBinding(ctx context.Context, store recordReader, applied operationst
 	if err != nil {
 		return "", err
 	}
-	return firstBinding(held[0].operation.Bindings), nil
+	return held.reopened(), nil
 }
 
 func sourceBindings(ctx context.Context, store recordReader, source string) ([]string, error) {

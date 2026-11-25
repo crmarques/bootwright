@@ -56,12 +56,12 @@ func (d decider) stagedDecision(ctx context.Context, view View, store decisionRe
 		decided, err := d.planner.freshDestroy(ctx, name, operation.Executable, live.source, live.scope, false)
 		return decided, true, err
 	}
-	ids, err := d.planner.stagedScope(name, d.floor, live.scope.owned, live.states)
+	ids, err := d.planner.stagedScope(name, d.floor, live)
 	if err != nil {
 		return operationPlan{}, true, err
 	}
 	if len(ids) == 0 {
-		return operationPlan{noop: true, keeps: true, verb: reconciliation.Destroy, operation: operation, plan: frozen, states: states}, true, nil
+		return settledDestroy(ctx, store, operationPlan{noop: true, keeps: true, verb: reconciliation.Destroy, operation: operation, plan: frozen, states: states}), true, nil
 	}
 	scope := live.scope
 	if scope.owned, err = scope.owned.Retain(ids); err != nil {
@@ -75,7 +75,7 @@ func (d decider) stagedDecision(ctx context.Context, view View, store decisionRe
 	if err := refuseLeavingOutside(name, decided.plan); err != nil {
 		return operationPlan{}, true, err
 	}
-	taken := slices.Clone(ids)
+	taken := append(slices.Clone(ids), live.unstarted...)
 	if staged(operation) {
 		taken = append(taken, operation.Stage.TakenBack...)
 	}
@@ -86,9 +86,11 @@ func (d decider) stagedDecision(ctx context.Context, view View, store decisionRe
 }
 
 type liveState struct {
-	source string
-	scope  removalScope
-	states map[string]reconciliation.BlockState
+	source    string
+	scope     removalScope
+	states    map[string]reconciliation.BlockState
+	unstarted []string
+	whole     reconciliation.Plan
 }
 
 func (d decider) liveOf(ctx context.Context, store decisionRecords, name string, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) (liveState, error) {
@@ -118,7 +120,11 @@ func (d decider) liveOf(ctx context.Context, store decisionRecords, name string,
 		if err != nil {
 			return liveState{}, err
 		}
-		return liveState{source: operation.ID, scope: scope, states: held.states()}, nil
+		whole, err := held.plan()
+		if err != nil {
+			return liveState{}, err
+		}
+		return liveState{source: operation.ID, scope: scope, states: held.states(), unstarted: held.unstarted(), whole: whole}, nil
 	}
 	head, err := store.ReadOperation(ctx, operation.Source)
 	if err != nil {
@@ -161,7 +167,7 @@ func (d decider) liveOf(ctx context.Context, store decisionRecords, name string,
 			scope.release = joinBindings(scope.release, member.operation.Bindings...)
 		}
 	}
-	return liveState{source: head.ID, scope: scope, states: held}, nil
+	return liveState{source: head.ID, scope: scope, states: held, whole: scope.owned}, nil
 }
 
 func keptOf(live reconciliation.Plan, scope []string) []string {
@@ -174,21 +180,11 @@ func keptOf(live reconciliation.Plan, scope []string) []string {
 	return kept
 }
 
-func (s Service) stagedScope(name string, floor reconciliation.Stage, live reconciliation.Plan, states map[string]reconciliation.BlockState) ([]string, error) {
+func (s Service) stagedScope(name string, floor reconciliation.Stage, held liveState) ([]string, error) {
+	live, states := held.scope.owned, held.states
 	scope := s.closure(live, floor)
 	if below := belowFloor(live, scope, floor); len(below) != 0 {
-		lower := floor
-		for widened := scope; ; {
-			next := lowestStage(live, belowFloor(live, widened, lower))
-			if next == "" {
-				break
-			}
-			if !reconciliation.ValidFloor(next) {
-				lower = next
-				break
-			}
-			lower, widened = next, s.closure(live, next)
-		}
+		lower := s.widened(live, floor)
 		remedy := "take back the whole context with " + contextCommand(name, "destroy --dry-run")
 		if reconciliation.ValidFloor(lower) {
 			remedy = "take back from a lower stage with " + contextCommand(name, "destroy --dry-run", "--stage", string(lower))
@@ -210,7 +206,24 @@ func (s Service) stagedScope(name string, floor reconciliation.Stage, live recon
 			"a staged destroy from the "+string(floor)+" stage would keep these steps, which are not done: "+strings.Join(unfinished, ", "),
 			"finish them with "+contextCommand(name, "apply")+", take them back with a lower stage, or take back the whole context with "+contextCommand(name, string(reconciliation.Destroy)))
 	}
-	return scope, s.refuseKeptHosts(name, floor, live, scope)
+	if len(scope) == 0 {
+		return scope, nil
+	}
+	return scope, s.refuseKeptHosts(name, floor, live, held.whole, scope, held.unstarted)
+}
+
+func (s Service) widened(live reconciliation.Plan, floor reconciliation.Stage) reconciliation.Stage {
+	lower := floor
+	for scope := s.closure(live, floor); ; {
+		next := lowestStage(live, belowFloor(live, scope, lower))
+		if next == "" || !reconciliation.ValidFloor(next) {
+			if next != "" {
+				lower = next
+			}
+			return lower
+		}
+		lower, scope = next, s.closure(live, next)
+	}
 }
 
 func (s Service) closure(live reconciliation.Plan, floor reconciliation.Stage) []string {
@@ -274,7 +287,7 @@ func lowestStage(live reconciliation.Plan, ids []string) reconciliation.Stage {
 	return lowest
 }
 
-func (s Service) refuseKeptHosts(name string, floor reconciliation.Stage, live reconciliation.Plan, scope []string) error {
+func (s Service) refuseKeptHosts(name string, floor reconciliation.Stage, live, whole reconciliation.Plan, scope, unstarted []string) error {
 	managed, deleted := map[string]bool{}, map[string]bool{}
 	for _, block := range live.Blocks {
 		if block.Kind != string(api.Machine) {
@@ -287,9 +300,9 @@ func (s Service) refuseKeptHosts(name string, floor reconciliation.Stage, live r
 		}
 	}
 	kept := func(machine string) bool { return managed[machine] && !deleted[machine] }
-	for _, id := range scope {
-		block, _ := live.Block(id)
-		machines := s.boundMachines(live, block)
+	for _, id := range slices.Concat(scope, unstarted) {
+		block, _ := whole.Block(id)
+		machines := s.boundMachines(whole, block)
 		slices.Sort(machines)
 		machines = slices.DeleteFunc(slices.Compact(machines), func(machine string) bool { return !kept(machine) })
 		if len(machines) == 0 {
@@ -375,12 +388,12 @@ func stageChanged(name string, operation operationstore.Operation, frozen reconc
 }
 
 func refuseTrimmed(name string, operation operationstore.Operation, preparation bool) error {
-	message := "the staged destroy " + operation.ID + " took back the " + string(operation.Stage.Floor) + " stage and everything built on it, and no apply restores it yet"
-	remedy := "take back what the context keeps with " + contextCommand(name, string(reconciliation.Destroy)) + ", then apply again"
+	took := "the staged destroy " + operation.ID + " took back the " + string(operation.Stage.Floor) + " stage and everything built on it"
+	remedy := "take back what the context keeps with " + contextCommand(name, string(reconciliation.Destroy)) + ", then apply the changed input"
 	if preparation {
-		return prepareRefused.Fail(message, remedy)
+		return prepareRefused.Fail(took+", and only an apply restores it", "restore it with "+contextCommand(name, string(reconciliation.Apply))+" first")
 	}
-	return applyContextTrimmed.Fail(message, remedy)
+	return applyContextTrimmed.Fail(took+", and the input changed since the steps it kept froze theirs, which a restoring apply does not take yet (B1859)", remedy)
 }
 
 func (s Service) withFloor(floor string, relaxations map[string]string) (Service, error) {
@@ -456,13 +469,17 @@ type StagedScope struct {
 	KeptPowerTargets []string
 }
 
-func (d decider) decideStaged(ctx context.Context, view View, store decisionRecords, verb reconciliation.Verb, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) (operationPlan, bool, error) {
+func (d decider) decideStaged(ctx context.Context, view View, store decisionRecords, verb reconciliation.Verb, selection reconciliation.Selection, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) (operationPlan, bool, error) {
 	if verb == reconciliation.Apply {
 		if err := d.admitPreparationCommand(frozen, operation); err != nil {
 			return operationPlan{}, true, err
 		}
+		if trimmed(operation) && d.preparation != nil {
+			return operationPlan{}, true, refuseTrimmed(view.Identity().Name, operation, true)
+		}
 		if trimmed(operation) {
-			return operationPlan{}, true, refuseTrimmed(view.Identity().Name, operation, d.preparation != nil)
+			decided, err := d.restoring(ctx, view, store, operation, selection)
+			return plannedFrom(decided, operation, states, attempts), true, err
 		}
 		return operationPlan{}, false, nil
 	}

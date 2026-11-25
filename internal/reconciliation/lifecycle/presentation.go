@@ -32,7 +32,10 @@ func (s Service) presentation(decided operationPlan) PlanResult {
 		markSourceProofs(result.Steps, decided.basis.blocks, abandonedBlocks(decided.plan))
 	}
 	result.Continuation = !decided.fresh
-	result.AddsTo, result.Scope = decided.predecessor, decided.scope()
+	result.AddsTo, result.Restores, result.Scope = decided.predecessor, decided.restores, decided.scope()
+	if decided.restores != "" {
+		result.AddsTo = ""
+	}
 	if decided.verb == reconciliation.Destroy && len(decided.takes) > 1 {
 		result.TakesBack = slices.Clone(decided.takes)
 	}
@@ -42,11 +45,8 @@ func (s Service) presentation(decided operationPlan) PlanResult {
 		result.Stops = s.stopsFirst(decided.plan, decided.phases)
 	}
 	if s.startsFlow(decided) {
-		bindings := s.capabilities.Bindings()
-		for _, block := range decided.removed().Blocks {
-			if managedPowerTarget(bindings, block) {
-				result.Stops = append(result.Stops, block.Object)
-			}
+		for _, block := range s.powerTargets(decided) {
+			result.Stops = append(result.Stops, block.Object)
 		}
 		slices.Sort(result.Stops)
 		result.Stops = slices.Compact(result.Stops)

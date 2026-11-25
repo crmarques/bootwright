@@ -247,7 +247,7 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, *api.Cat
 	if err != nil {
 		return nil, nil, err
 	}
-	summary, err := s.lifecycleSummary(ctx, store, operation, plan, states, blocks, logs)
+	summary, err := s.lifecycleSummary(ctx, view, store, operation, plan, states, blocks, logs)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -275,10 +275,14 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, *api.Cat
 	return result, selected, nil
 }
 
-func (s Service) lifecycleSummary(ctx context.Context, store OperationStore, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, blocks []BlockResult, logs []string) (*LifecycleSummary, error) {
+func (s Service) lifecycleSummary(ctx context.Context, view View, store OperationStore, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, blocks []BlockResult, logs []string) (*LifecycleSummary, error) {
+	next, err := nextOver(ctx, view, store, operation, plan, states)
+	if err != nil {
+		return nil, err
+	}
 	summary := &LifecycleSummary{
 		Operation: operation.ID, Verb: string(operation.Verb), State: string(operation.State),
-		Next: nextAction(operation, plan, states), Blocks: blocks, Logs: logs, Live: []LiveBlock{},
+		Next: next, Blocks: blocks, Logs: logs, Live: []LiveBlock{},
 		Executable: buildIdentity(operation.Executable), AnotherBuild: s.otherBuild(operation),
 	}
 	if summary.Logs == nil {
@@ -287,7 +291,6 @@ func (s Service) lifecycleSummary(ctx context.Context, store OperationStore, ope
 	if staged(operation) {
 		summary.Floor, summary.TakenBack = string(operation.Stage.Floor), slices.Clone(operation.Stage.TakenBack)
 	}
-	var err error
 	summary.Lineage, err = lineageEntries(ctx, store, operation, plan, states)
 	return summary, err
 }
@@ -315,6 +318,17 @@ func attemptWarnings(ctx context.Context, store OperationStore, operation string
 // holds. A completed removal whose finalization completed released them, which
 // its pristine evidence proves, so the count reads no keyring.
 func bindingsHeld(ctx context.Context, view View, store recordReader, operation operationstore.Operation) (int, error) {
+	if trimmed(operation) {
+		held, err := restoredLineage(ctx, store, operation)
+		if err != nil {
+			return 0, err
+		}
+		replaced, err := replacedChain(ctx, store, operation)
+		if err != nil {
+			return 0, err
+		}
+		return len(joinBindings(held.bindings(), replaced.bindings()...)), nil
+	}
 	if operation.Verb == reconciliation.Destroy && operation.State == reconciliation.OperationDone {
 		finished, err := finalized(ctx, view, store, operation)
 		if err != nil || finished {
@@ -369,7 +383,7 @@ func (s Service) offered(ctx context.Context, view View, store OperationStore, o
 			if s.setupGates(ctx, view) {
 				return []string{setupStep}, nil
 			}
-			return []string{contextCommand(view.Identity().Name, "destroy --dry-run"), contextCommand(view.Identity().Name, string(reconciliation.Destroy))}, nil
+			return trimmedSteps(ctx, view, store, operation)
 		}
 		if !unfinished {
 			return steps, nil
@@ -403,6 +417,15 @@ func (s Service) offered(ctx context.Context, view View, store OperationStore, o
 		}
 	}
 	return steps, nil
+}
+
+func trimmedSteps(ctx context.Context, view View, store recordReader, operation operationstore.Operation) ([]string, error) {
+	name := view.Identity().Name
+	whole := []string{contextCommand(name, "destroy --dry-run"), contextCommand(name, string(reconciliation.Destroy))}
+	if restores, err := restorable(ctx, view, store, operation); err != nil || !restores {
+		return whole, err
+	}
+	return []string{contextCommand(name, "apply --dry-run"), contextCommand(name, string(reconciliation.Apply)), whole[1]}, nil
 }
 
 // setupStep is the step status offers in place of every verb the retained

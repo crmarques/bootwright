@@ -81,6 +81,7 @@ type planPresentation struct {
 	Settled            bool                    `json:"settled,omitempty"`
 	Finalizes          bool                    `json:"finalizes"`
 	AddsTo             string                  `json:"addsTo,omitempty"`
+	Restores           string                  `json:"restores,omitempty"`
 	TakesBack          []string                `json:"takesBack,omitempty"`
 	Scope              *scopePresentation      `json:"scope,omitempty"`
 	AnotherBuild       *planBuildPresentation  `json:"anotherBuild,omitempty"`
@@ -102,6 +103,7 @@ func displayPlan(result *lifecycle.PlanResult) planPresentation {
 	shown.Later, shown.Blocked, shown.Excluded = result.Later, result.Blocked, result.Excluded
 	shown.AuthorizationSteps = slices.Clone(result.AuthorizationSteps)
 	shown.AddsTo, shown.TakesBack, shown.Scope = escapeDisplayLine(result.AddsTo), displayLines(result.TakesBack), displayScope(result.Scope)
+	shown.Restores = escapeDisplayLine(result.Restores)
 	if b := result.AnotherBuild; b != nil {
 		shown.AnotherBuild = &planBuildPresentation{RegisteredBy: escapeDisplayLine(b.RegisteredBy), Steps: append([]int{}, b.Steps...)}
 	}

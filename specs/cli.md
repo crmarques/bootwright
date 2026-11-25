@@ -889,7 +889,10 @@ failed attempt's adapter diagnostic names its block and the
 
 `next` names what the operation's own records call for, by one rule the
 receipt, lifecycle preview and `status` share over the operation the result reports, for a preview
-the one it continues: `none` once the operation is `done`;
+the one it continues: `none` once the operation is `done`, but once a
+[staged destroy](state-reconciliation.md#staged-destroy) is, `apply`, which the
+[restoring apply](state-reconciliation.md#restoring-apply) follows, or
+`destroy` under an input its kept steps did not freeze;
 `destroy` for a `failed` destroy holding a block that is not `done`, an
 `unknown` one included, because `destroy` replaces it with a fresh removal of
 what it has not removed rather than continuing or resolving it; `resolve` while
@@ -902,8 +905,8 @@ which is also how that verb completes a
 when the context owns no operation at all. A completed apply never names its
 destroy next, which would invite undoing what just succeeded; the preview reports
 the verbs a context admits. `apply`
-appears only as the previewed verb of a pure plan, and `destroy` only as that
-or as what a failed destroy calls for. Where `status` offers a next step it
+appears only as the previewed verb of a pure plan or after a staged destroy, and `destroy` only as that,
+as what a failed destroy calls for, or after a staged destroy under a changed input. Where `status` offers a next step it
 offers the command the token maps to in the table above, a command this
 executable runs: a continuation, a resolution and a replacement are all offered
 as the operation's own verb repeated, and `none` as no step at all. Every step that names a context-backed command carries

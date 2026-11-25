@@ -102,9 +102,9 @@ start, and the endings of one that ran.
 
 The lifecycle engine's stops (`internal/reconciliation/lifecycle`): a block
 that stopped on its host or on a defect, an attempt that recorded no start, a
-removal that would take back state in use, the end of an operation that did
-not complete, which reads as the consequence of the causes before it, and the
-refusals of a decision and its plan before any effect.
+removal that would take back state in use, an operation that did not
+complete, the consequence of the causes before it, and the refusals of a
+decision and its plan before any effect.
 
 ### Execution and removal
 
@@ -164,7 +164,6 @@ refusals of a decision and its plan before any effect.
 | `destroy.stage-keeps-unfinished` | operation | none | records | - | other-verb | a step a staged destroy would keep is not done, so nothing was registered | finish it with apply, take it back with a lower stage, or destroy without --stage |
 | `destroy.stage-keeps-host` | operation | none | input | - | fix-then-repeat | a step a staged destroy would take back runs on a Machine it keeps, which nothing yet takes such a step back from, so nothing was registered | repeat with the stage or the item the message names, or destroy without --stage |
 | `destroy.stage-changed` | operation | none | input | - | fix-then-repeat | an unfinished destroy froze another floor, or none, than the command names, so nothing was registered | finish it with the command the message names, then repeat |
-| `apply.context-trimmed` | operation | none | input | - | other-verb | a staged destroy took back part of the context, and no apply restores it yet | take back what the context keeps with destroy, then apply again |
 | `apply.target-before-preparation` | operation | none | input | - | other-verb | a scoped apply cannot freeze its installation plan before inventory outside its targets exists | complete the named machine inventories and review the scoped apply again |
 | `apply.until-before-preparation` | operation | none | input | - | other-verb | the add-on boundary --until names cannot be planned before preparation completes | run apply without --until to complete preparation, then select --until |
 | `engine.records-damaged` | operation | none | records | - | abandon-context | the context's operation records do not form the lineage or removal the operation needs | restore the context store from a backup, or delete the context with what it may still own |
@@ -177,6 +176,9 @@ refusals of a decision and its plan before any effect.
 
 | Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| `apply.context-trimmed` | operation | none | input | - | other-verb | a staged destroy trimmed the context, and the input changed since | destroy, then apply the changed input |
+| `apply.kept-block-changed` | operation | none | build | - | other-verb | this build would plan a kept step of a trimmed context otherwise | run the destroy the message names, then apply |
+| `apply.restore-unbound` | operation | none | records | - | other-verb | a restore's binding pins no version of a Secret an added step names | destroy, then apply |
 | `plan.input-uncompilable` | context | none | input | - | change-input | the context's frozen desired state could not be compiled | repair the input with validate and import it again |
 | `plan.capability-missing` | context | none | build | - | none | no lifecycle capability of this build plans the selected state | use a build that carries the capability; report it if this build should |
 | `plan.capability-defect` | context | none | defect | - | none | a capability planned a block it may not plan | report the message as a defect |

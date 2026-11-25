@@ -228,7 +228,17 @@ func (o Ownership) Covered() []Holding {
 	return covered
 }
 
-func (o Ownership) Plan() (Plan, error) {
+func (o Ownership) Plan() (Plan, error) { return o.planOf(func(Holding) bool { return true }) }
+
+func (o Ownership) CoveredPlan() (Plan, error) {
+	covered := map[string]bool{}
+	for _, holding := range o.Covered() {
+		covered[holding.Block.ID] = true
+	}
+	return o.planOf(func(holding Holding) bool { return covered[holding.Block.ID] })
+}
+
+func (o Ownership) planOf(keep func(Holding) bool) (Plan, error) {
 	if o.damage != nil {
 		return Plan{}, o.damage
 	}
@@ -241,7 +251,7 @@ func (o Ownership) Plan() (Plan, error) {
 	}
 	var definitions []BlockDefinition
 	for _, holding := range o.holdings {
-		if holding.Incarnation < 0 || o.takenBack(holding) {
+		if holding.Incarnation < 0 || o.takenBack(holding) || !keep(holding) {
 			continue
 		}
 		definition := clone(holding.Created.BlockDefinition)

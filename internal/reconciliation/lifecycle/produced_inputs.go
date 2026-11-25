@@ -94,7 +94,7 @@ func (s Service) dependOnProducedInputs(definitions []reconciliation.BlockDefini
 	return result, nil
 }
 
-func (s Service) producedLender(block reconciliation.Block, definitions []reconciliation.BlockDefinition, removal bool, read producedRead) (func(context.Context, ProducedInput) (secrets.Material, error), func(), error) {
+func (s Service) producedLender(block reconciliation.Block, definitions []reconciliation.BlockDefinition, removing map[string]bool, read producedRead) (func(context.Context, ProducedInput) (secrets.Material, error), func(), error) {
 	refs, err := s.producedReferences(block)
 	if err != nil {
 		return nil, nil, err
@@ -134,7 +134,7 @@ func (s Service) producedLender(block reconciliation.Block, definitions []reconc
 			entry.Material.Clear()
 			return secrets.Material{}, err
 		}
-		if !found || entry.Unproved && !removal {
+		if !found || entry.Unproved && !removing[producer] {
 			entry.Material.Clear()
 			return secrets.Material{}, applyProducedInputMissing.Fail("produced input "+producer+"/"+ref.Output+" is missing or unproved", "complete the producer block "+producer+" before applying this consumer")
 		}
@@ -176,6 +176,7 @@ func (s Service) prepareProducedExecution(ctx context.Context, tx Transaction, s
 	registered := operation.Created
 	owner := operation.ID
 	var held owners
+	var removing map[string]bool
 	switch {
 	case operation.Verb == reconciliation.Destroy:
 		chain, err := appliedLineage(ctx, store, operation)
@@ -186,7 +187,7 @@ func (s Service) prepareProducedExecution(ctx context.Context, tx Transaction, s
 			return nil, engineRecordsDamaged.Fail("the removal names no apply to borrow produced inputs from", "restore the context store")
 		}
 		held = chain.owners()
-		definitions = held.lendingHead()
+		definitions, removing = held.removalLending(plan, operation.Stage)
 	case operation.Predecessor != "":
 		chain, err := lineageOf(ctx, store, lineageMember{operation: operation, plan: plan})
 		if err != nil {
@@ -202,7 +203,7 @@ func (s Service) prepareProducedExecution(ctx context.Context, tx Transaction, s
 		}
 		owner, registered = member.operation.ID, member.operation.Created
 	}
-	lend, release, err := s.producedLender(execution.Block, definitions, operation.Verb == reconciliation.Destroy, s.producedInTransaction(tx))
+	lend, release, err := s.producedLender(execution.Block, definitions, removing, s.producedInTransaction(tx))
 	if err != nil {
 		return nil, err
 	}

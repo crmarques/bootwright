@@ -305,6 +305,9 @@ func (s Service) planInputWithEvidence(view View, state *compilation.State, cont
 
 // A new plan admits prerequisite evidence only from an active apply lineage.
 func planningOwners(ctx context.Context, store recordReader, current lineageMember) ([]lineageMember, error) {
+	if trimmed(current.operation) {
+		return restoredLineage(ctx, store, current.operation)
+	}
 	if current.operation.Verb != reconciliation.Apply {
 		return nil, nil
 	}

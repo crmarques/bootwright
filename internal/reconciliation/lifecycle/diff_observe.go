@@ -227,7 +227,7 @@ func (s Service) inspect(ctx context.Context, view RunView, store recordReader, 
 		}
 		execution.Warn = warned.collect
 		execution.SignOn = suspension
-		lend, release, lendErr := s.producedLender(block, planDefinitions(read.owningPlan), false, s.producedInContext(read.context.Name))
+		lend, release, lendErr := s.producedLender(block, planDefinitions(read.owningPlan), nil, s.producedInContext(read.context.Name))
 		if lendErr != nil {
 			return lendErr
 		}

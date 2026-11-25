@@ -239,7 +239,7 @@ func (s Service) removalStart(ctx context.Context, tx Transaction, store Operati
 	if err != nil {
 		return nil, nil, err
 	}
-	err = s.proveQuiescent(ctx, store, tx.Identity().Name, decided.floor(), located, decided.plan, decided.phases, material, chain, skip)
+	err = s.proveQuiescent(ctx, store, tx.Identity().Name, decided.floor(), decided.stage, located, decided.plan, decided.phases, material, chain, skip)
 	return groups, deferred, err
 }
 

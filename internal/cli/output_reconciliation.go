@@ -189,6 +189,10 @@ func writeLifecycleSteps(text *display, result lifecycle.PlanResult) {
 		text.section("")
 		text.lines([]string{"adds to operation " + result.AddsTo + "; runs none of its blocks"})
 	}
+	if result.Restores != "" {
+		text.section("")
+		text.lines([]string{"restores what operation " + result.Restores + " took back; runs none of the steps the context keeps"})
+	}
 	text.section("Plan")
 	text.lifecycleSteps(result)
 	var closing []field
@@ -227,7 +231,7 @@ func writeLifecycleSteps(text *display, result lifecycle.PlanResult) {
 		if len(scope.Residue) != 0 {
 			closing = append(closing, field{Label: "Residue", Value: strings.Join(scope.Residue, "; ")})
 		}
-		closing = append(closing, field{Label: "Restore", Value: fmt.Sprintf("no apply restores the %d steps this takes back yet; destroy without --stage takes back the %d it keeps", len(scope.Removed), len(scope.Kept))})
+		closing = append(closing, field{Label: "Restore", Value: fmt.Sprintf("the next apply restores the %d steps this takes back over the %d it keeps, whose frozen values change only once a destroy takes them back", len(scope.Removed), len(scope.Kept))})
 	}
 	if len(result.Stops) != 0 {
 		label := "Stop first"

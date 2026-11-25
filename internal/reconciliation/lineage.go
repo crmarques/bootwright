@@ -34,6 +34,8 @@ func AdditiveOver(fresh Plan, members ...Member) (Plan, error) {
 	return additive(fresh, lineage)
 }
 
+func Restoring(fresh, owned Plan) (Plan, error) { return additive(fresh, owned) }
+
 func additive(fresh, lineage Plan) (Plan, error) {
 	if fresh.Verb != Apply {
 		return Plan{}, planError("only an apply plan can be added")

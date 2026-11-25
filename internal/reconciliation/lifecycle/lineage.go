@@ -26,6 +26,7 @@ func lineageOf(ctx context.Context, store recordReader, head lineageMember) (lin
 	}
 	chain := lineage{head}
 	seen := map[string]bool{head.operation.ID: true}
+	restores := head.operation.Restores
 	for id := head.operation.Predecessor; id != ""; {
 		switch {
 		case seen[id]:
@@ -34,6 +35,13 @@ func lineageOf(ctx context.Context, store recordReader, head lineageMember) (lin
 			return nil, engineRecordsDamaged.Fail("the applies this operation adds to exceed the operations a context retains", "restore the context store")
 		}
 		seen[id] = true
+		if restores != "" {
+			restored, err := restoredMember(ctx, store, restores, id)
+			if err != nil {
+				return nil, err
+			}
+			chain = append(chain, restored)
+		}
 		record, err := store.ReadOperation(ctx, id)
 		if err != nil {
 			return nil, err
@@ -50,10 +58,25 @@ func lineageOf(ctx context.Context, store recordReader, head lineageMember) (lin
 			return nil, err
 		}
 		chain = append(chain, lineageMember{operation: record, plan: plan, states: states})
-		id = record.Predecessor
+		id, restores = record.Predecessor, record.Restores
 	}
 	slices.Reverse(chain)
 	return chain, nil
+}
+
+func restoredMember(ctx context.Context, store recordReader, id, predecessor string) (lineageMember, error) {
+	record, err := store.ReadOperation(ctx, id)
+	if err != nil {
+		return lineageMember{}, err
+	}
+	if !trimmed(record) || record.Source != predecessor {
+		return lineageMember{}, engineRecordsDamaged.Fail("the operation the apply after "+predecessor+" restores is no completed staged destroy of it", "restore the context store")
+	}
+	return lineageMember{operation: record, plan: reconciliation.Plan{Verb: reconciliation.Destroy}, states: map[string]reconciliation.BlockState{}, takenBack: slices.Clone(record.Stage.TakenBack)}, nil
+}
+
+func (l lineage) applies() lineage {
+	return slices.DeleteFunc(slices.Clone(l), func(member lineageMember) bool { return member.operation.Verb != reconciliation.Apply })
 }
 
 func appliedLineage(ctx context.Context, store recordReader, operation operationstore.Operation) (lineage, error) {
@@ -151,26 +174,40 @@ func (o owners) definitions() []reconciliation.BlockDefinition {
 }
 
 func (o owners) lending(plan reconciliation.Plan) []reconciliation.BlockDefinition {
+	return o.lendingBeside(plan, nil)
+}
+
+func (o owners) lendingBeside(plan reconciliation.Plan, taken []string) []reconciliation.BlockDefinition {
 	definitions := planDefinitions(plan)
-	if len(o.chain) < 2 {
-		return definitions
-	}
 	for _, definition := range o.definitions() {
-		if _, held := plan.Block(definition.ID); !held {
+		if _, held := plan.Block(definition.ID); !held && !slices.Contains(taken, definition.ID) {
 			definitions = append(definitions, definition)
 		}
 	}
 	return definitions
 }
 
-func (o owners) lendingHead() []reconciliation.BlockDefinition {
-	return o.lending(o.incarnated()[len(o.chain)-1])
+func (o owners) removalLending(plan reconciliation.Plan, stage *operationstore.Stage) ([]reconciliation.BlockDefinition, map[string]bool) {
+	removing := map[string]bool{}
+	for _, block := range plan.Blocks {
+		removing[block.ID] = true
+	}
+	if stage == nil {
+		return planDefinitions(plan), removing
+	}
+	return o.lendingBeside(plan, stage.TakenBack), removing
 }
 
 func (l lineage) ownerOf(block string) (lineageMember, bool) {
 	owner, _, held := l.owners().of(block)
 	return owner, held
 }
+
+func (l lineage) removalPlan(started reconciliation.Plan) (reconciliation.Plan, error) {
+	return reconciliation.Fold(append(l[:len(l)-1].members(), reconciliation.Member{Plan: started, Completed: true})...).CoveredPlan()
+}
+
+func (l lineage) ownedPlan() (reconciliation.Plan, error) { return l.ownership().CoveredPlan() }
 
 func (l lineage) merged(added reconciliation.Plan) (reconciliation.Plan, error) {
 	return reconciliation.LineageOf(append(l.members(), reconciliation.Member{Plan: added})...)
@@ -236,7 +273,7 @@ func lineageEntries(ctx context.Context, store recordReader, operation operation
 		return nil, err
 	}
 	entries := make([]LineageEntry, 0, len(chain))
-	for _, member := range chain {
+	for _, member := range chain.applies() {
 		entries = append(entries, LineageEntry{Operation: member.operation.ID, Verb: string(member.operation.Verb), State: string(member.operation.State)})
 	}
 	return entries, nil
@@ -246,6 +283,10 @@ func (l lineage) owned() []OwnedBlock { return l.owners().owned() }
 
 func (l lineage) lending(plan reconciliation.Plan) []reconciliation.BlockDefinition {
 	return l.owners().lending(plan)
+}
+
+func (l lineage) removalLending(plan reconciliation.Plan, stage *operationstore.Stage) ([]reconciliation.BlockDefinition, map[string]bool) {
+	return l.owners().removalLending(plan, stage)
 }
 
 func ownerID(ctx context.Context, store recordReader, operation operationstore.Operation, block string) (string, error) {
@@ -481,6 +522,21 @@ func (l lineage) live() ([]string, map[string]reconciliation.BlockState) {
 		}
 	}
 	return live, states
+}
+
+func (l lineage) unstarted() []string {
+	folded := l.ownership()
+	covered := map[string]bool{}
+	for _, holding := range folded.Covered() {
+		covered[holding.Block.ID] = true
+	}
+	var ids []string
+	for _, holding := range folded.Holdings() {
+		if holding.Incarnation >= 0 && !folded.TakenBack(holding) && !covered[holding.Block.ID] {
+			ids = append(ids, holding.Block.ID)
+		}
+	}
+	return ids
 }
 
 func (l lineage) replacedReach() []map[string][]reconciliation.BlockState {

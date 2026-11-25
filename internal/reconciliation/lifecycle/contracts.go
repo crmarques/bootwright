@@ -547,7 +547,7 @@ type OperationStore interface {
 	// ClaimAdding creates a fresh apply's operation directory, empty, before it
 	// binds anything, once the area admits the plan it will register and the
 	// lineage of the predecessor named last; Register then fills it.
-	ClaimAdding(context.Context, string, reconciliation.Plan, string) error
+	ClaimAdding(context.Context, string, reconciliation.Plan, string, string) error
 	// Claimed names every operation directory. Only a reclaim removes one,
 	// so a directory added since a listing was taken proves a newer claim.
 	Claimed(context.Context) ([]string, error)
@@ -606,7 +606,8 @@ type decisionPlanner interface {
 	refuseUnsupported(*compilation.State, *reconciliation.PreparationScope) error
 	freshDestroy(context.Context, string, operationstore.Executable, string, removalScope, bool) (operationPlan, error)
 	computePhases(reconciliation.Plan) removalPhases
-	stagedScope(string, reconciliation.Stage, reconciliation.Plan, map[string]reconciliation.BlockState) ([]string, error)
+	stagedScope(string, reconciliation.Stage, liveState) ([]string, error)
+	refuseKeptChanged(string, operationstore.Operation, reconciliation.Plan, reconciliation.Plan) error
 }
 
 type decisionProofs interface {
@@ -614,6 +615,7 @@ type decisionProofs interface {
 	verifyRemovalHost(context.Context, View) error
 	verifyContinuation(context.Context, View, operationstore.Operation, executionProof, *approved) error
 	custodyProved(context.Context, View, lineage, reconciliation.Plan) error
+	restoreProved(context.Context, View, lineage, reconciliation.Plan, reconciliation.Plan) error
 }
 
 type adminExecution interface {

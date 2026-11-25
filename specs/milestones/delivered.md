@@ -18471,4 +18471,54 @@ takes back, so a destroy digest an earlier build printed refuses
 **Limits:** over an unfinished staged destroy only its own floor is admitted
 ([B1867](m1.md#b1867)); no scoped step may act on a kept Machine, so the kept
 power targets stay empty until [B1860](m1.md#b1860); a done staged destroy
-names next `none` until the restoring apply ([B1858](m1.md#b1858)).
+names next `none` until the restoring apply ([B1858](#x757--the-restoring-apply-restores-what-a-staged-destroy-took-back)).
+
+## X757 — The restoring apply restores what a staged destroy took back
+
+**Items:** B1858. **Kind:** product, the fifth apply scenario. **Owner:**
+Reconciliation, with CLI. **Authorization:** [D288](backlog.md#d288) (3) and
+(4), the fourth slice of the [staged destroy design](../deferred/staged-destroy.md#program).
+
+**Outcome:** an `apply` over a trimmed context of unchanged input registers a
+[restoring apply](../state-reconciliation.md#restoring-apply): `predecessor`
+the staged destroy's source, `restores` the staged destroy, only the steps the
+context does not own, edges into owned steps frozen as prerequisites. The fold
+admits a repeat over a take-back or over a step an earlier apply never started
+behind a removal, and every reader of a lineage, the store's admission and
+attempt reserve included, folds the restored staged destroy's taken-back set
+before the restore. A re-created step carries the restore's identity, a kept
+one its creator's. The restore reserves the whole planned set, reopens the
+binding the staged destroy holds and records it, admits `rebind=`, and checks
+power only for the Machines it realizes. A done staged destroy names next
+`apply`, status offers it and counts the bindings the trimmed context keeps,
+and `destroy --stage` over a restore also takes back the steps it never
+started. One state-machine row, two stops and two kill-harness journeys land;
+`TestApplyAdmitsOnlyTheFourScenarios` becomes
+`TestApplyAdmitsOnlyItsFiveScenarios`.
+
+**Guard tests:** `TestTransitionTablesMatchSpec`,
+`TestApplyAdmitsOnlyItsFiveScenarios`, `TestStepLifeMatchesSpec`,
+`TestARestoringApplyCreatesOnlyWhatAStagedDestroyTookBack`,
+`TestARecreatedStepCarriesTheRestoringApplysIdentity`,
+`TestARestoreOverAFailedSourceCompletesTheLineage`,
+`TestARestoreRefusesWhatItCannotKeep`,
+`TestARestoreReadsThePowerOfOnlyTheMachinesItRealizes`,
+`TestARestoreReservesTheWholePlannedSet`,
+`TestARestoreReopensTheLineagesBindingAndRebindsAnAccessCredential`,
+`TestAFailedRestoreIsContinuedOrTakenBack`,
+`TestATrimmedContextOffersTheRestore`,
+`TestARestoreContinuationRefusesALostPrerequisite`,
+`TestARestoreRunsNoAutomaticPreparation`,
+`TestARestoreRefusesAnotherExecutionContract`,
+`TestARestoringApplyIsAdmittedOverTheStagedDestroyItRestores`,
+`TestEveryExampleRestoresWhatEachFloorTakesBack` and
+`TestAJourneyKilledAtAnyWriteLeavesAUsableStoreAndConvergesOnRetry`.
+
+**Gates:** `make focus`; the delivering commit records the command and result.
+
+**Limits:** changed input over a trimmed context refuses
+`apply.context-trimmed`, and an added step whose Secret the reopened binding
+does not pin, as an additive member's, refuses `apply.restore-unbound`
+([B1859](m1.md#b1859)); a restore reads no kept Machine's power, since no
+scope yet keeps a Machine a taken-back step acts on ([B1860](m1.md#b1860));
+the example-wide restore is proved at the plan and fold, not by a run.

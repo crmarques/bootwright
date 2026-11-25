@@ -312,7 +312,7 @@ and their output goldens:
 
 | Command | Result fields |
 | --- | --- |
-| `apply`, `destroy`, `machine enroll` | optional `keepGoing`, optional `remaining`, optional `retiringWithHosts`, `context`, `verb`, `steps`, optional `blocks`, optional `settled`, optional `recovered`, optional `next`, optional `scope`, `receipt`, optional `checks`, optional `stages`, optional `clusters`, optional `machines`, optional `until`, optional `waves`, optional `widest`, optional `bound`, optional `startable`, optional `later`, optional `blocked`, optional `excluded`, optional `deferred`, optional `continuation`, optional `finalizes`, optional `addsTo`, optional `takesBack`, optional `anotherBuild`, optional `stops`, optional `stopsAfterOnline`, optional `authorizationSteps`, optional `authorizations` |
+| `apply`, `destroy`, `machine enroll` | optional `keepGoing`, optional `remaining`, optional `retiringWithHosts`, `context`, `verb`, `steps`, optional `blocks`, optional `settled`, optional `recovered`, optional `next`, optional `scope`, `receipt`, optional `checks`, optional `stages`, optional `clusters`, optional `machines`, optional `until`, optional `waves`, optional `widest`, optional `bound`, optional `startable`, optional `later`, optional `blocked`, optional `excluded`, optional `deferred`, optional `continuation`, optional `finalizes`, optional `addsTo`, optional `restores`, optional `takesBack`, optional `anotherBuild`, optional `stops`, optional `stopsAfterOnline`, optional `authorizationSteps`, optional `authorizations` |
 | `catalog add-ons info` | `package` |
 | `catalog add-ons list` | `addOns` |
 | `catalog media add`, `catalog media delete` | `name`, `outcome`, `size`, optional `sha256` |
@@ -334,7 +334,7 @@ and their output goldens:
 | `install` | optional `context`, optional `machine`, optional `route`, optional `dryRun`, `outcome`, `platform`, optional `checks`, optional `actions`, optional `requirements`, optional `files`, optional `preview`, optional `progress`, optional `receipt`, optional `next` |
 | `logs` | optional `context`, optional `operation`, optional `verb`, optional `state`, optional `events`, optional `source`, optional `path`, optional `bytes`, optional `truncated`, optional `output` |
 | `machine cp` | `context`, `source`, `machines` |
-| `machine discover` | optional `keepGoing`, optional `checks`, optional `context`, optional `verb`, optional `steps`, optional `stages`, optional `clusters`, optional `machines`, optional `until`, optional `waves`, optional `widest`, optional `bound`, optional `startable`, optional `later`, optional `blocked`, optional `excluded`, optional `deferred`, optional `continuation`, optional `settled`, optional `finalizes`, optional `addsTo`, optional `takesBack`, optional `scope`, optional `anotherBuild`, optional `stops`, optional `stopsAfterOnline`, optional `authorizationSteps`, optional `authorizations`, optional `receipt`, optional `operation`, optional `inventories`, optional `next` |
+| `machine discover` | optional `keepGoing`, optional `checks`, optional `context`, optional `verb`, optional `steps`, optional `stages`, optional `clusters`, optional `machines`, optional `until`, optional `waves`, optional `widest`, optional `bound`, optional `startable`, optional `later`, optional `blocked`, optional `excluded`, optional `deferred`, optional `continuation`, optional `settled`, optional `finalizes`, optional `addsTo`, optional `restores`, optional `takesBack`, optional `scope`, optional `anotherBuild`, optional `stops`, optional `stopsAfterOnline`, optional `authorizationSteps`, optional `authorizations`, optional `receipt`, optional `operation`, optional `inventories`, optional `next` |
 | `machine info`, `machine list` | `context`, `machines`, `powerRead` |
 | `machine inventory` | `inventories` |
 | `machine media eject`, `machine restart`, `machine start`, `machine stop` | `context`, `verb`, `machines` |
@@ -422,8 +422,9 @@ instance, as `<cluster>.<package>`, when one was given. `clusters` or
 and selection counts. `deferred` is the sum of the latter three categories;
 `continuation` and `finalizes` say whether a preview continues an operation or
 only completes its finalization; `addsTo` names the apply an
-[additive apply](../state-reconciliation.md#additive-apply) adds to, and
-`takesBack` lists, oldest first, the applies a `destroy` takes back when that
+[additive apply](../state-reconciliation.md#additive-apply) adds to,
+`restores` the staged destroy a [restoring apply](../state-reconciliation.md#restoring-apply)
+restores, and `takesBack` lists, oldest first, the applies a `destroy` takes back when that
 apply has predecessors, each omitted otherwise; `stops` and `stopsAfterOnline` name the
 Machines of `Stop first` and `Stop after online cleanup`; `anotherBuild` carries
 `registeredBy` and the `steps` places this build runs; `authorizations`, present
@@ -1011,7 +1012,10 @@ finalization, a continuation under the registering build and a continuation
 with no step left to run under this build carry no such field. A new apply or destroy plan adds a `Stop first` field naming the managed Machines checked on entry,
 as `Stop first  rhel-01, rhel-02`. A scoped apply labels it `Stop first (fleet)`.
 The gate follows the prompt. A continuation is not gated again and carries none. An additive apply's plan
-opens with `adds to operation <id>; runs none of its blocks`, and a `destroy`
+opens with `adds to operation <id>; runs none of its blocks`, a restoring
+apply's with `restores what operation <id> took back; runs none of the steps
+the context keeps` beside `restores`, a staged destroy's closes with a
+`Restore` field counting the steps the next apply restores, and a `destroy`
 of a lineage closes with `Takes back  <id>, then <id>` beside `takesBack`. Every
 presentation of a plan that consumes an authorization closes with a `Requires`
 field naming each token the invocation requires, bound to the digest of

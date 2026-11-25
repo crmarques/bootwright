@@ -40,7 +40,11 @@ func (s Service) completeStaged(ctx context.Context, tx Transaction, store recor
 	if err := s.reserveKept(ctx, tx, owned, operation.Stage.TakenBack); err != nil {
 		return err
 	}
-	return s.projectRecord(ctx, tx, operation)
+	if err := s.projectRecord(ctx, tx, operation); err != nil {
+		return err
+	}
+	reclaim(ctx, tx, s.store(tx))
+	return nil
 }
 
 func stagedLineage(ctx context.Context, store recordReader, operation operationstore.Operation) (reconciliation.Plan, error) {
@@ -53,7 +57,7 @@ func stagedLineage(ctx context.Context, store recordReader, operation operations
 
 type claimIdentity struct{ kind, service string }
 
-// reserveKept keeps the shared claim keys kept steps plan, and marks only on gone objects' claims.
+// reserveKept keeps the shared claim keys kept steps plan, and marks exactly the gone objects' claims.
 func (s Service) reserveKept(ctx context.Context, tx Transaction, owned reconciliation.Plan, taken []string) error {
 	dropped, planned := map[claimIdentity][]string{}, map[claimIdentity][]string{}
 	for _, block := range owned.Blocks {
@@ -95,8 +99,8 @@ func (s Service) reserveKept(ctx context.Context, tx Transaction, owned reconcil
 			changed = changed || len(keys) != len(reservation.Keys)
 			reservation.Keys = keys
 		}
-		if reservation.Releasing && !namesGone(reservation, gone) {
-			reservation.Releasing, changed = false, true
+		if releasing := namesGone(reservation, gone); reservation.Releasing != releasing {
+			reservation.Releasing, changed = releasing, true
 		}
 		kept = append(kept, reservation)
 	}

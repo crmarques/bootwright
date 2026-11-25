@@ -206,6 +206,7 @@ type PlanResult struct {
 	Continuation bool
 	Settled      bool
 	AddsTo       string
+	Restores     string
 	TakesBack    []string
 	Scope        *StagedScope
 	// Finalizes marks a preview whose verb only completes the operation's

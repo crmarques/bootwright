@@ -191,7 +191,7 @@ func frozenReopenOf(ctx context.Context, store OperationStore) (frozenReopen, er
 		if err != nil {
 			return frozenReopen{}, err
 		}
-		if inherited := firstBinding(held[0].operation.Bindings); inherited != "" && binding == "" {
+		if inherited := held.reopened(); inherited != "" && binding == "" {
 			binding = inherited
 		}
 	}

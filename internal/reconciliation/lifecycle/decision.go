@@ -130,6 +130,11 @@ func (d decider) decideFrom(ctx context.Context, view View, verb reconciliation.
 	var known *additiveVerdict
 	if verb == "" {
 		held := standing{held: true, verb: operation.Verb, state: operation.State, trimmed: trimmed(operation)}
+		if held.trimmed {
+			if held.restorable, err = restorable(ctx, view, store, operation); err != nil {
+				return operationPlan{}, verb, err
+			}
+		}
 		admitted, refused := d.additive(ctx, view, store, operation, frozen, states, true)
 		known = &additiveVerdict{admitted: admitted, refused: refused}
 		held.additive = admitted != nil
@@ -178,7 +183,7 @@ type additiveVerdict struct {
 }
 
 func (d decider) decideBy(ctx context.Context, view View, store decisionRecords, verb reconciliation.Verb, selection reconciliation.Selection, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int, known *additiveVerdict) (operationPlan, error) {
-	if decided, handled, err := d.decideStaged(ctx, view, store, verb, operation, frozen, states, attempts); handled {
+	if decided, handled, err := d.decideStaged(ctx, view, store, verb, selection, operation, frozen, states, attempts); handled {
 		return decided, err
 	}
 	name := view.Identity().Name

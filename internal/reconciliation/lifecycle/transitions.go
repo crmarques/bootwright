@@ -21,13 +21,14 @@ const (
 )
 
 type standing struct {
-	held     bool
-	verb     reconciliation.Verb
-	state    reconciliation.OperationState
-	pending  bool
-	unknown  bool
-	additive bool
-	trimmed  bool
+	held       bool
+	verb       reconciliation.Verb
+	state      reconciliation.OperationState
+	pending    bool
+	unknown    bool
+	additive   bool
+	trimmed    bool
+	restorable bool
 }
 
 func standingOf(operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) standing {
@@ -82,7 +83,9 @@ func chosenVerb(held standing) reconciliation.Verb {
 		return reconciliation.Apply
 	case held.state != reconciliation.OperationDone:
 		return held.verb
-	case held.verb == reconciliation.Apply && !held.additive, held.trimmed:
+	case held.trimmed && held.restorable:
+		return reconciliation.Apply
+	case held.trimmed, held.verb == reconciliation.Apply && !held.additive:
 		return reconciliation.Destroy
 	}
 	return reconciliation.Apply

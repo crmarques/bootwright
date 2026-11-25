@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -137,11 +138,17 @@ func TestProducedInputLenderRefusesMissingUnprovedUndeclaredAndExpired(t *testin
 	definitions := h.capability.definitions
 	block := reconciliation.Block{BlockDefinition: definitions[2]}
 	for _, tc := range []struct {
-		name                           string
-		found, unproved, removal, want bool
-	}{{"missing", false, false, false, false}, {"unproved apply", true, true, false, false}, {"unproved removal", true, true, true, true}, {"proved", true, false, false, true}} {
+		name                  string
+		found, unproved, want bool
+		removing              map[string]bool
+	}{
+		{"missing", false, false, false, nil}, {"unproved apply", true, true, false, nil},
+		{"unproved removal", true, true, true, map[string]bool{"producer-a": true}},
+		{"unproved kept by a removal", true, true, false, map[string]bool{"consumer": true}},
+		{"proved", true, false, true, nil},
+	} {
 		t.Run(tc.name, func(t *testing.T) {
-			lend, release, err := h.service.producedLender(block, definitions, tc.removal, func(context.Context, string, string) (secretstore.ProducedMaterial, bool, error) {
+			lend, release, err := h.service.producedLender(block, definitions, tc.removing, func(context.Context, string, string) (secretstore.ProducedMaterial, bool, error) {
 				return secretstore.ProducedMaterial{Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("private")}), Unproved: tc.unproved}, tc.found, nil
 			})
 			if err != nil {
@@ -201,6 +208,86 @@ func TestProducedInputContinuationReopensAndWithholdsEachUnprovedEntry(t *testin
 				}
 			}
 		})
+	}
+}
+
+type probingLender struct{ *lendingCapability }
+
+func (c probingLender) Quiescent(ctx context.Context, probe Probe) (Quiescence, error) {
+	if err := c.borrow(ctx, probe.Execution()); err != nil {
+		return Quiescence{}, err
+	}
+	return c.testCapability.Quiescent(ctx, probe)
+}
+
+func (c probingLender) ObserveRemoval(ctx context.Context, e Execution) (Observation, error) {
+	if err := c.borrow(ctx, e); err != nil {
+		return Observation{Effect: reconciliation.EffectUnknown}, err
+	}
+	return c.testCapability.ObserveRemoval(ctx, e)
+}
+
+// A staged destroy over one completed apply lends the consumer it takes back
+// the entries of the producers it keeps, to its quiescence probe, its removal
+// attempt and the resolution that settles that attempt, and keeps them.
+func TestAStagedDestroyLendsTheEntriesOfTheProducersItKeeps(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h, c := lendingHarness(t)
+	h.capability.definitions[2].Stage = reconciliation.StageClusters
+	h.service.capabilities = testResolver{capability: probingLender{c}}
+	if _, err := apply(h); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"producer-a-private-material", "producer-b-private-material"}
+	c.borrowed = nil
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
+	request := DestroyRequest{ContextName: testContextName, Floor: string(reconciliation.StageClusters), SkipConfirmation: true}
+	if _, err := h.service.Destroy(ctx, request); firstCode(err) == planCapabilityDefect.Code || !slices.Equal(c.borrowed, append(slices.Clone(want), want...)) {
+		t.Fatalf("the staged destroy borrowed %v (%v)", c.borrowed, diagnostics.Of(err))
+	}
+	h.capability.outcomes, h.capability.observations, c.borrowed = nil, []Observation{{Effect: reconciliation.EffectCompleted}}, nil
+	if _, err := h.service.Destroy(ctx, request); err != nil || !slices.Equal(c.borrowed, want) {
+		t.Fatalf("the resolution borrowed %v (%v)", c.borrowed, diagnostics.Of(err))
+	}
+	if removal, plan := currentRecord(t, h); !trimmed(removal) || !slices.Equal(planIDs(plan), []string{"consumer"}) {
+		t.Fatalf("the staged destroy recorded %+v over %v", removal, planIDs(plan))
+	}
+	if held := kept(h); len(held) != 2 {
+		t.Fatalf("the staged destroy left custody %v", held)
+	}
+}
+
+// A removal lends from the blocks its plan takes back and those the context
+// keeps, never one its frozen taken-back set names, and a whole destroy keeps
+// none; only a block it takes back may lend an unproved entry.
+func TestARemovalLendsFromWhatItTakesBackAndWhatTheContextKeeps(t *testing.T) {
+	t.Parallel()
+	blocks := func(ids ...string) []reconciliation.Block {
+		var held []reconciliation.Block
+		for _, id := range ids {
+			held = append(held, reconciliation.Block{BlockDefinition: definition(id)})
+		}
+		return held
+	}
+	applied := operationstore.Operation{ID: "op-applied", Verb: reconciliation.Apply, State: reconciliation.OperationDone}
+	held := lineage{{operation: applied, plan: reconciliation.Plan{Verb: reconciliation.Apply, Blocks: blocks("producer-a", "producer-b", "consumer")}}}
+	removal := reconciliation.Plan{Verb: reconciliation.Destroy, Blocks: blocks("consumer")}
+	for name, tc := range map[string]struct {
+		stage *operationstore.Stage
+		want  []string
+	}{
+		"staged": {&operationstore.Stage{Floor: reconciliation.StageClusters, TakenBack: []string{"consumer", "producer-b"}}, []string{"consumer", "producer-a"}},
+		"whole":  {nil, []string{"consumer"}},
+	} {
+		definitions, removing := held.removalLending(removal, tc.stage)
+		var ids []string
+		for _, definition := range definitions {
+			ids = append(ids, definition.ID)
+		}
+		if !slices.Equal(ids, tc.want) || len(removing) != 1 || !removing["consumer"] {
+			t.Fatalf("a %s removal lends from %v, unproved from %v", name, ids, removing)
+		}
 	}
 }
 

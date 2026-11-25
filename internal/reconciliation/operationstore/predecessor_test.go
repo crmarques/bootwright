@@ -298,7 +298,7 @@ func TestAnAdditiveApplyIsAdmittedAgainstItsLineagesRemoval(t *testing.T) {
 			t.Fatalf("admission reported %+v, want the retained-operation refusal naming the bound with nothing created", reported)
 		}
 	}
-	refused(store.ClaimAdding(ctx, operation.ID, added, applied.ID))
+	refused(store.ClaimAdding(ctx, operation.ID, added, applied.ID, ""))
 	refused(store.Register(ctx, operation, added))
 	free := MaxEntries - AdmissionEntries(added) - extra
 	now, _, err := store.held(ctx, "", "")
@@ -308,10 +308,92 @@ func TestAnAdditiveApplyIsAdmittedAgainstItsLineagesRemoval(t *testing.T) {
 	for index := range now - free {
 		delete(area.files, "retained/record-"+FormatIndex(index))
 	}
-	if err := store.ClaimAdding(ctx, operation.ID, added, applied.ID); err != nil {
+	if err := store.ClaimAdding(ctx, operation.ID, added, applied.ID, ""); err != nil {
 		t.Fatalf("the claim refused with the lineage removal's room free: %+v", diagnostics.Of(err))
 	}
 	if err := store.Register(ctx, operation, added); err != nil {
 		t.Fatalf("the registration refused with the lineage removal's room free: %+v", diagnostics.Of(err))
 	}
+}
+
+// A restoring apply repeats a step its predecessor holds only over the staged
+// destroy it names: the claim, the registration and every attempt reserve fold
+// that destroy's taken-back set between the two, so the repeat is admitted and
+// the lineage's removal holds each step once; without the restore the same
+// plan repeats the step and is refused as damaged records.
+func TestARestoringApplyIsAdmittedOverTheStagedDestroyItRestores(t *testing.T) {
+	ctx := context.Background()
+	store, _ := newStore(t)
+	root := goldenPlan(t)
+	applied := testOperation(t, root)
+	if _, err := store.Index(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Register(ctx, applied, root); err != nil {
+		t.Fatal(err)
+	}
+	scoped, err := root.Retain([]string{"install-node-01"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	inverse, err := scoped.Inverse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	removal := testOperation(t, inverse)
+	removal.ID, removal.Source = "op-"+strings.Repeat("cd", 16), applied.ID
+	removal.Stage = &Stage{Floor: reconciliation.StageMachines, TakenBack: []string{"install-node-01"}}
+	if err := store.Register(ctx, removal, inverse); err != nil {
+		t.Fatalf("registering the staged destroy: %v", diagnostics.Of(err))
+	}
+	removal.State = reconciliation.OperationDone
+	if err := store.UpdateOperation(ctx, removal); err != nil {
+		t.Fatal(err)
+	}
+	kept, err := root.Retain([]string{"server-lab"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	added, err := reconciliation.Restoring(root, kept)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repeated, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{goldenPlanBlock(t, "server-lab")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ClaimAdding(ctx, "op-"+strings.Repeat("9a", 16), repeated, applied.ID, removal.ID); err == nil || !strings.Contains(firstMessage(err), "repeats the block server-lab") {
+		t.Fatalf("a restore repeating a step its staged destroy kept was admitted: %v", err)
+	}
+	operation := additiveOperation(t, added, applied.ID)
+	if err := store.ClaimAdding(ctx, operation.ID, added, applied.ID, ""); err == nil || !strings.Contains(firstMessage(err), "repeats the block install-node-01") {
+		t.Fatalf("a repeat over no restore was admitted: %v", err)
+	}
+	if err := store.ClaimAdding(ctx, operation.ID, added, applied.ID, removal.ID); err != nil {
+		t.Fatalf("the restore's claim: %v", diagnostics.Of(err))
+	}
+	operation.Restores = removal.ID
+	if err := store.Register(ctx, operation, added); err != nil {
+		t.Fatalf("registering the restore: %v", diagnostics.Of(err))
+	}
+	release, err := store.AdmitAttempt(ctx, operation, added, "install-node-01", false)
+	if err != nil {
+		t.Fatalf("the restore's attempt: %v", diagnostics.Of(err))
+	}
+	release()
+	unrestored := operation
+	unrestored.Restores = removal.ID[:len(removal.ID)-2] + "00"
+	if _, err := store.lineageRemoval(ctx, unrestored.ID, applied.ID, unrestored.Restores, added); err == nil {
+		t.Fatal("a restore naming no staged destroy of its predecessor was admitted")
+	}
+}
+
+func firstMessage(err error) string {
+	if reported := diagnostics.Of(err); len(reported) != 0 {
+		return reported[0].Message
+	}
+	if err != nil {
+		return err.Error()
+	}
+	return ""
 }

@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -62,15 +63,9 @@ func (s Service) prepareStart(ctx context.Context, view View, decided operationP
 		return nil, err
 	}
 	store := s.store(view)
-	var held lineage
-	source := decided.source
-	if source == "" {
-		source = decided.predecessor
-	}
-	if source != "" {
-		if held, err = sourceLineage(ctx, store, source); err != nil {
-			return nil, err
-		}
+	held, err := startOwners(ctx, store, decided)
+	if err != nil {
+		return nil, err
 	}
 	owned := held.owners()
 	targets := make([]startTarget, 0, len(blocks))
@@ -185,16 +180,57 @@ func (s Service) proveStartPower(ctx context.Context, name string, decided opera
 	return nil
 }
 
-func (s Service) startBlocks(ctx context.Context, view View, decided operationPlan) ([]reconciliation.Block, error) {
-	plan := decided.removed()
-	var blocks []reconciliation.Block
+func (s Service) powerTargets(decided operationPlan) []reconciliation.Block {
 	bindings := s.capabilities.Bindings()
+	plan := decided.removed()
+	if decided.restores != "" {
+		plan = decided.plan
+	}
+	var blocks []reconciliation.Block
 	for _, block := range plan.Blocks {
 		if managedPowerTarget(bindings, block) {
 			blocks = append(blocks, block)
 		}
 	}
-	if decided.verb != reconciliation.Apply || plan.Preparation == nil {
+	if decided.restores == "" {
+		return blocks
+	}
+	for _, added := range decided.plan.Blocks {
+		block, _ := decided.lineagePlan.Block(added.ID)
+		for _, machine := range s.boundMachines(decided.lineagePlan, block) {
+			for _, kept := range decided.lineagePlan.Blocks {
+				if kept.Kind == string(api.Machine) && kept.Object == machine && managedPowerTarget(bindings, kept) &&
+					!slices.ContainsFunc(blocks, func(held reconciliation.Block) bool { return held.ID == kept.ID }) {
+					blocks = append(blocks, kept)
+				}
+			}
+		}
+	}
+	return blocks
+}
+
+func startOwners(ctx context.Context, store recordReader, decided operationPlan) (lineage, error) {
+	source := decided.source
+	if source == "" {
+		source = decided.predecessor
+	}
+	switch {
+	case decided.restores != "":
+		removal, err := store.ReadOperation(ctx, decided.restores)
+		if err != nil {
+			return nil, err
+		}
+		return restoredLineage(ctx, store, removal)
+	case source != "":
+		return sourceLineage(ctx, store, source)
+	}
+	return nil, nil
+}
+
+func (s Service) startBlocks(ctx context.Context, view View, decided operationPlan) ([]reconciliation.Block, error) {
+	blocks := s.powerTargets(decided)
+	bindings := s.capabilities.Bindings()
+	if decided.verb != reconciliation.Apply || decided.restores != "" || decided.removed().Preparation == nil {
 		return blocks, nil
 	}
 	// Automatic discovery's frozen plan can select fewer machines than the

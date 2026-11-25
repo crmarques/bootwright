@@ -56,6 +56,7 @@ type stateMachineCase struct {
 	arrange        func(*testing.T, *harness)
 	apply, destroy string
 	staged         string
+	floor          reconciliation.Stage
 	previewed      reconciliation.Verb
 	next           string
 	reopens        bool
@@ -82,6 +83,8 @@ type stateMachineRow struct {
 	transition string
 	cases      map[string]stateMachineCase
 }
+
+const restoringTransition = "the row of that apply's state: `apply` continues it; `destroy` starts a fresh destroy of what the context owns, the steps it started and every step it keeps; `destroy --stage` starts a fresh staged destroy of what the context owns, which also takes back the steps it never started"
 
 const exitByDeletion = "none: `apply` and `destroy` refuse, naming `context delete --purge`, with `--allow-orphans` unless the evidence is pristine, which cannot list what it abandons over evidence the guard cannot read"
 
@@ -197,6 +200,14 @@ func stateMachineRows() map[string]stateMachineRow {
 				"a completed apply under an input that only adds an instance": {
 					arrange: additiveOver(false), apply: "add", destroy: "fresh destroy", previewed: reconciliation.Apply, next: "none", reopens: true, shown: planning("apply"),
 				},
+				"a completed restoring apply": {
+					arrange: func(t *testing.T, h *harness) {
+						completeApply(t, h)
+						stagedDestroy(t, h, reconciliation.StageClusters)
+						completeApply(t, h)
+					},
+					apply: "settle", destroy: "fresh destroy", previewed: reconciliation.Destroy, next: "none", reopens: true, shown: planning("destroy"),
+				},
 				"a completed additive apply": {
 					arrange: additiveOver(true), apply: "settle", destroy: "fresh destroy", previewed: reconciliation.Destroy, next: "none", reopens: true, shown: planning("destroy"),
 				},
@@ -288,11 +299,42 @@ func stateMachineRows() map[string]stateMachineRow {
 			},
 		},
 		"staged destroy done (trimmed)": {
-			transition: "`destroy` starts a fresh destroy of what the context still owns, which replaces the staged destroy; `destroy --stage` at the same or a later stage settles without effect, and at an earlier one starts a fresh staged destroy of what the context still owns, which replaces it; `apply` refuses; `context update` is admitted, since the context guard reads `{none, retained}` as no mutation",
+			transition: "`apply` of the input its kept steps froze starts a [restoring apply](#restoring-apply), and of a changed input refuses; `destroy` starts a fresh destroy of what the context still owns, which replaces the staged destroy; `destroy --stage` at the same or a later stage settles without effect, and at an earlier one starts a fresh staged destroy of what the context still owns, which replaces it; `context update` is admitted, since the context guard reads `{none, retained}` as no mutation",
 			cases: map[string]stateMachineCase{
 				"a staged destroy from the clusters stage": {
 					arrange: func(t *testing.T, h *harness) { completeApply(t, h); stagedDestroy(t, h, reconciliation.StageClusters) },
-					apply:   "refuse", destroy: "fresh destroy", staged: "settle", previewed: reconciliation.Destroy, next: "none", reopens: true, shown: planning("destroy"),
+					apply:   "restore", destroy: "fresh destroy", staged: "settle", previewed: reconciliation.Apply, next: "apply", reopens: true, shown: planning("apply"),
+				},
+				"a staged destroy from the clusters stage under a changed input": {
+					arrange: func(t *testing.T, h *harness) {
+						completeApply(t, h)
+						stagedDestroy(t, h, reconciliation.StageClusters)
+						h.workspace.inputs = desiredstate.Sources{Roots: []string{"/synthetic"}, Files: []desiredstate.SourceFile{
+							desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte("kind: Environment\n# edited\n")),
+						}}
+					},
+					apply: "refuse", destroy: "fresh destroy", staged: "settle", previewed: reconciliation.Destroy, next: "destroy", reopens: true, shown: planning("destroy"),
+				},
+			},
+		},
+		"restoring apply running, paused, unknown or failed": {
+			transition: restoringTransition,
+			cases: map[string]stateMachineCase{
+				"a restoring apply whose block failed": {
+					arrange: failedRestore, apply: "continue", destroy: "fresh destroy", staged: "fresh destroy", floor: reconciliation.StageClusters,
+					previewed: reconciliation.Apply, next: "continue-apply", reopens: true, shown: continuing("continue-apply"),
+				},
+				"a restoring apply whose executor died": {
+					arrange: runningRestore, apply: "continue", destroy: "fresh destroy", staged: "fresh destroy", floor: reconciliation.StageClusters,
+					previewed: reconciliation.Apply, next: "continue-apply", reopens: true, shown: continuing("continue-apply"),
+				},
+				"a restoring apply paused at a stage boundary": {
+					arrange: pausedRestore, apply: "continue", destroy: "fresh destroy", staged: "fresh destroy", floor: reconciliation.StageClusters,
+					previewed: reconciliation.Apply, next: "continue-apply", reopens: true, shown: continuing("continue-apply"),
+				},
+				"a restoring apply whose block lost its outcome": {
+					arrange: unknownRestore, apply: "continue", destroy: "fresh destroy", staged: "fresh destroy", floor: reconciliation.StageClusters,
+					previewed: reconciliation.Apply, next: "resolve", reopens: true, shown: continuing("resolve"),
 				},
 			},
 		},
@@ -388,18 +430,19 @@ func additiveMixed(t *testing.T, h *harness) {
 // apply.
 var admittedApply = map[string][]string{
 	"fresh apply": {"no operation, or completed destroy"},
+	"restore":     {"staged destroy done (trimmed)"},
 	"add":         {"apply done"},
 	"settle":      {"apply done"},
-	"continue":    {"apply running", "apply failed", "apply paused", "apply unknown"},
+	"continue":    {"apply running", "apply failed", "apply paused", "apply unknown", "restoring apply running, paused, unknown or failed"},
 	"finalize":    {"apply failed, every block `done`"},
 	"refuse":      nil,
 }
 
-// TestApplyAdmitsOnlyTheFourScenarios holds every apply decision the state
+// TestApplyAdmitsOnlyItsFiveScenarios holds every apply decision the state
 // machine declares to a fresh apply, a continuation or finalization of the
-// same apply, a settle, an add, or a refusal, each in its own rows. A new
-// scenario edits this test, the row and the code together.
-func TestApplyAdmitsOnlyTheFourScenarios(t *testing.T) {
+// same apply, a settle, an add, a restore, or a refusal, each in its own rows.
+// A new scenario edits this test, the row and the code together.
+func TestApplyAdmitsOnlyItsFiveScenarios(t *testing.T) {
 	t.Parallel()
 	for row, known := range stateMachineRows() {
 		for name, test := range known.cases {
@@ -441,7 +484,11 @@ func checkStateMachine(t *testing.T, lines []string) {
 				}
 			}
 			if test.staged != "" {
-				if got := decisionAtFloor(t, h, currentFloor(t, h)); got != test.staged {
+				floor := test.floor
+				if floor == "" {
+					floor = currentFloor(t, h)
+				}
+				if got := decisionAtFloor(t, h, floor); got != test.staged {
 					t.Errorf("row %q, %s: the destroy at the frozen stage decides %q, want %q", row[0], name, got, test.staged)
 				}
 			}
@@ -557,6 +604,8 @@ func decisionNamed(decided operationPlan) string {
 		return "release"
 	case decided.noop:
 		return "settle"
+	case decided.fresh && decided.restores != "":
+		return "restore"
 	case decided.fresh && decided.predecessor != "":
 		return "add"
 	case decided.fresh:
@@ -640,7 +689,10 @@ func currentNextAction(t *testing.T, h *harness) string {
 			return err
 		}
 		states, _, err := blockRecords(ctx, store, operation.ID, frozen)
-		next = nextAction(operation, frozen, states)
+		if err != nil {
+			return err
+		}
+		next, err = nextOver(ctx, view, store, operation, frozen, states)
 		return err
 	})
 	if err != nil {

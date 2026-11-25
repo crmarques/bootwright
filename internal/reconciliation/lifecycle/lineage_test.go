@@ -403,7 +403,7 @@ func TestAnExecutionIsHandedItsOwnersRegistrationTimeEvidenceAndProducers(t *tes
 	}
 	t.Run("a producer only the predecessor's plan holds", func(t *testing.T) {
 		execution := Execution{Block: consumer}
-		if _, _, err := h.service.producedLender(consumer, planDefinitions(f.headPlan), false, nil); err == nil {
+		if _, _, err := h.service.producedLender(consumer, planDefinitions(f.headPlan), nil, nil); err == nil {
 			t.Fatal("the head's own plan resolved a producer it does not hold")
 		}
 		release, err := h.service.prepareProducedExecution(ctx, nil, f.store, f.head, f.headPlan, &execution)
@@ -422,7 +422,7 @@ func TestAnExecutionIsHandedItsOwnersRegistrationTimeEvidenceAndProducers(t *tes
 		if err != nil {
 			t.Fatal(err)
 		}
-		lend, release, err := h.service.producedLender(consumer, held.lending(f.headPlan), false, read)
+		lend, release, err := h.service.producedLender(consumer, held.lending(f.headPlan), nil, read)
 		if err != nil {
 			t.Fatal(err)
 		}

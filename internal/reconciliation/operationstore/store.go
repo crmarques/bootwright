@@ -156,7 +156,7 @@ func (s *Store) Register(ctx context.Context, operation Operation, plan reconcil
 	if err != nil {
 		return err
 	}
-	if err := s.admit(ctx, operation.ID, plan, operation.Predecessor, len(encodedPlan)+len(encoded)+len(index)); err != nil {
+	if err := s.admit(ctx, operation.ID, plan, operation.Predecessor, operation.Restores, len(encodedPlan)+len(encoded)+len(index)); err != nil {
 		return err
 	}
 	if err := s.ensureOperation(ctx, operation.ID); err != nil {
@@ -188,10 +188,10 @@ func (s *Store) Register(ctx context.Context, operation Operation, plan reconcil
 // directory, and refuses at the retained-operation bound for the plan the
 // operation will register exactly as that registration does.
 func (s *Store) Claim(ctx context.Context, id string, plan reconciliation.Plan) error {
-	return s.ClaimAdding(ctx, id, plan, "")
+	return s.ClaimAdding(ctx, id, plan, "", "")
 }
 
-func (s *Store) ClaimAdding(ctx context.Context, id string, plan reconciliation.Plan, predecessor string) error {
+func (s *Store) ClaimAdding(ctx context.Context, id string, plan reconciliation.Plan, predecessor, restores string) error {
 	if !reconciliation.ValidOperationID(id) {
 		return defectError("lifecycle operation identity is invalid")
 	}
@@ -205,7 +205,7 @@ func (s *Store) ClaimAdding(ctx context.Context, id string, plan reconciliation.
 	if slices.Contains(claimed, id) {
 		return defectError("the lifecycle operation identity already has a directory")
 	}
-	if err := s.admit(ctx, id, plan, predecessor, 0); err != nil {
+	if err := s.admit(ctx, id, plan, predecessor, restores, 0); err != nil {
 		return err
 	}
 	return s.ensureOperation(ctx, id)
@@ -254,14 +254,14 @@ func admitOperations(retained int, plan reconciliation.Plan) error {
 // directory a claim created for id is what its registration fills, so it is
 // left out of what the area holds. registration is what the registration
 // writes, which a claim does not know and an apply does not need.
-func (s *Store) admit(ctx context.Context, id string, plan reconciliation.Plan, predecessor string, registration int) error {
+func (s *Store) admit(ctx context.Context, id string, plan reconciliation.Plan, predecessor, restores string, registration int) error {
 	held, size, err := s.held(ctx, "", id)
 	if err != nil {
 		return err
 	}
 	entries := AdmissionEntries(plan)
 	if predecessor != "" {
-		removal, err := s.lineageRemoval(ctx, id, predecessor, plan)
+		removal, err := s.lineageRemoval(ctx, id, predecessor, restores, plan)
 		if err != nil {
 			return err
 		}
@@ -392,7 +392,7 @@ func (s *Store) removalReserve(ctx context.Context, operation Operation, plan re
 	if kept, read := s.reserves[operation.ID]; read {
 		return kept.entries, kept.bytes, nil
 	}
-	removal, err := s.lineageRemoval(ctx, operation.ID, operation.Predecessor, plan)
+	removal, err := s.lineageRemoval(ctx, operation.ID, operation.Predecessor, operation.Restores, plan)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -415,7 +415,7 @@ func (s *Store) removalReserve(ctx context.Context, operation Operation, plan re
 	return kept.entries, kept.bytes, nil
 }
 
-func (s *Store) lineageRemoval(ctx context.Context, own, predecessor string, plan reconciliation.Plan) (reconciliation.Plan, error) {
+func (s *Store) lineageRemoval(ctx context.Context, own, predecessor, restores string, plan reconciliation.Plan) (reconciliation.Plan, error) {
 	if predecessor == "" {
 		return plan.Inverse()
 	}
@@ -426,6 +426,13 @@ func (s *Store) lineageRemoval(ctx context.Context, own, predecessor string, pla
 			return reconciliation.Plan{}, recordError("the applies this operation adds to name one another in a cycle or exceed the operations a context retains")
 		}
 		seen[id] = true
+		if restores != "" {
+			restored, err := s.restoredMember(ctx, restores, id)
+			if err != nil {
+				return reconciliation.Plan{}, err
+			}
+			members = append(members, restored)
+		}
 		predecessor, _, err := s.readOperation(ctx, id)
 		if err != nil {
 			return reconciliation.Plan{}, err
@@ -438,7 +445,7 @@ func (s *Store) lineageRemoval(ctx context.Context, own, predecessor string, pla
 			return reconciliation.Plan{}, recordError("the operation this apply adds to is no apply")
 		}
 		members = append(members, reconciliation.Member{Operation: id, Plan: earlier})
-		id = predecessor.Predecessor
+		id, restores = predecessor.Predecessor, predecessor.Restores
 	}
 	slices.Reverse(members)
 	lineage, err := reconciliation.LineageOf(members...)
@@ -446,6 +453,17 @@ func (s *Store) lineageRemoval(ctx context.Context, own, predecessor string, pla
 		return reconciliation.Plan{}, err
 	}
 	return lineage.Inverse()
+}
+
+func (s *Store) restoredMember(ctx context.Context, id, predecessor string) (reconciliation.Member, error) {
+	restored, _, err := s.readOperation(ctx, id)
+	if err != nil {
+		return reconciliation.Member{}, err
+	}
+	if restored.Stage == nil || restored.State != reconciliation.OperationDone || restored.Source != predecessor {
+		return reconciliation.Member{}, recordError("the operation a restoring apply restores is no completed staged destroy of its predecessor")
+	}
+	return reconciliation.Member{Operation: id, Plan: reconciliation.Plan{Verb: reconciliation.Destroy}, TakenBack: slices.Clone(restored.Stage.TakenBack)}, nil
 }
 
 // held counts the entries beneath target as the area's entry bound counts

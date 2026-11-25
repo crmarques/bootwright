@@ -18,6 +18,7 @@ func (s Service) automaticPreparation(ctx context.Context, name string, selectio
 	}
 	var scope *reconciliation.PreparationScope
 	var outside []string
+	var restoring string
 	err := s.workspace.ReadLifecycle(ctx, name, func(view View) error {
 		store := s.store(view)
 		index, err := store.Index(ctx)
@@ -30,7 +31,7 @@ func (s Service) automaticPreparation(ctx context.Context, name string, selectio
 				return err
 			}
 			if trimmed(operation) {
-				return refuseTrimmed(name, operation, false)
+				restoring = operation.ID
 			}
 			if operation.State != reconciliation.OperationDone {
 				frozen, err := store.ReadPlan(ctx, operation.ID)
@@ -83,6 +84,11 @@ func (s Service) automaticPreparation(ctx context.Context, name string, selectio
 	})
 	if err != nil || scope == nil {
 		return nil, false, err
+	}
+	if restoring != "" {
+		return nil, false, prepareRefused.Fail(
+			"the staged destroy "+restoring+" trimmed the context, and a restoring apply runs no automatic preparation, which these Machines need: "+strings.Join(scope.Targets, ", "),
+			"take back what the context keeps with "+contextCommand(name, string(reconciliation.Destroy))+", then apply again")
 	}
 	if len(outside) != 0 {
 		return nil, false, applyTargetBeforePreparation.Fail(

@@ -21,6 +21,9 @@ func (s Service) proveBindings(ctx context.Context, name string, decided operati
 	if !decided.fresh || decided.verb != reconciliation.Apply {
 		return nil
 	}
+	if err := s.proveRestoredBinding(name, decided, material); err != nil {
+		return err
+	}
 	for _, block := range decided.plan.Blocks {
 		capability, found := s.capabilities.Resolve(block.Kind, block.Implementation)
 		if !found {

@@ -25,7 +25,7 @@ func stagedDestroy(t *testing.T, h *harness, floor reconciliation.Stage) *Operat
 	t.Helper()
 	result, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, Floor: string(floor), SkipConfirmation: true})
 	if err != nil {
-		t.Fatalf("destroy --stage %s: %v", floor, err)
+		t.Fatalf("destroy --stage %s: %+v", floor, diagnostics.Of(err))
 	}
 	return result
 }
@@ -68,8 +68,7 @@ func trimmedEvidence(t *testing.T) []byte {
 
 // A staged destroy from the clusters stage takes back the cluster step and
 // keeps what lies below it: the context rests trimmed, keeping every binding,
-// its evidence retained and no binding released. An apply over it refuses, the
-// same floor settles, and a destroy without --stage takes back what it kept
+// its evidence retained and no binding released. The same floor settles, and a destroy without --stage takes back what it kept
 // and ends pristine.
 func TestAStagedDestroyTrimsTheContextAndAWholeDestroyFinishesIt(t *testing.T) {
 	t.Parallel()
@@ -77,7 +76,7 @@ func TestAStagedDestroyTrimsTheContextAndAWholeDestroyFinishesIt(t *testing.T) {
 	h := newPlannedHarness(t, chainedDefinitions())
 	applied := completeApply(t, h)
 	result := stagedDestroy(t, h, reconciliation.StageClusters)
-	if result.Receipt.Verb != "destroy" || result.Receipt.State != "done" || result.Receipt.Next != "none" {
+	if result.Receipt.Verb != "destroy" || result.Receipt.State != "done" || result.Receipt.Next != "apply" {
 		t.Fatalf("the staged destroy's receipt reads %+v", result.Receipt)
 	}
 	removal, plan := currentRecord(t, h)
@@ -96,9 +95,6 @@ func TestAStagedDestroyTrimsTheContextAndAWholeDestroyFinishesIt(t *testing.T) {
 	}
 	if destroyed := h.capability.destroys; !slices.Equal(destroyed, []string{"charlie"}) {
 		t.Fatalf("the staged destroy removed %v", destroyed)
-	}
-	if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); firstCode(err) != applyContextTrimmed.Code {
-		t.Fatalf("an apply over the trimmed context returned %v", err)
 	}
 	settled := stagedDestroy(t, h, reconciliation.StageClusters)
 	if !settled.Settled || len(h.binder.released) != 0 {

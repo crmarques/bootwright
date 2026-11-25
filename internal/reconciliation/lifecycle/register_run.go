@@ -53,7 +53,7 @@ func (s Service) register(ctx context.Context, tx Transaction, store OperationSt
 		return fail(err)
 	}
 	closure := located.closure
-	if decided.predecessor == "" || decided.reserveAddition {
+	if decided.predecessor == "" || decided.reserveAddition || decided.restores != "" {
 		if err := s.reserve(ctx, tx, decided, material); err != nil {
 			return fail(err)
 		}
@@ -73,7 +73,7 @@ func (s Service) register(ctx context.Context, tx Transaction, store OperationSt
 		InputDigest: inputDigest(tx), PlanDigest: digest, AutomationDigest: s.automation.CatalogDigest(),
 		Executable: operationstore.Executable{Version: s.options.Executable.Version, Commit: s.options.Executable.Commit},
 		Closure:    &closure, Contracts: contracts,
-		Source: decided.source, DeferredSourceProofs: decided.deferredSourceProofs, Predecessor: decided.predecessor, Stage: decided.stage, Bindings: bindings, State: reconciliation.OperationRunning,
+		Source: decided.source, DeferredSourceProofs: decided.deferredSourceProofs, Predecessor: decided.predecessor, Restores: decided.restores, Stage: decided.stage, Bindings: bindings, State: reconciliation.OperationRunning,
 		Created: stamp, Updated: stamp,
 	}
 	if decided.verb == reconciliation.Destroy && decided.basis.record.Verb == reconciliation.Destroy &&

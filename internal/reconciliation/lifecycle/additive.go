@@ -300,7 +300,7 @@ func (s Service) custodyProved(ctx context.Context, view View, chain lineage, ad
 		if len(references) == 0 {
 			continue
 		}
-		lend, release, err := s.producedLender(block, chain.definitions(), false, s.producedInContext(view.Identity().Name))
+		lend, release, err := s.producedLender(block, chain.definitions(), nil, s.producedInContext(view.Identity().Name))
 		if err != nil {
 			return refusal(applyNotAnAddition.Fail("the block "+block.ID+" cannot be added: "+firstMessage(err), s.changeRemedy(view)))
 		}

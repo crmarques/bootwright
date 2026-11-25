@@ -159,7 +159,13 @@ var (
 		Meaning: "an unfinished destroy froze another floor, or none, than the command names, so nothing was registered", Remedy: "finish it with the command the message names, then repeat"}
 	applyContextTrimmed = diagnostics.Stop{Code: "apply.context-trimmed", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryOtherVerb,
-		Meaning: "a staged destroy took back part of the context, and no apply restores it yet", Remedy: "take back what the context keeps with destroy, then apply again"}
+		Meaning: "a staged destroy trimmed the context, and the input changed since", Remedy: "destroy, then apply the changed input"}
+	applyKeptBlockChanged = diagnostics.Stop{Code: "apply.kept-block-changed", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseBuild, Recovery: diagnostics.RecoveryOtherVerb,
+		Meaning: "this build would plan a kept step of a trimmed context otherwise", Remedy: "run the destroy the message names, then apply"}
+	applyRestoreUnbound = diagnostics.Stop{Code: "apply.restore-unbound", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryOtherVerb,
+		Meaning: "a restore's binding pins no version of a Secret an added step names", Remedy: "destroy, then apply"}
 	applyTargetBeforePreparation = diagnostics.Stop{Code: "apply.target-before-preparation", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryOtherVerb,
 		Meaning: "a scoped apply cannot freeze its installation plan before inventory outside its targets exists", Remedy: "complete the named machine inventories and review the scoped apply again"}
@@ -331,7 +337,7 @@ var stops = []diagnostics.Stop{engineRecordsFull, engineRecordsReadOnly, engineR
 	planInputUncompilable, planCapabilityMissing, planCapabilityDefect, planHostKeyUnbound, planEnvironmentInvalid,
 	engineUnindexedRecords, engineRequestDefect, engineOtherBuild, destroyInverseMoved, destroyInverseUnstated, enginePlanMoved, engineInputMoved, engineBindingLost, authorizeUnneeded,
 	authorizeMissing, authorizeStale, authorizeRebindInvalid, destroyStageSelected,
-	destroyStageBelowFloor, destroyStageKeepsUnfinished, destroyStageKeepsHost, destroyStageChanged, applyContextTrimmed, applyUntilBeforePreparation, applyTargetBeforePreparation,
+	destroyStageBelowFloor, destroyStageKeepsUnfinished, destroyStageKeepsHost, destroyStageChanged, applyContextTrimmed, applyKeptBlockChanged, applyRestoreUnbound, applyUntilBeforePreparation, applyTargetBeforePreparation,
 	engineRecordsDamaged, applyProducedInputMissing, engineRecaptureMismatch, engineResolvedUnperformed, engineResolvedPartial, destroyPostconditionUnknown,
 	prepareRefused, prepareUnsupported,
 	engineBorrowedSSH, engineConfirmationRequired, engineInputInvalid, engineCredentialMoved, engineFinalizationIncomplete,

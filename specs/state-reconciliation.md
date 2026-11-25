@@ -235,6 +235,42 @@ Fresh apply planning takes prerequisite evidence from the current apply
 lineage. A completed destroy's source lineage remains available to removal
 and historical comparison.
 
+### Restoring apply
+
+An `apply` over a trimmed context is a restoring apply, the fifth scenario
+(D288). It registers a new apply whose `predecessor` is the staged destroy's
+source and whose `restores` names that staged destroy. It plans the whole
+selected input with this build, planning reading the evidence of what the
+context owns, and registers only the steps the context does not own, each
+edge into an owned step frozen as a `prerequisite`.
+
+- **Admission.** The input is the one the kept steps froze; a changed one
+  refuses `apply.context-trimmed`, naming the whole destroy
+  ([B1859](milestones/m1.md#b1859)). Every owned step is in the fresh plan
+  and compares the same, or `apply.kept-block-changed` names it and the floor
+  whose staged destroy takes it back, or the whole destroy when none does.
+  The fold admits each added step only where a staged destroy took it back or
+  no member started it. The owned members' contracts are re-proved under this
+  build, and an added step whose contract differs from one an owned member
+  froze for its implementation refuses `engine.other-build`. Each produced
+  input an added step borrows from an owned producer needs a proved custody
+  entry; an added producer produces it in the run.
+- **Registration.** It reserves the whole planned set, which clears the
+  releasing mark a gone object's claim kept, and proves the host binding as
+  an additive apply does. It binds nothing: it reopens the binding the staged
+  destroy holds, the lineage's own unless a rebind replaced it, and records
+  it as its own, so its continuation and a later removal reopen it, and
+  `--authorize rebind=` admits an access credential an added step presents.
+  A Secret that binding does not pin refuses `apply.restore-unbound`. While
+  trimmed, the holds keep every Secret a lineage binding pins.
+- **Identity.** A re-created step takes the restoring apply's identity, its
+  attempt records and ownership marks, as an added block does; a kept step
+  keeps its creator's.
+- **After.** It continues, settles and is taken back as any apply of a
+  lineage: one `destroy` removes every step the context owns, and
+  `destroy --stage` also takes back what the lineage never started. Its
+  preview reads `restores what operation <id> took back`.
+
 ## Context mutation evidence
 
 Reconciliation owns a closed version-1 mutation record initialized with
@@ -263,9 +299,9 @@ directories are exactly those it listed right after its own claim, because
 evidence bytes are no token: a release that lowered them and a later claim that
 raised them again leave the same bytes, and only that claim's directory tells
 the two apart. A directory is reclaimed, below, only while the evidence reads
-pristine or once a registration has moved the index, which refuses the apply
-on its own, and every raise over no operation or a completed destroy claims
-first, so the claim that raised the evidence again stays listed while that
+pristine or trimmed or once a registration has moved the index, which refuses
+the apply on its own, and every raise over no operation, a completed destroy
+or a trimmed context claims first, so the claim that raised the evidence again stays listed while that
 evidence stands. The directories themselves are proved rather than their
 number, because a reclaim of an older claim beside a newer one leaves the same
 number. The claim precedes the evidence so that no running evidence, even from
@@ -336,7 +372,10 @@ context whose claims that hold nothing fill that bound, where every fresh
 apply refuses before it raises anything. A directory holding
 anything else is kept, and a reclaim that fails is housekeeping: it refuses
 nothing and leaves the rest for the next pristine publication, settling
-destroy or registration.
+destroy or registration. A trimmed context's evidence, `{none, retained}`,
+reads as pristine reads here: a restoration of it, a
+[staged destroy](#staged-destroy)'s completion and a destroy that settles over
+it reclaim the same way, so a restore stopped after its claim leaves none.
 
 The guard allows update only without pending, failed or unknown operations;
 recreation/final deletion requires `none` operation and `none` ownership.
@@ -631,8 +670,9 @@ sends the operator back to `status`, which needs the same unreadable record.
 | destroy running | continue that exact destroy, or, under a relaxation its frozen plan does not hold, start a fresh destroy of what it has not removed, which resolves every unproved block first |
 | destroy paused | continue that exact destroy, or, under a relaxation its frozen plan does not hold, start a fresh destroy of what it has not removed, which resolves every unproved block first |
 | destroy failed | start a fresh destroy of what it has not removed |
-| staged destroy done (trimmed) | `destroy` starts a fresh destroy of what the context still owns, which replaces the staged destroy; `destroy --stage` at the same or a later stage settles without effect, and at an earlier one starts a fresh staged destroy of what the context still owns, which replaces it; `apply` refuses; `context update` is admitted, since the context guard reads `{none, retained}` as no mutation |
+| staged destroy done (trimmed) | `apply` of the input its kept steps froze starts a [restoring apply](#restoring-apply), and of a changed input refuses; `destroy` starts a fresh destroy of what the context still owns, which replaces the staged destroy; `destroy --stage` at the same or a later stage settles without effect, and at an earlier one starts a fresh staged destroy of what the context still owns, which replaces it; `context update` is admitted, since the context guard reads `{none, retained}` as no mutation |
 | staged destroy running, paused, unknown or failed | the row of that destroy's state, at the stage it froze: `destroy --stage` at that stage continues it, or replaces a failed one with a fresh staged destroy of what it has not removed; `destroy` without `--stage` or at another stage refuses |
+| restoring apply running, paused, unknown or failed | the row of that apply's state: `apply` continues it; `destroy` starts a fresh destroy of what the context owns, the steps it started and every step it keeps; `destroy --stage` starts a fresh staged destroy of what the context owns, which also takes back the steps it never started |
 | destroy unknown | continue it, resolving every unproved block first and then retrying what resolution leaves `failed` (D146), or, under a relaxation its frozen plan does not hold, start a fresh destroy of what it has not removed, which resolves them first |
 
 For an apply that names a predecessor, every fresh destroy these rows start also takes back the whole frozen plan of each predecessor ([removal over a lineage](#removal-over-a-lineage)).
@@ -814,7 +854,9 @@ states counts only beside a completion.
 
 One pure fold, `reconciliation.Fold`, answers what a context's operations own.
 It reads operation records oldest first, the apply lineage by `predecessor`,
-then a removal over it, each removal with the effect each block's settling
+with before each restoring apply the staged destroy it `restores` as its
+frozen taken-back set, each step `done` and `absent` even where its removal
+retained residue, which no removal acts on, then a removal over it, each removal with the effect each block's settling
 record names (its last resolution, else its last attempt; an apply's effect
 moves no row), and answers for each step:
 
@@ -830,9 +872,10 @@ The fold's rules:
 - A step is taken back when a removal holds it `done` and `absent`. A taken
   back step routes to no apply: it has no owner, prerequisite or evidence.
 - An apply's record of a step another member holds is admitted only over a
-  take-back. Any other repeat is damaged records: the first holder keeps the
-  step and the merged plan refuses. No fold yet holds a removal before an
-  apply, so every repeat is damage.
+  take-back, a [restoring apply](#restoring-apply)'s included: its staged
+  destroy took back every step the lineage never started. Any other repeat is
+  damaged records: the first holder keeps the step and the merged plan
+  refuses.
 - A prerequisite is held, and not taken back, by an earlier member.
 - A removal holds `done` what it took back before its own plan: a staged
   destroy's frozen taken-back set, or else what the apply it removes covered,
@@ -844,7 +887,8 @@ The fold's rules:
 - What a removal covers is every step of a completed apply, any other apply's
   started steps, and a removal's steps other than `done` ones.
 - The merged plan holds every step not taken back, as its incarnation froze
-  it, each prerequisite folded into a dependency.
+  it, each prerequisite folded into a dependency. What a context owns, and a
+  removal of its lineage takes back, is the merged plan of what it covers.
 
 | Record | Block | Condition | Life after |
 | --- | --- | --- | --- |
@@ -955,9 +999,11 @@ that block, and freezes the reference, never the bytes. Each apply attempt and
 observation of the consumer receives the custody entry as an operation-scoped
 material file under the bounds, clearing and logging rules of a declared
 Secret's, read from custody at that attempt; an entry marked unproved is lent
-only to a removal, and a missing one refuses with `apply.produced-input-missing` naming the
-producer. A removal lends the entry while custody holds it, which is until the
-removal completes. A consumer reaches the cluster only at the server the entry
+only to a removal that takes back its producer, and a missing one refuses with `apply.produced-input-missing` naming the
+producer. A removal, its quiescence probe and its resolutions find a producer
+among the blocks it takes back and, if staged, those the context keeps outside
+its frozen taken-back set, over any lineage, and lend the entry while custody
+holds it, which is until the removal completes. A consumer reaches the cluster only at the server the entry
 names, verifies it against the entry's authority, and reads a foreign or
 silent answer as `unknown`. Because a consumer reads the entry again at each
 attempt, a producer's recapture keeps the identity of the effect it proved,
@@ -2123,7 +2169,8 @@ the removal, as a lost frozen plan does.
 
 The removal reopens one Secret binding: its own if an
 [access-credential rebind](#access-credential-rebind) replaced it, otherwise
-the first binding of the root apply, never the head's. A rebind may name only
+the one the newest [restoring apply](#restoring-apply) records, else the first
+binding of the root apply, never the head's. A rebind may name only
 Secrets that binding holds. Its completion releases the bindings of every
 apply of the lineage.
 
@@ -2141,8 +2188,9 @@ set, its own scope with what every staged destroy it `replaces` took back.
   the scope reaches a step below the floor, naming the lower floor that takes it
   back, or the whole destroy at an infrastructure service;
   `destroy.stage-keeps-unfinished` when a kept step is not `done`; and
-  `destroy.stage-keeps-host` when a scoped step is bound, by its dependencies,
-  hosts or nodes, to a Machine the scope keeps: any Machine a step of this
+  `destroy.stage-keeps-host` when a scoped step, or one the lineage never
+  started, which it also takes back, is bound, by its dependencies, hosts or
+  nodes, to a Machine the scope keeps: any Machine a step of this
   context names, a substrate machine or the hardware or enrollment step of a
   physical, provided or bootstrap Machine, whose deletion step
   (`lifecycle.MachineDeletion`) is outside the scope. A physical Machine is
@@ -2156,12 +2204,15 @@ set, its own scope with what every staged destroy it `replaces` took back.
   publishes `{none, retained}`, the projection of a done staged destroy. A
   shared claim loses the keys only taken-back steps plan
   (`lifecycle.SharedClaimer`) and goes once no kept step plans it; a claim of
-  an object only taken-back steps name keeps its `releasing` mark, since that
-  object is gone, and every other claim loses it. Its finalization repeats
+  an object only taken-back steps name holds the `releasing` mark, since that
+  object is gone, even where a restore stopped before its index cleared it,
+  and every other claim loses it. Its finalization repeats
   those writes and is complete once that evidence stands and only such claims
   hold a mark.
-- **Afterwards** `apply`, `machine discover`, `machine enroll` and automatic
-  preparation refuse (`apply.context-trimmed`, `prepare.refused`). A `destroy`
+- **Afterwards** `apply` starts a [restoring apply](#restoring-apply), which
+  runs no automatic preparation and refuses `prepare.refused` where one would
+  run; `machine discover` and `machine enroll` refuse that stop too, naming
+  the restore. A `destroy`
   without `--stage` removes what the context still owns, replacing the staged
   destroy, and ends pristine; a lower floor replaces it with a staged destroy
   of what is left. Either reopens the binding the latest staged destroy holds,
@@ -2171,7 +2222,9 @@ set, its own scope with what every staged destroy it `replaces` took back.
   refuse `destroy.stage-changed`.
 - Every `destroy` command a remedy, receipt or status names over a staged
   destroy carries `--stage <floor>`. A done staged destroy's receipt names
-  next `none`. The plan and operation results carry `scope` (floor, removed
+  next `apply`, and `status` offers the restore beside the whole destroy,
+  or, under an input its kept steps did not freeze, `destroy` and only the
+  whole destroy, which the preview then chooses. The plan and operation results carry `scope` (floor, removed
   and kept steps, residue, kept power targets) and status carries `stage`.
 
 Not yet met: a `destroy` without `--stage`, or a lower floor, over an
@@ -2844,7 +2897,13 @@ starting, and the engine waits for in-flight readings before releasing the
 context lease. Refusal details list the targets in their planned check order
 regardless of completion order.
 
-A staged or additive apply checks its managed fleet. A destroy derives its
+A staged or additive apply checks its managed fleet. A
+[restoring apply](#restoring-apply) checks the Machines it realizes and each
+kept Machine an added step names by its dependencies, hosts or nodes; any
+other kept Machine reads in either state, as a continuation of its lineage
+reads it. A staged destroy refuses a step it takes back, started or not, that
+is bound to a Machine it keeps, so only a step new to the lineage acts on a
+kept one (D288, `TestARestoreProvesOffAKeptMachineAnAddedStepActsOn`). A destroy derives its
 targets from the frozen work it takes back. Destroy over an incomplete apply
 starts a new flow. Continuing the same registered flow, including replacing
 a failed destroy over its remaining work, proceeds from the durable records

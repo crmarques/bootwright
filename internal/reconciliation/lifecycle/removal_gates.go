@@ -318,7 +318,7 @@ func (s Service) reportResolution(ctx context.Context, event ProgressEvent) {
 // discovering the next obstacle each time they repeat the command. A probe
 // that cannot read its target reports live, because an environment that cannot
 // prove it is idle is never assumed to be.
-func (s Service) proveQuiescent(ctx context.Context, store OperationStore, contextName string, floor reconciliation.Stage, approved approved, plan reconciliation.Plan, phases removalPhases, material map[string]secrets.Material, held lineage, skip map[string]bool) error {
+func (s Service) proveQuiescent(ctx context.Context, store OperationStore, contextName string, floor reconciliation.Stage, stage *operationstore.Stage, approved approved, plan reconciliation.Plan, phases removalPhases, material map[string]secrets.Material, held lineage, skip map[string]bool) error {
 	var live, stops, remedies []string
 	generic := false
 	blocks := slices.DeleteFunc(slices.Clone(plan.Blocks), func(block reconciliation.Block) bool { return skip[block.ID] })
@@ -339,7 +339,7 @@ func (s Service) proveQuiescent(ctx context.Context, store OperationStore, conte
 				})
 			},
 		}, blocks, func(ctx context.Context, block reconciliation.Block) (Quiescence, error) {
-			return s.probeQuiescent(ctx, store, contextName, plan, phases, material, held, launch, block)
+			return s.probeQuiescent(ctx, store, contextName, plan, stage, phases, material, held, launch, block)
 		})
 		if err := fanout.FirstError(outcomes); err != nil {
 			return err
@@ -388,7 +388,7 @@ func (s Service) proveQuiescent(ctx context.Context, store OperationStore, conte
 	return destroyInUse.Fail("this removal would take back state that is still in use: "+strings.Join(live, ", "), remediation)
 }
 
-func (s Service) probeQuiescent(ctx context.Context, store OperationStore, contextName string, plan reconciliation.Plan, phases removalPhases, material map[string]secrets.Material, held lineage, launch prerequisites.PythonLaunch, block reconciliation.Block) (Quiescence, error) {
+func (s Service) probeQuiescent(ctx context.Context, store OperationStore, contextName string, plan reconciliation.Plan, stage *operationstore.Stage, phases removalPhases, material map[string]secrets.Material, held lineage, launch prerequisites.PythonLaunch, block reconciliation.Block) (Quiescence, error) {
 	capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
 	if !ok {
 		return Quiescence{}, engineOtherBuild.Fail(
@@ -403,7 +403,8 @@ func (s Service) probeQuiescent(ctx context.Context, store OperationStore, conte
 	if err != nil {
 		return Quiescence{}, err
 	}
-	lend, release, err := s.producedLender(block, held.lending(plan), true, s.producedInContext(contextName))
+	definitions, removing := held.removalLending(plan, stage)
+	lend, release, err := s.producedLender(block, definitions, removing, s.producedInContext(contextName))
 	if err != nil {
 		return Quiescence{}, err
 	}

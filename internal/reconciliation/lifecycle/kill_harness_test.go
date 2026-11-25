@@ -133,6 +133,9 @@ type killHost struct {
 	// are already stopped by the operator, so every durable boundary on both
 	// sides of the deferred stop proof can be killed in one invocation.
 	online map[string]bool
+	// claims names the artifact servers beside a that each plan claims, so a
+	// journey can hold the claim of an object a staged destroy takes back.
+	claims []string
 }
 
 func newKillHost(definitions []reconciliation.BlockDefinition) *killHost {
@@ -148,6 +151,7 @@ func (h *killHost) clone() *killHost {
 	return &killHost{
 		definitions: h.definitions, realized: maps.Clone(h.realized), effects: maps.Clone(h.effects), failures: maps.Clone(h.failures),
 		lost: maps.Clone(h.lost), partial: maps.Clone(h.partial), foreign: maps.Clone(h.foreign), silent: maps.Clone(h.silent), online: maps.Clone(h.online),
+		claims: h.claims,
 	}
 }
 
@@ -166,13 +170,15 @@ func (h *killHost) Plan(_ context.Context, input PlanInput) (CapabilityPlan, err
 	if input.Preparation != nil {
 		definitions = slices.DeleteFunc(definitions, func(d reconciliation.BlockDefinition) bool { return d.ID == "installation" })
 	}
-	return CapabilityPlan{
-		Definitions: definitions,
-		Reservations: []infrastructureservices.HostReservation{{
-			Context: testContextName, Kind: "artifact-server", Service: "a", Keys: []string{"socket:192.0.2.1:8443"},
-		}},
-		Secrets: []string{"artifact-server-tls"},
-	}, nil
+	reservations := []infrastructureservices.HostReservation{{
+		Context: testContextName, Kind: "artifact-server", Service: "a", Keys: []string{"socket:192.0.2.1:8443"},
+	}}
+	for index, service := range h.claims {
+		reservations = append(reservations, infrastructureservices.HostReservation{
+			Context: testContextName, Kind: "artifact-server", Service: service, Keys: []string{fmt.Sprintf("socket:192.0.2.%d:8443", index+2)},
+		})
+	}
+	return CapabilityPlan{Definitions: definitions, Reservations: reservations, Secrets: []string{"artifact-server-tls"}}, nil
 }
 
 func (*killHost) SecretReferences(reconciliation.Block) ([]string, error) {
@@ -855,6 +861,11 @@ const killClaimed = "publish secret binding#1"
 // there leaves a claim that holds nothing under pristine evidence.
 const killUnraised = "publish evidence#1"
 
+// killRestoreReserved is the first write of a restore after it reserved the
+// whole planned set, which clears the mark a gone object's claim held, and
+// before its index names it.
+const killRestoreReserved = "write <op>/plan.json#1"
+
 // killReclaim is every write of a reclaim of one claim, children before the
 // claim (specs/state-reconciliation.md, Context mutation evidence).
 func killReclaim() []string {
@@ -984,7 +995,21 @@ func killJourneys() []killJourney {
 			t.Fatal("the staged destroy a replacement starts from did not fail b")
 		}
 	}
+	claimedRestoreKilled := func(ctx context.Context, t *testing.T, rig *killRig) {
+		t.Helper()
+		rig.host.claims = []string{"b"}
+		trimmedAt(reconciliation.StageClusters)(ctx, t, rig)
+		killApplyAt(ctx, t, rig, killRestoreReserved)
+	}
+	restored := func(ctx context.Context, t *testing.T, rig *killRig) {
+		t.Helper()
+		trimmedAt(reconciliation.StageClusters)(ctx, t, rig)
+		applied(ctx, t, rig)
+	}
 	return []killJourney{
+		{name: "restore", bound: killBoundFreshApply, start: trimmedAt(reconciliation.StageClusters), run: reconciliation.Apply, retry: reconciliation.Apply},
+		{name: "restore-then-whole", bound: killBoundDestroy, start: restored, run: reconciliation.Destroy, retry: reconciliation.Destroy},
+		{name: "killed-restore-lower-floor", bound: killBoundDestroy, start: claimedRestoreKilled, run: reconciliation.Destroy, retry: reconciliation.Destroy, floor: reconciliation.StageSubstrates},
 		{name: "staged", bound: killBoundDestroy, start: stagedPlan, run: reconciliation.Destroy, retry: reconciliation.Destroy, floor: reconciliation.StageClusters},
 		{name: "staged-replacement", bound: killBoundReplacement, start: stagedFailed, run: reconciliation.Destroy, retry: reconciliation.Destroy, floor: reconciliation.StageClusters},
 		{name: "staged-lower-floor", bound: killBoundDestroy, start: trimmedAt(reconciliation.StageClusters), run: reconciliation.Destroy, retry: reconciliation.Destroy, floor: reconciliation.StageSubstrates},
@@ -1228,5 +1253,54 @@ func killCheckJourney(t *testing.T, journey killJourney, outcomes []killOutcome,
 	}
 	if converging && deepest < journey.bound {
 		t.Errorf("no kill point needs all %d %s invocations of the bound, only %d", journey.bound, journey.retry, deepest)
+	}
+}
+
+// L5: a restore killed after it reserved the whole planned set and before its
+// index names it leaves the claim of an object its staged destroy took back
+// unmarked; a lower floor's staged destroy then marks it again, so no
+// exclusive claim of a gone object survives without its releasing mark.
+func TestALowerFloorOverAKilledRestoreMarksTheGoneObjectsClaim(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	index := slices.IndexFunc(killJourneys(), func(journey killJourney) bool { return journey.name == "killed-restore-lower-floor" })
+	journey := killJourneys()[index]
+	rig := journey.begin(ctx, t)
+	marked := func() map[string]bool {
+		held := map[string]bool{}
+		for _, reservation := range rig.harness.workspace.reservations {
+			held[reservation.Service] = reservation.Releasing
+		}
+		return held
+	}
+	if held := marked(); held["b"] || held["a"] {
+		t.Fatalf("the killed restore left the claims %+v, want b's mark cleared", rig.harness.workspace.reservations)
+	}
+	if err := killInvokeAt(ctx, rig.harness.service, journey.run, journey.floor); err != nil {
+		t.Fatalf("the lower floor over the killed restore: %v", err)
+	}
+	if held := marked(); !held["b"] || held["a"] {
+		t.Fatalf("the lower floor left the claims %+v, want only the gone object b's marked", rig.harness.workspace.reservations)
+	}
+}
+
+// A restore stopped after its claim and before its running evidence landed
+// leaves a claim that holds nothing under the trimmed context's evidence; a
+// destroy that settles at the same floor reclaims it, as one over pristine
+// evidence does.
+func TestASettlingFloorReclaimsAStoppedRestoresClaim(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	index := slices.IndexFunc(killJourneys(), func(journey killJourney) bool { return journey.name == "staged-then-whole" })
+	rig := killJourneys()[index].begin(ctx, t)
+	killApplyAt(ctx, t, rig, killUnraised)
+	if w := rig.harness.workspace; killIdleClaims(w) != 1 || killRest(w) != "trimmed from clusters" {
+		t.Fatalf("the stopped restore left %d idle claims beside %s", killIdleClaims(w), killRest(w))
+	}
+	if err := killInvokeAt(ctx, rig.harness.service, reconciliation.Destroy, reconciliation.StageClusters); err != nil {
+		t.Fatal(err)
+	}
+	if w := rig.harness.workspace; killIdleClaims(w) != 0 || killRest(w) != "trimmed from clusters" {
+		t.Fatalf("the settling floor left %d idle claims beside %s", killIdleClaims(w), killRest(w))
 	}
 }

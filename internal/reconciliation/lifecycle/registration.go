@@ -126,7 +126,7 @@ func (s Service) protect(ctx context.Context, name string, decided operationPlan
 		if err != nil {
 			return err
 		}
-		if err := store.ClaimAdding(ctx, identity, decided.plan, decided.predecessor); err != nil {
+		if err := store.ClaimAdding(ctx, identity, decided.plan, decided.predecessor, decided.restores); err != nil {
 			claimed, listed := store.Claimed(recordingContext(ctx))
 			record.raised = listed != nil || slices.Contains(claimed, identity)
 			return atTheBound(ctx, tx, store, reconciliation.Apply, err)
@@ -301,20 +301,24 @@ func (s Service) restoreEvidence(ctx context.Context, name string, record *regis
 	})
 }
 
-// reclaim removes, once the evidence reads pristine and while the transaction
-// that published it still holds the lock, every claim that holds nothing. Such
-// a claim is a fresh apply that never registered, so without this each refused
-// retry would keep one toward the retained-operation bound until even a
-// removal could not register. Removing one only under pristine evidence, or
-// once a registration moved the index (publish), keeps a claim's directory a
-// proof: every raise over no operation or a completed removal claims first, so
-// the claim that raised the evidence again after a release stays listed while
-// that evidence stands, and an apply in flight still refuses on it.
+// reclaim removes, once the evidence reads pristine or trimmed and while the
+// transaction that published it still holds the lock, every claim that holds
+// nothing. Such a claim is an apply that never registered, so without this
+// each refused retry would keep one toward the retained-operation bound until
+// even a removal could not register. Removing one only under resting evidence,
+// or once a registration moved the index (publish), keeps a claim's directory
+// a proof: every raise over no operation, a completed removal or a trimmed
+// context claims first, so the claim that raised the evidence stays listed
+// while that evidence stands, and an apply in flight still refuses on it.
 // Reclaiming is housekeeping, so one that fails refuses nothing and leaves the
-// rest for the next pristine publication, settling destroy or registration.
+// rest for the next resting publication, settling destroy or registration.
 func reclaim(ctx context.Context, tx Transaction, store OperationStore) {
 	pristine, err := projection(reconciliation.Destroy, reconciliation.OperationDone)
-	if err != nil || !bytes.Equal(tx.Evidence(), pristine) {
+	if err != nil {
+		return
+	}
+	resting, err := reconciliation.Evidence{Operation: reconciliation.MutationNone, Ownership: reconciliation.OwnershipRetained}.Bytes()
+	if err != nil || !bytes.Equal(tx.Evidence(), pristine) && !bytes.Equal(tx.Evidence(), resting) {
 		return
 	}
 	_, _ = store.Reclaim(ctx)

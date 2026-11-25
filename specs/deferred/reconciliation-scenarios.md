@@ -14,7 +14,8 @@ exist; every other scenario described below does not.
 
 ## The admitted scenarios
 
-Decision D153 names the three scenarios `apply` admits and D211 adds a fourth.
+Decision D153 names the three scenarios `apply` admits, D211 adds a fourth and
+D288 a fifth.
 The contract states each one; the rows only point at the rule that owns it.
 
 | Scenario | Owning rule |
@@ -23,6 +24,7 @@ The contract states each one; the rows only point at the rule that owns it.
 | Partly realized: a running, failed, paused or unknown apply | [Continuation and removal](../state-reconciliation.md#continuation-and-removal), [dependency safety during recovery](../state-reconciliation.md#dependency-safety-during-recovery) and [attempts and unknown outcomes](../state-reconciliation.md#attempts-and-unknown-outcomes) |
 | Already realized: a completed apply under its unchanged input | [Lifecycle unit](../state-reconciliation.md#lifecycle-unit) and the `apply done` row of the [state machine](../state-reconciliation.md#state-machine) |
 | Add-on instances added to a cluster a completed apply installed | [Additive apply](../state-reconciliation.md#additive-apply) and the `apply done` row of the [state machine](../state-reconciliation.md#state-machine) |
+| What a staged destroy took back, restored over unchanged input | [Restoring apply](../state-reconciliation.md#restoring-apply) and the trimmed rows of the [state machine](../state-reconciliation.md#state-machine) |
 
 "Absent" and "done" are read from durable records, not from the host.
 [Comparing desired and real state](../state-reconciliation.md#comparing-desired-and-real-state)
@@ -65,11 +67,12 @@ one optional port.
   its record naming the completed apply as its `predecessor`. One destroy
   takes the whole lineage back
   ([removal over a lineage](../state-reconciliation.md#removal-over-a-lineage)).
-- **Guard.** `TestApplyAdmitsOnlyTheFourScenarios` in
+- **Guard.** `TestApplyAdmitsOnlyItsFiveScenarios` in
   `internal/reconciliation/lifecycle/transitions_spec_test.go` pins where each
   apply decision may appear: `fresh apply` only with no operation or a
-  completed destroy, `add` and `settle` only on `apply done`, `continue` only on a
-  running, failed, paused or unknown apply, and `finalize` only on a failed
+  completed destroy, `restore` only on a trimmed context, `add` and `settle` only
+  on `apply done`, `continue` only on a running, failed, paused or unknown apply,
+  and `finalize` only on a failed
   apply whose blocks are all `done`. A new scenario edits this test, the
   state-machine row, its `stateMachineRows` case and the code in one commit;
   `TestTransitionTablesMatchSpec` then holds the row and the code together.
@@ -104,7 +107,7 @@ cluster and its pools, and the operator adds one `CephPool`.
 4. **Code at the one branch.** The scenario extends the additive admission
    path in `decision.go` and `additive.go`: it admits an added object only
    when its capability implements `DeltaAdmitter`, and it edits
-   `TestApplyAdmitsOnlyTheFourScenarios`.
+   `TestApplyAdmitsOnlyItsFiveScenarios`.
 5. **Proof.** Before admitting, the slice requires `diff --observe` to read the
    pool's cluster blocks present on the host; records alone never prove the
    cluster is still the one the frozen plan realized.

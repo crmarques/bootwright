@@ -47,6 +47,7 @@ type operationPlan struct {
 	executionProof         executionProof
 	lineagePlan            reconciliation.Plan
 	predecessor            string
+	restores               string
 	takes                  []string
 	// basis is the durable state this transition was planned from. For a fresh
 	// removal it is the incomplete operation the removal takes the place of,
