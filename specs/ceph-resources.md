@@ -1453,8 +1453,10 @@ name, issuer URL and whether it binds a trust bundle, the authored
 and the derived `/custom_configs/0/content` to the provider's trust bundle
 Secret), and the management gateway's hosts, port, virtual IP, endpoint name,
 daemon count and whether it fronts Grafana. Its request digest moves only
-with those members. The block retires with its cluster's hosts; there is no
-per-block removal while they survive.
+with those members, never with whether the cluster's apply came before it:
+a CephSignOn added to a completed apply is a
+[sign-on addition](ceph.md#sign-on-addition). The block retires with its
+cluster's hosts; there is no per-block removal while they survive.
 
 ## CephNVMeoFSubsystem
 

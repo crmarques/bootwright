@@ -235,19 +235,6 @@ func signOnRequest(c api.Catalog, object api.Object, base Request, controller st
 	return r, nil
 }
 
-func signOnDelegated(c api.Catalog, cluster api.Object) ([]DelegatedService, error) {
-	var out []DelegatedService
-	for _, object := range cephcluster.ClusterSignOns(c, cluster.Name()) {
-		hosts, err := serviceHosts(cluster, object.Spec().Get("native"))
-		if err != nil {
-			return nil, err
-		}
-		slices.Sort(hosts)
-		out = append(out, DelegatedService{Name: SignOnUnitType, Hosts: hosts})
-	}
-	return out, nil
-}
-
 const (
 	signOnEnableImpact   = "Bootwright enables the dashboard's OAuth2 single sign-on; local sign-in returns only after bootwright cluster sign-on suspend"
 	signOnPortImpact     = "while sign-on is on, a manager's dashboard port 8443 accepts a forged token (an upstream defect); keep it reachable only from the management gateway hosts"

@@ -674,8 +674,13 @@ def validate_auxiliary(request):
     require(order == sorted(set(order)))
 
 
-def delegated_daemon(daemon, request):
-    """Tolerate a daemon another block executes only when its service is listed and it runs on one of that service's hosts."""
+SIGN_ON_SERVICE = "oauth2-proxy"
+
+
+def delegated_daemon(daemon, request, signed_on=frozenset()):
+    """Tolerate a daemon another block executes only when its service is listed and it runs on one of that service's hosts.
+    The cluster lists oauth2-proxy on every host whether or not a CephSignOn exists, so a sign-on added later moves no frozen
+    request; an oauth2-proxy daemon is then this context's only on a host its sign-on block's attempt record placed it on."""
     from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_observe
     delegated = {entry["name"]: entry["hosts"] for entry in request.get("delegated", [])}
     service = daemon.get("service_name")
@@ -686,6 +691,20 @@ def delegated_daemon(daemon, request):
     else:
         require(service.startswith(ceph_native_observe.DELEGATED_TYPES[kind] + "."), "foreign-service")
     require(daemon["hostname"] in delegated[service], "foreign-service")
+    require(service != SIGN_ON_SERVICE or daemon["hostname"] in signed_on, "foreign-service")
+
+
+def signed_on_hosts(record, scope):
+    """The hosts a sign-on block's unit attempt record placed oauth2-proxy on, under this cluster's bootstrap scope; none without one."""
+    if record is None:
+        return frozenset()
+    require(isinstance(record, dict) and set(record) == {"scope", "service"} and canonical(record["scope"]) == canonical(scope), "ownership")
+    service = record["service"]
+    placement = service.get("placement") if isinstance(service, dict) else None
+    require(isinstance(placement, dict) and service.get("service_type") == SIGN_ON_SERVICE, "ownership")
+    hosts = placement.get("hosts")
+    require(isinstance(hosts, list) and bool(hosts) and all(isinstance(host, str) and named(host) for host in hosts), "ownership")
+    return frozenset(hosts)
 
 
 def validate_scope(scope, *, delegated=False):
@@ -2803,7 +2822,7 @@ class Worker:
             unused, host_rule, counted, image_rule = DAEMON_TYPES[daemon["daemon_type"]]
             require(daemon.get("hostname") in wanted, "foreign-service")
             if host_rule == "delegated":
-                delegated_daemon(daemon, self.request)
+                self.tolerate_delegated(daemon)
             elif host_rule == "identity":
                 expected = expected_mons if daemon["daemon_type"] == "mon" else expected_mgrs
                 require(daemon_identity_host(daemon["daemon_type"], daemon.get("daemon_id"), expected) == daemon["hostname"], "foreign-service")
@@ -2990,6 +3009,13 @@ class Worker:
         named += ["unplaced@osd." + str(osd["id"]) for osd in self.unplaced]
         self.blocking = ([entry for entry in named if PENDING_OSD.fullmatch(entry) or UNPLACED_OSD.fullmatch(entry)] + self.blocking)[:16]
         return ready and not self.unplaced
+
+    def tolerate_delegated(self, daemon):
+        """A daemon another block executes; an oauth2-proxy one only where this cluster's sign-on block's attempt record placed it."""
+        signed_on = frozenset()
+        if daemon.get("service_name") == SIGN_ON_SERVICE:
+            signed_on = signed_on_hosts(self.markers.read("service-" + SIGN_ON_SERVICE + "-attempt.json"), self.recovery_scope())
+        delegated_daemon(daemon, self.request, signed_on)
 
     def observe_resource(self, evidence, ready):
         require(self.request["action"] == "cluster")

@@ -636,3 +636,86 @@ func TestAnAdditiveApplyAdmitsOnlyANewSecretAnAddedBlockNames(t *testing.T) {
 		})
 	}
 }
+
+func TestAnAdditiveApplyAdmitsACephSignOnWithTheProviderOnlyItNames(t *testing.T) {
+	t.Parallel()
+	f := newAdditiveFixture(t)
+	root := f.root(t)
+	ran := slices.Clone(f.capability.applies)
+	f.publish("rev-2", signOnOf("sso", "corp"), providerOf("corp", "https://idp.example.test"), secretObject(signOnSecret, "file:one"))
+	if result, err := apply(f.harness); err != nil || result.Receipt.State != "done" {
+		t.Fatalf("the added sign-on refused: %+v (%v)", result, diagnostics.Of(err))
+	}
+	head, plan := headPlan(t, f.harness)
+	if head.Predecessor != root.ID || !slices.Equal(blockIDs(plan), []string{"signon-sso"}) {
+		t.Fatalf("the head %+v plans %v", head, blockIDs(plan))
+	}
+	if block, _ := plan.Block("signon-sso"); !slices.Equal(block.Prerequisites, []string{"producer-a"}) || len(block.Dependencies) != 0 {
+		t.Fatalf("the added sign-on waits for %v and has prerequisites %v", block.Dependencies, block.Prerequisites)
+	}
+	if got := f.capability.applies[len(ran):]; !slices.Equal(got, []string{"signon-sso"}) {
+		t.Fatalf("the additive apply ran %v", got)
+	}
+	if !slices.Equal(f.binder.bound[len(f.binder.bound)-1:], []string{signOnSecret}) {
+		t.Fatalf("bound %v, want only the sign-on's Secret in the added binding", f.binder.bound)
+	}
+	if _, err := destroy(f.harness); err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	if got := f.capability.destroys; !slices.Equal(got, []string{"signon-sso", "producer-a"}) {
+		t.Fatalf("destroyed %v, want the sign-on before the cluster's blocks", got)
+	}
+	refused := map[string]struct {
+		initial, next []api.Object
+		fragments     []string
+	}{
+		"an added OIDCProvider no added sign-on names": {
+			next:      []api.Object{signOnOf("sso", "corp"), providerOf("corp", "https://idp.example.test"), providerOf("spare", "https://other.example.test")},
+			fragments: []string{"adds OIDCProvider/corp, OIDCProvider/spare", "CephSignOn/sso"},
+		},
+		"an added OIDCProvider alone": {
+			next:      []api.Object{providerOf("spare", "https://other.example.test")},
+			fragments: []string{"adds OIDCProvider/spare"},
+		},
+		"a changed OIDCProvider": {
+			initial:   []api.Object{providerOf("corp", "https://idp.example.test")},
+			next:      []api.Object{signOnOf("sso", "corp"), providerOf("corp", "https://moved.example.test")},
+			fragments: []string{"changes OIDCProvider/corp"},
+		},
+		"a sign-on beside another changed object": {
+			initial:   []api.Object{serverObject("s", "v1")},
+			next:      []api.Object{serverObject("s", "v2"), signOnOf("sso", "corp"), providerOf("corp", "https://idp.example.test")},
+			fragments: []string{"CephSignOn/sso", "changes ArtifactServer/s"},
+		},
+		"a removed sign-on beside an added one": {
+			initial:   []api.Object{signOnOf("old", "corp"), providerOf("corp", "https://idp.example.test")},
+			next:      []api.Object{signOnOf("new", "corp"), providerOf("corp", "https://idp.example.test")},
+			fragments: []string{"removes CephSignOn/old"},
+		},
+	}
+	for name, test := range refused {
+		t.Run(name, func(t *testing.T) {
+			f := newAdditiveFixture(t, test.initial...)
+			f.root(t)
+			ran := len(f.capability.applies)
+			f.publish("rev-2", test.next...)
+			f.refusedWith(t, test.fragments...)
+			if len(f.capability.applies) != ran {
+				t.Fatalf("a refused apply ran %v", f.capability.applies[ran:])
+			}
+		})
+	}
+}
+
+func TestAnAddedSignOnTheStorageCapabilityRefusesNamesItsReason(t *testing.T) {
+	t.Parallel()
+	f := newAdditiveFixture(t)
+	f.root(t)
+	f.capability.admitFault = testRefusal.Fail("the completed apply installed no management gateway of CephCluster cluster", "declare a mgmt-gateway service")
+	f.publish("rev-2", signOnOf("sso", "corp"), providerOf("corp", "https://idp.example.test"))
+	_, err := apply(f.harness)
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != testRefusal.Code || !strings.Contains(reported[0].Message, "no management gateway") {
+		t.Fatalf("the refused sign-on reported %+v (%v)", reported, err)
+	}
+}

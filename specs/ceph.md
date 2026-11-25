@@ -2461,11 +2461,33 @@ single sign-on write disables it when it removes the last running oauth2-proxy
 daemon, so observation then reads the block not ready. The block retires
 offline with its cluster's hosts; while the hosts survive its removal refuses
 `ceph-hosts-survive` ([B491](milestones/m2.md#b491)), and destroy leaves the
-dashboard's single sign-on setting to whole-cluster retirement.
+dashboard's single sign-on setting to whole-cluster retirement. A sign-on
+added after its cluster's apply is a [sign-on addition](#sign-on-addition).
 
-Not yet met: a CephSignOn added to a cluster an earlier apply completed changes
-that apply's input, so apply refuses instead of adding the sign-on block;
-tracked as [B1809](milestones/m2.md#b1809).
+### Sign-on addition
+
+A cluster that declares a `mgmt-gateway` and sets `spec.images.oauth2_proxy`
+delegates `oauth2-proxy` on every one of its hosts in its core request,
+whether or not a CephSignOn names it
+([delegated services](ceph-native-api.md#delegated-services)), so
+a sign-on declared on day one and one added later leave the cluster, host,
+image, settings and gateway requests the same. The cluster block's
+observation (`ceph orch ps`) owns a running proxy only through the sign-on
+block's own unit attempt record and refuses any other as `foreign-service`; a
+retained host's removal admits an oauth2-proxy directory under the cluster's
+FSID on any host, as it admits every delegated service's.
+
+A CephSignOn added to a cluster an earlier apply completed is an
+[additive apply](state-reconciliation.md#additive-apply): the storage
+capability admits the sign-on block only when that lineage installed the
+cluster and its management gateway unit, its image block froze the same
+`container_image_oauth2_proxy` reference the sign-on names, and it holds no
+sign-on; otherwise it refuses `ceph.sign-on-unaddable`. The added block runs
+the same request a day-one sign-on freezes, its dependencies (the cluster,
+image, settings and gateway unit blocks) frozen as prerequisites, and the lineage's one destroy retires it with its cluster's
+hosts. A cluster applied without `spec.images.oauth2_proxy` gains a sign-on
+only through destroy and a fresh apply, because adding the image changes its
+image, settings and host blocks.
 
 ## Grafana routes
 

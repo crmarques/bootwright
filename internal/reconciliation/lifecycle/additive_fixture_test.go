@@ -16,7 +16,10 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
-const addonSecret = "addon-secret"
+const (
+	addonSecret  = "addon-secret"
+	signOnSecret = "sign-on-secret"
+)
 
 type planningCapability struct {
 	*lendingCapability
@@ -51,6 +54,9 @@ func (c *planningCapability) Plan(ctx context.Context, input PlanInput) (Capabil
 		}
 		definitions = append(definitions, block)
 	}
+	for _, object := range input.State.Effective().OfKind(api.CephSignOn) {
+		definitions = append(definitions, stagedDefinition("signon-"+object.Name(), reconciliation.StageAddOns, "producer-a"))
+	}
 	plan.Definitions = definitions
 	if slices.Contains(members, c.reserves) {
 		plan.Reservations = append(plan.Reservations, infrastructureservices.HostReservation{Context: input.Context.Name, Kind: "listener", Service: c.reserves, Keys: []string{"tcp:" + c.reserves}})
@@ -60,8 +66,10 @@ func (c *planningCapability) Plan(ctx context.Context, input PlanInput) (Capabil
 
 func (c *planningCapability) Claimed(catalog api.Catalog) []string {
 	claimed := c.testCapability.Claimed(catalog)
-	for _, object := range catalog.OfKind(api.ClusterAddonBinding) {
-		claimed = append(claimed, object.Identity())
+	for _, kind := range []api.Kind{api.ClusterAddonBinding, api.CephSignOn, api.OIDCProvider} {
+		for _, object := range catalog.OfKind(kind) {
+			claimed = append(claimed, object.Identity())
+		}
 	}
 	return claimed
 }
@@ -69,6 +77,9 @@ func (c *planningCapability) Claimed(catalog api.Catalog) []string {
 func (c *planningCapability) SecretReferences(block reconciliation.Block) ([]string, error) {
 	if strings.HasPrefix(block.ID, "addon-") {
 		return []string{addonSecret}, nil
+	}
+	if strings.HasPrefix(block.ID, "signon-") {
+		return []string{signOnSecret}, nil
 	}
 	return c.testCapability.SecretReferences(block)
 }
@@ -79,14 +90,31 @@ func (c *addonCapability) AdmitAdded(lineage reconciliation.Plan, added reconcil
 	if c.admitFault != nil {
 		return c.admitFault
 	}
-	if !strings.HasPrefix(added.ID, "addon-") {
-		return failure("lifecycle.state", "the test capability admits only add-on instances", "")
+	if !strings.HasPrefix(added.ID, "addon-") && !strings.HasPrefix(added.ID, "signon-") {
+		return failure("lifecycle.state", "the test capability admits only add-on instances and sign-ons", "")
 	}
 	return nil
 }
 
+func (c *addonCapability) AdmitsAddedObjects(after api.Catalog, added []string) []string {
+	var admitted, providers []string
+	for _, identity := range added {
+		if kind, name, _ := strings.Cut(identity, "/"); kind == string(api.CephSignOn) {
+			object, _ := after.Find(api.CephSignOn, name)
+			admitted = append(admitted, identity)
+			providers = append(providers, string(api.OIDCProvider)+"/"+object.Spec().Get("oidcProviderRef").Text())
+		}
+	}
+	for _, identity := range added {
+		if slices.Contains(providers, identity) {
+			admitted = append(admitted, identity)
+		}
+	}
+	return admitted
+}
+
 func (c *addonCapability) ReadsMaterialOnlyInApply(block reconciliation.Block) bool {
-	return strings.HasPrefix(block.ID, "addon-")
+	return strings.HasPrefix(block.ID, "addon-") || strings.HasPrefix(block.ID, "signon-")
 }
 
 func (c *addonCapability) UnresolvedAdded(reconciliation.Verb, reconciliation.Block, json.RawMessage, []OwnedBlock) (Unresolved, bool) {
@@ -113,6 +141,15 @@ func addonBinding(cluster string, members ...string) api.Object {
 		spec = spec.With("packages", api.MapValue(packages...))
 	}
 	return api.NewObject(api.ClusterAddonBinding, "binding", api.Value{}, spec)
+}
+
+func signOnOf(name, provider string) api.Object {
+	return api.NewObject(api.CephSignOn, name, api.Value{}, api.MapValue(api.FieldValue{Name: "clusterRef", Value: api.StringValue("cluster")},
+		api.FieldValue{Name: "oidcProviderRef", Value: api.StringValue(provider)}))
+}
+
+func providerOf(name, issuer string) api.Object {
+	return api.NewObject(api.OIDCProvider, name, api.Value{}, api.MapValue(api.FieldValue{Name: "issuerURL", Value: api.StringValue(issuer)}))
 }
 
 func configuredBinding(member, channel string) api.Object {
@@ -143,6 +180,7 @@ func installAddons(h *harness, producer string, initial ...api.Object) *additive
 	c := &addonCapability{planning}
 	h.service.capabilities = testResolver{capability: c}
 	h.binder.material[addonSecret] = secrets.NewMaterial(nil)
+	h.binder.material[signOnSecret] = secrets.NewMaterial(nil)
 	compiler := sourcesCompiler{states: map[string]*compilation.State{}, errs: map[string]error{}}
 	compiler.states[digestOf(h.workspace.inputs)] = diffState(initial...)
 	h.service.compiler = compiler

@@ -130,6 +130,10 @@ var (
 	cephTiebreakerUnproved = diagnostics.Stop{Code: "ceph.tiebreaker-unproved", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyUnproved,
 		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryRepeat,
 		Meaning: "a provided stretch tiebreaker Machine did not prove its Ceph footprint, its transport boundary or its removal", Remedy: "repeat the operation, which observes the tiebreaker before anything else starts"}
+	cephSignOnUnaddable = diagnostics.Stop{Code: "ceph.sign-on-unaddable", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
+		Meaning: "a CephSignOn added to a completed apply names a cluster that apply did not install with a management gateway and an oauth2-proxy image, or one whose lineage already holds a sign-on, so nothing was added",
+		Remedy:  "declare it on a cluster that apply installed with a mgmt-gateway service and spec.images.oauth2_proxy, or take the apply back and apply again"}
 )
 
 var stops = []diagnostics.Stop{
@@ -137,7 +141,7 @@ var stops = []diagnostics.Stop{
 	cephUnsupportedRelease, cephLicenseUnaccepted, cephImageInvalid, cephUnsupportedProfile, cephUnsupportedTopology, cephUnsupportedService, cephUnsupportedDisk, cephUnsupportedPool,
 	cephPackageSourceUnsupported, cephBudgetExceeded, cephRetirementUnavailable, cephRetirementRefused, cephHostsSurvive, cephSecretInvalid, cephStretchIntent, cephSSHPolicyExcluded, cephSSHPolicyUnreadable,
 	cephDeviceRefused, cephUnqualified, cephForeign, cephDrifted, cephPrerequisite, cephNotReady, cephOSDUnproved, cephPackageUnproved, cephBoundaryUnproved, cephEnrollmentBudget,
-	cephConsumerIncomplete, cephUnproved, cephResultInvalid, cephEvidenceUnproved, cephTiebreakerUnproved,
+	cephConsumerIncomplete, cephUnproved, cephResultInvalid, cephEvidenceUnproved, cephTiebreakerUnproved, cephSignOnUnaddable,
 }
 
 func Stops() []diagnostics.Stop { return slices.Clone(stops) }

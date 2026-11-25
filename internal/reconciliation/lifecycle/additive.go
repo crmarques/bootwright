@@ -26,14 +26,16 @@ type additiveAdmission struct {
 
 const packagesPath = "spec.packages"
 
-func addsBindings(before api.Catalog, changes []objectChange) (bool, []string) {
-	var added []string
+func (d decider) addsObjects(before, after api.Catalog, changes []objectChange) (bool, []string) {
+	var secrets, others []string
 	bindings := false
 	for _, change := range changes {
 		kind, name, _ := strings.Cut(change.identity, "/")
 		switch {
-		case kind == string(api.Secret) && change.change == reconciliation.Added:
-			added = append(added, name)
+		case change.change == reconciliation.Added && kind == string(api.Secret):
+			secrets = append(secrets, name)
+		case change.change == reconciliation.Added && kind != string(api.ClusterAddonBinding):
+			others = append(others, change.identity)
 		case kind != string(api.ClusterAddonBinding):
 			return false, nil
 		case change.change == reconciliation.Added:
@@ -48,7 +50,22 @@ func addsBindings(before api.Catalog, changes []objectChange) (bool, []string) {
 			return false, nil
 		}
 	}
-	return bindings, added
+	if len(others) == 0 {
+		return bindings, secrets
+	}
+	var admitted []string
+	for _, bound := range d.capabilities.Bindings() {
+		capability, found := d.capabilities.Resolve(bound.Kind, bound.Implementation)
+		if objects, admits := capability.(AddedObjectsAdmitter); found && admits {
+			admitted = append(admitted, objects.AdmitsAddedObjects(after, others)...)
+		}
+	}
+	for _, identity := range others {
+		if !slices.Contains(admitted, identity) {
+			return false, nil
+		}
+	}
+	return true, secrets
 }
 
 func addsPackageMembers(previous api.Object, fields []string) bool {
@@ -110,7 +127,7 @@ func (d decider) addition(ctx context.Context, view View, store recordReader, op
 	if !ok {
 		return nil, nil
 	}
-	adds, addedSecrets := addsBindings(before.Effective(), objectChanges(before.Effective(), after.Effective()))
+	adds, addedSecrets := d.addsObjects(before.Effective(), after.Effective(), objectChanges(before.Effective(), after.Effective()))
 	if !adds {
 		return nil, nil
 	}

@@ -273,47 +273,6 @@ An MDS service is ready when as many daemons as its placement `count`, or else
 one per frozen placement host, run with the frozen image; no active rank is
 required before its filesystem exists.
 
-An NFS service and the ingress that fronts it run in one service-unit block;
-RGW and its ingress run in the gateway block. Neither is a block the cluster
-block owns. The core request lists each service another block executes in its
-`delegated` member with its eligible native hostnames, and carries nothing
-else of its document:
-
-- `rgw`, `nfs`, `nvmeof` and every `ingress`, the keepalived-only one that
-  fronts the management gateway included, by its qualified name;
-- each declared monitoring service, `mgmt-gateway` and `rbd-mirror` by its
-  singleton service name, its type;
-- a [CephSignOn](ceph-resources.md#cephsignon)'s `oauth2-proxy` with its
-  placement hosts;
-- `crash` with every host;
-- each declared SMB cluster's `smb.<cluster_id>`, as [the SMB rule](ceph.md#resources-readiness-and-access) lists it.
-
-`delegatedFamilies`, `GatewayTypes`, `MonitoringTypes` and `MirrorTypes`
-select them (`TestDelegatedServicesProjectIntoDelegated`,
-`TestTheManagementGatewayAndNVMeOFServicesProjectIntoDelegated`). A frozen
-host request never carries the member. The removal of a retained-root host,
-and its removal observation, add to its request the original cluster
-request's entries that name the host, each narrowed to it, to prove its daemon
-layout ([devices and destructive ownership](ceph.md#devices-and-destructive-ownership);
-`frozenHostDelegation`,
-`TestRetainedHostDestroyAndReadonlyRemovalUseNativeProof`).
-
-In the daemon-type table, a daemon of a delegated type (`DELEGATED_TYPES`) is
-admitted only when its `service_name` is listed, names its cephadm service
-type (`ingress` for `haproxy` and `keepalived`), equals that type for a
-singleton, and its host is among that entry's hosts; any other is a foreign
-service. A delegated daemon is never counted toward core readiness and never
-compared with the Ceph image there; its executing block checks both
-(`test_gateway_tables_agree`,
-`test_host_layout_types_match_the_daemon_type_table`). `ceph-exporter` keeps
-its cluster row: it runs the Ceph image on any frozen request host. In the host
-layout, a listed daemon's directory is admitted on a host of its
-entry, identified by its `unit.meta` `service_name` or, before unit files
-exist, by the one listed service whose ID prefixes its daemon name
-`<service_id>.[<rank>.<generation>.]<host short name>.<six lowercase letters>`
-([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/module.py#L922-L966));
-none or more than one such service refuses.
-
 The monitoring services (`prometheus`, `alertmanager`, `grafana`,
 `node-exporter`, `ceph-exporter`, `snmp-gateway`, `loki`, `alloy` and
 `promtail`) run in one service-unit block. cephadm names their daemons
@@ -370,6 +329,59 @@ gateway; block access over the network goes through the NVMe-oF gateway
 Bootwright does not realize CephFS snapshot mirroring
 ([B483](milestones/m2.md#b483)).
 The [resource contract](ceph-resources.md) owns those relationships.
+
+### Delegated services
+
+An NFS service and the ingress that fronts it run in one service-unit block;
+RGW and its ingress run in the gateway block. Neither is a block the cluster
+block owns. The core request lists each service another block executes in its
+`delegated` member with its eligible native hostnames, and carries nothing
+else of its document:
+
+- `rgw`, `nfs`, `nvmeof` and every `ingress`, the keepalived-only one that
+  fronts the management gateway included, by its qualified name;
+- each declared monitoring service, `mgmt-gateway` and `rbd-mirror` by its
+  singleton service name, its type;
+- `oauth2-proxy` with every host when the cluster declares a `mgmt-gateway`
+  and sets `spec.images.oauth2_proxy`, whether or not a
+  [CephSignOn](ceph-resources.md#cephsignon) names it, so the request does not
+  depend on a sign-on ([sign-on addition](ceph.md#sign-on-addition));
+- `crash` with every host;
+- each declared SMB cluster's `smb.<cluster_id>`, as [the SMB rule](ceph.md#resources-readiness-and-access) lists it.
+
+`delegatedFamilies`, `GatewayTypes`, `MonitoringTypes` and `MirrorTypes`
+select them (`TestDelegatedServicesProjectIntoDelegated`,
+`TestTheManagementGatewayAndNVMeOFServicesProjectIntoDelegated`). A frozen
+host request never carries the member. The removal of a retained-root host,
+and its removal observation, add to its request the original cluster
+request's entries that name the host, each narrowed to it, to prove its daemon
+layout ([devices and destructive ownership](ceph.md#devices-and-destructive-ownership);
+`frozenHostDelegation`,
+`TestRetainedHostDestroyAndReadonlyRemovalUseNativeProof`).
+
+In the daemon-type table, a daemon of a delegated type (`DELEGATED_TYPES`) is
+admitted only when its `service_name` is listed, names its cephadm service
+type (`ingress` for `haproxy` and `keepalived`), equals that type for a
+singleton, and its host is among that entry's hosts; any other is a foreign
+service. An `oauth2-proxy` daemon is admitted only on a host that the
+sign-on block's unit attempt record `service-oauth2-proxy-attempt.json`,
+read from the bootstrap host's marker directory and bound to this cluster's
+bootstrap scope, places it on; without that record every one is foreign
+(`test_the_cluster_tolerates_an_oauth2_proxy_only_on_a_host_its_sign_on_record_placed`).
+A sign-on unit's document places oauth2-proxy within its entry's hosts, where
+every other unit's document lists exactly them. The host layout of a retained
+host's removal narrows the entry to that host and admits an oauth2-proxy
+directory there without the record. A delegated daemon is never counted toward core readiness and never
+compared with the Ceph image there; its executing block checks both
+(`test_gateway_tables_agree`,
+`test_host_layout_types_match_the_daemon_type_table`). `ceph-exporter` keeps
+its cluster row: it runs the Ceph image on any frozen request host. In the host
+layout, a listed daemon's directory is admitted on a host of its
+entry, identified by its `unit.meta` `service_name` or, before unit files
+exist, by the one listed service whose ID prefixes its daemon name
+`<service_id>.[<rank>.<generation>.]<host short name>.<six lowercase letters>`
+([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/module.py#L922-L966));
+none or more than one such service refuses.
 
 ### Service families
 

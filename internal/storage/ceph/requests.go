@@ -475,11 +475,7 @@ func delegateChildServices(r *Request, c api.Catalog, cluster api.Object) error 
 	if err != nil {
 		return err
 	}
-	signOns, err := signOnDelegated(c, cluster)
-	if err != nil {
-		return err
-	}
-	r.Delegated = append(append(r.Delegated, delegated...), signOns...)
+	r.Delegated = append(append(r.Delegated, delegated...), signOnSlot(cluster, hostNames(*r))...)
 	r.Delegated = append(r.Delegated, DelegatedService{Name: "crash", Hosts: hostNames(*r)})
 	slices.SortStableFunc(r.Delegated, func(a, b DelegatedService) int { return strings.Compare(a.Name, b.Name) })
 	return nil

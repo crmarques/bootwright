@@ -1184,3 +1184,80 @@ def test_signon_phases_read_only_a_sign_on_unit(tmp_path):
     outside = units.worker(SSOMonitor(proxy), units.markers_for(tmp_path / "proxy", proxy))
     with pytest.raises(ceph_native.Refusal, match="^request$"):
         outside.signon_route_proof()
+
+
+def every_host_slot(request):
+    """The cluster's frozen oauth2-proxy entry: every cluster host, whether or not a CephSignOn exists (an added sign-on moves no request)."""
+    request["delegated"] = [{"hosts": sorted(entry["name"] for entry in request["hosts"]), "name": "oauth2-proxy"}]
+    return request
+
+
+def test_a_proxy_placed_within_the_clusters_every_host_slot_is_valid_and_one_outside_it_is_not():
+    request = every_host_slot(sso_request())
+    assert len(request["delegated"][0]["hosts"]) > len(gateway.TWO)
+    assert ceph_native.validate(copy.deepcopy(request)) is not None
+    request["service"]["documents"][0]["placement"]["hosts"] = ["node-1", "node-9"]
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_native.validate(request)
+    plain = gateway.gateway_request()
+    plain["delegated"] = [dict(entry, hosts=sorted(host["name"] for host in plain["hosts"])) if entry["name"] == "mgmt-gateway" else entry
+                          for entry in plain["delegated"]]
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_native.validate(plain)
+
+
+def test_the_cluster_tolerates_an_oauth2_proxy_only_on_a_host_its_sign_on_record_placed():
+    request = every_host_slot(dict(units.cluster(), action="cluster"))
+    daemon = {"daemon_type": "oauth2-proxy", "hostname": "node-1", "service_name": "oauth2-proxy"}
+    for signed_on in (frozenset(), frozenset({"node-2"})):
+        with pytest.raises(ceph_native.Refusal, match="^foreign-service$"):
+            ceph_native.delegated_daemon(daemon, request, signed_on)
+    with pytest.raises(ceph_native.Refusal, match="^foreign-service$"):
+        ceph_native.delegated_daemon(daemon, request)
+    ceph_native.delegated_daemon(daemon, request, frozenset({"node-1"}))
+    crash = {"daemon_type": "crash", "hostname": "node-1", "service_name": "crash"}
+    ceph_native.delegated_daemon(crash, dict(request, delegated=[{"hosts": ["node-1"], "name": "crash"}]))
+
+
+def test_the_sign_on_hosts_come_only_from_its_attempt_record_under_this_clusters_scope():
+    scope = {"version": "ceph-bootstrap-recovery-v1", "cluster": {"fsid": FSID}}
+    service = {"placement": {"hosts": ["node-1", "node-2"]}, "service_type": "oauth2-proxy", "spec": {"client_id": "ceph"}}
+    assert ceph_native.signed_on_hosts(None, scope) == frozenset()
+    assert ceph_native.signed_on_hosts({"scope": scope, "service": service}, scope) == frozenset({"node-1", "node-2"})
+    for record in ({"scope": dict(scope, cluster={"fsid": "other"}), "service": service},
+                   {"scope": scope, "service": dict(service, service_type="mgmt-gateway")},
+                   {"scope": scope, "service": dict(service, placement={"hosts": []})}, {"scope": scope, "service": service, "extra": 1},
+                   {"scope": scope, "service": dict(service, placement={"hosts": ["../node"]})}, ["not", "a", "record"]):
+        with pytest.raises(ceph_native.Refusal, match="^ownership$"):
+            ceph_native.signed_on_hosts(record, scope)
+
+
+class SignedOnCluster:
+    """The cluster observation's view of the bootstrap host: its request, its bootstrap scope and the sign-on's attempt record."""
+
+    def __init__(self, record):
+        self.request, self.record, self.reads = every_host_slot(dict(units.cluster(), action="cluster")), record, []
+        self.markers = self
+
+    def read(self, name):
+        self.reads.append(name)
+        return self.record
+
+    def recovery_scope(self):
+        return {"version": "ceph-bootstrap-recovery-v1", "cluster": {"fsid": FSID}}
+
+
+def test_the_cluster_observation_reads_the_sign_on_record_only_for_an_oauth2_proxy_daemon():
+    placed = {"scope": SignedOnCluster(None).recovery_scope(), "service": {"placement": {"hosts": ["node-1"]}, "service_type": "oauth2-proxy"}}
+    proxy = {"daemon_type": "oauth2-proxy", "hostname": "node-1", "service_name": "oauth2-proxy"}
+    owned = SignedOnCluster(placed)
+    ceph_native.Worker.tolerate_delegated(owned, proxy)
+    assert owned.reads == ["service-oauth2-proxy-attempt.json"]
+    with pytest.raises(ceph_native.Refusal, match="^foreign-service$"):
+        ceph_native.Worker.tolerate_delegated(owned, dict(proxy, hostname="node-2"))
+    with pytest.raises(ceph_native.Refusal, match="^foreign-service$"):
+        ceph_native.Worker.tolerate_delegated(SignedOnCluster(None), proxy)
+    crash = SignedOnCluster(placed)
+    crash.request["delegated"].append({"hosts": ["node-1"], "name": "crash"})
+    ceph_native.Worker.tolerate_delegated(crash, {"daemon_type": "crash", "hostname": "node-1", "service_name": "crash"})
+    assert crash.reads == []

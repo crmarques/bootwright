@@ -158,8 +158,9 @@ plan and changes none.
 ### Additive apply
 
 An `apply` over a completed apply under a changed input is an additive apply
-when the input only adds add-on instances to clusters that apply installed, as
-the admission list below defines. It
+when the input only adds add-on instances, or a
+[CephSignOn](ceph-resources.md#cephsignon), to clusters that apply installed,
+as the admission list below defines. It
 registers a new operation, an apply whose record names the completed apply as
 its `predecessor` ([operation records](#operation-records)). No block of the
 completed apply runs again and none of its records changes. An apply and the
@@ -172,14 +173,18 @@ the changed-input refusal `apply.input-changed` with its change list:
 - the completed apply and every predecessor read `done`, every block of their
   plans `done`; an unfinished block refuses `apply.records-missing`;
 - the frozen revision compiles and the objects it differs from the selected
-  input by are only added `ClusterAddonBinding` objects, added `Secret` objects
-  that an added block names for the first time and no lineage block references,
-  or bindings whose every changed path is `spec.packages.<member>` for a member
-  the frozen binding does not declare; an added Secret that fails this refuses
-  `apply.not-an-addition`, naming it, and a changed or removed Secret keeps the
-  changed-input refusal
-  (`TestAnAdditiveApplyAdmitsOnlyANewSecretAnAddedBlockNames`); a change list cut
-  at its bound refuses;
+  input by are only added `ClusterAddonBinding` objects, added objects a
+  capability's optional `AddedObjectsAdmitter` port names (the management
+  sign-on names each added `CephSignOn` and each added `OIDCProvider` an added
+  CephSignOn names), added `Secret` objects that an added block names for the
+  first time and no lineage block references, or bindings whose every changed
+  path is `spec.packages.<member>` for a member the frozen binding does not
+  declare; an added Secret that fails this refuses `apply.not-an-addition`,
+  naming it, and a changed or removed Secret, a changed OIDCProvider and an
+  added one no added CephSignOn names keep the changed-input refusal
+  (`TestAnAdditiveApplyAdmitsOnlyANewSecretAnAddedBlockNames`,
+  `TestAnAdditiveApplyAdmitsACephSignOnWithTheProviderOnlyItNames`); a change
+  list cut at its bound refuses;
 - this executable plans the selected input and the
   [comparison](#comparing-desired-and-real-state) of the lineage's plan with
   that plan shows every lineage block the same and at least one block added. A
@@ -190,9 +195,12 @@ the changed-input refusal `apply.input-changed` with its change list:
   [last package](add-ons.md#built-in-packages-and-selection) waits for its
   other instances;
 - each added block's capability admits it through the optional `DeltaAdmitter`
-  port, which only the add-on instance implements, for a cluster the lineage
-  installed, and states that the block reads bound Secret material only in its
-  own apply attempts. A capability without either refuses `apply.not-an-addition`;
+  port, which the add-on instance and the
+  [management sign-on](ceph.md#sign-on-addition) implement, for a cluster the
+  lineage installed, and states that the block reads bound Secret material only
+  in its own apply attempts; the sign-on admits only its own block, beside the
+  cluster's management gateway and frozen oauth2-proxy image that the lineage
+  installed. A capability without either refuses `apply.not-an-addition`;
 - each produced input an added block borrows has a producer in the lineage and
   a proved entry in the context's [custody](#produced-material-custody).
 
@@ -212,9 +220,14 @@ prerequisite still reads `done` in its owner's records, and refuses
 with the line `adds to operation <id>; runs none of its blocks`, and no
 `--authorize` token is demanded. One `destroy` takes the whole lineage back
 ([removal over a lineage](#removal-over-a-lineage)); no removal takes back an
-additive apply alone. An addition never adds, changes or removes a Machine,
-cluster, network, storage or service block, and never reaches an imported
-cluster.
+additive apply alone. An addition never changes or removes a Machine,
+cluster, network, storage or service block, of those kinds adds only a
+CephSignOn's sign-on block, a storage child block whose effects cephadm carries to the
+management gateway and monitoring daemons without changing their blocks, and
+never reaches an imported cluster. A sign-on declared on day one and one added
+later freeze the same block request for the same input, and the frozen
+requests of the cluster's other blocks do not depend on whether a sign-on is
+declared ([sign-on addition](ceph.md#sign-on-addition)).
 
 Fresh apply planning takes prerequisite evidence from the current apply
 lineage. A completed destroy's source lineage remains available to removal
@@ -2074,12 +2087,13 @@ An apply that names a predecessor is the head of a lineage, and one `destroy`
 takes the whole lineage back. The owned set is the blocks the head started and
 every predecessor's whole frozen plan. The removal plan is the inverse of the
 lineage's plan, each prerequisite folded into a dependency, so an added
-instance retires before the blocks of its cluster. The removal names the head
-as its source and resolves each unproved block into the records of the apply
-that owns it before it registers. A failed removal is replaced by a fresh one
-over what it has not removed, as for one apply. No removal takes back an
-additive apply alone, because instances retire offline and would leave the
-objects they created unmanaged. A predecessor record the store lost refuses
+instance or sign-on retires before the blocks of its cluster; the sign-on
+block retires offline with its cluster's hosts in that one destroy. The
+removal names the head as its source and resolves each unproved block into
+the records of the apply that owns it before it registers. A failed removal is
+replaced by a fresh one over what it has not removed, as for one apply. No
+removal takes back an additive apply alone, because added blocks retire
+offline with their cluster and would leave what they created unmanaged. A predecessor record the store lost refuses
 the removal, as a lost frozen plan does.
 
 The removal reopens one Secret binding: its own if an

@@ -538,6 +538,7 @@ The Ceph storage capability's stops (`internal/storage/ceph`).
 | `ceph.result-invalid` | block | unproved | defect | - | repeat | a Ceph adapter returned an outcome or a value it never produces | repeat the operation, which observes the Ceph state before anything else starts |
 | `ceph.evidence-unproved` | block | unproved | target | - | repeat | the evidence of a Ceph block does not prove the ownership and resource scope the block froze | repeat the operation, which observes the Ceph state before anything else starts |
 | `ceph.tiebreaker-unproved` | block | unproved | target | - | repeat | a provided stretch tiebreaker Machine did not prove its Ceph footprint, its transport boundary or its removal | repeat the operation, which observes the tiebreaker before anything else starts |
+| `ceph.sign-on-unaddable` | operation | none | input | - | change-input | a CephSignOn added to a completed apply names a cluster that apply did not install with a management gateway and an oauth2-proxy image, or one whose lineage already holds a sign-on, so nothing was added | declare it on a cluster that apply installed with a mgmt-gateway service and spec.images.oauth2_proxy, or take the apply back and apply again |
 
 ## Media store stops
 

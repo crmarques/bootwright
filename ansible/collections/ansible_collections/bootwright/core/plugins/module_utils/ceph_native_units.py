@@ -321,7 +321,8 @@ def leaf(value, path):
 
 
 def validate(request, hosts):
-    """One unit of a known type: 1 to 8 placed documents, each listed in `delegated` with exactly its hosts."""
+    """One unit of a known type: 1 to 8 placed documents, each listed in `delegated` with exactly its hosts; an oauth2-proxy within
+    the hosts the cluster lists for it."""
     unit = request.get("service")
     require(isinstance(unit, dict) and {"documents", "id", "type"} <= set(unit) <=
             {"bindings", "config", "documents", "endpoint", "id", "ingressPorts", "monitoring", "observeBudget", "scrapeIngress", "signOn", "type"})
@@ -353,7 +354,8 @@ def validate(request, hosts):
         require(len(set(listed)) == len(listed))
         require("count" not in placement or type(placement["count"]) is int and placement["count"] >= 1)
         name = service_name(document)
-        require(name not in seen and delegated.get(name) == listed)
+        # The cluster lists oauth2-proxy on every host, so a sign-on added after its apply moves no frozen request.
+        require(name not in seen and (set(listed) <= set(delegated.get(name, ())) if proxy else delegated.get(name) == listed))
         seen.add(name)
     validate_bindings(unit)
     UNIT_TYPES[unit["type"]].validate(unit, request, hosts)

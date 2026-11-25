@@ -94,8 +94,10 @@ func TestTheManagementGatewayAndNVMeOFServicesProjectIntoDelegated(t *testing.T)
 		catalog api.Catalog
 		want    []string
 	}{
-		"management gateway": {delegatedCatalog(signOnServices(), nil, signOnProvider(true), signOnObject()), []string{"crash", "ingress.mgmt", "mgmt-gateway", "oauth2-proxy"}},
-		"nvmeof":             {nvmeCatalog(), []string{"crash", "nvmeof.config.primary"}},
+		"management gateway":                      {withAuthoredImages(delegatedCatalog(signOnServices(), nil), "keepalived", "nginx", "oauth2_proxy"), []string{"crash", "ingress.mgmt", "mgmt-gateway", "oauth2-proxy"}},
+		"management gateway with a sign-on":       {signOnCatalog(t, true), []string{"crash", "ingress.mgmt", "mgmt-gateway", "oauth2-proxy"}},
+		"management gateway without oauth2_proxy": {delegatedCatalog(signOnServices(), nil), []string{"crash", "ingress.mgmt", "mgmt-gateway"}},
+		"nvmeof": {nvmeCatalog(), []string{"crash", "nvmeof.config.primary"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			r, err := planned(t, test.catalog, api.CephCluster, "example")

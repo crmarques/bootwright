@@ -484,6 +484,11 @@ type DeltaAdmitter interface {
 	AdmitAdded(lineage reconciliation.Plan, added reconciliation.Block) error
 }
 
+// AddedObjectsAdmitter names the added objects an addition of its blocks brings.
+type AddedObjectsAdmitter interface {
+	AdmitsAddedObjects(after api.Catalog, added []string) []string
+}
+
 type ApplyOnlyMaterial interface {
 	ReadsMaterialOnlyInApply(reconciliation.Block) bool
 }

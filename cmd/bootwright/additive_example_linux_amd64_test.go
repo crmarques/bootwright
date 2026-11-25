@@ -14,6 +14,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/storage/ceph"
 )
 
 // renamedExample reads a copy of the example with its Environment renamed, so
@@ -112,5 +113,65 @@ func TestTheOrderedExampleIsAnAdditionToTheNMStateExample(t *testing.T) {
 	}
 	if scoped, ok := capability.(lifecycle.ApplyOnlyMaterial); !ok || !scoped.ReadsMaterialOnlyInApply(block) {
 		t.Fatal("the capability does not state that it reads bound material only in its own apply")
+	}
+}
+
+func exampleWithout(t *testing.T, name string, dropped ...string) desiredstate.Sources {
+	t.Helper()
+	exampleDirectory(t, name)
+	copied := filepath.Join(t.TempDir(), "input")
+	if err := os.CopyFS(copied, os.DirFS(examplePath(t, name))); err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range dropped {
+		if err := os.Remove(filepath.Join(copied, file)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sources, err := (inputfs.Reader{}).Read(context.Background(), []string{copied})
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	return sources
+}
+
+// The observability example applied without its CephSignOn, its OIDCProvider
+// and the Secrets only they name freezes every block the full example freezes,
+// so the sign-on is an addition of its one block: the real compiler and
+// capabilities freeze the day-one request for it, its dependencies become
+// prerequisites, and the storage capability admits it.
+func TestASignOnAddedToTheObservabilityExampleAddsOnlyItsBlock(t *testing.T) {
+	t.Parallel()
+	const name = "libvirt-4-nodes-ceph-observability"
+	root, _ := exampleApplyPlan(t, exampleWithout(t, name, "storage/signon.yaml", "infra/components/oidc-provider.yaml",
+		"secret-descriptors/oidc-ca.yaml", "secret-descriptors/oidc-client.yaml", "secret-descriptors/oidc-cookie.yaml"), name)
+	fresh, resolver := exampleApplyPlan(t, exampleDirectory(t, name), name)
+	delta := reconciliation.Compare(root, fresh)
+	if first, differs := delta.First(); differs && first.Change != reconciliation.Added || delta.Count(reconciliation.Added) != 1 {
+		t.Fatalf("the example with its sign-on differs from the one without by %+v", delta)
+	}
+	added, err := reconciliation.Additive(fresh, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dayOne, _ := fresh.Block(ceph.SignOnBlockID("ceph-lab"))
+	if len(added.Blocks) != 1 || added.Blocks[0].ID != dayOne.ID || added.Blocks[0].RequestDigest != dayOne.RequestDigest ||
+		!slices.Equal(added.Blocks[0].Prerequisites, dayOne.Dependencies) || len(added.Blocks[0].Dependencies) != 0 {
+		t.Fatalf("the addition holds %+v beside the day-one sign-on %+v", added.Blocks, dayOne)
+	}
+	capability, ok := resolver.Resolve(dayOne.Kind, dayOne.Implementation)
+	if !ok {
+		t.Fatal("no capability for the added sign-on")
+	}
+	if err := capability.(lifecycle.DeltaAdmitter).AdmitAdded(root, added.Blocks[0]); err != nil {
+		t.Fatalf("the storage capability refuses the sign-on: %v", diagnostics.Of(err))
+	}
+	if scoped, ok := capability.(lifecycle.ApplyOnlyMaterial); !ok || !scoped.ReadsMaterialOnlyInApply(added.Blocks[0]) {
+		t.Fatal("the sign-on does not state that it reads bound material only in its own apply")
+	}
+	state, _ := compileAcceptance(t, exampleDirectory(t, name))
+	objects := []string{"CephSignOn/ceph-lab-sso", "OIDCProvider/qualification-idp"}
+	if admitter, ok := capability.(lifecycle.AddedObjectsAdmitter); !ok || !slices.Equal(admitter.AdmitsAddedObjects(state.Effective(), objects), objects) {
+		t.Fatal("the sign-on does not bring its object and the provider it names")
 	}
 }
