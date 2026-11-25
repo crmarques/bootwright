@@ -116,6 +116,8 @@ test/docs TestDocsRepositoryPathsExist
 test/docs TestDocsSecretReferenceClassCheckFindsAnUnclassifiedField
 test/docs TestDocsSecretReferencesNameTheirClass
 test/docs TestDocsSectionBudgetViolations
+test/docs TestDocsSectionsIndexRoutesEveryLargePage
+test/docs TestDocsSectionsIndexViolations
 test/docs TestDocsSkillDiscoveryViolations
 test/docs TestDocsSkillsAreDiscoverable
 test/docs TestDocsSpecLeavesStayWithinBudgets

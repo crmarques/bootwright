@@ -717,7 +717,12 @@ beside the explicitly declared general forwarders. It reads no ambient
 resolver file. Native suffix selection follows
 [dnsmasq's server rules](https://dnsmasq.org/docs/dnsmasq-man.html): longest
 matching domain on complete labels, with general forwarders used only outside
-the selected zone. Readiness proves the service's own retained records; it
+the selected zone. A managed resolver also owns each selected container
+cluster's `<cluster>.<container-cluster-domain>` suffix locally: the request
+freezes it as `localZones`, a query there without a derived record, an
+unsupported record type included, terminates with a negative answer and never
+returns to an upstream resolver, and the local suffix wins over a broader
+forwarding zone (`TestClusterDNSZoneTerminatesLocally`). Readiness proves the service's own retained records; it
 makes no claim that a future forwarding target is already reachable. Before
 publishing configuration, the adapter refuses malformed domain or address
 strings, configuration delimiters, duplicate domains and excess or empty target

@@ -408,6 +408,8 @@ to the main connection alone, so the installer runs at the default MTU. When
 the network selects no DNS server, an authored `dns-resolver.config.server` is
 kept as declared and the line carries no `--nameserver`.
 
+#### Install interface
+
 The installer's kernel command line pins every available composed `ethernet`
 interface name to its hardware address with dracut's `ifname=<name>:<mac>`, in
 composed order; libvirt and KubeVirt also pin each unmatched vNIC under its NIC
@@ -785,7 +787,9 @@ inverse instead of before the removal registers. An installer
 that was already booted keeps running on the guest after cancellation; the
 attempt becomes unknown and is resolved from the marker.
 
-### Network convergence
+## Network convergence
+
+### Scope and document
 
 **Scope.** Every installed `anaconda` Machine converges its declared network
 once, inside its `os-install-<machine>` block, after its completion is
@@ -837,6 +841,8 @@ stays a non-absent default route through the install interface or through
 none, because the address comes from the Machine's own assignment, the
 gateway from the same routes, and the purge comes first. The rules follow
 the [NMState YAML API](https://nmstate.io/devel/yaml_api.html).
+
+### Request and protocol
 
 **Request.** The request's `network` freezes `checkpointSeconds` 300,
 `documentPath` /etc/bootwright/network.yml, `markerPath`
@@ -909,6 +915,8 @@ the document and the marker only on standard input. In order:
 5. **Compare.** It reads `nmstatectl show --json` and compares it with the
    declared subset below. The completion then carries `network: true`,
    `networkReboot: true` and `networkDifferences: []`.
+
+### Failures and recovery
 
 **Failures and recovery.** Every failure of the phase follows the proof that
 the guest holds this request's install marker, so the attempt fails and the
@@ -985,6 +993,8 @@ Not yet met: the remedy texts of the network convergence role name
 | after the disk boot, before the evidence | marker with an earlier boot ID | inspect | converges |
 | guest power loss with a checkpoint pending | no log (`/run` is volatile), no marker | apply | converges if the path still works, otherwise unknown |
 
+### Comparison, evidence and plan
+
 **Compared subset.** The comparison reads only what the document declares;
 nmstate verified the rest at apply. Each interface declared `up` or
 without a state must be present with an equal `type`, state `up` and an equal
@@ -1023,7 +1033,7 @@ match its declaration after a reboot`.
 **Plan.** The plan shows the group `converge-network` and the impacts
 `configure-network <m>` and `restart <m>`.
 
-### FIPS mode
+## FIPS mode
 
 A profile enabling `spec.customizations.security.fips` installs the operating
 system in FIPS mode. Bootwright claims FIPS mode on the installed system and
@@ -1080,7 +1090,7 @@ its effect unknown, so the destroy still observes the Machine. An observation
 that proves the frozen marker without the FIPS proof reports a partial
 installation, never a complete one.
 
-### Registration
+## Registration
 
 A profile selecting `spec.subscription` with a `managed` `redhatRhel`
 Entitlement registers the installed system inside its `os-install-<machine>`
@@ -1191,7 +1201,7 @@ They and the CA bundle are lent to the apply alone, as material files only the
 controller module reads, and reach the machine only on the worker's standard
 input, as the [adapter boundary](#adapter-boundary) states.
 
-#### Registration outcomes
+### Registration outcomes
 
 **Evidence and completion.** The evidence records `registration.consumer` and
 `registration.state`; a registering installation completes only with an
@@ -1227,7 +1237,7 @@ with `Machine <machine> was not registered with its subscription service:
 is resolved by observation. Nothing is installed again on a retry: the
 registration is all the next apply repeats.
 
-#### Registration removal
+### Registration removal
 
 **Removal.** Destroy unregisters before withdrawal as the [inverse](#inverse) requires; no organization or
 activation key is lent to it or to any observation. The worker's `unregister`
@@ -1285,6 +1295,8 @@ any other name refuses `authorize.unneeded` before confirmation, as
 only: nothing persists it, and no next step names it except the authorization
 refusal of that invocation, whose command keeps it beside the tokens the plan
 requires, as [the command contract](cli/commands.md) states.
+
+## Physical Machines
 
 ### Physical removal
 

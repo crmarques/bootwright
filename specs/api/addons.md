@@ -207,14 +207,73 @@ check of an OLM add-on names its own `namespace.name` and effective
 ### Steps
 
 `spec.steps` is admitted but [unrealized](../api.md#admitted-but-unrealized): planning refuses a selected add-on that declares it. Admission validates each step's closed
-shape and its references as the [add-ons design](../deferred/add-ons-design.md#steps)
-records it: an ordered set keyed by unique `name`, a playbook or manifest
+shape and its references: an ordered array keyed by unique `name`, a playbook or manifest
 declaration, a contained content path, a Bootwright-owned target selection,
 and no `source.git`, reserved connection variable or controller target. No
 lifecycle, renderer or command reads a step, so `gates`, `follows`, `outputs`,
 `reclaimRendered` and manifest template tokens have no defined meaning and
-their consumer defaults never materialize. A step grants no execution
+their consumer defaults never materialize; the
+[add-ons design](../deferred/add-ons-design.md#steps) records the intended
+meaning. A step grants no execution
 authority under the [add-on boundary](../add-ons.md#trust-boundary).
+
+The exact step shape is:
+
+| Field | Type | Required | Default | Rule |
+| --- | --- | --- | --- | --- |
+| `name` | string | yes | — | Unique provisioning token. |
+| `gates` | string | conditional | — | Exactly one of `gates` and `follows`; only `apply`. |
+| `follows` | string | conditional | — | `operatorReady` or `ready`; `operatorReady` is OLM-only. |
+| `requires` | readiness-check array | no | `[]` | Same three-arm union as add-on readiness. |
+| `source` | object | no | — | Shared playbook source shape below. |
+| `playbook` | string | conditional | — | Relative entrypoint with a case-insensitive `.yaml` or `.yml` suffix; co-located content has a `playbooks` path segment. |
+| `rolesPath` | string | no | — | Contained relative roles directory. |
+| `collectionsPath` | string | no | — | Contained relative collections directory. |
+| `target` | object | conditional | — | Required with a playbook; union below. |
+| `extraVars` | object | no | `{}` | Arbitrary non-connection extra-variable values. |
+| `secretRefs` | array of strings | no | `[]` | Set of `Secret` refs, effect material. |
+| `timeout` | string | no | — (consumer default `10m`, not materialized) | Positive Go duration. |
+| `outputs` | array of objects | no | `[]` | Requires a playbook. |
+| `manifests` | array of objects | no | `[]` | Ordered manifest templates. |
+
+A step declares `playbook`, `manifests`, or both; `run` and `onFailure` are
+unknown fields. Reject reserved connection, inventory and privilege names in
+`extraVars`. Co-located playbooks, roles and collections use their corresponding
+reserved path segment. External content is relative to its source root without
+that segment requirement; all paths remain contained.
+
+The shared `source` union is:
+
+- `path`: one absolute external content directory outside the input tree; or
+- `git: {url, ref, subdir?, secretRef?}`.
+
+A present source requires exactly one arm; empty blocks are invalid. Add-on
+steps reject `source.git` because content belongs to the package. Validation
+checks source and contained path spelling only.
+
+A playbook target sets exactly one selection arm and an optional limit:
+
+| Field | Shape | Rule |
+| --- | --- | --- |
+| `boundCluster` | `{}` | Machines of the binding's `OpenShiftCluster`. |
+| `static` | `{clusters?: [names], machines?: [names]}` | At least one list is non-empty. Cluster names resolve to `OpenShiftCluster` or `CephCluster`; machine names resolve to SSH-accessible `Machine` objects. |
+| `limit` | string | The consumer default `firstReachable`, not materialized, or `all`. |
+
+The target is forbidden on a manifest-only step. No target selects the
+controller or an ambient inventory group.
+
+Each output is:
+
+| Field | Type | Required | Default | Rule |
+| --- | --- | --- | --- | --- |
+| `name` | string | yes | — | Unique provisioning token. |
+| `file` | string | yes | — | Clean contained relative path. |
+| `secret` | boolean | no | — (consumer default `false`, not materialized) | Marks sensitive output for a private consumer. |
+| `format` | string | no | — (consumer default `text`, not materialized) | `text`, `json`, or `sha256`; `sha256` cannot be secret. |
+
+Each step manifest is `{path, reclaimRendered?}`. Its `path` follows the
+manifest-set path rules; `reclaimRendered` has the consumer default false, not materialized. Validation checks
+only authored declaration relationships, without inspecting template tokens.
 
 ## ClusterAddonProfile
 

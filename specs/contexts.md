@@ -249,6 +249,8 @@ are unsupported under the
 [development policy](project.md#design-priorities-and-non-goals); a version
 alone proves no layout compatibility.
 
+### Store layout
+
 The production root is `/var/lib/bootwright`. Its host-wide state lives in one
 `controller/` directory: the Controller subtree `controller/record/` follows
 the [controller record](contexts/controller-record.md) and exists only after a
@@ -340,6 +342,8 @@ build's environments remains,
 no Bootwright-owned object remains and removes that store with every root this
 build keeps on the host, under [the uninstall flow](controller.md#the-uninstall-flow).
 
+### Context records
+
 A context's name is its durable identity, so nothing is allocated for it:
 reserve the name durably before creating its directory. Revision IDs use `rev-`
 plus 128 secure random bits and at
@@ -364,6 +368,8 @@ and manifest entries by relative path. Empty input is encoded
 with empty revision and Environment-directory strings; no input is invented.
 Reservation, manifest and keyring formats are versioned independently. Mutation
 evidence follows the Reconciliation-owned closed record contract.
+
+### Locks and waits
 
 Two advisory locks guard the store:
 
@@ -437,6 +443,8 @@ verifies every other ready context and admits exactly that one: its
 transaction serves only the registry, that context's mutation state and host
 reservations, and the deletion of its record, so another damaged context still
 refuses, named.
+
+### Snapshots and init
 
 A lifecycle operation snapshots its selected context and controller under the
 exclusive root lock, then retains the context's exclusive lease throughout its
@@ -514,6 +522,8 @@ removes a directory only once it is empty, and a record only while it is the
 file that held exactly the bytes its caller expects, and each removal is
 durable when it returns; an entry already absent counts as removed.
 
+### Publication and collection
+
 Registry and controller record writers hold the exclusive root lock during
 publication; context `state/` writers hold the context's exclusive lease.
 Collection takes the corresponding lock, so no collected stage has a live
@@ -567,6 +577,8 @@ and Environment directory; it writes nothing, and a mutation transaction reads
 only its selected revision. `bootwright diff` and the changed-input refusal
 read the revision the owning apply froze, which non-pristine evidence keeps. A
 collected revision reads as unknown there, never as a refusal of the command.
+
+### Traversal and bounds
 
 All traversal uses held no-follow handles. Inside the root reject mount
 crossings, links, hardlinks, special files, wrong ownership/modes and path
@@ -635,6 +647,8 @@ without target clients, and otherwise the base plus each client source's
 [acquisition deadline](controller.md#the-controller-stage)
 clamped to the client-installation ceiling; a closure past that ceiling is
 refused before Ansible starts, so the clamp never shortens a run it admits.
+
+### Operation-area admission
 
 A claim or registration refuses `operations.retention-full` at the retained-operation
 bound once the context could not retain the operation directories the new
@@ -727,6 +741,8 @@ own, and then the same init
 (`TestTheRetainedOperationRefusalsMatchTheirGolden`,
 `TestEachRetainedOperationExitLeadsOutOfTheBound`).
 
+### Missing registry and root admission
+
 Missing registry in a nonempty root is
 corruption, except that explicit init may finish publication when the root's
 only entry is one private `pending-<32 lowercase hexadecimal digits>.json` file
@@ -754,7 +770,7 @@ them. Any other entry refuses with the same other-build and whole-store
 guidance, whether or not the registry holds contexts. Bounds never authorize evidence
 deletion to make room.
 
-### Media acquisition
+## Media acquisition
 
 `catalog media add` takes the exclusive root lock twice and holds no root lock
 between, because an image may take hours to arrive and every other store

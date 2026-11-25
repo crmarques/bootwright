@@ -245,7 +245,7 @@ authored tag or SHA-256 digest. The Entitlement registry namespace must contain
 the selected repository; credentials are scoped to its authority. A direct
 digest is resolved independently of any tag. Native acquisition and platform
 inspection freeze the selected immutable artifact for continuation.
-The [release qualification](../ceph-coverage.md#release-qualification) owns
+The [image resolution](../ceph.md#image-resolution) owns
 those proofs. Validation proves no live qualification; [M2b](../milestones/m2.md#m2b)
 owns delivery and operator acceptance.
 

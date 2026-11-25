@@ -15,35 +15,24 @@ the owning section below.
 | One kind's fields | [environment](api/environment.md), [secrets](api/secrets.md), [machines](api/machines.md), [networks](api/networks.md), [infrastructure services](api/infrastructure-services.md), [container clusters](api/openshift-clusters.md), [storage](api/ceph.md#kinds), [add-ons](api/addons.md), [custom playbooks](api/custom-playbooks.md) |
 | Delegated SSH sessions | [session access policy](api/session-access-policy.md) |
 | Machine file transfer | [machine file copies](cli/machine-copy.md) |
-| Command behavior and journeys | [cli](cli.md); flags: [commands](cli/commands.md); streams, JSON, diagnostics: [output](cli/output.md), [stops](cli/stops.md) |
+| Command behavior and journeys | [cli](cli.md); flags: [commands](cli/commands.md); streams, JSON, diagnostics: [output](cli/output.md), [stops](cli/stops.md); cluster access: [access](cli/cluster-access.md), [administrator credentials](cli/cluster-admin-credentials.md) |
 | Host prerequisites, install and uninstall, the controller stage | [controller](controller.md) |
 | Contexts, frozen input, storage, locking, deletion | [contexts](contexts.md); [controller record](contexts/controller-record.md); [log root](contexts/log-root.md) |
 | Secret custody, bindings and reveal | [secrets](secrets.md) |
 | Apply, destroy, continuation, ownership, mutation safety, GitOps readiness | [state reconciliation](state-reconciliation.md) |
 | Managed services, host reservations, publication | [infrastructure services](infrastructure-services.md) |
 | Provider hosts, machines, emulated BMCs, identity and power | [substrates](substrates.md) |
-| Media store and operating-system installation | [managed OS](managed-os.md) |
+| Media store and operating-system installation | [managed OS](managed-os.md); Satellite content: [Satellite](managed-os-satellite.md), [subscription source](managed-os-subscription-source.md) |
 | Container cluster installation | [container clusters](openshift-clusters.md) |
 | OpenShift provider coverage and acceptance profiles | [cluster coverage](openshift-coverage.md) |
-| Ceph lifecycle, native input, resources and release qualification | [storage](ceph.md), [native input](ceph-native-api.md), [resources](ceph-resources.md), [coverage](ceph-coverage.md) |
+| Ceph lifecycle, native input, resources and release qualification | [storage](ceph.md), [native input](ceph-native-api.md), [resources](ceph-resources.md), [coverage](ceph-coverage.md), [subscription dependencies](ceph-subscription-dependencies.md) |
 | Trust, sensitive material, processes, network, supply chain | [security](security.md) |
 | The add-on boundary and lifecycle | [add-ons](add-ons.md) |
 | Built-in add-on packages and acceptance profiles | [add-on coverage](add-on-coverage.md) |
+| A section inside a large page: tasks, then each page's sections | [index of sections](index-sections.md) |
+| The M2a Ceph API review, as history | [review](storage-api-review.md) |
 | Delivery state, open items, delivered history, parked work, decisions | [milestones](milestones.md) and its pages, [delivered](milestones/delivered.md), [backlog](milestones/backlog.md) |
 | Design for an unpromoted feature, only when reviving it | [deferred](deferred/) |
-
-## Sections of the largest domains
-
-| Inside a large domain | Owning sections |
-| --- | --- |
-| Managed OS: installing one Machine | [shape](managed-os.md#supported-shape), [Kickstart](managed-os.md#derived-installation), [boot](managed-os.md#boot), [completion](managed-os.md#completion), [removal](managed-os.md#inverse), [network](managed-os.md#network-convergence), [FIPS](managed-os.md#fips-mode), [encryption](managed-os.md#root-disk-encryption), [registration](managed-os.md#registration), [update](managed-os.md#update-within-release), [physical](managed-os.md#physical-installation), [refusals](managed-os.md#refusal-table) |
-| State reconciliation: stages, recovery, removal | [stages](state-reconciliation.md#stages-and-the-pause-boundary), [attempts](state-reconciliation.md#attempts-and-unknown-outcomes), [continuation and removal](state-reconciliation.md#continuation-and-removal), [state machine](state-reconciliation.md#state-machine) |
-| Storage: bootstrap, resources, removal | [bootstrap and continuation](ceph.md#bootstrap-identity-and-continuation), [resources and access](ceph.md#resources-readiness-and-access), [removal](ceph.md#removal-and-concurrency) |
-| CLI: lifecycle, access, inspection | [lifecycle](cli.md#lifecycle-behavior), [inspection and access](cli.md#resource-inspection-and-explicit-access), [power](cli.md#machine-power-operations) |
-| Contexts: layout, locking, restore, deletion | [storage and locking](contexts.md#storage-locking-and-publication), [restore](contexts.md#format-and-restore-boundary), [deletion](contexts.md#permanent-deletion) |
-| Substrates: host, Machine, identity | [host](substrates.md#provider-host-realization), [Machine](substrates.md#machine-realization), [physical](substrates.md#physical-machine-realization), [firmware](substrates.md#physical-firmware), [identity and power](substrates.md#identity-and-power-operations) |
-| Which substrates and controllers are qualified | [qualification](substrates.md#qualification) |
-| The M2a Ceph API review, as history | [review](storage-api-review.md) |
 
 ## Conventions
 

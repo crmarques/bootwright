@@ -260,70 +260,14 @@ and the [coverage page's qualification rules](../add-on-coverage.md#qualificatio
 
 ## Steps
 
-This section is the exception to the page's status: admission enforces the
-closed step shape and references it records, while no lifecycle, renderer or
-command reads a step, as the [add-on API](../api/addons.md#steps) states, so
-its defaults and step semantics are unimplemented.
+The [add-on API](../api/addons.md#steps) owns the closed step shape that
+admission enforces. No lifecycle, renderer or command reads a step, so the
+meaning below is unimplemented.
 
-`spec.steps` is an ordered array keyed by unique `name`. The exact step shape
-is:
-
-| Field | Type | Required | Default | Rule |
-| --- | --- | --- | --- | --- |
-| `name` | string | yes | — | Unique provisioning token. |
-| `gates` | string | conditional | — | Exactly one of `gates` and `follows`; only `apply`. |
-| `follows` | string | conditional | — | `operatorReady` or `ready`; `operatorReady` is OLM-only. |
-| `requires` | readiness-check array | no | `[]` | Same three-arm union as add-on readiness. |
-| `source` | object | no | — | Shared playbook source shape below. |
-| `playbook` | string | conditional | — | Relative entrypoint with a case-insensitive `.yaml` or `.yml` suffix; co-located content has a `playbooks` path segment. |
-| `rolesPath` | string | no | — | Contained relative roles directory. |
-| `collectionsPath` | string | no | — | Contained relative collections directory. |
-| `target` | object | conditional | — | Required with a playbook; union below. |
-| `extraVars` | object | no | `{}` | Arbitrary non-connection extra-variable values. |
-| `secretRefs` | array of strings | no | `[]` | Set of `Secret` refs. |
-| `timeout` | string | no | `10m` | Positive Go duration. |
-| `outputs` | array of objects | no | `[]` | Requires a playbook. |
-| `manifests` | array of objects | no | `[]` | Ordered manifest templates. |
-
-A step declares `playbook`, `manifests`, or both; `run` and `onFailure` are
-unknown fields. Reject reserved connection, inventory and privilege names in
-`extraVars`. Co-located playbooks, roles and collections use their corresponding
-reserved path segment. External content is relative to its source root without
-that segment requirement; all paths remain contained.
-
-The shared `source` union is:
-
-- `path`: one absolute external content directory outside the input tree; or
-- `git: {url, ref, subdir?, secretRef?}`.
-
-A present source requires exactly one arm; empty blocks are invalid. Add-on
-steps reject `source.git` because content belongs to the package. Validation
-checks source and contained path spelling only.
-
-A playbook target sets exactly one selection arm and an optional limit:
-
-| Field | Shape | Rule |
-| --- | --- | --- |
-| `boundCluster` | `{}` | Machines of the binding's `OpenShiftCluster`. |
-| `fromInput` | `{input: <name>}` | Future design, absent from v1alpha1: a declared `resourceKind` input of kind `CephConsumer`, `CephCluster`, `OpenShiftCluster`, or `Machine`. A `CephConsumer` input also declares `cephConsumerAttachment`. |
-| `static` | `{clusters?: [names], machines?: [names]}` | At least one list is non-empty. Cluster names resolve to `OpenShiftCluster` or `CephCluster`; machine names resolve to SSH-accessible `Machine` objects. |
-| `limit` | string | `firstReachable` by default, or `all`. |
-
-The target is forbidden on a manifest-only step. No target selects the
-controller or an ambient inventory group.
-
-Each output is:
-
-| Field | Type | Required | Default | Rule |
-| --- | --- | --- | --- | --- |
-| `name` | string | yes | — | Unique provisioning token. |
-| `file` | string | yes | — | Clean contained relative path. |
-| `secret` | boolean | no | `false` | Marks sensitive output for a private consumer. |
-| `format` | string | no | `text` | `text`, `json`, or `sha256`; `sha256` cannot be secret. |
-
-Each step manifest is `{path, reclaimRendered?}`. Its `path` follows the
-manifest-set path rules; `reclaimRendered` defaults false. Validation checks
-only authored declaration relationships, without inspecting template tokens.
+A playbook target may select `{input: <name>}` through `fromInput`, a future
+design absent from v1alpha1: a declared `resourceKind` input of kind
+`CephConsumer`, `CephCluster`, `OpenShiftCluster`, or `Machine`. A
+`CephConsumer` input also declares `cephConsumerAttachment`.
 
 The step timeout, target limit, and output format have effective defaults
 `10m`, `firstReachable`, and `text` for their effectful consumers. They remain

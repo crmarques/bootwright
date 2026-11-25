@@ -106,6 +106,8 @@ the same original-material rule before redeployment. A qualified SELinux
 relabel is an explicit owned transition; it does not permit accepting
 arbitrary metadata drift on replay.
 
+### Bootstrap and enrollment fences
+
 Bootstrap first creates its frozen MON/MGR pair with zero native host inventory
 and SSH setup skipped. It imports key/config/user while that inventory is empty,
 then redeploys the initial MGR locally over Bootwright's verified fleet channel
@@ -164,17 +166,19 @@ guest sshd policy: correct and wrong key behavior through actual manager
 connections, actual MGR UID, permissions and SELinux, reconnection, restart and
 failover, interrupted-state recovery and removal.
 
-Host preparation uses the invocation-local [registry broker](ceph.md#registry-broker) with
-an empty authfile and ephemeral mutual TLS. Bootstrap never receives the
-registry login, and cephadm's own registry login, which would store it in the
-cluster's configuration, never runs: each host's retained authfile is its only
-native copy ([native-side retention](secrets.md#native-side-retention)). Core authorization reserves an
+Host preparation uses the invocation-local [registry broker](ceph.md#registry-broker).
+Bootstrap never receives the registry login, and cephadm's own registry login,
+which would store it in the cluster's configuration, never runs: each host's
+retained authfile, which holds that registry login, is its only native copy
+([native-side retention](secrets.md#native-side-retention)). Core authorization reserves an
 anonymous inode and durably binds it to the frozen scope before linking the
 host's protected registry login file `/etc/ceph/podman-auth.json`, which
 cephadm reads for its image pulls. A crash before linking leaves no named credential.
 After linking, recovery and removal prove the descriptor against that record.
 Records contain no credential or secret-derived digest. A foreign authfile or
 stored native registry credentials refuse.
+
+### Core OSD projection
 
 For example, this partial cluster declares core services using labels attached
 to its already-declared hosts. It omits provider coordinates and topology, so

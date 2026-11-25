@@ -1,16 +1,12 @@
 # Refused machine arms
 
-[B87](../milestones/m1.md#b87) admitted the KubeVirt arm for a host named
-by `kubeconfigRef` and [B732](../milestones/m3.md#b732) for one this context
-builds, named by `hostClusterRef`
-([KubeVirt machine realization](../substrates.md#kubevirt-machine-realization)),
-and [B99](../milestones/m1.md#b99) revives the vSphere detail. Until then the
+[B99](../milestones/m1.md#b99) revives the vSphere detail. Until then the
 vSphere arm is admitted by the closed schema in `api/v1alpha1/machines.go` and
 `api/v1alpha1/machines_install.go`, whose admission enforces the rules below
 as written, and refused before registration under the
-[refused-arm note](../api/machines.md#refused-arms). The KubeVirt arm realizes
-a `ClusterUserDefinedNetwork` or `NetworkAttachmentDefinition` attachment and
-refuses any other kind ([B909](../milestones/backlog.md#b909)).
+[refused-arm note](../api/machines.md#refused-arms). The
+[KubeVirt arm](../api/machines.md#kubevirt-arm) is realized and owned by the
+machines page.
 
 [M3e](../milestones/m3.md#m3e) and [M3f](../milestones/m3.md#m3f) consume these
 arms for OpenShift nodes; the realization contracts they need are stated in
@@ -46,20 +42,6 @@ Node networking has one owner, the cluster's
 ([platform union](../api/openshift-clusters.md#platform-union-and-derivation)),
 so this arm carries no `nodeNetworking` field and no rule that requires it.
 
-### KubeVirt arm
-
-| Field | Type | Required | Default | Rule |
-| --- | --- | --- | --- | --- |
-| `spec.kubevirt.hostClusterRef` | string | union | — | Global `OpenShiftCluster` reference. |
-| `spec.kubevirt.kubeconfigRef` | string | union | — | Kubeconfig-bearing `opaque` `Secret` reference. |
-| `spec.kubevirt.namespace` | string | yes | — | Kubernetes DNS label. |
-| `spec.kubevirt.storageClassRef` | string | no | — | External Kubernetes storage-class name. |
-| `spec.kubevirt.machineProfiles` | array | no | `[]` | Provider-local set keyed by `name`. |
-
-Exactly one of `hostClusterRef` and `kubeconfigRef` is present. The former
-selects a managed cluster and the latter an external host-cluster credential;
-they are never combined.
-
 ## Profile and segment fields
 
 The vSphere `machineProfiles[]` entry adds `template` and `failureDomainRef`
@@ -75,16 +57,6 @@ apply only to the refused arms:
 | Arm | Exact fields | Rule |
 | --- | --- | --- |
 | `vsphere` | required string `portgroup`; optional string `distributedSwitch` | `distributedSwitch` is required when the provider spans multiple failure domains. |
-| `kubevirt` | required object `networkRef` | `networkRef.name` is required. `kind` defaults `ClusterUserDefinedNetwork`; known native kinds also include `UserDefinedNetwork` and `NetworkAttachmentDefinition`. `apiGroup` defaults to `k8s.ovn.org` for the first two and `k8s.cni.cncf.io` for the latter; another kind requires explicit `apiGroup`. Scope rules below. |
-
-External KubeVirt `networkRef` has exactly `apiGroup`, `kind`, `name`, and
-optional `namespace`. `ClusterUserDefinedNetwork` is cluster-scoped and
-forbids `namespace`. `UserDefinedNetwork` and `NetworkAttachmentDefinition`
-are namespaced; an omitted namespace inherits the selected KubeVirt
-provider's namespace. An explicit namespace is a DNS label. Other kinds have
-no inferred scope or namespace; a qualified native consumer must verify the
-declared group, kind, and scope before effects. Namespace presence must match
-the native resource's scope.
 
 ## Machine fields
 
@@ -96,16 +68,9 @@ is authored in `spec.hardware.nics[].macAddress`, in the manual
 assignment range `00:50:56:00:00:00` through `00:50:56:3f:ff:ff`, or else
 derived in that range from the context, Machine and NIC names
 ([vSphere machine realization](../substrates.md#vsphere-machine-realization)).
-A KubeVirt interface carries a pinned `macAddress`
-([KubeVirt machine realization](../substrates.md#kubevirt-machine-realization))
-that the provider derives from the context, Machine and NIC names, as
-libvirt's does, and that is never authored: a KubeVirt Machine's NIC has no MAC field
-([B87](../milestones/m1.md#b87), D183, Q79).
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
-| `spec.hardware.profileRef` | string | conditional | — | On a KubeVirt provider: provider-local `machineProfiles[].name`; required when the OS is not provided. |
-| `spec.hardware.nics[].segmentRef` | string | conditional | — | On a KubeVirt provider: per-NIC segments, on libvirt as on KubeVirt, as [hardware and substrate](../api/machines.md#hardware-and-substrate) states; each `segmentRef` resolves to a KubeVirt arm of its provider. |
 | `spec.hardware.profileRef` | string | conditional | — | On a vSphere provider: provider-local `machineProfiles[].name`; required when the OS is not provided. The profile carries `template` and `failureDomainRef`. |
 | `spec.hardware.nics[].macAddress`, `segmentRef` | string | no | — | On a vSphere provider: each MAC in the manual assignment range above; `segmentRef` follows the bare-metal rule. |
 

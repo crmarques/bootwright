@@ -29,7 +29,8 @@ func docsByteBudgets() map[string]int {
 	return map[string]int{
 		"AGENTS.md":                                   2516,
 		"CLAUDE.md":                                   12,
-		"specs/index.md":                              5952,
+		"specs/index.md":                              4480,
+		"specs/index-sections.md":                     26368,
 		"specs/milestones.md":                         8704,
 		"specs/milestones/m1.md#opening":              1792,
 		"specs/milestones/m2.md#opening":              3264,

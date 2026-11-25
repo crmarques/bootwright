@@ -151,14 +151,14 @@ type docsSectionException struct {
 
 // docsSectionExceptions names, by "page ## heading", the sections granted a
 // ceiling above specSectionBudget on 2026-10-27, when the budget began, each
-// ceiling its section's size that day. Each is split into named leaves the
-// index routes to; none may grow. B965 in
+// ceiling its section's size that day. Each is split into
+// named leaves the index routes to; none may grow. B965 in
 // specs/milestones/backlog.md owns the split.
 var docsSectionExceptions = map[string]docsSectionException{
-	"specs/managed-os.md ## Installation":                       {ceiling: 88812, since: "2026-10-27"},
+	"specs/managed-os.md ## Installation":                       {ceiling: 36796, since: "2026-10-27"},
 	"specs/state-reconciliation.md ## Plan and execution":       {ceiling: 75242, since: "2026-10-27"},
 	"specs/ceph.md ## Resources, readiness and access":          {ceiling: 45216, since: "2026-10-27"},
-	"specs/contexts.md ## Storage, locking and publication":     {ceiling: 44548, since: "2026-10-27"},
+	"specs/contexts.md ## Storage, locking and publication":     {ceiling: 39259, since: "2026-10-27"},
 	"specs/cli.md ## Resource inspection and explicit access":   {ceiling: 38945, since: "2026-10-27"},
 	"specs/ceph-native-api.md ## Cluster and service ownership": {ceiling: 43942, since: "2026-10-27"},
 	"specs/openshift-clusters.md ## Installation":               {ceiling: 26826, since: "2026-10-27"},
@@ -179,12 +179,7 @@ var docsLeafExceptions = map[string]docsSectionException{
 	"specs/ceph-native-api.md ### Observability and management gateway records": {ceiling: 8545, since: "2026-10-29"},
 	"specs/ceph-native-api.md ### RGW, ingress and NFS records":                 {ceiling: 8993, since: "2026-10-29"},
 	"specs/ceph-native-api.md ### Service identity and references":              {ceiling: 9552, since: "2026-10-29"},
-	"specs/ceph-native-api.md ### Verified native orchestration transport":      {ceiling: 9910, since: "2026-10-29"},
 	"specs/ceph.md ### Cluster execution budget":                                {ceiling: 11192, since: "2026-10-29"},
-	"specs/cli.md ### Lifecycle receipt":                                        {ceiling: 10899, since: "2026-10-29"},
-	"specs/cli.md ### Local privilege and user identity":                        {ceiling: 10666, since: "2026-10-29"},
-	"specs/managed-os.md ### Derived installation":                              {ceiling: 11761, since: "2026-10-29"},
-	"specs/managed-os.md ### Network convergence":                               {ceiling: 16633, since: "2026-10-29"},
 	"specs/openshift-clusters.md ### Refusal table":                             {ceiling: 8901, since: "2026-10-29"},
 	"specs/state-reconciliation.md ### Continuation and removal":                {ceiling: 20636, since: "2026-10-29"},
 	"specs/state-reconciliation.md ### Converging an effect":                    {ceiling: 10414, since: "2026-10-29"},
@@ -489,6 +484,86 @@ func reachabilityViolations(files []markdownFile) []string {
 	for _, file := range files {
 		if _, reached := distance[file.path]; !reached && isNormativeSpec(file.path) {
 			violations = append(violations, fmt.Sprintf("%s is more than %d links from %s; index it or link it from an indexed page", file.path, specReachabilityHops, root))
+		}
+	}
+	slices.Sort(violations)
+	return violations
+}
+
+// sectionsIndexPath is the on-demand page that routes a task to one section of
+// a spec page above specSectionBudget.
+const sectionsIndexPath = "specs/index-sections.md"
+
+func TestDocsSectionsIndexRoutesEveryLargePage(t *testing.T) {
+	for _, violation := range sectionsIndexViolations(guidanceFiles(t), specSectionBudget) {
+		t.Error(violation)
+	}
+}
+
+func TestDocsSectionsIndexViolations(t *testing.T) {
+	page := func(name string, size int, links ...string) markdownFile {
+		lines := []string{"# " + name}
+		for _, link := range links {
+			lines = append(lines, "See [x]("+link+").")
+		}
+		lines = append(lines, strings.Repeat("x", size))
+		return markdownFile{path: name, lines: lines}
+	}
+	const budget = 100
+	cases := []struct {
+		name  string
+		files []markdownFile
+		want  []string
+	}{
+		{"a large page with a section row", []markdownFile{page(sectionsIndexPath, 10, "big.md#part", "api/wide.md#part"), page("specs/big.md", 200), page("specs/api/wide.md", 200)}, nil},
+		{"a small page needs no row", []markdownFile{page(sectionsIndexPath, 10), page("specs/small.md", 20)}, nil},
+		{"a large page with no row", []markdownFile{page(sectionsIndexPath, 10), page("specs/big.md", 200)},
+			[]string{"specs/big.md is above the 100-byte section budget but " + sectionsIndexPath + " links none of its sections"}},
+		{"a link to the page without a section", []markdownFile{page(sectionsIndexPath, 10, "big.md"), page("specs/big.md", 200)},
+			[]string{"specs/big.md is above the 100-byte section budget but " + sectionsIndexPath + " links none of its sections"}},
+		{"a deferred design and a milestone page need no row", []markdownFile{page(sectionsIndexPath, 10), page("specs/deferred/d.md", 200), page("specs/milestones/m1.md", 200)}, nil},
+		{"the sections page is missing", []markdownFile{page("specs/big.md", 200)},
+			[]string{sectionsIndexPath + " is not a tracked page; the large pages have no section routes"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := sectionsIndexViolations(tc.files, budget); !slices.Equal(got, tc.want) {
+				t.Fatalf("violations = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// sectionsIndexViolations reports each normative spec page above the section
+// budget that the sections page links by no anchor, so no large page is
+// routed to as a whole alone.
+func sectionsIndexViolations(files []markdownFile, budget int) []string {
+	var routes markdownFile
+	found := false
+	for _, file := range files {
+		if file.path == sectionsIndexPath {
+			routes, found = file, true
+		}
+	}
+	if !found {
+		return []string{sectionsIndexPath + " is not a tracked page; the large pages have no section routes"}
+	}
+	routed := map[string]bool{}
+	proseLines(routes, func(_ int, line string) {
+		for _, match := range markdownLink.FindAllStringSubmatch(inlineCode.ReplaceAllString(line, ""), -1) {
+			if linked, anchor, hasAnchor := strings.Cut(match[1], "#"); hasAnchor && anchor != "" && linked != "" {
+				routed[path.Join(path.Dir(routes.path), linked)] = true
+			}
+		}
+	})
+	var violations []string
+	for _, file := range files {
+		size := 0
+		for _, line := range file.lines {
+			size += len(line) + 1
+		}
+		if isNormativeSpec(file.path) && file.path != sectionsIndexPath && size > budget && !routed[file.path] {
+			violations = append(violations, fmt.Sprintf("%s is above the %d-byte section budget but %s links none of its sections", file.path, budget, sectionsIndexPath))
 		}
 	}
 	slices.Sort(violations)

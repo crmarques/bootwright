@@ -172,6 +172,19 @@ file as its source, and a template named by a variable that resolves to no
 checked role template is refused (`test_no_file_transfer_carries_lent_material`,
 `test_no_playbook_transfer_carries_lent_material`).
 
+The lifecycle runner writes each lent file once
+and then clears its copy of the value, so a run request whose material list
+names one file twice, or binds one adapter variable to two files, refuses with
+`runner.request-invalid` before the runner creates its job directory or writes any
+file. It writes each file at its name joined to the job directory, and the
+adapter finds each file's path beside the request's material values in one
+variable map, so a file named by anything but one segment of lowercase letters,
+digits, `.`, `_` and `-` that does not begin with a dot, or by a name the
+runner gives a job entry itself, and a material value named as a file's
+variable refuse the same way. Cleanup is bounded and recorded without
+recording the value or its digest. Retries use the same bound external version or confidential material, as the
+[immutable binding](secrets.md#immutable-binding-and-contexts) states.
+
 A pull secret reaches a mirror host's release copy only as an auth document
 the controller derives in Go for that attempt, holding the pull secret's
 `quay.io` token and the image mirror Registry's credential for its own
@@ -195,18 +208,9 @@ the attempt's [private publication](managed-os.md#physical-private-publication),
 fetched once by the installer over verified TLS, held in shell variables and a
 mode-0600 file in the installer's memory, given to the installer's own
 registration, and withdrawn with the private subtree; the same exclusions
-hold. The lifecycle runner writes each such file once
-and then clears its copy of the value, so a run request whose material list
-names one file twice, or binds one adapter variable to two files, refuses with
-`runner.request-invalid` before the runner creates its job directory or writes any
-file. It writes each file at its name joined to the job directory, and the
-adapter finds each file's path beside the request's material values in one
-variable map, so a file named by anything but one segment of lowercase letters,
-digits, `.`, `_` and `-` that does not begin with a dot, or by a name the
-runner gives a job entry itself, and a material value named as a file's
-variable refuse the same way. Cleanup is bounded and recorded without
-recording the value or its digest. Retries use the same bound external version or confidential operation
-snapshot. Generation uses an operating-system
+hold.
+
+Generation uses an operating-system
 cryptographic random source and a maintained, reviewed construction appropriate
 to the secret type; weak fallback randomness is forbidden.
 
@@ -682,7 +686,8 @@ authorize renders that configuration in a read-only round trip, and an empty
 intersection refuses `tunnel-host-key-excluded` there. Strict host-key
 checking and the pinned known hosts are unchanged. The Go session reducer and
 the Python placement and Ceph tunnel reducers all give the verdicts of one
-shared table of policy lines. Keeping a host policy, in these clients and in a
+shared table of policy lines (`TestThePolicyReducerFollowsTheSharedCorpus`,
+`test_ssh_crypto_policy_corpus.py`). Keeping a host policy, in these clients and in a
 [direct session](#direct-ssh-sessions), is access compatibility, not FIPS
 certification.
 
@@ -760,10 +765,10 @@ and the client never reopens the operator's file. The configuration is
 Bootwright's own: it carries only allowlisted cryptographic directives from the
 host crypto-policy backend where that exists, so site and FIPS policy is
 retained, and it admits no identity, certificate, agent, command, forwarding
-or host rule from system or personal configuration. A line of the backend that
-is not one allowlisted directive, or `GSSAPIKeyExchange no`, with a value of
-letters, digits and `@.,_+^*?!/ -` refuses `access.unavailable` rather than
-being skipped, by the shared table of
+or host rule from system or personal configuration. A backend line is admitted
+only when it is an allowlisted directive, or `GSSAPIKeyExchange no`, whose
+value holds only letters, digits and `@.,_+^*?!/ -`; any other line refuses
+`access.unavailable` rather than being skipped, by the shared table of
 [SSH client configuration](#ssh-client-configuration).
 For `operatorIdentity` without an offered key, the launcher gives only the
 generated policy and proved host pin to a helper running under the verified
@@ -1032,11 +1037,10 @@ A registry's token service and blob delivery hosts take the class of the
 serving host as well: Docker Hub's and `quay.io`'s are public origins, and
 `dd2.icr.io`, which serves `icr.io`'s blobs, and `access.redhat.com`, which
 serves `registry.access.redhat.com`'s signatures, are vendor origins. Red
-Hat's registries redirect blob reads to shared `quay.io` delivery hosts.
-A controlled network admits those reads as fetch-only vendor-delivery
-exceptions, as [D251](milestones/backlog.md#d251) decides; it keeps the
-registry and upload endpoints of public registries blocked. The
-[acquisition list](cli.md#acquisition-list) labels that vendor registry's
+Hat's registries redirect blob reads to shared `quay.io` delivery hosts, which
+a controlled network admits as fetch-only vendor-delivery exceptions
+([deferred](deferred/controlled-network.md#the-rule)).
+[The acquisition list](cli.md#acquisition-list) labels that vendor registry's
 shared-host edge `vendor delivery`, separate from `public` rows for a
 `quay.io` pull on the same host. The serving host itself stays public in
 `acquisition.OriginClass`, so the exception changes no image mirror route.

@@ -38,6 +38,12 @@ cluster's selection is added beside its nodes' default pool, and under the
 Environment's image mirror it replaces that pool
 ([install-time manifests](../openshift-clusters.md#install-time-manifests)).
 
+A controlled network admits the shared-host blob reads of Red Hat's registries
+as fetch-only vendor-delivery exceptions, as [D251](../milestones/backlog.md#d251) (41)
+decides, and keeps the registry and upload endpoints of public registries
+blocked. The [delivery protocol and its residual risk](../security.md#acquisition-origins)
+are stated with the acquisition origins.
+
 ## Deployment choices
 
 The mirror is optional, and where it runs is the operator's choice. Each row

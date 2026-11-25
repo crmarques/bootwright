@@ -251,6 +251,17 @@ user's explicit current-context selection is defined by [Contexts](contexts.md).
 The fixed state root is defined by
 [Contexts](contexts.md#storage-locking-and-publication).
 
+### Usage failures under a structured output
+
+After raw bounds pass, a valid final inherited `--output json` or `--output
+yaml` selects the corresponding single-document envelope for usage failures,
+including command-resolution failures. It carries `ok: false`, `exitCode: 2`,
+`result: null`, one source-free `cli.usage` diagnostic and empty `logs`, and
+writes nothing on standard error. The selector may precede or follow the
+command path. Invalid selectors remain human failures, and flag-shaped remote
+payload never selects Bootwright's mode. Explicit help retains precedence over
+semantic validation and uses the selected human or structured representation.
+
 ### Ordinary confirmation
 
 Every command that confirms uses one prompt, after the plan it confirms and
@@ -292,6 +303,8 @@ answer the same way. `--yes` suppresses only this prompt, under
 
 ### Local privilege and user identity
 
+#### Re-execution through sudo
+
 Classify and validate arguments before privilege effects. Help, completion,
 version, invalid invocations, unavailable commands and explicit-input
 `validate` never elevate. The install preview can elevate for private host
@@ -318,6 +331,8 @@ unchanged, so sudo's terminal relay carries prompts and answers
 to the child. A confirmation read whose terminal belongs to another
 foreground process group requests the terminal through job control instead of
 waiting for input that cannot arrive.
+
+#### Sudo output and signals
 
 Sudo and the elevated child share one standard error, and sudo exits 1 for its
 own refusals, so a noninteractive supervisor learns that the child started only
@@ -379,6 +394,8 @@ background, sudo can hand the child one interrupt twice, the kernel's signal
 beside the relay or both forwarded, so there the child never escalates on its
 own and the supervisor's second signal kills sudo.
 
+#### Credential refresh
+
 The supervisor owns bounded `sudo -n -v` refresh subprocesses during that child.
 Keep the same parent and terminal identity. An unambiguous positive effective
 timeout refreshes at half its duration, including fractional minutes. Zero and
@@ -391,6 +408,8 @@ a daemon or invalidate the user's wider sudo cache. The same `sudo -n -ll`
 listing decides whether a standard-input `secret set` refuses before sudo
 starts it because the policy logs input
 ([secret custody](secrets.md)).
+
+#### Invoking account
 
 Capture the real invoking account before elevation, resolved through the
 name service with the pinned, root-owned `/usr/bin/getent`: `passwd` by UID and
@@ -417,12 +436,15 @@ Each helper request is bounded by `invokerfs.requestDeadline`; a helper that
 fails, exits early or passes the deadline fails the command before root opens
 that name, with the message `the invoking account's file helper failed`
 (`TestAStalledOrCancelledHelperEndsTheSession`).
+
+#### Executable trust
+
 Root identity governs only root-owned runtime storage and the Bootwright
-executable, which root must be able to execute; sudo runs it by its proved
-root-owned path, which the elevated child confirms is the file it runs, or
-through `/proc/<pid>/exe`, whose path the child never resolves, which a
-root-squashed home would refuse. Only the
-unprivileged supervisor resolves that path, before it elevates: an invoking
+executable, which root must be able to execute. Sudo runs the executable by its
+proved root-owned path, which the elevated child confirms is the file it runs,
+or through `/proc/<pid>/exe`, whose path the child never resolves. A
+root-squashed home would refuse that resolution, so only the unprivileged
+supervisor resolves the path, before it elevates: an invoking
 account that cannot search a directory on it refuses `runtime.privilege`
 naming the path and that account, with the remedy of a local copy both that
 account and root can read, such as one in `/usr/local/bin`. Since root runs
@@ -435,17 +457,6 @@ root and names the file or directory and its owner or write bits, with the
 remedy `sudo install -m 0755 <path> /usr/local/bin/bootwright`. The invoking
 account's own build output, such as `bin/bootwright` at mode `0755` beneath its
 home, stays allowed.
-
-#### Usage failures under a structured output
-
-After raw bounds pass, a valid final inherited `--output json` or `--output
-yaml` selects the corresponding single-document envelope for usage failures,
-including command-resolution failures. It carries `ok: false`, `exitCode: 2`,
-`result: null`, one source-free `cli.usage` diagnostic and empty `logs`, and
-writes nothing on standard error. The selector may precede or follow the
-command path. Invalid selectors remain human failures, and flag-shaped remote
-payload never selects Bootwright's mode. Explicit help retains precedence over
-semantic validation and uses the selected human or structured representation.
 
 ## Context and setup behavior
 
@@ -898,6 +909,8 @@ its decision requires: the frozen plan's, or, for a failed destroy's
 replacement, those of the blocks it retains. A finalization carries none, and
 neither does `bootwright destroy --context <name>` offered beside an incomplete
 apply, since its presented plan names them.
+
+### Status next steps
 
 `status` considers, in order, the current operation's verb (`apply --dry-run` and
 `apply` when idle), `destroy` over an incomplete apply, `install`,

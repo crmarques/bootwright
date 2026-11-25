@@ -111,7 +111,7 @@ The [direct-digest regression](../../ansible/collections/ansible_collections/boo
 authenticates synthetic config bytes and exercises that metadata shape for
 both manifest media types. The tests also retain identical and escaped-equivalent
 duplicate rejection. The
-[image-resolution contract](../../specs/ceph-coverage.md#release-qualification)
+[image-resolution contract](../../specs/ceph.md#image-resolution)
 owns the JSON comparison rule. Diagnose the failed boundary before changing
 credentials or pins, and keep raw responses and credential-bearing locations
 private.

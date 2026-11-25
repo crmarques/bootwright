@@ -95,7 +95,7 @@ its 63-byte identity.
 | `spec.baremetal` | object | union | The bare-metal arm below. |
 | `spec.libvirt` | object | union | The libvirt arm below. |
 | `spec.vsphere` | object | union | A [refused arm](#refused-arms). |
-| `spec.kubevirt` | object | union | The KubeVirt arm, whose fields [refused machine arms](../deferred/machine-arms.md#kubevirt-arm) records. |
+| `spec.kubevirt` | object | union | The [KubeVirt arm](#kubevirt-arm) below. |
 | `spec.segments` | array | no | Set keyed by `name`; each entry has exactly the arm matching the selected substrate ([segments](#machine-profiles-and-segments)). |
 
 ### Bare-metal arm
@@ -172,20 +172,40 @@ capacity with a remedy naming these fields.
 operator-selected host headroom, not a Ceph version compatibility table or
 vendor minimum. Overflow beyond the native quantity representation refuses.
 
+### KubeVirt arm
+
+A `kubevirt` provider naming `kubeconfigRef` or `hostClusterRef` is realized for
+installer-provisioned Machines
+([KubeVirt machine realization](../substrates.md#kubevirt-machine-realization));
+a NIC on a network kind the realization does not attach refuses under the
+[refusal table](../substrates.md#refusal-table).
+
+| Field | Type | Required | Default | Rule |
+| --- | --- | --- | --- | --- |
+| `spec.kubevirt.hostClusterRef` | string | union | — | Global `OpenShiftCluster` reference. |
+| `spec.kubevirt.kubeconfigRef` | string | union | — | Kubeconfig-bearing `opaque` `Secret` reference, an access credential. |
+| `spec.kubevirt.namespace` | string | yes | — | Kubernetes DNS label. |
+| `spec.kubevirt.storageClassRef` | string | no | — | External Kubernetes storage-class name. |
+| `spec.kubevirt.machineProfiles` | array | no | `[]` | Provider-local set keyed by `name`. |
+
+Exactly one of `hostClusterRef` and `kubeconfigRef` is present. The former
+selects a managed cluster and the latter an external host-cluster credential;
+they are never combined.
+
+A KubeVirt interface carries a pinned `macAddress` that the provider derives
+from the context, Machine and NIC names, as libvirt's does, and that is never
+authored: a KubeVirt Machine's NIC has no MAC field.
+
 ### Refused arms
 
 The `vsphere` provider arm and its segment arm, and the
 `templateClone` installer arm, are admitted by the closed schema and refused
 before registration by
 [substrate selection](../substrates.md#selection-and-refusal) and
-[managed-OS installation](../managed-os.md#installation). A `kubevirt`
-provider naming `kubeconfigRef` or `hostClusterRef` is realized for
-installer-provisioned Machines
-([KubeVirt machine realization](../substrates.md#kubevirt-machine-realization)).
-The field detail of the vSphere arm is recorded in
+[managed-OS installation](../managed-os.md#installation). The field detail of
+the vSphere arm is recorded in
 [refused machine arms](../deferred/machine-arms.md), which
-[B99](../milestones/m1.md#b99) revives, and the KubeVirt arm's field reference
-is [its record](../deferred/machine-arms.md#kubevirt-arm).
+[B99](../milestones/m1.md#b99) revives.
 A Machine NIC's segment is its `hardware.nics[].segmentRef`
 ([hardware and substrate](#hardware-and-substrate)).
 
@@ -219,8 +239,7 @@ A segment is one provider network a Machine NIC is cabled to
 ([D240](../milestones/backlog.md#d240) (2), (4)). `segments[]` names are unique
 DNS labels; each entry has required `name`, the fields below and exactly one
 arm matching the provider's substrate. The `vsphere` arm is
-[refused](#refused-arms); the `kubevirt` arm's fields are in
-[its reference](../deferred/machine-arms.md#kubevirt-arm).
+[refused](#refused-arms); the `kubevirt` arm's fields are in the table below.
 
 | Field | Type | Default | Rule |
 | --- | --- | --- | --- |
@@ -228,7 +247,20 @@ arm matching the provider's substrate. The `vsphere` arm is
 | `taggedNetworkRefs` | set of `Network` references | none | The 802.1Q allow-list: each declares `vlan` and is not `untaggedNetworkRef`. Refused on a `kubevirt` or `vsphere` segment until [B1172](../milestones/backlog.md#b1172). |
 | `mtu` | integer 576 to 65536 | `1500`, materialized | The largest frame the segment carries, never derived into an interface MTU. A hosted KubeVirt segment naming a typed host `secondaryNetworks[]` entry takes that entry's `mtu`, 1500 when it has none, and an authored one refuses. |
 | `baremetal` | `{}` | | A physical network. |
+| `kubevirt` | object | | Required `networkRef`, whose `name` is required. `kind` defaults `ClusterUserDefinedNetwork`; known native kinds also include `UserDefinedNetwork`, which realization refuses under the [refusal table](../substrates.md#refusal-table), and `NetworkAttachmentDefinition`. `apiGroup` defaults to `k8s.ovn.org` for the first two and `k8s.cni.cncf.io` for the latter; another kind requires explicit `apiGroup`. |
 | `libvirt.bridge` | string | required | An existing bridge, proved present and never created, so never a trunk or leg device a [tagged managed Network](networks.md#tagged-managed-networks) creates: 1 to 15 bytes of letters, digits, `_`, `.` or `-`, neither `.` nor `..`; `+` refuses because firewalld reads it as an interface wildcard and a managed network puts its bridge in zone `trusted` (`TestABridgeNameRefusesFirewalldsWildcard`). |
+
+Not yet met: a KubeVirt interface on a namespaced `UserDefinedNetwork`
+refuses; tracked as [B909](../milestones/backlog.md#b909).
+
+A KubeVirt `networkRef` has exactly `apiGroup`, `kind`, `name`, and
+optional `namespace`. `ClusterUserDefinedNetwork` is cluster-scoped and
+forbids `namespace`. `UserDefinedNetwork` and `NetworkAttachmentDefinition`
+are namespaced; an omitted namespace inherits the selected KubeVirt
+provider's namespace. An explicit namespace is a DNS label. Other kinds have
+no inferred scope or namespace; a qualified native consumer must verify the
+declared group, kind, and scope before effects. Namespace presence must match
+the native resource's scope.
 
 A [managed `Network`](networks.md#libvirt-arm) whose `libvirt.providerRef`
 names the provider is one of its segments under the Network's name, carrying

@@ -146,9 +146,9 @@ native tools determine whether that selection can be installed and run.
 Acquisition freezes the selected artifacts before their native effects, and
 guest delivery uses the original binding. Bootwright does not substitute a
 reviewed release or compare the selected versions for compatibility.
-The [storage API](api/ceph.md) owns version selection and the
-[release qualification](ceph-coverage.md#release-qualification) owns the
-digest resolution and the authored-digest rule.
+The [storage API](api/ceph.md) owns version selection, and
+[image resolution](#image-resolution) owns the digest resolution and the
+authored-digest rule.
 
 Auxiliary images. A native service whose daemons run an image other than the
 Ceph image needs an auxiliary image, named by cephadm's
@@ -246,7 +246,7 @@ again from its first byte from the same URL, at most three attempts within the
 acquisition budget, and each attempt is verified like the first; an HTTP
 status, a TLS verification or protocol failure, a name that does not exist and
 a size, digest or signer refusal are never retried. This is the same
-classification as [image resolution's](ceph-coverage.md#release-qualification). Continuation uses that decision and
+classification as [image resolution's](#image-resolution). Continuation uses that decision and
 refuses an unrelated inventory or changed installed payload. An explicitly
 accepted IBM license authorizes only the provider's required `ACCEPT_EULA=yes`
 transaction environment; missing acceptance refuses before package effects. The
@@ -326,6 +326,58 @@ the identities before OSD realization. Later health checks compare the
 complete identifiers and original OSD identities, and prove the SSD class; a
 guessed serial projection or prefix-stripping comparison never proves the
 device. A missing or contradicting identity record refuses.
+
+### Image resolution
+
+Apply resolves the authored tag or digest in a controller-local image block,
+using the declared licensed Entitlement and its protected registry Secret, before any
+native effect. Acquisition uses only the controller Machine's route already
+frozen in its completed controller prerequisite, including its proxy bypass
+rules; missing or inconsistent proof refuses before acquisition. Ambient proxy
+variables and newly edited input never replace that recorded route. HTTP and
+HTTPS proxies use CONNECT; an HTTPS proxy verifies against controller system
+trust separately from the unchanged registry TLS anchor. A configuration-blob
+delivery CONNECT targets only an address validated as public unicast under the [registry broker's delivery rule](#registry-broker), retaining the
+original hostname for TLS verification, SNI and HTTP Host, without registry or
+proxy credentials. Resolution authenticates the selected manifest and platform
+from the declared registry origin. Its TLS verifies that origin against the
+Entitlement's `registry.trustBundleRef` alone when it is set, and against the
+host trust store otherwise, for the Ceph image and each auxiliary image; an
+origin the anchor does not verify refuses resolution before any effect, and
+the native error names the registry and the anchor. A registry or delivery
+request whose connection is lost in transport (closed before a response,
+reset, refused, timed out, ended by TLS EOF or truncated, or without a route or
+a name answer yet because the network is down) is made again on a new
+connection to the same host, at most three attempts within the resolution's
+180-second budget and only while the pause fits it; the token exchange is
+repeated only against the registry origin, and a delivery hop never carries a
+credential. An HTTP status, a TLS verification or protocol failure, a name
+that does not exist and every refusal fail at once, and exhausted attempts
+refuse as one attempt would. A direct digest selects that artifact
+without resolving or comparing it to a build-pinned tag. Resolution evidence
+identifies the authored reference, selected digest and platform, and the cluster,
+pool and client blocks depend on it. The result is frozen: continuation never
+refreshes a tag or substitutes another release. Native acquisition failures
+retain their cause and the requested coordinate through Bootwright's diagnostics.
+The saved image-resolution output also retains that
+bounded redacted projection, including a fixed transport category or validation
+site when the registry returned no native error; raw exception values and
+credential-bearing responses remain private.
+The guest re-proves the pulled image's platform and repository digest. The
+operator supplies neither a Podman login nor a locally cached image.
+Credential delivery and the original acquisition binding remain Secrets-owned.
+Registry manifests and image configurations compare JSON member names as
+case-sensitive decoded strings, including nested vendor metadata. Identical
+decoded names at any depth, including escaped spellings of the same name,
+refuse; distinct names that differ only in case remain distinct
+([JSON string comparison](https://www.rfc-editor.org/rfc/rfc8259#section-8.3)).
+The [canonical adapter channel](architecture.md#ansible-collection-plugins-and-results)
+retains its own encoding requirements.
+Signed package acquisition and the pull belong to host preparation. RHEL
+installation media are a separate prerequisite.
+Guest pull credentials are confined by the invocation-local
+[registry broker](#registry-broker); the native client receives no real
+registry credential or token.
 
 ## Plan and prerequisites
 
@@ -412,12 +464,9 @@ lists the requirements each storage family emits:
   the proxy's TLS pair "cephadm signs oauth2-proxy's TLS certificate". Its
   evidence may carry an `endpoint` member whose lowercase SHA-256 is present
   exactly when the endpoint answered, and readiness needs that answer; every
-  other unit's evidence carries no endpoint. Every ceph-core evidence carries
-  an `incarnation` member, the monitor map's creation time that `ceph mon dump`
-  reports, in the UTC form `YYYY-MM-DDTHH:MM:SS.ffffffZ`, or `""` while no
-  cluster exists. Every ceph-core evidence carries
-  an `sso` member, `""` or `"oauth2"`; only a management gateway unit with an
-  oauth2-proxy may report `"oauth2"`, and its readiness needs it. Before a fresh apply registers, the bound certificate
+  other unit's evidence carries no endpoint. Only this unit with an
+  oauth2-proxy may report the `sso` member `"oauth2"`, and its readiness needs
+  it. Before a fresh apply registers, the bound certificate
   must name the gateway's `virtual_ip` (an IP address entry) or, without one,
   every host of its placement (a DNS name or a matching wildcard), and also
   the frozen `service.endpoint` when there is one, or the apply refuses naming
@@ -476,24 +525,9 @@ lists the requirements each storage family emits:
   fixed (apply 2040 s, a share 3600 s; observe 720 s, a share 1380 s).
 
 Before an apply that selects managed Ceph claims an operation or binds secrets,
-it observes aggregate declared libvirt CPU, memory and backing-filesystem disk
-capacity, including guests outside the selected cluster. Pure planning performs
-no capacity probes. Apply re-proves the capacity gate under its exclusive
-transaction before registration or native effects. [Storage preflight](cli/commands.md) reports the same
-capacity checks; unknown facts cannot authorize effects. The gate runs only for an apply
-transition that may still start or resolve a libvirt Machine block in its
-selection; a continuation whose Machine blocks are all done is not gated. The provider authors
-its reserve explicitly through `libvirt.capacityReserve`; there is no inferred
-vendor sizing profile or default reserve. Existing owned allocations receive
-credit only after exact protected domain, process and backing-file proofs.
-Foreign configured domains, including inactive domains, reserve their vCPUs.
-Memory uses observed available memory plus proved owned resident memory; disk
-uses actual backing-filesystem availability plus unique proved allocations,
-and counts what the apply writes beside its guests as
-[capacity admission](substrates.md#capacity-admission) states.
-A provider host on the SSH arm is observed as
-[capacity admission](substrates.md#capacity-admission) states, without reuse
-credit.
+the [capacity admission](substrates.md#capacity-admission) gate runs over the
+libvirt Machine blocks of its selection. [Storage preflight](cli/commands.md)
+reports the same capacity checks.
 
 Storage preflight reports future Machines whose managed OS installation has
 not started as pending without remote guest probes. Installed or provided OS
@@ -881,7 +915,7 @@ owned markers scoped by owner, FSID and host:
    integrity proof without a package/image compatibility comparison.
 4. A route probe of the provider's native SSH class inside the image.
 
-The [coverage page](ceph-coverage.md#release-qualification) owns the probe
+[Frozen release and trust](#frozen-release-and-trust) owns the probe
 and route requirements.
 
 The cluster block depends on every host block, re-proves the recorded profile
@@ -1249,7 +1283,10 @@ with `packageRefusals`, `sshPolicyRefusals`, `serialDeviceRefusals` and
 the next apply observes that block first and resolves it from the observed
 evidence, a host block through its preparation evidence. Every other entry
 leaves the attempt failed. A censored failure that names no refusal stays the
-generic adapter failure, failing the attempt.
+generic adapter failure, failing the attempt. A token that no map holds, such
+as `registry-ownership`, is published as `unknown` with the token in the detail
+under the [refusal publication rule](#bootstrap-identity-and-continuation),
+held by `TestAnUnnamedRefusalTokenReachesTheOperatorInTheUnknownDetail`.
 
 A token's stop depends on the block that raises it:
 
@@ -1616,6 +1653,12 @@ and [client handoff](milestones/m2.md#b489). The iSCSI gateway is not a family: 
 The [API ownership rules](api/ceph.md) prevent one resource from implicitly
 creating or deleting another resource's pools, services or credentials.
 
+### Evidence, pools, images, CephFS
+
+Every evidence of `storage-ceph-core-v1` carries `incarnation`, the monitor
+map's creation time from `ceph mon dump` as `YYYY-MM-DDTHH:MM:SS.ffffffZ`, or
+`""` while no cluster exists, and `sso`, `""` or `"oauth2"`.
+
 Resource evidence binds the logical object, cluster FSID, owning operation and
 native immutable identity where the provider supplies one. Native-created
 children have a named owner, creation boundary, dependency edges and qualified
@@ -1707,6 +1750,8 @@ drift is not ready rather than refused. No phase removes, resizes, snapshots,
 clones or re-creates a recorded subvolume; it retires with its cluster's
 hosts, and [B491](milestones/m2.md#b491) owns its online removal.
 
+### NFS, monitoring and consumers
+
 A declared `nfs` service, with the `ingress` that fronts it when one is
 declared, is realized by its service-unit block
 `ceph-service-<cluster>-nfs-<id>`, which depends on the cluster, image and
@@ -1797,6 +1842,8 @@ A managed [CephConsumer](ceph-resources.md#cephconsumer) is realized by
 its consumer block, which mints the consumer's own principals and produces its
 external-cluster details in custody; it installs nothing on the consuming
 cluster.
+
+### Management gateway
 
 The management gateway unit `ceph-service-<cluster>-mgmt-gateway` runs its
 apply phase only on the bootstrap host, after the firewall check below on each
@@ -1908,6 +1955,8 @@ and `sso@oauth2-proxy`. Destroy leaves the dashboard's single sign-on setting
 to whole-cluster retirement; per-resource removal is
 [B491](milestones/m2.md#b491)'s.
 
+### Object users and buckets
+
 A CephObjectUser is realized by its user block `ceph-object-user-<user>`
 on the bootstrap host, in one `object_user` phase. Before any write it proves
 the cluster's ownership record and FSID, the gateway's own records with its
@@ -1989,6 +2038,8 @@ the block never removes or replaces a policy it did not put. Evidence carries
 the bucket name only. The block never deletes a bucket or its objects; it
 retires with the cluster's hosts, and [B491](milestones/m2.md#b491) owns its
 online removal.
+
+### NFS exports and SMB
 
 A CephNFSExport is realized by its export block `ceph-nfs-export-<export>`
 on the bootstrap host. A subvolume binding binds the path the subvolume's
@@ -2097,6 +2148,8 @@ and `smb-unavailable` otherwise. The core request lists each declared SMB
 cluster's `smb.<cluster_id>` service with its hosts among the services other
 blocks execute, so core observation tolerates exactly those daemons.
 
+### Object gateway
+
 A CephObjectGateway's realm, zone group, zone, zone placement and rgw service
 are realized by its gateway block `ceph-gateway-<gateway>`, which runs its
 three phases only on the bootstrap host, after the firewall check below when an
@@ -2157,6 +2210,8 @@ each ingress passes the virtual IP holder proof below; a
 timeout names `tls@`, `vip@`, `noholder@`, `holders@`, `haproxy@` or
 `keepalived@` the service. An ingress plans once its auxiliary images are
 authored ([refusal table](#refusal-table)).
+
+### Readiness
 
 Readiness reports bounded observations of FSID, quorum, orchestrator and host
 state, expected daemons, OSD membership, placement/capacity, pool protection,

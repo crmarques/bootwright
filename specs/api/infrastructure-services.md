@@ -155,13 +155,12 @@ only that zone's forwarders, without falling back to general forwarders if
 those targets are unavailable. Forwarding does not require the target to be
 ready while the service is installed, so an explicit route can precede a
 resolver provisioned by another context. Operators must avoid forwarding
-cycles across those contexts. A managed resolver also owns each selected
-container cluster's `<cluster>.<container-cluster-domain>` suffix locally.
-Queries without a derived record terminate there with a negative answer,
-including unsupported record types; they never return to an upstream resolver.
-A forwarding zone equal to or beneath a local cluster suffix refuses at its
-`domain`. Broader forwarding zones remain valid: the local suffix wins.
-These local zones derive from the graph and require no authored field.
+cycles across those contexts. A forwarding zone equal to or beneath a selected
+container cluster's `<cluster>.<container-cluster-domain>` suffix refuses at
+its `domain`; the [realization](../infrastructure-services.md#managed-network-services)
+owns that suffix locally, derived from the graph with no authored field
+(`TestDNSLocalZonesRefuseForwardingBackOut`). Broader forwarding zones remain
+valid.
 Managed NTPServer
 accepts optional `upstreamSources[]` containing IP or DNS NTP sources. With
 none declared or none reachable it answers from its host's clock at a fixed

@@ -2672,7 +2672,7 @@ generates, which binding it takes and how the provider proof reads it. Today
 the arm refuses an attachment of any kind but a ClusterUserDefinedNetwork or a
 NetworkAttachmentDefinition before registration. **Outcome:** a KubeVirt
 interface on a UDN. **Exit evidence:** selection and proof tests and a live
-attachment.
+attachment. Its rule is stated in [Machine profiles and segments](../api/machines.md#machine-profiles-and-segments).
 
 ### B927
 

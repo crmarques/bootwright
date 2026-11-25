@@ -530,9 +530,9 @@ unnamed generation skips such a Secret and reports it unchanged.
 The lifecycle names the holds: each binding that the current operation, and
 the lineage it applies or takes back, names; and as its effect material every
 Secret a block of that operation references that its capability classes as
-effect material or leaves unclassified, the classes the
+effect material or leaves unclassified (the classes the
 [access-credential rebind](state-reconciliation.md#access-credential-rebind)
-reads. An access credential and a trust anchor are never held, so a libvirt
+reads). An access credential and a trust anchor are never held, so a libvirt
 host's SSH key and `known_hosts` entry renew and are replaced while it stays
 applied. A block whose capability cannot name or classify its Secrets holds
 every version its binding pins. A `caBundle` is never held
@@ -541,12 +541,15 @@ every version its binding pins. A `caBundle` is never held
 Every Secret a capability's plan binds is named by one of the blocks it
 planned, so a block's hold never rests on another block of the lineage;
 planning refuses `engine.request-defect` for a capability that binds one none of its
-blocks names, a defect of the build. A binding no
-registered operation names holds every version it pins while an apply has
-raised its running evidence and is not yet registered, when the keyring did
-not list it yet as the command read the holds, before any prompt or input
-read, and whenever the lifecycle records cannot be read; beside a context at
-rest it holds nothing
+blocks names, a defect of the build. A binding that no registered operation
+names holds every version it pins in each of these cases:
+
+- an apply has raised its running evidence and is not yet registered;
+- the binding was missing from the keyring listing the command read to compute
+  the holds, which it reads before any prompt or input read;
+- the lifecycle records cannot be read.
+
+Beside a context at rest it holds nothing
 (`TestRenewRefusesALiveEffectMaterialBinding`,
 `TestDeleteRefusesALiveEffectMaterialBinding`,
 `TestACredentialVersionOverTheRealKeyringIsCurrentPinnedAndHeldInEveryWindow`,

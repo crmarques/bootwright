@@ -1104,26 +1104,29 @@ nothing listens on the BMC's socket before that reservation is released.
 A disk is present while anything exists at its path, whatever its image
 reports. Because the deleted disks may hold an installed operating system, the
 block consumes `data-loss` on destroy, so the operator acknowledges the loss
-before the plan registers. Observation is read-only, and nothing present with
-no recorded before-state is positive no effect. The domain, its BMC unit
-or one of its disks present without the whole is a positive partial realization
-the next attempt converges. A listener on the BMC socket with none of
-those present is not proved to be this Machine's and stays unknown. A same-name
-domain without this context's ownership is foreign and stays unknown. A
-removal's resolution reads the same observation for what the removal takes
-back, not for what the apply proves. None of the domain, its BMC unit,
-its disks and a listener on its socket present is its completion. The whole
-machine is positive no effect: through a hypervisor that answered, the domain
-with this context's ownership, its BMC unit active with its container,
-and every frozen disk present. The rest of what the apply proves, the image the
-BMC runs, a power state its ComputerSystem reports, the domain's UUID
-and each disk's size, is nothing the removal takes back, so it plays no part: a
-BMC on another image, a silent emulated BMC or a resized disk still
-reads no effect, and so does a socket nothing listens on. The removal stops the
-BMC unit first, so a unit that is not active may be its first effect:
-that, like any of the domain, unit, container or disks present without the
-whole, is a positive partial realization. The adapter's postcondition is the
-apply's, so it plays no part here either.
+before the plan registers.
+
+Observation is read-only, and a removal's resolution reads the same
+observation for what the removal takes back, not for what the apply proves:
+
+| Verb | State observed | Resolution |
+| --- | --- | --- |
+| apply | Nothing present, with no recorded before-state | positive no effect |
+| apply | The domain, its BMC unit or a disk present without the whole | positive partial, which the next attempt converges |
+| apply | A listener on the BMC socket with none of those present | unknown: not proved to be this Machine's |
+| apply | A same-name domain without this context's ownership | unknown: foreign |
+| removal | None of the domain, its BMC unit, its disks and a listener on its socket present | completion |
+| removal | Through a hypervisor that answered ([Hypervisor answer](#machine-realization)), the domain with this context's ownership, its BMC unit active with its container, and every frozen disk | positive no effect |
+| removal | Any of the domain, unit, container or disks present without the whole, a unit that is not active included | positive partial |
+| removal | A listener on the BMC socket with none of those present, or a same-name domain without this context's ownership | unknown |
+
+The rest of what the apply proves is nothing the removal takes back: the image
+the BMC runs, a power state its ComputerSystem reports, the domain's UUID and
+each disk's size play no part, so a BMC on another image, a silent emulated
+BMC or a resized disk still reads no effect, and so does a socket nothing
+listens on. The removal stops the BMC unit first, so a unit that is not active
+may be its first effect. The adapter's postcondition is the apply's, so it
+plays no part in a removal.
 
 Not yet met: completion evidence proves the domain name, ownership, unit,
 image, system UUID, power state and disks but not vCPU, memory, interfaces, TPM
@@ -1186,10 +1189,17 @@ provider host's aggregate libvirt CPU, memory and backing-filesystem disk
 capacity against every declared libvirt guest placed there, including guests
 outside the selection, and the reserve the provider authors in
 `libvirt.capacityReserve`. It refuses before registration when the guests and
-the reserve do not fit or a fact is unknown, under the checks, credits and
-reserve rules [managed Ceph's gate](ceph.md#plan-and-prerequisites) states.
-Pure planning probes nothing, a continuation whose Machine blocks are all done
-is not gated, and [container-cluster preflight](openshift-clusters.md#preflight)
+the reserve do not fit or a fact is unknown; an unknown fact never authorizes
+an effect. The apply re-proves the gate under its exclusive transaction before
+registration or native effects. The provider authors its reserve explicitly
+through `libvirt.capacityReserve`; no vendor sizing profile or default reserve
+is inferred. An owned allocation receives credit only after exact protected
+domain, process and backing-file proofs. A foreign configured domain,
+including an inactive one, reserves its vCPUs. Memory uses the observed
+available memory plus the proved owned resident memory; disk uses the actual
+backing-filesystem availability plus the unique proved allocations. Pure
+planning probes nothing, a continuation whose Machine blocks are all done is
+not gated, and [container-cluster preflight](openshift-clusters.md#preflight)
 and storage preflight report the same checks.
 
 Each backing filesystem's disk check also counts what the apply itself writes
@@ -2208,11 +2218,13 @@ authored physical `caBundle` contract to accept a non-CA serving leaf.
 The BMC-to-artifact-server leg follows the realized target's frozen
 `bmc.virtualMedia.tls` policy under the
 [media transport trust](api/machines.md#media-transport-trust), which defines
-the deciding verification setting. Its default
-imports trust and enables that setting. Device collections
-use the serving leaf; a qualified discovered SecurityService imports the
-chain's terminal issuer. `established` imports no trust. The explicit
-per-Machine `disableVerification` exception instead proves verification off,
+the deciding verification setting. Under the `trust`
+mode `importCertificate`, the default, the client imports a trust anchor and
+enables that setting: the artifact server's serving leaf into a device
+certificate collection, or the chain's terminal issuer into a qualified
+discovered SecurityService. Under `established` the client imports no
+trust. The explicit per-Machine `disableVerification` exception instead
+proves verification off,
 including for private media, with its weaker bootstrap provenance recorded.
 It never changes BMC-management or controller-listener verification.
 

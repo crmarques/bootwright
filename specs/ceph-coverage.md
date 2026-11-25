@@ -43,56 +43,9 @@ restrictions, staged bootstrap, read-only MGR mounts, reconnection,
 restart/failover and owned recovery/removal; prior per-version approval is not
 an admission requirement.
 
-Apply resolves the authored tag or digest in a controller-local image block,
-using the declared licensed Entitlement and its protected registry Secret, before any
-native effect. Acquisition uses only the controller Machine's route already
-frozen in its completed controller prerequisite, including its proxy bypass
-rules; missing or inconsistent proof refuses before acquisition. Ambient proxy
-variables and newly edited input never replace that recorded route. HTTP and
-HTTPS proxies use CONNECT; an HTTPS proxy verifies against controller system
-trust separately from the unchanged registry TLS anchor. A configuration-blob
-delivery CONNECT targets only an address validated as public unicast under the [registry broker's delivery rule](ceph.md#registry-broker), retaining the
-original hostname for TLS verification, SNI and HTTP Host, without registry or
-proxy credentials. Resolution authenticates the selected manifest and platform
-from the declared registry origin. Its TLS verifies that origin against the
-Entitlement's `registry.trustBundleRef` alone when it is set, and against the
-host trust store otherwise, for the Ceph image and each auxiliary image; an
-origin the anchor does not verify refuses resolution before any effect, and
-the native error names the registry and the anchor. A registry or delivery
-request whose connection is lost in transport (closed before a response,
-reset, refused, timed out, ended by TLS EOF or truncated, or without a route or
-a name answer yet because the network is down) is made again on a new
-connection to the same host, at most three attempts within the resolution's
-180-second budget and only while the pause fits it; the token exchange is
-repeated only against the registry origin, and a delivery hop never carries a
-credential. An HTTP status, a TLS verification or protocol failure, a name
-that does not exist and every refusal fail at once, and exhausted attempts
-refuse as one attempt would. A direct digest selects that artifact
-without resolving or comparing it to a build-pinned tag. Resolution evidence
-identifies the authored reference, selected digest and platform, and the cluster,
-pool and client blocks depend on it. The result is frozen: continuation never
-refreshes a tag or substitutes another release. Native acquisition failures
-retain their cause and the requested coordinate through Bootwright's diagnostics.
-The saved image-resolution output also retains that
-bounded redacted projection, including a fixed transport category or validation
-site when the registry returned no native error; raw exception values and
-credential-bearing responses remain private.
-The guest re-proves the pulled image's platform and repository digest. The
-operator supplies neither a Podman login nor a locally cached image.
-Credential delivery and the original acquisition binding remain Secrets-owned.
-Registry manifests and image configurations compare JSON member names as
-case-sensitive decoded strings, including nested vendor metadata. Identical
-decoded names at any depth, including escaped spellings of the same name,
-refuse; distinct names that differ only in case remain distinct
-([JSON string comparison](https://www.rfc-editor.org/rfc/rfc8259#section-8.3)).
-The [canonical adapter channel](architecture.md#ansible-collection-plugins-and-results)
-retains its own encoding requirements.
-Signed package acquisition and the pull belong to host preparation. RHEL
-installation media are a separate prerequisite.
-Guest pull credentials are confined by the invocation-local broker described
-in [storage](ceph.md); the native client receives no real
-registry credential or token. Synthetic boundary tests include foreign realms,
-redirects, uncredentialed bypass, local mutual-TLS access, a registry trust
+Image resolution, its transport retry and its TLS anchor belong to
+[storage](ceph.md#image-resolution). The synthetic boundary tests of image
+resolution and the registry broker include foreign realms, redirects, uncredentialed bypass, local mutual-TLS access, a registry trust
 bundle that verifies, one that does not, and none, and a package repository
 trust bundle that verifies, one that does not, and none.
 
