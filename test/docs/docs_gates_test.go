@@ -156,7 +156,7 @@ type docsSectionException struct {
 // specs/milestones/backlog.md owns the split.
 var docsSectionExceptions = map[string]docsSectionException{
 	"specs/managed-os.md ## Installation":                       {ceiling: 36796, since: "2026-10-27"},
-	"specs/state-reconciliation.md ## Plan and execution":       {ceiling: 75242, since: "2026-10-27"},
+	"specs/state-reconciliation.md ## Plan and execution":       {ceiling: 40112, since: "2026-10-27"},
 	"specs/ceph.md ## Resources, readiness and access":          {ceiling: 45216, since: "2026-10-27"},
 	"specs/contexts.md ## Storage, locking and publication":     {ceiling: 39259, since: "2026-10-27"},
 	"specs/cli.md ## Resource inspection and explicit access":   {ceiling: 38945, since: "2026-10-27"},
@@ -181,9 +181,6 @@ var docsLeafExceptions = map[string]docsSectionException{
 	"specs/ceph-native-api.md ### Service identity and references":              {ceiling: 9552, since: "2026-10-29"},
 	"specs/ceph.md ### Cluster execution budget":                                {ceiling: 11192, since: "2026-10-29"},
 	"specs/openshift-clusters.md ### Refusal table":                             {ceiling: 8901, since: "2026-10-29"},
-	"specs/state-reconciliation.md ### Continuation and removal":                {ceiling: 20636, since: "2026-10-29"},
-	"specs/state-reconciliation.md ### Converging an effect":                    {ceiling: 10414, since: "2026-10-29"},
-	"specs/state-reconciliation.md #### Stopping after an add-on instance":      {ceiling: 13029, since: "2026-10-29"},
 }
 
 var exceptionDate = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}$`)
@@ -581,17 +578,16 @@ type historyAllowance struct{ links, ids int }
 // still cite. Each cite is a delivered fact a spec page restates; replace it
 // with the rule it informed, then lower the allowance.
 var docsHistoryAllowances = map[string]historyAllowance{
-	"specs/add-on-coverage.md":      {links: 2},
-	"specs/api/addons.md":           {links: 1},
-	"specs/api/input.md":            {links: 1},
-	"specs/ceph-coverage.md":        {links: 6},
-	"specs/ceph-native-api.md":      {links: 1},
-	"specs/ceph.md":                 {links: 1},
-	"specs/index.md":                {links: 1},
-	"specs/openshift-coverage.md":   {links: 17},
-	"specs/security.md":             {links: 1},
-	"specs/state-reconciliation.md": {links: 3},
-	"specs/storage-api-review.md":   {links: 2, ids: 1},
+	"specs/add-on-coverage.md":    {links: 2},
+	"specs/api/addons.md":         {links: 1},
+	"specs/api/input.md":          {links: 1},
+	"specs/ceph-coverage.md":      {links: 6},
+	"specs/ceph-native-api.md":    {links: 1},
+	"specs/ceph.md":               {links: 1},
+	"specs/index.md":              {links: 1},
+	"specs/openshift-coverage.md": {links: 17},
+	"specs/security.md":           {links: 1},
+	"specs/storage-api-review.md": {links: 2, ids: 1},
 }
 
 func TestDocsNormativePagesCiteNoNewDeliveryHistory(t *testing.T) {

@@ -1313,7 +1313,7 @@ blocks for, and those its own rule realizes with no block, such as a
 bare-metal InfraProvider realized only through its Machines; an object its
 capability refuses is not claimed. An effect-bearing object that no bound
 implementation claims and no refusal table names is refused by the
-[unclaimed-object table](state-reconciliation.md#stages-and-the-pause-boundary),
+[unclaimed-object table](state-reconciliation.md#unrealizable-objects),
 whether or not its kind is bound.
 `TestEveryExampleObjectIsClaimedOncePerFamily` holds every example to this,
 every planned block of an effect-bearing object to its implementation's

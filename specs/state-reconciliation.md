@@ -5,8 +5,9 @@ and presentation.
 
 ## Lifecycle unit
 
-One complete validated Environment selection rooted in one environment
-directory is one lifecycle unit. [API selection](api.md#environment-directory-and-selected-state)
+One context's selected input revision, a complete validated Environment
+selection, is one lifecycle unit; the context name is its identity
+([contexts](contexts.md#identity-and-selection)). [API selection](api.md#environment-directory-and-selected-state)
 owns graph membership. The complete plan stays frozen for each operation.
 [Apply selection](#stages-and-the-pause-boundary) gates which blocks an
 invocation may start. It allocates no new ownership unit or partial plan.
@@ -56,8 +57,10 @@ binding a Secret, claiming a reservation or reaching a host; the one
 transaction a settling `apply` opens is the one that
 [restores](#converging-an-effect) a latched log fault. Such
 an invocation requires no authorization and no confirmation, because it has no
-consequence to acknowledge, and a token it is given authorizes nothing and
-refuses nothing. Repeating a verb is therefore always safe, which is what lets
+consequence to acknowledge, and a `data-loss` token it is given authorizes
+nothing and refuses nothing; a relaxation or rebind token refuses as
+[erase relaxation](#erase-relaxation), [abandoned removal](#abandoned-removal)
+and [access-credential rebind](#access-credential-rebind) state. Repeating a verb is therefore always safe, which is what lets
 an operator or a script ask whether anything is left to do. A verb settles
 only once its operation's finalization, below, is complete. A completed apply
 whose records hold a block that is not `done` proves no such thing, so an
@@ -84,7 +87,7 @@ Before any verb, an operation whose blocks are all `done` but whose record,
 [produced material](#produced-material-custody) do not yet say so is finalized
 first; an invocation interrupted between its last outcome and its last write
 leaves exactly that. The finalization runs under
-the exclusive lock after re-proving the state it was decided from, without
+the exclusive context lease after re-proving the state it was decided from, without
 authorization, presentation or confirmation, because it performs only the
 record, the releases and the projection its records prove: it records the
 operation `done`, then publishes an apply's projection, or withdraws a
@@ -134,7 +137,7 @@ evidence is pristine and it holds no reservation. Running evidence, or a
 reservation beside pristine evidence, is what a
 [registration](#context-mutation-evidence) interrupted before its index named
 its operation leaves, and the destroy releases it first, under the exclusive
-lock and without authorization, presentation or confirmation, because it
+context lease and without authorization, presentation or confirmation, because it
 performs no effect: once it re-proves that the context still holds no
 operation, the evidence it decided from and no state no index accounts for,
 it releases the context's reservations and publishes pristine
@@ -162,11 +165,12 @@ its `predecessor` ([operation records](#operation-records)). No block of the
 completed apply runs again and none of its records changes. An apply and the
 applies it adds to are its lineage, oldest first.
 
-The `apply` admits the addition only when all of these hold, and otherwise
-keeps the changed-input refusal, naming the first block that differs:
+The `apply` admits the addition only when all of these hold. A failed
+condition refuses as its item states, and an input that is no addition keeps
+the changed-input refusal `apply.input-changed` with its change list:
 
 - the completed apply and every predecessor read `done`, every block of their
-  plans `done`;
+  plans `done`; an unfinished block refuses `apply.records-missing`;
 - the frozen revision compiles and the objects it differs from the selected
   input by are only added `ClusterAddonBinding` objects, added `Secret` objects
   that an added block names for the first time and no lineage block references,
@@ -179,14 +183,16 @@ keeps the changed-input refusal, naming the first block that differs:
 - this executable plans the selected input and the
   [comparison](#comparing-desired-and-real-state) of the lineage's plan with
   that plan shows every lineage block the same and at least one block added. A
-  lineage block it would freeze differently refuses `records.lineage-reshaped`,
-  naming it, and an existing instance that would wait for the added one
-  refuses too, as a cluster's [last package](add-ons.md#built-in-packages-and-selection)
-  waits for its other instances;
+  lineage block it would freeze differently refuses `apply.not-an-addition`,
+  naming the first, or `records.lineage-reshaped` when the merge of the added
+  plan into the lineage finds one, and an existing instance that would wait for the added one
+  refuses `apply.not-an-addition` too, as a cluster's
+  [last package](add-ons.md#built-in-packages-and-selection) waits for its
+  other instances;
 - each added block's capability admits it through the optional `DeltaAdmitter`
   port, which only the add-on instance implements, for a cluster the lineage
   installed, and states that the block reads bound Secret material only in its
-  own apply attempts. A capability without either refuses the addition;
+  own apply attempts. A capability without either refuses `apply.not-an-addition`;
 - each produced input an added block borrows has a producer in the lineage and
   a proved entry in the context's [custody](#produced-material-custody).
 
@@ -322,18 +328,13 @@ recreation/final deletion requires `none` operation and `none` ownership.
 Protected contexts remain named and selectable for status, exact continuation
 and destroy. Recreation never bypasses protected evidence.
 
-Deletion refuses protected evidence by default, naming
-`bootwright status --context <name>` and `bootwright diff --context <name>`,
-which also lists what the selected input no longer declares, as the inventory
-of what it owns and `destroy` as the way to release it. An explicit orphan
-acknowledgement waives that one verdict, and nothing else: the objects the
-evidence still attributes to the context are abandoned in place, so they
-survive unmanaged and unreferenced, and no further command can discover,
-continue or remove them through Bootwright. Over missing, corrupt or
-unsupported evidence nothing proves what the context owns, so an update and a
-default deletion refuse naming status and the acknowledged deletion, and the acknowledgement abandons
-the context saying that its objects cannot be listed. A live lease still
-refuses under the acknowledgement. The acknowledgement replaces no other
+[Permanent deletion](contexts.md#permanent-deletion) owns the deletion
+verdicts, refusals and exits over protected, missing, corrupt, unsupported and
+unopenable evidence. An explicit orphan acknowledgement waives only the
+disposal verdict: the objects the evidence still attributes to the context are
+abandoned in place, so they survive unmanaged and unreferenced, and no further
+command can discover, continue or remove them through Bootwright. A live lease
+still refuses under the acknowledgement. The acknowledgement replaces no other
 deletion safeguard, performs no remote effect, and there is no recovery-only
 archival mode. The deleted context's host reservations go with it, as
 [permanent deletion](contexts.md#permanent-deletion) states, so the keys they
@@ -364,8 +365,8 @@ provides root execution only for valid available commands that require it.
 Context-free read-only commands do not access the root except available
 [Controller inspection](controller.md#the-setup-flow), which
 may read shared host metadata without selecting a context. Context-backed reads
-acquire the existing store's shared lock and never create, repair or migrate
-state. A bounded run takes the same shared lock and creates only
+acquire the existing store's shared root lock and never create, repair or migrate
+state. A bounded run takes the same shared root lock and creates only
 the file under the [log root](contexts.md#log-root) its own adapter output is
 [retained](cli/output.md#bounded-run-output) in, with any private log
 directory above it that is missing, once its private runtime is
@@ -374,7 +375,7 @@ nothing. That file is troubleshooting material, never state, so a run still
 repairs and migrates nothing. A bounded run or a bounded consumer binds no
 Secret: it [reads](secrets.md#immutable-binding-and-contexts) the current
 version of each Secret it names in one keyring session under the store's
-shared lock, publishes no binding or identity reservation, and clears that
+shared root lock, publishes no binding or identity reservation, and clears that
 material when its call returns, a call ended by cancellation included.
 Workspace defines the narrow explicit retry of pending creation/deletion.
 
@@ -449,11 +450,10 @@ contexts/<name>/state/operations/
 Its logs lie outside the store, under the
 [log root](contexts.md#log-root) at `contexts/<name>/operations/<operation-id>/`.
 
-`index.json` names at most one current operation. An index of another version,
-or one carrying `qualification`, is unreadable evidence: it refuses every
-lifecycle command with the remedy naming the build that prepared it, then
-`context delete --purge`, or `--purge --allow-orphans` as the abandoning
-fallback.
+`index.json` names at most one current operation. An index the closed decoder or
+its validation refuses, such as one of another version, is unreadable evidence: every lifecycle command refuses
+`operations.record-invalid`, and the exit is `context delete --purge`, or
+`--purge --allow-orphans` as the abandoning fallback.
 Every other
 operation directory is kept for audit and never named by the index: a
 completed operation, one a removal superseded, and the unreferenced directory
@@ -531,12 +531,15 @@ when they would not hold or fit the record's bound, and never on a
 resolution's record. They are presentation:
 the run reports them once and `status` reports the latest attempt's, and
 neither moves the attempt's outcome or its block's state.
-[The output contract](cli/output.md#private-operation-logs) owns the log
-tree, which [the log root](contexts.md#log-root) places and bounds.
+The [log root](contexts/log-root.md#layout) owns the log tree;
+[the output contract](cli/output.md#private-operation-logs) owns what each log
+holds.
 
-`replaces`, `predecessor`, `prerequisites`, `failure`, `warnings` and `removal`
-are optional members: adding one does not move its record's version, because a
-record that omits it means no such member. A member whose omission would mean
+A member its record type tags `omitempty` in
+`internal/reconciliation/operationstore/records.go` or
+`internal/reconciliation/plan.go` is optional, except `closure`, which
+`validateClosure` requires: adding one does not move its record's version,
+because a record that omits it means no such member. A member whose omission would mean
 anything else is required; the [development policy](project.md#design-priorities-and-non-goals)
 keeps its version fixed without promising older records remain readable. An optional member
 is compatible one way only: a build that does not know it decodes records
@@ -562,7 +565,8 @@ record. Every record and
 frozen request is encoded, read closed and proved canonical by one
 canonical-JSON implementation; each format keeps its own byte bound,
 pre-decode bounds, trailing line feed and failure words. An operation record
-is version `operationstore.OperationVersion`, and a registration writes no other; any other version refuses
+is version `operationstore.OperationVersion`, and a registration writes no other; a record that
+decodes closed and canonical but carries any other version refuses
 `operations.record-invalid` as unsupported. Every read of a frozen plan holds it to its
 operation's record, as the registration did: a
 `plan.json` whose digest or verb is not the one that record carries refuses
@@ -574,8 +578,11 @@ rather than overwriting durable evidence. An exclusively created record is
 staged and then renamed without replacement, so its name appears only with
 complete, synchronized bytes.
 
-An operation refused as malformed, unsupported or noncanonical during record
-decoding names its registering executable when its
+An operation record that fails closed decoding, as one carrying an unknown
+member does, or is noncanonical refuses `operations.record-unreadable`; one with
+trailing data after the record refuses `operations.record-invalid`. A refusal
+of the first kind
+names its registering executable when its
 `executable` member is uniquely and exactly spelled, canonical and bounded.
 That identity is a recovery hint only; it admits no other format or evidence.
 The remedy names that build for inspection and removal, followed by context
@@ -634,7 +641,7 @@ executable does not offer refuses before its attempt or resolution starts. A
 block's content digest travels with the block: a removal keeps the one its apply
 froze, and execution checks it against the current implementation contract.
 
-This table and the four below state the transition code exactly:
+This table and the five below state the transition code exactly:
 `TestTransitionTablesMatchSpec` drives that code with every row of each, so a
 row changes only together with the code.
 
@@ -706,7 +713,11 @@ block's owning apply durably recorded an attempt of it, so its ownership comes
 from durable records, and no earlier resolution of the block in this
 operation was inconclusive; that retry reads the target again before any
 effect, completing over a postcondition the read proves, removing over a
-target the read shows, and performing nothing otherwise. Any other
+target the read shows, and otherwise performing no effect: when the read is
+again inconclusive it records the attempt `unknown` with
+`destroy.postcondition-unknown`, and when the read fails, `unknown` with that
+failure (`rereadBeforeRemoval`,
+`TestAnInconclusiveReplaySafeRemovalIsRetriedOnceAfterARead`). Any other
 inconclusive observation stays `unknown`, as a failed, forbidden,
 disconnected or malformed observation always does, which never reads as
 `no-effect` and never admits a retry or a replacement operation.
@@ -716,8 +727,8 @@ disconnected or malformed observation always does, which never reads as
 | Positive completion | `completed` | `done` |
 | Positive no effect | `no-effect` | `failed` |
 | Positive partial realization this context owns | `partial` | `failed` |
-| Inconclusive removal observation of a replay-safe removal, before its one retry | `inconclusive` | `failed` |
-| Failed, forbidden, empty, malformed, contradictory, or foreign observation, or any other inconclusive one | `unknown` | `unknown` |
+| Inconclusive removal observation that admits its one retry: a replay-safe removal, an owning apply that recorded an attempt, and no earlier inconclusive resolution in this operation | `inconclusive` | `failed` |
+| Failed, forbidden, empty, malformed, contradictory, or foreign observation, or an inconclusive one that admits no retry | `unknown` | `unknown` |
 
 The operation then takes the state its blocks give it under
 [precedence](#operation-state-precedence), and a block resolved `failed` is
@@ -758,6 +769,13 @@ resolves by the apply's check alone.
 | `no-effect`: the target shows everything the removal takes back, as this context's own | `partial` | `failed` |
 | `partial`: part of it remains, as this context's own | `partial` | `failed` |
 | `unknown` | `unknown` | `unknown` |
+| `inconclusive`, or any other result | `unknown` | `unknown` |
+
+Not yet met: a removal that keeps its target by design, as the add-on
+instance's and the controller stage's do, answers its check `completed`
+without reading the target, so a fresh `destroy` records the apply block it
+resolves `no-effect` beside a target that may remain; tracked as
+[B1799](milestones/m1.md#b1799).
 
 A resolution records an outcome beside that effect. A completed effect records
 the outcome its capability proves the effect had, `changed` or `unchanged`, as
@@ -766,6 +784,12 @@ capability proves neither, because the attempt it completed may have changed
 its target. Positive no effect and a positive partial realization record
 `failed`, and an unproved observation `unknown`: an outcome the capability
 states counts only beside a completion.
+
+## Produced material and block transitions
+
+This section owns the custody of material a block produces and the transitions
+of a block and of its operation; [the state machine](#state-machine) owns the
+durable states and the outcome tables.
 
 ### Produced material custody
 
@@ -827,8 +851,9 @@ regular file or exceeds the output bound, so its removal deletes the work area
 while custody holds none; tracked as [B1768](milestones/m3.md#b1768).
 
 A block may name, as a *produced input*, an output another block of its plan,
-or for an additive apply of its lineage, produces, by that block's kind and object and the output's name: today a
-cluster's `kubeconfig`. Planning resolves it to the producing block, depends on
+or for an additive apply of its lineage, produces, by that block's kind and object and the output's name. Each
+consumer names its closed set of admitted producers
+([add-ons](add-ons.md#owned-secrets)). Planning resolves it to the producing block, depends on
 that block, and freezes the reference, never the bytes. Each apply attempt and
 observation of the consumer receives the custody entry as an operation-scoped
 material file under the bounds, clearing and logging rules of a declared
@@ -872,7 +897,7 @@ that object alone, by its UID, once the run returns. So a read-only or
 unrecorded execution may run a lend and take its output, and run that
 revoke, as the [read-only rule](#attempts-and-unknown-outcomes) admits. A lend deletes the expired leftovers of
 earlier lends only inside a recorded attempt that may change its host, never
-a read-only execution, a resolution or an unrecorded one
+a read-only execution, a resolution included, or an unrecorded one
 ([lent access revocation](substrates.md#lent-kubevirt-access-revocation)). A
 quiescence probe borrows produced entries as the removal it gates does. The KubeVirt arm on a host this context
 builds is the one such consumer
@@ -914,16 +939,18 @@ observes as it does any `running` block. The invocation that meets it admits
 nothing further, never admits that block again, and waits for what is already
 running. Its operation then takes the state its block records give it under
 [precedence](#operation-state-precedence), and the stop is never a pause. The
-result names that failure as its block's cause, as `engine.escaped` naming
-the block when the failure carries no diagnostic of its own, and never in the
-failure's own words. One whose errno says the host refused is the
-[engine stop](cli/stops.md#engine-stops) of that fault instead: a filesystem
-with no room (`ENOSPC`, `EDQUOT`, `EFBIG`), a read-only one, a denied access or
-a device error.
+result names that failure as its block's cause, and never in the failure's
+own words. A failure that carries a diagnostic of its own keeps it. One whose
+errno says the host refused is the [engine stop](cli/stops.md#engine-stops) of
+that fault: a filesystem with no room (`ENOSPC`, `EDQUOT`, `EFBIG`), a
+read-only one, a denied access or a device error. Otherwise it is
+`engine.start-unrecorded` naming the block when the attempt recorded no start,
+and `engine.escaped` naming the block for any other failure without a
+diagnostic.
 
 A block that an invocation finds `running` lost its executor mid-attempt.
 Nothing recorded its outcome, so it is unproved exactly as an `unknown` block
-is: the next continuation or removal observes it under the exclusive lock, and
+is: the next continuation or removal observes it under the exclusive context lease, and
 it becomes `unknown` only when that observation proves nothing. A resolution
 that cannot start observes nothing, so the block stays `running` and its
 operation keeps its state; an execution stopped with a block still `running` is
@@ -960,14 +987,14 @@ pending registry before its first platform side effect.
 Every apply or destroy decision, and every plan preview, yields one in-memory
 operation plan: the frozen block DAG with the bound selection, the decided
 mode, the durable basis the executor re-proves, the capability bindings and the
-removal phases. The executor acts only on that plan and the ports, after
+[removal phases](#quiescence-before-removal). The executor acts only on that plan and the ports, after
 re-proving its basis, and never plans again. Facts derived from the frozen plan,
 the removal phases included, are recomputed by each invocation from the running
 build and are never persisted.
 
 A plan is a dependency DAG of stable blocks. Each block has an ID, description,
-stage, dependencies, the host resources it will not share, impacts, and
-execution kind. Operations are `running`, `paused`, `failed`, `unknown`, or
+stage, dependencies, the host resources it will not share, an optional
+throttle name, impacts, and execution kind. Operations are `running`, `paused`, `failed`, `unknown`, or
 `done`; blocks are `pending`, `running`, `failed`, `unknown`, or `done`; the
 effect an attempt or resolution records is `no-effect`, `partial`,
 `completed`, or `unknown`.
@@ -979,13 +1006,12 @@ numbered plan gives each step a stable place for presentation and evidence. A
 wave is never a barrier: a block starts once its own dependencies are done. Equal definitions in any input order
 produce an identical plan and digest.
 
-A plan holds at most 256 blocks, a block at most 32 groups of at most 512
-Machines each, 128 impacts and 8 resources it will not share, every identifier
-at most 63 characters, each canonical request at most 256 KiB, and all of a
-plan's requests together at most 4 MiB, so a fresh apply's plan and its
-removal's fit the bytes it keeps free; the
-[operator-visible bounds](contexts.md#storage-locking-and-publication) list
-them. A plan past any bound refuses before registration, naming the bound.
+A plan past any of the
+[operator-visible bounds](contexts.md#storage-locking-and-publication), which
+own the numbers for blocks, groups, Machines, impacts, resources a block will
+not share, identifiers and request bytes, refuses before registration, naming
+the bound. The bounds keep a fresh apply's plan and its removal within the
+bytes the store keeps free.
 
 A definition may name host resources its block *will not share* while it runs.
 Two blocks that name one resource never run at once, however independent the
@@ -994,6 +1020,10 @@ what two would write at once. The set is
 bounded, unique, ordered and frozen with the plan, and a removal keeps exactly
 the set its apply froze, because what must not run together to create
 something is what must not run together to remove it.
+
+A definition may also name one throttle, frozen with the plan and covered by
+its digest: at most `lifecycle.MaxThrottledBlocks` running blocks name one
+throttle at once.
 
 A block's description and impacts state what the planned verb does, never what
 the opposite verb would do. A destroy block lists only the effects it
@@ -1042,6 +1072,12 @@ or a stated reason (`TestEveryReferenceFieldHasAnEdgeRowOrAReason`).
 Not yet met: six
 storage references emit requirements no row names; tracked as
 [B969](milestones/backlog.md#b969).
+
+Not yet met: every managed service kind can require its placement Machine's
+`os-install`, `machine-hardware` and `os-host-firewall` blocks, each under its
+condition, as `managedservice.PlacementRequirements` states, yet the
+managed-service rows list only the kinds and classes an example plans, because
+the catalog test fails on a row no example plans; tracked as [B1800](milestones/m1.md#b1800).
 
 Destroy inverts every edge. A family
 ordering its own blocks, as a storage child after its cluster, is not listed.
@@ -1123,16 +1159,17 @@ one a row's field path names on its object while a block realizes the target.
 Every block carries one stage, frozen with the plan and covered by its digest,
 naming its block's kind of platform work:
 
-| Stage | Blocks |
+| Stage | Purpose |
 | --- | --- |
-| `controller` | The [context prerequisites](controller.md) this Environment adds to its controller host: the target clients its graph selects; the libvirt client a libvirt provider hosted on the controller or any Machine a libvirt provider hosts selects, [and nothing else](controller.md#the-controller-stage); the hypervisor closure a hosted provider selects; the installer-media tooling an artifact server on the controller selects; the `nmstate` package an agent-installed OpenShiftCluster node that references a declared Machine selects; and the `iputils` package an agent-installed multi-node baremetal OpenShiftCluster selects for an OpenShift-sourced IPv4 virtual IP in a managed libvirt network of a provider hosted on the controller. |
-| `infrastructure-services` | Managed shared services: proxying, name resolution, time, artifact serving, registries and load balancing. |
+| `controller` | The [context prerequisites](controller.md#the-controller-stage) this Environment's graph selects on its controller host. |
+| `infrastructure-services` | Managed shared services: proxying, name resolution, time, artifact serving, registries and load balancing, and the host preparation they depend on. |
 | `substrates` | [Provider host realization](substrates.md#provider-host-realization) for a declared `InfraProvider`: its virtualization runtime, managed networks and virtual-media pool. |
 | `machines` | [Machine realization](substrates.md#machine-realization) with its management controller, the [claim and proof](substrates.md#physical-machine-realization) of a physical machine, [shared package-tree publication](managed-os.md#shared-package-tree-publication), and [managed operating-system installation](managed-os.md#installation). |
 | `clusters` | Container and storage cluster installation. |
 | `add-ons` | Add-on instances bound to a cluster, and the cluster configuration they enable. |
 
-The capability that plans a block owns its stage. Stages are not strata: a
+The capability that plans a block owns its stage, and its page names the blocks
+it places in each stage. Stages are not strata: a
 block depends on blocks, never on a stage, so a `substrates` block may wait on
 an `add-ons` block when an add-on enables the cluster hosting a provider.
 
@@ -1171,21 +1208,21 @@ A block is *ready* when it is `pending` and every dependency is `done`, and
 *startable* when it is ready and admitted. Execution fills the bound from
 startable blocks using [ready-work priority](#ready-work-priority),
 re-evaluating as each settles. A block is admitted only while no running block
-holds a resource it will not share and fewer running blocks than its
-throttle's capacity name its throttle.
+holds a resource it will not share and fewer than
+`lifecycle.MaxThrottledBlocks` running blocks name its throttle.
 
 The executable defaults to eight running blocks (`lifecycle.MaxRunningBlocks`)
 and sets the throttle capacity (`lifecycle.MaxThrottledBlocks`, eight).
 `apply` and `destroy` accept [an invocation-only running-block override](cli/commands.md#command-and-flag-catalog).
 Neither limit enters desired state or frozen plans. Each invocation, including
 continuation, uses its supplied bound or this build's default. Dependencies,
-exclusive claims and group throttles still constrain admission; increasing the
+resources a block will not share and throttles still constrain admission; increasing the
 running-block bound changes no dependency, effect or evidence.
 
 Production uses the invocation's running-block bound. Independent
 services and machines are admitted together; a fast dependency chain advances
 while unrelated work remains running. A hosted package tree is its own durable
-block: installations require its completion and hold no exclusive tree claim
+block: installations require its completion and hold no resource they will not share
 while they build images, boot or wait for guests. Replay and inverse dependency
 ordering use that same ownership boundary.
 
@@ -1204,9 +1241,7 @@ outside its frozen request and digest. A role proves its own root-only child
 before writing, and cleans only that child, including on a remote placement.
 Durable machine work and published artifacts remain beneath the disjoint paths
 their capabilities freeze. Cancellation and cleanup never remove a sibling's
-scratch or retained effects. [B303](milestones/delivered.md#x48--bounded-concurrent-execution),
-[B304](milestones/delivered.md#x48--bounded-concurrent-execution) and [B466](milestones/delivered.md#b466) qualify these
-boundaries in production composition and the closing operator run.
+scratch or retained effects.
 
 An operation is `paused` when execution stops because no block is startable,
 nothing is still running, no block is failed or unknown, and pending blocks
@@ -1229,7 +1264,9 @@ done the operation pauses as above, and a later `apply`, with or without
 another `--until`, continues the same operation. `--until` composes with
 `--stage`, and `--dry-run` previews the same selection.
 
-Before any effect, an apply refuses:
+Before any effect, an apply refuses. The two `apply.until-unknown` rows decide
+before the selection is evaluated; each other row applies only when the selection admits no block, and
+the first matching row decides:
 
 | Fault | Code | Message | Remedy |
 | --- | --- | --- | --- |
@@ -1237,9 +1274,11 @@ Before any effect, an apply refuses:
 | No add-on instance carries the name | `apply.until-unknown` | `the plan has no add-on instance named by --until` | `name one of: <objects>` (at most eight, then `and <n> more`) |
 | The selected stages admit none of the ready blocks the instance requires | `apply.stage-empty` | `the selected stages have nothing to start` | the apply with `--stage` widened by the first such block's stage, keeping `--until` and the plan's authorizations |
 | A failed block the instance requires lies outside the selected stages | `apply.stage-excludes-retry` | `the block this operation must retry is outside the selected stages` | as the row above |
-| The instance and every block it requires are done, or every block to retry lies outside them | `apply.stage-empty` | `the add-on instance --until names and the blocks it requires have nothing to start under this selection` | `repeat bootwright apply --context <context> [--stage <list>] [--authorize <tokens>] without --until` |
+| The instance and every block it requires are done, or every block to retry lies outside the selected stages | `apply.stage-empty` | `the add-on instance --until names and the blocks it requires have nothing to start under this selection` | `repeat bootwright apply --context <context> [--stage <list>] [--authorize <tokens>] without --until` |
 
 Destroy accepts no apply selection.
+
+#### Retrying under a selection
 
 Selection never weakens a safety rule. When an explicit
 selection excludes controller and a controller block has an unproved effect,
@@ -1247,7 +1286,7 @@ apply refuses and names the controller recovery invocation. For other
 blocks resolution is a read-only observation; several unproved effects may be observed together, and nothing
 starts, retries or is removed beside them. Failed blocks are then retried
 under the rules a first attempt follows: each whose stage is selected starts
-once the bound and its exclusive resources admit it, beside the other retries
+once the bound and the resources it will not share admit it, beside the other retries
 and beside every startable block, and what depends on a failed block waits
 for its retry to complete, as it would for a first attempt. An invocation
 retries a block at most once, and once a block it worked fails, it starts no
@@ -1259,11 +1298,17 @@ invocation works any block; once one is worked, admission follows only these
 rules, so what starts never depends on which running block completes first. A selection that admits no startable block also refuses
 `apply.stage-empty` before registration, naming a stage that would unblock work.
 
+### Plan-time refusals
+
+Each leaf below states one refusal of a fresh plan before registration.
+
+#### Unrealizable objects
+
 A fresh `apply` and its `--dry-run` preview refuse, whatever stages are selected and
 before registration, every selected object this executable cannot realize: an
 effect-bearing object no implementation
 [claims](architecture.md#implementation-selection), such as a managed
-`Registry` or an enabled `CustomPlaybook`, and every shape a capability reports
+`LoadBalancer` or an enabled `CustomPlaybook`, and every shape a capability reports
 unsupported. Each refused object is its own `plan.object-unsupported`
 diagnostic, with the reason its capability gives, or that nothing claims it,
 and the remedy; one refused for two reasons is two diagnostics. An object two implementations of one family both
@@ -1297,10 +1342,14 @@ reason and remedy is the diagnostic's message and remediation, in which
 | An enabled CustomPlaybook | a CustomPlaybook with `spec.enabled: true`, its kind unbound | `no capability of this executable runs an enabled CustomPlaybook` | `remove <object> from the selected Environment, or use an example within the supported shape such as examples/machines/lab-rhel` |
 | An unclaimed object of a claimed kind | an effect-bearing object of a bound kind none claims | `no implementation of this executable claims <object>` | `remove <object> from the selected Environment, or use an example within the supported shape such as examples/machines/lab-rhel` |
 
+#### Unusable bound material
+
 A fresh `apply` also refuses, once it has bound the Secrets
 its plan names and before registration, any bound material a capability proves
 unusable, naming the Secret, and it releases the binding it created
 (`TestAFreshApplyRefusesMaterialItsCapabilityRefusesBeforeRegistration`).
+
+#### Template syntax in requests
 
 A fresh `apply` and its preview refuse, before registration, every
 block whose request holds a template delimiter, `{{`, `{%` or `{#`, in a string
@@ -1323,6 +1372,8 @@ the same way before its confirmation and before any runtime is lent or Secret
 bound. It names the Machine whose value holds the delimiter or key and the
 field, read from that Machine's request, and its remedy ends with that same
 command, with `--context`.
+
+### Previewing a decision
 
 The operator selects `apply --dry-run` or `destroy --dry-run`. Each uses the decision
 path of its named verb. A fresh
@@ -1351,10 +1402,12 @@ preview and its verb report a refusal of that decision with the same code,
 message and remedy, and a preview that succeeds shows the plan the verb then
 presents. The preview stops at the decision: it finalizes nothing, binds no
 secret, claims neither the controller host nor a host reservation, takes no
-exclusive lock and registers nothing, so a refusal from those steps, like the
+exclusive root lock or lease and registers nothing, so a refusal from those steps, like the
 authorization and confirmation gates, a continuation's re-proof of its input,
 automation, execution closure and host, and a removal's resolution and
 quiescence proof, stays the verb's.
+
+### Presentation groups and implementation identity
 
 A domain capability may define ordered presentation groups within its block for
 one operation performed across one or more Machines. The capability owns each
@@ -1394,10 +1447,10 @@ use refuses before its observation or effect, preserving recovery evidence.
 Every effect of an operation runs inside the controller runtime of the build
 in hand: the venv its embedded runtime lock builds on the interpreter the setup
 receipt names ([controller runtime](controller.md#host-identity-and-shared-prerequisites)).
-An operation locates that runtime once, before it registers, and refuses
-`controller.state` with `run bootwright install` when the setup record holds no
-receipt, records an interrupted setup or another build's format, or this host
-has published no runtime for the build's lock. A registration freezes the
+An operation locates that runtime once, before it registers, as
+[the controller runtime](controller.md#the-controller-runtime) states,
+rebuilding a missing runtime directory from the cache and otherwise refusing
+`controller.state` with `run bootwright install`. A registration freezes the
 runtime's Python and Ansible *execution closure* in the operation record:
 `prerequisites.RuntimeClosureFormat`, a SHA-256 over the runtime lock
 digest and the interpreter's ABI, with that ABI (`python`) and the lock's
@@ -1423,7 +1476,7 @@ observation, it proves each saved block's fingerprint and content digest against
 the current implementation and strictly reads its frozen request through that
 capability. The proof applies even to the registering executable. The original
 plan digest, input revision and bytes, dependencies, reservations, bindings and
-authorizations remain authoritative and are re-proved under the exclusive lock.
+authorizations remain authoritative and are re-proved under the exclusive context lease.
 A continued removal also re-derives only its removal policy and refuses changed
 authorizations or groups. A fresh removal proves the contracts of the blocks it
 owns; evidence lent from its original apply is checked against its producing
@@ -1468,8 +1521,8 @@ safe-removal proofs remain mandatory.
 
 That re-proof, with the controller setup and host binding a continuation also
 re-proves ([controller-host protection](#controller-host-protection)), runs
-under the shared lock before the plan is presented, authorized or confirmed,
-and again under the exclusive lock before registration, so no plan is
+under the shared root lock before the plan is presented, authorized or confirmed,
+and again under the exclusive context lease before registration, so no plan is
 presented for a continuation or resolution that refuses. A fresh removal
 proves its host the same way. An `apply` refused over an incomplete removal
 names that removal's continuation, or the fresh removal that replaces a failed
@@ -1483,17 +1536,15 @@ setup has not completed, or whose runtime for the running build is not
 prepared, refuses every verb that runs a block or registers, naming
 `run bootwright install`, and `status` offers it in their place.
 
-### Attempts and unknown outcomes
+## Attempts and unknown outcomes
 
 The executor allocates the next attempt number and durably records `running`
-before a block's first side effect. Each attempt durably records the effect
-state its [outcome](#attempt-outcomes) justifies, `completed` or `unknown`, and
-only positive evidence permits an effect state other than `unknown`. A
+before a block's first side effect. Each attempt durably records the effect and block state the
+[attempt outcomes](#attempt-outcomes) table assigns. A
 Bootwright-controlled block reaches `done` only after its
 effect plus required ownership and completion evidence are durable. It reaches
 `failed` only with a typed failure whose evidence and capability contract
-define a safe continuation or retry boundary. A direct apply or destroy result
-with positive `no-effect` is a typed failure and never success. An idempotent
+define a safe continuation or retry boundary. An idempotent
 already-complete apply reports `completed` with completion evidence, and an
 already-absent destroy reports `completed` with positive absence evidence.
 
@@ -1522,9 +1573,11 @@ nothing, including an attempt record beside no block record, which is how a
 lost block record reads: starting over an effect that may have begun would skip
 the observation an unproved effect requires.
 
-An invocation that names no attempt of its own, a resolution, or a keep is
-read-only: before it creates a job, the runner refuses any adapter operation
-there but `observe`, a `lend`, and the read-only operations composition admits
+An execution that runs no attempt of its own is read-only: a resolution, a
+keep, which is the observation handing over a
+[kept copy](#produced-material-custody) before a removal, and an execution no
+operation record names. There, before it creates a job, the runner refuses any adapter operation
+but `observe`, a `lend`, and the read-only operations composition admits
 (`readOnlyOperations`, held by `TestReadOnlyEntrypointsAreExplicit`): a lend's
 [revoke](#produced-material-custody) and an
 [administrator credential update](cli/cluster-admin-credentials.md#administrator-credential-updates)'s
@@ -1550,6 +1603,8 @@ This is what makes a retry safe, and every retry in this contract depends on
 it: a failed block is retried by repeating its operation, and a block resolved
 from a partial realization is retried the same way. Each capability owns which
 of its own differences are convergible and names them beside its replay rules.
+
+### Resolving an unknown outcome
 
 A lost response, cancellation, required-log failure, or contradictory
 observation moves the attempt effect state, block, and operation to durable
@@ -1658,7 +1713,9 @@ observation proves. Deleting the context with `--allow-orphans` instead
 abandons whatever the block may own, and releases the context's host
 reservations with it ([permanent deletion](contexts.md#permanent-deletion)).
 
-A required-log write failure is also a sticky, durable operation fault: it sets
+### Required-log faults
+
+A required-log write failure is a sticky, durable operation fault: it sets
 the operation record's `logFault` flag, and no later effect or retry starts
 until the required private logging boundary is safely restored, even if
 positive evidence resolves the affected block to `done` or `failed`. The
@@ -1675,7 +1732,7 @@ invocation that would observe, probe, register or start anything, and an
 `apply` that [settles](#lifecycle-unit) over the unchanged input of that
 operation once it is a completed apply, after re-proving the apply it decided
 from. Each first reopens that operation's operation log under the exclusive
-lock and durably writes its opening record, and only then durably clears the
+context lease and durably writes its opening record, and only then durably clears the
 flag; the settling `apply` reports only after that. Nothing else clears it:
 not elapsed time, a read, `status`, a `destroy` that settles, or a write to any
 other log. A failure at either step preserves the flag and starts nothing.
@@ -1687,7 +1744,12 @@ replaces the failed attempt log. Missing or truncated log detail is never
 reconstructed, treated as operation evidence, or used to weaken the resolution
 rules above.
 
-### Continuation and removal
+## Continuation and removal
+
+Continuation retries what failed and a removal takes back what an operation
+owns; each leaf below states one rule set.
+
+### Retry and admission
 
 Continuation skips done blocks and retries failed blocks under their frozen
 capability contracts, concurrently and each once per invocation: an invocation
@@ -1710,6 +1772,8 @@ the same: it admits nothing further and waits for what is in flight, and it is
 never a pause. See [keep-going removal](#keep-going-removal) for the opt-in
 destroy policy.
 
+### Removal ownership
+
 Destroy is planned from the plan its apply froze, not from desired state and
 not from what current code would derive from it. Every block a removal carries
 keeps the identity, implementation, content digest and canonical request its
@@ -1726,10 +1790,10 @@ incomplete apply that started no block, which is one still `running` or
 the exact input it froze could continue; its removal is therefore not a settled
 verb but a removal that carries no block: it registers, performs no effect and
 completes, which releases what the apply claimed and leaves the context at
-rest. No other operation can leave nothing to remove: a completed apply's
-blocks are all `done`, and a `failed` or `unknown` apply holds the block that
-made it so or, where its record [lags](#lifecycle-unit) behind them, blocks
-that are all `done`. A failed removal holds a block it has not proved gone,
+rest. No other operation can leave nothing to remove: a completed apply owns
+its whole frozen plan, which its removal covers whatever its blocks read, and a
+`failed` or `unknown` apply holds the block that made it so or, where its
+record [lags](#lifecycle-unit) behind them, blocks that are all `done`. A failed removal holds a block it has not proved gone,
 whether the one that failed or the `running` one a retry start that failed
 left, unless a
 removal superseding it resolved that block `done` and stopped before recording
@@ -1756,6 +1820,8 @@ completed removal holding a block that is not `done` is refused by both
 verbs, as the [lifecycle unit](#lifecycle-unit) states. An incomplete apply
 and a failed removal are not held to this, because blocks that are not `done`
 are legitimate in both.
+
+### Contradictory records
 
 A removal of an incomplete apply refuses instead where the apply's records
 contradict what it started, with the completed-apply refusal's code, remedy
@@ -1824,13 +1890,16 @@ removal, beside no operation, each state no index accounts for, and an
 operation whose frozen Secret binding the keyring no longer lists, or whose
 keyring listing fails as its reopen would, as below.
 
+### Frozen requests and contract guards
+
 A frozen block records what creating it did; removing it is the other half of
 the same request. Each capability therefore reads its own frozen request and
 states what removing that block does: the words it is planned and reported in,
-the impacts it lists, and the authorization it consumes. Nothing else of the
-block may change, so planning a removal can never alter what is removed, and a
-removal acknowledges the consequences of removing rather than the consequences
-its apply acknowledged. An [erase relaxation](#erase-relaxation) is the one
+the impacts it lists, its groups and the authorization it consumes. Nothing
+else of the block may change, so planning a removal can never alter what is
+removed, and a removal acknowledges the consequences of removing rather than
+the consequences its apply acknowledged. A relaxation, an
+[erase](#erase-relaxation) or an [abandonment](#abandoned-removal), is the one
 exception.
 
 Reading a frozen request is what makes a context removable without re-deriving
@@ -1880,8 +1949,12 @@ stuck or partial destroy. A change loosening what an observation accepts as
 this context's own has no such backstop, so it requires explicit safety review
 and updated current contract evidence under the development policy.
 
+### Bindings of a removal
+
 A fresh removal uses the secret material its apply bound, by reopening that
-operation's own binding rather than binding what the current declarations name.
+operation's own binding, or over a lineage the binding
+[removal over a lineage](#removal-over-a-lineage) names, rather than binding
+what the current declarations name.
 The material that created an effect is the material that proves it gone, and a
 declaration edited or rotated afterwards never silently changes which version a
 removal presents; only the recorded
@@ -1937,6 +2010,8 @@ all `done` it offers `bootwright apply` first, which finalizes that apply
 without reopening the binding, and then the deletion; over any other such
 operation it offers that deletion as its only next step.
 
+### Removal order and supersession
+
 Destroy removes dependents before dependencies, so a removal inverts the
 apply's dependency graph and not merely its order: every edge turns around and
 a block waits on its own dependents, because what it provided stays in use
@@ -1947,9 +2022,9 @@ it was written.
 
 A fresh removal may supersede any apply that has not completed, and a failed
 destroy, which is removed over what it has not yet proved gone and is never
-continued. A replacement's block also counts, as proof of its dependencies'
-removal, each one a removal of the same `source` it replaces proved `done` and
-no nearer removal carries. An apply
+continued. A replacement also counts as already removed each block that a removal of the
+same `source`, which it replaces, recorded `done` and that no nearer removal
+carries. An apply
 qualifies however it stopped, because the set it owns is the same at a
 boundary, at a failure, and at an interruption.
 A removal resolves unproved effects first by the apply or removal
@@ -1957,14 +2032,16 @@ A removal resolves unproved effects first by the apply or removal
 [keep-going removal](#keep-going-removal) permits deferral. A continuation of an apply still
 resolves by the apply's check. A running, paused or unknown removal is
 continued rather than replaced, because a removal that lost an outcome is
-resolved by repeating itself, except under a new
-[erase relaxation](#erase-relaxation). A continuation runs a repaired adapter when the
+resolved by repeating itself, except under a relaxation its plan does not
+hold, an [erase](#erase-relaxation) or an [abandonment](#abandoned-removal). A continuation runs a repaired adapter when the
 repair leaves every frozen block the same; replacement is the road out of any
 other repair, because a continuation stays frozen to its blocks and execution
 closure while a fresh operation runs under the current ones.
 
-Every transition is decided from durable state read under the shared lock and
-performs its effects under the exclusive one. Under the exclusive lock, before
+### Re-proof under the lock
+
+Every transition is decided from durable state read under the shared root lock and
+performs its effects under the exclusive context lease. Under that lease, before
 it does anything, it re-proves that the context still holds exactly the state
 it was planned from: the same current operation, or still none; the same
 operation record, every field of it; the same frozen plan, whose digest is the
@@ -1987,10 +2064,11 @@ those its operation froze, and a fresh apply against those its plan was
 compiled from, so it never registers a plan under an input it was not compiled
 from.
 
-Destroy retains evidence until positive removal or positive absence is durable.
+Destroy retains evidence until positive removal or positive absence is durable,
+or until an [abandoned removal](#abandoned-removal) records the step abandoned.
 It accepts no stage selection.
 
-#### Removal over a lineage
+### Removal over a lineage
 
 An apply that names a predecessor is the head of a lineage, and one `destroy`
 takes the whole lineage back. The owned set is the blocks the head started and
@@ -2029,8 +2107,8 @@ With `--keep-going`, the enrollment and everything its inverse holds back
 remain pending while independent steps can run. This applies when the
 enrollment has no inverse prerequisites, the removal has no pre-stop,
 online, or host-retirement phase to preserve, and it
-[abandons](#abandoned-removal) no step. The destroy record carries a
-source block IDs before its first effect. Every retry, including a
+[abandons](#abandoned-removal) no step. Before its first effect, the destroy
+record lists the IDs of the source blocks whose proof it defers. Every retry, including a
 plain destroy, requires readable positive proof before admitting those inverses.
 Native power-off groups exclude Machines held behind an unresolved proof.
 The source record retains the failed proof and its reason. A stopped or
@@ -2080,7 +2158,9 @@ abandonments the plan already holds.
 
 `--clusters` selects a cluster's realizing blocks and its cluster-owned
 resources, networks and add-ons. `--machines` selects the named Machines'
-realizing blocks. A name must resolve to planned work in the current phase.
+realizing blocks. A name the plan the apply registers or continues holds no block for refuses
+`apply.stage-empty`, naming it, before any effect
+(`TestASelectedTargetThePlanHoldsNoBlockForRefusesNamingIt`).
 The planner freezes generated and child blocks' cluster ownership alongside
 their typed object identity. A cluster selector refuses a frozen plan whose
 child blocks lack that ownership. The operator can continue it by stage. A block with two cluster owners, such as Ceph
@@ -2103,8 +2183,9 @@ effects the operation started.
 During automatic disk preparation, a scoped apply can freeze discovery for
 explicitly named Machines or direct members of explicitly named clusters.
 When a fresh preparation needs inventory outside that selection, apply
-refuses before effects and names the missing Machines. Review and authorize
-the resolved install in its own phase.
+refuses before effects and names the missing Machines. The operator reviews and
+authorizes the resolved install in a separate apply that selects those
+Machines.
 
 ## Ready-work priority
 
@@ -2114,7 +2195,8 @@ This is a scheduling heuristic, not a duration estimate or an optimality
 guarantee. Unselected or completed successors add no priority. A block waiting
 for a claim or throttle never holds back another startable block.
 
-Resolutions, retries and every removal containing a pre-stop phase retain
+Resolutions, retries and every removal containing a pre-stop phase, as
+[quiescence before removal](#quiescence-before-removal) names it, retain
 their admission order, including after that phase completes ahead of dependency
 order. The frozen plan, dependencies, step numbers and digests stay unchanged
 when admission chooses a later ready step first. Each invocation uses this
@@ -2170,6 +2252,12 @@ host. A block's state, not the absence of a record, decides absence:
 | No block realizes it otherwise | present while the applied catalog declares it, else absent | `apply <op> did not declare it` |
 | The applied revision is collected, its bytes moved, or it no longer compiles, where the applied object would be shown | unknown | `the input revision <rev> that apply <op> froze cannot be read: <message>` |
 | Its blocks are done but the applied catalog does not declare it | unknown | `the input revision <rev> that apply <op> froze does not declare it`, with the remedy of reviewing `bootwright status` |
+
+Not yet met: an object whose removal step was [abandoned](#abandoned-removal)
+reads `absent` with the reason `destroy <op> took it back`, though its effect
+stays on its host; it reads `unknown` with the reason
+`destroy <op> abandoned <blocks> in place on its host`; tracked as
+[B1801](milestones/m1.md#b1801).
 
 An object both undeclared and absent is not listed. Objects are ordered by API
 kind order, then name. The input reads `none` with no owning apply or after a
@@ -2267,7 +2355,7 @@ with the remedy of restoring the context's keyring from a
 [complete backup](contexts.md#format-and-restore-boundary) or running
 `bootwright diff` without `--observe`.
 
-**Host proof and re-proof.** It then holds the context's shared lock as a
+**Host proof and re-proof.** It then holds the context's shared lease as a
 bounded run does. It re-reads the operation records and refuses
 `diff.context-moved` `the context changed while diff read it`, with the remedy of
 repeating the command, when they, the selected input revision or its bytes
@@ -2280,7 +2368,7 @@ observations in frozen plan order, each inside its own execution guard, at
 most as many at once as an operation runs and at most a
 [throttle's](#stages-and-the-pause-boundary) capacity of the blocks naming one
 throttle, skipping a block whose throttle is full so it never holds back a
-later one; an observation claims no exclusive resource. Readings fold in frozen plan order, whatever order observations return in. It
+later one; an observation names no resource it will not share. Readings fold in frozen plan order, whatever order observations return in. It
 reports one check row, `observation`, and holds the lock until every
 observation returned, so an apply or destroy started meanwhile refuses
 `context.busy`. Canceling it stops further observations, and a block not
@@ -2319,11 +2407,17 @@ their cluster's host reads this way
 A present or partial reading also carries, as the note `<block>: <message>`,
 each [warning](architecture.md#adapter-warnings-and-group-progress) its
 observation's completed result reported, such as the checks a Ceph
-observation names as `not ready: <entry>`; a warning holding a part of 8
-bytes or more of the material lent to the read is left out. An unknown
+observation names as `not ready: <entry>`; a warning that carries lent
+material is left out. A text carries lent material when it contains, byte for
+byte, a whole part of a Secret lent to the run whose length is at least
+`minLentPart` (8 bytes); a shorter part is not matched
+(`TestALentSecretInAProjectionRefusesBeforeOutput`). An unknown
 reading carries none.
 An unknown reading's reason is the capability's explanation of what it read
-when it gives one, with its remedy; otherwise the error's first message, or
+when it gives one, with its remedy; otherwise the error's first message, which
+comes from a refusal's closed `detail` grammar or the redacted `nativeError` of
+[the adapter result protocol](architecture.md#the-adapter-result-protocol) and
+carries no lent value, or
 the general reason of an observation that proved nothing, with the remedy
 `restore what the reason names, then repeat bootwright diff --context <name> --observe`,
 except the runner's refusal of an unrecorded output, whose remedy is named under
@@ -2363,8 +2457,8 @@ claims is a path its `ProjectedPaths` and the [table
 below](#observable-fields-by-implementation) list, and it carries at most 8
 notes of at most 200 bytes without control characters (C0, DEL or C1); otherwise its block
 reads unknown, naming why. Before anything is admitted, any fragment, note or
-name holding a part of 8 bytes or more of the material lent to the run refuses
-the whole comparison with `plan.capability-defect`
+name that carries lent material, as the [readings](#readings-and-their-fold)
+define it, refuses the whole comparison with `plan.capability-defect`
 `a projection of block <id> carries Secret material, so diff shows nothing`.
 Fragments merge by field and named lists align by their key. A field two
 fragments observe differently is resolved by **Attribution** below when both
@@ -2419,9 +2513,8 @@ context owns, so what a host holds outside one is neither listed here nor
 taken back by a removal. A comparison restores no data: an object's contents,
 such as a pool's objects, are never part of either side.
 
-An object an abandoned context of the same name left on a host reads as this
-context's, because no native identity distinguishes the two, the known
-exception [mutation safety](#mutation-safety) names.
+The name-derived kinds [mutation safety](#mutation-safety) lists read as this
+context's own when an abandoned context of the same name left them.
 
 ### Observable fields by implementation
 
@@ -2530,12 +2623,17 @@ Provided infrastructure and the controller stay available. A failed or
 ambiguous reading refuses the complete flow with `lifecycle.start-power` before any registration,
 credential issue, recovery write or cleanup. It leaves existing records,
 logs, staged files and subscriptions intact. Repeating the command checks
-again. Authorization and `--unregistered` leave this condition in force. An
+again. Authorization and `--unregistered` leave this condition in force. It covers
+every managed target Machine, those a destroy lists under `Stop after online
+cleanup` included, whose later stop proof [quiescence before
+removal](#quiescence-before-removal) states.
+An
 entry reading creates nothing on a provider host, no Secret and no token
 (`TestStartPowerRequiresClusterAndVMIdentityAndNeverLendsHostedAccess`).
 Each reading reports one row under `Checks` while it runs and settles with
 its outcome, so the wait for a management controller is visible; an apply
-asks for its [bootstrap passwords](api/machines.md#managed-lifecycle-enrollment)
+first collects the bootstrap passwords
+[the Machine contract selects](api/machines.md#managed-lifecycle-enrollment)
 before the first reading.
 
 A staged or additive apply checks its managed fleet. A destroy derives its
@@ -2556,10 +2654,12 @@ again. A power reading supplies neither ownership nor authority to erase.
 
 ### Quiescence before removal
 
-The engine supports the online ordering below. Candidate Ceph capabilities
-refuse removal while any host survives it
-([B491](milestones/m2.md#b491)); their
-[target contract](ceph.md) owns the consumer-quiescence and cleanup proofs.
+The engine supports the online ordering below. The removal phases are the
+pre-stop inverses, the online cleanup and the retirement of hosts.
+[Ceph removal and concurrency](ceph.md#removal-and-concurrency) owns Ceph
+removal while hosts survive it, retirement with virtual hosts, physical
+retirement of bare-metal hosts, and the consumer-quiescence and cleanup
+proofs.
 
 A storage effect whose every host Machine is a Bootwright-owned virtual
 Machine destroyed by the same removal is retired with them, provided no
@@ -2577,9 +2677,11 @@ runs of the image and host blocks are not host-contacting calls.
 
 Bootwright removes and replaces only what is out of use. Machine capabilities
 prove their targets stopped from native state; a silent or unreadable target
-is unproved and refuses. Most removals prove every affected Machine stopped
-before registration, report `destroy.in-use` with the stop commands (or the
-remedy a capability names when no stop settles its block), and make no effect
+is unproved and refuses. Every removal proves every affected Machine stopped
+before registration, except a Machine the plan lists under `Stop after online
+cleanup` and a Machine whose proof follows a pre-stop block, both below; no
+other removal defers the proof. It reports `destroy.in-use` with the stop commands (or the
+remedy a capability names when no stop settles its block), and makes no effect
 when any target is live. Each Machine inverse revalidates its target
 just before removing it.
 
@@ -2674,7 +2776,7 @@ host. A managed network keeps off the host's own links and routes under the
 probe of [provider host realization](substrates.md#provider-host-realization).
 
 A fresh removal proves, before its plan is presented and again under the
-exclusive lock before it resolves an effect, probes quiescence or registers,
+exclusive context lease before it resolves an effect, probes quiescence or registers,
 that controller setup completed on this host, that this host is the host the
 controller state records, and that a binding the controller state records for
 the context names this host. A fresh removal over a context the controller
@@ -2825,10 +2927,11 @@ its targets, identities and network; its Kickstart renders them, the stored
 erase host key and the current fleet key with the running build's worker, so
 each boot rewrites it and a retry after an automation fix boots the fixed
 worker under the same custody while the worker request version is unchanged.
-A fresh removal always erases under its own custody:
-finding custody naming another removal's attempt, whether that removal failed,
-was replaced or finished, it withdraws that custody's private publication and
-boot-private files, sets its receipt and any finalizing or completed record
+A fresh removal always erases under its own custody. Custody whose request
+digest or apply operation differs from this removal's refuses `foreign-custody`
+and stays in place. Custody that matches both and names another removal's
+attempt, whether that removal failed, was replaced or finished, is withdrawn:
+the removal withdraws that custody's private publication and boot-private files, sets its receipt and any finalizing or completed record
 aside as `superseded-<operation>-<record>.json` without adopting them, keeping
 those of only the four removals set aside last, and then writes its own, and an
 observation of it reads unprepared for this removal. An erase a removal it
@@ -2939,24 +3042,21 @@ machine, missing OS or zero prefix never proves completion. Identity drift,
 short writes, failed readback and unavailable probes refuse without selecting
 another disk.
 
-An erase phase that refuses names its refusal to the runner instead of failing
-under `no_log`: `machine-running`, `identity-mismatch`, `hardware-mismatch` and
-`target-unanswered` from the controller's target proof; `controller-refused`
-and `controller-deadline` from a media, boot, power or eject step;
-`poweroff-unproved`, `worker-failed`, `worker-unreachable`, `foreign-worker`
-and `receipt-timeout` from the RAM worker; `foreign-custody` and
-`custody-drift` from custody; `boot-media-mismatch`,
-`image-build-failed` and `install-network-unsupported` from the image build. Its detail carries only what the controller or
-the session observed, such as a power state, the answering system UUID, how
-many hardware addresses differ, an HTTP status or an unanswered session's class
-and minutes, never a value derived from the private material; the play then
-stops outside `no_log` naming the code and the controller's own printable
-line. Each diagnostic is the [stop of its code](cli/stops.md#physical-erase-stops),
-of the Machine, whose remedy names the destroy to run; a foreign worker, an unreachable worker and
-a foreign custody also name releasing the Machine without erasing through
-`--authorize erase=<machine>:retain`, and an unsupported install network names
-only that release. A custody drift never does, because a
-retained erase reads the same custody: its remedy names the custody directory
+An erase phase that refuses names one closed adapter code to the runner instead
+of failing under `no_log`, and the play then stops outside `no_log` naming the
+code and the controller's own printable line. Its detail carries only what the
+controller or the session observed, such as a power state, the answering system
+UUID, how many hardware addresses differ, an HTTP status or an unanswered
+session's class and minutes, never a value derived from the private material.
+`internal/managedos/physicalerase` maps each code to one [physical erase
+stop](cli/stops.md#physical-erase-stops), whose remedy names the destroy to run
+(`TestPhysicalEraseNamesEachRefusalWithItsCauseAndTheDestroyRemedy`). The remedies of `erase.target-mismatch`
+for an identity mismatch, `erase.foreign-worker`, `erase.worker-unreachable`
+and `erase.custody-mismatch` for a foreign custody also name releasing the
+Machine without erasing through `--authorize erase=<machine>:retain`, and
+`erase.install-network` names only that release. A custody drift (also `erase.custody-mismatch`) never does,
+because a retained erase reads the same custody: its remedy names the custody
+directory
 `/var/lib/bootwright-hosted/<context>/machines/<machine>/erase/<apply operation>`
 and the private erase publication directory, for the operator to remove the
 image its record names and then that custody by hand before the destroy runs
@@ -3061,7 +3161,8 @@ power, probe, or digest checks.
 is the [access-credential rebind](#access-credential-rebind), which no block
 consumes and which refuses when it does not apply, and `erase=<machine>:<method>`
 is the [erase relaxation](#erase-relaxation), which no block consumes either,
-nor does `abandon=<machine>`, the [abandoned removal](#abandoned-removal). `all`, unknown, duplicate,
+nor does `abandon=<machine>`, the [abandoned removal](#abandoned-removal);
+each of those three is inapplicable as its linked section states. `all`, unknown, duplicate,
 empty, and inapplicable values are errors. An apply requires exactly the tokens [consumed](#plan-and-execution) by
 unfinished blocks that could reach an attempt in this invocation. This
 includes later waves and retries under the selected stages and targets.
@@ -3070,8 +3171,9 @@ admitted prerequisites succeed and unproved predecessors can resolve.
 An observation outside the selection adds no data-loss authorization. The
 engine re-proves the decision under the exclusive lease and checks dispatch
 against the reviewed set. Each continuation computes its own set. Destroy
-requires the tokens its frozen removal plan consumes. A token the invocation does not require
-is inapplicable and refuses with `authorize.unneeded` before registration,
+requires the tokens its frozen removal plan consumes. A `data-loss` token the
+invocation does not require is inapplicable and refuses with
+`authorize.unneeded` before registration,
 so a habitual authorization cannot pre-authorize a future destructive plan; a
 required token that is not supplied refuses `authorize.missing`, naming the blocks
 that consume it. A `data-loss` token may carry the digest of the steps that
@@ -3089,14 +3191,7 @@ blocks are all `done` precedes planning, consumes no token and asks no
 confirmation, because it performs only the record, releases and projection its
 records prove. An
 enabled `CustomPlaybook` has no authorization bypass; it refuses under the
-[unrealizable-kind rule](#stages-and-the-pause-boundary).
-
-Before operational exposure, every supported substrate/component/version must
-pass the shared port suite, safety tests, and real-system qualification with
-immutable plans, durable continuation, leases, exact ownership, and private
-attempt logs. [The CLI contract](cli.md) must cover the complete journey,
-including confirmation/authorization, results, diagnostics, cancellation, and
-recovery.
+[unrealizable-kind rule](#unrealizable-objects).
 
 ### Erase relaxation
 
@@ -3109,9 +3204,9 @@ declared [removal erase](#opt-in-physical-logical-overwrite) of every target
 of that Machine for that one removal. The removal block whose capability offers
 a relaxation for that Machine validates the method and states the relaxed
 description, impacts and groups, and the block freezes the method as its
-relaxation beside its unchanged identity, request and digests; this is the one
-exception to a removal planning nothing of a block but its words, impacts,
-groups and authorization ([continuation and removal](#continuation-and-removal)).
+relaxation beside its unchanged identity, request and digests, the
+[exception](#continuation-and-removal) a relaxation is to a removal planning
+nothing of a block.
 A relaxed block still consumes `data-loss`, and for a block an erase
 relaxation changes, that relaxation is one more member of the `data-loss`
 digest, so the relaxed removal is reviewed in its plan and bound by its digest
@@ -3145,8 +3240,8 @@ continuation.
 ### Access-credential rebind
 
 An access credential rotated at its endpoint after an operation bound it, such
-as a management controller's password, a provider's kubeconfig, a vCenter
-login or a registry login, would strand that operation's continuation and
+as a management controller's password, a provider's kubeconfig or a registry
+login, would strand that operation's continuation and
 removal, because both present the bound version, which the endpoint now
 refuses. The access-credential rebind is the one recorded exit beside the two
 a [lost binding](#continuation-and-removal) names (D37) and the rebind of an
@@ -3171,17 +3266,11 @@ token:
   the rebind, naming the step.
 
 Each capability reads the class from the
-[classes its block's Secrets carry](secrets.md#immutable-binding-and-contexts).
-Today the bare-metal Machine, the managed-OS installation and its physical
-erase of a bare-metal target, and the agent installation's bare-metal nodes
-present their management controller's `credentialsRef`, the KubeVirt blocks
-their `kubeconfigRef`, the Ceph cluster, host and image blocks the
-registry login, a managed service, an artifact server and a libvirt
-Machine's emulated BMC the registry login of their image source, and every
-block placed on an SSH host that host's `privateKeyRef`. An emulated BMC's
-credentials are effect material its libvirt host gave the emulator, and a
-trust anchor (`trustBundleRef`, `knownHostsRef`) is never presented, so neither
-is rebound. A vSphere arm will name its vCenter login likewise.
+[classes its block's Secrets carry](secrets.md#immutable-binding-and-contexts),
+which the code declares and `TestEveryReferencedSecretIsClassified` holds. An
+emulated BMC's credentials are effect material its libvirt host gave the
+emulator, and a trust anchor (`trustBundleRef`, `knownHostsRef`) is never
+presented (`TestAHostRebindsNoTrustAnchor`), so neither is rebound.
 
 The rebind issues a new binding version: a binding equal to the reopened one
 except that each named Secret is pinned to its current version. A fresh removal

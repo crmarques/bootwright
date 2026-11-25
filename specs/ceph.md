@@ -61,7 +61,7 @@ A `CephCluster`'s `spec.management` selects: `managed` selects the
 implementations whose block families [the plan](#plan-and-prerequisites)
 freezes, and an `external` cluster selects none here. An effect-bearing Ceph
 object that no bound implementation claims refuses by the
-[unclaimed-object table](state-reconciliation.md#stages-and-the-pause-boundary),
+[unclaimed-object table](state-reconciliation.md#unrealizable-objects),
 and the combinations the release does not support refuse as the
 [unsupported combinations](ceph-coverage.md#unsupported-combinations) list.
 `TestEveryExampleObjectIsClaimedOncePerFamily` holds every example to the claim.

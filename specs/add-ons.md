@@ -470,8 +470,8 @@ key. The instance names it as a
 [produced input](state-reconciliation.md#produced-material-custody), the
 attempt is lent the entry, and the digest, comparison and observation
 rules above apply unchanged; an unproved entry is never placed. A produced
-placement source is one of a closed set the program version names, today
-only a `CephConsumer`'s `external-details`. Planning refuses any other
+placement source is one of a closed set the program version names: a
+`CephConsumer`'s `external-details`. Planning refuses any other
 producer kind or output, in particular every `kubeconfig` and `dashboard`
 output, naming the placement.
 

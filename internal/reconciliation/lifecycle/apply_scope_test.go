@@ -167,3 +167,20 @@ func TestAClusterSelectionRequiresFrozenOwnershipAndACompatibleAddOnBoundary(t *
 		t.Fatalf("unrelated add-on was accepted: %+v", diagnostics.Of(err))
 	}
 }
+
+func TestASelectedTargetThePlanHoldsNoBlockForRefusesNamingIt(t *testing.T) {
+	t.Parallel()
+	host := stagedDefinition("host", reconciliation.StageClusters)
+	host.Kind = "OpenShiftCluster"
+	plan, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{host})
+	if err != nil {
+		t.Fatal(err)
+	}
+	selection, _ := reconciliation.ParseSelection(nil, "")
+	selection, _ = selection.WithTargets([]string{"absent"}, nil)
+	_, err = bindSelection(testContextName, plan, selection)
+	reported := diagnostics.Of(err)
+	if firstCode(err) != "apply.stage-empty" || !strings.Contains(reported[0].Message, "absent") {
+		t.Fatalf("a target no block realizes was accepted: %+v", reported)
+	}
+}

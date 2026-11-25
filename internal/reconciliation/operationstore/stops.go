@@ -27,7 +27,7 @@ var (
 		Meaning: "a record of the context names another build as its writer, and this build cannot read it", Remedy: "continue or remove the operation with the build that wrote the record"}
 	operationsRecordUnreadable = diagnostics.Stop{Code: "operations.record-unreadable", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryRegisteringBuild,
-		Meaning: "the record of an operation is malformed, unsupported or not canonical, so status cannot read it", Remedy: "use the build that registered the operation to inspect and remove it, or restore the whole context store from a matching backup"}
+		Meaning: "the record of an operation fails closed decoding or is not canonical, so status cannot read it", Remedy: "inspect and remove it with the build that registered it, then delete its context; when this build registered it, restore the whole context store from a matching backup"}
 	operationsPlanOtherBuild = diagnostics.Stop{Code: "operations.plan-other-build", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseBuild, Recovery: diagnostics.RecoveryRegisteringBuild,
 		Meaning: "the frozen plan of an operation is not one this build could have produced", Remedy: "destroy the context with the build that registered the operation"}

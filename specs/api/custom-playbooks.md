@@ -121,7 +121,7 @@ compilation resolves them and renders only the references.
 
 An enabled `CustomPlaybook` is an object no capability realizes, so a fresh
 `apply` and its `--dry-run` preview refuse it under the
-[unrealizable-kind rule](../state-reconciliation.md#stages-and-the-pause-boundary)
+[unrealizable-kind rule](../state-reconciliation.md#unrealizable-objects)
 before content access or operation registration, with no authorization bypass,
 and `validate` warns it `api.unrealized`
 ([admitted but unrealized](../api.md#admitted-but-unrealized)). A disabled

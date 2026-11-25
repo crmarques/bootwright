@@ -957,7 +957,8 @@ older value; tracked as [B103](milestones/backlog.md#b103).
 ## Permanent deletion
 
 The [Reconciliation guard](state-reconciliation.md#context-mutation-evidence)
-owns positive disposal proof. Under the root lock and context lease, refuse
+owns positive disposal proof and the orphan acknowledgement's waiver of it;
+this section owns every deletion case. Under the root lock and context lease, refuse
 live resources, incomplete operations, retained ownership, unknown/corrupt
 evidence, or any required recovery material. A default refusal over evidence
 that still attributes objects to the context names

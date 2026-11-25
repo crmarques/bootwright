@@ -1296,26 +1296,15 @@ no lifecycle identity or log. Setup uses its
 separate from the lifecycle receipt and operation logs, and keeps what its
 dnf printed in a [setup run](#setup-run-output) and nothing
 else. Only lifecycle effects and unknown-effect resolution use the operation,
-block, and attempt log tree below; a
+block, and attempt log tree of the log root; a
 [bounded run](#bounded-run-output) retains what its own adapter printed and
 nothing else.
 
-Managed operations use this tree beneath the log root, `/var/log/bootwright`:
-
-```text
-contexts/<context-name>/operations/<operation-id>/
-  operation.jsonl
-  blocks/<block-id>/
-    attempt-000001.jsonl
-    attempt-000001.output
-    attempt-000002.jsonl
-    attempt-000002-resolution-000001.jsonl
-    attempt-000002-resolution-000001.output
-```
-
-The [log root](../contexts/log-root.md) owns this layout, its modes, how it is
-created, and the retention of operation logs; the log root is never part of the
-store, so no path here is relative to the state root. State reconciliation owns
+Managed operations write their logs beneath the log root,
+`/var/log/bootwright`, in the tree the [log root](../contexts/log-root.md#layout)
+owns with its modes, how it is created, and the retention of operation logs;
+the log root is never part of the store, so no path here is relative to the
+state root. State reconciliation owns
 `<operation-id>`, `<block-id>`, and attempt numbers, and Workspace owns
 `<context-name>`. Their safe
 grammar, allocation, collision, and crash-gap rules are defined by

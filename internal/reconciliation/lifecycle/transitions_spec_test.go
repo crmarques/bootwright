@@ -41,6 +41,7 @@ func TestTransitionTablesMatchSpec(t *testing.T) {
 		"state machine":              checkStateMachine,
 		"attempt outcomes":           checkAttemptOutcomes,
 		"resolution outcomes":        checkResolutionOutcomes,
+		"removal checks":             checkRemovalChecks,
 		"block transitions":          checkBlockTransitions,
 		"operation state precedence": checkOperationPrecedence,
 	} {
@@ -576,6 +577,20 @@ func checkResolutionOutcomes(t *testing.T, lines []string) {
 	requireVocabulary(t, covered, "EffectState")
 }
 
+func checkRemovalChecks(t *testing.T, lines []string) {
+	covered := map[string]bool{}
+	for _, row := range specTableHeaded(t, lines, "### Resolution outcomes", "Removal's check proves, after an apply observation that did not prove completion", "Apply effect state", "Block") {
+		observed, _, _ := strings.Cut(strings.TrimPrefix(row[0], "`"), "`")
+		effect := removalEffect(reconciliation.EffectState(observed))
+		recorded, block, err := reconciliation.ResolutionTransition(effect)
+		if err != nil || row[1] != specList(string(recorded)) || row[2] != specList(string(block)) {
+			t.Errorf("row %q: the code records %q and %q (%v)", row, recorded, block, err)
+		}
+		cover(t, covered, observed)
+	}
+	requireVocabulary(t, covered, "EffectState")
+}
+
 func checkBlockTransitions(t *testing.T, lines []string) {
 	// What an attempt and a resolution can leave a block in, over every
 	// outcome and effect the code declares.
@@ -705,6 +720,58 @@ func specTable(t *testing.T, lines []string, heading string, header ...string) [
 		}
 	}
 	return table[2:]
+}
+
+// specTableHeaded returns the data rows of the table under an exact heading
+// whose header is the one named, for a heading that holds several tables.
+func specTableHeaded(t *testing.T, lines []string, heading string, header ...string) [][]string {
+	t.Helper()
+	start := slices.Index(lines, heading)
+	if start < 0 || slices.Contains(lines[start+1:], heading) {
+		t.Fatalf("%s must hold exactly one %q heading", transitionSpec, heading)
+	}
+	var tables [][]string
+	var current []string
+	flush := func() {
+		if len(current) != 0 {
+			tables = append(tables, current)
+			current = nil
+		}
+	}
+	for _, line := range lines[start+1:] {
+		if strings.HasPrefix(line, "#") {
+			break
+		}
+		if strings.HasPrefix(line, "|") {
+			current = append(current, line)
+			continue
+		}
+		flush()
+	}
+	flush()
+	for _, table := range tables {
+		cells := func(line string) []string {
+			parts := strings.Split(strings.TrimSuffix(strings.TrimPrefix(line, "|"), "|"), "|")
+			for index := range parts {
+				parts[index] = strings.TrimSpace(parts[index])
+			}
+			return parts
+		}
+		if len(table) < 3 || !slices.Equal(cells(table[0]), header) {
+			continue
+		}
+		var rows [][]string
+		for _, line := range table[2:] {
+			row := cells(line)
+			if len(row) != len(header) {
+				t.Fatalf("%q has a malformed row %q", heading, row)
+			}
+			rows = append(rows, row)
+		}
+		return rows
+	}
+	t.Fatalf("%q holds no table headed %q", heading, header)
+	return nil
 }
 
 // specCode reads a cell that must be exactly one code span.

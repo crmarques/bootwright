@@ -25,7 +25,9 @@ its modifier wherever two of its senses can meet; elsewhere context decides. A n
   substrate, so `Infra` in `InfraProvider` means substrate; an infrastructure
   service is a shared service kind, managed or external, such as `Proxy` or
   `DNSServer` ([infrastructure services](infrastructure-services.md)). The
-  `infrastructure-services` stage token names the service layer.
+  `infrastructure-services` stage token names the stage of shared services and
+  the host preparation they depend on
+  ([stages](state-reconciliation.md#stages-and-the-pause-boundary)).
 - **Block** and **step**: a block is the plan node, one frozen unit of the
   plan ([state reconciliation](state-reconciliation.md#plan-and-execution)); a
   step is a block as a preview or result presents it, numbered by its place in
@@ -33,6 +35,12 @@ its modifier wherever two of its senses can meet; elsewhere context decides. A n
   ([output](cli/output.md#lifecycle-and-status-results)). An add-on
   `spec.steps` entry is an add-on step ([add-ons](api/addons.md#steps)), never a
   block.
+- **Lifecycle unit**: one context's selected input revision, a complete
+  validated Environment selection; the context name is its identity
+  ([state reconciliation](state-reconciliation.md#lifecycle-unit)).
+- **Throttle**: a name a block may carry, frozen with the plan, that bounds
+  how many running blocks name it at once
+  ([stages](state-reconciliation.md#stages-and-the-pause-boundary)).
 - **Reservation**: a host-wide claim, such as a socket, BMC, media or machine,
   that refuses a conflicting context
   ([host reservations](infrastructure-services.md#host-reservations)).

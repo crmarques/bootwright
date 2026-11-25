@@ -66,10 +66,10 @@ var (
 		Meaning: "an incomplete operation of the other verb must be continued before another operation", Remedy: "continue or replace the incomplete operation the message names"}
 	applyRecordsMissing = diagnostics.Stop{Code: "apply.records-missing", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryAbandonContext,
-		Meaning: "a completed apply records no completion for blocks it froze, so nothing proves its input applied", Remedy: "restore the context's records, or take back what it owns and apply again"}
+		Meaning: "a completed apply records no completion for blocks it froze, so nothing proves its input applied", Remedy: "take back its frozen plan with destroy, or delete the context with context delete --purge"}
 	destroyRecordsMissing = diagnostics.Stop{Code: "destroy.records-missing", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryAbandonContext,
-		Meaning: "a completed destroy records no completion for blocks it froze, so nothing proves their effects removed", Remedy: "restore the context's records, or delete the context with what it may still own"}
+		Meaning: "a completed destroy records no completion for blocks it froze, so nothing proves their effects removed", Remedy: "delete the context with context delete --purge, adding --allow-orphans unless its evidence is pristine"}
 	applyInputChanged = diagnostics.Stop{Code: "apply.input-changed", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryOtherVerb,
 		Meaning: "the desired state changed after the apply completed, and it is no addition to it", Remedy: "take back what the context owns with destroy, then apply the changed input"}
@@ -108,7 +108,7 @@ var (
 		Meaning: "the selected state holds no single Environment naming its controller Machine", Remedy: "repair the input with validate"}
 	engineUnindexedRecords = diagnostics.Stop{Code: "engine.unindexed-records", Level: diagnostics.LevelContext, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryAbandonContext,
-		Meaning: "the context holds operation records or evidence its index names no operation for", Remedy: "restore the context's records, or delete the context with what it may still own"}
+		Meaning: "the context holds operation records or evidence its index names no operation for", Remedy: "delete the context with context delete --purge, adding --allow-orphans unless its evidence is pristine"}
 	engineRequestDefect = diagnostics.Stop{Code: "engine.request-defect", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseDefect, Recovery: diagnostics.RecoveryNone,
 		Meaning: "a capability declared or requested something the engine refuses to compose", Remedy: "report the message as a defect"}
@@ -126,7 +126,7 @@ var (
 		Meaning: "a Secret binding the operation froze is lost, so its material cannot be lent again", Remedy: "restore the context's keyring from a complete backup, or delete the context and remove what it named by hand"}
 	authorizeUnneeded = diagnostics.Stop{Code: "authorize.unneeded", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryFixThenRepeat,
-		Meaning: "--authorize names a token the plan does not require", Remedy: "repeat the command without that --authorize"}
+		Meaning: "--authorize names a token the plan does not require or a relaxation that changes nothing, or an --unregistered that acknowledges nothing", Remedy: "repeat the command without that --authorize"}
 	authorizeMissing = diagnostics.Stop{Code: "authorize.missing", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryAuthorize,
 		Meaning: "the plan has consequences no --authorize grants", Remedy: "review the plan, then repeat the command with the authorization it names"}

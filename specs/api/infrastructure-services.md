@@ -274,7 +274,7 @@ own address, topology and VIP constraints.
 No capability realizes a managed LoadBalancer. It is admitted with an
 [`api.unrealized`](../api.md#admitted-but-unrealized) warning, and refuses at
 plan as an unclaimed managed service whose remedy names `management: external`
-([unclaimed objects](../state-reconciliation.md#stages-and-the-pause-boundary));
+([unclaimed objects](../state-reconciliation.md#unrealizable-objects));
 declare `management: external` to use one.
 
 ## Consumer selections
