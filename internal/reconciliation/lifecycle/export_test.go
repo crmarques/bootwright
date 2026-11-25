@@ -206,6 +206,13 @@ func (p plannedCapability) RequiresOnlineRemoval(block reconciliation.Block) boo
 	return ok && online.RequiresOnlineRemoval(block)
 }
 
+func (p plannedCapability) OnlineRetirementHosts(block reconciliation.Block) ([]string, error) {
+	if online, ok := p.Capability.(OnlineRetirement); ok {
+		return online.OnlineRetirementHosts(block)
+	}
+	return nil, nil
+}
+
 func (p plannedCapability) ProbesQuiescence() bool {
 	prober, ok := p.Capability.(QuiescenceProber)
 	return ok && prober.ProbesQuiescence()

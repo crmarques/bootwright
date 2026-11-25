@@ -629,6 +629,13 @@ func (s Service) callBlock(ctx context.Context, run invocation, execution Execut
 	if !ReadOnlyRun(execution) {
 		execution.PowerMachine = s.machinePower(run, execution)
 		for _, group := range run.stopGroups {
+			ready, err := group.ready(ctx, run, execution.Block.ID)
+			if err != nil {
+				return Result{Outcome: reconciliation.OutcomeFailed}, err
+			}
+			if !ready {
+				continue
+			}
 			group.once.Do(func() { group.err = s.stopRemovalGroup(ctx, run, execution, group) })
 			if group.err != nil {
 				return Result{Outcome: reconciliation.OutcomeFailed}, group.err

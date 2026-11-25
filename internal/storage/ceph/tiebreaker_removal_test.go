@@ -78,6 +78,25 @@ func TestOnlyAPhysicalClusterThatRemovesAnFSIDStopsItsManagers(t *testing.T) {
 	if retiresManagers(pool) {
 		t.Fatal("a pool block stops the managers")
 	}
+	for _, cases := range []struct {
+		request  Request
+		machines []string
+	}{
+		{request: stretch},
+		{request: physical(stretch, false), machines: installedMachines(stretch)},
+		{request: physical(coreRequest(), false)},
+		{request: physical(coreRequest(), true), machines: installedMachines(coreRequest())},
+	} {
+		data, err := cases.request.Canonical()
+		if err != nil {
+			t.Fatal(err)
+		}
+		block := reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{Request: data}}
+		machines, err := (Capability{}).OnlineRetirementHosts(block)
+		if err != nil || !slices.Equal(machines, cases.machines) {
+			t.Fatalf("online retirement requires %v, want %v (%v)", machines, cases.machines, err)
+		}
+	}
 }
 
 func tiebreakerExecution(t *testing.T, r Request) lifecycle.Execution {

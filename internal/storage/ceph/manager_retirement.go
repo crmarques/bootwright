@@ -3,6 +3,7 @@ package ceph
 import (
 	"context"
 	"encoding/json"
+	"slices"
 
 	"github.com/crmarques/bootwright/internal/canonicaljson"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -32,6 +33,21 @@ func retiresManagers(r Request) bool {
 	}
 	_, removes := removesTiebreaker(r)
 	return physical && (retained || removes)
+}
+
+func (Capability) OnlineRetirementHosts(block reconciliation.Block) ([]string, error) {
+	r, err := DecodeRequest(block.Request)
+	if err != nil || !retiresManagers(r) {
+		return nil, err
+	}
+	var machines []string
+	for _, host := range r.Hosts {
+		if host.Physical && !host.Provided {
+			machines = append(machines, host.Machine)
+		}
+	}
+	slices.Sort(machines)
+	return slices.Compact(machines), nil
 }
 
 func (c Capability) managers(ctx context.Context, e lifecycle.Execution, operation string) (ManagersEvidence, error) {

@@ -3017,7 +3017,9 @@ the FSID's layout back onto one just cleaned
 - **Recovery.** The stop is idempotent: a host with no manager of the FSID
   changes nothing. The retirement's observation reads only the second round,
   and a manager running or enabled there reads no effect, or partial once the
-  tiebreaker's removal recorded an attempt.
+  tiebreaker's removal recorded an attempt. The installed physical hosts
+  defer the resumed removal's [automatic stop](state-reconciliation.md#quiescence-before-removal)
+  until this retirement is proved done.
 - A cluster with no physical host, or with no retained root and no provided
   tiebreaker, makes no native call when it retires.
 

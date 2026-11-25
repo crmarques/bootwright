@@ -269,6 +269,13 @@ type OnlineRemoval interface {
 	RequiresOnlineRemoval(reconciliation.Block) bool
 }
 
+// OnlineRetirement names installed Machines whose registered retirement still
+// needs the guest. A resumed destroy defers their automatic stop until the
+// frozen retirement block is done. This does not grant power or erase authority.
+type OnlineRetirement interface {
+	OnlineRetirementHosts(reconciliation.Block) ([]string, error)
+}
+
 // PreStopRemoval runs an inverse before every other inverse of a removal and the stop proof
 // of the Machines following it. A capability opts in only an inverse that touches its own
 // Machine's guest and published content and that no other block's inverse or retirement reads.

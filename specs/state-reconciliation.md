@@ -2724,6 +2724,14 @@ the registered removal once the stop can be proved. It never repeats an
 online effect already durably completed. Unknown or failed online cleanup
 cannot admit Machine or substrate deletion.
 
+A resumed removal defers its automatic stop for an installed Machine that a
+frozen online retirement still needs. It stops that Machine before running a
+frozen dependent of the retirement, after the retirement is durably done.
+The stop still proves native identity and power. The retirement's observation
+never changes power. Other Machines keep their existing stop phases.
+`TestResumedOnlineRetirementProvesCleanupBeforeStoppingItsHost` holds this
+ordering.
+
 A KubeVirt Machine whose provider names `hostClusterRef` is such an online
 effect: its VirtualMachine is reached only
 through the API of a host cluster the same removal takes down, so it is

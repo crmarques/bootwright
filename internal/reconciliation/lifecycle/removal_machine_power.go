@@ -4,6 +4,7 @@ import (
 	"context"
 	"maps"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -12,6 +13,8 @@ import (
 
 type removalMachineGroup struct {
 	machines []reconciliation.Block
+	before   map[string]bool
+	after    []string
 	once     sync.Once
 	err      error
 }
@@ -38,6 +41,85 @@ func (c *scheduler) deferMachineGroup(skip map[string]bool) {
 	if group := c.service.deferMachineStops(c.plan, skip); group != nil {
 		c.stopGroups = append(slices.Clone(c.stopGroups), group)
 	}
+}
+
+// retirementStopGroups partitions the retry's own native stops by the
+// retirement blocks that still need the guest. The frozen dependency narrows
+// where to run a deferred stop, but the durable state admits it.
+func (s Service) retirementStopGroups(decided operationPlan, skip map[string]bool) ([]*removalMachineGroup, error) {
+	waitFor := map[string][]string{}
+	for _, block := range decided.plan.Blocks {
+		if !decided.phases.retired[block.ID] || decided.basis.blocks[block.ID] == reconciliation.BlockDone {
+			continue
+		}
+		capability, _ := s.capabilities.Resolve(block.Kind, block.Implementation)
+		online, ok := capability.(OnlineRetirement)
+		if !ok {
+			continue
+		}
+		hosts, err := online.OnlineRetirementHosts(block)
+		if err != nil {
+			return nil, err
+		}
+		for _, host := range hosts {
+			waitFor[host] = append(waitFor[host], block.ID)
+		}
+	}
+	bindings := s.capabilities.Bindings()
+	var groups []*removalMachineGroup
+	byPrerequisites := map[string]*removalMachineGroup{}
+	for _, block := range decided.plan.Blocks {
+		after := waitFor[block.Object]
+		if skip[block.ID] || len(after) == 0 || !managedPowerTarget(bindings, block) {
+			continue
+		}
+		key := strings.Join(after, "\x00")
+		group := byPrerequisites[key]
+		if group == nil {
+			group = &removalMachineGroup{before: dependentsOfAll(decided.plan, after), after: after}
+			byPrerequisites[key] = group
+			groups = append(groups, group)
+		}
+		if !group.before[block.ID] {
+			return nil, engineRecordsDamaged.Fail("Machine/"+block.Object+" does not follow its online retirement", "restore the context's original removal records")
+		}
+		group.machines = append(group.machines, block)
+		skip[block.ID] = true
+	}
+	return groups, nil
+}
+
+func (g *removalMachineGroup) ready(ctx context.Context, run invocation, block string) (bool, error) {
+	if g.before != nil && !g.before[block] {
+		return false, nil
+	}
+	for _, id := range g.after {
+		record, err := run.store.Block(ctx, run.operation.ID, id)
+		if err != nil || record.State != reconciliation.BlockDone {
+			return false, err
+		}
+	}
+	return true, nil
+}
+
+func dependentsOfAll(plan reconciliation.Plan, prerequisites []string) map[string]bool {
+	counts := map[string]int{}
+	for _, prerequisite := range prerequisites {
+		reached := map[string]bool{prerequisite: true}
+		for _, block := range plan.Blocks {
+			if slices.ContainsFunc(block.Dependencies, func(id string) bool { return reached[id] }) {
+				reached[block.ID] = true
+				counts[block.ID]++
+			}
+		}
+	}
+	result := map[string]bool{}
+	for id, count := range counts {
+		if count == len(prerequisites) {
+			result[id] = true
+		}
+	}
+	return result
 }
 
 func (s Service) recordedMachinePower(ctx context.Context, run invocation, execution Execution, block reconciliation.Block) (BlockEvidence, Quiescence, error) {
@@ -140,8 +222,15 @@ func (s Service) removalStart(ctx context.Context, tx Transaction, store Operati
 	if decided.basis.record.Verb == reconciliation.Destroy {
 		stopExclusions := maps.Clone(skip)
 		maps.Copy(stopExclusions, heldRemovalBlocks(decided.plan, deferred))
+		retirementStops, err := s.retirementStopGroups(decided, stopExclusions)
+		if err != nil {
+			return nil, nil, err
+		}
 		if group := s.deferMachineStops(decided.plan, stopExclusions); group != nil {
 			groups = append(groups, group)
+		}
+		groups = append(groups, retirementStops...)
+		for _, group := range groups {
 			for _, block := range group.machines {
 				skip[block.ID] = true
 			}
