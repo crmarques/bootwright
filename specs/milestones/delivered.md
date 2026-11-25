@@ -18205,3 +18205,19 @@ a block that never ran needs no removal proof, so the partial abandonment
 then completed and the assertion failed. The [abandonment
 rule](../state-reconciliation.md#abandoned-removal) is unchanged.
 X672's integration gate exposed it, and it failed 2 of 10 runs at `main`.
+
+## X724 — Stale Go coverage floors
+
+**Owner:** Developer tooling. **Item:** B1813 (defect). **Discovered by:** X723's
+integration coverage check.
+
+The unchanged destination already exceeded the recorded floors for controller
+prerequisites, diagnostics, Machines, session policy and managed OS host
+firewall by more than the permitted margin. The
+[coverage ratchet](../architecture.md#architecture-verification) uses the
+measured results for those five packages. No floor is lowered.
+
+**Exit evidence:** the five-package probe on the unchanged destination
+reproduced the excess. The coverage check passes against the remeasured Go
+profile and the collection's coverage from unchanged inputs. The delivering
+commit records the integration gates.
