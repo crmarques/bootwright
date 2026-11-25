@@ -356,7 +356,7 @@ func (c MediaCapability) runWithOutputs(ctx context.Context, execution lifecycle
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
 		Implementation: MediaImplementation, Operation: operation, Variable: mediaVariablePrefix,
 		Canonical: canonical, Placement: request.Placement, Materials: materials, Values: values,
-		Outputs: outputs, Deadline: request.Deadline(),
+		Outputs: outputs, GroupLog: installerLogGroupNote(operation, MediaImplementation, request.WorkRoot), Deadline: request.Deadline(),
 	}))
 }
 

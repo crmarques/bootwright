@@ -94,6 +94,7 @@ CAPABILITY = adapter_protocol.Capability(
     "boot-media",
     "the boot-media capability result could not be published",
     completion,
+    detail=True,
 )
 
 

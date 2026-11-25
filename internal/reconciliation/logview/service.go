@@ -24,6 +24,7 @@ type Options struct {
 	Operations OperationStoreFactory
 	Selection  CurrentSelection
 	Pause      Pause
+	ToolLog    func(string, reconciliation.Block) (ToolLog, bool)
 }
 
 type Service struct {
@@ -90,6 +91,8 @@ func Validate(selection Selection) error { return validate(selection) }
 func validate(selection Selection) error {
 	stream := selection.Run != "" || selection.Install != ""
 	switch {
+	case selection.Tools && (stream || selection.Raw):
+		return usage("--tools follows an operation and takes no --raw, --run or --install")
 	case selection.Run != "" && selection.Install != "":
 		return usage("--run and --install select different outputs; name one")
 	case stream && (selection.Operation != "" || selection.Block != "" || selection.Raw || selection.Attempt != 0):

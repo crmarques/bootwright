@@ -221,7 +221,21 @@ func (c Capability) invokeFor(ctx context.Context, e lifecycle.Execution, operat
 		refusals["foreign-client"] = foreignClientRefusal(r.Client.Name)
 	}
 	maps.Copy(refusals, named)
+	if r.Action == "cluster" && (operation == "apply" || operation == "destroy") {
+		reportCephadmLog(ctx, execution, r)
+	}
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{Implementation: Implementation, Operation: operation, Variable: "bootwright_ceph", Canonical: canonical, Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: r.Controller}, Materials: files, Values: values, Outputs: outputs, Refusals: refusals, NativeErrors: true, Deadline: deadline}))
+}
+
+func reportCephadmLog(ctx context.Context, execution lifecycle.Execution, request Request) {
+	for _, host := range request.Hosts {
+		if host.Name != request.Bootstrap || host.Machine == "" {
+			continue
+		}
+		location := "cephadm default log on Machine/" + host.Machine + ": /var/log/ceph/cephadm.log (host-wide; inspect on that host)"
+		lifecycle.ReportToolLog(ctx, execution, location)
+		return
+	}
 }
 
 const (

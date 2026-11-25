@@ -88,6 +88,8 @@ type progressPresenter struct {
 	heading        string
 	prompting      bool
 	pendingHeading string
+	toolLogs       map[string]bool
+	pendingLogs    []string
 	// steps are the block's steps in position order; a settled step stays
 	// until no earlier step still runs.
 	steps []*progressStep
@@ -260,6 +262,10 @@ func (p *progressPresenter) resumeAfterPrompt() {
 		p.writeHeading(p.pendingHeading)
 	}
 	p.pendingHeading = ""
+	for _, location := range p.pendingLogs {
+		p.writeToolLog(location)
+	}
+	p.pendingLogs = nil
 	p.steps = slices.DeleteFunc(p.steps, func(step *progressStep) bool {
 		return step.settled == "" && !step.active()
 	})
@@ -355,6 +361,38 @@ func (p *progressPresenter) stopHeartbeat() {
 		p.stop()
 		p.stop = nil
 	}
+}
+
+// toolLog places a complete location above the redrawn rows without ending
+// concurrent steps or moving their elapsed-time origin.
+func (p *progressPresenter) toolLog(location string) {
+	if presentationFor(p.out).Progress == "never" {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.toolLogs[location] {
+		return
+	}
+	if p.toolLogs == nil {
+		p.toolLogs = make(map[string]bool)
+	}
+	p.toolLogs[location] = true
+	if p.prompting {
+		p.pendingLogs = append(p.pendingLogs, location)
+		return
+	}
+	p.writeToolLog(location)
+	if p.terminal() && len(p.steps) != 0 {
+		p.redraw(p.clock.now())
+	}
+}
+
+func (p *progressPresenter) writeToolLog(location string) {
+	var out strings.Builder
+	p.erase(&out)
+	out.WriteString(displayIndent + "Tool log" + strings.Repeat(" ", displayGap) + escapeDisplayLine(location) + "\n")
+	io.WriteString(p.out, out.String())
 }
 
 // fields writes one aligned field group, first ending the row a terminal is

@@ -472,7 +472,7 @@ func (c InstallCapability) runWithOutputs(ctx context.Context, execution lifecyc
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
 		Implementation: InstallImplementation, Operation: operation, Variable: installVariablePrefix,
 		Canonical: canonical, Placement: request.Placement, Materials: materials, Values: values,
-		Outputs: outputs, Refusals: refusals, Deadline: request.Deadline(),
+		Outputs: outputs, GroupLog: installerLogGroupNote(operation, InstallImplementation, request.WorkRoot), Refusals: refusals, Deadline: request.Deadline(),
 		NodeCount: len(request.Nodes), Parallelism: request.Budgets.FanOut, Preparation: preparation,
 	}))
 }

@@ -29,3 +29,15 @@ func TestStatusTokensCoverTheVocabulary(t *testing.T) {
 		}
 	}
 }
+
+func TestPendingAndWarningsUseAmberDistinctFromErrors(t *testing.T) {
+	options := PresentationOptions{Color: "always"}
+	for _, token := range []string{"[PENDING]", "[WAITING]", "[WARN]", "[UNKNOWN]"} {
+		if got := styleState(token, options); got != "\x1b[38;5;214m"+token+"\x1b[0m" {
+			t.Errorf("%s uses %q, want amber", token, got)
+		}
+	}
+	if got := styleState("[FAIL]", options); got != "\x1b[38;5;160m[FAIL]\x1b[0m" {
+		t.Errorf("[FAIL] uses %q, want red", got)
+	}
+}

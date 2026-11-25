@@ -14,6 +14,7 @@
     phase: group
     group: wait-bootstrap
     status: running
+    detail: '{{ "installer-log" if not (containercluster_install_agent_settled | bool) else "" }}'
   no_log: true
 
 - name: Wait for the bootstrap control plane to hand over
@@ -36,6 +37,7 @@
     phase: group
     group: wait-install
     status: running
+    detail: '{{ "installer-log" if not (containercluster_install_agent_settled | bool) else "" }}'
   no_log: true
 
 - name: Wait for the cluster to finish installing

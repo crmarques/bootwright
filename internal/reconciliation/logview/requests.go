@@ -15,6 +15,7 @@ type Selection struct {
 	Operation string
 	Block     string
 	Raw       bool
+	Tools     bool
 	Attempt   int
 	Run       string
 	Install   string

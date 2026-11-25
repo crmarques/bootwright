@@ -91,6 +91,12 @@ func (p *LifecycleProgressPresenter) ReportProgress(ctx context.Context, event l
 	if p == nil || p.progress.out == nil || ctx.Err() != nil || event.Block == "" {
 		return
 	}
+	if event.Bytes.ToolLog != "" {
+		p.progress.toolLog(event.Bytes.ToolLog)
+		if event.Declared == 0 {
+			return
+		}
+	}
 	identity := ""
 	label, detail := event.Description, event.Detail
 	if p.model != nil {

@@ -405,6 +405,9 @@ type lifecycleJudge struct {
 
 func (j *lifecycleJudge) groupDetail(record adapterprotocol.Record, bytes lifecycle.ByteProgress) (string, bool) {
 	group, status := record.Group, record.Status
+	if bytes.ToolLog != "" {
+		return status + " " + bytes.ToolLog, true
+	}
 	if bytes.Note != "" {
 		return status + " " + bytes.Note, true
 	}
@@ -449,10 +452,13 @@ func (j *lifecycleJudge) Judge(ctx context.Context, record adapterprotocol.Recor
 			bytes = lifecycle.ByteProgress{Completed: record.Progress.Completed, Total: record.Progress.Total}
 		}
 		if valid && record.Detail != "" {
-			if j.request.GroupNote == nil {
-				valid = false
-			} else {
+			switch {
+			case j.request.GroupLog != nil:
+				bytes.ToolLog, valid = j.request.GroupLog(record.Group, record.Detail)
+			case j.request.GroupNote != nil:
 				bytes.Note, valid = j.request.GroupNote(record.Group, record.Detail)
+			default:
+				valid = false
 			}
 		}
 		reported := valid && !moment.Exited

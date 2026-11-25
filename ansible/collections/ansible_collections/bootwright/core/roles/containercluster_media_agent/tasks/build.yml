@@ -158,6 +158,14 @@
         containercluster_media_agent_started: >-
           {{ ((now(utc=true) - ('1970-01-01 00:00:00' | to_datetime)).total_seconds() | int) }}
 
+    - name: Report the native installer log for image construction
+      bootwright.core.containercluster_media_protocol:
+        phase: group
+        group: build-image
+        status: running
+        detail: installer-log
+      no_log: true
+
     - name: Generate native cluster manifests for encrypted installation
       ansible.builtin.command:
         argv:

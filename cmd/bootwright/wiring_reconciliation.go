@@ -53,6 +53,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate/kubevirt"
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
 	"github.com/crmarques/bootwright/internal/trust"
+	"github.com/crmarques/bootwright/internal/workspace/contextfs"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -477,6 +478,16 @@ func wireLogs(deps lifecycleDependencies) logview.Service {
 			return operationStore(systemClock{}, deps.Executable, records, logs)
 		},
 		Selection: currentSelection(deps.Selection),
+		ToolLog: func(name string, block reconciliation.Block) (logview.ToolLog, bool) {
+			log, ok := agentinstall.InstallerLogForBlock(name, block)
+			if !ok {
+				return logview.ToolLog{}, false
+			}
+			return logview.ToolLog{
+				Name: "openshift-install", Active: log.Active, Project: log.Project,
+				Open: func() (logview.LogFile, string, error) { return contextfs.OpenNativeToolLog(log.Path()) },
+			}, true
+		},
 	})
 }
 

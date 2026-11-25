@@ -40,6 +40,9 @@ func (s Service) Follow(ctx context.Context, selection Selection, sink Sink) (*S
 		summary.State = string(session.state)
 		return summary, follower.finish()
 	}
+	if err := follower.tools(ctx, true, false); err != nil {
+		return nil, err
+	}
 	detached, busyPolls := 0, 0
 	if !session.mutating {
 		detached = 1
@@ -62,12 +65,12 @@ func (s Service) Follow(ctx context.Context, selection Selection, sink Sink) (*S
 			return nil, err
 		}
 		busyPolls = 0
-		if err := follower.emit(); err != nil {
+		if err := follower.pass(false); err != nil {
 			return nil, err
 		}
 		summary.State = string(session.state)
 		if session.state != reconciliation.OperationRunning || !session.current {
-			return summary, follower.drain()
+			return summary, follower.drain(ctx)
 		}
 		detached++
 		if session.mutating {
@@ -77,7 +80,10 @@ func (s Service) Follow(ctx context.Context, selection Selection, sink Sink) (*S
 			summary.Warnings = append(summary.Warnings, diagnostics.Diagnostic{Severity: "warning", Code: logsDetached.Code,
 				Message:     "operation " + session.operation + " is running but no apply or destroy holds context " + name,
 				Remediation: "continue it with bootwright " + session.verb + " --context " + name})
-			return summary, follower.drain()
+			return summary, follower.drain(ctx)
+		}
+		if err := follower.tools(ctx, false, false); err != nil {
+			return nil, err
 		}
 	}
 }
@@ -89,6 +95,7 @@ type follower struct {
 }
 
 func (f *follower) event(event Event) error {
+	f.startTool(event)
 	return f.sink.Event(Line{Source: event.Block, Text: renderEvent(event, f.width, 0, f.session.selection.FullTimes)})
 }
 
@@ -190,9 +197,15 @@ func (f *follower) pass(final bool) error {
 	return nil
 }
 
-func (f *follower) emit() error { return f.pass(false) }
-
-func (f *follower) drain() error { return f.pass(true) }
+func (f *follower) drain(ctx context.Context) error {
+	if err := f.pass(true); err != nil {
+		return err
+	}
+	if !f.session.current {
+		return nil
+	}
+	return f.tools(ctx, false, true)
+}
 
 func (f *follower) finish() error {
 	session := f.session

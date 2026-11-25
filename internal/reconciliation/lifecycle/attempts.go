@@ -757,6 +757,17 @@ func groupDetail(block reconciliation.Block, id string, bytes ByteProgress) stri
 	return groupDescription(block, id)
 }
 
+func ReportToolLog(ctx context.Context, e Execution, location string) {
+	if e.Log != nil {
+		if err := e.Log(ctx, operationstore.LogRecord{Event: "tool-log", Detail: location}); err != nil {
+			return
+		}
+	}
+	if e.Progress != nil {
+		e.Progress(ctx, "tool-log", "running", ByteProgress{ToolLog: location})
+	}
+}
+
 func declaresGroup(block reconciliation.Block, id string) bool {
 	return slices.ContainsFunc(block.Groups, func(group reconciliation.Group) bool { return group.ID == id })
 }

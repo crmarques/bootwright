@@ -31,6 +31,9 @@ func TestLogsRefusesConflictingSelections(t *testing.T) {
 		args []string
 		want string
 	}{
+		{[]string{"--tools", "--run", "run-000001"}, "--tools follows an operation"},
+		{[]string{"--tools", "--install"}, "--tools follows an operation"},
+		{[]string{"--tools", "--raw", "--block", "b"}, "--tools follows an operation"},
 		{[]string{"--block", "b", "--run", "run-000001"}, "--run and --install select one whole output"},
 		{[]string{"--raw", "--block", "b", "--install"}, "--run and --install select one whole output"},
 		{[]string{"--attempt", "1", "--raw", "--block", "b", "--run", "run-000001"}, "--run and --install select one whole output"},
@@ -58,7 +61,7 @@ func TestLogsRefusesConflictingSelections(t *testing.T) {
 			t.Errorf("%v: exit %d after %d calls, stdout %q, stderr %q; want usage %q", args, code, record.calls, out, errOut, test.want)
 		}
 	}
-	for _, valid := range [][]string{{"logs"}, {"logs", "--follow"}, {"logs", "--install", "--follow"}, {"logs", "--install=install-000003"}, {"logs", "--run", "run-000003", "--follow"},
+	for _, valid := range [][]string{{"logs"}, {"logs", "--follow"}, {"logs", "--tools"}, {"logs", "--tools", "--follow", "--block", "b"}, {"logs", "--install", "--follow"}, {"logs", "--install=install-000003"}, {"logs", "--run", "run-000003", "--follow"},
 		{"logs", "--operation", "op-0123456789abcdef0123456789abcdef", "--block", "b", "--raw", "--attempt", "2"}} {
 		if !ClassifyInvocation(valid).RequiresRoot {
 			t.Errorf("%v was refused or needs no root, want it admitted as privileged as status is", valid)
@@ -67,16 +70,26 @@ func TestLogsRefusesConflictingSelections(t *testing.T) {
 }
 
 func TestFollowRefusesStructuredOutputBeforePrivilege(t *testing.T) {
-	for _, format := range []string{"json", "yaml"} {
-		args := []string{"logs", "--follow", "--output", format}
-		if ClassifyInvocation(args).RequiresRoot {
-			t.Fatalf("%v needs root, want a refusal before privilege", args)
+	for _, flag := range []string{"--follow", "--tools"} {
+		for _, format := range []string{"json", "yaml"} {
+			args := []string{"logs", flag, "--output", format}
+			if ClassifyInvocation(args).RequiresRoot {
+				t.Fatalf("%v needs root, want a refusal before privilege", args)
+			}
+			record := &dispatchRecord{}
+			code, out, _ := runLogs(t, record, args...)
+			if code != 2 || record.calls != 0 || !strings.Contains(out, `cli.usage`) || !strings.Contains(out, flag+" streams lines and has no") {
+				t.Fatalf("%s: exit %d after %d calls with %q", format, code, record.calls, out)
+			}
 		}
-		record := &dispatchRecord{}
-		code, out, _ := runLogs(t, record, args...)
-		if code != 2 || record.calls != 0 || !strings.Contains(out, `cli.usage`) || !strings.Contains(out, "--follow streams lines and has no") {
-			t.Fatalf("%s: exit %d after %d calls with %q", format, code, record.calls, out)
-		}
+	}
+}
+
+func TestToolsImpliesFollowingTheSelectedBlock(t *testing.T) {
+	record := &dispatchRecord{result: commandResult{logsFollow: &logview.Summary{}}}
+	code, _, errOut := runLogs(t, record, "logs", "--context", "lab", "--tools", "--block", "b")
+	if selection, ok := record.request.(logview.Selection); code != 0 || !ok || selection.Block != "b" || !selection.Tools {
+		t.Fatalf("exit %d (%q), selection %+v", code, errOut, record.request)
 	}
 }
 

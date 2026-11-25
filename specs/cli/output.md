@@ -121,6 +121,7 @@ facts; `internal/cli` performs no environment or descriptor discovery.
 Standard output and standard error use their own injected terminal capabilities.
 SSH streams retain their original descriptors without presentation wrappers.
 
+Human output uses amber for pending work and warnings, and red for errors.
 Resource lists emphasize each white identity and semantic states; descriptive
 columns are ordinary text. Resource info groups only facts the existing service result
 provides: machine Placement, Access and Evidence; secret Identity and Custody;
@@ -1507,6 +1508,28 @@ is a non-blocking lock test released at once: a follow takes no lease, and an
 install starting at the instant a setup is probed is refused as
 [busy](../contexts.md#storage-locking-and-publication).
 
+**Native tool logs.** Installer image construction and milestone waits record
+the host and path of the OpenShift installer's `.openshift_install.log` before
+the native command. Ceph cluster apply and destroy name the bootstrap
+Machine and the default host-wide `/var/log/ceph/cephadm.log` location. The
+concurrent human progress output also reports these locations.
+
+`--tools` implies `--follow` for an operation and respects `--operation` and
+`--block`. When the current attempt reports an installer log on the controller,
+the reader opens the file at the path derived from that block's frozen plan.
+The reader follows no symlink and admits only a singly linked, root-owned
+regular file beneath the [private hosted root](../contexts.md#hosted-root).
+It pins the file and its size, then rechecks the current operation before
+reading from it.
+Each poll checks for a newly created or replaced file. The reader examines at
+most the last 64 KiB of unread bytes each poll, outside the root lock. It
+shows no more than the last ten matching lines on initial attachment. Each update is prefixed `[<block>/openshift-install]`.
+The reader shows only fixed descriptions of recognized progress, warnings and
+errors from the current attempt's time window, not the native fields or text,
+which can contain credentials. A file that cannot be read safely does not stop
+ordinary operation follow. The reader creates no copy and opens no remote
+session. Host-wide Ceph logs are location notices only.
+
 **Busy polls.** Each read, initial or a poll, takes the shared root lock
 without waiting, opens its files under it and reads their bytes after releasing
 it, so a command that needs the exclusive root lock waits for that short hold
@@ -1535,7 +1558,8 @@ attempt `0` for operation-log rows. Raw, run and install: `source` (`kind` of
 or install it names), `path` relative to the log root, `bytes`, `truncated` for
 an attempt's output alone, and `output`, the export `{mediaType, encoding,
 content}` of the exact bytes, encoded as the [export rule](#json-output) says. `--follow`
-with either format is a `cli.usage` refusal, as is `--follow --raw`.
+with either format is a `cli.usage` refusal, as is `--follow --raw`. `--tools`
+accepts only operation follow in text mode.
 
 **Exit and diagnostics.** `0` when rendered or a follow ended; `1` for
 `logs.not-found`, `context.busy`, an unsafe log file (`context.state`) or a

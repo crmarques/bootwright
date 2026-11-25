@@ -102,6 +102,7 @@ type RunRequest struct {
 	NativeErrors bool
 	Groups       []string
 	GroupNote    func(group, detail string) (string, bool)
+	GroupLog     func(group, detail string) (string, bool)
 	// Deadline bounds the run: the capability derives it from the waits its
 	// frozen request budgets, and the runner honors it as stated. Zero keeps
 	// the runner's default.
@@ -168,6 +169,7 @@ type Invocation struct {
 	NativeErrors bool
 	Groups       []string
 	GroupNote    func(group, detail string) (string, bool)
+	GroupLog     func(group, detail string) (string, bool)
 	// Deadline is the run's own deadline, derived from the budgets the frozen
 	// request carries; zero keeps the runner's default.
 	Deadline           time.Duration
@@ -224,6 +226,7 @@ func RunFor(execution Execution, invocation Invocation) RunRequest {
 		NativeErrors:      invocation.NativeErrors,
 		Groups:            slices.Clone(invocation.Groups),
 		GroupNote:         invocation.GroupNote,
+		GroupLog:          invocation.GroupLog,
 		Deadline:          invocation.Deadline,
 		Admission:         execution.Admission,
 		ReadOnly:          readOnly,

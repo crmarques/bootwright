@@ -11,6 +11,7 @@ type ByteProgress struct {
 	Completed int64
 	Total     int64
 	Note      string
+	ToolLog   string
 }
 
 func (p ByteProgress) Known() bool {

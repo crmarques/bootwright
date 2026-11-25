@@ -574,7 +574,7 @@ material into them, and invokes the installer once. The installer consumes its
 inputs into its own asset state and writes beside the image the access the
 installation later needs, whose admin client certificate is the cluster's
 [identity](#installation), so the area outlives the attempt that created it, is
-never enumerated in evidence, progress output or a log, and is discarded and
+not enumerated in evidence, progress output or a log, and is discarded and
 rebuilt rather than reused whenever the inputs it was built from are not the
 inputs frozen now, unless a node may have been handed the image built there. The build
 receipt also records the context's
@@ -584,6 +584,8 @@ another incarnation, as a recreated context of the same name finds one its
 predecessor left, refuses before any effect, naming the area and keeping it,
 and the hand-over of a kept kubeconfig to custody before a removal refuses
 naming such an area rather than skipping it.
+Only the fixed installer log leaf is named explicitly for troubleshooting by
+the [CLI tool log rule](cli/output.md#reading-and-following-logs).
 
 **A work area a node may have been handed the image in is never rebuilt.** The area also
 holds the state the [installation](#installation) boots its nodes into and the

@@ -179,6 +179,7 @@ CAPABILITY = adapter_protocol.Capability(
     "installation",
     "the installation capability result could not be published",
     completion,
+    detail=True,
     phases=adapter_protocol.PREPARING_PHASES,
     refusals=refused,
     preparation=preparation,

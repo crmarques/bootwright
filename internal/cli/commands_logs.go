@@ -18,6 +18,7 @@ func logsCommandSpec() commandSpec {
 			stringFlag("block", "Keep one block's events, or name the block whose output --raw prints"),
 			boolFlag("raw", "Print the block's newest retained adapter output instead of events"),
 			stringFlag("attempt", "Print attempt N's output with --raw (default: the newest)"),
+			boolFlag("tools", "Follow operation logs and include safe progress from controller-local tool files"),
 			boolFlag("follow", "Stream new events and running blocks' output until the operation, run or install ends"),
 			stringFlag("run", "Print a bounded run's output, named run-NNNNNN"),
 			optionalValueFlag("install", logview.NewestInstall, "Print the newest install's output, or one named as --install=install-NNNNNN"),
@@ -25,6 +26,7 @@ func logsCommandSpec() commandSpec {
 		long: "Render the events of a context's current operation, or of --operation, as lines oldest first: the operation log merged with every attempt log." +
 			" --block keeps one block's events; --raw prints that block's newest retained adapter output instead, or attempt N's with --attempt." +
 			" --follow prints what is written so far, then streams new events and each running block's output, prefixed by its block, until the operation leaves running." +
+			" --tools implies --follow and includes safe progress from supported controller-local tool files." +
 			" --run prints a bounded run's output and --install the host's newest install output, or one named as --install=install-NNNNNN; either follows with --follow." +
 			" Text output escapes every line for the terminal; JSON and YAML carry the exact output bytes. --detail full prints each event's full UTC timestamp. It reads under short shared locks and never holds a lease an apply waits on."})
 }
@@ -40,13 +42,13 @@ func (s Services) invokeLogs(ctx context.Context, values *requestValues, _ []str
 	}
 	selection := logview.Selection{
 		Context: values.text("context"), Operation: values.text("operation"), Block: values.text("block"),
-		Raw: values.boolean("raw"), Run: values.text("run"), Install: values.text("install"),
+		Raw: values.boolean("raw"), Tools: values.boolean("tools"), Run: values.text("run"), Install: values.text("install"),
 		FullTimes: stringValue(values.flags, "detail") == "full",
 	}
 	if attempt := values.text("attempt"); attempt != "" {
 		selection.Attempt, _ = strconv.Atoi(attempt)
 	}
-	if values.boolean("follow") {
+	if values.boolean("follow") || selection.Tools {
 		summary, err := invokeResult(ctx, values, selection, func(ctx context.Context, selection logview.Selection) (*logview.Summary, error) {
 			return s.Logs.Follow(ctx, selection, newLogsPresenter(s.logOutput))
 		})
@@ -59,7 +61,7 @@ func (s Services) invokeLogs(ctx context.Context, values *requestValues, _ []str
 func validateLogsFlags(command *cobra.Command) string {
 	flags := command.Flags()
 	selection := logview.Selection{Context: stringValue(flags, "context"), Operation: stringValue(flags, "operation"), Block: stringValue(flags, "block"),
-		Raw: boolValue(flags, "raw"), Run: stringValue(flags, "run"), Install: stringValue(flags, "install")}
+		Raw: boolValue(flags, "raw"), Tools: boolValue(flags, "tools"), Run: stringValue(flags, "run"), Install: stringValue(flags, "install")}
 	if attempt := stringValue(flags, "attempt"); attempt != "" {
 		selection.Attempt = -1
 		if number, err := strconv.Atoi(attempt); err == nil && number > 0 && strconv.Itoa(number) == attempt {
@@ -72,9 +74,11 @@ func validateLogsFlags(command *cobra.Command) string {
 		}
 		return err.Error()
 	}
-	switch follow := boolValue(flags, "follow"); {
+	switch follow := boolValue(flags, "follow") || selection.Tools; {
 	case follow && selection.Raw:
 		return "--follow streams events and output as they are written; --raw reads one whole output"
+	case selection.Tools && selectedStructured(command):
+		return "--tools streams lines and has no " + structuredLabel(command) + " form; drop the streaming flags or --output"
 	case follow && selectedStructured(command):
 		return "--follow streams lines and has no " + structuredLabel(command) + " form; drop --follow or --output"
 	}

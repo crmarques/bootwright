@@ -134,7 +134,7 @@ func stateStyleCode(value string) string {
 	case "running", "active", "working", "create", updating, "observe", "preview", "planned", "add":
 		code = "38;5;69"
 	case "warn", "warning", "pending", "queued", "waiting", "deferred", "unknown", "unproved", "unsupported", "data-loss", "unchecked", "off", "paused", "skipped", "not-applied", "stale", "orphaned", "not-applicable", "initializing", "deleting", "replace", "remove":
-		code = "38;5;172"
+		code = "38;5;214"
 	case "fail", "failed", "error", "blocked", "unavailable", "missing", "mismatch", "canceled", "invalid", "not-implemented", "unreadable":
 		code = "38;5;160"
 	}

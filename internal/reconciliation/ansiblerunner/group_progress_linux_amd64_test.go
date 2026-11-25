@@ -124,3 +124,22 @@ func TestAGroupsDetailReachesTheEngineAsItsCapabilitysNoteAndOnlyForADeclaredGro
 		t.Fatalf("an invalid record reported %+v", *reports)
 	}
 }
+
+func TestAGroupLogTokenBecomesOnlyTheCapabilityLocation(t *testing.T) {
+	clock := time.Date(2026, 11, 17, 9, 0, 0, 0, time.UTC)
+	judge, reports, logged := progressJudge(&clock)
+	const location = "installer log on the controller: /private/demo.log"
+	judge.request.GroupLog = func(group, detail string) (string, bool) {
+		return location, group == "build" && detail == "installer-log"
+	}
+	record := adapterprotocol.Record{Phase: "group", Group: "build", Status: "running", Detail: "installer-log"}
+	moment := adapterprotocol.Moment{Open: true}
+	if !judge.Judge(context.Background(), record, moment).Valid || len(*reports) != 1 || len(*logged) != 1 ||
+		(*reports)[0].bytes.ToolLog != location || (*logged)[0].Detail != "running "+location {
+		t.Fatalf("reported = %+v, logged = %+v", *reports, *logged)
+	}
+	record.Detail = "/other/secret"
+	if judge.Judge(context.Background(), record, moment).Valid || len(*logged) != 1 {
+		t.Fatal("a location offered by the adapter was accepted")
+	}
+}

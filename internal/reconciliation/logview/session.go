@@ -114,6 +114,7 @@ type session struct {
 	state     reconciliation.OperationState
 	current   bool
 	mutating  bool
+	tools     map[string]*toolTail
 }
 
 func newSession(service Service, name string, selection Selection) *session {
@@ -122,6 +123,7 @@ func newSession(service Service, name string, selection Selection) *session {
 }
 
 func (s *session) close() {
+	s.releaseToolSnapshots()
 	if s.log != nil {
 		s.log.file.Close()
 	}
@@ -173,6 +175,7 @@ func (s *session) poll(ctx context.Context, first, follow bool) error {
 			return notFound("operation "+s.operation+" of context "+s.name+" froze no block "+s.selection.Block,
 				"run bootwright status --context "+s.name+" to see the operation's blocks")
 		}
+		capturedTools := false
 		for _, block := range s.selected() {
 			if s.records[block].State == reconciliation.BlockDone {
 				continue
@@ -184,6 +187,22 @@ func (s *session) poll(ctx context.Context, first, follow bool) error {
 			s.records[block] = record
 			if err := s.open(ctx, view, block, first, follow); err != nil {
 				return err
+			}
+			if tool := s.tools[block]; follow && tool != nil && s.current &&
+				(!first || s.state == reconciliation.OperationRunning && record.State == reconciliation.BlockRunning) &&
+				record.Attempts > 0 {
+				tool.capture()
+				capturedTools = true
+			}
+		}
+		if capturedTools {
+			latest, err := store.Index(ctx)
+			if err != nil {
+				return err
+			}
+			s.current = latest.Current == s.operation
+			if !s.current {
+				s.releaseToolSnapshots()
 			}
 		}
 		s.mutating = false
@@ -223,6 +242,15 @@ func (s *session) resolve(ctx context.Context, view View, store OperationStore) 
 		}
 		for _, block := range plan.Blocks {
 			s.blocks = append(s.blocks, block.ID)
+			if s.selection.Tools && s.verb == string(reconciliation.Apply) && s.service.options.ToolLog != nil &&
+				(s.selection.Block == "" || s.selection.Block == block.ID) {
+				if source, ok := s.service.options.ToolLog(s.name, block); ok {
+					if s.tools == nil {
+						s.tools = make(map[string]*toolTail)
+					}
+					s.tools[block.ID] = &toolTail{source: source}
+				}
+			}
 		}
 		s.planned = true
 	}

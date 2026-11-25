@@ -624,3 +624,39 @@ func TestTerminalProgressHoldsInputEchoWhileRowsAreDrawn(t *testing.T) {
 	appended.finish()
 	assertHeld(2, 2)
 }
+
+func TestOperationProgressRetainsFullNativeToolLocation(t *testing.T) {
+	progress, clock, out := newTestTerminalProgress(48)
+	ctx := context.Background()
+	progress.report(ctx, progressEvent{Heading: "Progress", Label: "Build agent image", Status: "running"})
+	const location = "openshift-install log on the controller: /var/lib/bootwright-hosted/lab/clusters/demo/.openshift_install.log"
+	progress.toolLog(location)
+	progress.toolLog(location)
+	progress.withPrompt(func() {
+		progress.toolLog("another tool log on the controller")
+		if strings.Contains(out.String(), "another tool") {
+			t.Fatal("the notice interrupted a prompt")
+		}
+	})
+	clock.advance(11 * time.Second)
+	progress.report(ctx, progressEvent{Heading: "Progress", Label: "Build agent image", Status: "done"})
+	if strings.Count(out.String(), location) != 1 ||
+		!strings.Contains(out.String(), "another tool log on the controller") ||
+		!strings.Contains(out.String(), "[DONE]") {
+		t.Fatalf("locations or progress were lost: %q", out.String())
+	}
+}
+
+func TestToolLogNoticeDoesNotHideTheRunningInstallerPhase(t *testing.T) {
+	var out bytes.Buffer
+	p := NewLifecycleProgressPresenter(&out, nil)
+	defer p.Finish()
+	p.ReportProgress(context.Background(), lifecycle.ProgressEvent{
+		Block: "install", Description: "install the cluster", Group: "wait-install", Detail: "wait for cluster installation",
+		Status: "running", Declared: 4, Bytes: lifecycle.ByteProgress{ToolLog: "/private/.openshift_install.log"},
+	})
+	if got := out.String(); !strings.Contains(got, "Tool log  /private/.openshift_install.log") ||
+		!strings.Contains(got, "wait for cluster installation") {
+		t.Fatalf("tool log or running phase missing: %q", got)
+	}
+}

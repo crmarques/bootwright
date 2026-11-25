@@ -12,6 +12,9 @@ import (
 )
 
 func (s Service) Show(ctx context.Context, selection Selection) (*Result, error) {
+	if selection.Tools {
+		return nil, usage("--tools follows an operation")
+	}
 	if err := s.available(ctx); err != nil {
 		return nil, err
 	}
