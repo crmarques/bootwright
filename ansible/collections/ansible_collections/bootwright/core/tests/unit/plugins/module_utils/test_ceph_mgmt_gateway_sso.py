@@ -247,6 +247,14 @@ def test_sso_evidence_has_no_secret(tmp_path, monkeypatch):
     ready, blocking, evidence = gateway.observing(monitor, markers)
     assert ready is False and blocking == ["sso@oauth2-proxy"] and evidence["sso"] == ""
     monitor.enabled = True
+    monitor.standby = {"standby_behaviour": "redirect", "standby_error_status_code": 500}
+    ready, blocking, evidence = gateway.observing(monitor, markers)
+    assert ready is False and blocking == ["standby@mgmt-gateway"] and evidence["sso"] == "oauth2"
+    monitor.enabled = False
+    ready, blocking, evidence = gateway.observing(monitor, markers)
+    assert ready is False and blocking == ["standby@mgmt-gateway", "sso@oauth2-proxy"]
+    monitor.enabled = True
+    monitor.standby = {"standby_behaviour": "error", "standby_error_status_code": 503}
     ready, blocking, evidence = gateway.observing(monitor, markers)
     assert ready is True and blocking == [] and evidence["sso"] == "oauth2"
     assert not any(mark in json.dumps(evidence) for mark in SECRET_MARKS)

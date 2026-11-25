@@ -131,6 +131,7 @@ class Monitor:
         self.failures = {}
         self.before_store = self.after_store = None
         self.after_config = None
+        self.standby = {"standby_behaviour": "error", "standby_error_status_code": 503}
         self.log, self.mutations, self.stdin = [], [], []
 
     def exported(self):
@@ -151,6 +152,8 @@ class Monitor:
                    ("orch", "status"): {"available": True, "backend": "cephadm"}}
         if command in answers:
             return 0, json.dumps(answers[command]).encode()
+        if command[:3] == ("config", "get", "mgr") and command[3] in ("mgr/dashboard/" + name for name in self.standby):
+            return 0, json.dumps(self.standby[command[3].rsplit("/", 1)[1]]).encode()
         self.mutations.append(command)
         if command[:2] == ("config", "set"):
             section, name, value = command[2:]

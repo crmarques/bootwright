@@ -1874,11 +1874,14 @@ Evidence's `endpoint` holds that SHA-256 once every endpoint passed, or without
 a binding the SHA-256 of the cephadm-signed leaf the first endpoint served, and
 the coordinator refuses `evidence` for any other digest of a bound unit. A
 readiness timeout names `mgmt-gateway@mgmt-gateway`, `keepalived@ingress.<id>`,
-`tls@mgmt-gateway` and `http@mgmt-gateway` beside the blocking health checks.
-Without an oauth2-proxy, Bootwright writes no dashboard setting and runs no
-`dashboard` or `mgr module` command for the gateway; cephadm sets the
-dashboard's standby behaviour itself, and the cluster's dashboard phase keeps
-its own publication and readback.
+`tls@mgmt-gateway`, `http@mgmt-gateway` and `standby@mgmt-gateway` beside the
+blocking health checks. For the gateway Bootwright writes no dashboard setting
+and runs no `dashboard` or `mgr module` command but the sign-on enable below.
+cephadm sets the standby options after the daemons deploy, so readiness waits
+until `config get mgr` reads `mgr/dashboard/standby_behaviour` as `error` and
+`mgr/dashboard/standby_error_status_code` as `503` (a JSON string or integer,
+else `native-output`), and no standby redirects to the active manager. The
+cluster's dashboard phase keeps its own publication and readback.
 
 A running management gateway turns on cephadm's monitoring security, which
 puts Prometheus and Alertmanager behind basic authentication, with the login

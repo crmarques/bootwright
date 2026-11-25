@@ -64,6 +64,20 @@ to `error`. Removing the gateway restores 500 and `redirect`. Bootwright writes
 no dashboard option (`test_gateway_unit_never_writes_a_dashboard_setting`). The
 internal listener is 29443.
 
+`config_dashboard` does not run at the deploy. It runs from
+`daemon_check_post` at the end of a later `_check_daemons` pass, for daemons
+whose `pending_daemon_config` the deploy set, and only while the `dashboard`
+module is enabled. Until then `ceph config get mgr` answers the module
+defaults, `redirect` and 500, and a standby dashboard sends the browser to the
+active manager's address in `mgr services` (the gateway's nginx skips only a
+standby that answers 503). On the 2026-11-24 ceph-stretch run (`ceph-prd-01`)
+the pass waited behind a two-minute reconfiguration sweep that began right
+after the gateway deployed, the apply reported the gateway ready, and the
+owner's browser at the gateway's address landed on `https://10.7.7.2:8443/`.
+Gateway readiness therefore reads both options and is not ready until they
+read `error` and 503 (blocking entry `standby@mgmt-gateway`); it still writes
+nothing, because the wait outlasts cephadm's delay.
+
 The dashboard also uses its own certificate and key as the TLS client identity
 for Prometheus and Alertmanager (see
 [`get_access_info`](https://github.com/ceph/ceph/blob/v20.2.2/src/pybind/mgr/dashboard/controllers/prometheus.py)).

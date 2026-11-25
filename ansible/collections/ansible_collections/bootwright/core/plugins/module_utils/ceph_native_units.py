@@ -161,7 +161,7 @@ DOCUMENT_MEMBERS = frozenset(("networks", "placement", "service_id", "service_ty
 PROXY_MEMBERS = DOCUMENT_MEMBERS | {"custom_configs"}
 INPUTS_VERSION = "ceph-service-inputs-v1"
 MAX_DAEMONS = 256
-ENDPOINT_ENTRIES = frozenset(("vip", "noholder", "holders", "module", "sso"))
+ENDPOINT_ENTRIES = frozenset(("vip", "noholder", "holders", "module", "sso", "standby"))
 PENDING = re.compile(r"(?:(?:" + "|".join(sorted({name for unit in UNIT_TYPES.values() for name in unit.daemon_types} | ENDPOINT_ENTRIES))
                      + r")@(?:(?:nfs|ingress)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}|"
                      + "|".join(ceph_native_observability.MONITORING_TYPES + ceph_native_observability.GATEWAY_TYPES + MIRROR_TYPES + CRASH_TYPES)

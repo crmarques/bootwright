@@ -435,7 +435,35 @@ def test_gateway_unit_never_writes_a_dashboard_setting(tmp_path, monkeypatch):
     assert monitor.mutations == [("orch", "apply", "-i", "-")]
     commands = [argv[argv.index("--format") + 2:] for argv in monitor.log]
     assert not any(command[:1] == ["dashboard"] or command[:2] == ["mgr", "module"] or "set" in command[:2] for command in commands)
-    assert not any("mgr/dashboard" in " ".join(command) for command in commands)
+    assert not any("mgr/dashboard" in " ".join(command) and command[:3] != ["config", "get", "mgr"] for command in commands)
+    assert [command[3] for command in commands if command[:3] == ["config", "get", "mgr"]] == [
+        "mgr/dashboard/standby_behaviour", "mgr/dashboard/standby_error_status_code"]
+
+
+@pytest.mark.parametrize("standby, ready", [
+    ({"standby_behaviour": "redirect", "standby_error_status_code": 500}, False),
+    ({"standby_behaviour": "error", "standby_error_status_code": 500}, False),
+    ({"standby_behaviour": "redirect", "standby_error_status_code": 503}, False),
+    ({"standby_behaviour": "error", "standby_error_status_code": "503"}, True),
+    ({"standby_behaviour": "error", "standby_error_status_code": 503}, True)])
+def test_gateway_readiness_waits_for_cephadms_dashboard_standby_options(tmp_path, monkeypatch, standby, ready):
+    markers, monitor = applied(tmp_path, gateway_request())
+    Probes(monkeypatch, (LEAF, True))
+    monitor.standby = standby
+    result, blocking, evidence = observing(monitor, markers)
+    assert result is ready and blocking == ([] if ready else ["standby@mgmt-gateway"]) and evidence["ready"] is False
+    assert all(command[0] != "config" or command[1] == "get" for command in monitor.mutations) and not any(
+        command[:2] == ("config", "set") or command[:1] == ("dashboard",) for command in monitor.mutations)
+    assert ceph_native_units.PENDING.fullmatch("standby@mgmt-gateway") and ceph_core.blocking_entry("standby@mgmt-gateway")
+
+
+@pytest.mark.parametrize("answer", [True, None, ["error"], 3.5])
+def test_gateway_readiness_refuses_a_standby_option_it_cannot_read(tmp_path, monkeypatch, answer):
+    markers, monitor = applied(tmp_path, gateway_request())
+    Probes(monkeypatch, (LEAF, True))
+    monitor.standby = {"standby_behaviour": answer, "standby_error_status_code": 503}
+    with pytest.raises(ceph_native.Refusal, match="^native-output$"):
+        observing(monitor, markers)
 
 
 def test_gateway_tables_agree():

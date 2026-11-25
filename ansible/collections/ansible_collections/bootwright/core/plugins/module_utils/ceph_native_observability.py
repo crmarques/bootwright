@@ -120,6 +120,9 @@ OAUTH2_PROXY_CA_PATH = "/etc/pki/tls/certs/oauth2-proxy-idp-ca.pem"
 OAUTH2_MEMBERS = frozenset(("allowlist_domains", "client_id", "https_address", "oidc_issuer_url", "provider_display_name", "redirect_url"))
 OAUTH2_PORT = ":4180"
 SSO_OPTION = "mgr/dashboard/sso_oauth2"
+# The two dashboard options cephadm's mgmt-gateway service sets itself, in a later serve-loop pass after the gateway daemons deploy, so that
+# a standby dashboard answers the gateway with an error it skips instead of redirecting the browser to the active manager's address.
+STANDBY_OPTIONS = (("mgr/dashboard/standby_behaviour", "error"), ("mgr/dashboard/standby_error_status_code", "503"))
 # The deployed proxy's verification switch as oauth2-proxy reads it: a flag, its environment form, and its configuration key.
 INSECURE_FLAG = "--ssl-insecure-skip-verify"
 INSECURE_ENVIRONMENT = "OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY"
@@ -518,14 +521,30 @@ def sso_enabled(worker):
     return value.lower() == "true"
 
 
+def standby_settled(worker):
+    """Read-only: both dashboard options read the values cephadm sets for a gateway, `error` and 503, as a JSON string or integer; `ceph config get`
+    answers the module default (`redirect`, 500) while a value is unset."""
+    settled = True
+    for option, wanted in STANDBY_OPTIONS:
+        value = worker.ceph("config", "get", "mgr", option)
+        require(isinstance(value, str) or (isinstance(value, int) and type(value) is not bool), "native-output")
+        settled = settled and str(value) == wanted
+    return settled
+
+
 def gateway_readiness(worker, unit, blocking):
-    """Beyond the daemons, whose served leaf the endpoint hook proves: with the proxy, the dashboard's OAuth2 single sign-on is enabled.
-    It never writes."""
+    """Beyond the daemons, whose served leaf the endpoint hook proves: cephadm's dashboard standby options are set, and with the proxy the
+    dashboard's OAuth2 single sign-on is enabled. It never writes."""
+    ready = True
+    if not standby_settled(worker):
+        if "standby@mgmt-gateway" not in blocking:
+            blocking.append("standby@mgmt-gateway")
+        ready = False
     if gateway_documents(unit)[2] is None:
-        return True
+        return ready
     if sso_enabled(worker):
         worker.sso_protocol = "oauth2"
-        return True
+        return ready
     if "sso@oauth2-proxy" not in blocking:
         blocking.append("sso@oauth2-proxy")
     return False
