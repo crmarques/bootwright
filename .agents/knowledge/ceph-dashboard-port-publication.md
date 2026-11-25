@@ -58,9 +58,14 @@ holds their persisted ownership to the core content digest. Keep the original
 redeploy records unchanged; an older registered operation is not upgraded by
 installing a new automation build.
 
-An explicit native reconfiguration can reopen discovered ports without
-restarting a Ceph daemon, but cephadm's reconfiguration path skips unit-file
-rewriting. It does not establish that refreshed deployment metadata changed.
+An explicit native reconfiguration also re-derives the ports from `mgr services`
+and opens them without restarting a Ceph daemon. It skips unit-file rewriting,
+but the cephadm binary of 20.1.0-221, 20.2.1-405 and 20.2.2-349 persists the
+payload's ports into `unit.meta` on reconfiguration (`Reconfig: update
+unit.meta so ports/ip from deploy payload are persisted`, `cephadm.py` line
+1253 at 20.2.1), so refreshed deployment metadata shows them. The monitoring
+unit relies on that for the prometheus module's port; see
+[the exporter port and firewalld](ibm-ceph-monitoring.md#the-exporter-port-and-firewalld).
 An unchanged completed Bootwright apply is also a lifecycle no-op; a new
 automation build alone does not repair an already completed cluster. See
 [continuation after a fix](continuation-after-a-fix.md) for the boundary between

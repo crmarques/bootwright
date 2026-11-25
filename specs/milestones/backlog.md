@@ -338,6 +338,7 @@ Alias cell.
 | [B1557](#b1557) | new, 2026-11-17 (X576) | enabling | Verification tooling, with each owning context | The role families that call fixed executables, fixed host roots or remote endpoints run their entry points through ansible-core in the gate | Each needs an executable, root or endpoint override in the role, a custody change the owner has not asked for |
 | [B1588](#b1588) | new, 2026-11-18 (X597 review) | safety | Substrate | A libvirt guest listing reads each domain by its UUID, so no domain name is read as another domain's ID | Low confidence that libvirt admits an all-digit domain name; the fix touches every guest-listing fixture |
 | [B1612](#b1612) | new, 2026-11-18 (D277) | product | Storage, with Add-ons | An omitted CephConsumer key type defaults to one the cluster's MONs allow | An explicit `aes256k` already works; the default needs an owner decision |
+| [B1805](#b1805) | new, 2026-11-24 (the owner's ceph-stretch run) | product | Storage | The management gateway listens only on its virtual IP, so it can share hosts and port 443 with an object gateway ingress | The owner kept the gateway on 9443 for the next run; it needs an owned cephadm template override |
 
 ### B82
 
@@ -3689,6 +3690,25 @@ default, and the examples and goldens that rely on it. Parked by
 [D277](#d277) because changing a consumer default is outside that decision
 and the kernel client's key support is still unqualified
 ([B761](m4.md#b761)).
+### B1805
+
+**Owner:** Storage. **Kind:** product. **Requires:** an owner decision.
+**Definition:** Candidate. **Outcome:** a CephCluster's management gateway
+binds its listener to the gateway's virtual IP only, so it can take port 443
+on hosts whose object gateway ingress already serves 443 on its own virtual IP.
+The owner asked for both endpoints on 443 on 2026-11-24, after the
+ceph-stretch run of `ceph-prd-01`, then kept 9443 for the next run. cephadm's
+`external_server.conf.j2` writes `listen <port> ssl` with no address, so nginx
+claims the port on every host address; the gateway's service spec has no bind
+address, the kernel refuses a second listener on that port, and
+the [listener registry](../api/ceph.md#listener-registry) refuses the
+overlap. The definition decides an owned override of that template, in the way
+the monitoring unit owns a Prometheus template, the non-local bind a standby
+gateway host needs, and how readiness probes a listener bound to an address its
+host may not hold. **Exit evidence:** a stretch plan placing the gateway and
+an object gateway ingress on the same hosts at 443 admitted, the rendered
+listener bound to the virtual IP, and the readiness probe over that address.
+
 ## Audit remediation (2026-10-26)
 
 The [2026-10-26 spec audit](../../audits/001-spec/report-final.md) ordered its
