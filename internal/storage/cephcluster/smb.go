@@ -30,7 +30,7 @@ const (
 	smbLoginRemedy     = "write the name without whitespace and within 128 characters"
 	smbUniqueMessage   = "SMB user, group and login names must be unique in their list"
 	smbADSettings      = "an active-directory SMB cluster needs domain_settings with its realm and join sources"
-	smbADSettingsFix   = "add domain_settings.realm and a join_sources entry whose ref is the auth_id of a ceph.smb.join.auth resource named in spec.resourceRefs"
+	smbADSettingsFix   = "add domain_settings.realm, or name an LDAPServer that declares activeDirectory in spec.ldapServerRef, and a join_sources entry whose ref is the auth_id of a ceph.smb.join.auth resource named in spec.resourceRefs"
 	smbJoinPassword    = "/auth/password"
 	smbSecretQualified = "bind /auth/password on a ceph.smb.join.auth resource or /values/users/<i>/password on a ceph.smb.usersgroups resource"
 )
@@ -67,8 +67,19 @@ func normalizeSMB(spec api.Value, catalog api.Catalog) api.Value {
 				spec = spec.With("resourceRefs", api.StringList(refs...))
 			}
 		}
+		if realm := smbDirectoryRealm(spec, catalog); realm != "" && !native.Has("domain_settings", "realm") && textOf(native, "auth_mode") == "active-directory" && (!native.Has("domain_settings") || native.Get("domain_settings").Type() == api.Mapping) {
+			spec = spec.With("native", native.WithPath(api.StringValue(realm), "domain_settings", "realm"))
+		}
 	}
 	return spec
+}
+
+func smbDirectoryRealm(spec api.Value, catalog api.Catalog) string {
+	server, found := catalog.Find(api.LDAPServer, textOf(spec, "ldapServerRef"))
+	if !found {
+		return ""
+	}
+	return textOf(server.Spec(), "activeDirectory", "realm")
 }
 
 func smbDerivedMembers(spec api.Value, catalog api.Catalog) []string {
@@ -168,6 +179,9 @@ func (a *admission) smbIntrinsic() {
 	switch rt {
 	case api.SMBCluster:
 		a.smbClusterValues(native)
+		if spec.Has("ldapServerRef") && textOf(native, "auth_mode") == "user" {
+			a.issue("api.invariant", "$.spec.ldapServerRef", "a user-mode SMB cluster joins no directory", "remove spec.ldapServerRef, or set auth_mode: active-directory")
+		}
 		a.smbPublicAddrValues(native)
 		if placement := native.Get("placement"); a.partial && placement.Type() == api.Mapping {
 			a.nativePlacement(api.Object{}, placement, "$.spec.native.placement", true)
@@ -203,6 +217,9 @@ func (a *admission) smbEnvelope(spec api.Value, rt string) {
 		}
 	} else if spec.Has("filesystemRef") && spec.Has("subvolumeRef") {
 		a.issue("api.invariant", "$.spec", smbShareBacking, "keep only one of spec.filesystemRef and spec.subvolumeRef")
+	}
+	if rt != api.SMBCluster && spec.Has("ldapServerRef") {
+		a.issue("api.invariant", "$.spec.ldapServerRef", "only a ceph.smb.cluster resource joins a directory", "remove spec.ldapServerRef")
 	}
 	if rt != api.SMBCluster && spec.Has("resourceRefs") {
 		a.issue("api.invariant", "$.spec.resourceRefs", "only a ceph.smb.cluster resource names auth resources", "remove spec.resourceRefs")
@@ -334,6 +351,7 @@ func (a *admission) smbResource(cluster api.Object) {
 		}
 	case api.SMBCluster:
 		a.smbClusterSettings(native)
+		a.smbDirectory(spec, native)
 		a.smbAuthReferences(cluster, spec, native)
 		a.smbClusterPlacement(cluster, native)
 		a.smbPublicAddrs(cluster, native)
@@ -358,6 +376,26 @@ func (a *admission) smbClusterSettings(native api.Value) {
 		} else if sources := native.Get("domain_settings", "join_sources"); sources.Type() == api.Sequence && sources.Len() == 0 {
 			a.issue("api.invariant", "$.spec.native.domain_settings.join_sources", smbADSettings, smbADSettingsFix)
 		}
+	}
+}
+
+func (a *admission) smbDirectory(spec, native api.Value) {
+	if !spec.Has("ldapServerRef") || textOf(native, "auth_mode") != "active-directory" {
+		return
+	}
+	server, found := a.catalog.Find(api.LDAPServer, textOf(spec, "ldapServerRef"))
+	if !found {
+		return
+	}
+	realm := textOf(server.Spec(), "activeDirectory", "realm")
+	if realm == "" {
+		a.issue("api.invariant", "$.spec.ldapServerRef", "LDAPServer "+server.Name()+" declares no spec.activeDirectory, so it is not an Active Directory domain an SMB cluster can join",
+			"declare spec.activeDirectory.realm on LDAPServer "+server.Name()+", or remove spec.ldapServerRef")
+		return
+	}
+	if authored := native.Get("domain_settings", "realm"); authored.Type() == api.String && !strings.EqualFold(authored.Text(), realm) {
+		a.issue("api.invariant", "$.spec.native.domain_settings.realm", "the realm disagrees with the Active Directory realm of LDAPServer "+server.Name(),
+			"omit domain_settings.realm so it derives from LDAPServer "+server.Name()+", or write the realm that server declares (in any case)")
 	}
 }
 

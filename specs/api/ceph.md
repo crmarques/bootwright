@@ -56,6 +56,7 @@ on the already selected Machine.
 | `subvolumeRef` | `CephSubvolume` |
 | `smbClusterRef` | `CephSMBResource` whose native type is `ceph.smb.cluster` |
 | `resourceRefs` (CephSMBResource) | `CephSMBResource` of type `ceph.smb.join.auth` or `ceph.smb.usersgroups` |
+| `ldapServerRef` (CephSMBResource) | `LDAPServer` that declares `activeDirectory`, on a `ceph.smb.cluster` of `auth_mode: active-directory` |
 | `objectGatewayRef` | `CephObjectGateway` |
 | `authentication.ldap.ldapServerRef` (CephObjectGateway) | `LDAPServer` |
 | `authentication.sts.oidcProviderRefs` (CephObjectGateway) | `OIDCProvider` |

@@ -10,7 +10,7 @@ const (
 func storageSMBResourceSchema() *Shape {
 	secrets := nonemptyArray(array(record(required("path", nonempty()), required("secretRef", secret("opaque", "token")))))
 	secrets.NameKey = "path"
-	return record(required("clusterRef", ref(CephCluster)), field("smbClusterRef", ref(CephSMBResource)), field("filesystemRef", ref(CephFilesystem)), field("subvolumeRef", ref(CephSubvolume)), field("resourceRefs", set(ref(CephSMBResource))), field("secrets", secrets), required("native", native()))
+	return record(required("clusterRef", ref(CephCluster)), field("smbClusterRef", ref(CephSMBResource)), field("filesystemRef", ref(CephFilesystem)), field("subvolumeRef", ref(CephSubvolume)), field("resourceRefs", set(ref(CephSMBResource))), field("ldapServerRef", ref(LDAPServer)), field("secrets", secrets), required("native", native()))
 }
 
 func StorageSMBResourceNativeSchema(resourceType string) *Shape {

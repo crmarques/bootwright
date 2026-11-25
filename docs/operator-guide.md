@@ -901,6 +901,49 @@ builds the host cluster, save the host's kubeconfig with
 `bootwright cluster kubeconfig`: the destroy drops it from custody while
 bare-metal hosts keep running.
 
+## Reach Ceph while an identity provider is down
+
+A cluster that signs users in through an OIDC provider or a directory keeps a
+path that does not depend on that service. Each owning section states the
+rule; this one only orders the steps. `bootwright cluster rsh` and
+`cluster exec` reach the nodes over the fleet's SSH access and never ask the
+provider or the directory anything, so they work whatever is down.
+
+- Dashboard, Grafana, Prometheus and Alertmanager. While a
+  [`CephSignOn`](../specs/ceph-resources.md#cephsignon) is on, no local sign-in
+  exists: the gateway sends every user to the provider. Run
+  `bootwright cluster sign-on suspend --name <cluster>`; it works with the
+  provider down, removes oauth2-proxy, and returns the management plane to local
+  sign-in. Read the local logins and sign in as the dashboard `admin`:
+
+  ```sh
+  bootwright cluster info --context lab-rhel --name ceph-lab --secrets
+  ```
+
+  When the provider is back, run `bootwright cluster sign-on resume --name <cluster>`.
+  Never remove oauth2-proxy by hand: cephadm reconfigures the gateway and
+  Bootwright's observation reports the difference
+  ([management sign-on](../specs/ceph.md#management-sign-on)).
+- Object gateway. Local `CephObjectUser` keys keep working: RGW's LDAP and STS
+  engines only deny, and local authentication is always in its sign-in order, so
+  a request signed with a local key never contacts the directory or the provider.
+  Directory users fail until the directory answers. Temporary credentials STS
+  already issued last until they expire; a new `AssumeRoleWithWebIdentity` fails
+  while the provider is down. Leave the `client.rgw.<id>` options alone: cephadm
+  reasserts them and Bootwright's observation refuses the drift
+  ([authentication](../specs/ceph.md#object-gateway-authentication)).
+- SMB in Active Directory mode. The cluster has no local-user fallback: Ceph
+  forbids local users in that mode, and one subvolume backs one SMB cluster, so
+  no second cluster can serve the data. While the domain controllers are down,
+  reach the data through CephFS with a Ceph key (a
+  [`CephClient`](../specs/ceph-resources.md#cephclient)) or with
+  `bootwright cluster exec` on a node
+  ([CephSMBResource](../specs/ceph-resources.md#cephsmbresource)).
+
+Rotating a directory's bind password or an STS key needs a destroy and a fresh
+apply: the object gateway takes both as effect material
+([CephObjectGateway](../specs/ceph-resources.md#cephobjectgateway-authentication)).
+
 ## Add-ons
 
 A `ClusterAddonBinding` installs operators on a cluster after it is up. This

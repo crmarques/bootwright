@@ -1157,6 +1157,7 @@ managed service.
 | `filesystemRef` | Share backing: a CephFilesystem of the same cluster. Forbidden on every type but `ceph.smb.share`. |
 | `subvolumeRef` | Share backing: a CephSubvolume of the same cluster. Forbidden on every type but `ceph.smb.share`. |
 | `resourceRefs` | Optional set of `CephSMBResource` names, admitted only on a `ceph.smb.cluster`, naming its `ceph.smb.join.auth` and `ceph.smb.usersgroups` resources. When omitted it is derived from the native references: each same-cluster resource whose native ID a `domain_settings.join_sources[].ref` or a `user_group_settings[].ref` of `source_type: resource` names, in that order. The native references stay the authored home. |
+| `ldapServerRef` | Optional [`LDAPServer`](api/infrastructure-services.md#oidcprovider-and-ldapserver) on a `ceph.smb.cluster` with `auth_mode: active-directory`, naming the Active Directory domain the cluster joins. The server declares `activeDirectory`, whose realm an omitted `domain_settings.realm` takes. Forbidden on every other type and on `auth_mode: user`. |
 | `secrets` | Required on `ceph.smb.join.auth` and `ceph.smb.usersgroups`, forbidden elsewhere; the leaves in [secret bindings](ceph-native-api.md#secret-bindings). Each binding names an `opaque` or `token` Secret. |
 
 Exactly one of `filesystemRef` and `subvolumeRef` is required for a share;
@@ -1167,7 +1168,7 @@ types and its enumerations. `resource_type` selects one closed record:
 
 | Type | Members |
 | --- | --- |
-| `ceph.smb.cluster` | Required `cluster_id`, `auth_mode` (`user` or `active-directory`) and `placement` (the native placement grammar); optional `intent`, `domain_settings` (required `realm` and `join_sources[]` of `source_type: resource` and a required `ref`), `user_group_settings[]` (`source_type` and a required `ref`), `custom_dns` (a set), `clustering` (`default`, `always` or `never`) and `public_addrs[]` (a required `address`). |
+| `ceph.smb.cluster` | Required `cluster_id`, `auth_mode` (`user` or `active-directory`) and `placement` (the native placement grammar); optional `intent`, `domain_settings` (required `realm`, derived from `spec.ldapServerRef` when omitted, and `join_sources[]` of `source_type: resource` and a required `ref`), `user_group_settings[]` (`source_type` and a required `ref`), `custom_dns` (a set), `clustering` (`default`, `always` or `never`) and `public_addrs[]` (a required `address`). |
 | `ceph.smb.share` | Required `share_id`; `cluster_id`, derived from the `smbClusterRef` resource's `cluster_id` when omitted; optional `intent`, `name`, `readonly`, `browseable`, `cephfs` (`volume`, `path`, `subvolumegroup`, `subvolume` and `provider`), `restrict_access` and `login_control[]` (a required `name`, `category` `user` or `group`, and `access`). |
 | `ceph.smb.join.auth` | Required `auth_id` and `auth` with a required `username`; optional `intent`. |
 | `ceph.smb.usersgroups` | Required `users_groups_id` and `values` with required `users[]` and `groups[]`, each entry a required `name`; optional `intent`. |
@@ -1228,6 +1229,26 @@ Value rules, each at its field:
   decides.
 - A share with `restrict_access: true` needs at least one `login_control`
   entry.
+- `spec.ldapServerRef` refuses at its field on a type other than
+  `ceph.smb.cluster` and on `auth_mode: user`, also in a fragment. Normalization
+  derives an omitted `domain_settings.realm` from the server's
+  `activeDirectory.realm`, as a share's `cluster_id` derives from its cluster,
+  so the native projection, the request and the effective output carry the
+  realm and no contract moves; a `domain_settings` without `join_sources`
+  still refuses at `join_sources`. A server that declares no `activeDirectory`
+  refuses at `$.spec.ldapServerRef`, naming the server, and an authored realm
+  that differs from the server's, compared without case, refuses at
+  `$.spec.native.domain_settings.realm`, naming the server and echoing no
+  realm. The server's bind DN, bind password, URLs and trust bundle are not
+  used: the join authenticates with the `ceph.smb.join.auth` resource.
+
+An Active Directory SMB cluster has no local-user fallback. The SMB manager
+forbids `user_group_settings` in that mode and one subvolume backs one SMB
+cluster, so no local SMB user can reach the data while the domain controllers
+are down. The operator reaches the data through CephFS with a Ceph key (a
+[CephClient](#cephclient)) or `bootwright cluster exec`, as the
+[operator guide](../docs/operator-guide.md#reach-ceph-while-an-identity-provider-is-down)
+describes.
 
 Cross-object rules, each refusal naming the other object by its
 `metadata.name` and never echoing a native value:

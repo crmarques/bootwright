@@ -88,12 +88,12 @@ The last column names the item that owns the implementation and its evidence.
 | Devices and OSDs | Explicit devices and bounded selectors, drive groups, BlueStore data/DB/WAL separation, device class, slots and allocation, encrypted OSDs and the TPM2 variants Bootwright realizes; prove every destructive target and owned cleanup | [B475](milestones/m2.md#b475) |
 | CRUSH and pools | Host/site failure domains, replicated and erasure profiles, application tags, autoscaling/PG bounds, quotas, compression, device classes where supported, RBD initialization and data-pool selection | [B81](milestones/m2.md#b81) |
 | CephFS | Replicated metadata, replicated or EC data, multiple data pools and explicit default/layout, MDS placement and standby/replay, subvolume groups, subvolumes and service-consumer references | [B492](milestones/m2.md#b492) |
-| RGW | Service placement, realm/zonegroup/zone bootstrap, pools, users/buckets/credentials needed to prove S3 access, backend ports, TLS public endpoints and HA ingress | [B477](milestones/m2.md#b477) |
+| RGW | Service placement, realm/zonegroup/zone bootstrap, pools, users/buckets/credentials needed to prove S3 access, backend ports, TLS public endpoints and HA ingress, LDAP or Active Directory sign-in through an `LDAPServer` and STS web-identity trust of `OIDCProvider` issuers, local users unaffected | [B477](milestones/m2.md#b477), [B1833](milestones/m2.md#b1833), [B1834](milestones/m2.md#b1834) |
 | NFS | NFS-Ganesha placement, CephFS/RGW exports Bootwright realizes, client restrictions and squash, ingress transport and VIP failover; native release decides backend/TLS support | [B478](milestones/m2.md#b478) |
-| Observability and management | Dashboard, Prometheus, Grafana, Alertmanager, node and Ceph exporters, log collection (Loki with Alloy or Promtail, each image authored under `images`) and SNMP gateway, management gateway, TLS, OAuth2/SSO and access roles, retention and health/alert checks; the prometheus manager module and `crash` are derived children with named owners (cephadm enables the module for a declared prometheus service; Bootwright's derived crash unit applies `crash` on every host) and are never authored; the direct dashboard certificate ([B682](milestones/backlog.md#b682)), local dashboard roles and users ([B683](milestones/backlog.md#b683)), the manager exporter without a Prometheus service ([B684](milestones/backlog.md#b684)) and cephadm-signed or selected certificate sources ([B685](milestones/backlog.md#b685)) are parked | [B479](milestones/m2.md#b479) |
+| Observability and management | Dashboard, Prometheus, Grafana, Alertmanager, node and Ceph exporters, log collection (Loki with Alloy or Promtail, each image authored under `images`) and SNMP gateway, management gateway, TLS, OAuth2/SSO through a `CephSignOn` and an `OIDCProvider`, with `cluster sign-on suspend` for local sign-in while the provider is down, and access roles, retention and health/alert checks; the prometheus manager module and `crash` are derived children with named owners (cephadm enables the module for a declared prometheus service; Bootwright's derived crash unit applies `crash` on every host) and are never authored; the direct dashboard certificate ([B682](milestones/backlog.md#b682)), local dashboard roles and users ([B683](milestones/backlog.md#b683)), the manager exporter without a Prometheus service ([B684](milestones/backlog.md#b684)) and cephadm-signed or selected certificate sources ([B685](milestones/backlog.md#b685)) are parked | [B479](milestones/m2.md#b479), [B1831](milestones/m2.md#b1831), [B1832](milestones/m2.md#b1832) |
 | NVMe-oF | Gateway groups and HA, listeners, subsystem/NQN identities, namespaces backed by owned RBD images, authorized clients and the authentication/TLS the native tools accept, ANA and client failover | [B480](milestones/m2.md#b480) |
 | iSCSI | Refusal only: admission refuses `service_type: iscsi` before any effect as a gateway Bootwright does not realize (D176) | [B481](milestones/delivered.md#x58--iscsi-refusal) |
-| SMB | Supported SMB cluster/domain/authentication modes, CephFS subvolumes and shares, HA/CTDB and client tests; AD is an explicitly declared external dependency | [B482](milestones/m2.md#b482) |
+| SMB | Supported SMB cluster/domain/authentication modes, CephFS subvolumes and shares, HA/CTDB and client tests; AD is an explicitly declared external dependency, joined through an `LDAPServer` that declares its realm, with no local-user fallback | [B482](milestones/m2.md#b482), [B1835](milestones/m2.md#b1835) |
 | Multi-cluster services | RGW multisite and RBD/CephFS mirroring setup Bootwright realizes, peer identity/credentials, initial synchronization and bounded failover evidence over separate managed clusters | [B483](milestones/m2.md#b483) |
 | Host and security variants | Bond/VLAN install, final NMState network, OS registration, target FIPS and CephX policy, encrypted root disks, reboot access; distinguish these from encrypted OSDs and controller certification | [B74](milestones/m1.md#b74) to [B77](../docs/acceptance.md#ledger), [B326](milestones/m1.md#b326), [B346](milestones/m1.md#b346), [B472](milestones/m2.md#b472), [B484](milestones/m2.md#b484), [B485](milestones/m2.md#b485) |
 | Disconnected supply | Qualified private mirrors/registry, all bootstrap/service images and dependencies, CA and pull-secret custody, explicit destinations and no unintended public fallback | [B493](milestones/m2.md#b493) |
@@ -394,13 +394,28 @@ authored under a second owner.
 [Dashboard OAuth2](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=dashboard-enabling-oauth2-single-sign)
 requires the management gateway, OAuth2 proxy, a qualified identity provider
 and user-role mapping; configuring a redirect alone is not SSO acceptance.
-Bootwright realizes SSO through the management gateway unit for an identity
-provider whose certificate chains to the selected image's trust store or to a
-CA bundle bound through the oauth2-proxy's one `custom_configs` entry, and
-enables the dashboard's OAuth2 single sign-on only after each deployed proxy's
-rendered configuration proves that it verifies the identity provider's
-certificate. Local dashboard roles and users stay parked
-([B683](milestones/backlog.md#b683)).
+Bootwright realizes SSO through a [CephSignOn](ceph-resources.md#cephsignon)
+and one `OIDCProvider` whose certificate chains to the selected image's trust
+store or to the provider's `trustBundleRef`, and enables the dashboard's OAuth2
+single sign-on only after each deployed proxy's rendered configuration proves
+that it verifies the identity provider's certificate. Local dashboard roles and
+users stay parked ([B683](milestones/backlog.md#b683)).
+
+Identity qualification names two coordinates. Keycloak (the Red Hat build of
+Keycloak 26.2 or later, a kind IBM's compatibility matrix lists) is the OIDC
+provider behind a `CephSignOn` and the object gateway's STS trust; Microsoft
+Active Directory is the directory behind the object gateway's LDAP sign-in and
+the SMB domain join. They are the coordinates a qualification run uses, recorded
+as evidence like every other tested coordinate; they approve no provider, and
+another OIDC provider or LDAP directory is declared the same way. Each owes the
+owner an [acceptance row](../docs/acceptance.md#ceph-matrix-row) on its item:
+[B1831](milestones/m2.md#b1831) (sign-in), [B1832](milestones/m2.md#b1832)
+(suspend and resume with the provider stopped),
+[B1833](milestones/m2.md#b1833) (LDAP), [B1834](milestones/m2.md#b1834) (STS)
+and [B1835](milestones/m2.md#b1835) (the domain join). The
+[operator guide](../docs/operator-guide.md#reach-ceph-while-an-identity-provider-is-down)
+gives the procedure for reaching Ceph while a provider is down
+([B1836](milestones/m2.md#b1836)).
 
 Monitoring and the management gateway ([B479](milestones/m2.md#b479)) follow the
 [native records](ceph-native-api.md#observability-and-management-gateway-records).

@@ -101,7 +101,7 @@ func TestSMBResourceSchemaShape(t *testing.T) {
 	for _, field := range schema.Fields {
 		names = append(names, field.Name)
 	}
-	if !slices.Equal(names, []string{"clusterRef", "smbClusterRef", "filesystemRef", "subvolumeRef", "resourceRefs", "secrets", "native"}) {
+	if !slices.Equal(names, []string{"clusterRef", "smbClusterRef", "filesystemRef", "subvolumeRef", "resourceRefs", "ldapServerRef", "secrets", "native"}) {
 		t.Fatalf("CephSMBResource fields = %v", names)
 	}
 	if native, _ := schema.Field("native"); !native.Required || !native.Shape.Open || !native.Shape.Atomic {

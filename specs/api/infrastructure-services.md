@@ -294,7 +294,11 @@ service. A `CephSignOn`, a
 (its LDAP sign-in names an `LDAPServer`; its STS trust lists `OIDCProvider`
 objects for the plan only and refuses one with `trustBundleRef`, because RGW
 verifies an issuer against the image's system trust store alone) and an Active
-Directory SMB cluster consume them; their consumers' pages own the effects, and
+Directory SMB cluster consume them (its
+[`ldapServerRef`](../ceph-resources.md#cephsmbresource) names an `LDAPServer`
+that declares `activeDirectory`, whose realm the cluster's omitted
+`domain_settings.realm` takes; the join uses neither the bind credentials nor
+the URLs); their consumers' pages own the effects, and
 neither kind claims that a consumer exists or that the service answers.
 
 | Field | Type | Required | Default or rule |
