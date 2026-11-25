@@ -156,7 +156,7 @@ var (
 		Meaning: "a step a staged destroy would take back runs on a Machine it keeps, which nothing yet takes such a step back from, so nothing was registered", Remedy: "repeat with the stage or the item the message names, or destroy without --stage"}
 	destroyStageChanged = diagnostics.Stop{Code: "destroy.stage-changed", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryFixThenRepeat,
-		Meaning: "an unfinished destroy froze another floor, or none, than the command names, so nothing was registered", Remedy: "finish it with the command the message names, then repeat"}
+		Meaning: "a later floor than an unfinished staged destroy froze, or any floor over an unfinished whole destroy, would narrow it, so nothing was registered", Remedy: "finish it with the command the message names, or review and take back the whole context with the commands it names"}
 	applyContextTrimmed = diagnostics.Stop{Code: "apply.context-trimmed", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryOtherVerb,
 		Meaning: "a staged destroy trimmed the context, and the input changed since", Remedy: "destroy, then apply the changed input"}

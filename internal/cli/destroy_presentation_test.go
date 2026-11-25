@@ -98,3 +98,24 @@ func TestDestroyHelpStatesWhatItRemovesAndItsPrerequisites(t *testing.T) {
 		}
 	}
 }
+
+// A destroy that widens an unfinished staged destroy opens by naming it and
+// the floor it widens to, in text and JSON.
+func TestADestroyPlanNamesTheStagedDestroyItWidens(t *testing.T) {
+	for to, scope := range map[string]*lifecycle.StagedScope{"the whole context": nil, "the substrates stage": {Floor: "substrates"}} {
+		result := previewResult()
+		result.Verb, result.Receipt.Next = "destroy", "destroy"
+		result.Widens, result.Scope = &lifecycle.Widening{Operation: "op-1", From: "clusters"}, scope
+		var out bytes.Buffer
+		if err := writeLifecyclePlan(&out, result); err != nil {
+			t.Fatal(err)
+		}
+		if want := "this destroy widens the unfinished staged destroy op-1 from the clusters stage to " + to + " Plan"; !strings.Contains(strings.Join(strings.Fields(out.String()), " "), want) {
+			t.Fatalf("plan text = %q, missing %q", out.String(), want)
+		}
+		encoded, err := json.Marshal(displayPlan(result))
+		if err != nil || !strings.Contains(string(encoded), `"widens":{"operation":"op-1","from":"clusters"}`) {
+			t.Fatalf("plan JSON = %s (%v)", encoded, err)
+		}
+	}
+}

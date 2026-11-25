@@ -203,7 +203,11 @@ func (s Service) resolveMember(ctx context.Context, tx Transaction, store Operat
 	if removal {
 		removalPlan = &decided.plan
 	}
-	causes, cause := s.observe(work, invocation{tx: tx, store: store, approved: approved, boundary: logging, operation: replaced, plan: frozen, material: material, abandoned: abandoned, unregistered: frozenUnregistered(decided.plan), floor: decided.floor()}, phases, states, removalPlan, decided.phases)
+	run := invocation{tx: tx, store: store, approved: approved, boundary: logging, operation: replaced, plan: frozen, material: material, abandoned: abandoned, unregistered: frozenUnregistered(decided.plan), floor: decided.floor()}
+	if !removal {
+		run.repeat = contextCommand(tx.Identity().Name, string(reconciliation.Destroy), invocationFlags(decided.floor(), reconciliation.Selection{}, authorizingUnfixed(decided.plan))...)
+	}
+	causes, cause := s.observe(work, run, phases, states, removalPlan, decided.phases)
 	logging.close(ctx, log)
 	if err := s.recordFromBlocks(recordingContext(ctx), tx, store, replaced, frozen, states); err != nil {
 		return memberResolution{}, err

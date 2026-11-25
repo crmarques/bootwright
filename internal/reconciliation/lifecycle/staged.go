@@ -35,10 +35,9 @@ func (d decider) stagedDecision(ctx context.Context, view View, store decisionRe
 	switch {
 	case d.floor == "" && !staged(operation):
 		return operationPlan{}, false, nil
-	case staged(operation) && operation.State != reconciliation.OperationDone:
-		if d.floor == operation.Stage.Floor {
-			return operationPlan{}, false, nil
-		}
+	case staged(operation) && operation.State != reconciliation.OperationDone && d.floor == operation.Stage.Floor:
+		return operationPlan{}, false, nil
+	case staged(operation) && operation.State != reconciliation.OperationDone && d.floor != "" && d.floor.AtOrAbove(operation.Stage.Floor):
 		return operationPlan{}, true, stageChanged(name, operation, frozen, states, d.floor)
 	case operation.Verb == reconciliation.Destroy && !staged(operation):
 		if operation.State == reconciliation.OperationDone {
@@ -54,6 +53,10 @@ func (d decider) stagedDecision(ctx context.Context, view View, store decisionRe
 	}
 	if d.floor == "" {
 		decided, err := d.planner.freshDestroy(ctx, name, operation.Executable, live.source, live.scope, false)
+		if err != nil {
+			return operationPlan{}, true, err
+		}
+		decided, err = d.widen(ctx, store, decided, operation, frozen, states)
 		return decided, true, err
 	}
 	ids, err := d.planner.stagedScope(name, d.floor, live)
@@ -82,7 +85,32 @@ func (d decider) stagedDecision(ctx context.Context, view View, store decisionRe
 	slices.Sort(taken)
 	decided.stage = &operationstore.Stage{Floor: d.floor, TakenBack: slices.Compact(taken)}
 	decided.release, decided.kept = nil, keptOf(live.scope.owned, ids)
-	return decided, true, nil
+	decided, err = d.widen(ctx, store, decided, operation, frozen, states)
+	return decided, true, err
+}
+
+type widening struct {
+	operation string
+	from      reconciliation.Stage
+}
+
+func (d decider) widen(ctx context.Context, store decisionRecords, decided operationPlan, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) (operationPlan, error) {
+	if !staged(operation) || operation.State == reconciliation.OperationDone {
+		return decided, nil
+	}
+	decided.widens = &widening{operation: operation.ID, from: operation.Stage.Floor}
+	return d.replacing(ctx, store, decided, operation, frozen, states)
+}
+
+func (t operationPlan) widened() string {
+	if t.widens == nil {
+		return ""
+	}
+	to := "the whole context"
+	if floor := t.floor(); floor != "" {
+		to = "the " + string(floor) + " stage"
+	}
+	return "which widens the unfinished staged destroy " + t.widens.operation + " from the " + string(t.widens.from) + " stage to " + to
 }
 
 type liveState struct {
@@ -377,14 +405,9 @@ func refuseLeavingOutside(name string, plan reconciliation.Plan) error {
 }
 
 func stageChanged(name string, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, floor reconciliation.Stage) error {
-	message := "the unfinished staged destroy " + operation.ID + " froze the " + string(operation.Stage.Floor) + " stage"
-	if floor == "" {
-		message += ", and a destroy without --stage would also take back the steps it keeps"
-	} else {
-		message += ", not the " + string(floor) + " stage"
-	}
-	return destroyStageChanged.Fail(message,
-		"finish it with "+continuationCommand(name, operation, frozen, states)+"; once it completes, a lower --stage or a destroy without --stage takes back more")
+	message := "the unfinished staged destroy " + operation.ID + " froze the " + string(operation.Stage.Floor) + " stage, not the " + string(floor) + " stage"
+	return destroyStageChanged.Fail(message+", and a later stage cannot narrow it",
+		"finish it with "+continuationCommand(name, operation, frozen, states)+", or review taking back the whole context with "+contextCommand(name, "destroy --dry-run")+" and run "+contextCommand(name, string(reconciliation.Destroy)))
 }
 
 func refuseTrimmed(name string, operation operationstore.Operation, preparation bool) error {
@@ -438,10 +461,14 @@ func (t operationPlan) floor() reconciliation.Stage {
 
 func confirmedAction(decided operationPlan) string {
 	floor := decided.floor()
-	if decided.verb != reconciliation.Destroy || floor == "" {
-		return string(decided.verb)
+	action := string(decided.verb)
+	if decided.verb == reconciliation.Destroy && floor != "" {
+		action = "destroy --stage " + string(floor) + ", taking back " + strconv.Itoa(len(decided.plan.Blocks)) + " steps and keeping " + strconv.Itoa(len(decided.kept)) + ","
 	}
-	return "destroy --stage " + string(floor) + ", taking back " + strconv.Itoa(len(decided.plan.Blocks)) + " steps and keeping " + strconv.Itoa(len(decided.kept)) + ","
+	if widened := decided.widened(); widened != "" {
+		action = strings.TrimSuffix(action, ",") + ", " + widened + ","
+	}
+	return action
 }
 
 func (t operationPlan) scope() *StagedScope {
@@ -459,6 +486,18 @@ func (t operationPlan) scope() *StagedScope {
 		}
 	}
 	return scope
+}
+
+type Widening struct {
+	Operation string
+	From      string
+}
+
+func (t operationPlan) widening() *Widening {
+	if t.widens == nil {
+		return nil
+	}
+	return &Widening{Operation: t.widens.operation, From: string(t.widens.from)}
 }
 
 type StagedScope struct {

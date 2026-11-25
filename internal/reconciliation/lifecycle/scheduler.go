@@ -87,6 +87,7 @@ type invocation struct {
 	effects        map[string]bool
 	selection      reconciliation.Selection
 	floor          reconciliation.Stage
+	repeat         string
 	stopGroups     []*removalMachineGroup
 	clusterStarts  *sync.Map
 	tx             Transaction
@@ -403,6 +404,9 @@ func (c *scheduler) durable(ctx context.Context, block string, prior reconciliat
 // plan's tokens, or the continuation of this operation.
 func (c *scheduler) observingCommand() string {
 	name := c.tx.Identity().Name
+	if c.repeat != "" {
+		return c.repeat
+	}
 	if c.removal != nil {
 		return contextCommand(name, string(reconciliation.Destroy), invocationFlags(c.floor, reconciliation.Selection{}, authorizingUnfixed(*c.removal))...)
 	}

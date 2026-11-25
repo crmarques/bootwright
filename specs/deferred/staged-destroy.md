@@ -48,7 +48,7 @@ causes.
 | 1 | [B1856](../milestones/delivered.md#x754--run-time-inverse-branches-frozen) | The remaining inverse branches decided at run time are frozen |
 | 2 | [B1857](../milestones/delivered.md#x755--one-fold-answers-what-a-contexts-operations-own) | One ownership fold answers what a context owns |
 | 3 | [B166](../milestones/delivered.md#x756--a-staged-destroy-takes-back-a-stage-and-the-context-rests-trimmed) | `destroy --stage` and the trimmed resting state |
-| 3b | [B1867](../milestones/m1.md#b1867) | A `destroy` without `--stage`, or a lower floor, supersedes an unfinished staged destroy |
+| 3b | [B1867](../milestones/delivered.md#x758--a-destroy-widens-an-unfinished-staged-destroy) | A `destroy` without `--stage`, or a lower floor, supersedes an unfinished staged destroy |
 | 4 | [B1858](../milestones/delivered.md#x757--the-restoring-apply-restores-what-a-staged-destroy-took-back) | The restoring apply over unchanged input |
 | 5 | [B1859](../milestones/m1.md#b1859) | A restore admits changed input inside the taken-back part |
 | 6 | [B1860](../milestones/m1.md#b1860) | An agent installation whose nodes never booted is taken back on kept nodes |
@@ -103,7 +103,7 @@ for that member's steps ([B1859](../milestones/m1.md#b1859)).
 | --- | --- |
 | Cluster provisioning failed and the nodes are virtual, installed and proved | `--stage clusters` is admitted once the node Machines are kept and the root-disk reset exists ([B1861](../milestones/m1.md#b1861)); before that it refuses with `destroy.stage-keeps-host` |
 | A cluster install failed before any node booted the image | `--stage clusters` takes back the agent installation on kept nodes ([B1860](../milestones/m1.md#b1860)) |
-| A staged destroy fails halfway and the operator widens it | A lower floor or no `--stage` supersedes it behind the widening confirmation ([B1867](../milestones/m1.md#b1867)) |
+| A staged destroy fails halfway and the operator widens it | A lower floor or no `--stage` supersedes it behind the widening confirmation ([staged destroy](../state-reconciliation.md#staged-destroy)) |
 | `apply` over a trimmed context with input that changes a taken-back block | A restoring apply that carries the change ([B1859](../milestones/m1.md#b1859)) |
 | A kept host is in the wrong power state | Stops with the `machine start` or `machine stop` command |
 | A physical install is in the scope | Refuses; the physical restore is parked ([B1864](../milestones/backlog.md#b1864)) |

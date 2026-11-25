@@ -185,13 +185,9 @@ func writeLifecycleSteps(text *display, result lifecycle.PlanResult) {
 		text.lines([]string{"no blocks"})
 		return
 	}
-	if result.AddsTo != "" {
+	if opening := planOpening(&result); opening != "" {
 		text.section("")
-		text.lines([]string{"adds to operation " + result.AddsTo + "; runs none of its blocks"})
-	}
-	if result.Restores != "" {
-		text.section("")
-		text.lines([]string{"restores what operation " + result.Restores + " took back; runs none of the steps the context keeps"})
+		text.lines([]string{opening})
 	}
 	text.section("Plan")
 	text.lifecycleSteps(result)
@@ -473,4 +469,18 @@ func blockStatusToken(state string) string {
 		return "[UNKNOWN]"
 	}
 	return "[FAIL]"
+}
+
+func planOpening(result *lifecycle.PlanResult) string {
+	switch {
+	case result.AddsTo != "":
+		return "adds to operation " + result.AddsTo + "; runs none of its blocks"
+	case result.Restores != "":
+		return "restores what operation " + result.Restores + " took back; runs none of the steps the context keeps"
+	case result.Widens != nil && result.Scope != nil:
+		return "this destroy widens the unfinished staged destroy " + result.Widens.Operation + " from the " + result.Widens.From + " stage to the " + result.Scope.Floor + " stage"
+	case result.Widens != nil:
+		return "this destroy widens the unfinished staged destroy " + result.Widens.Operation + " from the " + result.Widens.From + " stage to the whole context"
+	}
+	return ""
 }

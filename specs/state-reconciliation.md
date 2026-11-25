@@ -671,7 +671,7 @@ sends the operator back to `status`, which needs the same unreadable record.
 | destroy paused | continue that exact destroy, or, under a relaxation its frozen plan does not hold, start a fresh destroy of what it has not removed, which resolves every unproved block first |
 | destroy failed | start a fresh destroy of what it has not removed |
 | staged destroy done (trimmed) | `apply` of the input its kept steps froze starts a [restoring apply](#restoring-apply), and of a changed input refuses; `destroy` starts a fresh destroy of what the context still owns, which replaces the staged destroy; `destroy --stage` at the same or a later stage settles without effect, and at an earlier one starts a fresh staged destroy of what the context still owns, which replaces it; `context update` is admitted, since the context guard reads `{none, retained}` as no mutation |
-| staged destroy running, paused, unknown or failed | the row of that destroy's state, at the stage it froze: `destroy --stage` at that stage continues it, or replaces a failed one with a fresh staged destroy of what it has not removed; `destroy` without `--stage` or at another stage refuses |
+| staged destroy running, paused, unknown or failed | the row of that destroy's state, at the stage it froze: `destroy --stage` at that stage continues it, or replaces a failed one with a fresh staged destroy of what it has not removed; `destroy` without `--stage` replaces it with a fresh destroy of what the context still owns, and `destroy --stage` at an earlier stage with a fresh staged destroy of what the context still owns, each [widening](#staged-destroy) it and resolving its unproved blocks first; at a later stage it refuses |
 | restoring apply running, paused, unknown or failed | the row of that apply's state: `apply` continues it; `destroy` starts a fresh destroy of what the context owns, the steps it started and every step it keeps; `destroy --stage` starts a fresh staged destroy of what the context owns, which also takes back the steps it never started |
 | destroy unknown | continue it, resolving every unproved block first and then retrying what resolution leaves `failed` (D146), or, under a relaxation its frozen plan does not hold, start a fresh destroy of what it has not removed, which resolves them first |
 
@@ -2217,20 +2217,29 @@ set, its own scope with what every staged destroy it `replaces` took back.
   destroy, and ends pristine; a lower floor replaces it with a staged destroy
   of what is left. Either reopens the binding the latest staged destroy holds,
   which differs from the lineage root's only after a rebind, and the whole one
-  releases every staged destroy's binding beside the lineage's. Over an unfinished staged destroy only its own floor
-  continues or replaces it; any other floor and a destroy without `--stage`
-  refuse `destroy.stage-changed`.
+  releases every staged destroy's binding beside the lineage's.
+- **Widening.** Over an unfinished staged destroy its own floor continues it,
+  or replaces a failed one. A `destroy` without `--stage` replaces it with a
+  whole removal of what the context still owns, which leaves out what it and
+  the staged destroys it replaces proved gone, and a lower floor with a staged
+  destroy whose cumulative taken-back set grows; a later floor refuses
+  `destroy.stage-changed`. Either names it by `replaces` and resolves its
+  unproved blocks first, under a remedy that repeats the widening. The preview
+  opens with `this destroy widens the unfinished staged destroy <id> from the
+  <floor> stage to the whole context`, or `to the <floor> stage`, beside
+  `widens`, and the confirmation states it. The digest covers every step it
+  takes back, so it tells a widening from the staged destroy only when the
+  widening removes a step the staged destroy kept, and otherwise the plans are
+  the same steps. One reviewed for the staged destroy then refuses
+  `authorize.stale`, as `--yes` without a digest does
+  (`TestAWideningIsNamedAndAuthorizedAgainstItsOwnPlan`).
 - Every `destroy` command a remedy, receipt or status names over a staged
-  destroy carries `--stage <floor>`. A done staged destroy's receipt names
+  destroy carries `--stage <floor>`, the floor of the destroy it repeats,
+  which a widening to the whole context drops. A done staged destroy's receipt names
   next `apply`, and `status` offers the restore beside the whole destroy,
   or, under an input its kept steps did not freeze, `destroy` and only the
   whole destroy, which the preview then chooses. The plan and operation results carry `scope` (floor, removed
   and kept steps, residue, kept power targets) and status carries `stage`.
-
-Not yet met: a `destroy` without `--stage`, or a lower floor, over an
-unfinished staged destroy refuses instead of superseding it behind a
-confirmation that names the widening; tracked as
-[B1867](milestones/m1.md#b1867).
 
 ## Frozen requests and contract guards
 

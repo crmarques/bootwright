@@ -24,6 +24,7 @@ type operationPlan struct {
 	idle      bool
 	keeps     bool
 	stage     *operationstore.Stage
+	widens    *widening
 	requested reconciliation.Stage
 	kept      []string
 	verb      reconciliation.Verb

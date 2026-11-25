@@ -18469,7 +18469,7 @@ takes back, so a destroy digest an earlier build printed refuses
 **Gates:** `make focus`; the delivering commit records the command and result.
 
 **Limits:** over an unfinished staged destroy only its own floor is admitted
-([B1867](m1.md#b1867)); no scoped step may act on a kept Machine, so the kept
+([B1867](#x758--a-destroy-widens-an-unfinished-staged-destroy)); no scoped step may act on a kept Machine, so the kept
 power targets stay empty until [B1860](m1.md#b1860); a done staged destroy
 names next `none` until the restoring apply ([B1858](#x757--the-restoring-apply-restores-what-a-staged-destroy-took-back)).
 
@@ -18522,3 +18522,37 @@ does not pin, as an additive member's, refuses `apply.restore-unbound`
 ([B1859](m1.md#b1859)); a restore reads no kept Machine's power, since no
 scope yet keeps a Machine a taken-back step acts on ([B1860](m1.md#b1860));
 the example-wide restore is proved at the plan and fold, not by a run.
+
+## X758 — A destroy widens an unfinished staged destroy
+
+**Items:** B1867. **Kind:** product. **Owner:** Reconciliation, with CLI.
+**Authorization:** [D288](backlog.md#d288) (2), the slice after the third of
+the [staged destroy design](../deferred/staged-destroy.md#program).
+
+**Outcome:** over a staged destroy that is running, paused, unknown or failed,
+a `destroy` without `--stage` replaces it with a whole removal of what the
+context still owns, and a lower floor with a staged destroy of a wider scope,
+each naming it by `replaces` and resolving its unproved blocks first; a later
+floor still refuses `destroy.stage-changed`
+([staged destroy](../state-reconciliation.md#staged-destroy)). The preview,
+plan `widens` and confirmation name the widening, and its digest is the
+widened plan's. A resolution a replacing removal runs over a replaced removal
+names that replacing destroy as the command that observes it again. The
+state-machine row, its cases at the lower and later floor, and three
+kill-harness journeys land.
+
+**Guard tests:** `TestTransitionTablesMatchSpec`,
+`TestADestroyWithoutStageWidensAnUnfinishedStagedDestroy`,
+`TestALowerFloorWidensAnUnfinishedStagedDestroyCumulatively`,
+`TestALaterFloorOverAnUnfinishedStagedDestroyRefuses`,
+`TestAWideningIsNamedAndAuthorizedAgainstItsOwnPlan`,
+`TestALowerFloorConfirmationNamesTheWidening`,
+`TestADestroyPlanNamesTheStagedDestroyItWidens`,
+`TestEachConfirmationNamesItsObjectAndContextAndKeepsItsConsumersCode` and
+`TestAJourneyKilledAtAnyWriteLeavesAUsableStoreAndConvergesOnRetry`.
+
+**Gates:** `make focus`; the delivering commit records the command and result.
+
+**Limits:** a lower floor that takes back no step more than the staged destroy
+it replaces removes the same steps, so its digest equals that destroy's
+replacement at its own floor.

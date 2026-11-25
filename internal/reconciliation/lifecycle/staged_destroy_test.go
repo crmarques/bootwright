@@ -337,21 +337,12 @@ func TestAnEmptyScopeSettlesKeepingEveryBinding(t *testing.T) {
 }
 
 // A failed staged destroy is replaced at its own floor by one that keeps the
-// frozen taken-back set and the floor; a destroy without --stage refuses and
-// names that command until it completes.
+// frozen taken-back set and the floor.
 func TestAFailedStagedDestroyIsReplacedAtItsFloor(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
 	h := newPlannedHarness(t, chainedDefinitions())
 	failedStagedRemoval(t, h)
 	failed, _ := currentRecord(t, h)
-	_, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
-	if reported := diagnostics.Of(err); firstCode(err) != destroyStageChanged.Code || !strings.Contains(reported[0].Remediation, "destroy --context "+testContextName+" --stage clusters") {
-		t.Fatalf("a destroy without --stage over the failed staged destroy returned %v", err)
-	}
-	if _, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, Floor: string(reconciliation.StageAddOns), SkipConfirmation: true}); firstCode(err) != destroyStageChanged.Code {
-		t.Fatalf("a later floor over the failed staged destroy returned %v", err)
-	}
 	stagedDestroy(t, h, reconciliation.StageClusters)
 	replacement, plan := currentRecord(t, h)
 	if !trimmed(replacement) || replacement.Replaces != failed.ID || !slices.Equal(replacement.Stage.TakenBack, failed.Stage.TakenBack) || !slices.Equal(planIDs(plan), []string{"charlie"}) {

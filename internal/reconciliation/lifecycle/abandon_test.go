@@ -236,3 +236,28 @@ func TestACapabilityCannotReportAnAbandonment(t *testing.T) {
 		t.Fatalf("forged abandonment = %+v, %v", result, err)
 	}
 }
+
+// A destroy that replaces an unproved removal under an abandonment its plan
+// does not hold repeats itself, when its resolution proves nothing, with the
+// abandonment.
+func TestAnAbandoningReplacementRepeatsItsAbandonmentWhenResolutionProvesNothing(t *testing.T) {
+	t.Parallel()
+	h := newPlannedHarness(t, chainedDefinitions())
+	h.service.capabilities = testResolver{capability: &abandoningTestCapability{testCapability: h.capability, abandonable: map[string]bool{"bravo": true}}}
+	completeApply(t, h)
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
+	if _, err := destroy(h); err == nil {
+		t.Fatal("a removal whose block lost its outcome reported success")
+	}
+	h.capability.outcomes = nil
+	replaced, _ := currentRecord(t, h)
+	_, err := h.service.Destroy(t.Context(), DestroyRequest{ContextName: testContextName, SkipConfirmation: true, Relaxations: abandoning("bravo")})
+	reported := diagnostics.Of(err)
+	if firstCode(err) != engineOutcomeUnknown.Code || !strings.Contains(reported[0].Remediation, "repeat bootwright destroy --context "+testContextName) ||
+		!strings.Contains(reported[0].Remediation, "--authorize abandon=bravo") {
+		t.Fatalf("the abandoning replacement returned %+v", reported)
+	}
+	if current, _ := currentRecord(t, h); current.ID != replaced.ID {
+		t.Fatalf("the unresolved replacement registered %s", current.ID)
+	}
+}

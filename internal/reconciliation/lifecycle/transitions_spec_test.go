@@ -57,6 +57,7 @@ type stateMachineCase struct {
 	apply, destroy string
 	staged         string
 	floor          reconciliation.Stage
+	lower, higher  string
 	previewed      reconciliation.Verb
 	next           string
 	reopens        bool
@@ -85,6 +86,8 @@ type stateMachineRow struct {
 }
 
 const restoringTransition = "the row of that apply's state: `apply` continues it; `destroy` starts a fresh destroy of what the context owns, the steps it started and every step it keeps; `destroy --stage` starts a fresh staged destroy of what the context owns, which also takes back the steps it never started"
+
+const stagedUnfinishedTransition = "the row of that destroy's state, at the stage it froze: `destroy --stage` at that stage continues it, or replaces a failed one with a fresh staged destroy of what it has not removed; `destroy` without `--stage` replaces it with a fresh destroy of what the context still owns, and `destroy --stage` at an earlier stage with a fresh staged destroy of what the context still owns, each [widening](#staged-destroy) it and resolving its unproved blocks first; at a later stage it refuses"
 
 const exitByDeletion = "none: `apply` and `destroy` refuse, naming `context delete --purge`, with `--allow-orphans` unless the evidence is pristine, which cannot list what it abandons over evidence the guard cannot read"
 
@@ -339,24 +342,24 @@ func stateMachineRows() map[string]stateMachineRow {
 			},
 		},
 		"staged destroy running, paused, unknown or failed": {
-			transition: "the row of that destroy's state, at the stage it froze: `destroy --stage` at that stage continues it, or replaces a failed one with a fresh staged destroy of what it has not removed; `destroy` without `--stage` or at another stage refuses",
+			transition: stagedUnfinishedTransition,
 			cases: map[string]stateMachineCase{
 				"a staged destroy whose block failed": {
-					arrange: failedStagedRemoval, apply: "refuse", destroy: "refuse", staged: "fresh destroy", previewed: reconciliation.Destroy, next: "destroy", reopens: true, shown: planning("destroy"),
+					arrange: failedStagedRemoval, apply: "refuse", destroy: "fresh destroy", staged: "fresh destroy", lower: "fresh destroy", higher: "refuse", previewed: reconciliation.Destroy, next: "destroy", reopens: true, shown: planning("destroy"),
 				},
 				"a staged destroy whose executor died": {
 					arrange: func(t *testing.T, h *harness) {
 						failedStagedRemoval(t, h)
 						rewriteState(t, h, path.Join(currentOperation(t, h), "operation.json"), string(reconciliation.OperationRunning))
 					},
-					apply: "refuse", destroy: "refuse", staged: "continue", previewed: reconciliation.Destroy, next: "continue-destroy", reopens: true, shown: continuing("continue-destroy"),
+					apply: "refuse", destroy: "fresh destroy", staged: "continue", lower: "fresh destroy", higher: "refuse", previewed: reconciliation.Destroy, next: "continue-destroy", reopens: true, shown: continuing("continue-destroy"),
 				},
 				"a staged destroy paused before its next block": {
 					arrange: func(t *testing.T, h *harness) {
 						failedStagedRemoval(t, h)
 						rewriteState(t, h, path.Join(currentOperation(t, h), "operation.json"), string(reconciliation.OperationPaused))
 					},
-					apply: "refuse", destroy: "refuse", staged: "continue", previewed: reconciliation.Destroy, next: "continue-destroy", reopens: true, shown: continuing("continue-destroy"),
+					apply: "refuse", destroy: "fresh destroy", staged: "continue", lower: "fresh destroy", higher: "refuse", previewed: reconciliation.Destroy, next: "continue-destroy", reopens: true, shown: continuing("continue-destroy"),
 				},
 				"a staged destroy whose block lost its outcome": {
 					arrange: func(t *testing.T, h *harness) {
@@ -367,7 +370,7 @@ func stateMachineRows() map[string]stateMachineRow {
 						}
 						h.capability.outcomes = nil
 					},
-					apply: "refuse", destroy: "refuse", staged: "continue", previewed: reconciliation.Destroy, next: "resolve", reopens: true, shown: continuing("resolve"),
+					apply: "refuse", destroy: "fresh destroy", staged: "continue", lower: "fresh destroy", higher: "refuse", previewed: reconciliation.Destroy, next: "resolve", reopens: true, shown: continuing("resolve"),
 				},
 			},
 		},
@@ -488,8 +491,18 @@ func checkStateMachine(t *testing.T, lines []string) {
 				if floor == "" {
 					floor = currentFloor(t, h)
 				}
-				if got := decisionAtFloor(t, h, floor); got != test.staged {
-					t.Errorf("row %q, %s: the destroy at the frozen stage decides %q, want %q", row[0], name, got, test.staged)
+				if got, decided := decisionAtFloor(t, h, floor); got != test.staged || decided.widens != nil {
+					t.Errorf("row %q, %s: the destroy at the frozen stage decides %q widening %+v, want %q widening nothing", row[0], name, got, decided.widens, test.staged)
+				}
+			}
+			for offset, want := range map[int]string{-1: test.lower, 1: test.higher} {
+				if want == "" {
+					continue
+				}
+				floor := floorBeside(t, h, offset)
+				got, decided := decisionAtFloor(t, h, floor)
+				if got != want || (want == "fresh destroy") != (decided.widens != nil) {
+					t.Errorf("row %q, %s: the destroy at the %s stage decides %q widening %+v, want %q", row[0], name, floor, got, decided.widens, want)
 				}
 			}
 			relaxed := test.destroy
@@ -534,7 +547,7 @@ func previewedDecision(t *testing.T, h *harness, test stateMachineCase) string {
 	return decisionOver(t, h, test.previewed)
 }
 
-func decisionAtFloor(t *testing.T, h *harness, floor reconciliation.Stage) string {
+func decisionAtFloor(t *testing.T, h *harness, floor reconciliation.Stage) (string, operationPlan) {
 	t.Helper()
 	ctx := context.Background()
 	var decided operationPlan
@@ -549,15 +562,22 @@ func decisionAtFloor(t *testing.T, h *harness, floor reconciliation.Stage) strin
 		if code := firstCode(err); !refusedBeforeEffect(code) {
 			t.Fatalf("the destroy at %s refuses %s: %v", floor, code, err)
 		}
-		return "refuse"
+		return "refuse", operationPlan{}
 	}
-	return decisionNamed(decided)
+	return decisionNamed(decided), decided
 }
 
 func unfinishedStaged(t *testing.T, h *harness) bool {
 	t.Helper()
 	operation, _ := currentRecord(t, h)
 	return staged(operation) && operation.State != reconciliation.OperationDone
+}
+
+// floorBeside is the floor offset stages from the one the current operation froze.
+func floorBeside(t *testing.T, h *harness, offset int) reconciliation.Stage {
+	t.Helper()
+	floors := reconciliation.Floors()
+	return floors[slices.Index(floors, currentFloor(t, h))+offset]
 }
 
 func currentFloor(t *testing.T, h *harness) reconciliation.Stage {

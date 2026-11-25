@@ -209,6 +209,7 @@ type PlanResult struct {
 	Restores     string
 	TakesBack    []string
 	Scope        *StagedScope
+	Widens       *Widening
 	// Finalizes marks a preview whose verb only completes the operation's
 	// interrupted finalization and then settles, running no block.
 	Finalizes bool

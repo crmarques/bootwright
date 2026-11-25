@@ -665,6 +665,14 @@ func (d decider) supersede(ctx context.Context, view View, store decisionRecords
 			return operationPlan{}, err
 		}
 	}
+	if decided, err = d.replacing(ctx, store, decided, operation, frozen, states); err != nil {
+		return operationPlan{}, err
+	}
+	return plannedFrom(decided, operation, states, attempts), nil
+}
+
+func (d decider) replacing(ctx context.Context, store decisionRecords, decided operationPlan, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) (operationPlan, error) {
+	var err error
 	decided.replacedPhases = d.planner.computePhases(frozen)
 	if len(unprovedOutside(frozen, states, nil)) != 0 {
 		if decided.replacedPhases, err = proveInverse(frozen, decided.replacedPhases, operation); err != nil {
@@ -674,7 +682,7 @@ func (d decider) supersede(ctx context.Context, view View, store decisionRecords
 			return operationPlan{}, err
 		}
 	}
-	return plannedFrom(decided, operation, states, attempts), nil
+	return decided, nil
 }
 
 // plannedFrom records the durable state a transition was planned from. The

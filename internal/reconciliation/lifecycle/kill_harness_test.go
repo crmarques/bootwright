@@ -875,11 +875,20 @@ func killReclaim() []string {
 // killApplyAt makes what an apply killed at point left the rig's own.
 func killApplyAt(ctx context.Context, t *testing.T, rig *killRig, point string) {
 	t.Helper()
+	killVerbAt(ctx, t, rig, reconciliation.Apply, "", point)
+}
+
+// killStagedRunning is the log record of b a staged destroy writes after its
+// effect, so a destroy killed there leaves b running with its outcome lost.
+const killStagedRunning = "append <op>/blocks/b/attempt-000001.jsonl#3"
+
+func killVerbAt(ctx context.Context, t *testing.T, rig *killRig, verb reconciliation.Verb, floor reconciliation.Stage, point string) {
+	t.Helper()
 	points := &killPoints{counts: map[string]int{}, key: point}
 	rig.arm(points)
-	_ = killInvoke(ctx, rig.harness.service, reconciliation.Apply)
+	_ = killInvokeAt(ctx, rig.harness.service, verb, floor)
 	if points.snapshot == nil {
-		t.Fatalf("the apply a journey starts from was not killed at %s: %v", point, points.keys)
+		t.Fatalf("the %s a journey starts from was not killed at %s: %v", verb, point, points.keys)
 	}
 	rig.adopt(points.snapshot)
 }
@@ -995,6 +1004,11 @@ func killJourneys() []killJourney {
 			t.Fatal("the staged destroy a replacement starts from did not fail b")
 		}
 	}
+	stagedKilled := func(ctx context.Context, t *testing.T, rig *killRig) {
+		t.Helper()
+		stagedPlan(ctx, t, rig)
+		killVerbAt(ctx, t, rig, reconciliation.Destroy, reconciliation.StageClusters, killStagedRunning)
+	}
 	claimedRestoreKilled := func(ctx context.Context, t *testing.T, rig *killRig) {
 		t.Helper()
 		rig.host.claims = []string{"b"}
@@ -1013,6 +1027,9 @@ func killJourneys() []killJourney {
 		{name: "staged", bound: killBoundDestroy, start: stagedPlan, run: reconciliation.Destroy, retry: reconciliation.Destroy, floor: reconciliation.StageClusters},
 		{name: "staged-replacement", bound: killBoundReplacement, start: stagedFailed, run: reconciliation.Destroy, retry: reconciliation.Destroy, floor: reconciliation.StageClusters},
 		{name: "staged-lower-floor", bound: killBoundDestroy, start: trimmedAt(reconciliation.StageClusters), run: reconciliation.Destroy, retry: reconciliation.Destroy, floor: reconciliation.StageSubstrates},
+		{name: "staged-failed-widened", bound: killBoundReplacement, start: stagedFailed, run: reconciliation.Destroy, retry: reconciliation.Destroy},
+		{name: "staged-failed-lower-floor", bound: killBoundReplacement, start: stagedFailed, run: reconciliation.Destroy, retry: reconciliation.Destroy, floor: reconciliation.StageSubstrates},
+		{name: "staged-killed-widened", bound: killBoundPartial, start: stagedKilled, run: reconciliation.Destroy, retry: reconciliation.Destroy, reaches: killRemovalResolution()},
 		{name: "staged-then-whole", bound: killBoundDestroy, start: trimmedAt(reconciliation.StageClusters), run: reconciliation.Destroy, retry: reconciliation.Destroy},
 		{name: "a", bound: killBoundFreshApply, run: reconciliation.Apply, retry: reconciliation.Apply},
 		{name: "b", bound: killBoundDestroy, start: applied, run: reconciliation.Destroy, retry: reconciliation.Destroy},

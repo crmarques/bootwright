@@ -32,7 +32,7 @@ func (s Service) presentation(decided operationPlan) PlanResult {
 		markSourceProofs(result.Steps, decided.basis.blocks, abandonedBlocks(decided.plan))
 	}
 	result.Continuation = !decided.fresh
-	result.AddsTo, result.Restores, result.Scope = decided.predecessor, decided.restores, decided.scope()
+	result.AddsTo, result.Restores, result.Scope, result.Widens = decided.predecessor, decided.restores, decided.scope(), decided.widening()
 	if decided.restores != "" {
 		result.AddsTo = ""
 	}

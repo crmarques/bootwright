@@ -84,6 +84,7 @@ type planPresentation struct {
 	Restores           string                  `json:"restores,omitempty"`
 	TakesBack          []string                `json:"takesBack,omitempty"`
 	Scope              *scopePresentation      `json:"scope,omitempty"`
+	Widens             *wideningPresentation   `json:"widens,omitempty"`
 	AnotherBuild       *planBuildPresentation  `json:"anotherBuild,omitempty"`
 	Stops              []string                `json:"stops"`
 	StopsAfterOnline   []string                `json:"stopsAfterOnline"`
@@ -104,6 +105,9 @@ func displayPlan(result *lifecycle.PlanResult) planPresentation {
 	shown.AuthorizationSteps = slices.Clone(result.AuthorizationSteps)
 	shown.AddsTo, shown.TakesBack, shown.Scope = escapeDisplayLine(result.AddsTo), displayLines(result.TakesBack), displayScope(result.Scope)
 	shown.Restores = escapeDisplayLine(result.Restores)
+	if w := result.Widens; w != nil {
+		shown.Widens = &wideningPresentation{Operation: escapeDisplayLine(w.Operation), From: escapeDisplayLine(w.From)}
+	}
 	if b := result.AnotherBuild; b != nil {
 		shown.AnotherBuild = &planBuildPresentation{RegisteredBy: escapeDisplayLine(b.RegisteredBy), Steps: append([]int{}, b.Steps...)}
 	}
@@ -133,6 +137,11 @@ type scopePresentation struct {
 	KeptSteps        []string `json:"keptSteps"`
 	Residue          []string `json:"residue"`
 	KeptPowerTargets []string `json:"keptPowerTargets"`
+}
+
+type wideningPresentation struct {
+	Operation string `json:"operation"`
+	From      string `json:"from"`
 }
 
 func displayScope(scope *lifecycle.StagedScope) *scopePresentation {
