@@ -112,13 +112,13 @@ func loadShapeRoots() shapeRoots {
 }
 
 func nativeSchemas() []*api.Shape {
-	shapes := []*api.Shape{api.StorageNFSExportNativeSchema()}
+	shapes := []*api.Shape{api.StorageNFSExportNativeSchema(), api.StorageSignOnNativeSchema()}
 	for _, resource := range []string{api.SMBCluster, api.SMBShare, api.SMBJoinAuth, api.SMBUsersGroups} {
 		shapes = append(shapes, api.StorageSMBResourceNativeSchema(resource))
 	}
 	for _, service := range []string{
 		"mon", "mgr", "mds", "rbd-mirror", "osd", "rgw", "ingress", "nfs", "prometheus", "alertmanager", "grafana",
-		"node-exporter", "loki", "alloy", "promtail", "ceph-exporter", "snmp-gateway", "mgmt-gateway", "nvmeof", "oauth2-proxy",
+		"node-exporter", "loki", "alloy", "promtail", "ceph-exporter", "snmp-gateway", "mgmt-gateway", "nvmeof",
 	} {
 		shapes = append(shapes, api.StorageNativeServiceSpecSchema(service))
 	}

@@ -113,7 +113,7 @@
   },
   "storage-ceph-core-v1": {
     "contentDigest": "984a7897d0d3883b4a3471af271c14f04ffb0f8ea5119efba9a180edd95588ac",
-    "fingerprint": "5de158d6eb84aef4f6838ac0d15cb149fcfbc840518ffa6ee039df9450ca2b10"
+    "fingerprint": "2b8e72cc1a211d29592b71ea34d86230a816bd738ec05ea1e4e144f001c8cd21"
   },
   "storage-ceph-host-v1": {
     "contentDigest": "69938e53f4f41a3b75a1a92e0adb03e573291644aade560892d894ef0e7bb57d",
@@ -130,6 +130,10 @@
   "storage-ceph-replication-v1": {
     "contentDigest": "fb3e6c45363e2c3ec7cef4c6902dbd34fb8290867c59def6d988204165833296",
     "fingerprint": "37d856d21b7eaee8fb75aedb46af8a27b614e4acbd373ce7aa9048bcf7f88f37"
+  },
+  "storage-ceph-signon-v1": {
+    "contentDigest": "9178a3a51885b66af1cd7fb5e0beba4e20a4ab0ca908ec7874a7e2abdaad61a4",
+    "fingerprint": "480ebb0c38ebe6cef75bc1276f1b63d6c12c2918172b0694c6d273e1dff35058"
   },
   "storage-ceph-smb-v1": {
     "contentDigest": "8881e871ae65d1dae0f830b683954cbcd665a792c4d7dd5ee808710605c9bcda",

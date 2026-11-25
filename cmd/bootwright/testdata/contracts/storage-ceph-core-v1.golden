@@ -311,6 +311,14 @@ request-schema:
   service.monitoring []string omitempty
   service.observeBudget int omitempty
   service.scrapeIngress map[string]string omitempty
+  service.signOn *struct ceph.SignOnTarget omitempty
+  service.signOn.certificateSHA256 string
+  service.signOn.count int64
+  service.signOn.endpoint string omitempty
+  service.signOn.grafana bool omitempty
+  service.signOn.hosts []string
+  service.signOn.port int64
+  service.signOn.virtualIP string omitempty
   service.type string
   services []opaque
   settings *struct ceph.Settings omitempty

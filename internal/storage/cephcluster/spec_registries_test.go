@@ -42,8 +42,8 @@ func TestNativeServiceFamilyTableMatchesAdmission(t *testing.T) {
 
 func TestCephListenerTableMatchesRegistry(t *testing.T) {
 	portKeys := map[string]bool{}
-	smb := map[string]int64{}
-	files := map[string]bool{"endpoints.go": true, "smb.go": true}
+	fixed := map[string]int64{}
+	files := map[string]bool{"endpoints.go": true, "smb.go": true, "signon.go": true}
 	for _, source := range nativeListeners {
 		fn := runtime.FuncForPC(reflect.ValueOf(source).Pointer())
 		file, _ := fn.FileLine(fn.Entry())
@@ -76,7 +76,7 @@ func TestCephListenerTableMatchesRegistry(t *testing.T) {
 		})
 		for _, declaration := range syntax.Decls {
 			fn, ok := declaration.(*ast.FuncDecl)
-			if !ok || fn.Name.Name != "smbListeners" {
+			if !ok || fn.Name.Name != "smbListeners" && fn.Name.Name != "signOnListeners" {
 				continue
 			}
 			ast.Inspect(fn.Body, func(node ast.Node) bool {
@@ -110,13 +110,13 @@ func TestCephListenerTableMatchesRegistry(t *testing.T) {
 					}
 				}
 				if label != "" && port != 0 {
-					smb[label] = port
+					fixed[label] = port
 				}
 				return true
 			})
 		}
 	}
-	if len(portKeys) == 0 || len(smb) == 0 {
+	if len(portKeys) == 0 || len(fixed) == 0 {
 		t.Fatal("listener sources were not qualified")
 	}
 	keys := make([]string, 0, len(portKeys))
@@ -165,13 +165,13 @@ func TestCephListenerTableMatchesRegistry(t *testing.T) {
 		}
 		fmt.Fprintf(&table, "| %s | %s | %s |\n", label, defaults, listenerPorts(configured, ports))
 	}
-	labels := make([]string, 0, len(smb))
-	for label := range smb {
+	labels := make([]string, 0, len(fixed))
+	for label := range fixed {
 		labels = append(labels, label)
 	}
 	slices.Sort(labels)
 	for _, label := range labels {
-		fmt.Fprintf(&table, "| %s | %d | fixed |\n", label, smb[label])
+		fmt.Fprintf(&table, "| %s | %d | fixed |\n", label, fixed[label])
 	}
 	cephSpecTable(t, "../../../specs/api/ceph.md", "| Listener source | Default ports | Authored port members and fixed ports |", table.String())
 }

@@ -1,0 +1,118 @@
+implementation: storage-ceph-signon-v1
+content-digest: 9178a3a51885b66af1cd7fb5e0beba4e20a4ab0ca908ec7874a7e2abdaad61a4
+request-version: ceph-signon-v1
+automation-formats: none
+mark-formats: none
+proof-ids: marker:-attempt, marker:-attempt-%d.json, marker:-attempt.json, marker:-complete, marker:-complete.json, marker:-id, marker:-inputs.json, marker:-pulled.json, marker:-ready.json, marker:-reserved.json, marker:.json, marker:artifact.json, marker:attempt-call_home_initialize.json, marker:auth.json, marker:auxiliary-, marker:bootstrap-attempt.json, marker:bootstrap-enrollment.json, marker:bootstrap-original-ready.json, marker:bootstrap-original-reserved.json, marker:bootstrap-output-source.json, marker:bootstrap-prepared.json, marker:bootstrap-protocol.json, marker:bootstrap-scope.json, marker:cache-directory-intent.json, marker:cache-directory.json, marker:cache-pending.json, marker:cache-ready.json, marker:call-home-accepted.json, marker:client-, marker:client-applied-, marker:client-attempt-, marker:client-generator.json, marker:complete-call_home_initialize.json, marker:complete.json, marker:dashboard-port-, marker:dashboard-port-repair.json, marker:dashboard-redeploy.json, marker:dashboard-redeployed.json, marker:decision.json, marker:device-identities.json, marker:filesystem-, marker:filesystem-attempt., marker:filesystem-id., marker:group-attempt., marker:group., marker:initial-mgr-original-ready.json, marker:manager-ports-, marker:manifest.json, marker:monitoring-haproxy-attempt.json, marker:monitoring-haproxy-complete.json, marker:monitoring-log-config-attempt.json, marker:monitoring-log-config-complete.json, marker:monitoring-template-attempt.json, marker:monitoring-template-complete.json, marker:native-removal-config.json, marker:native-removal-sshd-reloaded.json, marker:native-removal-sshd.json, marker:native-route.json, marker:native-teardown.json, marker:nfs-export-attempt., marker:nfs-export-id., marker:nfs-pool-id.json, marker:nfs-pool.json, marker:nvmeof-attempt., marker:nvmeof-complete., marker:object-bucket-, marker:object-user-, marker:osd-device-, marker:osd-device-intent.json, marker:owner.json, marker:physical-device-binding.json, marker:podman-auth.json, marker:policy-, marker:policy-attempt-, marker:policy-id-, marker:policy.json, marker:pool-, marker:pull-attempt-%d.json, marker:pulled.json, marker:rbd-, marker:rbd-attempt., marker:rbd-id., marker:registry-file.json, marker:registry-inode-, marker:registry-intent.json, marker:registry-pending.json, marker:registry-removal.json, marker:registry-removed.json, marker:registry-rotated-, marker:registry-rotating-, marker:rgw-root.json, marker:route.json, marker:runtime-profile.json, marker:scope.json, marker:service-, marker:service-inputs.json, marker:setting-, marker:ssh-authorization.json, marker:sshd-policy.json, marker:stretch-, marker:subvolume-, marker:subvolume-attempt., marker:subvolume-path., marker:synthetic.json, marker:tiebreaker-removal-attempt.json, marker:tiebreaker-removal-complete.json, marker:transport-directory.json, marker:transport-file-ready-, marker:transport-file-relabeled-, marker:transport-file-reserved-, marker:transport-ready.json, marker:transport-relabel.json, marker:transport.json, marker:tunnel-config-attempt-, marker:tunnel-config-attempt-call_home.json, marker:tunnel-config-attempt-call_home_proxy.json, marker:tunnel-config-complete-, marker:tunnel-config-complete-call_home.json, marker:tunnel-config-complete-call_home_proxy.json, marker:tunnel-config-intent.json, marker:tunnel-configured.json, marker:tunnel-manager-files.json, marker:tunnel-mgr-source.json, marker:tunnel-mounted.json, marker:tunnel-redeploy.json, marker:tunnel-stage.json
+fixed-places: /var/lib/bootwright/ceph
+effect-pins:
+  storage-ceph-physical-retirement-v1
+request-identity:
+  cluster
+  object
+  document
+  provider.issuerURL
+request-schema:
+  bindings []struct ceph.ServiceBinding
+  bindings[].path string
+  bindings[].secretRef string
+  bindings[].serviceRef string
+  cluster string
+  controller string
+  document opaque
+  gateway struct ceph.SignOnGateway
+  gateway.count int64
+  gateway.endpoint string omitempty
+  gateway.grafana bool omitempty
+  gateway.hosts []string
+  gateway.port int64
+  gateway.virtualIP string omitempty
+  hostSecretRefs []string
+  image string
+  machines []string
+  object string
+  provider struct ceph.SignOnProvider
+  provider.issuerURL string
+  provider.name string
+  provider.trustBundle bool
+  version string
+evidence-schema:
+  action string
+  client string
+  daemons []struct ceph.UnitDaemon
+  daemons[].host string
+  daemons[].name string
+  daemons[].service string
+  dashboard struct ceph.DashboardEvidence
+  dashboard.certificateSHA256 string
+  dashboard.reachable bool
+  dashboard.url string
+  endpoint struct ceph.EndpointEvidence
+  endpoint.certificateSHA256 string
+  endpoint.reachable bool
+  exists bool
+  fsid string
+  health string
+  hosts []string
+  incarnation string
+  inventory *struct ceph.InventoryEvidence omitempty
+  inventory.omitted int
+  inventory.osds []struct ceph.OSDEvidence
+  inventory.osds[].host string
+  inventory.osds[].id int
+  inventory.osds[].path string
+  inventory.osds[].uuid string
+  inventory.pools []struct ceph.PoolEvidence
+  inventory.pools[].applications []string
+  inventory.pools[].autoscale string
+  inventory.pools[].maxBytes int64
+  inventory.pools[].maxObjects int64
+  inventory.pools[].minSize int
+  inventory.pools[].name string
+  inventory.pools[].size int
+  inventory.pools[].type string
+  mgrActive string
+  mgrStandbys []string
+  monAddrs []struct ceph.MonitorAddress
+  monAddrs[].address string
+  monAddrs[].host string
+  monitors []string
+  osds []struct ceph.OSDEvidence
+  osds[].host string
+  osds[].id int
+  osds[].path string
+  osds[].uuid string
+  owned bool
+  owner string
+  partial bool
+  pool *struct ceph.PoolEvidence omitempty
+  pool.applications []string
+  pool.autoscale string
+  pool.maxBytes int64
+  pool.maxObjects int64
+  pool.minSize int
+  pool.name string
+  pool.size int
+  pool.type string
+  readiness struct ceph.ReadinessEvidence
+  readiness.checks []string
+  readiness.filesystems []string
+  readiness.license string
+  readiness.pgs struct ceph.PGEvidence
+  readiness.pgs.clean int64
+  readiness.pgs.total int64
+  readiness.pools []string
+  readiness.scoped []string
+  readiness.unnamed bool
+  ready bool
+  removed bool
+  request string
+  resource struct ceph.ResourceEvidence
+  resource.id string
+  resource.path string
+  specializations []string omitempty
+  sso string
+  stretch *struct ceph.StretchEvidence omitempty
+  stretch.enabled bool
+  stretch.stage string
+  version string

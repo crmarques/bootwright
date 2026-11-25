@@ -81,6 +81,8 @@ func TestCephRefusalTableMatchesUnsupported(t *testing.T) {
 			},
 		}, values: map[string]string{"<smb>": "smb-join", "<cluster>": "example", "<name>": "samba"},
 			overrides: map[string]map[string]string{"samba set, samba_metrics not": {"<name>": "samba_metrics"}}, extra: []api.Object{smbUsers(), smbJoin()}},
+		"A CephSignOn whose oauth2-proxy image is not selected": {edits: map[string]func(api.Value) api.Value{"a sign-on without its image": nil},
+			values: map[string]string{"<signon>": "ceph-sso", "<cluster>": "example"}, extra: []api.Object{signOnProvider(true), signOnObject()}},
 		"An auxiliary image that no declared service needs": {edits: map[string]func(api.Value) api.Value{
 			"haproxy without an ingress": func(spec api.Value) api.Value {
 				return spec.WithPath(requestMap("base", PinnedRegistry+"/synthetic/haproxy", "version", "synthetic-1"), "images", "haproxy")

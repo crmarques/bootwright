@@ -418,7 +418,7 @@ An identity provider's roles map only onto system roles
 so a custom role needs local users, and `ac-user-create` reads the password
 from `-i`. Local roles and users are parked
 ([B683](../../specs/milestones/backlog.md#b683)). SSO itself is realized
-through the management gateway unit (`TestOAuth2ProxyNoLongerRefusesR16`).
+by a CephSignOn's own block (`TestSignOnPlansItsOwnBlockAfterTheGateway`).
 
 cephadm never enables dashboard SSO:
 [`config_dashboard`](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/mgmt_gateway.py)
@@ -432,11 +432,12 @@ daemon list holds a running oauth2-proxy, then sets the module option
 `sso_oauth2` (read as `mgr/dashboard/sso_oauth2`), while `dashboard sso
 status` and `disable` answer `EPERM` without `python3-saml`. So the unit waits
 for `ceph orch ps --daemon_type oauth2-proxy` to list one running, enables SSO
-itself, and observes the option, never `sso status`.
+itself, and observes the option, never `sso status`; the sign-on block owns
+that write.
 
 cephadm's `OAuth2ProxySpec` validation admits a `cookie_secret` of 16, 24 or
 32 bytes only, counted after URL-safe base64 decoding when it decodes, so
-every placeholder the unit normalizes in a secret's place must pass it
+every placeholder the sign-on unit normalizes in a secret's place must pass it
 (`test_every_bound_placeholder_passes_the_proxy_spec_validation`).
 
 ## Certificate manager

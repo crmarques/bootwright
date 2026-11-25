@@ -266,10 +266,24 @@ def test_gateway_and_ingress_render_identical_canonical_vip(case):
         ceph_native.validate(INVALID_VIP[case]())
 
 
+def with_proxy(request):
+    """The gateway unit with the oauth2-proxy document it used to carry: a CephSignOn runs that proxy now, so the unit refuses it."""
+    proxy = {"placement": {"count": 2, "hosts": list(TWO)}, "service_type": "oauth2-proxy",
+             "spec": {"client_id": "ceph", "oidc_issuer_url": "https://idp.example.test/realms/ceph", "provider_display_name": "SSO"}}
+    request["service"]["documents"].append(proxy)
+    request["delegated"] = sorted(request["delegated"] + [{"name": "oauth2-proxy", "hosts": list(TWO)}], key=lambda entry: entry["name"])
+    request["auxiliary"] = request["auxiliary"] + [{"image": "registry.example.test/ceph/oauth2-proxy@sha256:" + "e" * 64, "name": "oauth2_proxy"}]
+
+
 INVALID = {
     "service_id on the gateway": lambda request: request["service"]["documents"][1].update(service_id="main"),
     "id on the unit": lambda request: request["service"].update(id="main"),
-    "single sign-on": lambda request: request["service"]["documents"][1]["spec"].update(enable_auth=True),
+    "an oauth2-proxy document": with_proxy,
+    "custom configs on the gateway": lambda request: request["service"]["documents"][1].update(custom_configs=[{"mount_path": "/etc/x.pem"}]),
+    "enable_auth not a bool": lambda request: request["service"]["documents"][1]["spec"].update(enable_auth="true"),
+    "signOn on the gateway": lambda request: request["service"].update(signOn={"certificateSHA256": "a" * 64, "hosts": ["node-1"], "port": PORT}),
+    "an oauth2-proxy binding": lambda request: request["service"].update(
+        bindings=bindings() + [{"path": "/spec/client_secret", "secretRef": "sso-client", "serviceRef": "oauth2-proxy"}]),
     "plaintext": lambda request: request["service"]["documents"][1]["spec"].update(ssl=False),
     "no port": lambda request: request["service"]["documents"][1]["spec"].pop("port"),
     "unknown protocol": lambda request: request["service"]["documents"][1]["spec"].update(ssl_protocols=["TLSv1.1"]),
@@ -290,6 +304,21 @@ INVALID = {
     "unsorted monitoring": lambda request: request["service"].update(monitoring=["prometheus", "grafana"]),
     "repeated monitoring": lambda request: request["service"].update(monitoring=["grafana", "grafana"]),
 }
+
+
+def test_gateway_admits_enable_auth_either_way_and_never_does_the_sign_on_itself(tmp_path):
+    for enabled in (True, False):
+        request = gateway_request()
+        request["service"]["documents"][1]["spec"]["enable_auth"] = enabled
+        assert ceph_native.validate(request) is not None
+    request = gateway_request()
+    request["service"]["documents"][1]["spec"]["enable_auth"] = True
+    markers, monitor = applied(tmp_path, request)
+    assert monitor.mutations == [("orch", "apply", "-i", "-")]
+    parts = [json.loads(part) for part in monitor.stdin[0].split(b"---\n")]
+    assert [ceph_native_units.service_name(part) for part in parts] == ["ingress.mgmt", "mgmt-gateway"]
+    assert parts[1]["spec"]["enable_auth"] is True and not any("custom_configs" in part for part in parts)
+    assert ceph_native_units.material_names(request, "unit") == {"mgmtGatewayCertificate", "mgmtGatewayKey"}
 
 
 def test_gateway_access_members_only_on_the_gateway_unit():
@@ -374,7 +403,7 @@ def test_execute_unit_checks_the_bound_digest(monkeypatch):
     assert result["evidence"]["ready"] is True and result["evidence"]["endpoint"] == served
     cert, both = ["mgmtGatewayCertificate"], sorted(MATERIAL)
     assert transport.private == [("prerequisites", []), ("ingress_firewall", []), ("ingress_firewall", []), ("unit", both), ("observe", cert),
-                                 ("observe", cert), ("vip_holder", [])]
+                                 ("observe", cert), ("vip_holder", []), ("grafana_route", [])]
     removed = {"exists": False, "ready": False, "removed": True, "partial": False, "daemons": [], "endpoint": {"certificateSHA256": "", "reachable": False}}
     transport = MaterialTransport(request, served)
     transport.observed.update(removed)
@@ -470,25 +499,21 @@ def test_gateway_readiness_refuses_a_standby_option_it_cannot_read(tmp_path, mon
 
 
 def test_gateway_tables_agree():
-    assert observability.GATEWAY_TYPES == ("mgmt-gateway", "oauth2-proxy")
+    assert observability.GATEWAY_TYPES == ("mgmt-gateway",)
     assert set(observability.GATEWAY_TYPES) <= observe.SINGLETONS <= observe.LISTED_SINGLETONS
     assert observe.DELEGATED_TYPES["mgmt-gateway"] == "mgmt-gateway" and observe.DELEGATED_TYPES["keepalived"] == "ingress"
-    assert observe.DELEGATED_TYPES["oauth2-proxy"] == "oauth2-proxy" and ceph_native.DELEGATED_SERVICE.fullmatch("oauth2-proxy")
     assert all(ceph_native.DAEMON_TYPES[kind] == ("delegated", "delegated", False, "none") for kind in observability.GATEWAY_DAEMON_TYPES)
     assert ceph_native.DELEGATED_SERVICE.fullmatch("mgmt-gateway") and ceph_native.DELEGATED_SERVICE.fullmatch("ingress.mgmt")
     assert not any(ceph_native.DELEGATED_SERVICE.fullmatch(name) for name in ("mgmt-gateway.main", "oauth2-proxy.main"))
+    assert observability.RENDERED_ROUTES == ("external", "nginx") and observability.SIGN_ON_ROUTES == ("cookie", "role")
+    assert sorted(observability.RENDERED_ROUTES + observability.SIGN_ON_ROUTES) == list(observability.GATEWAY_ROUTES)
     gateway = ceph_native_units.UNIT_TYPES["mgmt-gateway"]
-    assert gateway.singletons == frozenset(("mgmt-gateway", "oauth2-proxy")) and gateway.endpoint is observability.gateway_endpoint
+    assert gateway.singletons == frozenset(("mgmt-gateway",)) and gateway.endpoint is observability.gateway_endpoint
     assert gateway.daemon_types == observability.GATEWAY_DAEMON_TYPES and gateway.images == observability.GATEWAY_IMAGES
     assert set(gateway.images) == set(gateway.daemon_types) and set(gateway.images.values()) <= set(ceph_native.AUXILIARY_NAMES)
-    assert gateway.leaves == {("mgmt-gateway", "/spec/ssl_cert"): "mgmtGatewayCertificate", ("mgmt-gateway", "/spec/ssl_key"): "mgmtGatewayKey",
-                              ("oauth2-proxy", "/custom_configs/0/content"): "oauth2ProxyCABundle",
-                              ("oauth2-proxy", "/spec/client_secret"): "oauth2ProxyClientSecret",
-                              ("oauth2-proxy", "/spec/cookie_secret"): "oauth2ProxyCookieSecret",
-                              ("oauth2-proxy", "/spec/ssl_cert"): "oauth2ProxyCertificate", ("oauth2-proxy", "/spec/ssl_key"): "oauth2ProxyKey"}
-    assert observability.OAUTH2_PROXY_CA_PATH == "/etc/pki/tls/certs/oauth2-proxy-idp-ca.pem"
+    assert gateway.leaves == {("mgmt-gateway", "/spec/ssl_cert"): "mgmtGatewayCertificate", ("mgmt-gateway", "/spec/ssl_key"): "mgmtGatewayKey"}
     assert observability.OBSERVED_LEAVES < set(gateway.leaves.values()) <= ceph_native_units.MATERIAL_VARIABLES
-    entries = ("mgmt-gateway@mgmt-gateway", "keepalived@ingress.mgmt", "tls@mgmt-gateway", "http@mgmt-gateway", "oauth2-proxy@oauth2-proxy", "sso@oauth2-proxy")
+    entries = ("mgmt-gateway@mgmt-gateway", "keepalived@ingress.mgmt", "tls@mgmt-gateway", "http@mgmt-gateway")
     assert all(ceph_native_units.PENDING.fullmatch(entry) and ceph_core.blocking_entry(entry) for entry in entries)
     assert not any(ceph_native_units.PENDING.fullmatch(entry) for entry in ("tls@ingress.mgmt", "http@grafana", "haproxy@mgmt-gateway.x"))
     request = gateway_request()

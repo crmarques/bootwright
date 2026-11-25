@@ -51,13 +51,6 @@ var observabilityRefusedMembers = map[string][]refusedMember{
 		{names: []string{"certificate_source"}, message: "certificate sources are not selectable by Bootwright yet", remedy: "omit spec.certificate_source"},
 		{names: []string{"ssl_prefer_server_ciphers", "ssl_session_tickets", "ssl_session_timeout", "ssl_session_cache", "server_tokens", "ssl_stapling", "ssl_stapling_verify"}, message: "this management gateway option has no qualified effect contract", remedy: "omit spec.<member>"},
 	},
-	"oauth2-proxy": {
-		monitoringTLSRefused,
-		inlineTLSRefused,
-		signedSANsRefused,
-		{names: []string{"client_secret", "cookie_secret"}, message: inlineCredentialMessage, remedy: "remove spec.<member>; bind /spec/<member> to a Secret in spec.serviceBindings"},
-		{names: []string{"ssl_insecure_skip_verify"}, message: "oauth2-proxy must verify the identity provider's certificate", remedy: "omit spec.ssl_insecure_skip_verify"},
-	},
 }
 
 var unnetworkedServiceTypes = []string{"ceph-exporter", "snmp-gateway"}
@@ -138,8 +131,6 @@ func (a *admission) observabilityRecord(service api.Value, typeName, field strin
 		a.snmpGatewayRecord(spec, at, partial)
 	case "mgmt-gateway":
 		a.mgmtGatewayRecord(spec, at, partial)
-	case "oauth2-proxy":
-		a.oauth2ProxyRecord(spec, at)
 	}
 }
 
@@ -234,24 +225,6 @@ func (a *admission) oauth2ProxyRecord(spec api.Value, at string) {
 	}
 }
 
-func (a *admission) oauth2ProxyCAMount(service api.Value, field string) {
-	entries := service.Get("custom_configs").Items()
-	if len(entries) == 0 {
-		return
-	}
-	if len(entries) != 1 || textOf(entries[0], "mount_path") != OAuth2ProxyCABundlePath {
-		a.issue("api.invariant", field+".custom_configs", "oauth2-proxy takes custom_configs only for its identity provider's CA bundle at "+OAuth2ProxyCABundlePath, "declare one custom_configs entry with mount_path "+OAuth2ProxyCABundlePath+" and bind /custom_configs/0/content to a caBundle Secret in spec.serviceBindings, or omit custom_configs")
-		return
-	}
-	if entries[0].Has("content") {
-		a.issue("api.invariant", field+".custom_configs[0].content", "native documents never carry the identity provider's CA bundle inline", "remove content; bind /custom_configs/0/content to a caBundle Secret in spec.serviceBindings")
-	}
-}
-
-func oauth2ProxyCAMounted(service api.Value) bool {
-	return slices.ContainsFunc(service.Get("custom_configs").Items(), func(entry api.Value) bool { return textOf(entry, "mount_path") == OAuth2ProxyCABundlePath })
-}
-
 func allowlistDomain(text string) bool {
 	if !allowlistDomainPattern.MatchString(text) {
 		return false
@@ -272,11 +245,8 @@ func (a *admission) logAgent(agent, field string, declared map[string]bool) {
 func (a *admission) observabilityGraph(ceph api.Value) {
 	services := ceph.Get("services").Items()
 	declared := map[string]bool{}
-	authenticating := false
 	for _, service := range services {
-		typeName := textOf(service, "service_type")
-		declared[typeName] = true
-		authenticating = authenticating || typeName == "mgmt-gateway" && service.Get("spec", "enable_auth").Bool()
+		declared[textOf(service, "service_type")] = true
 	}
 	a.managementGateway(ceph, declared["mgmt-gateway"])
 	for i, service := range services {
@@ -287,16 +257,8 @@ func (a *admission) observabilityGraph(ceph api.Value) {
 			if !declared["alertmanager"] {
 				a.issue("api.invariant", field+".service_type", "the SNMP gateway receives alerts only from Alertmanager", "declare an alertmanager service in spec.services or remove the snmp-gateway service")
 			}
-		case "oauth2-proxy":
-			if !authenticating {
-				a.issue("api.invariant", field+".service_type", "oauth2-proxy authenticates only through a management gateway with enable_auth: true", "declare a mgmt-gateway service with spec.enable_auth: true, or remove the oauth2-proxy service")
-			}
 		case "alloy", "promtail":
 			a.logAgent(textOf(service, "service_type"), field, declared)
-		case "mgmt-gateway":
-			if service.Get("spec", "enable_auth").Bool() && !declared["oauth2-proxy"] {
-				a.issue("api.invariant", field+".spec.enable_auth", "enable_auth needs an oauth2-proxy service as the management gateway's authentication backend", "declare an oauth2-proxy service or set spec.enable_auth: false")
-			}
 		}
 	}
 }

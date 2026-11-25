@@ -45,13 +45,6 @@ var bindingSlots = []BindingSlot{
 	{ServiceType: "snmp-gateway", Path: "/spec/credentials/snmp_v3_priv_password", SecretTypes: valueSecretTypes, Part: secrets.ValuePart, Required: &BindingRule{Holds: snmpPrivacy, Field: "spec.privacy_protocol", Message: "an SNMP V3 privacy_protocol needs the /spec/credentials/snmp_v3_priv_password binding"}, Allowed: &BindingRule{Holds: snmpPrivacy, Message: "snmp_v3_priv_password is read only with snmp_version V3 and a privacy_protocol", Remedy: "remove this binding or set spec.privacy_protocol on an SNMP V3 gateway"}},
 	{ServiceType: "mgmt-gateway", Path: "/spec/ssl_cert", SecretTypes: []string{"tlsCertificate"}, Part: secrets.CertificatePart, Pair: "/spec/ssl_key"},
 	{ServiceType: "mgmt-gateway", Path: "/spec/ssl_key", SecretTypes: []string{"tlsCertificate"}, Part: secrets.PrivateKeyPart, Pair: "/spec/ssl_cert"},
-	{ServiceType: "oauth2-proxy", Path: "/spec/client_secret", SecretTypes: valueSecretTypes, Part: secrets.ValuePart, Required: &BindingRule{Holds: always, Message: "oauth2-proxy needs the /spec/client_secret binding"}},
-	{ServiceType: "oauth2-proxy", Path: "/spec/cookie_secret", SecretTypes: valueSecretTypes, Part: secrets.ValuePart, Required: &BindingRule{Holds: always, Message: "oauth2-proxy needs the /spec/cookie_secret binding, so continuation never depends on a secret cephadm generated"}},
-	{ServiceType: "oauth2-proxy", Path: "/spec/ssl_cert", SecretTypes: []string{"tlsCertificate"}, Part: secrets.CertificatePart, Pair: "/spec/ssl_key"},
-	{ServiceType: "oauth2-proxy", Path: "/spec/ssl_key", SecretTypes: []string{"tlsCertificate"}, Part: secrets.PrivateKeyPart, Pair: "/spec/ssl_cert"},
-	{ServiceType: "oauth2-proxy", Path: "/custom_configs/0/content", SecretTypes: []string{"caBundle", "trustBundle"}, Part: secrets.CertificatePart,
-		Required: &BindingRule{OnService: oauth2ProxyCAMounted, Field: "custom_configs", Message: "an oauth2-proxy custom_configs entry needs its identity provider's CA bundle bound at /custom_configs/0/content"},
-		Allowed:  &BindingRule{OnService: oauth2ProxyCAMounted, Message: "/custom_configs/0/content is read only with the oauth2-proxy custom_configs entry for the identity provider's CA bundle", Remedy: "declare custom_configs with mount_path /etc/pki/tls/certs/oauth2-proxy-idp-ca.pem on this oauth2-proxy service, or remove this binding"}},
 }
 
 const snmpV2cRemedy = "remove this binding; SNMP V2c binds /spec/credentials/snmp_community"
@@ -60,8 +53,6 @@ var (
 	valueSecretTypes = []string{"opaque", "token"}
 	snmpV3Auth       = &BindingRule{Holds: snmpVersion("V3"), Field: "spec.snmp_version", Message: "SNMP V3 notifications need the /spec/credentials/snmp_v3_auth_username and /spec/credentials/snmp_v3_auth_password bindings of one usernamePassword Secret"}
 )
-
-func always(api.Value) bool { return true }
 
 func (rule *BindingRule) holds(service api.Value) bool {
 	if rule.OnService != nil {

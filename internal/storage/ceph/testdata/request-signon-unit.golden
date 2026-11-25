@@ -1,61 +1,33 @@
 {
   "action": "service",
-  "ansiblePackageVersion": "5.0.3-1",
+  "ansiblePackageVersion": "",
   "auxiliary": [
     {
-      "image": "cp.icr.io/synthetic/keepalived@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "image": "cp.icr.io/synthetic/keepalived@sha256:1111111111111111111111111111111111111111111111111111111111111111",
       "name": "keepalived"
     },
     {
-      "image": "cp.icr.io/synthetic/nginx@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "image": "cp.icr.io/synthetic/nginx@sha256:2222222222222222222222222222222222222222222222222222222222222222",
       "name": "nginx"
     },
     {
-      "image": "cp.icr.io/synthetic/oauth2_proxy@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "image": "cp.icr.io/synthetic/oauth2_proxy@sha256:3333333333333333333333333333333333333333333333333333333333333333",
       "name": "oauth2_proxy"
     }
   ],
   "bootstrap": "node-1",
-  "callHome": "enabled",
+  "callHome": "",
   "cephadm": {
-    "packageVersion": "20.2.1-405.el9cp",
-    "path": "/usr/sbin/cephadm"
+    "packageVersion": "",
+    "path": ""
   },
   "cluster": "example",
   "clusterKeyRef": "cluster-key",
-  "clusterNetworks": [
-    "198.51.100.0/24"
-  ],
+  "clusterNetworks": null,
   "clusterSSHTransport": "native",
-  "clusterSSHUser": "operator",
-  "config": {
-    "global": {
-      "osd_pool_default_min_size": "2",
-      "osd_pool_default_size": "2"
-    },
-    "osd": {
-      "osd_memory_target": "2147483648",
-      "osd_memory_target_autotune": "false"
-    }
-  },
+  "clusterSSHUser": "",
   "controller": "controller",
   "delegated": [
-    {
-      "hosts": [
-        "node-1",
-        "node-2",
-        "node-3"
-      ],
-      "name": "ingress.mgmt"
-    },
-    {
-      "hosts": [
-        "node-1",
-        "node-2",
-        "node-3"
-      ],
-      "name": "mgmt-gateway"
-    },
     {
       "hosts": [
         "node-1",
@@ -77,9 +49,7 @@
         }
       ],
       "hostKeyRef": "node-1-host-key",
-      "labels": [
-        "storage"
-      ],
+      "labels": [],
       "location": {},
       "machine": "node-1",
       "name": "node-1",
@@ -97,9 +67,7 @@
         }
       ],
       "hostKeyRef": "node-2-host-key",
-      "labels": [
-        "storage"
-      ],
+      "labels": [],
       "location": {},
       "machine": "node-2",
       "name": "node-2",
@@ -117,9 +85,7 @@
         }
       ],
       "hostKeyRef": "node-3-host-key",
-      "labels": [
-        "storage"
-      ],
+      "labels": [],
       "location": {},
       "machine": "node-3",
       "name": "node-3",
@@ -128,18 +94,15 @@
       "user": "operator"
     }
   ],
-  "image": "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-25074",
-  "monIP": "192.0.2.1",
-  "nfsGaneshaPackageVersion": "synthetic-native-ganesha",
+  "image": "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "monIP": "",
   "owner": "apply-original",
-  "packageRepository": "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64",
+  "packageRepository": "",
   "packageRepositoryKey": "",
-  "publicNetworks": [
-    "192.0.2.0/24"
-  ],
+  "publicNetworks": null,
   "registry": "cp.icr.io",
   "registryRef": "registry",
-  "release": "9.9.1.2",
+  "release": "",
   "service": {
     "bindings": [
       {
@@ -170,39 +133,6 @@
     ],
     "documents": [
       {
-        "placement": {
-          "count": 2,
-          "hosts": [
-            "node-1",
-            "node-2",
-            "node-3"
-          ]
-        },
-        "service_id": "mgmt",
-        "service_type": "ingress",
-        "spec": {
-          "backend_service": "mgmt-gateway",
-          "keepalive_only": true,
-          "virtual_ip": "192.0.2.60"
-        }
-      },
-      {
-        "placement": {
-          "count": 2,
-          "hosts": [
-            "node-1",
-            "node-2",
-            "node-3"
-          ]
-        },
-        "service_type": "mgmt-gateway",
-        "spec": {
-          "enable_auth": true,
-          "port": 9443,
-          "virtual_ip": "192.0.2.60"
-        }
-      },
-      {
         "custom_configs": [
           {
             "mount_path": "/etc/pki/tls/certs/oauth2-proxy-idp-ca.pem"
@@ -225,10 +155,18 @@
       }
     ],
     "id": "",
-    "ingressPorts": [
-      29443
-    ],
-    "type": "mgmt-gateway"
+    "signOn": {
+      "certificateSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "count": 2,
+      "hosts": [
+        "node-1",
+        "node-2",
+        "node-3"
+      ],
+      "port": 9443,
+      "virtualIP": "192.0.2.60"
+    },
+    "type": "oauth2-proxy"
   },
   "services": [
     {

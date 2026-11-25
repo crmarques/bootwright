@@ -400,7 +400,7 @@ table of its field page in the change that adds it, which
 | Substrates | `InfraProvider` | Substrate | [machines](api/machines.md#kinds) |
 | Infrastructure services | `Proxy`, `DNSServer`, `NTPServer`, `ArtifactServer`, `Registry`, `LoadBalancer`, `OIDCProvider`, `LDAPServer` | Infrastructure services | [infrastructure services](api/infrastructure-services.md#kinds) |
 | Container clusters | `OpenShiftCluster` | Container cluster (OpenShift implementation) | [OpenShift clusters](api/openshift-clusters.md#kinds) |
-| Storage | `CephCluster`, `CephPlacementPolicy`, `CephPool`, `CephRBDImage`, `CephClient`, `CephFilesystem`, `CephSubvolume`, `CephObjectGateway`, `CephObjectUser`, `CephObjectBucket`, `CephNFSExport`, `CephSMBResource`, `CephNVMeoFSubsystem`, `CephReplication`, `CephConsumer` | Storage | [Ceph](api/ceph.md#kinds) |
+| Storage | `CephCluster`, `CephPlacementPolicy`, `CephPool`, `CephRBDImage`, `CephClient`, `CephFilesystem`, `CephSubvolume`, `CephObjectGateway`, `CephObjectUser`, `CephObjectBucket`, `CephNFSExport`, `CephSMBResource`, `CephSignOn`, `CephNVMeoFSubsystem`, `CephReplication`, `CephConsumer` | Storage | [Ceph](api/ceph.md#kinds) |
 | Add-ons | `ClusterAddon`, `ClusterAddonProfile`, `ClusterAddonBinding` | Add-ons | [add-ons](api/addons.md#kinds) |
 | Reserved operator automation | `CustomPlaybook` | Desired state owns boundary validation; no executable domain capability is implied. | [custom playbooks](api/custom-playbooks.md#kinds) |
 
@@ -576,7 +576,7 @@ Canonical effective output:
    `OIDCProvider`, `LDAPServer`, `OpenShiftCluster`, `CephCluster`, `CephPlacementPolicy`,
    `CephPool`, `CephRBDImage`, `CephClient`, `CephFilesystem`,
    `CephSubvolume`, `CephObjectGateway`, `CephObjectUser`,
-   `CephObjectBucket`, `CephNFSExport`, `CephSMBResource`,
+   `CephObjectBucket`, `CephNFSExport`, `CephSMBResource`, `CephSignOn`,
    `CephNVMeoFSubsystem`, `CephReplication`, `CephConsumer`, `ClusterAddon`,
    `ClusterAddonProfile`, `ClusterAddonBinding`, `CustomPlaybook`,
    then `Secret`;

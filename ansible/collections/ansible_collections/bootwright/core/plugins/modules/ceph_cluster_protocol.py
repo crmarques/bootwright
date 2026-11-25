@@ -129,6 +129,9 @@ options:
       - nvmeof-foreign
       - nvmeof-budget
       - sso-unverified
+      - sign-on-provider-unreachable
+      - sign-on-unprotected
+      - sign-on-unenforced
       - stretch-intent
       - stretch-interrupted
       - stretch-location

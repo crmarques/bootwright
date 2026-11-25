@@ -5,7 +5,8 @@ guests running an IBM Storage Ceph cluster (`ceph-lab`) with the observability
 and management services. Prometheus (15d/10GB retention), Alertmanager,
 Grafana, node and Ceph exporters, an SNMPv3 gateway, Loki with Alloy on every
 host, and a management gateway fronted by a keepalive-only ingress VIP with
-OAuth2 SSO through oauth2-proxy. The storage side is a size-2/min-size-2 RBD
+OAuth2 single sign-on through a CephSignOn (`storage/signon.yaml`) and the
+OIDCProvider `qualification-idp` (`infra/components/oidc-provider.yaml`). The storage side is a size-2/min-size-2 RBD
 pool, a placement policy and a pool client over one SSD OSD per guest.
 
 Synthetic qualification input for [M2c](../../../specs/milestones/m2.md#m2c).
@@ -22,12 +23,16 @@ No live execution or operator acceptance is claimed.
 - Management VIP `198.51.100.50`, port 9443; allow the gateway port and VRRP
   on both ingress hosts. Clients reach the gateway as
   `mgr.ceph-lab.lab.example.test`, the name normalization derives, so
-  `management-tls` and the oauth2-proxy `redirect_url` name it; publish its DNS
+  `management-tls` and the CephSignOn's `redirect_url` name it; publish its DNS
   record pointing at the VIP.
+- While sign-on is on, a manager's dashboard port 8443 accepts a forged token
+  (an upstream defect): keep it reachable only from the management gateway
+  hosts.
 - Required operator inputs: a trusted OIDC IdP with client registration and
-  role mapping (`oidc-client`, `oidc-cookie`, `oidc-ca`), an SNMPv3 receiver
+  role mapping (`oidc-client`, `oidc-cookie`, and `oidc-ca`, the
+  OIDCProvider's trust bundle), an SNMPv3 receiver
   (`snmp-auth`, `snmp-privacy`), `management-tls`, `grafana-admin`, and DNS for
-  the endpoint, IdP and callback. Replace the IdP issuer, redirect URL and
+  the endpoint, IdP and callback. Replace the OIDCProvider issuer, redirect URL and
   SNMP destination placeholders.
 - Replace the ten synthetic auxiliary image digests (`sha256:1111...` and so
   on) with verified selections from your release.

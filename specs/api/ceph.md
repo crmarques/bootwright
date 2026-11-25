@@ -32,6 +32,7 @@ Every Ceph kind names its objects under the [one name rule](../api.md#object-nam
 | `CephObjectBucket` | One S3 bucket, whose native name is `metadata.name`, owned by the CephObjectUser `ownerRef` of the same CephObjectGateway `objectGatewayRef`, with an optional native bucket policy under `policy`. | [CephObjectBucket](../ceph-resources.md#cephobjectbucket-field-record) |
 | `CephNFSExport` | One NFS export of one declared nfs service, backed by a same-cluster CephFilesystem, CephSubvolume or CephObjectUser, with its native export under `native`. Daemon placement, ports and ingress belong to the native services. | [CephNFSExport](../ceph-resources.md#cephnfsexport) |
 | `CephSMBResource` | One native SMB manager resource (`ceph.smb.cluster`, `ceph.smb.share`, `ceph.smb.join.auth` or `ceph.smb.usersgroups`) under `native`, with its share backing, auth references and password bindings. | [CephSMBResource](../ceph-resources.md#cephsmbresource) |
+| `CephSignOn` | The single sign-on of one managed cluster's management gateway: one OIDCProvider through `oidcProviderRef`, the cephadm `oauth2-proxy` service document under `native`, and its credential and TLS bindings under `secrets`. At most one per cluster. | [CephSignOn](../ceph-resources.md#cephsignon) |
 | `CephNVMeoFSubsystem` | One NVMe-oF subsystem of one declared nvmeof gateway service: its NQN, a listener on every gateway of the group, the host NQNs allowed to connect and its namespaces, each backed by a same-cluster CephRBDImage. | [CephNVMeoFSubsystem](../ceph-resources.md#cephnvmeofsubsystem) |
 | `CephReplication` | One one-way journal RBD mirroring relationship from a primary pool of `clusterRef` to the same-named pool of `peerClusterRef`, in image or pool mode. | [CephReplication](../ceph-resources.md#cephreplication) |
 | `CephConsumer` | One downstream consumer of one Ceph cluster, owning its per-consumer principals; not an NFS export. Its arm says what it is: `dataFoundation` attaches one Data Foundation consumer to a managed cluster, and `externalDetails` is for an external one. It has no `type`. | [CephConsumer](../ceph-resources.md#cephconsumer) |
@@ -62,6 +63,7 @@ on the already selected Machine.
 | `imageRef` (CephNVMeoFSubsystem) | `CephRBDImage` |
 | `imageRefs` (CephReplication) | `CephRBDImage` |
 | `peerClusterRef` | `CephCluster` |
+| `oidcProviderRef` (CephSignOn) | `OIDCProvider` |
 | `peerPoolRef` | `CephPool` |
 | `cephadm.bootstrap.nodeRef` | nested owner-local: a `name` in the same cluster's `spec.topology.nodes` that the MON service places on |
 | `cephadm.addressRef`, `cephadm.bootstrap.addressRef` | nested on a Machine: an address name on the Machine of every topology node, or of the bootstrap node; the bootstrap value defaults to `cephadm.addressRef`, else the Machine's `access.ssh.addressRef`; validation requires the resolved address to equal that fleet SSH address |
@@ -278,9 +280,10 @@ owns the Ceph image. Each holds `base` and `version` under the rules of
 `image`: an IBM distribution requires both, the base must be beneath the
 Entitlement registry namespace, and the version is a tag or a SHA-256 digest,
 nonempty and bounded as the `packageVersion` strings are, which native tools
-interpret. An image is required exactly when a declared service or a
-CephSMBResource of the cluster needs it; planning refuses a missing one and
-one that nothing declared needs
+interpret. An image is required exactly when a declared service, a
+CephSMBResource or a CephSignOn of the cluster needs it, and `oauth2_proxy` is
+also admitted whenever the cluster declares a `mgmt-gateway`; planning refuses
+a missing one and one that nothing declared needs
 ([refusal table](../ceph.md#refusal-table)). Bootwright keeps no default and
 no table of values. Resolution freezes each image's linux/amd64 digest with
 the Ceph image ([frozen release and trust](../ceph.md#frozen-release-and-trust)).
@@ -587,7 +590,6 @@ CTDB applies only to clustered SMB.
 | `nfs` | `monitoring_port`: 9587, `port`: 2049, the NFS cluster QoS listener (31311) | `monitoring_port`, `port`, the NFS cluster QoS listener (31311) |
 | `node-exporter` | `port`: 9100 | `port` |
 | `nvmeof` | `discovery_port`: 8009, `port`: 5500, the NVMe-oF gateway exporter (10008), the NVMe/TCP subsystem listener port (4420) | `discovery_port`, `port`, the NVMe-oF gateway exporter (10008), the NVMe/TCP subsystem listener port (4420) |
-| `oauth2-proxy` | oauth2-proxy (4180) | oauth2-proxy (4180) |
 | `prometheus` | `port`: 9095 | `port` |
 | `promtail` | `port`: 9080, the promtail listener (9080) | `port`, the promtail listener (9080) |
 | `rgw` | `rgw_frontend_port`: 80; ssl: `rgw_frontend_port`: 443 | `rgw_frontend_port` |
@@ -595,6 +597,7 @@ CTDB applies only to clustered SMB.
 | CTDB (4379) | 4379 | fixed |
 | SMB (445) | 445 | fixed |
 | SMB metrics (9922) | 9922 | fixed |
+| oauth2-proxy (4180) | 4180 | fixed |
 
 Reserved monitor, messenger and implicit exporter listeners hold every storage
 host. Dashboard and service-discovery listeners hold MGR hosts; the manager's

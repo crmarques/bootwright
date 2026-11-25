@@ -113,6 +113,9 @@ options:
       - ssh-policy-unavailable
       - tunnel-host-key-excluded
       - sso-unverified
+      - sign-on-provider-unreachable
+      - sign-on-unprotected
+      - sign-on-unenforced
       - stretch-intent
       - stretch-interrupted
       - stretch-location

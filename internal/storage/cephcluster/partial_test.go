@@ -100,6 +100,7 @@ func TestPartialValidationIssuesAlsoRefuseTheCompleteObject(t *testing.T) {
 		{"native gateway plaintext", appendService(m("service_type", "mgmt-gateway", "placement", m("label", "mgr"), "spec", m("ssl", false, "port", 9443)))},
 		{"native gateway prefixed VIP", appendService(m("service_type", "mgmt-gateway", "placement", m("label", "mgr"), "spec", m("port", 9443, "virtual_ip", "192.0.2.50/24")))},
 		{"native oauth2-proxy port", appendService(m("service_type", "oauth2-proxy", "placement", m("label", "mgr"), "spec", m("provider_display_name", "IdP", "client_id", "ceph", "oidc_issuer_url", "https://idp.example.test/realms/ceph", "https_address", "0.0.0.0:4181")))},
+		{"native sign-on port", object(api.CephSignOn, "sign-on", m("native", signOnNative(signOnSpec("https_address", "0.0.0.0:4181"))))},
 		{"native grafana inline password", appendService(m("service_type", "grafana", "placement", m("label", "mgr"), "spec", m("initial_admin_password", "material")))},
 		{"native tracing service", appendService(m("service_type", "jaeger-agent", "placement", m("label", "mgr")))},
 		{"native authored crash", appendService(m("service_type", "crash", "placement", m("label", "mgr")))},

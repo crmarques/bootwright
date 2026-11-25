@@ -436,37 +436,28 @@ lists the requirements each storage family emits:
   `backend_service` is `mgmt-gateway` form one
   `ceph-service-<cluster>-mgmt-gateway` block: the ingress document comes
   first in native-name order, the singleton `mgmt-gateway` document carries no
-  `service_id`, and both write `virtual_ip` in its canonical address form. A
-  declared `oauth2-proxy` joins the block as a singleton document after
-  `mgmt-gateway`; its spec carries only `allowlist_domains`, `client_id`,
-  `https_address`, `oidc_issuer_url`, `provider_display_name` and
-  `redirect_url`, so an authored `scope` or `email_domains` refuses at
-  planning ("the native service oauth2-proxy carries spec.<member>, which
-  Bootwright does not realize for this service"), and its one admitted
-  `custom_configs` entry carries only its `mount_path`. The block also depends
+  `service_id`, and both write `virtual_ip` in its canonical address form. The
+  block never carries an `oauth2-proxy`: a [CephSignOn](#management-sign-on)
+  realizes it in its own block, and a frozen gateway request holding an
+  oauth2-proxy document refuses `ceph.other-build` ("the management gateway of
+  CephCluster <cluster> froze an oauth2-proxy, which this build realizes as a
+  CephSignOn"; destroy it with the build that applied it, then apply with this
+  build). `enable_auth` is admitted either way and frozen as authored. The block also depends
   on `ceph-service-<cluster>-monitoring` when that block exists, and its
-  deadline is apply 3600 s (4920 s with an oauth2-proxy, whose rendered
-  configuration proof and single sign-on write each add one native call),
-  observe 1380 s, destroy 1380 s, each apply and observation holding one native
+  deadline is apply 3600 s, observe 1380 s, destroy 1380 s, each apply and observation holding one native
   call for its monitoring logins. Its request also carries the cluster's
   effective [`managementGateway.fqdn`](api/ceph.md#cephcluster) as
   `service.endpoint`, when there is one, and as `service.monitoring` the
   sorted declared subset of `alertmanager`, `grafana` and `prometheus`, which
   the gateway serves under `/<service>/`; no other unit carries either. Its bindings are Secret references
   (`service.bindings`) lent as protected files: the gateway's certificate to
-  every operation and its private key to apply only, and the oauth2-proxy's
-  client and cookie secrets, TLS pair and identity provider CA bundle to apply
-  only. Without the gateway's TLS binding the block lists the impact "cephadm
+  every operation and its private key to apply only. Without the gateway's TLS binding the block lists the impact "cephadm
   signs the management gateway's TLS certificate; the readiness proof reports
-  its SHA-256". With an oauth2-proxy it also lists "the management gateway
-  signs users in through oauth2-proxy and its identity provider, and
-  Bootwright enables the Ceph dashboard's OAuth2 single sign-on", and without
-  the proxy's TLS pair "cephadm signs oauth2-proxy's TLS certificate". Its
+  its SHA-256". Its
   evidence may carry an `endpoint` member whose lowercase SHA-256 is present
-  exactly when the endpoint answered, and readiness needs that answer; every
-  other unit's evidence carries no endpoint. Only this unit with an
-  oauth2-proxy may report the `sso` member `"oauth2"`, and its readiness needs
-  it. Before a fresh apply registers, the bound certificate
+  exactly when the endpoint answered, and readiness needs that answer; of the
+  other units only a sign-on's carries one (its enforcement proof). Only a
+  sign-on's unit may report the `sso` member `"oauth2"`. Before a fresh apply registers, the bound certificate
   must name the gateway's `virtual_ip` (an IP address entry) or, without one,
   every host of its placement (a DNS name or a matching wildcard), and also
   the frozen `service.endpoint` when there is one, or the apply refuses naming
@@ -643,7 +634,8 @@ links each matrix combination that this table refuses.
 | Incomplete or unsafe Ceph coordinates or transport | a CephCluster declaring an empty `release`, `packageVersion`, `cephadm.ansible.packageVersion` or `image.version`, an empty `image.base`, or a `cephadm.clusterSSH.transport` other than `verifiedTunnel` in an effective state that admission did not refuse (an omitted transport normalizes to `verifiedTunnel`, and `validate` refuses `native`) | `the selected Ceph coordinates or cluster SSH transport are incomplete or unsafe` | `declare bounded version strings, an image repository and verifiedTunnel transport; native transport is refused and host-key verification cannot be disabled` |
 | A native service whose auxiliary image is not selected | a CephCluster declaring in `services` a service whose type needs an auxiliary image (an `alertmanager`, `alloy`, `grafana`, `ingress`, `loki`, `mgmt-gateway`, `node-exporter`, `nvmeof`, `oauth2-proxy`, `prometheus`, `promtail`, `smb` or `snmp-gateway` service) that `images` does not set; `<service>` is the first such service's qualified name in name order, `<family>` its `service_type`, `<name>` the first image it needs in name order that `images` does not set (only `keepalived` for an `ingress` with `spec.keepalive_only`) and `<cluster>` the CephCluster | `the <family> service <service> needs cephadm's container_image_<name>, and spec.images.<name> is not set; Bootwright keeps no default` | `set spec.images.<name> of CephCluster <cluster> to an image beneath its Entitlement registry, or remove <service> from its spec.services, together with its spec.serviceBindings entries` |
 | CephSMBResource objects whose samba images are not selected | a CephCluster that a CephSMBResource of any resource type names in its `clusterRef` while `images` does not set both `samba` and `samba_metrics`, and that the native-service row does not refuse; `<smb>` is the first such CephSMBResource in name order, `<name>` is `samba` unless `images` sets it, else `samba_metrics`, and `<cluster>` the CephCluster | `CephSMBResource <smb> needs cephadm's container_image_<name>, and spec.images.<name> is not set; Bootwright keeps no default` | `set spec.images.<name> of CephCluster <cluster> to an image beneath its Entitlement registry, or remove every CephSMBResource whose spec.clusterRef is <cluster> from the selected Environment` |
-| An auxiliary image that no declared service needs | a CephCluster setting `images.<name>` for an image that no service in `services` and no CephSMBResource naming it needs (per the auxiliary image table, with `samba` and `samba_metrics` for a CephSMBResource) and that neither the native-service nor the CephSMBResource row refuses; `<name>` is the first such name in name order and `<cluster>` the CephCluster | `spec.images.<name> is set, but no declared service or CephSMBResource of CephCluster <cluster> needs cephadm's container_image_<name>` | `remove spec.images.<name> from CephCluster <cluster>` |
+| A CephSignOn whose oauth2-proxy image is not selected | a CephCluster that a CephSignOn names in its `clusterRef` while `images` does not set `oauth2_proxy`, and that neither the native-service nor the CephSMBResource row refuses; `<signon>` is the first such CephSignOn in name order and `<cluster>` the CephCluster | `CephSignOn <signon> needs cephadm's container_image_oauth2_proxy, and spec.images.oauth2_proxy of CephCluster <cluster> is not set; Bootwright keeps no default` | `set spec.images.oauth2_proxy of CephCluster <cluster> to an image beneath its Entitlement registry; on an installed cluster that is an input change: take back what this context owns with bootwright destroy --context <context>, then apply` |
+| An auxiliary image that no declared service needs | a CephCluster setting `images.<name>` for an image that no service in `services` and no CephSMBResource naming it needs (per the auxiliary image table, with `samba` and `samba_metrics` for a CephSMBResource and `oauth2_proxy` for a declared `mgmt-gateway`) and that neither the native-service nor the CephSMBResource row refuses; `<name>` is the first such name in name order and `<cluster>` the CephCluster | `spec.images.<name> is set, but no declared service or CephSMBResource of CephCluster <cluster> needs cephadm's container_image_<name>` | `remove spec.images.<name> from CephCluster <cluster>` |
 | More Ceph hosts than the cluster run deadline admits | a CephCluster whose topology declares more nodes than the [cluster execution budget](#cluster-execution-budget) fits under the run ceiling, with its stretch activation when it declares `topology.stretch`; `<deadline>` is that budget's apply deadline for `<hosts>` hosts and `<most>` the largest host count it admits | `CephCluster <cluster> declares <hosts> Ceph hosts, whose cluster run deadline of <deadline> is past the 6h0m0s bound Ceph holds its derived deadlines to` | `declare at most <most> entries in spec.topology.nodes of CephCluster <cluster>; B1183 tracks larger clusters` |
 | A distribution that core Ceph does not realize | a CephCluster whose `distribution` selects the `oss` or `redhat` arm, an omitted `distribution` included, because omission selects `oss` ([distribution](api/ceph.md#cephcluster)) | `core Ceph realizes only the IBM Storage Ceph distribution` | `select spec.distribution.ibm` |
 
@@ -2305,7 +2297,7 @@ the coordinator refuses `evidence` for any other digest of a bound unit. A
 readiness timeout names `mgmt-gateway@mgmt-gateway`, `keepalived@ingress.<id>`,
 `tls@mgmt-gateway`, `http@mgmt-gateway` and `standby@mgmt-gateway` beside the
 blocking health checks. For the gateway Bootwright writes no dashboard setting
-and runs no `dashboard` or `mgr module` command but the sign-on enable below.
+and runs no `dashboard` or `mgr module` command.
 cephadm sets the standby options after the daemons deploy, so readiness waits
 until `config get mgr` reads `mgr/dashboard/standby_behaviour` as `error` and
 `mgr/dashboard/standby_error_status_code` as `503` (each the MON's bare one-line
@@ -2345,56 +2337,111 @@ canonical JSON `{"<service>":{"password","user"}}` of exactly those services,
 never evidence, a refusal, a record or a diagnostic. A unit listing neither
 service, and a removal's observation, declare no output.
 
-With an oauth2-proxy, the unit also reads `container_image_oauth2_proxy`, and
-the proxy's five bound leaves (`client_secret`, `cookie_secret`, `ssl_cert`,
-`ssl_key` and `/custom_configs/0/content`) are lent to its apply phase only
-and spliced, like the gateway's, into the one apply stream after the
-`mgmt-gateway` document. Their placeholders pass cephadm's spec validation,
-so the `cookie_secret` one holds 32 bytes; a bound `cookie_secret` that
-validation refuses, neither 16, 24 nor 32 bytes after URL-safe base64
-decoding when it decodes, else as text, refuses `material` before any effect.
-The identity provider's public trust bundle, held by a `caBundle` or
-`trustBundle` Secret, reaches the container only through that document's `custom_configs` entry, which cephadm
-mounts at `/etc/pki/tls/certs/oauth2-proxy-idp-ca.pem`; no plan, record,
-argument, evidence or diagnostic carries a bundle or secret byte or a hash of
-one. After the apply, and before any dashboard write, each host of the proxy's
-placement proves read-only, within one native call of the block's deadline
-(each round calls every proxy host concurrently, so a round lasts one call of
-at most 120 s whatever the host count; rounds 10 s apart, a 600 s window), that
-every running oauth2-proxy container of this cluster there skips no identity
-provider certificate verification: neither its arguments
-(`--ssl-insecure-skip-verify`) nor its environment
-(`OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY`) nor the configuration file its
-`--config` argument names, read through its mount beneath
-`/var/lib/ceph/<fsid>/` without following a link, sets the skip (a line
-naming the key other than as its bare assignment leaves the daemon unproved),
-and, with a bound bundle, its CA mount holds exactly that bundle. The deployed
-container's rendered configuration is the postcondition, never one release's
-template. A skip refuses `sso-unverified`, naming the host, the daemon and
-whether the argument, environment or configuration skips; this is the unit's
-one refusal after its apply's effect, and the dashboard's single sign-on is
-never enabled through an unproved proxy. Until the placed daemon count runs
-proved, the window's exhaustion refuses `not-ready`. Then the bootstrap host
-runs the unit's one dashboard write, `ceph dashboard sso enable oauth2`, only
-when the dashboard module option `mgr/dashboard/sso_oauth2` is not already
-true and once `ceph orch ps --daemon_type oauth2-proxy` lists a running
-daemon, which the enable requires; until then it writes nothing and asks
-again 10 s apart, each call begun within the proof's window, whose
-exhaustion refuses `not-ready`. Then it reads the option back. cephadm's only
-dashboard single sign-on write disables it when it removes the last running
-oauth2-proxy daemon, so readiness turns not-ready until the next apply enables
-it again. Readiness also needs the `oauth2-proxy` daemon count on its frozen image and
-that option true, which it reads and never writes (`dashboard sso status` is
-never run, because it answers EPERM without python3-saml); evidence's `sso`
-is then `"oauth2"`. A readiness timeout also names `oauth2-proxy@oauth2-proxy`
-and `sso@oauth2-proxy`. Destroy leaves the dashboard's single sign-on setting
-to whole-cluster retirement; per-resource removal is
-[B491](milestones/m2.md#b491)'s.
+### Management sign-on
 
-Not yet met: an oauth2-proxy added to a management gateway that an earlier
-apply realized without one changes the gateway's completed document, so the
-unit refuses instead of switching the gateway to single sign-on; tracked as
-[B1809](milestones/m2.md#b1809).
+A [CephSignOn](ceph-resources.md#cephsignon) signs users in to the management
+gateway through oauth2-proxy and one OIDCProvider in its own block
+`ceph-signon-<cluster>`, implementation `ceph.SignOnImplementation`. cephadm
+turns the gateway's sign-on on exactly while an oauth2-proxy daemon exists and
+reconfigures the gateway, Grafana, Prometheus and Alertmanager itself, so their
+blocks and requests do not change. The block depends on the cluster, image,
+settings and management gateway unit blocks, claims no host, and runs on the
+bootstrap host as a core service unit of type `oauth2-proxy`: the cluster
+creation proof's frozen request with the sign-on's one oauth2-proxy document,
+its bindings and the gateway target (its hosts, port, virtual IP, endpoint
+name, daemon count, whether it fronts Grafana, and the certificate SHA-256 its
+own apply proof reports). The owner and FSID are the cluster creation proof's
+operation, never the operation that runs the sign-on block. Its deadline is
+apply 4920 s (six native calls and one readiness wait) and observe 720 s.
+
+Its apply, in order:
+
+1. Before any effect, each oauth2-proxy host reads, read-only and concurrently
+   within one 120 s call, `<issuerURL>/.well-known/openid-configuration`: one
+   HTTP/1.0 request without a proxy, following no redirect, at most 64 KiB in
+   15 s, over TLS verified against the OIDCProvider's trust bundle alone, or
+   the host's system store without one, its host name checked. A 200 JSON
+   document whose `issuer` is exactly `issuerURL` and whose
+   `authorization_endpoint` is an absolute URL passes; otherwise the block
+   refuses `sign-on-provider-unreachable`, naming the host, the stage (`dns`,
+   `connect`, `tls`, `status <n>`, `content`, `issuer-mismatch` or
+   `oversize`) and the issuer URL, never a byte of the bundle or the answer.
+   oauth2-proxy discovers its issuer when it starts and exits when it cannot.
+   The container adds the bundle to its image's own trust store, so the host
+   check approximates the container's trust; the readiness proof that every
+   proxy daemon kept running closes the gap.
+2. The unit's one `ceph orch apply -i -` stream: the check reads, never
+   writes, `container_image_oauth2_proxy`, and an oauth2-proxy service without
+   this operation's attempt record refuses `foreign-service`. The proxy's five
+   bound leaves (`client_secret`, `cookie_secret`, `ssl_cert`, `ssl_key` and
+   `/custom_configs/0/content`, the OIDCProvider's trust bundle) are lent to
+   the apply only and spliced in memory, as the gateway's are. Their
+   placeholders pass cephadm's spec validation, so the `cookie_secret` one
+   holds 32 bytes; a bound `cookie_secret` that validation refuses, neither
+   16, 24 nor 32 bytes after URL-safe base64 decoding when it decodes, else as
+   text, refuses `material` before any effect. The bundle reaches the
+   container only through the document's `custom_configs` entry, which
+   cephadm mounts at `/etc/pki/tls/certs/oauth2-proxy-idp-ca.pem`; no plan,
+   record, argument, evidence or diagnostic carries a bundle or secret byte or
+   a hash of one.
+3. Each proxy host proves read-only, in concurrent rounds of at most 120 s,
+   10 s apart, within a 600 s window, that every running oauth2-proxy
+   container of this cluster there skips no identity provider certificate
+   verification: neither its arguments (`--ssl-insecure-skip-verify`) nor its
+   environment (`OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY`) nor the
+   configuration file its `--config` argument names, read through its mount
+   beneath `/var/lib/ceph/<fsid>/` without following a link, sets the skip (a
+   line naming the key other than as its bare assignment leaves the daemon
+   unproved), and, with a bound bundle, its CA mount holds exactly that
+   bundle. A skip refuses `sso-unverified`, naming the host, the daemon and
+   whether the argument, environment or configuration skips. Until the placed
+   daemon count runs proved, the window's exhaustion refuses `not-ready`.
+4. Each management gateway host proves, in the same kind of rounds within its
+   own 600 s window, that every running gateway container renders the
+   [gateway sign-on headers](#gateway-sign-on-headers) corrections this
+   build's record selects; a gateway that still lacks one when the window
+   closes refuses `sign-on-unprotected`, naming the host and the correction,
+   with the remedy to realize the gateway with this build (destroy, then a
+   fresh apply). The dashboard's single sign-on is never enabled over an
+   unprotected gateway.
+5. The bootstrap host runs the block's one dashboard write, `ceph dashboard sso
+   enable oauth2`, only when `mgr/dashboard/sso_oauth2` is not already true and
+   once `ceph orch ps --daemon_type oauth2-proxy` lists a running daemon, which
+   the enable requires; until then it asks again 10 s apart within a 600 s
+   window, whose exhaustion refuses `not-ready`. Then it reads the option back.
+
+Readiness needs the placed `oauth2-proxy` daemons running on their frozen
+image, each one seen running by cephadm's last refresh at least 30 s after it
+started (cephadm's own clock, so it did not exit on discovery), the option true,
+read and never written (`dashboard sso status` is never run, because it answers
+EPERM without python3-saml), every running gateway container still rendering
+the selected corrections, and the enforcement proof. That proof, run from the
+bootstrap host against the virtual IP, else every running gateway daemon at
+its own address, at the gateway port (as many as the gateway's placed count), sends an unauthenticated `GET /` with no cookie or authorization header
+over TLS pinned to the gateway certificate's SHA-256. It passes only on the
+answer the pinned image's templates give when sign-on is enforced: nginx's
+`auth_request /oauth2/auth` answers 401, `error_page 401 = /oauth2/sign_in`
+hands the request to oauth2-proxy, and with `skip_provider_button= true`
+oauth2-proxy answers a 302 to the issuer's authorization endpoint
+(`templates/services/mgmt-gateway/external_server.conf.j2`, `location /`;
+`templates/services/oauth2-proxy/oauth2-proxy.conf.j2`), so the proof accepts
+exactly a 302 whose `Location` is an `https` URL on the issuer's origin. Any
+other answer, the dashboard's own page included, stays pending, never a pass.
+Evidence's `sso` is then `"oauth2"` and its `endpoint` holds the pinned
+SHA-256 once every endpoint passed. A readiness timeout names
+`oauth2-proxy@oauth2-proxy`, `stable@oauth2-proxy`, `sso@oauth2-proxy`,
+`route@mgmt-gateway`, `tls@mgmt-gateway` and `enforce@mgmt-gateway`; one that
+ends with only the enforcement entries refuses `sign-on-unenforced`.
+Observation reads the daemons, their stability, the option and the enforcement proof once; the gateway route proof runs only in apply. cephadm's only dashboard
+single sign-on write disables it when it removes the last running oauth2-proxy
+daemon, so observation then reads the block not ready. The block retires
+offline with its cluster's hosts; while the hosts survive its removal refuses
+`ceph-hosts-survive` ([B491](milestones/m2.md#b491)), and destroy leaves the
+dashboard's single sign-on setting to whole-cluster retirement.
+
+Not yet met: a CephSignOn added to a cluster an earlier apply completed changes
+that apply's input, so apply refuses instead of adding the sign-on block;
+tracked as [B1809](milestones/m2.md#b1809).
 
 ## Grafana routes
 
@@ -2406,8 +2453,8 @@ selects it: `mgr/cephadm/services/mgmt-gateway/nginx.conf` and
 attempt and a completion record named after its key. The first opens
 Grafana's upstream with `ip_hash;`, so each client address reaches one Grafana
 and keeps the session that Grafana issued. The second forwards the client's
-`Host` in the `/grafana` location when no oauth2-proxy is declared, whose own
-native branch already sets it, so Grafana's cross-origin check compares the
+`Host` in the `/grafana` location outside the template's oauth2-proxy branch,
+whose own native branch already sets it, so Grafana's cross-origin check compares the
 address the browser signed in at and nginx sends one Host header. Every other
 byte stays native. When a Grafana fails, nginx sends its clients to another,
 where they sign in again, and a Grafana that returns takes back the client
@@ -2462,9 +2509,11 @@ selected, so the gateway owns at most one override per template file.
 
 ## Gateway sign-on headers
 
-A management gateway unit that declares an oauth2-proxy corrects two lines of
-cephadm's `external_server.conf` template, each inside its
-`{% if enable_oauth2_proxy %}` branch and each when the
+Every management gateway unit corrects two lines of cephadm's
+`external_server.conf` template, each inside its `{% if enable_oauth2_proxy %}`
+branch, which renders only while a [CephSignOn](#management-sign-on)'s
+oauth2-proxy runs, so the lines are inert without one and a sign-on added
+later finds them in place; each is applied when the
 [artifact specialization catalog](../.agents/knowledge/version-specializations.md#ceph-gateway-sign-on-headers)
 selects it:
 
@@ -2488,18 +2537,17 @@ the header keeps that line native, and no digest, release or tag selects
 them. The selected corrections join the [Grafana routes](#grafana-routes)
 host correction in the one owned `external_server.conf` override, applied in
 that order, under the same records, check, completion before the stream and
-removal. A gateway without an oauth2-proxy carries none of them, so its
-override is the Grafana routes' alone.
+removal. A gateway override an earlier build completed without them keeps its
+bytes and refuses `monitoring-template-identity` on its next run; realize the
+context afresh to take them.
 
-The route proof inside the readiness wait runs for every gateway unit that
-fronts Grafana or declares an oauth2-proxy, and counts each selected
-correction in the file each running container mounts at
-`/etc/nginx_external_server.conf`: exactly one `proxy_set_header Cookie "";`
-in the dashboard location, and in Grafana's exactly one
-`proxy_set_header X-WEBAUTH-ROLE "Viewer";` and no
-`$http_x_auth_request_role`. A daemon rendered before the oauth2-proxy
-daemons ran lacks both lines, so it takes the one reconfigure and the wait
-goes on until it serves them.
+The gateway's own route proof counts only the lines it renders without a
+proxy (the Grafana routes). A CephSignOn's block proves the sign-on
+corrections in the file each running gateway container mounts at
+`/etc/nginx_external_server.conf` before it enables single sign-on and again
+in its readiness: exactly one `proxy_set_header Cookie "";` in the dashboard
+location, and in Grafana's exactly one `proxy_set_header X-WEBAUTH-ROLE
+"Viewer";` and no `$http_x_auth_request_role`.
 
 Not yet met: while a management gateway signs users in, each manager's own
 dashboard port (8443 by default) still answers any network the host admits,
@@ -2598,7 +2646,7 @@ are a separate operation. The proof is a controller-side TLS connect to the acti
 URL, comparing the certificate SHA-256 with the stored certificate; an
 unreachable port reports the dashboard unproved. The dashboard's direct
 certificate and roles remain [B479](milestones/m2.md#b479); its OAuth2 single
-sign-on is enabled by the management gateway unit above, and the monitoring
+sign-on is enabled by a [CephSignOn](#management-sign-on), and the monitoring
 stack is realized by its service-unit block above.
 
 The client-data test is operator-run through `cluster exec` with the

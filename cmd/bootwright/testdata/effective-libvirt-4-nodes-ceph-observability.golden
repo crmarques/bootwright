@@ -454,6 +454,15 @@ spec:
       addressRef: ip
 ---
 apiVersion: bootwright.io/v1alpha1
+kind: OIDCProvider
+metadata:
+  name: qualification-idp
+spec:
+  management: external
+  issuerURL: https://idp.example.test/realms/ceph
+  trustBundleRef: oidc-ca
+---
+apiVersion: bootwright.io/v1alpha1
 kind: CephCluster
 metadata:
   name: ceph-lab
@@ -609,18 +618,6 @@ spec:
         backend_service: mgmt-gateway
         keepalive_only: true
         virtual_ip: 198.51.100.50
-    - service_type: oauth2-proxy
-      placement:
-        hosts:
-          - rhel-01.lab.example.test
-          - rhel-02.lab.example.test
-      spec:
-        client_id: ceph
-        oidc_issuer_url: https://idp.example.test/realms/ceph
-        provider_display_name: Qualification IdP
-        redirect_url: https://mgr.ceph-lab.lab.example.test:9443/oauth2/callback
-      custom_configs:
-        - mount_path: /etc/pki/tls/certs/oauth2-proxy-idp-ca.pem
     - service_type: loki
       placement:
         hosts:
@@ -645,14 +642,6 @@ spec:
           secretRef: management-tls
         - path: /spec/ssl_key
           secretRef: management-tls
-    - serviceRef: oauth2-proxy
-      secrets:
-        - path: /custom_configs/0/content
-          secretRef: oidc-ca
-        - path: /spec/client_secret
-          secretRef: oidc-client
-        - path: /spec/cookie_secret
-          secretRef: oidc-cookie
     - serviceRef: snmp-gateway
       secrets:
         - path: /spec/credentials/snmp_v3_auth_password
@@ -719,6 +708,29 @@ spec:
   clusterRef: ceph-lab
   poolRef: rbd-data
   access: readWrite
+---
+apiVersion: bootwright.io/v1alpha1
+kind: CephSignOn
+metadata:
+  name: ceph-lab-sso
+spec:
+  clusterRef: ceph-lab
+  oidcProviderRef: qualification-idp
+  secrets:
+    - path: /spec/client_secret
+      secretRef: oidc-client
+    - path: /spec/cookie_secret
+      secretRef: oidc-cookie
+  native:
+    placement:
+      hosts:
+        - rhel-01.lab.example.test
+        - rhel-02.lab.example.test
+    service_type: oauth2-proxy
+    spec:
+      client_id: ceph
+      provider_display_name: Qualification IdP
+      redirect_url: https://mgr.ceph-lab.lab.example.test:9443/oauth2/callback
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Secret

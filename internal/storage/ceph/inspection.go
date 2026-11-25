@@ -536,6 +536,7 @@ var scopeRows = frozenScopeRows()
 func frozenScopeRows() map[api.Kind]func(api.Catalog, string, []reconciliation.Block) string {
 	rows := map[api.Kind]func(api.Catalog, string, []reconciliation.Block) string{
 		api.CephSMBResource: smbFrozenScope,
+		api.CephSignOn:      signOnFrozenScope,
 		api.CephReplication: replicationFrozenScope,
 		api.CephConsumer:    declaredScope(api.CephConsumer, exportScopeText),
 	}
@@ -561,6 +562,22 @@ func smbFrozenScope(_ api.Catalog, name string, frozen []reconciliation.Block) s
 		return ""
 	}
 	return smbScopeText(matched[0])
+}
+
+func signOnFrozenScope(_ api.Catalog, name string, frozen []reconciliation.Block) string {
+	var matched []SignOnRequest
+	for _, block := range frozen {
+		if block.Kind != string(api.CephSignOn) || block.Object != name || block.Implementation != SignOnImplementation {
+			continue
+		}
+		if r, err := DecodeSignOnRequest(block.Request); err == nil {
+			matched = append(matched, r)
+		}
+	}
+	if len(matched) != 1 {
+		return ""
+	}
+	return "sign-on through " + matched[0].Provider.IssuerURL
 }
 
 func smbScopeText(r SMBRequest) string {

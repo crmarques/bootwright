@@ -486,14 +486,14 @@ func TestActualCompilerRefusesFutureKindsAndAdditionalVariants(t *testing.T) {
 		t.Fatal("future reference unexpectedly compiled")
 	}
 	requireReferenceRefusals(t, diagnostics.Of(err), true)
-	if len(api.Kinds()) != 37 {
+	if len(api.Kinds()) != 38 {
 		t.Fatalf("kind catalog changed: %d", len(api.Kinds()))
 	}
 }
 
 // The projection is the full-wiring positive coverage the reference cannot
 // give while it declares refused families: every kind but the refused ones
-// reaches the effective graph from the reference, the replication profile or, for Network, the lab-networks example. A kind added to the
+// reaches the effective graph from the reference, the replication profile or, for Network, the lab-networks example, and for CephSignOn the observability example. A kind added to the
 // catalog without coverage, or a family admitted without leaving the
 // allow-list, fails here.
 func TestActualAdmissibleProjectionAdmitsEveryKindButTheRefusedFamilies(t *testing.T) {
@@ -501,13 +501,14 @@ func TestActualAdmissibleProjectionAdmitsEveryKindButTheRefusedFamilies(t *testi
 	state, report := compileAcceptance(t, admissibleExampleSources(t, true))
 	replication, _ := compileAcceptance(t, exampleDirectory(t, "libvirt-2x4-nodes-ceph-multisite"))
 	networks, _ := compileAcceptance(t, exampleDirectory(t, "lab-networks"))
+	signOn, _ := compileAcceptance(t, exampleDirectory(t, "libvirt-4-nodes-ceph-observability"))
 	kinds := api.Kinds()
-	if len(kinds) != 37 {
+	if len(kinds) != 38 {
 		t.Fatalf("kind catalog changed: %d; cover the new kind in the reference or the extras", len(kinds))
 	}
 	for _, kind := range kinds {
 		covered := len(state.Effective().OfKind(kind)) != 0 || kind == api.CephReplication && len(replication.Effective().OfKind(kind)) != 0 ||
-			kind == api.Network && len(networks.Effective().OfKind(kind)) != 0
+			kind == api.Network && len(networks.Effective().OfKind(kind)) != 0 || kind == api.CephSignOn && len(signOn.Effective().OfKind(kind)) != 0
 		switch refused := slices.Contains(refusedKinds, kind); {
 		case refused && covered:
 			t.Errorf("kind %s is admitted now: remove it from refusedKinds and cover it", kind)

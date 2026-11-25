@@ -321,13 +321,12 @@ func TestB479ServiceSchemasAreClosed(t *testing.T) {
 		"ceph-exporter": {"ssl", "certificate_source", "sock_dir", "addrs"},
 		"snmp-gateway":  {"credentials"},
 		"mgmt-gateway":  {"ssl_cert", "ssl_key", "custom_sans", "certificate_source", "ssl_prefer_server_ciphers", "ssl_session_tickets", "ssl_session_timeout", "ssl_session_cache", "server_tokens", "ssl_stapling", "ssl_stapling_verify"},
-		"oauth2-proxy":  {"ssl", "certificate_source", "ssl_cert", "ssl_key", "custom_sans", "client_secret", "cookie_secret", "ssl_insecure_skip_verify"},
 		"nvmeof":        {"server_key", "server_cert", "client_key", "client_cert", "root_ca_cert", "encryption_key", "addr", "addr_map", "discovery_addr", "discovery_addr_map", "enable_prometheus_exporter", "prometheus_port"},
 		"loki":          {"retention_time", "targets", "only_bind_port_on_networks"},
 		"alloy":         {"retention_time", "targets", "only_bind_port_on_networks"},
 		"promtail":      {"retention_time", "targets", "only_bind_port_on_networks"},
 	}
-	required := map[string][]string{"nvmeof": {"pool", "group"}, "mgmt-gateway": {"port"}, "snmp-gateway": {"snmp_version", "snmp_destination"}, "oauth2-proxy": {"provider_display_name", "client_id", "oidc_issuer_url"}}
+	required := map[string][]string{"nvmeof": {"pool", "group"}, "mgmt-gateway": {"port"}, "snmp-gateway": {"snmp_version", "snmp_destination"}}
 	var closed func(*Shape) bool
 	closed = func(shape *Shape) bool {
 		if shape.Type == Mapping && shape.Open {

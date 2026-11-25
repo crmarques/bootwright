@@ -9,13 +9,14 @@ import ipaddress
 import re
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    ceph_host_runtime, ceph_native, ceph_native_nfs, ceph_native_object, ceph_native_observability, ceph_native_stretch, ceph_native_units,
+    ceph_host_runtime, ceph_native, ceph_native_nfs, ceph_native_object, ceph_native_stretch, ceph_native_units, ceph_signon_native,
     native_specializations,
 )
 
 
 # Every id the shipped specialization registry declares; a worker answer or a record naming any other id is refused.
 SPECIALIZATION_IDS = frozenset(record.id for record in native_specializations.SPECIALIZATIONS)
+SIGNON_TYPE = ceph_signon_native.TYPE
 
 
 # A provided tiebreaker's removal evidence (ceph_native_stretch.TiebreakerRemoval); its Go caller decodes the same closed members.
@@ -269,10 +270,16 @@ def endpoint_evidence(value, request=None):
     if value.get("action") == "service" and request is not None and request.get("action") == "service" and request["service"]["type"] == "mgmt-gateway":
         ceph_native.require((endpoint["certificateSHA256"] != "") == endpoint["reachable"], "evidence")
         return
-    # The result publisher holds no request: a management gateway unit is the service whose own daemon rows name mgmt-gateway.
+    # A sign-on's endpoint is its enforcement proof: the gateway certificate Go pinned, present exactly when every endpoint enforced.
+    if value.get("action") == "service" and request is not None and signon(request):
+        pinned = request["service"]["signOn"]["certificateSHA256"]
+        ceph_native.require(endpoint["certificateSHA256"] in ("", pinned) and (endpoint["certificateSHA256"] != "") == endpoint["reachable"], "evidence")
+        return
+    # The result publisher holds no request: a management gateway unit is the service whose own daemon rows name mgmt-gateway, and a
+    # sign-on's those that name oauth2-proxy.
     if value.get("action") == "service" and request is None and endpoint != {"certificateSHA256": "", "reachable": False}:
         rows = value.get("daemons")
-        ceph_native.require(isinstance(rows, list) and any(isinstance(row, dict) and row.get("service") == "mgmt-gateway" for row in rows)
+        ceph_native.require(isinstance(rows, list) and any(isinstance(row, dict) and row.get("service") in ("mgmt-gateway", SIGNON_TYPE) for row in rows)
                             and (endpoint["certificateSHA256"] != "") == endpoint["reachable"], "evidence")
         return
     if value.get("action") != "gateway":
@@ -284,17 +291,22 @@ def endpoint_evidence(value, request=None):
         ceph_native.require(not (endpoint["reachable"] and tls) or endpoint["certificateSHA256"] != "", "evidence")
 
 
-def proxied(request):
-    """Whether a request is a management gateway unit with an oauth2-proxy document."""
-    return (request["action"] == "service" and request["service"]["type"] == "mgmt-gateway"
-            and ceph_native_observability.gateway_documents(request["service"])[2] is not None)
+def signon(request):
+    """Whether a request is a sign-on's oauth2-proxy unit."""
+    return request["action"] == "service" and request["service"]["type"] == SIGNON_TYPE
 
 
 def sso_evidence(value, request=None):
-    """Whether the dashboard's OAuth2 single sign-on is enabled: only a management gateway unit with an oauth2-proxy reports it."""
+    """Whether the dashboard's OAuth2 single sign-on is enabled: only a sign-on's oauth2-proxy unit reports it; the result publisher, which
+    holds no request, knows that unit by its own daemon rows."""
     ceph_native.require(value["sso"] in ("", "oauth2"), "evidence")
     if value["sso"] == "oauth2":
-        ceph_native.require(value.get("action") == "service" and (request is None or proxied(request)), "evidence")
+        ceph_native.require(value.get("action") == "service" and (signon(request) if request is not None else signon_rows(value)), "evidence")
+
+
+def signon_rows(value):
+    rows = value.get("daemons")
+    return isinstance(rows, list) and any(isinstance(row, dict) and row.get("service") == SIGNON_TYPE for row in rows)
 
 
 def tiebreaker_host(request):

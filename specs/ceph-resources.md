@@ -1332,6 +1332,74 @@ Planning refuses a CephSMBResource whose CephCluster does not set both `samba`
 and `samba_metrics` under `spec.images`, as the
 [refusal table](ceph.md#refusal-table) states.
 
+## CephSignOn
+
+One object signs users in to one managed cluster's management gateway, and
+through it the dashboard, Grafana, Prometheus and Alertmanager, with
+oauth2-proxy and one [OIDCProvider](api/infrastructure-services.md). Its block
+and readiness are the [management sign-on](ceph.md#management-sign-on).
+
+| Field | Contract |
+| --- | --- |
+| `clusterRef` | Required managed CephCluster that declares a `mgmt-gateway` service; an external cluster, or one without a gateway, refuses at `$.spec.clusterRef`. A cluster has at most one CephSignOn: a second one, later in name order, refuses as a duplicate at `$.spec.clusterRef`. |
+| `oidcProviderRef` | Required OIDCProvider. Its `issuerURL` becomes the proxy's `oidc_issuer_url`, and its `trustBundleRef`, when set, the proxy's one `custom_configs` entry, mounted at `/etc/pki/tls/certs/oauth2-proxy-idp-ca.pem` and added to the container's trust store. |
+| `native` | Required cephadm `oauth2-proxy` service document in native spelling: required `service_type: oauth2-proxy`, `placement` (the native placement grammar, its hosts resolved to the cluster's topology nodes) and `spec` with required `client_id` and `provider_display_name`; optional `redirect_url`, `allowlist_domains`, `https_address` and `networks`. |
+| `secrets` | Required bindings `{path, secretRef}`: `/spec/client_secret` and `/spec/cookie_secret`, each an `opaque` or `token` Secret, both required; optional `/spec/ssl_cert` and `/spec/ssl_key`, one `tlsCertificate` Secret bound at both or at neither. Without the pair cephadm signs oauth2-proxy's certificate. |
+
+Native members Bootwright does not realize refuse at their own field, and no
+refusal echoes a value:
+
+| Member | Reason | Next step |
+| --- | --- | --- |
+| `spec.oidc_issuer_url` | The issuer URL comes from the OIDCProvider's issuerURL. | Remove it. |
+| `custom_configs` | The identity provider's CA bundle comes from the OIDCProvider's trustBundleRef. | Remove it; set `trustBundleRef` on the OIDCProvider. |
+| `spec.client_secret`, `spec.cookie_secret` | Native documents never carry credentials inline. | Bind the path in `spec.secrets`. |
+| `spec.ssl_cert`, `spec.ssl_key` | Native documents never carry TLS material inline. | Bind both paths in `spec.secrets`. |
+| `spec.ssl`, `spec.certificate_source`, `spec.custom_sans` | TLS options of this service are not supported by Bootwright yet. | Omit it. |
+| `spec.ssl_insecure_skip_verify` | oauth2-proxy must verify the identity provider's certificate. | Omit it. |
+| `spec.scope`, `spec.email_domains` | No oauth2-proxy spec Bootwright realizes has this member. | Omit it. |
+| `service_id`, `service_name` | oauth2-proxy is a singleton service named by its type. | Remove it. |
+| `config`, `extra_container_args`, `extra_entrypoint_args`, `unmanaged`, `preview_only` | Not qualified by this consumer. | Remove it. |
+| `placement.count_per_host` | oauth2-proxy places at most one daemon per host. | Omit it. |
+
+Value rules: `https_address` is `host:port` with the fixed
+[oauth2-proxy port](api/ceph.md#listener-registry) 4180, whatever the address
+names; `redirect_url` is an `https` URL without user information; each
+`allowlist_domains` entry is `[.|*.]host[:port|:*]`. The 4180 listener on the
+placement hosts clashes with any other listener there, refused at
+`$.spec.native.placement`. A bound `cookie_secret` must be 16, 24 or 32 bytes
+after URL-safe base64 decoding when it decodes, else as text, as IBM's
+`OAuth2ProxySpec.validate` requires; binding time, not admission, checks it.
+
+`CephCluster.spec.images.oauth2_proxy` is admitted whenever the cluster
+declares a `mgmt-gateway` and required by a CephSignOn, which
+[refuses at planning](ceph.md#refusal-table) without it. Every host pre-pulls
+that image, because the image block resolves it before any sign-on placement
+is known.
+
+The block's plan impacts are, in order: its realization; "the management
+gateway signs users in through oauth2-proxy and OIDCProvider <name>"; "Bootwright
+enables the dashboard's OAuth2 single sign-on; local sign-in returns only after
+bootwright cluster sign-on suspend"; "cephadm reconfigures the management
+gateway, Grafana, Prometheus and Alertmanager for single sign-on; their blocks
+do not change"; "while sign-on is on, a manager's dashboard port 8443 accepts a
+forged token (an upstream defect); keep it reachable only from the management
+gateway hosts" ([B1829](milestones/m2.md#b1829)); without the TLS pair
+"cephadm signs oauth2-proxy's TLS certificate"; and without a trust bundle
+"oauth2-proxy verifies the issuer of OIDCProvider <name> with its image's
+system trust store".
+
+The frozen request is `ceph.SignOnRequest`: the cluster, object and
+controller, the cluster's Machines and host key references, the OIDCProvider's
+name, issuer URL and whether it binds a trust bundle, the authored
+`oauth2_proxy` image reference, the oauth2-proxy document with the derived
+`oidc_issuer_url` and `custom_configs` mount, the bindings (the authored ones
+and the derived `/custom_configs/0/content` to the provider's trust bundle
+Secret), and the management gateway's hosts, port, virtual IP, endpoint name,
+daemon count and whether it fronts Grafana. Its request digest moves only
+with those members. The block retires with its cluster's hosts; there is no
+per-block removal while they survive.
+
 ## CephNVMeoFSubsystem
 
 One object owns one NVMe-oF subsystem of one gateway group, with its

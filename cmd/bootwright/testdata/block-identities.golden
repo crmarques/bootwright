@@ -604,6 +604,7 @@ libvirt-4-nodes-ceph-observability:
   ceph-service-ceph-lab-mgmt-gateway
   ceph-service-ceph-lab-monitoring
   ceph-settings-ceph-lab
+  ceph-signon-ceph-lab
   controller-prerequisites
   dns-lab-dns
   machine-rhel-01

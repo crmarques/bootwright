@@ -20,26 +20,26 @@ import (
 // name every Ceph implementation whose worker derives from them.
 func cephMarkerSources() map[string][]string {
 	core, host := ceph.Implementation, ceph.HostImplementation
-	export, smb, replication := ceph.ConsumerImplementation, ceph.SMBImplementation, ceph.ReplicationImplementation
+	export, smb, replication, signon := ceph.ConsumerImplementation, ceph.SMBImplementation, ceph.ReplicationImplementation, ceph.SignOnImplementation
 	return map[string][]string{
 		// Explicit credential updates are bounded commands; no lifecycle block consumes their journal.
 		"ceph_admin_credentials_native.py": nil,
 		"ceph_monitoring_logins_native.py": nil,
-		"ceph_native.py":                   {core, export, smb, replication},
-		"ceph_native_bootstrap.py":         {core, export, smb, replication},
-		"ceph_native_dashboard.py":         {core, export, smb, replication},
-		"ceph_native_osd.py":               {core, export, smb, replication},
-		"ceph_native_registry.py":          {core, host, export, smb, replication},
-		"ceph_native_resources.py":         {core, export, smb, replication},
-		"ceph_native_nfs.py":               {core, smb},
-		"ceph_native_nvmeof.py":            {core},
-		"ceph_native_object.py":            {core},
-		"ceph_native_observability.py":     {core},
-		"ceph_monitoring_template.py":      {core},
-		"ceph_native_stretch.py":           {core, host},
-		"ceph_native_units.py":             {core},
-		"ceph_tunnel_custody.py":           {core},
-		"ceph_host_runtime.py":             {host, core},
+		"ceph_native.py":                   {core, export, smb, replication, signon},
+		"ceph_native_bootstrap.py":         {core, export, smb, replication, signon},
+		"ceph_native_dashboard.py":         {core, export, smb, replication, signon},
+		"ceph_native_osd.py":               {core, export, smb, replication, signon},
+		"ceph_native_registry.py":          {core, host, export, smb, replication, signon},
+		"ceph_native_resources.py":         {core, export, smb, replication, signon},
+		"ceph_native_nfs.py":               {core, smb, signon},
+		"ceph_native_nvmeof.py":            {core, signon},
+		"ceph_native_object.py":            {core, signon},
+		"ceph_native_observability.py":     {core, signon},
+		"ceph_monitoring_template.py":      {core, signon},
+		"ceph_native_stretch.py":           {core, host, signon},
+		"ceph_native_units.py":             {core, signon},
+		"ceph_tunnel_custody.py":           {core, signon},
+		"ceph_host_runtime.py":             {host, core, signon},
 		"ceph_packages.py":                 {host},
 		"ceph_export_native.py":            {export},
 		"ceph_smb_native.py":               {smb},

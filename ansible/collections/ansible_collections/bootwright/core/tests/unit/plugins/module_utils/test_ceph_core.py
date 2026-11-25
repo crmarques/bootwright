@@ -636,7 +636,7 @@ def test_private_input_is_opened_without_links_and_not_in_argv(core_request, tmp
                                             "canonical_json", "bounded_process", "tls_trust", "ceph_monitoring_template",
                                             "native_specializations", "ceph_pull_broker", "held_directory", "registry_auth", "private_files",
                                             "ceph_native_nfs", "ceph_native_nvmeof", "ceph_native_observability",
-                                            "ceph_native_units", "ceph_native_object", "ceph_smb_native", "ceph_replication_native",
+                                            "ceph_signon_native", "ceph_native_units", "ceph_native_object", "ceph_smb_native", "ceph_replication_native",
                                             "ceph_export_dns", "ceph_export_native",
                                             "ceph_native_registry", "ceph_native_osd", "ceph_native_dashboard", "ceph_native_bootstrap",
                                             "ceph_native_validate",
@@ -2470,7 +2470,8 @@ def test_resource_phases_ship_in_their_own_module():
     assert modules[modules.index("ceph_native_stretch") + 1] == "ceph_native_nfs"
     assert modules[modules.index("ceph_native_nfs") + 1] == "ceph_native_nvmeof"
     assert modules[modules.index("ceph_native_nvmeof") + 1] == "ceph_native_observability"
-    assert modules[modules.index("ceph_native_observability") + 1] == "ceph_native_units"
+    assert modules[modules.index("ceph_native_observability") + 1] == "ceph_signon_native"
+    assert modules[modules.index("ceph_signon_native") + 1] == "ceph_native_units"
     assert modules[modules.index("ceph_native_units") + 1] == "ceph_native_object"
     assert modules[modules.index("ceph_native_object") + 1] == "ceph_smb_native"
     assert tuple(ceph_transport.Transport.native_sources()) == modules

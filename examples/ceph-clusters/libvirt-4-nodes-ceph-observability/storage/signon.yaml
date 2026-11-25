@@ -1,0 +1,27 @@
+apiVersion: bootwright.io/v1alpha1
+kind: CephSignOn
+metadata:
+  name: ceph-lab-sso
+
+spec:
+  clusterRef: ceph-lab
+  oidcProviderRef: qualification-idp
+
+  native:
+    service_type: oauth2-proxy
+    placement:
+      hosts:
+        - rhel-01.lab.example.test
+        - rhel-02.lab.example.test
+
+    spec:
+      client_id: ceph
+      provider_display_name: Qualification IdP
+      redirect_url: https://mgr.ceph-lab.lab.example.test:9443/oauth2/callback
+
+  secrets:
+    - path: /spec/client_secret
+      secretRef: oidc-client
+
+    - path: /spec/cookie_secret
+      secretRef: oidc-cookie

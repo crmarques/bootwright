@@ -66,7 +66,6 @@ var nativeListeners = map[string]listenerSource{
 	"ceph-exporter": portListener(9926, false),
 	"snmp-gateway":  portListener(9464, false),
 	"mgmt-gateway":  portListener(0, false),
-	"oauth2-proxy":  oauth2ProxyListeners,
 	"loki":          lokiListeners,
 	"promtail":      promtailListeners,
 	"alloy":         portListener(0, false),
@@ -236,10 +235,6 @@ func lokiListeners(placed *placements, catalog api.Catalog, service api.Value, f
 func promtailListeners(placed *placements, catalog api.Catalog, service api.Value, field string, index int) []listener {
 	out := portListener(9080, false)(placed, catalog, service, field, index)
 	return append(out, labelledListener(placed, service, field, index, 9080, "the promtail listener (9080)"))
-}
-
-func oauth2ProxyListeners(placed *placements, _ api.Catalog, service api.Value, field string, index int) []listener {
-	return []listener{labelledListener(placed, service, field, index, 4180, "oauth2-proxy (4180)")}
 }
 
 func nfsListeners(placed *placements, _ api.Catalog, service api.Value, field string, index int) []listener {

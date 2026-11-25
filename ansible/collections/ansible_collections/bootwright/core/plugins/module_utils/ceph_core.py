@@ -15,8 +15,8 @@ import time
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
     adapter_protocol, canonical_json, ceph_evidence, ceph_host_runtime, ceph_native, ceph_native_nfs, ceph_native_nvmeof,
-    ceph_native_object, ceph_native_observability, ceph_native_resources, ceph_native_stretch, ceph_native_units, ceph_native_worker, ceph_smb_native,
-    ceph_ssh_policy, ceph_transport, ceph_tunnel_staging, native_diagnostics, private_files,
+    ceph_native_object, ceph_native_observability, ceph_native_resources, ceph_native_stretch, ceph_native_units, ceph_native_worker, ceph_signon_native,
+    ceph_smb_native, ceph_ssh_policy, ceph_transport, ceph_tunnel_staging, native_diagnostics, private_files,
 )
 
 READINESS_TIMEOUT = 900
@@ -35,8 +35,8 @@ RUN_DEADLINE = re.compile(r"[1-9][0-9]{0,4}\Z")
 # Each ingress host's read-only firewall check: every host in one concurrent round, within one native call of the block's Go deadline.
 FIREWALL_CALL = 120
 HOLDER_CALL = 60
-# The rendered-configuration proof of a management gateway's oauth2-proxy: every host in one concurrent round, rounds within a window of
-# one native call of the block's Go deadline.
+# A sign-on's issuer discovery, rendered-configuration and gateway route proofs: every host in one concurrent round, each window of rounds
+# within one native call of the block's Go deadline.
 SSO_CALL = 120
 SSO_WINDOW = 600
 SSO_PAUSE = 10
@@ -90,7 +90,8 @@ CLUSTER_REASONS = (
     "nvmeof-native", "nvmeof-identity", "nvmeof-foreign", "nvmeof-budget",
     "monitoring-login-unsupported",
     "ingress-firewall", "service-credential-foreign", "ssh-policy-host-excluded", "ssh-policy-unavailable", "tunnel-host-key-excluded",
-    "sso-unverified", "stretch-intent", "stretch-interrupted", "stretch-location", "stretch-weight", "stretch-rule", "stretch-foreign", "stretch-pools",
+    "sso-unverified", "sign-on-provider-unreachable", "sign-on-unprotected", "sign-on-unenforced",
+    "stretch-intent", "stretch-interrupted", "stretch-location", "stretch-weight", "stretch-rule", "stretch-foreign", "stretch-pools",
     "stretch-drift", "tiebreaker-foreign", "tiebreaker-unreachable", "managers-running", "device-not-empty", "foreign-osd",
     "osd-partial", "osd-clear-failed", "osd-clear-unproved", "osd-orphan-booted", "osd-orphan-unproved", "osd-class-drift",
 )
@@ -1131,7 +1132,7 @@ def sso_proof(request, transport, now, pause):
     oauth2-proxy container of this cluster verifies its identity provider's certificate and mounts the bound CA bundle. Each round calls
     every host concurrently, so a round lasts one call whatever the host count; rounds repeat until the placed count runs proved, and one
     native call of the block's Go deadline covers the window, which the proof returns."""
-    proxy = ceph_native_observability.gateway_documents(request["service"])[2]
+    proxy = ceph_signon_native.document_of(request["service"])
     hosts = {host["name"]: host for host in request["hosts"]}
     held = transport.unit_material("sso_config")
     deadline = now() + SSO_WINDOW
@@ -1157,6 +1158,96 @@ def sso_enable(bootstrap, transport, deadline, now, pause):
         remaining = deadline - now()
         ceph_native.require(remaining > 0, "not-ready")
         pause(min(SSO_PAUSE, remaining))
+
+
+def signon_discovery(request, transport):
+    """Before any effect of a sign-on's apply: each oauth2-proxy host reads, read-only and concurrently, its issuer's discovery document."""
+    hosts = {host["name"]: host for host in request["hosts"]}
+    proxy = ceph_signon_native.document_of(request["service"])
+    results = host_round(transport, [hosts[name] for name in proxy["placement"]["hosts"]], "signon_discovery", transport.unit_material("signon_discovery"),
+                         timeout=SSO_CALL)
+    ceph_native.require(all(result == {"changed": False} for result in results), "evidence")
+
+
+class SignOnRoutes:
+    """A sign-on's gateway route proof: the bootstrap host names the sign-on corrections this build selects once, then each round proves
+    on every gateway host that each running gateway daemon renders them. Before the single sign-on write a window of rounds must prove
+    them or refuse sign-on-unprotected, naming the host and correction; inside the readiness wait each call is one more round."""
+
+    def __init__(self, request, bootstrap, transport):
+        self.request, self.bootstrap, self.transport = request, bootstrap, transport
+        self.routes, self.lacking = None, None
+
+    def selected(self, timeout):
+        if self.routes is None:
+            produced = self.transport.call(self.bootstrap, "signon_routes", timeout=timeout)
+            ceph_native.require(isinstance(produced, dict) and set(produced) == {"changed", "routes"} and produced["changed"] is False
+                                and isinstance(produced["routes"], list) and set(produced["routes"]) <= set(ceph_native_observability.SIGN_ON_ROUTES)
+                                and produced["routes"] == sorted(set(produced["routes"])), "evidence")
+            self.routes = produced["routes"]
+        return self.routes
+
+    def round(self, timeout):
+        """Whether every placed gateway daemon renders each selected correction; the first host lacking one is kept for the refusal."""
+        target = self.request["service"]["signOn"]
+        hosts = {host["name"]: host for host in self.request["hosts"]}
+        daemons, self.lacking = 0, None
+        for name, result in zip(target["hosts"], host_round(self.transport, [hosts[name] for name in target["hosts"]], "signon_route_proof",
+                                                            timeout=timeout)):
+            ceph_native.require(isinstance(result, dict) and set(result) == {"changed", "daemons", "served"} and result["changed"] is False
+                                and type(result["daemons"]) is int and result["daemons"] >= 0 and isinstance(result["served"], dict)
+                                and set(result["served"]) == ROUTES and all(type(count) is int and 0 <= count <= result["daemons"]
+                                                                            for count in result["served"].values()), "evidence")
+            daemons += result["daemons"]
+            missing = [route for route in self.routes if result["served"][route] < result["daemons"]]
+            if missing and self.lacking is None:
+                self.lacking = (name, missing[0])
+        return daemons == target["count"] and self.lacking is None
+
+    def prove(self, now, pause):
+        """Before the single sign-on write: rounds until every gateway daemon renders each selected correction, within one window."""
+        deadline = now() + SSO_WINDOW
+        if not self.selected(window_call(SSO_CALL, deadline, now)):
+            return
+        while not self.round(window_call(ROUTE_CALL, deadline, now)):
+            remaining = deadline - now()
+            if remaining <= 0:
+                host, route = self.lacking if self.lacking is not None else ("none", "daemon count")
+                raise ceph_native.NativeFailure("sign-on-unprotected", "sign-on gateway route proof", "host " + host + ": correction " + route)
+            pause(min(SSO_PAUSE, remaining))
+
+    def __call__(self, deadline, now):
+        remaining = deadline - now()
+        if remaining <= 0:
+            return None
+        if not self.selected(min(READ_BUDGET, remaining)):
+            return []
+        remaining = deadline - now()
+        if remaining <= 0:
+            return None
+        return [] if self.round(min(ROUTE_CALL, remaining)) else [ROUTE_ENTRY]
+
+
+def execute_signon(request, request_digest, transport, bootstrap, bound, seen, *, now, pause):
+    """A sign-on's apply after its preparation proof: issuer discovery on every proxy host before any effect, its one unit stream, the
+    rendered-configuration proof on every proxy host, the gateway route proof on every gateway host, the one single sign-on write, then
+    its readiness wait, which proves the gateway enforces sign-on and renders the corrections; a wait that ends still unenforced refuses
+    sign-on-unenforced."""
+    signon_discovery(request, transport)
+    produced = transport.call(bootstrap, "unit", bound)
+    ceph_native.require(isinstance(produced, dict) and set(produced) == {"changed"} and type(produced["changed"]) is bool, "evidence")
+    sso_proof(request, transport, now, pause)
+    routes = SignOnRoutes(request, bootstrap, transport)
+    routes.prove(now, pause)
+    changed = sso_enable(bootstrap, transport, now() + SSO_WINDOW, now, pause) or produced["changed"]
+    try:
+        observation = wait_unit(request, request_digest, bootstrap, transport, now, pause, private=seen, routes=routes)
+    except ReadinessRefusal as error:
+        if error.checks and all(check in ("enforce@mgmt-gateway", "tls@mgmt-gateway") for check in error.checks):
+            raise ceph_native.Refusal("sign-on-unenforced") from None
+        raise
+    ceph_native.require(observation["ready"], "not-ready")
+    return changed, observation
 
 
 def observe_nvmeof(request, request_digest, bootstrap, transport, timeout, now, blocking):
@@ -1216,10 +1307,9 @@ def execute_nvmeof(request, operation, request_digest, transport, bootstrap, *, 
 
 def execute_unit(request, operation, request_digest, transport, bootstrap, *, now, pause, phases=("unit",), outputs=None):
     """A service unit runs its apply phases only on the bootstrap host: its preparation proof, with an ingress the firewall check on each
-    ingress host, its apply phases in order, with an oauth2-proxy the rendered-configuration proof on each proxy host and then the one
-    single sign-on write, then its own readiness wait, which for a gateway fronting Grafana or declaring an oauth2-proxy includes the route
-    proof on each gateway host,
-    and in which a monitoring unit with prometheus asks cephadm to reconfigure each MGR whose deployment ports lag the published module
+    ingress host, its apply phases in order (a sign-on's are execute_signon's), then its own readiness wait, which for a management
+    gateway includes the route proof on each gateway host, and in which a monitoring unit with prometheus asks cephadm to reconfigure each
+    MGR whose deployment ports lag the published module
     endpoints. Its apply phase holds every bound leaf; each observation and removal holds the observed ones, and a management gateway's
     served leaf must be the bound certificate's. A ready management gateway that declares its output then writes its monitoring logins
     there."""
@@ -1231,13 +1321,13 @@ def execute_unit(request, operation, request_digest, transport, bootstrap, *, no
         if request["action"] == "service":
             ingress_firewall(request, transport, ingress_fronts(request))
         bound = transport.unit_material("unit") if bound_unit else {}
+        if ceph_evidence.signon(request):
+            changed, observation = execute_signon(request, request_digest, transport, bootstrap, bound, seen, now=now, pause=pause)
+            return observed({"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}, operation, pending)
         for phase in phases:
             produced = transport.call(bootstrap, phase, bound) if bound and phase == "unit" else transport.call(bootstrap, phase)
             ceph_native.require(isinstance(produced, dict) and set(produced) == {"changed"} and type(produced["changed"]) is bool, "evidence")
             changed = produced["changed"] or changed
-        if request["action"] == "service" and ceph_evidence.proxied(request):
-            deadline = sso_proof(request, transport, now, pause)
-            changed = sso_enable(bootstrap, transport, deadline, now, pause) or changed
         remedy = ManagerPorts(bootstrap, transport) if (
             request["action"] == "service" and ceph_native_observability.prometheus_declared(request["service"])) else None
         routes = GrafanaRoutes(request, bootstrap, transport) if (

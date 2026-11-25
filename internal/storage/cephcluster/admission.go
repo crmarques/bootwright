@@ -18,7 +18,7 @@ type admission struct {
 }
 
 func isStorage(kind api.Kind) bool {
-	return slices.Contains([]api.Kind{api.CephCluster, api.CephPlacementPolicy, api.CephPool, api.CephFilesystem, api.CephObjectGateway, api.CephObjectUser, api.CephObjectBucket, api.CephNFSExport, api.CephSMBResource, api.CephNVMeoFSubsystem, api.CephReplication, api.CephConsumer, api.CephClient, api.CephRBDImage, api.CephSubvolume}, kind)
+	return slices.Contains([]api.Kind{api.CephCluster, api.CephPlacementPolicy, api.CephPool, api.CephFilesystem, api.CephObjectGateway, api.CephObjectUser, api.CephObjectBucket, api.CephNFSExport, api.CephSMBResource, api.CephSignOn, api.CephNVMeoFSubsystem, api.CephReplication, api.CephConsumer, api.CephClient, api.CephRBDImage, api.CephSubvolume}, kind)
 }
 
 func (a *admission) issue(code, field, message, remediation string) {
@@ -196,6 +196,8 @@ func Validate(object api.Object, catalog api.Catalog) []api.Issue {
 		a.nfsExport(owner)
 	case api.CephSMBResource:
 		a.smbResource(owner)
+	case api.CephSignOn:
+		a.signOn(owner)
 	case api.CephNVMeoFSubsystem:
 		a.nvmeofSubsystem(owner)
 	case api.CephConsumer:

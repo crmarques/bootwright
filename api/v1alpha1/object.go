@@ -41,6 +41,7 @@ const (
 	CephObjectBucket      Kind = "CephObjectBucket"
 	CephNFSExport         Kind = "CephNFSExport"
 	CephSMBResource       Kind = "CephSMBResource"
+	CephSignOn            Kind = "CephSignOn"
 	CephNVMeoFSubsystem   Kind = "CephNVMeoFSubsystem"
 	CephConsumer          Kind = "CephConsumer"
 	ClusterAddon          Kind = "ClusterAddon"
@@ -50,7 +51,7 @@ const (
 	Secret                Kind = "Secret"
 )
 
-var kindOrder = []Kind{Environment, Entitlement, Machine, MachineImage, MachineInstallProfile, Network, NetworkConfig, InfraProvider, Proxy, DNSServer, NTPServer, ArtifactServer, Registry, LoadBalancer, OIDCProvider, LDAPServer, OpenShiftCluster, CephCluster, CephPlacementPolicy, CephPool, CephRBDImage, CephClient, CephFilesystem, CephSubvolume, CephObjectGateway, CephObjectUser, CephObjectBucket, CephNFSExport, CephSMBResource, CephNVMeoFSubsystem, CephReplication, CephConsumer, ClusterAddon, ClusterAddonProfile, ClusterAddonBinding, CustomPlaybook, Secret}
+var kindOrder = []Kind{Environment, Entitlement, Machine, MachineImage, MachineInstallProfile, Network, NetworkConfig, InfraProvider, Proxy, DNSServer, NTPServer, ArtifactServer, Registry, LoadBalancer, OIDCProvider, LDAPServer, OpenShiftCluster, CephCluster, CephPlacementPolicy, CephPool, CephRBDImage, CephClient, CephFilesystem, CephSubvolume, CephObjectGateway, CephObjectUser, CephObjectBucket, CephNFSExport, CephSMBResource, CephSignOn, CephNVMeoFSubsystem, CephReplication, CephConsumer, ClusterAddon, ClusterAddonProfile, ClusterAddonBinding, CustomPlaybook, Secret}
 
 func Kinds() []Kind           { return slices.Clone(kindOrder) }
 func KindIndex(kind Kind) int { return slices.Index(kindOrder, kind) }

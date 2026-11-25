@@ -35,15 +35,10 @@ func b479Minimal() map[string]api.Value {
 		"ceph-exporter": b479Service("ceph-exporter"),
 		"snmp-gateway":  b479Service("snmp-gateway", "snmp_version", "V2c", "snmp_destination", "192.0.2.9:162"),
 		"mgmt-gateway":  b479Service("mgmt-gateway", "port", 9443),
-		"oauth2-proxy":  oauth2Proxy(),
 		"loki":          b479Service("loki"),
 		"alloy":         b479Service("alloy"),
 		"promtail":      b479Service("promtail"),
 	}
-}
-
-func oauth2Proxy(extra ...any) api.Value {
-	return b479Service("oauth2-proxy", append([]any{"provider_display_name", "IdP", "client_id", "ceph", "oidc_issuer_url", "https://idp.example.test/realms/ceph"}, extra...)...)
 }
 
 func authGateway(extra ...any) api.Value {
@@ -87,7 +82,7 @@ func TestB479MinimalDocumentsAdmit(t *testing.T) {
 	groups := []group{
 		{services: []api.Value{minimal["prometheus"], minimal["alertmanager"], minimal["grafana"], minimal["node-exporter"], minimal["ceph-exporter"]}},
 		{services: []api.Value{minimal["snmp-gateway"], minimal["alertmanager"]}, bindings: []api.Value{leaves("snmp-gateway", "/spec/credentials/snmp_community", "opaque-a")}},
-		{services: []api.Value{authGateway(), minimal["oauth2-proxy"]}, bindings: []api.Value{leaves("oauth2-proxy", "/spec/client_secret", "opaque-a", "/spec/cookie_secret", "opaque-a")}},
+		{services: []api.Value{authGateway()}},
 	}
 	for _, name := range []string{"prometheus", "alertmanager", "grafana", "node-exporter", "ceph-exporter", "mgmt-gateway"} {
 		groups = append(groups, group{services: []api.Value{minimal[name]}})
@@ -123,11 +118,8 @@ func TestB479RefusalsNameTheirRemedy(t *testing.T) {
 		{"R3", "api.invariant", s3 + ".service_type", "the SNMP gateway receives alerts only from Alertmanager", "declare an alertmanager service in spec.services or remove the snmp-gateway service", added(b479Minimal()["snmp-gateway"])},
 		{"R8 bare", "api.invariant", s3 + ".spec.virtual_ip", "a management gateway virtual_ip is a bare address without a prefix length", "write spec.virtual_ip as an address without a prefix length, inside a declared public network", added(b479Service("mgmt-gateway", "port", 9443, "virtual_ip", "192.0.2.50/24"))},
 		{"R8 public", "api.invariant", s3 + ".spec.virtual_ip", "a management gateway virtual_ip lies inside a declared public network, so a host interface carries it", "choose an address inside spec.networks.publicCIDRs", added(b479Service("mgmt-gateway", "port", 9443, "virtual_ip", "198.51.100.7"))},
-		{"R10", "api.invariant", s3 + ".service_type", "oauth2-proxy authenticates only through a management gateway with enable_auth: true", "declare a mgmt-gateway service with spec.enable_auth: true, or remove the oauth2-proxy service", added(oauth2Proxy(), b479Service("mgmt-gateway", "port", 9443))},
-		{"R11", "api.invariant", s3 + ".spec.enable_auth", "enable_auth needs an oauth2-proxy service as the management gateway's authentication backend", "declare an oauth2-proxy service or set spec.enable_auth: false", added(authGateway())},
+		{"R10", "api.invariant", s3 + ".service_type", "oauth2-proxy is realized by a CephSignOn, which signs users in to the management gateway through an OIDCProvider", "remove this oauth2-proxy service and its spec.serviceBindings entries from spec.services; declare a CephSignOn", added(b479Service("oauth2-proxy", "provider_display_name", "IdP", "client_id", "ceph"), b479Service("mgmt-gateway", "port", 9443))},
 		{"R12", "api.invariant", s3 + ".spec.ssl", "a plaintext management gateway would carry dashboard credentials unencrypted", "omit spec.ssl or set it to true", added(b479Service("mgmt-gateway", "port", 9443, "ssl", false))},
-		{"R12a port", "api.invariant", s3 + ".spec.https_address", "cephadm reserves port 4180 for oauth2-proxy whatever https_address names", "use port 4180 in spec.https_address or omit it", added(oauth2Proxy("https_address", "0.0.0.0:4181"), authGateway())},
-		{"R12a malformed", "api.invariant", s3 + ".spec.https_address", "https_address is host:port", "write spec.https_address as host:4180 or omit it", added(oauth2Proxy("https_address", "4180"), authGateway())},
 		{"R14a alloy", "api.invariant", s3 + ".service_type", "the alloy log agent ships logs only to a Loki service of this cluster", "declare a loki service in spec.services or remove the alloy service", added(b479Service("alloy"))},
 		{"R14a promtail", "api.invariant", s3 + ".service_type", "the promtail log agent ships logs only to a Loki service of this cluster", "declare a loki service in spec.services or remove the promtail service", added(b479Service("promtail"))},
 		{"R14b", "api.invariant", "$.spec.services[5].service_type", "alloy and promtail would both ship the same Ceph logs to Loki", "keep one log agent: remove the alloy or the promtail service from spec.services", added(b479Service("loki"), b479Service("alloy"), b479Service("promtail"))},
@@ -160,10 +152,6 @@ func TestB479InlineSecretLeavesRefuse(t *testing.T) {
 		{b479Service("snmp-gateway", "snmp_version", "V2c", "snmp_destination", "192.0.2.9:162", "credentials", m("snmp_community", secret)), "credentials", credential, "remove spec.credentials; bind each credential leaf under /spec/credentials to a Secret in spec.serviceBindings"},
 		{b479Service("mgmt-gateway", "port", 9443, "ssl_cert", secret), "ssl_cert", material, "remove spec.ssl_cert; " + tlsRemedy},
 		{b479Service("mgmt-gateway", "port", 9443, "ssl_key", secret), "ssl_key", material, "remove spec.ssl_key; " + tlsRemedy},
-		{oauth2Proxy("client_secret", secret), "client_secret", credential, "remove spec.client_secret; bind /spec/client_secret to a Secret in spec.serviceBindings"},
-		{oauth2Proxy("cookie_secret", secret), "cookie_secret", credential, "remove spec.cookie_secret; bind /spec/cookie_secret to a Secret in spec.serviceBindings"},
-		{oauth2Proxy("ssl_cert", secret), "ssl_cert", material, "remove spec.ssl_cert; " + tlsRemedy},
-		{oauth2Proxy("ssl_key", secret), "ssl_key", material, "remove spec.ssl_key; " + tlsRemedy},
 	} {
 		cluster, catalog := withServices(t, fixtureCatalog(), row.service)
 		field := "$.spec.services[3].spec." + row.member
@@ -235,22 +223,6 @@ func TestDeclaredCrashServiceRefusesNamingTheDerivedUnit(t *testing.T) {
 		}
 		if text := found[0].Message + found[0].Remediation; strings.Contains(text, "does not realize") || strings.Contains(text, "bootstrap creates") || strings.ContainsAny(text, "0123456789") {
 			t.Fatalf("crash refusal reads as unrealized or names a release: %q", text)
-		}
-	}
-}
-
-func TestOAuth2ProxyPortIsFixed(t *testing.T) {
-	const field = "$.spec.services[3].spec.https_address"
-	for address, message := range map[string]string{
-		"0.0.0.0:4180": "",
-		"[::]:4180":    "",
-		"0.0.0.0:4181": "cephadm reserves port 4180 for oauth2-proxy whatever https_address names",
-		"4180":         "https_address is host:port",
-	} {
-		cluster, catalog := withServices(t, fixtureCatalog(), oauth2Proxy("https_address", address), authGateway())
-		found := issuesAt(Validate(cluster, catalog), field)
-		if message == "" && len(found) != 0 || message != "" && (len(found) != 1 || found[0].Message != message) {
-			t.Fatalf("https_address %s: %#v", address, found)
 		}
 	}
 }
@@ -332,16 +304,10 @@ func TestB479ValueRulesFollowTheNativeGrammar(t *testing.T) {
 		{b479Service("snmp-gateway", "snmp_version", "V3", "snmp_destination", "192.0.2.9:162", "engine_id", "8000C53F00"), "engine_id", true},
 		{b479Service("snmp-gateway", "snmp_version", "V3", "snmp_destination", "192.0.2.9:162", "engine_id", "8000C53F001"), "engine_id", false},
 		{b479Service("snmp-gateway", "snmp_version", "V3", "snmp_destination", "192.0.2.9:162", "engine_id", "8000C53FZZ"), "engine_id", false},
-		{oauth2Proxy("redirect_url", "https://ceph.example.test/oauth2/callback"), "redirect_url", true},
-		{oauth2Proxy("redirect_url", "http://ceph.example.test/oauth2/callback"), "redirect_url", false},
-		{b479Service("oauth2-proxy", "provider_display_name", "IdP", "client_id", "ceph", "oidc_issuer_url", "https://user@idp.example.test/"), "oidc_issuer_url", false},
-		{oauth2Proxy("allowlist_domains", api.StringList(".example.test", "*.example.test:*", "192.0.2.9:8443")), "allowlist_domains[0]", true},
-		{oauth2Proxy("allowlist_domains", api.StringList("https://example.test")), "allowlist_domains[0]", false},
-		{oauth2Proxy("allowlist_domains", api.StringList("example.test:0")), "allowlist_domains[0]", false},
 		{b479Service("mgmt-gateway", "port", 9443, "ssl_ciphers", api.ListValue()), "ssl_ciphers", false},
 		{b479Service("grafana", "only_bind_port_on_networks", true), "only_bind_port_on_networks", false},
 	} {
-		cluster, catalog := withServices(t, fixtureCatalog(), row.service, alertmanager, authGateway(), oauth2Proxy())
+		cluster, catalog := withServices(t, fixtureCatalog(), row.service, alertmanager)
 		field := "$.spec.services[3].spec." + row.member
 		found := issuesAt(Validate(cluster, catalog), field)
 		if row.admitted != (len(found) == 0) || len(found) > 1 {
@@ -374,19 +340,6 @@ func TestR14NoLongerRefusesLoki(t *testing.T) {
 		for _, issue := range Validate(cluster, catalog) {
 			if strings.Contains(issue.Message, "Bootwright does not realize log collection yet") {
 				t.Fatalf("%s refused as unrealized: %#v", name, issue)
-			}
-		}
-	}
-}
-
-func TestOAuth2ProxyInsecureSkipVerifyAlwaysRefuses(t *testing.T) {
-	const field = "$.spec.services[3].spec.ssl_insecure_skip_verify"
-	for _, value := range []bool{true, false} {
-		cluster, catalog := withServices(t, fixtureCatalog(), oauth2Proxy("ssl_insecure_skip_verify", value), authGateway())
-		for _, issues := range [][]api.Issue{Validate(cluster, catalog), ValidatePartial(cluster, catalog)} {
-			found := issuesAt(issues, field)
-			if len(found) != 1 || found[0] != (api.Issue{Code: "api.invariant", Field: field, Message: "oauth2-proxy must verify the identity provider's certificate", Remediation: "omit spec.ssl_insecure_skip_verify"}) {
-				t.Fatalf("ssl_insecure_skip_verify %v: %#v", value, found)
 			}
 		}
 	}

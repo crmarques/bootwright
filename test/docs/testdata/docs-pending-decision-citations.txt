@@ -7,7 +7,6 @@ specs/api/machines.md D240
 specs/api/networks.md D240
 specs/api/openshift-clusters.md D240
 specs/ceph-native-api.md D159
-specs/ceph-native-api.md D161
 specs/ceph-resources.md D159
 specs/ceph.md D196
 specs/ceph.md D198

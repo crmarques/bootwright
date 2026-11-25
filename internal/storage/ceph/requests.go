@@ -456,13 +456,9 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 	if err := projectServices(&r, cluster); err != nil {
 		return Request{}, err
 	}
-	delegated, err := smbDelegated(c, cluster)
-	if err != nil {
+	if err := delegateChildServices(&r, c, cluster); err != nil {
 		return Request{}, err
 	}
-	r.Delegated = append(r.Delegated, delegated...)
-	r.Delegated = append(r.Delegated, DelegatedService{Name: "crash", Hosts: hostNames(r)})
-	slices.SortStableFunc(r.Delegated, func(a, b DelegatedService) int { return strings.Compare(a.Name, b.Name) })
 
 	selectDevices(&r)
 	if err := singleHostProfile(r); err != nil {
@@ -472,6 +468,21 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 		return Request{}, err
 	}
 	return r, nil
+}
+
+func delegateChildServices(r *Request, c api.Catalog, cluster api.Object) error {
+	delegated, err := smbDelegated(c, cluster)
+	if err != nil {
+		return err
+	}
+	signOns, err := signOnDelegated(c, cluster)
+	if err != nil {
+		return err
+	}
+	r.Delegated = append(append(r.Delegated, delegated...), signOns...)
+	r.Delegated = append(r.Delegated, DelegatedService{Name: "crash", Hosts: hostNames(*r)})
+	slices.SortStableFunc(r.Delegated, func(a, b DelegatedService) int { return strings.Compare(a.Name, b.Name) })
+	return nil
 }
 
 func singleHostProfile(r Request) error {

@@ -81,6 +81,8 @@ func (a *admission) intrinsic() {
 		a.clientIntrinsic()
 	case api.CephSMBResource:
 		a.smbIntrinsic()
+	case api.CephSignOn:
+		a.signOnIntrinsic()
 	case api.CephNVMeoFSubsystem:
 		a.nvmeofSubsystemIntrinsic()
 	case api.CephConsumer:

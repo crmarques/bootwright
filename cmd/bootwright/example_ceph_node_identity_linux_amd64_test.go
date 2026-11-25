@@ -79,7 +79,7 @@ func bindingTypes(t *testing.T, cluster api.Object) []string {
 func TestExampleServiceBindingsPlanByTheRoutingTable(t *testing.T) {
 	t.Parallel()
 	state, _ := compileAcceptance(t, exampleDirectory(t, "libvirt-4-nodes-ceph-observability"))
-	if got := bindingTypes(t, requireObject(t, state.Effective(), api.CephCluster, "ceph-lab")); !slices.Equal(got, []string{"grafana", "mgmt-gateway", "oauth2-proxy", "snmp-gateway"}) {
+	if got := bindingTypes(t, requireObject(t, state.Effective(), api.CephCluster, "ceph-lab")); !slices.Equal(got, []string{"grafana", "mgmt-gateway", "snmp-gateway"}) {
 		t.Fatalf("the observability example binds %v", got)
 	}
 	if plan := planIngressFixture(t, state, "libvirt-4-nodes-ceph-observability"); len(plan.Blocks) == 0 {

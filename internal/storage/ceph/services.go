@@ -183,6 +183,9 @@ func unneededAuxiliary(c api.Catalog, cluster api.Object) (string, string, bool)
 	if len(clusterSMBResources(c, cluster.Name())) != 0 {
 		needed["samba"], needed["samba_metrics"] = true, true
 	}
+	if needed["nginx"] {
+		needed[signOnImage] = true
+	}
 	images := cluster.Spec().Get("images")
 	for _, name := range AuxiliaryNames {
 		if images.Has(name) && !needed[name] {

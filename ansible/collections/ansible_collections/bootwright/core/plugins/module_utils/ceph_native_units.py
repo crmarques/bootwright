@@ -22,7 +22,7 @@ import json
 import re
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    ceph_monitoring_template, ceph_native, ceph_native_nfs, ceph_native_nvmeof, ceph_native_observability, ceph_native_resources,
+    ceph_monitoring_template, ceph_native, ceph_native_nfs, ceph_native_nvmeof, ceph_native_observability, ceph_native_resources, ceph_signon_native,
 )
 from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import NativeFailure, Refusal, canonical, named, require
 
@@ -125,13 +125,18 @@ UNIT_TYPES = {
                              ceph_native_observability.gateway_frontend, ceph_native_observability.GATEWAY_IMAGES,
                              {(kind, path): variable for kind, path, variable in ceph_native_observability.GATEWAY_LEAVES},
                              frozenset(ceph_native_observability.GATEWAY_TYPES), ceph_native_observability.gateway_endpoint),
+    "oauth2-proxy": UnitType(ceph_signon_native.validate, ceph_signon_native.check, ceph_signon_native.claim, ceph_signon_native.settle,
+                             ceph_signon_native.expected, ceph_signon_native.readiness, ceph_signon_native.DAEMON_TYPES, ceph_signon_native.frontend,
+                             ceph_signon_native.IMAGES, {(kind, path): variable for kind, path, variable in ceph_signon_native.LEAVES},
+                             frozenset(ceph_signon_native.DAEMON_TYPES), ceph_signon_native.endpoint),
     "rbd-mirror": UnitType(mirror_validate, mirror_check, mirror_claim, mirror_settle, mirror_expected, mirror_readiness, MIRROR_TYPES, mirror_frontend,
                            {"rbd-mirror": None}, {}, frozenset(MIRROR_TYPES), None),
 }
-PHASES = frozenset(("unit", "ingress_firewall", "vip_holder", "sso_config", "sso", "manager_ports", "manager_ports_unrecorded",
+PHASES = frozenset(("unit", "ingress_firewall", "vip_holder", "signon_discovery", "signon_routes", "signon_route_proof", "sso_config", "sso",
+                    "manager_ports", "manager_ports_unrecorded",
                     "nvmeof_unit_observe", "monitoring_credentials", "monitoring_credentials_held", "grafana_route", "grafana_route_proof",
                     "grafana_reconfig"))
-READ_ONLY_PHASES = frozenset(("nvmeof_unit_observe", "monitoring_credentials_held"))
+READ_ONLY_PHASES = frozenset(("nvmeof_unit_observe", "monitoring_credentials_held", "signon_discovery", "signon_routes", "signon_route_proof"))
 # The daemon types whose deployment proves cephadm v20.2.1 already stores a service's login: it stores both logins before it configures a
 # Prometheus daemon (PrometheusService.generate_config) and Prometheus's before it configures a Grafana daemon
 # (GrafanaService.get_dependencies), src/pybind/mgr/cephadm/services/monitoring.py.
@@ -158,14 +163,15 @@ RICH_PORT = re.compile(r'rule (?:family="(ipv4|ipv6)" )?port port="([0-9]{1,5})(
 DNS_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\Z")
 GATEWAY_MONITORED = ("alertmanager", "grafana", "prometheus")
 DOCUMENT_MEMBERS = frozenset(("networks", "placement", "service_id", "service_type", "spec"))
-# The management gateway's oauth2-proxy document alone also carries its one custom_configs entry, the identity provider's CA bundle mount.
+# A sign-on's oauth2-proxy document alone also carries its one custom_configs entry, the OIDCProvider's trust bundle mount.
 PROXY_MEMBERS = DOCUMENT_MEMBERS | {"custom_configs"}
 INPUTS_VERSION = "ceph-service-inputs-v1"
 MAX_DAEMONS = 256
-ENDPOINT_ENTRIES = frozenset(("vip", "noholder", "holders", "module", "sso", "standby", "route"))
+ENDPOINT_ENTRIES = frozenset(("vip", "noholder", "holders", "module", "sso", "standby", "route", "stable", "enforce"))
 PENDING = re.compile(r"(?:(?:" + "|".join(sorted({name for unit in UNIT_TYPES.values() for name in unit.daemon_types} | ENDPOINT_ENTRIES))
                      + r")@(?:(?:nfs|ingress)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}|"
-                     + "|".join(ceph_native_observability.MONITORING_TYPES + ceph_native_observability.GATEWAY_TYPES + MIRROR_TYPES + CRASH_TYPES)
+                     + "|".join(ceph_native_observability.MONITORING_TYPES + ceph_native_observability.GATEWAY_TYPES + ceph_signon_native.DAEMON_TYPES
+                                + MIRROR_TYPES + CRASH_TYPES)
                      + r")|(?:tls|http)@(?:" + "|".join(ceph_native_observability.GATEWAY_TYPES) + r")|"
                      + re.escape(ceph_native_observability.PORTS_ENTRY) + r")\Z")
 BINDING_MEMBERS = frozenset(("path", "secretRef", "serviceRef"))
@@ -226,8 +232,8 @@ def material_names(request, phase="unit"):
     names = frozenset(leaves[(types[binding["serviceRef"]], binding["path"])] for binding in unit.get("bindings", []))
     if phase == "unit":
         return names
-    if phase == "sso_config":
-        return names & {"oauth2ProxyCABundle"}
+    if phase in ("sso_config", "signon_discovery"):
+        return names & {ceph_signon_native.CA_VARIABLE}
     if phase in ("login_prepare", "login_update"):
         return names & {"grafanaAdminPassword"}
     return names & ceph_native_observability.OBSERVED_LEAVES if phase in ("observe", "destroy") else frozenset()
@@ -318,10 +324,11 @@ def validate(request, hosts):
     """One unit of a known type: 1 to 8 placed documents, each listed in `delegated` with exactly its hosts."""
     unit = request.get("service")
     require(isinstance(unit, dict) and {"documents", "id", "type"} <= set(unit) <=
-            {"bindings", "config", "documents", "endpoint", "id", "ingressPorts", "monitoring", "observeBudget", "scrapeIngress", "type"})
+            {"bindings", "config", "documents", "endpoint", "id", "ingressPorts", "monitoring", "observeBudget", "scrapeIngress", "signOn", "type"})
     require(isinstance(unit["type"], str) and unit["type"] in UNIT_TYPES)
     require("config" not in unit or unit["type"] == "monitoring")
     require("scrapeIngress" not in unit or unit["type"] == "monitoring")
+    require(("signOn" in unit) == (unit["type"] == ceph_signon_native.TYPE))
     gateway_access(unit)
     # Go freezes the NVMe-oF unit observer's read bound (service_unit.go unitDeadline).
     require(("observeBudget" in unit) == (unit["type"] == "nvmeof"))
@@ -335,7 +342,7 @@ def validate(request, hosts):
     delegated = {entry["name"]: entry["hosts"] for entry in request.get("delegated", [])}
     seen = set()
     for document in documents:
-        proxy = unit["type"] == "mgmt-gateway" and isinstance(document, dict) and document.get("service_type") == "oauth2-proxy"
+        proxy = unit["type"] == ceph_signon_native.TYPE
         require(isinstance(document, dict) and {"placement", "service_type"} <= set(document) <= (PROXY_MEMBERS if proxy else DOCUMENT_MEMBERS))
         singleton = document["service_type"] in singletons
         require(named(document["service_type"]) and ("service_id" not in document if singleton else named(document.get("service_id"))))
@@ -694,11 +701,14 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
         return {"changed": False, "holds": vip_held(self, found[0]["spec"])}
 
     def sso_proxy(self):
-        """The unit's oauth2-proxy document: only a management gateway unit with single sign-on has one."""
+        """The unit's oauth2-proxy document: only a sign-on unit has one."""
         unit = self.request["service"]
-        proxy = ceph_native_observability.gateway_documents(unit)[2] if unit["type"] == "mgmt-gateway" else None
-        require(proxy is not None)
-        return proxy
+        require(unit["type"] == ceph_signon_native.TYPE)
+        return ceph_signon_native.document_of(unit)
+
+    def signon_discovery(self):
+        """Read-only, before any effect of a sign-on's apply, on one oauth2-proxy host: its issuer's discovery document proves the issuer."""
+        return ceph_signon_native.discovery(self)
 
     def sso_config(self):
         """Read-only, after the unit's apply and on one oauth2-proxy host: each running oauth2-proxy container of this cluster here neither
@@ -711,7 +721,7 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
         prefix = "ceph-" + fsid + "-oauth2-proxy"
         rows = self.command([PODMAN, "ps", "--all", "--format", "json", "--filter", "name=^" + prefix + "[.-]"], timeout=SSO_TIMEOUT)
         require(isinstance(rows, list) and len(rows) <= MAX_PROXY_CONTAINERS and all(isinstance(row, dict) for row in rows), "native-output")
-        bundle = self.bound.get("oauth2ProxyCABundle") if isinstance(self.bound, dict) else None
+        bundle = self.bound.get(ceph_signon_native.CA_VARIABLE) if isinstance(self.bound, dict) else None
         daemons, proved = 0, True
         for row in rows:
             names = row.get("Names")
@@ -723,7 +733,7 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
             require(isinstance(identifier, str) and CONTAINER_ID.fullmatch(identifier) is not None, "native-output")
             inspected = self.command([PODMAN, "inspect", "--type", "container", identifier], timeout=SSO_TIMEOUT)
             require(isinstance(inspected, list) and len(inspected) == 1 and isinstance(inspected[0], dict), "native-output")
-            verdict, where = ceph_native_observability.proxy_verdict(fsid, inspected[0], bundle)
+            verdict, where = ceph_signon_native.proxy_verdict(fsid, inspected[0], bundle)
             if verdict == "insecure":
                 raise NativeFailure("sso-unverified", self.native_coordinate(), "host " + self.host["name"] + " daemon " + names[0]
                                     + ": oauth2-proxy skips identity provider certificate verification in its " + where)
@@ -740,7 +750,7 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
         require(self.ceph("fsid") == {"fsid": self.request["fsid"]}, "ownership")
         self.sso_proxy()
         require(all(self.markers.read("service-" + name + "-complete.json") is not None for name in self.unit_names()), "not-ready")
-        if ceph_native_observability.sso_enabled(self):
+        if ceph_signon_native.sso_enabled(self):
             return {"changed": False, "pending": False}
         rows = self.manager_retry(self.ceph, "orch", "ps", "--daemon_type", "oauth2-proxy")
         require(isinstance(rows, list) and all(isinstance(row, dict) for row in rows), "native-output")
@@ -749,13 +759,13 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
         sent = []
 
         def enable():
-            if sent and ceph_native_observability.sso_enabled(self):
+            if sent and ceph_signon_native.sso_enabled(self):
                 return
             sent.append(True)
             self.tunnel_effect("dashboard", "sso", "enable", "oauth2", json_result=False)
 
         self.manager_declare(enable, module=("dashboard", "ac-user-show"))
-        require(ceph_native_observability.sso_enabled(self), "not-ready")
+        require(ceph_signon_native.sso_enabled(self), "not-ready")
         return {"changed": True, "pending": False}
 
     def grafana_gateway(self):
@@ -773,13 +783,34 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
         self.grafana_gateway()
         plans = [(descriptor, plan) for descriptor, plan in ceph_monitoring_template.gateway_plans(self, self.request["service"]) if plan is not None]
         require(all(ceph_monitoring_template.ready(self, plan, descriptor) for descriptor, plan in plans), "not-ready")
-        return {"changed": False, "routes": sorted(ceph_monitoring_template.gateway_corrections(self, self.request["service"]))}
+        selected = ceph_monitoring_template.gateway_corrections(self, self.request["service"])
+        return {"changed": False, "routes": sorted(name for name in selected if name in ceph_native_observability.RENDERED_ROUTES)}
 
     def grafana_route_proof(self):
         """Read-only, on one gateway host: the running mgmt-gateway containers of this cluster here, and for each route how many
         serve it in the files they mount and started after those files were written. No path or byte is returned."""
         gateway = self.grafana_gateway()
         require(self.host["name"] in gateway["placement"]["hosts"])
+        return self.gateway_served()
+
+    def signon_routes(self):
+        """Read-only, on the bootstrap host of a sign-on: the sign-on corrections this build's gateway-identity record selects for the
+        cluster's management gateway, which every running gateway daemon must then render."""
+        require(self.markers.owned(), "ownership")
+        require(self.ceph("fsid") == {"fsid": self.request["fsid"]}, "ownership")
+        unit = self.request["service"]
+        require(unit["type"] == ceph_signon_native.TYPE)
+        gateway = {"type": "mgmt-gateway", "documents": [], "monitoring": ["grafana"] if unit["signOn"].get("grafana") else []}
+        selected = ceph_monitoring_template.gateway_corrections(self, gateway)
+        return {"changed": False, "routes": sorted(name for name in selected if name in ceph_native_observability.SIGN_ON_ROUTES)}
+
+    def signon_route_proof(self):
+        """Read-only, on one management gateway host of a sign-on: what grafana_route_proof reads, for the sign-on routes."""
+        unit = self.request["service"]
+        require(unit["type"] == ceph_signon_native.TYPE and self.host["name"] in unit["signOn"]["hosts"])
+        return self.gateway_served()
+
+    def gateway_served(self):
         fsid = self.request["fsid"]
         prefix = "ceph-" + fsid + "-mgmt-gateway"
         rows = self.command([PODMAN, "ps", "--all", "--format", "json", "--filter", "name=^" + prefix + "[.-]"], timeout=SSO_TIMEOUT)

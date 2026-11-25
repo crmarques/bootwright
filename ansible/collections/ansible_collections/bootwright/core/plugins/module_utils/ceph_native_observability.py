@@ -14,16 +14,11 @@ derives the two global file-logging options, whose own attempt and completion re
 password and SNMP credentials are bound leaves the generic unit worker splices into the apply stream only.
 
 The management gateway unit applies its keepalive-only ingress, when it has a virtual IP, before the singleton mgmt-gateway
-document in the same stream, and its oauth2-proxy after it; their TLS leaves, the proxy's credentials and the identity
-provider's CA bundle, which only the proxy's `custom_configs` entry carries, are bound the same way, and readiness probes the
-served leaf from the bootstrap host. cephadm sets the dashboard's standby behaviour itself for a declared gateway
-(src/pybind/mgr/cephadm/services/mgmt_gateway.py:49-52) and no cephadm code writes dashboard single sign-on, so the unit's own
-`sso` phase runs `dashboard sso enable oauth2`, which sets the dashboard module option sso_oauth2
-(src/pybind/mgr/dashboard/services/sso.py); readiness reads that option, never `dashboard sso status`, which answers EPERM
-without python3-saml. Before that write the deployed proxy's arguments, environment and mounted `--config` file, which cephadm's
-daemon form passes and mounts (src/cephadm/cephadmlib/daemons/oauth2_proxy.py:78-83, 138-151), must not skip the identity
-provider's certificate verification on any host. The TLS probe here is shared with the object gateway worker. Like the core
-worker it imports only the target Python standard library and the core worker modules.
+document in the same stream; its TLS leaves are bound the same way, and readiness probes the served leaf from the bootstrap host.
+cephadm sets the dashboard's standby behaviour itself for a declared gateway (src/pybind/mgr/cephadm/services/mgmt_gateway.py:49-52).
+The gateway's oauth2-proxy and the dashboard's single sign-on belong to a CephSignOn's own block (ceph_signon_native); cephadm
+reconfigures this gateway for it without a change to this unit. The TLS probe here is shared with the object gateway worker. Like
+the core worker it imports only the target Python standard library and the core worker modules.
 """
 
 from __future__ import annotations
@@ -98,22 +93,16 @@ PUBLISHED_PORT = re.compile(r":([0-9]+)/")
 PORTS_VERSION = "ceph-manager-ports-attempt-v1"
 GATEWAY_TYPES = (
     "mgmt-gateway",
-    "oauth2-proxy",
 )
-# Each bound leaf of the management gateway and its oauth2-proxy: (service type, JSON pointer, runner material variable).
+# Each bound leaf of the management gateway: (service type, JSON pointer, runner material variable).
 GATEWAY_LEAVES = (
     ("mgmt-gateway", "/spec/ssl_cert", "mgmtGatewayCertificate"),
     ("mgmt-gateway", "/spec/ssl_key", "mgmtGatewayKey"),
-    ("oauth2-proxy", "/custom_configs/0/content", "oauth2ProxyCABundle"),
-    ("oauth2-proxy", "/spec/client_secret", "oauth2ProxyClientSecret"),
-    ("oauth2-proxy", "/spec/cookie_secret", "oauth2ProxyCookieSecret"),
-    ("oauth2-proxy", "/spec/ssl_cert", "oauth2ProxyCertificate"),
-    ("oauth2-proxy", "/spec/ssl_key", "oauth2ProxyKey"),
 )
 # The bound leaves observation and removal also hold: the certificate the endpoint proof compares.
 OBSERVED_LEAVES = frozenset(("mgmtGatewayCertificate",))
-GATEWAY_DAEMON_TYPES = ("mgmt-gateway", "keepalived", "oauth2-proxy")
-GATEWAY_IMAGES = {"mgmt-gateway": "nginx", "keepalived": "keepalived", "oauth2-proxy": "oauth2_proxy"}
+GATEWAY_DAEMON_TYPES = ("mgmt-gateway", "keepalived")
+GATEWAY_IMAGES = {"mgmt-gateway": "nginx", "keepalived": "keepalived"}
 # The monitored services behind a management gateway whose basic-auth login cephadm keeps and answers through `orch <service>
 # get-credentials` as {user, password, certificate} once its monitoring security is enabled, which a running gateway enables, and as {}
 # before (src/pybind/mgr/orchestrator/module.py, _get_prometheus_access_info and _get_alertmanager_access_info; src/pybind/mgr/cephadm/
@@ -125,19 +114,9 @@ LOGIN_MEMBERS = frozenset(("password", "user"))
 ACCESS_MEMBERS = LOGIN_MEMBERS | {"certificate"}
 MAX_LOGIN = 128
 MAX_LOGINS = 4096
-# Where the identity provider's CA bundle is mounted into the oauth2-proxy container: a file in a directory Go's system trust store
-# reads, as the Go planner's storage.OAuth2ProxyCABundlePath names it.
-OAUTH2_PROXY_CA_PATH = "/etc/pki/tls/certs/oauth2-proxy-idp-ca.pem"
-OAUTH2_MEMBERS = frozenset(("allowlist_domains", "client_id", "https_address", "oidc_issuer_url", "provider_display_name", "redirect_url"))
-OAUTH2_PORT = ":4180"
-SSO_OPTION = "mgr/dashboard/sso_oauth2"
 # The two dashboard options cephadm's mgmt-gateway service sets itself, in a later serve-loop pass after the gateway daemons deploy, so that
 # a standby dashboard answers the gateway with an error it skips instead of redirecting the browser to the active manager's address.
 STANDBY_OPTIONS = (("mgr/dashboard/standby_behaviour", "error"), ("mgr/dashboard/standby_error_status_code", "503"))
-# The deployed proxy's verification switch as oauth2-proxy reads it: a flag, its environment form, and its configuration key.
-INSECURE_FLAG = "--ssl-insecure-skip-verify"
-INSECURE_ENVIRONMENT = "OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY"
-INSECURE_KEY = "ssl_insecure_skip_verify"
 # Rendered files are read only beneath the cluster's data directory, bounded.
 DATA_ROOT = "/var/lib/ceph"
 MAX_RENDERED = 65536
@@ -152,6 +131,10 @@ DASHBOARD_COOKIE = 'proxy_set_header Cookie "";'
 GRAFANA_ROLE = 'proxy_set_header X-WEBAUTH-ROLE "Viewer";'
 CLIENT_ROLE = "$http_x_auth_request_role"
 GATEWAY_ROUTES = ("cookie", "external", "nginx", "role")
+# The routes a gateway renders without an oauth2-proxy, which its own readiness proves; the sign-on routes render only inside the
+# oauth2-proxy branches, so the CephSignOn's block proves them once its proxy runs.
+RENDERED_ROUTES = ("external", "nginx")
+SIGN_ON_ROUTES = ("cookie", "role")
 STARTED_AT = re.compile(r"([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\.([0-9]{1,9}))?(Z|[+-][0-9]{2}:[0-9]{2})")
 GATEWAY_MEMBERS = frozenset(("enable_auth", "enable_health_check_endpoint", "port", "ssl", "ssl_ciphers", "ssl_protocols", "virtual_ip"))
 GATEWAY_INGRESS_MEMBERS = frozenset(("backend_service", "first_virtual_router_id", "health_check_interval", "keepalive_only", "virtual_interface_networks",
@@ -458,24 +441,24 @@ def canonical_address(value):
 
 
 def gateway_documents(unit):
-    """(ingress or None, mgmt-gateway document, oauth2-proxy document or None), each found by its service type."""
+    """(ingress or None, mgmt-gateway document), each found by its service type."""
     found = {}
     for document in unit["documents"]:
         found.setdefault(document["service_type"], document)
-    return found.get("ingress"), found.get("mgmt-gateway"), found.get("oauth2-proxy")
+    return found.get("ingress"), found.get("mgmt-gateway")
 
 
 def gateway_needed(unit):
-    """nginx, keepalived with the keepalive-only ingress, and oauth2_proxy with the proxy, in name order."""
-    ingress, unused, proxy = gateway_documents(unit)
-    return (["keepalived"] if ingress is not None else []) + ["nginx"] + (["oauth2_proxy"] if proxy is not None else [])
+    """nginx, and keepalived with the keepalive-only ingress, in name order."""
+    ingress, unused = gateway_documents(unit)
+    return (["keepalived"] if ingress is not None else []) + ["nginx"]
 
 
-def gateway_spec(spec, proxied=False):
-    """The mgmt-gateway spec within its realized record: TLS on, single sign-on exactly with the proxy, a port, closed protocol and cipher
-    lists."""
+def gateway_spec(spec):
+    """The mgmt-gateway spec within its realized record: TLS on, a port, closed protocol and cipher lists. enable_auth is admitted either
+    way: cephadm reads it nowhere, and sign-on is on exactly while a CephSignOn's oauth2-proxy runs."""
     require(isinstance(spec, dict) and set(spec) <= GATEWAY_MEMBERS and ceph_native_nfs.port(spec.get("port")))
-    require(spec.get("ssl", True) is True and spec.get("enable_auth", False) is proxied)
+    require(spec.get("ssl", True) is True and type(spec.get("enable_auth", False)) is bool)
     require(type(spec.get("enable_health_check_endpoint", False)) is bool)
     if "ssl_protocols" in spec:
         protocols = spec["ssl_protocols"]
@@ -497,53 +480,34 @@ def gateway_ingress(ingress, vip):
     require("health_check_interval" not in spec or isinstance(spec["health_check_interval"], str) and 0 < len(spec["health_check_interval"]) <= 16)
 
 
-def oauth2_spec(spec):
-    """The oauth2-proxy spec within its closed realized record: never a verification switch, a scope or an email domain."""
-    require(isinstance(spec, dict) and set(spec) <= OAUTH2_MEMBERS)
-    require(all(text(spec.get(name)) for name in ("provider_display_name", "client_id", "oidc_issuer_url")))
-    require(all(name not in spec or text(spec[name]) and spec[name].startswith("https://") for name in ("oidc_issuer_url", "redirect_url")))
-    require("https_address" not in spec or text(spec["https_address"]) and spec["https_address"].endswith(OAUTH2_PORT))
-    domains = spec.get("allowlist_domains", ["-"])
-    require(isinstance(domains, list) and domains and all(text(domain) for domain in domains))
-
-
-def gateway_bindings(unit, proxy):
-    """The gateway's TLS pair bound together or not at all; with the proxy its two credentials, its TLS pair together or not at all, and
-    its CA bundle exactly with its custom_configs entry; without the proxy no proxy leaf."""
+def gateway_bindings(unit):
+    """The gateway's TLS pair bound together or not at all, and no other leaf."""
     bound = {(binding["serviceRef"], binding["path"]) for binding in unit.get("bindings", [])}
     require((("mgmt-gateway", "/spec/ssl_cert") in bound) == (("mgmt-gateway", "/spec/ssl_key") in bound))
-    if proxy is None:
-        require(all(ref != "oauth2-proxy" for ref, unused in bound))
-        return
-    require({("oauth2-proxy", "/spec/client_secret"), ("oauth2-proxy", "/spec/cookie_secret")} <= bound)
-    require((("oauth2-proxy", "/spec/ssl_cert") in bound) == (("oauth2-proxy", "/spec/ssl_key") in bound))
-    require((("oauth2-proxy", "/custom_configs/0/content") in bound) == ("custom_configs" in proxy))
+    require(all(ref == "mgmt-gateway" for ref, unused in bound))
 
 
 def gateway_validate(unit, request, hosts):
-    """The singleton mgmt-gateway document after its keepalive-only ingress, present exactly with a virtual IP, and before its oauth2-proxy,
-    present exactly with enable_auth; each in name order, bound as gateway_bindings requires."""
+    """The singleton mgmt-gateway document after its keepalive-only ingress, present exactly with a virtual IP, in name order, bound as
+    gateway_bindings requires. A gateway unit never carries an oauth2-proxy: a CephSignOn realizes it."""
     del hosts
     documents = unit["documents"]
-    require(unit["id"] == "" and 1 <= len(documents) <= 3)
+    require(unit["id"] == "" and 1 <= len(documents) <= 2)
     kinds = [document["service_type"] for document in documents]
-    require(kinds == sorted(set(kinds)) and set(kinds) <= {"ingress", "mgmt-gateway", "oauth2-proxy"} and "mgmt-gateway" in kinds)
-    ingress, gateway, proxy = gateway_documents(unit)
+    require(kinds == sorted(set(kinds)) and set(kinds) <= {"ingress", "mgmt-gateway"} and "mgmt-gateway" in kinds)
+    ingress, gateway = gateway_documents(unit)
     require("service_id" not in gateway)
     spec = gateway.get("spec")
-    gateway_spec(spec, proxy is not None)
+    gateway_spec(spec)
     vip = spec.get("virtual_ip")
     require((ingress is None) == (vip is None))
     if ingress is not None:
         gateway_ingress(ingress, vip)
-    if proxy is not None:
-        require("service_id" not in proxy and proxy.get("custom_configs", [{"mount_path": OAUTH2_PROXY_CA_PATH}]) == [{"mount_path": OAUTH2_PROXY_CA_PATH}])
-        oauth2_spec(proxy.get("spec"))
     for document in documents:
-        require("custom_configs" not in document or document is proxy)
+        require("custom_configs" not in document)
         if "networks" in document:
             ceph_native_nfs.networks(document["networks"])
-    gateway_bindings(unit, proxy)
+    gateway_bindings(unit)
     frozen = {entry["name"] for entry in request.get("auxiliary", [])}
     require(set(gateway_needed(unit)) <= frozen)
 
@@ -591,23 +555,12 @@ def placed_count(document):
 
 
 def gateway_expected(unit):
-    """The gateway daemons, with the ingress its keepalived daemons, and with the proxy its daemons; a keepalive-only ingress runs no haproxy."""
-    ingress, gateway, proxy = gateway_documents(unit)
+    """The gateway daemons, and with the ingress its keepalived daemons; a keepalive-only ingress runs no haproxy."""
+    ingress, gateway = gateway_documents(unit)
     result = {("mgmt-gateway", "mgmt-gateway"): placed_count(gateway)}
     if ingress is not None:
         result[("ingress." + ingress["service_id"], "keepalived")] = placed_count(ingress)
-    if proxy is not None:
-        result[("oauth2-proxy", "oauth2-proxy")] = placed_count(proxy)
     return result
-
-
-def sso_enabled(worker):
-    """Read-only: the dashboard module's sso_oauth2 option, which `dashboard sso enable oauth2` sets; a JSON boolean or its text."""
-    value = worker.ceph("config", "get", "mgr", SSO_OPTION)
-    if type(value) is bool:
-        return value
-    require(isinstance(value, str) and value.lower() in ("true", "false"), "native-output")
-    return value.lower() == "true"
 
 
 def standby_settled(worker):
@@ -627,8 +580,7 @@ def standby_settled(worker):
 
 
 def gateway_readiness(worker, unit, blocking):
-    """Beyond the daemons, whose served leaf the endpoint hook proves: cephadm's dashboard standby options are set, and with the proxy the
-    dashboard's OAuth2 single sign-on is enabled. It never writes."""
+    """Beyond the daemons, whose served leaf the endpoint hook proves: cephadm's dashboard standby options are set. It never writes."""
     if not all(ceph_monitoring_template.ready(worker, plan, descriptor) for descriptor, plan in ceph_monitoring_template.gateway_plans(worker, unit)):
         return False
     ready = True
@@ -636,68 +588,13 @@ def gateway_readiness(worker, unit, blocking):
         if "standby@mgmt-gateway" not in blocking:
             blocking.append("standby@mgmt-gateway")
         ready = False
-    if gateway_documents(unit)[2] is None:
-        return ready
-    if sso_enabled(worker):
-        worker.sso_protocol = "oauth2"
-        return ready
-    if "sso@oauth2-proxy" not in blocking:
-        blocking.append("sso@oauth2-proxy")
-    return False
+    return ready
 
 
 def gateway_frontend(unit):
     """The keepalive-only ingress and the gateway port, the port clients reach on the virtual IP; None without an ingress."""
-    ingress, gateway, unused = gateway_documents(unit)
+    ingress, gateway = gateway_documents(unit)
     return None if ingress is None else (ingress, gateway["spec"]["port"])
-
-
-def insecure_flag(args, environment):
-    """Where the deployed proxy's arguments or environment skip certificate verification: "argument", "environment" or None."""
-    for argument in args:
-        if argument == INSECURE_FLAG or argument.startswith(INSECURE_FLAG + "=") and argument.partition("=")[2].lower() != "false":
-            return "argument"
-    for entry in environment:
-        name, unused, value = entry.partition("=")
-        if name == INSECURE_ENVIRONMENT and value.lower() != "false":
-            return "environment"
-    return None
-
-
-def config_path(args):
-    """The one configuration file the proxy's arguments name, else None."""
-    found = []
-    for index, argument in enumerate(args):
-        if argument.startswith("--config="):
-            found.append(argument[len("--config="):])
-        elif argument == "--config":
-            found.append(args[index + 1] if index + 1 < len(args) else "")
-    return found[0] if len(found) == 1 and found[0] else None
-
-
-def rendered_skip(value):
-    """Whether a rendered oauth2-proxy configuration skips verification: "insecure", "verified" or "unproved". It reads the flat TOML
-    subset cephadm renders, line by line, and returns no other line. A line that names the key in any spelling yet is not the bare key's
-    assignment leaves it unproved."""
-    found = []
-    for line in value.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        key, separator, setting = line.partition("=")
-        if INSECURE_KEY not in line.lower().replace("-", "_"):
-            continue
-        if not separator or key.strip() != INSECURE_KEY:
-            return "unproved"
-        setting = setting.strip()
-        if len(setting) >= 2 and setting[0] == setting[-1] and setting[0] in "\"'":
-            setting = setting[1:-1]
-        found.append(setting.strip().lower())
-    if not found:
-        return "verified"
-    if len(found) > 1 or found[0] not in ("true", "false"):
-        return "unproved"
-    return "insecure" if found[0] == "true" else "verified"
 
 
 def file_identity(info):
@@ -778,41 +675,15 @@ def proxy_container(inspected):
     return args, environment, user, pairs
 
 
-def proxy_verdict(fsid, inspected, bundle):
-    """(verdict, where) for one deployed proxy container: "insecure" naming where it skips verification, "verified" when its arguments,
-    environment and mounted configuration do not skip it and, with a bound CA bundle, its CA mount holds exactly that bundle, else
-    "unproved". No path, byte, argument or environment value leaves this function."""
-    args, environment, user, mounts = proxy_container(inspected)
-    where = insecure_flag(args, environment)
-    if where is not None:
-        return "insecure", where
-    owners = proxy_owners(user)
-    path = config_path(args)
-    sources = [source for destination, source in mounts if destination == path]
-    rendered = rendered_file(fsid, sources[0], owners) if path is not None and len(sources) == 1 else None
-    try:
-        verdict = "unproved" if rendered is None else rendered_skip(rendered.decode("utf-8"))
-    except UnicodeError:
-        verdict = "unproved"
-    if verdict != "verified":
-        return verdict, "configuration"
-    if bundle is not None:
-        sources = [source for destination, source in mounts if destination == OAUTH2_PROXY_CA_PATH]
-        mounted = rendered_file(fsid, sources[0], owners) if len(sources) == 1 else None
-        if mounted is None or not hmac.compare_digest(mounted, bundle.encode("utf-8")):
-            return "unproved", "CA bundle mount"
-    return "verified", ""
-
-
 def grafana_fronted(unit):
     """Whether a management gateway unit fronts a declared Grafana, the only case its Grafana routing overrides can apply."""
     return unit.get("type") == "mgmt-gateway" and "grafana" in unit.get("monitoring", [])
 
 
 def routes_owed(unit):
-    """Whether a management gateway unit may own a template override, so its readiness proves the routes: it fronts a declared Grafana
-    or declares an oauth2-proxy."""
-    return grafana_fronted(unit) or unit.get("type") == "mgmt-gateway" and gateway_documents(unit)[2] is not None
+    """Whether a unit may own a gateway template override, so its readiness proves the routes: every management gateway unit, whose
+    sign-on corrections need no fronted Grafana."""
+    return unit.get("type") == "mgmt-gateway"
 
 
 def config_block(text, opening):

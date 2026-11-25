@@ -32,6 +32,7 @@ def source_bundle():
             "ceph_tunnel": '"""Fixed fixture."""\n', "ceph_tunnel_staging": '"""Fixed fixture."""\n', "ceph_tunnel_custody": '"""Fixed fixture."""\n',
             "ceph_native_observe": '"""Fixed fixture."""\n', "ceph_native_stretch": '"""Fixed fixture."""\n', "ceph_native_resources": '"""Fixed fixture."""\n',
             "ceph_native_nvmeof": '"""Fixed fixture."""\n', "ceph_native_nfs": '"""Fixed fixture."""\n', "ceph_native_observability": '"""Fixed fixture."""\n',
+            "ceph_signon_native": '"""Fixed fixture."""\n',
             "ceph_native_units": '"""Fixed fixture."""\n',
             "ceph_native_object": '"""Fixed fixture."""\n', "ceph_smb_native": '"""Fixed fixture."""\n', "ceph_replication_native": '"""Fixed fixture."""\n',
             "ceph_export_dns": '"""Fixed fixture."""\n', "ceph_export_native": '"""Fixed fixture."""\n',

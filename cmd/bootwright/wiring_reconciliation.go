@@ -228,6 +228,9 @@ func operationPlaybook() map[string]string {
 		ceph.SMBImplementation + "/apply":                           "storage/smb_apply.yml",
 		ceph.SMBImplementation + "/observe":                         "storage/smb_observe.yml",
 		ceph.SMBImplementation + "/destroy":                         "storage/smb_destroy.yml",
+		ceph.SignOnImplementation + "/apply":                        "storage/core_apply.yml",
+		ceph.SignOnImplementation + "/observe":                      "storage/core_observe.yml",
+		ceph.SignOnImplementation + "/destroy":                      "storage/core_destroy.yml",
 	}
 	for _, operation := range []string{"apply", "observe", "destroy"} {
 		bindings[mirrorfill.FilesImplementation+"/"+operation] = "infrastructureservices/mirror_files_" + operation + ".yml"
@@ -356,6 +359,7 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 	resolver = append(resolver, boundCapability{kind: string(api.CephCluster), implementation: ceph.PhysicalRetirementImplementation, family: ceph.PhysicalRetirementFamily,
 		capability: ceph.NewPhysicalRetirement().WithProofs(cephDependencyProofs{}).WithErasureProofs(physicalCephEraseProof).WithUninstalledProofs(physicalerase.PhysicalEraseUnstarted)})
 	resolver = append(resolver, boundCapability{kind: string(api.CephSMBResource), implementation: ceph.SMBImplementation, family: "storage-smb", capability: ceph.NewSMB(runner).WithProofs(cephDependencyProofs{})})
+	resolver = append(resolver, boundCapability{kind: string(api.CephSignOn), implementation: ceph.SignOnImplementation, family: "storage-signon", capability: ceph.NewSignOn(runner).WithProofs(cephDependencyProofs{})})
 	resolver = append(resolver, boundCapability{kind: string(api.CephReplication), implementation: ceph.ReplicationImplementation, family: "storage-replication", capability: ceph.NewReplication(runner).WithProofs(cephDependencyProofs{})})
 	for _, definition := range managedServiceDefinitions() {
 		resolver = append(resolver, boundCapability{

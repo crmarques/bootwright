@@ -94,7 +94,7 @@ func TestTheManagementGatewayAndNVMeOFServicesProjectIntoDelegated(t *testing.T)
 		catalog api.Catalog
 		want    []string
 	}{
-		"management gateway": {delegatedCatalog(ssoServices(), ssoBindings()), []string{"crash", "ingress.mgmt", "mgmt-gateway", "oauth2-proxy"}},
+		"management gateway": {delegatedCatalog(signOnServices(), nil, signOnProvider(true), signOnObject()), []string{"crash", "ingress.mgmt", "mgmt-gateway", "oauth2-proxy"}},
 		"nvmeof":             {nvmeCatalog(), []string{"crash", "nvmeof.config.primary"}},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -143,7 +143,7 @@ func TestClusterRequestRefusesOnlyUnexecutedBindings(t *testing.T) {
 			catalog := delegatedCatalog(append([]api.Value{rgwService("objects")}, c.services...), []api.Value{tlsBinding("rgw.objects", "gateway-tls"), c.binding},
 				childOf(api.CephObjectGateway, "objects", "serviceRef", "rgw.objects"))
 			_, err := planned(t, catalog, api.CephCluster, "example")
-			refusedStop(t, err, cephUnsupportedService, "Bootwright does not realize the service binding of "+c.ref+"; it realizes only the TLS bindings of an rgw service that a CephObjectGateway binds and of the ingress that fronts it, the TLS binding of the management gateway, the credential, TLS and CA bundle bindings of its oauth2-proxy, the credential bindings of the grafana and snmp-gateway services, and the five mTLS bindings of nvmeof",
+			refusedStop(t, err, cephUnsupportedService, "Bootwright does not realize the service binding of "+c.ref+"; it realizes only the TLS bindings of an rgw service that a CephObjectGateway binds and of the ingress that fronts it, the TLS binding of the management gateway, the credential bindings of the grafana and snmp-gateway services, and the five mTLS bindings of nvmeof",
 				"remove the spec.serviceBindings entry for "+c.ref)
 		})
 	}

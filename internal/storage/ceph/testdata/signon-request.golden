@@ -1,0 +1,78 @@
+{
+  "bindings": [
+    {
+      "path": "/custom_configs/0/content",
+      "secretRef": "sso-ca",
+      "serviceRef": "oauth2-proxy"
+    },
+    {
+      "path": "/spec/client_secret",
+      "secretRef": "sso-client",
+      "serviceRef": "oauth2-proxy"
+    },
+    {
+      "path": "/spec/cookie_secret",
+      "secretRef": "sso-cookie",
+      "serviceRef": "oauth2-proxy"
+    },
+    {
+      "path": "/spec/ssl_cert",
+      "secretRef": "sso-tls",
+      "serviceRef": "oauth2-proxy"
+    },
+    {
+      "path": "/spec/ssl_key",
+      "secretRef": "sso-tls",
+      "serviceRef": "oauth2-proxy"
+    }
+  ],
+  "cluster": "example",
+  "controller": "controller",
+  "document": {
+    "custom_configs": [
+      {
+        "mount_path": "/etc/pki/tls/certs/oauth2-proxy-idp-ca.pem"
+      }
+    ],
+    "placement": {
+      "count": 1,
+      "hosts": [
+        "node-1",
+        "node-2",
+        "node-3"
+      ]
+    },
+    "service_type": "oauth2-proxy",
+    "spec": {
+      "client_id": "ceph",
+      "oidc_issuer_url": "https://idp.example.test/realms/ceph",
+      "provider_display_name": "SSO"
+    }
+  },
+  "gateway": {
+    "count": 2,
+    "hosts": [
+      "node-1",
+      "node-2",
+      "node-3"
+    ],
+    "port": 9443,
+    "virtualIP": "192.0.2.60"
+  },
+  "hostSecretRefs": [
+    "fleet-key"
+  ],
+  "image": "cp.icr.io/synthetic/oauth2_proxy:synthetic-1",
+  "machines": [
+    "node-1",
+    "node-2",
+    "node-3"
+  ],
+  "object": "ceph-sso",
+  "provider": {
+    "issuerURL": "https://idp.example.test/realms/ceph",
+    "name": "corp-sso",
+    "trustBundle": true
+  },
+  "version": "ceph-signon-v1"
+}

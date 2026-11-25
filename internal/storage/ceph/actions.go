@@ -106,7 +106,8 @@ func objectBucketResource(e Evidence, r Request) bool {
 }
 
 func serviceReady(e Evidence, r Request) bool {
-	return r.Service != nil && everyDocumentRuns(e, r) && (r.Service.Type != "mgmt-gateway" || e.Endpoint.Reachable) && (!unitProxied(*r.Service) || e.SSO == "oauth2")
+	return r.Service != nil && everyDocumentRuns(e, r) && (r.Service.Type != "mgmt-gateway" || e.Endpoint.Reachable) &&
+		(r.Service.Type != SignOnUnitType || e.SSO == "oauth2" && e.Endpoint.Reachable)
 }
 
 func gatewayReady(e Evidence, r Request) bool {

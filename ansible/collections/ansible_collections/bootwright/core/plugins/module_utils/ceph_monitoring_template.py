@@ -313,19 +313,15 @@ CORRECTIONS = {"nginx": (NGINX, routed_upstream), "external": (EXTERNAL, routed_
                "role": (EXTERNAL, viewer_role)}
 
 
-def proxied(unit):
-    """Whether the unit declares an oauth2-proxy, the only case the gateway renders its sign-on branches."""
-    return any(document.get("service_type") == "oauth2-proxy" for document in unit.get("documents", []))
-
-
 def gateway_corrections(worker, unit):
     """The selected corrections by name, in CORRECTIONS order. The Grafana routes need a fronted Grafana and their seam; the sign-on
-    corrections need a declared oauth2-proxy and their own seam, the role one a fronted Grafana too. Each needs its own witness."""
+    corrections need only their own seam, the role one a fronted Grafana too: they sit inside the template's oauth2-proxy branches, inert until a
+    CephSignOn's oauth2-proxy runs, and a sign-on added later finds them already in place. Each needs its own witness."""
     fronted, chosen = "grafana" in unit.get("monitoring", []), set()
     if fronted and worker.selection.variant("ceph.gateway.grafana-route") == "host-and-affinity":
         witness = gateway_witness(worker.selection.source("image-gateway")[0])
         chosen.update(name for name in ("nginx", "external") if witness[name] is True)
-    if proxied(unit) and worker.selection.variant("ceph.gateway.sign-on-headers") == "gateway-identity":
+    if worker.selection.variant("ceph.gateway.sign-on-headers") == "gateway-identity":
         witness = sign_on_witness(worker.selection.source("image-gateway")[0])
         chosen.update(name for name in ("cookie", "role") if witness[name] is True and (fronted or name == "cookie"))
     return [name for name in CORRECTIONS if name in chosen]

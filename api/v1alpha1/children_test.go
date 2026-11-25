@@ -12,7 +12,7 @@ import (
 // an OpenShiftCluster child without a list naming them.
 func TestChildrenAreReadFromTheSchemaRegistry(t *testing.T) {
 	storage := []Kind{CephPlacementPolicy, CephPool, CephRBDImage, CephClient, CephFilesystem, CephSubvolume, CephObjectGateway,
-		CephObjectUser, CephObjectBucket, CephNFSExport, CephSMBResource, CephNVMeoFSubsystem, CephReplication, CephConsumer}
+		CephObjectUser, CephObjectBucket, CephNFSExport, CephSMBResource, CephSignOn, CephNVMeoFSubsystem, CephReplication, CephConsumer}
 	if got := Children(CephCluster); !slices.Equal(got, storage) {
 		t.Errorf("CephCluster children = %v", got)
 	}

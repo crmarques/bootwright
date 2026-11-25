@@ -86,6 +86,7 @@ func contractVersions() []contractVersion {
 		{ceph.HostImplementation, ceph.HostContentDigest(), reflect.TypeFor[ceph.HostRequest](), reflect.TypeFor[ceph.HostEvidence]()},
 		{ceph.PhysicalRetirementImplementation, ceph.PhysicalRetirementContentDigest(), reflect.TypeFor[ceph.PhysicalRetirementRequest](), reflect.TypeFor[ceph.PhysicalRetirementEvidence]()},
 		{ceph.SMBImplementation, ceph.SMBContentDigest(), reflect.TypeFor[ceph.SMBRequest](), reflect.TypeFor[ceph.SMBEvidence]()},
+		{ceph.SignOnImplementation, ceph.SignOnContentDigest(), reflect.TypeFor[ceph.SignOnRequest](), reflect.TypeFor[ceph.Evidence]()},
 		{ceph.ReplicationImplementation, ceph.ReplicationContentDigest(), reflect.TypeFor[ceph.ReplicationRequest](), reflect.TypeFor[ceph.ReplicationEvidence]()},
 		{ceph.ConsumerImplementation, ceph.ConsumerContentDigest(), reflect.TypeFor[ceph.ConsumerRequest](), reflect.TypeFor[ceph.ConsumerEvidence]()},
 	}
@@ -358,7 +359,7 @@ func automationIdentities() map[string]automationFormat {
 		"bootwright-bound:/spec/ssl_cert":            fixedBy(kindProof, "the placeholder a stored gateway spec holds for its bound certificate", core),
 		"bootwright-bound:/spec/ssl_key":             fixedBy(kindProof, "the placeholder a stored gateway spec holds for its bound key", core),
 		"bootwright.storage-export.principal-v1":     fixedBy(kindPlace, "the domain the export's principal name is derived under", ceph.ConsumerImplementation),
-		"/var/lib/bootwright/ceph":                   fixedBy(kindPlace, "the root of the cluster's tunnel, custody and native records on each host, which the export, SMB and replication workers read and write under", core, ceph.ConsumerImplementation, ceph.SMBImplementation, ceph.ReplicationImplementation),
+		"/var/lib/bootwright/ceph":                   fixedBy(kindPlace, "the root of the cluster's tunnel, custody and native records on each host, which the export, SMB, sign-on and replication workers read and write under", core, ceph.ConsumerImplementation, ceph.SMBImplementation, ceph.SignOnImplementation, ceph.ReplicationImplementation),
 		"/var/lib/bootwright/ceph-host":              fixedBy(kindPlace, "the root of the host's runtime profile", host, core),
 		"/var/lib/bootwright/ceph-packages":          fixedBy(kindPlace, "the root of the host's package records", host),
 		"/run/bootwright-ceph-ssh":                   fixedBy(kindPlace, "the tunnel's mount point inside the cluster's containers", core),

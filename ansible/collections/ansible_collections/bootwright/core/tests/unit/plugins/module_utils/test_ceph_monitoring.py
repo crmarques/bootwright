@@ -29,6 +29,7 @@ import pytest
 from ansible_collections.bootwright.core.plugins.module_utils import private_files
 from ansible_collections.bootwright.core.plugins.module_utils import (
     ceph_core, ceph_transport, ceph_host_runtime, ceph_native, ceph_native_observability as observability, ceph_native_observe as observe, ceph_native_units,
+    ceph_signon_native,
 )
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_service_units as units
 
@@ -754,7 +755,7 @@ def test_host_layout_admits_listed_monitoring_daemon(layout, case):
 def test_monitoring_tables_agree():
     types = set(observability.MONITORING_TYPES)
     assert list(observability.MONITORING_TYPES) == sorted(types) and observability.DAEMON_TYPES == observability.MONITORING_TYPES
-    gateways = set(observability.GATEWAY_TYPES)
+    gateways = set(observability.GATEWAY_TYPES) | set(ceph_signon_native.DAEMON_TYPES)
     assert set(observability.IMAGES) == types == set(observability.MEMBERS) and observe.LISTED_SINGLETONS == types | gateways | {"crash", "rbd-mirror"}
     assert observe.SINGLETONS == types - {"ceph-exporter"} | gateways and all(observe.DELEGATED_TYPES[kind] == kind for kind in observe.SINGLETONS)
     assert all(ceph_native.DAEMON_TYPES[kind] == ("delegated", "delegated", False, "none") for kind in observe.SINGLETONS)
@@ -766,7 +767,7 @@ def test_monitoring_tables_agree():
     monitoring = ceph_native_units.UNIT_TYPES["monitoring"]
     assert monitoring.singletons == types and monitoring.endpoint is None
     assert monitoring.daemon_types == observability.MONITORING_TYPES and monitoring.images == observability.IMAGES
-    leaves = observability.MONITORING_LEAVES + observability.GATEWAY_LEAVES
+    leaves = observability.MONITORING_LEAVES + observability.GATEWAY_LEAVES + ceph_signon_native.LEAVES
     assert ceph_native_units.MATERIAL_VARIABLES == ({variable for unused, unused_path, variable in leaves}
                                                     | set(ceph_native_units.UNIT_TYPES["nvmeof"].leaves.values()))
     assert all(ceph_native_units.PENDING.fullmatch(entry) for entry in ("module@prometheus", "grafana@grafana", "nfs@nfs.files", "vip@ingress.nfs.files"))

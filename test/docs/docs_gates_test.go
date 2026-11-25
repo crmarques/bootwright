@@ -175,12 +175,11 @@ const specLeafBudget = 8192
 // ceiling its leaf's size that day. B965 in specs/milestones/backlog.md owns
 // splitting them and the section exceptions above; none may grow.
 var docsLeafExceptions = map[string]docsSectionException{
-	"specs/ceph-coverage.md ### Profile catalog":                                {ceiling: 13962, since: "2026-10-29"},
-	"specs/ceph-native-api.md ### Observability and management gateway records": {ceiling: 8545, since: "2026-10-29"},
-	"specs/ceph-native-api.md ### RGW, ingress and NFS records":                 {ceiling: 8993, since: "2026-10-29"},
-	"specs/ceph-native-api.md ### Service identity and references":              {ceiling: 9552, since: "2026-10-29"},
-	"specs/ceph.md ### Cluster execution budget":                                {ceiling: 11192, since: "2026-10-29"},
-	"specs/openshift-clusters.md ### Refusal table":                             {ceiling: 8901, since: "2026-10-29"},
+	"specs/ceph-coverage.md ### Profile catalog":                   {ceiling: 13962, since: "2026-10-29"},
+	"specs/ceph-native-api.md ### RGW, ingress and NFS records":    {ceiling: 8993, since: "2026-10-29"},
+	"specs/ceph-native-api.md ### Service identity and references": {ceiling: 9552, since: "2026-10-29"},
+	"specs/ceph.md ### Cluster execution budget":                   {ceiling: 11192, since: "2026-10-29"},
+	"specs/openshift-clusters.md ### Refusal table":                {ceiling: 8901, since: "2026-10-29"},
 }
 
 var exceptionDate = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}$`)

@@ -240,7 +240,7 @@ Do not impose global uniqueness on the bare `service_id`. Any authored native
 `service_id` follows one table keyed by service type, with three states.
 Forbidden: `mon`, `mgr`, `prometheus`, `alertmanager`, `grafana`,
 `node-exporter`, `ceph-exporter`, `snmp-gateway`, `mgmt-gateway`,
-`oauth2-proxy`, `loki`, `alloy`, `promtail` and `rbd-mirror`, the native singletons that cephadm refuses with an ID because
+`loki`, `alloy`, `promtail` and `rbd-mirror`, the native singletons that cephadm refuses with an ID because
 they are not in `REQUIRES_SERVICE_ID` (IBM's python3-ceph-common 20.2.1-405
 `ServiceSpec.validate`). Native-required: `mds`, `rgw`, `ingress`, `nfs` and `nvmeof`; every row in this state is a type in cephadm's
 `REQUIRES_SERVICE_ID` (container, ingress, iscsi, mds, nfs, nvmeof, rgw, smb,
@@ -281,8 +281,10 @@ else of its document:
 
 - `rgw`, `nfs`, `nvmeof` and every `ingress`, the keepalived-only one that
   fronts the management gateway included, by its qualified name;
-- each declared monitoring service, `mgmt-gateway`, `oauth2-proxy` and
-  `rbd-mirror` by its singleton service name, its type;
+- each declared monitoring service, `mgmt-gateway` and `rbd-mirror` by its
+  singleton service name, its type;
+- a [CephSignOn](ceph-resources.md#cephsignon)'s `oauth2-proxy` with its
+  placement hosts;
 - `crash` with every host;
 - each declared SMB cluster's `smb.<cluster_id>`, as [the SMB rule](ceph.md#resources-readiness-and-access) lists it.
 
@@ -392,7 +394,6 @@ admission claims no lifecycle beyond its owning refusal table.
 | `ceph-exporter` | forbidden |
 | `snmp-gateway` | forbidden |
 | `mgmt-gateway` | forbidden |
-| `oauth2-proxy` | forbidden |
 | `loki` | forbidden |
 | `alloy` | forbidden |
 | `promtail` | forbidden |
@@ -589,7 +590,7 @@ its entry ([stretch services](ceph.md#stretch-services-and-front-doors)).
 ### Observability and management gateway records
 
 Admission accepts `prometheus`, `alertmanager`, `grafana`, `node-exporter`,
-`ceph-exporter`, `snmp-gateway`, `mgmt-gateway` and `oauth2-proxy` documents
+`ceph-exporter`, `snmp-gateway` and `mgmt-gateway` documents
 under closed records that follow the
 [ServiceSpec schema](#native-ceph-service-input). It accepts the log collection types `loki`,
 `alloy` and `promtail` under a `port`-only record: cephadm's `MonitoringSpec`
@@ -614,7 +615,6 @@ image, and it and the other monitoring services realize through the
 | `ceph-exporter` | `port` (1-65535), `prio_limit` (at least 0), `stats_period` (at least 1) |
 | `snmp-gateway` | required `snmp_version` (`V2c` or `V3`) and `snmp_destination`; `port` (1-65535), `engine_id`, `auth_protocol` (`MD5` or `SHA`), `privacy_protocol` (`DES` or `AES`) |
 | `mgmt-gateway` | required `port` (1-65535); `ssl`, `enable_auth`, `ssl_protocols` (`TLSv1.2`, `TLSv1.3`), `ssl_ciphers`, `virtual_ip`, `enable_health_check_endpoint` |
-| `oauth2-proxy` | required `provider_display_name`, `client_id` and `oidc_issuer_url`; `https_address`, `redirect_url`, `scope`, `email_domains`, `allowlist_domains` |
 | `loki` | `port` (1-65535) |
 | `alloy` | `port` (1-65535) |
 | `promtail` | `port` (1-65535) |
@@ -624,13 +624,13 @@ required and the endpoint never depends on a release default. Every other
 member of the schema refuses at its own field with an owner:
 
 - Inline credentials (grafana `initial_admin_password`, snmp-gateway
-  `credentials`, oauth2-proxy `client_secret` and `cookie_secret`) and inline
-  TLS material (mgmt-gateway and oauth2-proxy `ssl_cert` and `ssl_key`) never
+  `credentials`) and inline TLS material (mgmt-gateway `ssl_cert` and
+  `ssl_key`) never
   appear in a native document; their [secret binding rows](#secret-bindings) own them.
 - Parked by D160 (OD26): cephadm-signed certificates (`custom_sans`) and the
   management gateway's `certificate_source`.
 - `ssl` and `certificate_source` refuse on `prometheus`, `alertmanager`,
-  `grafana`, `node-exporter`, `ceph-exporter` and `oauth2-proxy`. Grafana's TLS
+  `grafana`, `node-exporter` and `ceph-exporter`. Grafana's TLS
   follows `protocol`; the others serve the selected release's native default.
 - Members with no qualified effect contract refuse: prometheus and
   node-exporter `targets`, `remote_write_url` and
@@ -641,15 +641,10 @@ member of the schema refuses at its own field with an owner:
 - Service `networks` refuses on `ceph-exporter` and `snmp-gateway`, whose
   ServiceSpec has no `networks` field, so cephadm would reject the document
   before it is stored; the monitoring unit's worker refuses the same request.
-- oauth2-proxy `ssl_insecure_skip_verify` always refuses (D161): the proxy
-  verifies its identity provider's certificate.
-- oauth2-proxy takes `custom_configs` only as exactly one entry whose
-  `mount_path` is `/etc/pki/tls/certs/oauth2-proxy-idp-ca.pem`, without
-  `content`: the identity provider's CA bundle, mounted into a directory the
-  proxy's system trust store reads, arrives through its
-  [binding row](#secret-bindings). Another entry or `mount_path` refuses at
-  `custom_configs`, and inline `content` refuses at that entry's `content`.
-  Every other service still refuses `custom_configs`.
+- `service_type: oauth2-proxy` refuses at its `service_type` with the remedy
+  to declare a [CephSignOn](ceph-resources.md#cephsignon), whose record holds
+  the oauth2-proxy rules; its `serviceBindings` entries refuse with it.
+- Every service refuses `custom_configs`.
 - An alertmanager `user_data` key other than `default_webhook_urls` refuses
   at that key, because cephadm reads only that one
   ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/monitoring.py#L314-L324)).
@@ -664,15 +659,12 @@ each `default_webhook_urls` entry is an `http` or `https` URL without user infor
 an `engine_id`; `only_bind_port_on_networks` needs service `networks`.
 Bootwright adds: the management gateway refuses `ssl: false`, because it would
 carry dashboard credentials in plaintext, and an empty `ssl_ciphers`; its
-`virtual_ip` is a bare address inside a declared public network; oauth2-proxy
-`https_address` is `host:port` with the fixed
-[oauth2-proxy port](api/ceph.md#listener-registry), whatever the address names;
-`oidc_issuer_url` and `redirect_url` are `https` URLs without user information; and each `allowlist_domains` entry is
-`[.|*.]host[:port|:*]`.
+`virtual_ip` is a bare address inside a declared public network.
 
-Across services, an snmp-gateway needs an alertmanager service, an
-oauth2-proxy needs a mgmt-gateway with `enable_auth: true`, and a
-mgmt-gateway with `enable_auth: true` needs an oauth2-proxy. An `alloy` or
+Across services, an snmp-gateway needs an alertmanager service. A
+mgmt-gateway's `enable_auth` is admitted either way with no rule across
+services: cephadm reads it nowhere, and the gateway signs users in exactly
+while a CephSignOn's oauth2-proxy runs. An `alloy` or
 `promtail` log agent ships logs only to a `loki` service of its cluster, so
 either without a declared `loki` refuses at its `service_type`; `alloy` and
 `promtail` together refuse at the `promtail` entry, because both would ship
@@ -689,11 +681,7 @@ after parsing, because "the `virtual_ip` parameter must be identical in both"
 the gateway's `virtual_ip` without such an ingress refuses at that field, and
 the ingress refuses at its own `virtual_ip` when the gateway declares none or
 a different address. That ingress runs keepalived only, so it refuses
-`frontend_port` and `monitor_port`. A declared oauth2-proxy joins the
-management gateway's unit after the `mgmt-gateway` document, and that
-gateway carries `enable_auth: true`. Planning refuses an authored oauth2-proxy
-`scope` or `email_domains`, because no oauth2-proxy spec Bootwright realizes
-has them.
+`frontend_port` and `monitor_port`.
 
 Log collection runs `loki` with one agent, `alloy` or `promtail`, in the
 monitoring unit, each on its image authored under `spec.images`. The
@@ -740,7 +728,7 @@ complete native touch closure or qualify actual guest/runtime observations;
 that evidence remains [B79](milestones/m2.md#b79).
 
 In the host layout, a
-listed monitoring singleton's, `mgmt-gateway`'s or `oauth2-proxy`'s daemon directory is admitted on a host of its
+listed monitoring singleton's, `mgmt-gateway`'s or a CephSignOn's `oauth2-proxy`'s daemon directory is admitted on a host of its
 entry and, as cephadm makes it, may be owned by the user of its own image; it
 is still a directory that is not a link and that neither group nor others may
 write, re-proved unchanged after use. Its `unit.meta` and `unit.image` keep the
@@ -848,7 +836,7 @@ The core cluster request never carries a binding. Planning routes each
 | --- | --- | --- |
 | `rgw` that a CephObjectGateway binds, and the `ingress` that fronts it | gateway block | its TLS leaves, and the derived LDAP leaves `/custom_configs/0/content` and `/custom_configs/2/content` from the gateway's `authentication`, never a `serviceBindings` entry |
 | `grafana`, `snmp-gateway` | monitoring unit | grafana's `/spec/initial_admin_password`; snmp-gateway's `/spec/credentials/` `snmp_community`, `snmp_v3_auth_username`, `snmp_v3_auth_password` and `snmp_v3_priv_password` |
-| `mgmt-gateway`, `oauth2-proxy` | management gateway unit | the gateway's `/spec/ssl_cert` and `/spec/ssl_key`; the proxy's `/spec/client_secret`, `/spec/cookie_secret`, `/spec/ssl_cert`, `/spec/ssl_key` and `/custom_configs/0/content` |
+| `mgmt-gateway` | management gateway unit | the gateway's `/spec/ssl_cert` and `/spec/ssl_key` |
 | `nvmeof` | nvmeof unit | the five mTLS leaves of the [rows below](#secret-bindings), as effect material |
 | `nfs`, and the `ingress` that fronts it | none: the entry refuses at validation as well | — |
 
@@ -938,26 +926,20 @@ or `token` Secret.
 | `snmp-gateway` | `/spec/credentials/snmp_v3_priv_password` | value | | with `snmp_version: V3` and a `privacy_protocol`, at `privacy_protocol` | unless both hold |
 | `mgmt-gateway` | `/spec/ssl_cert` | `tlsCertificate` certificate | `/spec/ssl_key` | no: without the pair cephadm generates the certificate | |
 | `mgmt-gateway` | `/spec/ssl_key` | `tlsCertificate` private key | `/spec/ssl_cert` | with its pair | |
-| `oauth2-proxy` | `/spec/client_secret` | value | | always, at the service | |
-| `oauth2-proxy` | `/spec/cookie_secret` | value | | always, at the service | |
-| `oauth2-proxy` | `/spec/ssl_cert` | `tlsCertificate` certificate | `/spec/ssl_key` | no: without the pair cephadm signs the certificate | |
-| `oauth2-proxy` | `/spec/ssl_key` | `tlsCertificate` private key | `/spec/ssl_cert` | with its pair | |
-| `oauth2-proxy` | `/custom_configs/0/content` | `caBundle` or `trustBundle` certificate | | with the `custom_configs` entry, at `custom_configs` | without it |
 
 cephadm reads these credential keys per SNMP version: V2c needs
 `snmp_community`, V3 needs the two auth keys and, with a `privacy_protocol`,
 `snmp_v3_priv_password` (IBM's `SNMPGatewaySpec.validate`). The two SNMP V3
 auth leaves take the username and password parts of one `usernamePassword`
-Secret, and each pair of leaves binds one Secret together. cephadm generates
-an absent `cookie_secret`; Bootwright requires it anyway, so continuation
-never depends on a value cephadm generated into the stored spec. The
+Secret, and each pair of leaves binds one Secret together. A CephSignOn's
+oauth2-proxy leaves are its own `spec.secrets`
+([CephSignOn](ceph-resources.md#cephsignon)), never `serviceBindings` rows. The
 management gateway's ingress takes no binding, because cephadm generates its
 keepalived password. Admission checks the leaf, the Secret type, the pairing
 and these required and refused conditions, and only for whole documents,
 because a later file of partial input may add the binding. Binding time, not
 admission, checks the part's byte bound, the UTF-8 encoding of value parts,
-PEM certificate parsing and the decoded length of `cookie_secret` (16, 24 or
-32 bytes, as IBM's `OAuth2ProxySpec.validate` requires).
+and PEM certificate parsing.
 
 Admission validates descriptor/reference types and the native payload with
 the declared binding slots. It does not open the secret store. Required native

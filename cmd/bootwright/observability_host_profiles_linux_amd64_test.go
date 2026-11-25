@@ -15,7 +15,7 @@ func TestObservabilityAndHostProfilesProductionPlans(t *testing.T) {
 			state, report := compileAcceptance(t, exampleDirectory(t, name))
 			wantCount := 30
 			if name == "libvirt-4-nodes-ceph-observability" {
-				wantCount = 33
+				wantCount = 35
 			}
 			if report.Counts.FilesSeen != wantCount || report.Counts.ObjectsDecoded != wantCount {
 				t.Fatalf("counts: %+v, want %d files and objects", report.Counts, wantCount)

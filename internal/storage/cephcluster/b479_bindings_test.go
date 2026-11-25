@@ -1,9 +1,7 @@
 package cephcluster
 
 import (
-	"fmt"
 	"slices"
-	"strings"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -85,7 +83,7 @@ func requireSlotsMatchTheirSecrets(t *testing.T) {
 			t.Fatalf("pair %s %s does not share one Secret type with its partner", slot.ServiceType, slot.Path)
 		}
 	}
-	for _, leaf := range []string{"snmp-gateway/spec/credentials/snmp_community", "snmp-gateway/spec/credentials/snmp_v3_auth_username", "snmp-gateway/spec/credentials/snmp_v3_auth_password", "snmp-gateway/spec/credentials/snmp_v3_priv_password", "oauth2-proxy/spec/client_secret", "oauth2-proxy/spec/cookie_secret", "oauth2-proxy/spec/ssl_cert", "oauth2-proxy/spec/ssl_key", "grafana/spec/initial_admin_password", "mgmt-gateway/spec/ssl_cert", "mgmt-gateway/spec/ssl_key", "oauth2-proxy/custom_configs/0/content"} {
+	for _, leaf := range []string{"snmp-gateway/spec/credentials/snmp_community", "snmp-gateway/spec/credentials/snmp_v3_auth_username", "snmp-gateway/spec/credentials/snmp_v3_auth_password", "snmp-gateway/spec/credentials/snmp_v3_priv_password", "grafana/spec/initial_admin_password", "mgmt-gateway/spec/ssl_cert", "mgmt-gateway/spec/ssl_key"} {
 		if _, ok := rows[leaf]; !ok {
 			t.Fatalf("secret leaf %s has no binding row", leaf)
 		}
@@ -121,65 +119,13 @@ func TestB479BindingConditions(t *testing.T) {
 	requireB479Admits(t, b479Issues(t, false, []api.Value{b479Service("grafana", "anonymous_access", false)}, leaves("grafana", "/spec/initial_admin_password", "opaque-a")))
 	requireB479Admits(t, b479Issues(t, false, []api.Value{b479Service("grafana")}, leaves("grafana", "/spec/initial_admin_password", "opaque-a")))
 	requireB479Admits(t, b479Issues(t, false, snmpV3("privacy_protocol", "AES"), leaves("snmp-gateway", username, "user-a", password, "user-a", priv, "opaque-a")))
-	proxy := []api.Value{oauth2Proxy(), authGateway()}
-	found := issuesAt(b479Issues(t, false, proxy), s3)
-	if len(found) != 2 || found[0].Message != "oauth2-proxy needs the /spec/client_secret binding" || found[1].Message != "oauth2-proxy needs the /spec/cookie_secret binding, so continuation never depends on a secret cephadm generated" {
-		t.Fatalf("oauth2-proxy without its secrets: %#v", found)
-	}
-	if found := issuesAt(b479Issues(t, true, proxy), s3); len(found) != 0 {
-		t.Fatalf("partial oauth2-proxy checked its secrets: %#v", found)
-	}
 }
 
-func caMountedProxy(entries ...api.Value) api.Value {
-	return oauth2Proxy().With("custom_configs", api.ListValue(entries...))
-}
-
-func proxyLeaves(extra ...string) api.Value {
-	return leaves("oauth2-proxy", append([]string{"/spec/client_secret", "opaque-a", "/spec/cookie_secret", "opaque-a"}, extra...)...)
-}
-
-func TestPrivateCAIdPNeedsItsBoundCABundle(t *testing.T) {
-	const s3 = "$.spec.services[3]"
-	const content = "/custom_configs/0/content"
-	mounted := []api.Value{caMountedProxy(m("mount_path", OAuth2ProxyCABundlePath)), authGateway()}
-	requireOnly(t, b479Issues(t, false, mounted, proxyLeaves()), s3+".custom_configs", "api.invariant", "an oauth2-proxy custom_configs entry needs its identity provider's CA bundle bound at /custom_configs/0/content", "add a spec.serviceBindings entry for this service that binds /custom_configs/0/content to a caBundle or trustBundle Secret")
-	if found := issuesAt(b479Issues(t, true, mounted, proxyLeaves()), s3+".custom_configs"); len(found) != 0 {
-		t.Fatalf("partial input checked the CA bundle binding: %#v", found)
-	}
-	plain := []api.Value{oauth2Proxy(), authGateway()}
-	requireOnly(t, b479Issues(t, false, plain, proxyLeaves(content, "ca-a")), "$.spec.serviceBindings[0].secrets[2].path", "api.invariant", "/custom_configs/0/content is read only with the oauth2-proxy custom_configs entry for the identity provider's CA bundle", "declare custom_configs with mount_path /etc/pki/tls/certs/oauth2-proxy-idp-ca.pem on this oauth2-proxy service, or remove this binding")
-	requireOnly(t, b479Issues(t, false, mounted, proxyLeaves(content, "tls-a")), "$.spec.serviceBindings[0].secrets[2].secretRef", "api.invariant", "this binding leaf accepts only caBundle or trustBundle Secrets", "bind a caBundle or trustBundle Secret at this path")
-	requireB479Admits(t, b479Issues(t, false, mounted, proxyLeaves(content, "ca-a")))
-	requireB479Admits(t, b479Issues(t, false, mounted, proxyLeaves(content, "trust-a")))
-}
-
-func TestCustomConfigsAdmittedOnlyForTheBoundCABundle(t *testing.T) {
+func TestCustomConfigsRefusedOnNativeServices(t *testing.T) {
 	if OAuth2ProxyCABundlePath != "/etc/pki/tls/certs/oauth2-proxy-idp-ca.pem" {
 		t.Fatalf("CA bundle mount path moved: %s", OAuth2ProxyCABundlePath)
 	}
 	const s3 = "$.spec.services[3]"
-	const content = "/custom_configs/0/content"
-	entry := m("mount_path", OAuth2ProxyCABundlePath)
-	for _, partial := range []bool{false, true} {
-		requireB479Admits(t, b479Issues(t, partial, []api.Value{caMountedProxy(entry), authGateway()}, proxyLeaves(content, "ca-a")))
-	}
-	onlyMessage := "oauth2-proxy takes custom_configs only for its identity provider's CA bundle at /etc/pki/tls/certs/oauth2-proxy-idp-ca.pem"
-	onlyRemedy := "declare one custom_configs entry with mount_path /etc/pki/tls/certs/oauth2-proxy-idp-ca.pem and bind /custom_configs/0/content to a caBundle Secret in spec.serviceBindings, or omit custom_configs"
-	for name, proxy := range map[string]api.Value{
-		"two entries":  caMountedProxy(entry, entry),
-		"another path": caMountedProxy(m("mount_path", OAuth2ProxyCABundlePath+".d/extra.pem")),
-	} {
-		t.Run(name, func(t *testing.T) {
-			requireOnly(t, b479Issues(t, false, []api.Value{proxy, authGateway()}, proxyLeaves(content, "ca-a")), s3+".custom_configs", "api.invariant", onlyMessage, onlyRemedy)
-		})
-	}
-	inline := caMountedProxy(m("mount_path", OAuth2ProxyCABundlePath, "content", "-----BEGIN CERTIFICATE-----"))
-	issues := b479Issues(t, false, []api.Value{inline, authGateway()}, proxyLeaves(content, "ca-a"))
-	requireOnly(t, issues, s3+".custom_configs[0].content", "api.invariant", "native documents never carry the identity provider's CA bundle inline", "remove content; bind /custom_configs/0/content to a caBundle Secret in spec.serviceBindings")
-	if strings.Contains(fmt.Sprint(issues), "BEGIN CERTIFICATE") {
-		t.Fatalf("a diagnostic echoed the inline bundle: %#v", issues)
-	}
 	grafana := b479Service("grafana").With("custom_configs", api.ListValue(m("mount_path", OAuth2ProxyCABundlePath, "content", "x")))
 	requireOnly(t, b479Issues(t, false, []api.Value{grafana}), s3+".custom_configs", "api.invariant", "native effect-bearing options are not qualified by this core consumer", "omit "+s3+".custom_configs until its effect contract is qualified")
 }

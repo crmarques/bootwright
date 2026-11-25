@@ -196,6 +196,7 @@ func contractRows() []contractRow {
 		{kind: string(api.CephCluster), implementation: ceph.PhysicalRetirementImplementation, example: "physical-3-nodes-ceph", completedFrom: "specs/ceph.md: physical retirement verifies original host disk bindings against complete original-policy erase receipts before claim release"},
 		{kind: string(api.CephReplication), implementation: ceph.ReplicationImplementation, example: "libvirt-2x4-nodes-ceph-multisite", completedFrom: "specs/ceph.md, RBD replication: both cluster scopes and credentials require original apply proofs"},
 		{kind: string(api.CephSMBResource), implementation: ceph.SMBImplementation, example: "libvirt-3-nodes-ceph+smb", completedFrom: cephSMBCompletedFrom},
+		{kind: string(api.CephSignOn), implementation: ceph.SignOnImplementation, example: "libvirt-4-nodes-ceph-observability", completedFrom: cephSignOnCompletedFrom},
 		{kind: string(api.CephConsumer), implementation: ceph.ConsumerImplementation, example: "lab-compact-df", completedFrom: "specs/ceph-resources.md, CephConsumer: produced details require the original apply's proved Ceph cluster scope"},
 		{kind: string(api.CephCluster), implementation: ceph.ImageImplementation, example: "libvirt-3-nodes-ceph", presence: contractImagePresence, indivisible: true,
 			removalObservesNothing: "specs/ceph.md, Frozen release and trust: a resolution retains nothing, so its removal takes back nothing a run could observe",
@@ -293,6 +294,8 @@ func contractProvidedHostnamePresence(_ *testing.T, _ lifecycle.Execution) map[s
 	return map[string]any{"postcondition": true, "version": providedhostname.EvidenceVersion, "state": "complete",
 		"hostname": "witness.example.test", "changed": true}
 }
+
+const cephSignOnCompletedFrom = "specs/ceph-resources.md, CephSignOn: a sign-on runs its oauth2-proxy unit with the owner, FSID, hosts and resolved images of the cluster creation proof, and the gateway certificate its management gateway proof reports"
 
 const cephSMBCompletedFrom = "specs/ceph.md, SMB resources: an SMB request takes its owner, FSID, bootstrap host, cluster scope and resolved samba images from the original apply's core cluster and image proofs"
 

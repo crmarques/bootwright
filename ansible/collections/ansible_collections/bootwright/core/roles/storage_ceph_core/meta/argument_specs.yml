@@ -788,6 +788,27 @@ argument_specs:
                 required: true
               scrapeIngress:
                 type: dict
+              signOn:
+                type: dict
+                options:
+                  certificateSHA256:
+                    type: str
+                    required: true
+                  count:
+                    type: int
+                    required: true
+                  endpoint:
+                    type: str
+                  grafana:
+                    type: bool
+                  hosts:
+                    type: list
+                    elements: str
+                  port:
+                    type: int
+                    required: true
+                  virtualIP:
+                    type: str
               ingressPorts:
                 type: list
                 elements: int

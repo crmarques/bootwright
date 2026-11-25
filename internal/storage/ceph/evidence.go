@@ -360,6 +360,10 @@ func validDashboard(e Evidence, r Request) bool {
 }
 
 func validEndpoint(e Evidence, r Request) bool {
+	if r.Action == "service" && r.Service != nil && r.Service.Type == SignOnUnitType {
+		digest := e.Endpoint.CertificateSHA256
+		return r.Service.SignOn != nil && (digest == "" || digest == r.Service.SignOn.CertificateSHA256) && (digest != "") == e.Endpoint.Reachable
+	}
 	if r.Action == "service" && r.Service != nil && r.Service.Type == "mgmt-gateway" {
 		digest := e.Endpoint.CertificateSHA256
 		return (digest == "" || certificateDigest.MatchString(digest)) && (digest != "") == e.Endpoint.Reachable
@@ -381,7 +385,7 @@ func validIncarnation(value string) bool {
 }
 
 func validSSO(e Evidence, r Request) bool {
-	return e.SSO == "" || e.SSO == "oauth2" && r.Action == "service" && r.Service != nil && unitProxied(*r.Service)
+	return e.SSO == "" || e.SSO == "oauth2" && r.Action == "service" && r.Service != nil && r.Service.Type == SignOnUnitType
 }
 
 func sameNames(actual, want []string) bool {

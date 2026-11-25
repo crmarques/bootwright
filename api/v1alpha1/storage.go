@@ -15,6 +15,7 @@ func init() {
 	register(CephObjectBucket, storageObjectBucketSchema)
 	register(CephNFSExport, storageNFSExportSchema)
 	register(CephSMBResource, storageSMBResourceSchema)
+	register(CephSignOn, storageSignOnSchema)
 	register(CephNVMeoFSubsystem, storageNVMeoFSubsystemSchema)
 	register(CephConsumer, cephConsumerSchema)
 	register(CephClient, storageClientSchema)
