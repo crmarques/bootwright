@@ -3,6 +3,8 @@ package lifecycle
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"reflect"
 	"slices"
@@ -198,27 +200,21 @@ func TestARestoreOverAFailedSourceCompletesTheLineage(t *testing.T) {
 	}
 }
 
-// A restore admits only the input its kept steps froze: a changed input
-// refuses naming the whole destroy, and a build that would freeze a kept step
-// differently refuses apply.kept-block-changed, naming the floor that takes
-// that step back, or the whole destroy when no floor does.
+// B1859: a restore admits a changed input only while every step the context
+// keeps compares the same. An input that would freeze a kept step differently
+// refuses apply.kept-block-changed, naming the floor that takes that step back,
+// or the whole destroy when no floor does, as a build that would.
 func TestARestoreRefusesWhatItCannotKeep(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	h := newPlannedHarness(t, chainedDefinitions())
 	completeApply(t, h)
 	stagedDestroy(t, h, reconciliation.StageClusters)
-	inputs := h.workspace.inputs
-	h.workspace.inputs = desiredstate.Sources{Roots: []string{"/synthetic"}, Files: []desiredstate.SourceFile{
+	h.update("rev-edited", desiredstate.Sources{Roots: []string{"/synthetic"}, Files: []desiredstate.SourceFile{
 		desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte("kind: Environment\n# edited\n")),
-	}}
-	_, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
-	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != applyContextTrimmed.Code || !strings.Contains(reported[0].Remediation, "bootwright destroy --context lab") {
-		t.Fatalf("a restore under a changed input returned %v", err)
-	}
-	h.workspace.inputs = inputs
+	}})
 	h.capability.definitions[1].Request = json.RawMessage(`{"moved":true,"name":"bravo"}`)
-	_, err = h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
+	_, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
 	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != applyKeptBlockChanged.Code ||
 		!strings.Contains(reported[0].Message, "the step bravo") || !strings.Contains(reported[0].Remediation, "take back the whole context") {
 		t.Fatalf("a restore that would change a kept service returned %v", diagnostics.Of(err))
@@ -364,7 +360,8 @@ func TestARestoreReopensTheLineagesBindingAndRebindsAnAccessCredential(t *testin
 // unknown, is continued as an apply; a staged destroy over it takes back what
 // it started at its floor with what it never started and keeps the rest, and
 // a restore after that completes; and a whole destroy over it removes every
-// step the context owns exactly once.
+// step the context owns exactly once, never the paused restore's never-started
+// delta, which the staged destroy already took back.
 func TestAFailedRestoreIsContinuedOrTakenBack(t *testing.T) {
 	t.Parallel()
 	for name, arrange := range map[string]func(*testing.T, *harness){
@@ -410,7 +407,7 @@ func TestAFailedRestoreIsContinuedOrTakenBack(t *testing.T) {
 			if err := destroyWith(h); err != nil {
 				t.Fatal(err)
 			}
-			if slices.Contains(h.capability.destroys, "alpha") != true || len(slices.Compact(slices.Sorted(slices.Values(h.capability.destroys)))) != len(h.capability.destroys) {
+			if !slices.Equal(h.capability.destroys, []string{"charlie", "bravo", "alpha"}) {
 				t.Fatalf("the whole destroy over the restore removed %v", h.capability.destroys)
 			}
 		})
@@ -586,10 +583,12 @@ func TestAStagedDestroyRefusesANeverStartedStepOnAKeptMachine(t *testing.T) {
 	}
 }
 
-// Decision 3 over a step new to the lineage: the restore proves powered off
-// every kept Machine an added step acts on, with that Machine's own creator
-// as its owner, besides the Machines it realizes.
-func TestARestoreProvesOffAKeptMachineAnAddedStepActsOn(t *testing.T) {
+// B1859: a restore re-creates only what a staged destroy took back or the
+// lineage never started. A step new to the lineage, here an installation on a
+// kept Machine, refuses apply.restore-adds-new naming it before any power read,
+// and the preview, status and context update read the same refusal; without
+// that step the restore proceeds.
+func TestARestoreRefusesAStepNoStagedDestroyTookBack(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t)
@@ -600,27 +599,32 @@ func TestARestoreProvesOffAKeptMachineAnAddedStepActsOn(t *testing.T) {
 	machine := &restorePowerMachine{testCapability: machines, on: map[string]bool{}, read: &read, deletes: map[string]bool{"machine-first-v1-made": true}}
 	installs := claimingCapability("os-install-v1")
 	h.service.capabilities = claimResolver{bindings[0]: machine, bindings[1]: claimingCapability("machine-second-v1"), bindings[2]: installs}
-	applied := completeApply(t, h)
+	completeApply(t, h)
 	stagedDestroy(t, h, reconciliation.StageMachines)
+	removal, _ := currentRecord(t, h)
 	install := definition("os-install-v1-kept")
 	install.Kind, install.Object, install.Implementation, install.Stage = "Machine", "kept", "os-install-v1", reconciliation.StageMachines
 	install.Dependencies = []string{"machine-first-v1-kept"}
 	installs.definitions = []reconciliation.BlockDefinition{install}
-	if preview, err := h.service.Plan(ctx, PlanRequest{ContextName: testContextName}); err != nil || !slices.Equal(preview.Stops, []string{"kept", "made"}) {
-		t.Fatalf("the restore's preview names the Machines %+v to stop first (%v)", preview, err)
+	if preview, err := h.service.Plan(ctx, PlanRequest{ContextName: testContextName}); err != nil || preview.Verb != "destroy" || preview.Restores != "" {
+		t.Fatalf("the preview over a new step reads %+v (%v)", preview, err)
+	}
+	if status, err := h.service.Status(ctx, StatusRequest{ContextName: testContextName}); err != nil || status.Lifecycle.Next != "destroy" {
+		t.Fatalf("status over a new step reads %+v (%v)", status, err)
+	}
+	if kept, err := h.service.KeptChanges(ctx, testContextName, h.workspace.inputs); err != nil || kept.Removal != removal.ID || !slices.Equal(kept.Added, []string{install.ID}) || len(kept.Steps) != 0 {
+		t.Fatalf("the kept changes over a new step read %+v (%v)", kept, err)
 	}
 	read, machine.on["kept"] = nil, true
-	if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); firstCode(err) != startPowerRefused.Code {
-		t.Fatalf("a restore acting on a running kept Machine returned %v", err)
+	_, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != applyRestoreAddsNew.Code || !strings.Contains(reported[0].Message, "the step os-install-v1-kept, which no staged destroy") ||
+		!strings.Contains(reported[0].Remediation, "additive apply") || !strings.Contains(reported[0].Remediation, "bootwright destroy --dry-run --context lab") {
+		t.Fatalf("a restore adding a new step returned %v", reported)
 	}
-	owners := map[string]string{}
-	for _, probe := range read {
-		owners[probe.Block.Object] = probe.ApplyOperation
+	if current, _ := currentRecord(t, h); !trimmed(current) || len(read) != 0 {
+		t.Fatalf("a refused restore left %+v current and read %+v", current, read)
 	}
-	if len(read) != 2 || owners["kept"] != applied || owners["made"] != "" {
-		t.Fatalf("the restore read %+v", read)
-	}
-	machine.on["kept"] = false
+	installs.definitions = nil
 	restoreWith(t, h)
 }
 
@@ -700,26 +704,165 @@ func TestARestoreRefusesAKeptProducersMissingCustody(t *testing.T) {
 	}
 }
 
-// L1: under an input the kept steps did not freeze, the restore refuses, so
-// the receipt, status and the preview name the whole destroy instead.
-func TestATrimmedContextUnderAChangedInputNamesTheWholeDestroy(t *testing.T) {
+// B1859: a changed input that changes only a taken-back step is restored with
+// the new request under the restore's identity, which freezes the new input,
+// so a repeated apply settles over it; the receipt, status and the preview
+// name the restore under any input, since only its comparison decides.
+func TestARestoreCarriesAChangedInputInsideItsScope(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h := newPlannedHarness(t, chainedDefinitions())
+	applied := completeApply(t, h)
+	stagedDestroy(t, h, reconciliation.StageClusters)
+	before, err := h.service.store(h.workspace.view()).ReadPlan(ctx, applied)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.update("rev-edited", desiredstate.Sources{Roots: []string{"/synthetic"}, Files: []desiredstate.SourceFile{
+		desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte("kind: Environment\n# edited\n")),
+	}})
+	h.capability.definitions[2].Request = json.RawMessage(`{"moved":true,"name":"charlie"}`)
+	status, err := h.service.Status(ctx, StatusRequest{ContextName: testContextName})
+	if err != nil || status.Lifecycle.Next != "apply" ||
+		!slices.Equal(status.NextSteps, []string{"bootwright apply --dry-run --context lab", "bootwright apply --context lab", "bootwright destroy --context lab"}) {
+		t.Fatalf("status under a changed input reads %+v %+v (%v)", status.Lifecycle, status.NextSteps, err)
+	}
+	if preview, err := h.service.Plan(ctx, PlanRequest{ContextName: testContextName}); err != nil || preview.Verb != "apply" || preview.Restores == "" {
+		t.Fatalf("the preview under a changed input reads %+v (%v)", preview, err)
+	}
+	h.capability.executions = nil
+	restoreWith(t, h)
+	restoring, plan := currentRecord(t, h)
+	charlie, _ := plan.Block("charlie")
+	if restoring.Revision != "rev-edited" || restoring.InputDigest != digestOf(h.workspace.inputs) || string(charlie.Request) != `{"moved":true,"name":"charlie"}` {
+		t.Fatalf("the restore froze %+v and %s", restoring, charlie.Request)
+	}
+	if len(h.capability.executions) != 1 || h.capability.executions[0].ApplyOperation != restoring.ID || ownerOfBlock(t, h, restoring.ID, "bravo") != applied {
+		t.Fatalf("the restore ran %+v", h.capability.executions)
+	}
+	if kept, _ := before.Block("charlie"); kept.RequestDigest == charlie.RequestDigest {
+		t.Fatalf("the restore froze the request charlie froze before")
+	}
+	if settled := restoreWith(t, h); !settled.Settled {
+		t.Fatalf("an apply over the changed restore returned %+v", settled)
+	}
+	h.capability.executions = nil
+	if err := destroyWith(h); err != nil {
+		t.Fatal(err)
+	}
+	presented := map[string]string{}
+	for _, execution := range h.capability.executions {
+		presented[execution.Block.ID] = execution.ApplyOperation + " " + string(execution.Block.Request)
+	}
+	if presented["charlie"] != restoring.ID+` {"moved":true,"name":"charlie"}` || presented["bravo"] != applied+` {"name":"bravo"}` {
+		t.Fatalf("the whole destroy over the changed restore presented %v", presented)
+	}
+}
+
+// H1 of B1859: an input that drops exactly what the staged destroy took back
+// leaves the restore nothing to add, so it refuses apply.restore-empty naming
+// the whole destroy and the taken-back steps, never engine.records-damaged;
+// status, the preview and context update read the same refusal.
+func TestARestoreOfNothingRefusesNamingTheWholeDestroy(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	h := newPlannedHarness(t, chainedDefinitions())
 	completeApply(t, h)
-	h.workspace.inputs = desiredstate.Sources{Roots: []string{"/synthetic"}, Files: []desiredstate.SourceFile{
-		desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte("kind: Environment\n# edited\n")),
-	}}
-	if receipt := stagedDestroy(t, h, reconciliation.StageClusters).Receipt; receipt.Next != "destroy" {
-		t.Fatalf("the staged destroy under a changed input names next %q, want destroy", receipt.Next)
-	}
+	stagedDestroy(t, h, reconciliation.StageClusters)
+	removal, _ := currentRecord(t, h)
+	h.update("rev-edited", desiredstate.Sources{Roots: []string{"/synthetic"}, Files: []desiredstate.SourceFile{
+		desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte("kind: Environment\n# dropped charlie\n")),
+	}})
+	h.capability.definitions = h.capability.definitions[:2]
 	status, err := h.service.Status(ctx, StatusRequest{ContextName: testContextName})
 	if err != nil || status.Lifecycle.Next != "destroy" ||
 		!slices.Equal(status.NextSteps, []string{"bootwright destroy --dry-run --context lab", "bootwright destroy --context lab"}) {
-		t.Fatalf("status under a changed input reads %+v %+v (%v)", status.Lifecycle, status.NextSteps, err)
+		t.Fatalf("status over an input that drops what was taken back reads %+v %+v (%v)", status.Lifecycle, status.NextSteps, err)
 	}
-	if preview, err := h.service.Plan(ctx, PlanRequest{ContextName: testContextName}); err != nil || preview.Verb != "destroy" {
-		t.Fatalf("the preview under a changed input reads %+v (%v)", preview, err)
+	if preview, err := h.service.Plan(ctx, PlanRequest{ContextName: testContextName}); err != nil || preview.Verb != "destroy" || preview.Restores != "" {
+		t.Fatalf("the preview over an input that drops what was taken back reads %+v (%v)", preview, err)
+	}
+	if kept, err := h.service.KeptChanges(ctx, testContextName, h.workspace.inputs); err != nil || !kept.Empty || kept.Removal != removal.ID || !strings.Contains(kept.Remedy, "bootwright destroy --context lab") {
+		t.Fatalf("the kept changes over an input that drops what was taken back read %+v (%v)", kept, err)
+	}
+	h.capability.applies = nil
+	_, err = h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != applyRestoreEmpty.Code ||
+		reported[0].Message != "the selected input declares nothing the staged destroy "+removal.ID+" took back, so there is nothing to restore" ||
+		!strings.Contains(reported[0].Remediation, "bootwright destroy --dry-run --context lab") || !strings.Contains(reported[0].Remediation, "(charlie)") {
+		t.Fatalf("a restore of nothing returned %v", reported)
+	}
+	if current, _ := currentRecord(t, h); !trimmed(current) || len(h.capability.applies) != 0 {
+		t.Fatalf("a refused restore left %+v current and ran %v", current, h.capability.applies)
+	}
+}
+
+type requestReservingCapability struct{ *testCapability }
+
+func (c requestReservingCapability) Plan(ctx context.Context, input PlanInput) (CapabilityPlan, error) {
+	planned, err := c.testCapability.Plan(ctx, input)
+	for _, definition := range planned.Definitions {
+		digest := sha256.Sum256(definition.Request)
+		planned.Reservations = append(planned.Reservations, infrastructureservices.HostReservation{
+			Context: testContextName, Kind: "artifact-server", Service: definition.ID, Keys: []string{"bridge:br-" + hex.EncodeToString(digest[:6])},
+		})
+	}
+	return planned, err
+}
+
+// L4 of B1859: the restore replaces the held reservations with the new plan's,
+// so a kept step that compares the same keeps its keys under a changed input,
+// and only the re-created step's claim moves with its new request.
+func TestARestoreUnderAChangedInputKeepsTheKeptStepsReservations(t *testing.T) {
+	t.Parallel()
+	h := newPlannedHarness(t, chainedDefinitions())
+	h.service.capabilities = testResolver{capability: requestReservingCapability{h.capability}}
+	completeApply(t, h)
+	keys := func() map[string][]string {
+		held := map[string][]string{}
+		for _, reservation := range h.workspace.reservations {
+			held[reservation.Service] = reservation.Keys
+		}
+		return held
+	}
+	before := keys()
+	stagedDestroy(t, h, reconciliation.StageClusters)
+	h.update("rev-edited", desiredstate.Sources{Roots: []string{"/synthetic"}, Files: []desiredstate.SourceFile{
+		desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte("kind: Environment\n# edited\n")),
+	}})
+	h.capability.definitions[2].Request = json.RawMessage(`{"moved":true,"name":"charlie"}`)
+	restoreWith(t, h)
+	after := keys()
+	if len(after) != 3 || !slices.Equal(after["alpha"], before["alpha"]) || !slices.Equal(after["bravo"], before["bravo"]) || slices.Equal(after["charlie"], before["charlie"]) {
+		t.Fatalf("the restore holds %v, want the kept steps' keys of %v and charlie's moved", after, before)
+	}
+}
+
+// B1859: context update over a trimmed context names, by the restore's own
+// comparison, each kept step a candidate input changes and the destroy that
+// takes them back, and nothing for a change only taken-back steps carry.
+func TestKeptChangesNamesWhatARestoreWouldRefuse(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h := stagedHarness(t)
+	completeApply(t, h)
+	stagedDestroy(t, h, reconciliation.StageMachines)
+	candidate := desiredstate.Sources{Roots: []string{"/synthetic"}, Files: []desiredstate.SourceFile{
+		desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte("kind: Environment\n# edited\n")),
+	}}
+	if kept, err := h.service.KeptChanges(ctx, testContextName, candidate); err != nil || len(kept.Steps) != 0 {
+		t.Fatalf("an unchanged plan named %+v (%v)", kept, err)
+	}
+	h.capability.definitions[1].Request = json.RawMessage(`{"moved":true,"name":"host"}`)
+	kept, err := h.service.KeptChanges(ctx, testContextName, candidate)
+	removal, _ := currentRecord(t, h)
+	if err != nil || kept.Removal != removal.ID || !slices.Equal(kept.Steps, []string{h.capability.definitions[1].ID}) ||
+		kept.Remedy != "take it back with bootwright destroy --dry-run --context lab --stage substrates, then apply again" {
+		t.Fatalf("a changed kept host named %+v (%v)", kept, err)
+	}
+	h.capability.planErr = planCapabilityDefect.Fail("the host plan broke", "")
+	if kept, err := h.service.KeptChanges(ctx, testContextName, candidate); err != nil || kept.Removal != removal.ID || kept.Unchecked != "the host plan broke" || len(kept.Steps) != 0 {
+		t.Fatalf("a comparison that could not plan named %+v (%v)", kept, err)
 	}
 }
 

@@ -8,7 +8,8 @@ its part into the owning spec in its own commit and deletes that part from this
 page. A rule that the code already holds is not stated here: slice 0, the
 frozen inverse of every destroy step, slice 1, its branches once decided at
 run time, slice 2, the ownership fold, slice 3, `destroy --stage` and the
-trimmed resting state, and slice 4, the restoring apply, are implemented and
+trimmed resting state, slice 4, the restoring apply, and slice 5, its changed
+input, are implemented and
 are owned by [state reconciliation](../state-reconciliation.md#staged-destroy),
 its [restoring apply](../state-reconciliation.md#restoring-apply) and the
 [delivered records](../milestones/delivered.md#x757--the-restoring-apply-restores-what-a-staged-destroy-took-back).
@@ -50,7 +51,8 @@ causes.
 | 3 | [B166](../milestones/delivered.md#x756--a-staged-destroy-takes-back-a-stage-and-the-context-rests-trimmed) | `destroy --stage` and the trimmed resting state |
 | 3b | [B1867](../milestones/delivered.md#x758--a-destroy-widens-an-unfinished-staged-destroy) | A `destroy` without `--stage`, or a lower floor, supersedes an unfinished staged destroy |
 | 4 | [B1858](../milestones/delivered.md#x757--the-restoring-apply-restores-what-a-staged-destroy-took-back) | The restoring apply over unchanged input |
-| 5 | [B1859](../milestones/m1.md#b1859) | A restore admits changed input inside the taken-back part |
+| 5 | [B1859](../milestones/delivered.md#x759--a-restore-admits-changed-input-inside-what-a-staged-destroy-took-back) | A restore admits changed input inside the taken-back part |
+| 5b | [B1868](../milestones/m1.md#b1868) | A restore binds its added steps' Secrets, and a whole removal reopens each member's binding |
 | 6 | [B1860](../milestones/m1.md#b1860) | An agent installation whose nodes never booted is taken back on kept nodes |
 | 7 | [B1861](../milestones/m1.md#b1861) | Root disks of kept virtual nodes are blanked through their substrate |
 | 8 | [B1862](../milestones/m2.md#b1862) | A Ceph cluster is taken back on kept hosts |
@@ -65,8 +67,6 @@ one add-on instance is [B769](../milestones/backlog.md#b769).
 
 What lands with later items:
 
-- `context update` over a trimmed context warns `input.changes-kept` when the
-  new input changes a kept block ([B1859](../milestones/m1.md#b1859)).
 - After every registration the log area still fits one whole removal of what
   the context owns. A staged destroy and its restore cost two operation
   directories, and nothing is pruned. At the bound the command refuses and
@@ -74,12 +74,14 @@ What lands with later items:
 
 ## The restoring apply
 
-The restore over unchanged input is owned by
-[state reconciliation](../state-reconciliation.md#restoring-apply). The next
-slice takes changed input and a newer build for the added steps under their
-own binding, which also admits an added step whose Secret only an additive
-member's binding pins, and a whole removal then reopens each member's binding
-for that member's steps ([B1859](../milestones/m1.md#b1859)).
+The restore, changed input included, is owned by
+[state reconciliation](../state-reconciliation.md#restoring-apply). Next, the
+restore binds the current versions of the Secrets its added steps name in a
+binding of its own, which also admits an added step whose Secret only an
+additive member's binding pins; while trimmed, the holds keep only the pinned
+Secrets kept steps name, so a Secret only taken-back steps used may rotate
+before the restore; and a whole removal reopens, for each step, the binding of
+the member that last created it ([B1868](../milestones/m1.md#b1868)).
 
 ## Safety gates
 
@@ -104,7 +106,6 @@ for that member's steps ([B1859](../milestones/m1.md#b1859)).
 | Cluster provisioning failed and the nodes are virtual, installed and proved | `--stage clusters` is admitted once the node Machines are kept and the root-disk reset exists ([B1861](../milestones/m1.md#b1861)); before that it refuses with `destroy.stage-keeps-host` |
 | A cluster install failed before any node booted the image | `--stage clusters` takes back the agent installation on kept nodes ([B1860](../milestones/m1.md#b1860)) |
 | A staged destroy fails halfway and the operator widens it | A lower floor or no `--stage` supersedes it behind the widening confirmation ([staged destroy](../state-reconciliation.md#staged-destroy)) |
-| `apply` over a trimmed context with input that changes a taken-back block | A restoring apply that carries the change ([B1859](../milestones/m1.md#b1859)) |
 | A kept host is in the wrong power state | Stops with the `machine start` or `machine stop` command |
 | A physical install is in the scope | Refuses; the physical restore is parked ([B1864](../milestones/backlog.md#b1864)) |
 | `--clusters` narrows a staged destroy | Parked ([B1865](../milestones/backlog.md#b1865)) |

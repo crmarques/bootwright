@@ -126,7 +126,7 @@ func (s Service) preparationOwned(ctx context.Context, view View) (reconciliatio
 	}
 	if operation.Verb != reconciliation.Apply {
 		if trimmed(operation) {
-			return reconciliation.Plan{}, refuseTrimmed(view.Identity().Name, operation, true)
+			return reconciliation.Plan{}, refuseTrimmed(view.Identity().Name, operation)
 		}
 		if operation.Verb == reconciliation.Destroy && operation.State == reconciliation.OperationDone {
 			return reconciliation.Plan{}, nil

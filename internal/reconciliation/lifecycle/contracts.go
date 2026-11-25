@@ -607,7 +607,7 @@ type decisionPlanner interface {
 	freshDestroy(context.Context, string, operationstore.Executable, string, removalScope, bool) (operationPlan, error)
 	computePhases(reconciliation.Plan) removalPhases
 	stagedScope(string, reconciliation.Stage, liveState) ([]string, error)
-	refuseKeptChanged(string, operationstore.Operation, reconciliation.Plan, reconciliation.Plan) error
+	keptChanges(string, reconciliation.Plan, reconciliation.Plan) ([]reconciliation.BlockChange, string)
 }
 
 type decisionProofs interface {

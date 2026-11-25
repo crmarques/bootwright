@@ -891,8 +891,9 @@ failed attempt's adapter diagnostic names its block and the
 receipt, lifecycle preview and `status` share over the operation the result reports, for a preview
 the one it continues: `none` once the operation is `done`, but once a
 [staged destroy](state-reconciliation.md#staged-destroy) is, `apply`, which the
-[restoring apply](state-reconciliation.md#restoring-apply) follows, or
-`destroy` under an input its kept steps did not freeze;
+[restoring apply](state-reconciliation.md#restoring-apply) follows, where the
+preview and `status` name `destroy` instead when that restore's admission
+refuses the selected input;
 `destroy` for a `failed` destroy holding a block that is not `done`, an
 `unknown` one included, because `destroy` replaces it with a fresh removal of
 what it has not removed rather than continuing or resolving it; `resolve` while

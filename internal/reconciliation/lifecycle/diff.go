@@ -217,8 +217,27 @@ func (s Service) owningApply(ctx context.Context, store recordReader, current op
 		return current, merged, reached, err
 	case current.Source == "":
 		return operationstore.Operation{}, reconciliation.Plan{}, nil, nil
+	case trimmed(current):
+		return keptApply(ctx, store, current)
 	}
 	return removedApply(ctx, store, current.Source)
+}
+
+func keptApply(ctx context.Context, store recordReader, removal operationstore.Operation) (operationstore.Operation, reconciliation.Plan, map[string]reconciliation.BlockState, error) {
+	applied, err := store.ReadOperation(ctx, removal.Source)
+	if err != nil {
+		return operationstore.Operation{}, reconciliation.Plan{}, nil, err
+	}
+	chain, err := restoredLineage(ctx, store, removal)
+	if err != nil {
+		return operationstore.Operation{}, reconciliation.Plan{}, nil, err
+	}
+	live, err := chain.ownedPlan()
+	if err != nil {
+		return operationstore.Operation{}, reconciliation.Plan{}, nil, unremovable(applied, err)
+	}
+	_, states := chain.live()
+	return applied, live, states, nil
 }
 
 func (s Service) appliedState(ctx context.Context, view View, owning operationstore.Operation, desired *compilation.State) (*compilation.State, desiredstate.Sources, string) {

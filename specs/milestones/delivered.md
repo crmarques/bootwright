@@ -18519,7 +18519,7 @@ started. One state-machine row, two stops and two kill-harness journeys land;
 **Limits:** changed input over a trimmed context refuses
 `apply.context-trimmed`, and an added step whose Secret the reopened binding
 does not pin, as an additive member's, refuses `apply.restore-unbound`
-([B1859](m1.md#b1859)); a restore reads no kept Machine's power, since no
+([B1859](#x759--a-restore-admits-changed-input-inside-what-a-staged-destroy-took-back)); a restore reads no kept Machine's power, since no
 scope yet keeps a Machine a taken-back step acts on ([B1860](m1.md#b1860));
 the example-wide restore is proved at the plan and fold, not by a run.
 
@@ -18556,3 +18556,49 @@ kill-harness journeys land.
 **Limits:** a lower floor that takes back no step more than the staged destroy
 it replaces removes the same steps, so its digest equals that destroy's
 replacement at its own floor.
+
+## X759 — A restore admits changed input inside what a staged destroy took back
+
+**Items:** B1859. **Kind:** product. **Owner:** Reconciliation, with Contexts
+and CLI. **Authorization:** [D288](backlog.md#d288), the fifth slice of the
+[staged destroy design](../deferred/staged-destroy.md#program).
+
+**Outcome:** a [restoring apply](../state-reconciliation.md#restoring-apply)
+admits any selected input while every kept step compares the same, freezes the
+new requests of its added steps and the selected revision as its input, and
+otherwise refuses `apply.kept-block-changed` with the floor or whole destroy
+that takes the step back; `apply.context-trimmed` is retired. It adds only
+steps the staged destroy's cumulative taken-back set holds or the lineage
+never started, and otherwise refuses `apply.restore-adds-new`, naming the step,
+with the additive apply after the restore for an add-on instance and otherwise
+the whole destroy; an input that declares nothing taken back refuses
+`apply.restore-empty`, naming the whole destroy, never
+`engine.records-damaged`. A trimmed context's next action, status steps and
+preview name `apply` while that admission admits the selected input, and
+`destroy` otherwise. `context update` warns `input.changes-kept` from the same
+admission, or `input.restore-unchecked` with the cause when it could not plan
+the input, and `diff` over a trimmed context compares what it owns, counting
+the steps the restore adds and the kept steps it refuses. A whole destroy over a paused
+restore was checked and removes no step twice: the never-started step the
+staged destroy took back stays taken back.
+
+**Guard tests:** `TestTransitionTablesMatchSpec`,
+`TestApplyAdmitsOnlyItsFiveScenarios`,
+`TestARestoreRefusesWhatItCannotKeep`,
+`TestARestoreCarriesAChangedInputInsideItsScope`,
+`TestARestoreOfNothingRefusesNamingTheWholeDestroy`,
+`TestARestoreRefusesAStepNoStagedDestroyTookBack`,
+`TestARestoreUnderAChangedInputKeepsTheKeptStepsReservations`,
+`TestKeptChangesNamesWhatARestoreWouldRefuse`,
+`TestAFailedRestoreIsContinuedOrTakenBack`,
+`TestADiffOverATrimmedContextReadsWhatItKeeps` and
+`TestChangedInputOverACompletedApplyWarnsBeforeThePrompt`.
+
+**Gates:** `make focus`; the delivering commit records the command and result.
+
+**Limits:** the restore still reopens the lineage's binding, so a Secret it
+does not pin refuses `apply.restore-unbound`, the holds keep every pinned
+Secret while trimmed, so a Secret replaced since the staged destroy is
+presented at its pinned version, and a whole removal reopens one binding
+([B1868](m1.md#b1868)); an input that drops what the staged destroy took back
+refuses rather than settles ([B1869](backlog.md#b1869)).

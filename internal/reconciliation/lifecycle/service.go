@@ -310,7 +310,7 @@ func (s Service) preview(ctx context.Context, decision decider, view View, previ
 		result.Verb, result.Continuation, result.Finalizes = string(verb), true, true
 		result.Receipt = Receipt{Operation: marked.operation.ID, Verb: "plan", State: "preview", Next: string(verb)}
 		if !guardedFinalization {
-			if result.Receipt.Next, err = nextOver(ctx, view, s.store(view), marked.operation, marked.plan, marked.states); err != nil {
+			if result.Receipt.Next, err = decision.nextOver(ctx, view, s.store(view), marked.operation, marked.plan, marked.states); err != nil {
 				return nil, operationPlan{}, basis{}, err
 			}
 		}

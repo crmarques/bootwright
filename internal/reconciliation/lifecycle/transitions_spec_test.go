@@ -302,7 +302,7 @@ func stateMachineRows() map[string]stateMachineRow {
 			},
 		},
 		"staged destroy done (trimmed)": {
-			transition: "`apply` of the input its kept steps froze starts a [restoring apply](#restoring-apply), and of a changed input refuses; `destroy` starts a fresh destroy of what the context still owns, which replaces the staged destroy; `destroy --stage` at the same or a later stage settles without effect, and at an earlier one starts a fresh staged destroy of what the context still owns, which replaces it; `context update` is admitted, since the context guard reads `{none, retained}` as no mutation",
+			transition: "`apply` starts a [restoring apply](#restoring-apply), which refuses an input or build that would change a step the context keeps, that declares nothing the staged destroy took back, or that declares a step no staged destroy took back, and then the preview and next action name `destroy`; `destroy` starts a fresh destroy of what the context still owns, which replaces the staged destroy; `destroy --stage` at the same or a later stage settles without effect, and at an earlier one starts a fresh staged destroy of what the context still owns, which replaces it; `context update` is admitted, since the context guard reads `{none, retained}` as no mutation",
 			cases: map[string]stateMachineCase{
 				"a staged destroy from the clusters stage": {
 					arrange: func(t *testing.T, h *harness) { completeApply(t, h); stagedDestroy(t, h, reconciliation.StageClusters) },
@@ -315,6 +315,22 @@ func stateMachineRows() map[string]stateMachineRow {
 						h.workspace.inputs = desiredstate.Sources{Roots: []string{"/synthetic"}, Files: []desiredstate.SourceFile{
 							desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte("kind: Environment\n# edited\n")),
 						}}
+					},
+					apply: "restore", destroy: "fresh destroy", staged: "settle", previewed: reconciliation.Apply, next: "apply", reopens: true, shown: planning("apply"),
+				},
+				"a staged destroy from the clusters stage under an input that changes a kept step": {
+					arrange: func(t *testing.T, h *harness) {
+						completeApply(t, h)
+						stagedDestroy(t, h, reconciliation.StageClusters)
+						h.capability.definitions[1].Request = []byte(`{"moved":true,"name":"bravo"}`)
+					},
+					apply: "refuse", destroy: "fresh destroy", staged: "settle", previewed: reconciliation.Destroy, next: "destroy", reopens: true, shown: planning("destroy"),
+				},
+				"a staged destroy from the clusters stage under an input that drops what it took back": {
+					arrange: func(t *testing.T, h *harness) {
+						completeApply(t, h)
+						stagedDestroy(t, h, reconciliation.StageClusters)
+						h.capability.definitions = h.capability.definitions[:2]
 					},
 					apply: "refuse", destroy: "fresh destroy", staged: "settle", previewed: reconciliation.Destroy, next: "destroy", reopens: true, shown: planning("destroy"),
 				},
@@ -712,7 +728,7 @@ func currentNextAction(t *testing.T, h *harness) string {
 		if err != nil {
 			return err
 		}
-		next, err = nextOver(ctx, view, store, operation, frozen, states)
+		next, err = h.service.decider(nil).nextOver(ctx, view, store, operation, frozen, states)
 		return err
 	})
 	if err != nil {

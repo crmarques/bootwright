@@ -20,6 +20,7 @@ type admittedInput struct {
 	controller  string
 	report      *compilation.Report
 	addsTo      string
+	kept        KeptInputChange
 }
 
 func (s Service) admitInputs(ctx context.Context, name, file, directory string) (admittedInput, error) {

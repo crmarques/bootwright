@@ -55,6 +55,7 @@ spec:
 type repository struct {
 	t              *testing.T
 	addsTo         string
+	kept           contexts.KeptInputChange
 	registry       contexts.Registry
 	selection      contexts.Selection
 	configurations map[string][]byte
@@ -1025,6 +1026,12 @@ func options(r *repository) contexts.Options {
 				r.t.Fatalf("the addition was read locked=%v leased=%v for %q over %d files", r.locked, r.leased, name, len(candidate.Files))
 			}
 			return r.addsTo
+		},
+		KeptChanges: func(ctx context.Context, name string, candidate desiredstate.Sources) contexts.KeptInputChange {
+			if r.locked || r.leased || len(candidate.Files) == 0 {
+				r.t.Fatalf("the kept steps were read locked=%v leased=%v for %q over %d files", r.locked, r.leased, name, len(candidate.Files))
+			}
+			return r.kept
 		}}
 }
 
@@ -1537,8 +1544,11 @@ func TestAnIdenticalUpdateKeepsTheSelectedRevisionAndAsksNothing(t *testing.T) {
 // Changed input over a completed apply warns, in the presented plan and in the
 // result: with diff's Input sentence and its prediction caveat, and no destroy
 // remedy, when an additive apply would admit it, and otherwise that apply
-// refuses it until a destroy takes back what that apply owns; over pristine
-// evidence it does not.
+// refuses it until a destroy takes back what that apply owns; over a trimmed
+// context it names what the restoring apply would refuse, a changed kept step,
+// nothing to restore or a step no staged destroy took back, with its remedy,
+// or that the comparison could not run (B1859); over pristine evidence it does
+// not.
 func TestChangedInputOverACompletedApplyWarnsBeforeThePrompt(t *testing.T) {
 	const applied = `{"version":1,"operation":"applied","ownership":"retained"}`
 	destroy := diagnostics.Diagnostic{
@@ -1552,10 +1562,41 @@ func TestChangedInputOverACompletedApplyWarnsBeforeThePrompt(t *testing.T) {
 			"which bootwright diff --context example --observe and the apply prove",
 		Remediation: "run bootwright apply --context example",
 	}
+	const trimmed = `{"version":1,"operation":"none","ownership":"retained"}`
+	keptChange := contexts.KeptInputChange{Removal: "op-2", Steps: []string{"bravo", "host"}, Remedy: "take it back with bootwright destroy --dry-run --context example --stage substrates, then apply again"}
+	kept := diagnostics.Diagnostic{
+		Severity: "warning", Code: "input.changes-kept", Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryOtherVerb, Certainty: diagnostics.CertaintyNone,
+		Message:     "context example rests trimmed by the staged destroy op-2, and this input would change the steps it kept: bravo, host; the restoring apply refuses it until they are taken back",
+		Remediation: keptChange.Remedy,
+	}
+	emptyChange := contexts.KeptInputChange{Removal: "op-2", Empty: true, Remedy: "take back what the context keeps with bootwright destroy --context example"}
+	empty := diagnostics.Diagnostic{
+		Severity: "warning", Code: "input.changes-kept", Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryOtherVerb, Certainty: diagnostics.CertaintyNone,
+		Message:     "context example rests trimmed by the staged destroy op-2, and this input declares nothing it took back, so the restoring apply refuses it: there is nothing to restore",
+		Remediation: emptyChange.Remedy,
+	}
+	addedChange := contexts.KeptInputChange{Removal: "op-2", Added: []string{"echo"}, Remedy: "restore without echo"}
+	added := diagnostics.Diagnostic{
+		Severity: "warning", Code: "input.changes-kept", Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryOtherVerb, Certainty: diagnostics.CertaintyNone,
+		Message:     "context example rests trimmed by the staged destroy op-2, and this input declares steps no staged destroy took back: echo; the restoring apply refuses them, since it re-creates only what one took back",
+		Remediation: addedChange.Remedy,
+	}
+	uncheckedChange := contexts.KeptInputChange{Removal: "op-2", Unchecked: "the host plan broke"}
+	unchecked := diagnostics.Diagnostic{
+		Severity: "warning", Code: "input.restore-unchecked", Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryRepeat, Certainty: diagnostics.CertaintyNone,
+		Message:     "context example rests trimmed by the staged destroy op-2, and the restoring apply's comparison of this input could not run: the host plan broke",
+		Remediation: "review the restore with bootwright apply --dry-run --context example",
+	}
 	for name, test := range map[string]struct {
 		evidence, addsTo string
+		kept             contexts.KeptInputChange
 		want             []diagnostics.Diagnostic
 	}{
+		"trimmed":                           {evidence: trimmed},
+		"trimmed with a kept change":        {evidence: trimmed, kept: keptChange, want: []diagnostics.Diagnostic{kept}},
+		"trimmed with nothing to restore":   {evidence: trimmed, kept: emptyChange, want: []diagnostics.Diagnostic{empty}},
+		"trimmed with a new step":           {evidence: trimmed, kept: addedChange, want: []diagnostics.Diagnostic{added}},
+		"trimmed with no comparison":        {evidence: trimmed, kept: uncheckedChange, want: []diagnostics.Diagnostic{unchecked}},
 		"pristine":                          {evidence: pristineEvidence},
 		"pristine with an addition":         {evidence: pristineEvidence, addsTo: "op-1"},
 		"applied":                           {evidence: applied, want: []diagnostics.Diagnostic{destroy}},
@@ -1563,7 +1604,7 @@ func TestChangedInputOverACompletedApplyWarnsBeforeThePrompt(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			r := existingRepository(t)
-			r.evidence["example"], r.addsTo = []byte(test.evidence), test.addsTo
+			r.evidence["example"], r.addsTo, r.kept = []byte(test.evidence), test.addsTo, test.kept
 			got, err := service(t, r, sourceFixture("/synthetic/input")).Update(context.Background(), contexts.UpdateRequest{Name: "example", InputDirectory: "/synthetic/input"})
 			if err != nil || got == nil || !got.InputChanged || !got.Presented || r.updatePlan == nil || !slices.Contains(r.calls, "publish") {
 				t.Fatalf("the changed update = %#v (%v): %v", got, err, r.calls)

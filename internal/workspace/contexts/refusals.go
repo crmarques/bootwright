@@ -2,6 +2,7 @@ package contexts
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
@@ -132,6 +133,22 @@ func AddedInput(apply string) string {
 func AddedInputWarning(name, apply string) diagnostics.Diagnostic {
 	return warning(contextInputAdded, AddedInput(apply)+"; this predicts that admission without proving the custody of the material the added instances borrow, which bootwright diff --context "+
 		name+" --observe and the apply prove", "run bootwright apply --context "+name)
+}
+
+func keptInputWarning(name string, kept KeptInputChange) diagnostics.Diagnostic {
+	trimmed := "context " + name + " rests trimmed by the staged destroy " + kept.Removal + ", and "
+	switch {
+	case kept.Unchecked != "":
+		return warning(contextRestoreUnchecked, trimmed+"the restoring apply's comparison of this input could not run: "+kept.Unchecked,
+			"review the restore with bootwright apply --dry-run --context "+name)
+	case kept.Empty:
+		return warning(contextInputChangesKept, trimmed+"this input declares nothing it took back, so the restoring apply refuses it: there is nothing to restore", kept.Remedy)
+	case len(kept.Added) != 0:
+		return warning(contextInputChangesKept, trimmed+"this input declares steps no staged destroy took back: "+strings.Join(kept.Added, ", ")+
+			"; the restoring apply refuses them, since it re-creates only what one took back", kept.Remedy)
+	}
+	return warning(contextInputChangesKept, trimmed+"this input would change the steps it kept: "+
+		strings.Join(kept.Steps, ", ")+"; the restoring apply refuses it until they are taken back", kept.Remedy)
 }
 
 // appliedInputWarning is the warning of changed input over a completed apply,

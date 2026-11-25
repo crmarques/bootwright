@@ -410,13 +410,9 @@ func stageChanged(name string, operation operationstore.Operation, frozen reconc
 		"finish it with "+continuationCommand(name, operation, frozen, states)+", or review taking back the whole context with "+contextCommand(name, "destroy --dry-run")+" and run "+contextCommand(name, string(reconciliation.Destroy)))
 }
 
-func refuseTrimmed(name string, operation operationstore.Operation, preparation bool) error {
+func refuseTrimmed(name string, operation operationstore.Operation) error {
 	took := "the staged destroy " + operation.ID + " took back the " + string(operation.Stage.Floor) + " stage and everything built on it"
-	remedy := "take back what the context keeps with " + contextCommand(name, string(reconciliation.Destroy)) + ", then apply the changed input"
-	if preparation {
-		return prepareRefused.Fail(took+", and only an apply restores it", "restore it with "+contextCommand(name, string(reconciliation.Apply))+" first")
-	}
-	return applyContextTrimmed.Fail(took+", and the input changed since the steps it kept froze theirs, which a restoring apply does not take yet (B1859)", remedy)
+	return prepareRefused.Fail(took+", and only an apply restores it", "restore it with "+contextCommand(name, string(reconciliation.Apply))+" first")
 }
 
 func (s Service) withFloor(floor string, relaxations map[string]string) (Service, error) {
@@ -514,7 +510,7 @@ func (d decider) decideStaged(ctx context.Context, view View, store decisionReco
 			return operationPlan{}, true, err
 		}
 		if trimmed(operation) && d.preparation != nil {
-			return operationPlan{}, true, refuseTrimmed(view.Identity().Name, operation, true)
+			return operationPlan{}, true, refuseTrimmed(view.Identity().Name, operation)
 		}
 		if trimmed(operation) {
 			decided, err := d.restoring(ctx, view, store, operation, selection)

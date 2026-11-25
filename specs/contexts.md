@@ -213,7 +213,12 @@ lock, before its own transactions. Otherwise it warns
 that apply refuses the input until `bootwright destroy --context <name>` takes
 back what that apply owns, and that importing the original files again does
 not undo the update: they become a new revision, which apply refuses the same
-way.
+way. Over a [trimmed](state-reconciliation.md#staged-destroy) context it warns
+`input.changes-kept` when the restoring apply would refuse the input: for a
+kept step, naming those steps and the destroy that takes them back, for
+declaring nothing the staged destroy took back, or for a step none took back;
+and `input.restore-unchecked`, with the cause, when that comparison could not
+plan the input.
 
 Before directory discovery or file compilation, resolve the
 state-root location read-only and reject a root within the input directory;

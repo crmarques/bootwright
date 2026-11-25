@@ -176,8 +176,9 @@ decision and its plan before any effect.
 
 | Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `apply.context-trimmed` | operation | none | input | - | other-verb | a staged destroy trimmed the context, and the input changed since | destroy, then apply the changed input |
-| `apply.kept-block-changed` | operation | none | build | - | other-verb | this build would plan a kept step of a trimmed context otherwise | run the destroy the message names, then apply |
+| `apply.kept-block-changed` | operation | none | input | - | other-verb | the selected input or this build would plan a kept step of a trimmed context otherwise | run the destroy the message names, then apply |
+| `apply.restore-empty` | operation | none | input | - | other-verb | the selected input declares nothing a staged destroy took back, so a restoring apply has nothing to restore | take back the whole context with destroy, or declare again what the staged destroy took back and apply |
+| `apply.restore-adds-new` | operation | none | input | - | change-input | the selected input declares a step no staged destroy of the context took back, which a restoring apply never creates | restore without it, then add an add-on instance with the additive apply, or take back the whole context with destroy, then apply |
 | `apply.restore-unbound` | operation | none | records | - | other-verb | a restore's binding pins no version of a Secret an added step names | destroy, then apply |
 | `plan.input-uncompilable` | context | none | input | - | change-input | the context's frozen desired state could not be compiled | repair the input with validate and import it again |
 | `plan.capability-missing` | context | none | build | - | none | no lifecycle capability of this build plans the selected state | use a build that carries the capability; report it if this build should |
@@ -689,6 +690,8 @@ The context input checks' stops (`internal/workspace/contexts`).
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `input.added-since-apply` | context | none | input | - | repeat | a warning: imported input declares more than the completed apply froze, only add-on instances, and the next apply adds it without running its blocks | run bootwright apply --context <context> to add it to that apply |
 | `input.changed-since-apply` | context | none | input | - | other-verb | a warning: the context holds a completed apply and imported input changed since it, which apply refuses until a destroy takes back what that apply owns | take the apply back with bootwright destroy --context <context>, then apply again |
+| `input.changes-kept` | context | none | input | - | other-verb | a warning: the context rests trimmed and imported input would change a step its staged destroy kept, declares nothing it took back, or declares a step none took back, which the restoring apply refuses | follow the remedy the message names, then apply |
+| `input.restore-unchecked` | context | none | input | - | repeat | a warning: the context rests trimmed and the restoring apply's comparison of the imported input could not run | review the restore with bootwright apply --dry-run --context <context>, which names the cause |
 
 ## Context store stops
 

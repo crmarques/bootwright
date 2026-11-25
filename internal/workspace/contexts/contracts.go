@@ -163,6 +163,16 @@ type Options struct {
 	ValidateConfiguration func(context.Context, Configuration) error
 	Presenter             Presenter
 	AddsTo                func(context.Context, string, desiredstate.Sources) string
+	KeptChanges           func(context.Context, string, desiredstate.Sources) KeptInputChange
+}
+
+type KeptInputChange struct {
+	Removal   string
+	Steps     []string
+	Added     []string
+	Empty     bool
+	Remedy    string
+	Unchecked string
 }
 
 // Inputs acquires an immutable revision for an explicit or current context.

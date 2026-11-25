@@ -276,7 +276,7 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, *api.Cat
 }
 
 func (s Service) lifecycleSummary(ctx context.Context, view View, store OperationStore, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, blocks []BlockResult, logs []string) (*LifecycleSummary, error) {
-	next, err := nextOver(ctx, view, store, operation, plan, states)
+	next, err := s.decider(nil).nextOver(ctx, view, store, operation, plan, states)
 	if err != nil {
 		return nil, err
 	}
@@ -383,7 +383,7 @@ func (s Service) offered(ctx context.Context, view View, store OperationStore, o
 			if s.setupGates(ctx, view) {
 				return []string{setupStep}, nil
 			}
-			return trimmedSteps(ctx, view, store, operation)
+			return trimmedSteps(view.Identity().Name, next), nil
 		}
 		if !unfinished {
 			return steps, nil
@@ -419,13 +419,12 @@ func (s Service) offered(ctx context.Context, view View, store OperationStore, o
 	return steps, nil
 }
 
-func trimmedSteps(ctx context.Context, view View, store recordReader, operation operationstore.Operation) ([]string, error) {
-	name := view.Identity().Name
+func trimmedSteps(name, next string) []string {
 	whole := []string{contextCommand(name, "destroy --dry-run"), contextCommand(name, string(reconciliation.Destroy))}
-	if restores, err := restorable(ctx, view, store, operation); err != nil || !restores {
-		return whole, err
+	if next != string(reconciliation.Apply) {
+		return whole
 	}
-	return []string{contextCommand(name, "apply --dry-run"), contextCommand(name, string(reconciliation.Apply)), whole[1]}, nil
+	return []string{contextCommand(name, "apply --dry-run"), contextCommand(name, string(reconciliation.Apply)), whole[1]}
 }
 
 // setupStep is the step status offers in place of every verb the retained

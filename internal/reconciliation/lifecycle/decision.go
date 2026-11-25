@@ -26,6 +26,7 @@ type decider struct {
 	relaxing     eraseRelaxing
 	changeRemedy func(View) string
 	floor        reconciliation.Stage
+	restore      *restorePlan
 }
 
 func (s Service) decider(scope *reconciliation.PreparationScope) decider {
@@ -131,9 +132,13 @@ func (d decider) decideFrom(ctx context.Context, view View, verb reconciliation.
 	if verb == "" {
 		held := standing{held: true, verb: operation.Verb, state: operation.State, trimmed: trimmed(operation)}
 		if held.trimmed {
-			if held.restorable, err = restorable(ctx, view, store, operation); err != nil {
+			planned, err := d.planRestore(ctx, view, store, operation)
+			if err != nil {
 				return operationPlan{}, verb, err
 			}
+			d.restore = &planned
+			_, refused := d.admitRestore(view.Identity().Name, operation, planned)
+			held.restorable = refused == nil
 		}
 		admitted, refused := d.additive(ctx, view, store, operation, frozen, states, true)
 		known = &additiveVerdict{admitted: admitted, refused: refused}

@@ -244,13 +244,20 @@ selected input with this build, planning reading the evidence of what the
 context owns, and registers only the steps the context does not own, each
 edge into an owned step frozen as a `prerequisite`.
 
-- **Admission.** The input is the one the kept steps froze; a changed one
-  refuses `apply.context-trimmed`, naming the whole destroy
-  ([B1859](milestones/m1.md#b1859)). Every owned step is in the fresh plan
-  and compares the same, or `apply.kept-block-changed` names it and the floor
-  whose staged destroy takes it back, or the whole destroy when none does.
-  The fold admits each added step only where a staged destroy took it back or
-  no member started it. The owned members' contracts are re-proved under this
+- **Admission.** Any selected input is admitted while every owned step is in
+  the fresh plan and compares the same; otherwise `apply.kept-block-changed`
+  names the first and the floor whose staged destroy takes it back, or the
+  whole destroy when none does, as for a DNS record, the controller's client
+  selection or a mirror copy a cluster's values reach. Added steps freeze the
+  new requests, and the restore freezes the selected revision as its input,
+  so a repeated `apply` settles over it.
+  An added step is only one the staged destroy's cumulative taken-back set
+  holds or no member started; any other refuses `apply.restore-adds-new`,
+  naming it, with the additive apply after the restore for an add-on instance
+  and otherwise the whole destroy. An input that declares nothing the staged
+  destroy took back refuses `apply.restore-empty`, naming the whole destroy
+  or declaring the taken-back objects again; settling on it is
+  [B1869](milestones/backlog.md#b1869). The owned members' contracts are re-proved under this
   build, and an added step whose contract differs from one an owned member
   froze for its implementation refuses `engine.other-build`. Each produced
   input an added step borrows from an owned producer needs a proved custody
@@ -261,8 +268,11 @@ edge into an owned step frozen as a `prerequisite`.
   destroy holds, the lineage's own unless a rebind replaced it, and records
   it as its own, so its continuation and a later removal reopen it, and
   `--authorize rebind=` admits an access credential an added step presents.
-  A Secret that binding does not pin refuses `apply.restore-unbound`. While
-  trimmed, the holds keep every Secret a lineage binding pins.
+  A Secret that binding does not pin, as a changed input may name, refuses
+  `apply.restore-unbound`. While trimmed, the holds keep every Secret a
+  lineage binding pins, so a Secret replaced since the staged destroy is
+  presented at its pinned version; a binding of the restore's own, for its
+  added steps, is [B1868](milestones/m1.md#b1868).
 - **Identity.** A re-created step takes the restoring apply's identity, its
   attempt records and ownership marks, as an added block does; a kept step
   keeps its creator's.
@@ -270,6 +280,13 @@ edge into an owned step frozen as a `prerequisite`.
   lineage: one `destroy` removes every step the context owns, and
   `destroy --stage` also takes back what the lineage never started. Its
   preview reads `restores what operation <id> took back`.
+- **Before.** `diff` over a trimmed context compares what it owns with the
+  fresh plan, so it counts the steps the restore adds and the kept steps it
+  refuses. `context update` warns `input.changes-kept`, by the restore's own
+  admission, naming each kept step a new input changes, that it declares
+  nothing taken back, or each step none took back, with that remedy, and
+  `input.restore-unchecked`, with the cause, when that admission could not
+  plan the input.
 
 ## Context mutation evidence
 
@@ -670,7 +687,7 @@ sends the operator back to `status`, which needs the same unreadable record.
 | destroy running | continue that exact destroy, or, under a relaxation its frozen plan does not hold, start a fresh destroy of what it has not removed, which resolves every unproved block first |
 | destroy paused | continue that exact destroy, or, under a relaxation its frozen plan does not hold, start a fresh destroy of what it has not removed, which resolves every unproved block first |
 | destroy failed | start a fresh destroy of what it has not removed |
-| staged destroy done (trimmed) | `apply` of the input its kept steps froze starts a [restoring apply](#restoring-apply), and of a changed input refuses; `destroy` starts a fresh destroy of what the context still owns, which replaces the staged destroy; `destroy --stage` at the same or a later stage settles without effect, and at an earlier one starts a fresh staged destroy of what the context still owns, which replaces it; `context update` is admitted, since the context guard reads `{none, retained}` as no mutation |
+| staged destroy done (trimmed) | `apply` starts a [restoring apply](#restoring-apply), which refuses an input or build that would change a step the context keeps, that declares nothing the staged destroy took back, or that declares a step no staged destroy took back, and then the preview and next action name `destroy`; `destroy` starts a fresh destroy of what the context still owns, which replaces the staged destroy; `destroy --stage` at the same or a later stage settles without effect, and at an earlier one starts a fresh staged destroy of what the context still owns, which replaces it; `context update` is admitted, since the context guard reads `{none, retained}` as no mutation |
 | staged destroy running, paused, unknown or failed | the row of that destroy's state, at the stage it froze: `destroy --stage` at that stage continues it, or replaces a failed one with a fresh staged destroy of what it has not removed; `destroy` without `--stage` replaces it with a fresh destroy of what the context still owns, and `destroy --stage` at an earlier stage with a fresh staged destroy of what the context still owns, each [widening](#staged-destroy) it and resolving its unproved blocks first; at a later stage it refuses |
 | restoring apply running, paused, unknown or failed | the row of that apply's state: `apply` continues it; `destroy` starts a fresh destroy of what the context owns, the steps it started and every step it keeps; `destroy --stage` starts a fresh staged destroy of what the context owns, which also takes back the steps it never started |
 | destroy unknown | continue it, resolving every unproved block first and then retrying what resolution leaves `failed` (D146), or, under a relaxation its frozen plan does not hold, start a fresh destroy of what it has not removed, which resolves them first |
@@ -2237,8 +2254,9 @@ set, its own scope with what every staged destroy it `replaces` took back.
   destroy carries `--stage <floor>`, the floor of the destroy it repeats,
   which a widening to the whole context drops. A done staged destroy's receipt names
   next `apply`, and `status` offers the restore beside the whole destroy,
-  or, under an input its kept steps did not freeze, `destroy` and only the
-  whole destroy, which the preview then chooses. The plan and operation results carry `scope` (floor, removed
+  which the preview then chooses, while the restore's own admission would
+  admit the selected input; otherwise `status` and the preview name `destroy`
+  and only the whole destroy. The plan and operation results carry `scope` (floor, removed
   and kept steps, residue, kept power targets) and status carries `stage`.
 
 ## Frozen requests and contract guards
@@ -2911,8 +2929,10 @@ A staged or additive apply checks its managed fleet. A
 kept Machine an added step names by its dependencies, hosts or nodes; any
 other kept Machine reads in either state, as a continuation of its lineage
 reads it. A staged destroy refuses a step it takes back, started or not, that
-is bound to a Machine it keeps, so only a step new to the lineage acts on a
-kept one (D288, `TestARestoreProvesOffAKeptMachineAnAddedStepActsOn`). A destroy derives its
+is bound to a Machine it keeps, and a restore refuses a step new to the
+lineage (`apply.restore-adds-new`, `TestARestoreRefusesAStepNoStagedDestroyTookBack`),
+so no added step acts on a kept one; [B1860](milestones/m1.md#b1860)
+and [B1861](milestones/m1.md#b1861) take steps back on kept Machines (D288). A destroy derives its
 targets from the frozen work it takes back. Destroy over an incomplete apply
 starts a new flow. Continuing the same registered flow, including replacing
 a failed destroy over its remaining work, proceeds from the durable records

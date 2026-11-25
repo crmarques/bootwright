@@ -34,6 +34,13 @@ func wireContexts(deps serviceDependencies, compiler compilation.Compiler, secre
 			}
 			return apply
 		}
+		options.KeptChanges = func(ctx context.Context, name string, candidate desiredstate.Sources) contexts.KeptInputChange {
+			kept, err := reconciler.KeptChanges(ctx, name, candidate)
+			if err != nil {
+				return contexts.KeptInputChange{}
+			}
+			return contexts.KeptInputChange{Removal: kept.Removal, Steps: kept.Steps, Added: kept.Added, Empty: kept.Empty, Remedy: kept.Remedy, Unchecked: kept.Unchecked}
+		}
 	}
 	if deps.Streams.Out != nil {
 		options.Presenter = cli.NewContextPlanPresenter(deps.Streams.Out, deps.Streams.Err)

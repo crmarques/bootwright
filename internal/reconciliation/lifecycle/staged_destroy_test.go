@@ -631,14 +631,16 @@ func TestAKeptStepOfATrimmedLineageReadsAsItsHolders(t *testing.T) {
 
 // A diff over a trimmed context reads the kept steps' objects as their apply
 // realized them and the input as unchanged; an object no step names is not
-// read as one the staged destroy took back.
+// read as one the staged destroy took back. Its plan compares what the
+// context owns, so it counts the taken-back step the next apply restores as
+// added and a kept step that apply would refuse as changed (B1859).
 func TestADiffOverATrimmedContextReadsWhatItKeeps(t *testing.T) {
 	t.Parallel()
 	h := newPlannedHarness(t, chainedDefinitions())
 	completeApply(t, h)
 	stagedDestroy(t, h, reconciliation.StageClusters)
 	diff, err := h.service.Diff(context.Background(), DiffRequest{ContextName: testContextName})
-	if err != nil || diff.Input != diffUnchanged || diff.Operation.Verb != "destroy" || diff.Plan.State != "same" {
+	if err != nil || diff.Input != diffUnchanged || diff.Operation.Verb != "destroy" || diff.Plan.State != diffDiffers || diff.Plan.Added != 1 || diff.Plan.Changed != 0 {
 		t.Fatalf("the diff over the trimmed context reads %+v %+v input %s (%v)", diff.Operation, diff.Plan, diff.Input, err)
 	}
 	read := map[string]ObjectDiff{}
@@ -648,6 +650,10 @@ func TestADiffOverATrimmedContextReadsWhatItKeeps(t *testing.T) {
 	environment, alpha, charlie := read["Environment/lab"], read["ArtifactServer/alpha"], read["ArtifactServer/charlie"]
 	if alpha.Realization != RealizationDone || charlie.Realization == RealizationDone || strings.Contains(environment.Real.Reason, "took it back") {
 		t.Fatalf("the diff over the trimmed context reads %+v", diff.Objects)
+	}
+	h.capability.definitions[1].Request = json.RawMessage(`{"moved":true,"name":"bravo"}`)
+	if diff, err = h.service.Diff(context.Background(), DiffRequest{ContextName: testContextName}); err != nil || diff.Plan.Added != 1 || diff.Plan.Changed != 1 {
+		t.Fatalf("the diff over a trimmed context whose kept step moved reads %+v (%v)", diff.Plan, err)
 	}
 }
 

@@ -255,6 +255,9 @@ func (s Service) Update(ctx context.Context, request UpdateRequest) (*AdmissionR
 	if admitted.report != nil && s.options.AddsTo != nil {
 		admitted.addsTo = s.options.AddsTo(ctx, request.Name, admitted.sources)
 	}
+	if admitted.report != nil && s.options.KeptChanges != nil {
+		admitted.kept = s.options.KeptChanges(ctx, request.Name, admitted.sources)
+	}
 	if request.Check {
 		decision, err := s.inspectUpdate(ctx, request, admitted)
 		if err != nil {
@@ -419,9 +422,9 @@ func sameConfiguration(ctx context.Context, tx Transaction, name string, config 
 // the context lease, in order: the controller binding, then the mutation guard,
 // so every protected state refuses even an identical
 // input, and only then whether the input changes the selected revision.
-// Changed input returns its warnings: admission's, and over a completed apply
-// the warning that apply adds it to that apply, when an additive apply would
-// admit it, or otherwise refuses it until a destroy.
+// Changed input returns admission's warnings and, over a completed apply or a
+// trimmed context, the warning of what the next apply adds, refuses until a
+// destroy, or refuses for a kept step.
 func (s Service) decideUpdate(ctx context.Context, tx Transaction, reg Registry, record Record, admitted admittedInput) (bool, []diagnostics.Diagnostic, error) {
 	if reg.Controller != (ControllerDescriptor{}) {
 		if err := tx.CheckControllerInput(ctx, record.Name, admitted.controller); err != nil {
@@ -447,6 +450,8 @@ func (s Service) decideUpdate(ctx context.Context, tx Transaction, reg Registry,
 		warnings = append(warnings, AddedInputWarning(record.Name, admitted.addsTo))
 	case disposition.Applied:
 		warnings = append(warnings, appliedInputWarning(record.Name))
+	case admitted.kept.Removal != "":
+		warnings = append(warnings, keptInputWarning(record.Name, admitted.kept))
 	}
 	return false, warnings, nil
 }

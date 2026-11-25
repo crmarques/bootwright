@@ -24,7 +24,7 @@ The contract states each one; the rows only point at the rule that owns it.
 | Partly realized: a running, failed, paused or unknown apply | [Continuation and removal](../state-reconciliation.md#continuation-and-removal), [dependency safety during recovery](../state-reconciliation.md#dependency-safety-during-recovery) and [attempts and unknown outcomes](../state-reconciliation.md#attempts-and-unknown-outcomes) |
 | Already realized: a completed apply under its unchanged input | [Lifecycle unit](../state-reconciliation.md#lifecycle-unit) and the `apply done` row of the [state machine](../state-reconciliation.md#state-machine) |
 | Add-on instances added to a cluster a completed apply installed | [Additive apply](../state-reconciliation.md#additive-apply) and the `apply done` row of the [state machine](../state-reconciliation.md#state-machine) |
-| What a staged destroy took back, restored over unchanged input | [Restoring apply](../state-reconciliation.md#restoring-apply) and the trimmed rows of the [state machine](../state-reconciliation.md#state-machine) |
+| What a staged destroy took back, restored under an input that changes no kept step and adds only what was taken back | [Restoring apply](../state-reconciliation.md#restoring-apply) and the trimmed rows of the [state machine](../state-reconciliation.md#state-machine) |
 
 "Absent" and "done" are read from durable records, not from the host.
 [Comparing desired and real state](../state-reconciliation.md#comparing-desired-and-real-state)

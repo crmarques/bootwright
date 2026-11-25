@@ -346,6 +346,7 @@ Alias cell.
 | [B1839](#b1839) | new, 2026-11-25 (X739) | product | Storage | A completed object gateway rotates its LDAP bind password, its directory's CA bundle or its STS key in place | The leaves are effect material the gateway block placed; revive when an owner asks for in-place rotation |
 | [B1864](#b1864) | new, 2026-11-25 (D288) | product | Reconciliation, with Managed OS | A staged destroy takes back a physical Machine's installation and its erase, and the restoring apply rebuilds them through disk discovery | After the restoring apply ([B1858](delivered.md#x757--the-restoring-apply-restores-what-a-staged-destroy-took-back)); a physical install in a staged scope refuses |
 | [B1865](#b1865) | new, 2026-11-25 (D288) | product | Reconciliation and CLI | `destroy --stage` narrows to the selected clusters with `--clusters` | After the restoring apply ([B1858](delivered.md#x757--the-restoring-apply-restores-what-a-staged-destroy-took-back)); a staged destroy takes the whole stage |
+| [B1869](#b1869) | new, 2026-11-25 (X759 review) | product | Reconciliation | A trimmed context whose input drops what its staged destroy took back settles on the new input | It is the first reconciliation of changed desired state, which the owner asked to prepare for but not build now; the restore refuses `apply.restore-empty` and names the whole destroy |
 
 ### B82
 
@@ -3779,6 +3780,21 @@ and the trimmed standing each hold per cluster. **Exit evidence:** a journey
 over two clusters of one context, and the proofs of the
 [staged destroy design](../state-reconciliation.md#staged-destroy) for the
 narrowed scope.
+
+### B1869
+
+**Owner:** Reconciliation. **Kind:** product.
+**Requires:** [B1859](delivered.md#x759--a-restore-admits-changed-input-inside-what-a-staged-destroy-took-back). **Definition:** Candidate. **Outcome:**
+an `apply` over a [trimmed](../state-reconciliation.md#staged-destroy) context
+whose selected input declares nothing the staged destroy took back, and changes
+no kept step, settles: the context then rests on the new input with what it
+keeps, and no restore is registered. Today the
+[restoring apply](../state-reconciliation.md#restoring-apply) refuses
+`apply.restore-empty` and names the whole destroy, because settling there is
+the first reconciliation of changed desired state, which the owner asked to
+prepare for but not build now. **Exit evidence:** the settled apply, the
+trimmed context's next action and status under the new input, and a later
+staged or whole destroy over it.
 
 ## Audit remediation (2026-10-26)
 
@@ -10057,7 +10073,7 @@ the owner's request, out of sequence. The program, in order, is the items of the
 [staged destroy design](../deferred/staged-destroy.md#program): the frozen
 inverse of every destroy step ([B1855](delivered.md#x753--every-destroy-step-states-its-inverse), [B1856](delivered.md#x754--run-time-inverse-branches-frozen)), one
 ownership fold ([B1857](delivered.md#x755--one-fold-answers-what-a-contexts-operations-own)), `destroy --stage` (B166), the restoring
-apply ([B1858](delivered.md#x757--the-restoring-apply-restores-what-a-staged-destroy-took-back), [B1859](m1.md#b1859)), and the per-capability
+apply ([B1858](delivered.md#x757--the-restoring-apply-restores-what-a-staged-destroy-took-back), [B1859](delivered.md#x759--a-restore-admits-changed-input-inside-what-a-staged-destroy-took-back)), and the per-capability
 unlocks ([B1860](m1.md#b1860), [B1861](m1.md#b1861),
 [B1862](m2.md#b1862)). This decision authorizes X753, the slice of B1855, and
 no other slice. Each later slice needs its own authorization, and the

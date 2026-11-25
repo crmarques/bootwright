@@ -812,11 +812,7 @@ func (s Service) finish(ctx context.Context, tx Transaction, store OperationStor
 	if err == nil {
 		result.Logs = logs
 	}
-	action, err := nextOver(ctx, tx, store, current, plan, states)
-	if err != nil {
-		return result, err
-	}
-	result.Receipt = Receipt{Operation: operation.ID, Verb: string(operation.Verb), State: string(next), Next: action}
+	result.Receipt = Receipt{Operation: operation.ID, Verb: string(operation.Verb), State: string(next), Next: receiptNext(current, plan, states)}
 	if next == reconciliation.OperationDone {
 		return result, nil
 	}
@@ -865,19 +861,22 @@ func terminalFailure(contextName string, operation operationstore.Operation, pla
 // are all done is finalized, which completes that same removal. In any other
 // incomplete operation a block that reads unknown is resolved before anything
 // else starts, whatever state the operation records.
-func nextOver(ctx context.Context, view View, store recordReader, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) (string, error) {
-	if !trimmed(operation) || pendingRemains(frozen, states) {
-		return nextAction(operation, frozen, states), nil
+func receiptNext(operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) string {
+	if trimmed(operation) && !pendingRemains(frozen, states) {
+		return string(reconciliation.Apply)
 	}
-	if restores, err := restorable(ctx, view, store, operation); err != nil || !restores {
-		return string(reconciliation.Destroy), err
-	}
-	return string(reconciliation.Apply), nil
+	return nextAction(operation, frozen, states)
 }
 
-func restorable(ctx context.Context, view View, store recordReader, removal operationstore.Operation) (bool, error) {
-	head, err := store.ReadOperation(ctx, removal.Source)
-	return err == nil && inputDrift(view, head) == "", err
+func (d decider) nextOver(ctx context.Context, view View, store recordReader, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) (string, error) {
+	next := receiptNext(operation, frozen, states)
+	if next != string(reconciliation.Apply) {
+		return next, nil
+	}
+	if restores, err := d.restorable(ctx, view, store, operation); err != nil || !restores {
+		return string(reconciliation.Destroy), err
+	}
+	return next, nil
 }
 
 func nextAction(operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) string {

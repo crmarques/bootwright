@@ -157,12 +157,15 @@ var (
 	destroyStageChanged = diagnostics.Stop{Code: "destroy.stage-changed", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryFixThenRepeat,
 		Meaning: "a later floor than an unfinished staged destroy froze, or any floor over an unfinished whole destroy, would narrow it, so nothing was registered", Remedy: "finish it with the command the message names, or review and take back the whole context with the commands it names"}
-	applyContextTrimmed = diagnostics.Stop{Code: "apply.context-trimmed", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
-		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryOtherVerb,
-		Meaning: "a staged destroy trimmed the context, and the input changed since", Remedy: "destroy, then apply the changed input"}
 	applyKeptBlockChanged = diagnostics.Stop{Code: "apply.kept-block-changed", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
-		Cause: diagnostics.CauseBuild, Recovery: diagnostics.RecoveryOtherVerb,
-		Meaning: "this build would plan a kept step of a trimmed context otherwise", Remedy: "run the destroy the message names, then apply"}
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryOtherVerb,
+		Meaning: "the selected input or this build would plan a kept step of a trimmed context otherwise", Remedy: "run the destroy the message names, then apply"}
+	applyRestoreEmpty = diagnostics.Stop{Code: "apply.restore-empty", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryOtherVerb,
+		Meaning: "the selected input declares nothing a staged destroy took back, so a restoring apply has nothing to restore", Remedy: "take back the whole context with destroy, or declare again what the staged destroy took back and apply"}
+	applyRestoreAddsNew = diagnostics.Stop{Code: "apply.restore-adds-new", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
+		Meaning: "the selected input declares a step no staged destroy of the context took back, which a restoring apply never creates", Remedy: "restore without it, then add an add-on instance with the additive apply, or take back the whole context with destroy, then apply"}
 	applyRestoreUnbound = diagnostics.Stop{Code: "apply.restore-unbound", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryOtherVerb,
 		Meaning: "a restore's binding pins no version of a Secret an added step names", Remedy: "destroy, then apply"}
@@ -337,7 +340,7 @@ var stops = []diagnostics.Stop{engineRecordsFull, engineRecordsReadOnly, engineR
 	planInputUncompilable, planCapabilityMissing, planCapabilityDefect, planHostKeyUnbound, planEnvironmentInvalid,
 	engineUnindexedRecords, engineRequestDefect, engineOtherBuild, destroyInverseMoved, destroyInverseUnstated, enginePlanMoved, engineInputMoved, engineBindingLost, authorizeUnneeded,
 	authorizeMissing, authorizeStale, authorizeRebindInvalid, destroyStageSelected,
-	destroyStageBelowFloor, destroyStageKeepsUnfinished, destroyStageKeepsHost, destroyStageChanged, applyContextTrimmed, applyKeptBlockChanged, applyRestoreUnbound, applyUntilBeforePreparation, applyTargetBeforePreparation,
+	destroyStageBelowFloor, destroyStageKeepsUnfinished, destroyStageKeepsHost, destroyStageChanged, applyKeptBlockChanged, applyRestoreEmpty, applyRestoreAddsNew, applyRestoreUnbound, applyUntilBeforePreparation, applyTargetBeforePreparation,
 	engineRecordsDamaged, applyProducedInputMissing, engineRecaptureMismatch, engineResolvedUnperformed, engineResolvedPartial, destroyPostconditionUnknown,
 	prepareRefused, prepareUnsupported,
 	engineBorrowedSSH, engineConfirmationRequired, engineInputInvalid, engineCredentialMoved, engineFinalizationIncomplete,
