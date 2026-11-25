@@ -1814,10 +1814,15 @@ type's daemon count running on its frozen image (the Ceph image for
 ceph-exporter) and, with a prometheus service, an available MGR and a
 non-empty `prometheus` endpoint in `ceph mgr services`: cephadm enables the
 prometheus manager module itself for that service, and Bootwright never
-enables a module. The stored specifications and `ceph orch ps` are read as one
-manager-served observation, so the MGR restart that enable causes leaves the
-observation unfinished rather than refused. A readiness timeout names
-`<type>@<service>` and `module@prometheus` beside the blocking health checks.
+enables a module. Readiness also needs every port `ceph mgr services`
+publishes among each running declared MGR's `ceph orch ps --daemon_type mgr`
+ports, the ones cephadm opens in firewalld; the apply's wait runs
+`manager_ports`, which requests `ceph orch daemon reconfig mgr.<id>` for each
+lagging MGR, active included, once per apply after its intent record. The
+stored specifications and `ceph orch ps` are read as one manager-served
+observation, so the MGR restart that enable causes leaves the observation
+unfinished rather than refused. A readiness timeout names `<type>@<service>`,
+`module@prometheus` and `ports@mgr` beside the blocking health checks.
 Observation never writes, and no credential or stored specification reaches
 evidence, which lists only each daemon's host, name and service. The block's
 deadline is fixed for its type (apply 2280 s, observe 720 s, destroy 1380 s).

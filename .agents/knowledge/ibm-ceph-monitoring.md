@@ -147,10 +147,54 @@ is the declared service's derived effect, and `spec.mgrModules` refuses it
 The unit never enables the module. It reads readiness from `ceph mgr services`
 inside one served-manager block, so a respawn reads as unfinished work
 (`test_prometheus_module_observed_through_mgr_services`,
-`test_unit_waits_for_available_mgr_after_module_respawn`). The IBM image's copy
-of `PrometheusService.config` was not read: if a build lacks the call,
-readiness fails closed and never reads ready. The remedy is new evidence, not
-an enable step.
+`test_unit_waits_for_available_mgr_after_module_respawn`). The IBM
+20.2.1-405 tree carries the same call (`services/monitoring.py`,
+`PrometheusService.config`); if a build lacks it, readiness fails closed and
+never reads ready. The remedy is new evidence, not an enable step.
+
+### The exporter port and firewalld
+
+A MGR's deployment ports are every port in `mgr services` at the moment
+cephadm deploys, redeploys or reconfigures that MGR, plus service discovery's
+8765 (`MgrService.prepare_create` in `services/cephadmservice.py`, IBM
+20.2.1-405 tree). The cephadm binary opens exactly a daemon's deployment ports
+in firewalld on every fresh deploy, redeploy and reconfigure
+(`handle_deployment_firewall_updates`, called from
+`handle_post_writing_unit_files_deployment_actions` in the 20.2.1-405-el9
+binary). A reconfigure also writes the new ports to the daemon's `unit.meta`
+and restarts no Ceph daemon (`restart_reconfigured_daemon`). Enabling the
+prometheus module only respawns the MGRs, so their ports stay as they were.
+
+The cluster's dashboard phase redeploys every MGR once the dashboard
+publishes, before any monitoring unit runs, so every MGR gets ports 8443 and
+8765 only; bootstrap opened 9283 on the first host alone. Service discovery
+hands every Prometheus one target, the active MGR's FQDN at `:9283`
+(`prometheus_sd_config` in `services/service_discovery.py`), so only the
+Prometheus colocated with the active MGR reaches it. On the owner's
+`ceph-prd-01` (IBM 9.9.1.2, 2026-11-24) `ceph orch ps --daemon-type mgr`
+listed `*:8443,8765` on all four MGRs while `mgr services` published
+`https://10.7.7.2:9283/`. Three of the four Prometheus daemons saw the target
+down, so `CephMgrPrometheusModuleInactive` (`up{job="ceph"} == 0`) fired and
+cleared as the gateway balanced alert reads across them
+([B1803](../../specs/milestones/m2.md#b1803)).
+
+The remedy is `ceph orch daemon reconfig mgr.<id>`. cephadm's `_daemon_action`
+runs `prepare_create` for a reconfigure, so the ports are recomputed from the
+current `mgr services`, and it refuses only a redeploy or restart of the
+active MGR (`module.py`). The request is scheduled durably per daemon
+(`schedule_daemon_action` in `inventory.py`, saved with the host) and a repeat
+coalesces. A reconfigured Ceph daemon is not re-added to cephadm's daemon
+cache (`_create_daemon` in `serve.py`), so `orch ps` lists the new ports only
+after a host refresh, which `--refresh` requests and a later read shows. The
+monitoring unit's readiness names `ports@mgr` until then, and its apply makes
+the request after an intent record per MGR container, published ports and
+active MGR instance. An apply asks each lagging MGR at most once: its first
+evaluated call may ask a recorded one again, later calls only unrecorded ones.
+So a lost reply repeats nothing within the apply, and the next apply asks a
+lost request once more, the policy of the dashboard port repair
+(`test_lagging_manager_ports_block_readiness_until_reconfigured_and_refreshed`,
+`test_lost_reconfigure_reply_is_never_repeated_within_its_apply`,
+`test_a_lost_request_is_asked_again_once_per_apply`).
 
 The exporter on its default port without a Prometheus service is parked
 ([B684](../../specs/milestones/backlog.md#b684)).

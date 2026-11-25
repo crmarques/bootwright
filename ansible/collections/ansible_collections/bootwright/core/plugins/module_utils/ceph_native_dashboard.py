@@ -133,8 +133,13 @@ class Dashboard:
 
     def manager_containers(self):
         """Refreshed declared MGR containers, running state and dashboard port publication."""
+        return {daemon: (container, up, DASHBOARD_PORT in ports) for daemon, (container, up, ports) in self.manager_daemons().items()}
+
+    def manager_daemons(self, refresh=True):
+        """Declared MGR containers, running state and deployment ports from cephadm's daemon cache. A refresh asks cephadm to reread every
+        host's daemons, which only a later read shows."""
         with self.worker.manager_served():
-            rows = self.worker.ceph("orch", "ps", "--daemon_type", "mgr", "--refresh")
+            rows = self.worker.ceph("orch", "ps", "--daemon_type", "mgr", *(("--refresh",) if refresh else ()))
         require(isinstance(rows, list) and len(rows) <= 128, "native-output")
         managers = next(s["placement"]["hosts"] for s in self.worker.request["services"] if s["service_type"] == "mgr")
         result = {}
@@ -146,9 +151,9 @@ class Dashboard:
             ports = row.get("ports", [])
             require(isinstance(ports, list) and len(ports) <= 128
                     and all(type(port) is int and 1 <= port <= 65535 for port in ports), "native-output")
-            result[row["daemon_id"]] = (container or "", type(row.get("status")) is int and row["status"] == 1, DASHBOARD_PORT in ports)
+            result[row["daemon_id"]] = (container or "", type(row.get("status")) is int and row["status"] == 1, tuple(ports))
         require(len({row["hostname"] for row in rows}) == len(rows), "foreign-service")
-        containers = [container for container, unused_up, unused_port in result.values() if container]
+        containers = [container for container, unused_up, unused_ports in result.values() if container]
         require(len(set(containers)) == len(containers), "foreign-service")
         return result
 

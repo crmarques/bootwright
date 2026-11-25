@@ -864,9 +864,26 @@ def vip_holders(request, observed, transport, deadline, now):
     return entries
 
 
-def wait_unit(request, request_digest, bootstrap, transport, now, pause, *, private=None):
+class ManagerPorts:
+    """One apply's MGR port remedy, within the readiness window that names the lag: its first evaluated call may ask a target an
+    earlier apply recorded once more, and every later call asks only an unrecorded one, so no target is asked twice in one apply."""
+
+    def __init__(self, bootstrap, transport):
+        self.bootstrap, self.transport = bootstrap, transport
+        self.evaluated = self.changed = False
+
+    def __call__(self, timeout):
+        produced = self.transport.call(self.bootstrap, "manager_ports_unrecorded" if self.evaluated else "manager_ports", timeout=timeout)
+        ceph_native.require(isinstance(produced, dict) and set(produced) == {"changed", "pending"} and type(produced["changed"]) is bool
+                            and type(produced["pending"]) is bool and not (produced["changed"] and produced["pending"]), "evidence")
+        self.evaluated = self.evaluated or not produced["pending"]
+        self.changed = self.changed or produced["changed"]
+
+
+def wait_unit(request, request_digest, bootstrap, transport, now, pause, *, private=None, remedy=None):
     """Poll the unit's own observation until ready and, with an ingress, until each virtual IP has exactly one holder; a timeout names the
-    daemons, endpoint, holder or health checks still blocking."""
+    daemons, endpoint, holder or health checks still blocking. While an observation names lagging MGR ports, an apply's remedy runs
+    within the same window before the next poll."""
     call_timeout = unit_observation_timeout(request)
     deadline = now() + READINESS_TIMEOUT + (call_timeout if ceph_transport.nvmeof_unit(request) else 0)
     blocking, unheld = [], []
@@ -893,6 +910,11 @@ def wait_unit(request, request_digest, bootstrap, transport, now, pause, *, priv
         remaining = deadline - now()
         if remaining <= 0:
             raise ReadinessRefusal(blocking)
+        if remedy is not None and observed is not None and ceph_native_observability.PORTS_ENTRY in blocking:
+            remedy(min(READ_BUDGET, remaining))
+            remaining = deadline - now()
+            if remaining <= 0:
+                raise ReadinessRefusal(blocking)
         pause(min(READINESS_INTERVAL, remaining))
 
 
@@ -1018,7 +1040,8 @@ def execute_nvmeof(request, operation, request_digest, transport, bootstrap, *, 
 def execute_unit(request, operation, request_digest, transport, bootstrap, *, now, pause, phases=("unit",), outputs=None):
     """A service unit runs its apply phases only on the bootstrap host: its preparation proof, with an ingress the firewall check on each
     ingress host, its apply phases in order, with an oauth2-proxy the rendered-configuration proof on each proxy host and then the one
-    single sign-on write, then its own readiness wait. Its apply phase holds every bound leaf; each observation and
+    single sign-on write, then its own readiness wait, in which a monitoring unit with prometheus asks cephadm to reconfigure each MGR whose
+    deployment ports lag the published module endpoints. Its apply phase holds every bound leaf; each observation and
     removal holds the observed ones, and a management gateway's served leaf must be the bound certificate's. A ready management gateway
     that declares its output then writes its monitoring logins there."""
     changed, pending = False, []
@@ -1036,7 +1059,10 @@ def execute_unit(request, operation, request_digest, transport, bootstrap, *, no
         if request["action"] == "service" and ceph_evidence.proxied(request):
             deadline = sso_proof(request, transport, now, pause)
             changed = sso_enable(bootstrap, transport, deadline, now, pause) or changed
-        observation = wait_unit(request, request_digest, bootstrap, transport, now, pause, private=seen)
+        remedy = ManagerPorts(bootstrap, transport) if (
+            request["action"] == "service" and ceph_native_observability.prometheus_declared(request["service"])) else None
+        observation = wait_unit(request, request_digest, bootstrap, transport, now, pause, private=seen, remedy=remedy)
+        changed = remedy is not None and remedy.changed or changed
         ceph_native.require(observation["ready"], "not-ready")
     elif operation == "destroy" and ceph_transport.nvmeof_unit(request):
         observation = observe_unit(request, request_digest, bootstrap, transport)

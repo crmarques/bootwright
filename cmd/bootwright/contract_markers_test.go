@@ -62,7 +62,7 @@ func cephMarkerNames() []string {
 		"complete-call_home_initialize.json", "complete.json", "dashboard-credential-update.json", "dashboard-port-", "dashboard-port-repair.json",
 		"dashboard-redeploy.json", "dashboard-redeployed.json", "decision.json", "device-identities.json",
 		"filesystem-", "filesystem-attempt.", "filesystem-id.", "gateway-", "group-attempt.", "group.", "image-",
-		"initial-mgr-original-ready.json", "manifest.json", "monitoring-haproxy-attempt.json", "monitoring-haproxy-complete.json",
+		"initial-mgr-original-ready.json", "manager-ports-", "manifest.json", "monitoring-haproxy-attempt.json", "monitoring-haproxy-complete.json",
 		"monitoring-log-config-attempt.json",
 		"monitoring-log-config-complete.json", "monitoring-template-attempt.json", "monitoring-template-complete.json",
 		"native-removal-config.json", "native-removal-sshd-reloaded.json", "native-removal-sshd.json", "native-route.json",

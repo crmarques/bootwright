@@ -117,8 +117,20 @@ def without_leaves(value):
     return value
 
 
+MANAGERS = {"node-1.abcdef": "0123456789ab", "node-2.ghijkl": "fedcba987654"}
+
+
+def manager_rows(ports, status=1):
+    """cephadm's cached MGR rows, which list the deployment ports MgrService.prepare_create computed at the last (re)deploy or reconfigure."""
+    return {daemon: {"daemon_type": "mgr", "daemon_id": daemon, "hostname": daemon.split(".", maxsplit=1)[0], "container_id": container, "status": status,
+                     "ports": list(ports)} for daemon, container in MANAGERS.items()}
+
+
 class Monitor:
-    """A scripted monitor: reads answer from its tables; `orch apply` stores its documents as cephadm keeps them."""
+    """A scripted monitor: reads answer from its tables; `orch apply` stores its documents as cephadm keeps them. A MGR reconfigure
+    gives that MGR the ports `mgr services` publishes plus service discovery's 8765 on its host; cephadm's daemon cache shows them only
+    on a read after a refresh, as a reconfigured Ceph daemon is not re-added to the cache (src/pybind/mgr/cephadm/serve.py,
+    _create_daemon)."""
 
     def __init__(self, request, specs=None, rows=None, omit=False):
         self.request = request
@@ -127,6 +139,9 @@ class Monitor:
         self.running = list(rows or [])
         self.omit = omit
         self.manager_services = {"dashboard": "https://192.0.2.1:8443/", "prometheus": "http://192.0.2.1:9283/"}
+        self.managers = manager_rows((8443, 9283, 8765))
+        self.realized = copy.deepcopy(self.managers)
+        self.gid = 4100
         self.unavailable = 0
         self.failures = {}
         self.before_store = self.after_store = None
@@ -146,15 +161,22 @@ class Monitor:
             return 1, b"Error ENOTSUP: Module 'orchestrator' is not enabled/loaded"
         if command == ("mgr", "dump"):
             self.unavailable = max(self.unavailable - 1, -1)
-            return 0, json.dumps({"active_gid": 4100, "active_name": "node-1.abcdef", "available": self.unavailable < 0, "standbys": []}).encode()
+            return 0, json.dumps({"active_gid": self.gid, "active_name": "node-1.abcdef", "available": self.unavailable < 0, "standbys": []}).encode()
         answers = {("fsid",): {"fsid": FSID}, ("config", "dump"): self.config, ("orch", "ls", "--export"): self.exported(),
                    ("orch", "ps"): self.running, ("mgr", "services"): self.manager_services,
+                   ("orch", "ps", "--daemon_type", "mgr"): list(self.managers.values()),
+                   ("orch", "ps", "--daemon_type", "mgr", "--refresh"): list(self.managers.values()),
                    ("orch", "status"): {"available": True, "backend": "cephadm"}}
         if command in answers:
+            if command[-1] == "--refresh":
+                self.managers = copy.deepcopy(self.realized)
             return 0, json.dumps(answers[command]).encode()
         if command[:3] == ("config", "get", "mgr") and command[3] in ("mgr/dashboard/" + name for name in self.standby):
             return 0, json.dumps(self.standby[command[3].rsplit("/", 1)[1]]).encode()
         self.mutations.append(command)
+        if command[:3] == ("orch", "daemon", "reconfig"):
+            ports = [int(url.rsplit(":", 1)[1].rstrip("/")) for url in self.manager_services.values()]
+            self.realized[command[3][len("mgr."):]]["ports"] = ports + [8765]
         if command[:2] == ("config", "set"):
             section, name, value = command[2:]
             self.config = [row for row in self.config if row.get("name") != name]
@@ -367,6 +389,182 @@ def test_prometheus_module_observed_through_mgr_services(tmp_path):
     assert observing(monitor, markers)[:2] == (True, [])
     assert monitor.mutations == [("orch", "apply", "-i", "-")]
     assert not any("module" in argv for argv in monitor.log)
+
+
+def lagging_monitor(tmp_path):
+    """The owner's ceph-prd-01 shape: the dashboard phase redeployed every MGR before the prometheus module published, so each MGR's
+    deployment ports are 8443 and 8765 without 9283."""
+    request = monitoring_request()
+    markers = units.markers_for(tmp_path, request)
+    monitor = Monitor(request, rows=running(request))
+    monitor.managers = manager_rows((8443, 8765))
+    monitor.realized = copy.deepcopy(monitor.managers)
+    applying(monitor, markers).unit()
+    return monitor, markers
+
+
+def reconfigures(monitor):
+    return [command[3] for command in monitor.mutations if command[:3] == ("orch", "daemon", "reconfig")]
+
+
+def attempts(markers):
+    return sorted(name for name in os.listdir(markers.path) if name.startswith("manager-ports-"))
+
+
+ASKED = {"changed": True, "pending": False}
+NOTHING = {"changed": False, "pending": False}
+
+
+def first(monitor, markers):
+    """An apply's first evaluated call of the port remedy."""
+    return applying(monitor, markers).manager_ports()
+
+
+def later(monitor, markers):
+    """A later call of the port remedy within the same apply."""
+    return applying(monitor, markers).manager_ports_unrecorded()
+
+
+def test_lagging_manager_ports_block_readiness_until_reconfigured_and_refreshed(tmp_path):
+    monitor, markers = lagging_monitor(tmp_path)
+    assert observing(monitor, markers)[:2] == (False, ["ports@mgr"])
+    assert first(monitor, markers) == ASKED
+    assert reconfigures(monitor) == ["mgr.node-1.abcdef", "mgr.node-2.ghijkl"] and len(attempts(markers)) == 2
+    intent = markers.read(attempts(markers)[0])
+    assert intent["ports"] == [8443, 9283] and intent["manager"] == 4100 and intent["daemon"] in MANAGERS
+    assert observing(monitor, markers)[:2] == (False, ["ports@mgr"])
+    assert later(monitor, markers) == NOTHING
+    assert observing(monitor, markers)[:2] == (True, [])
+    assert first(monitor, markers) == NOTHING
+    assert len(reconfigures(monitor)) == 2 and not any("module" in argv for argv in monitor.log)
+
+
+def test_observation_names_lagging_ports_and_never_writes(tmp_path):
+    monitor, markers = lagging_monitor(tmp_path)
+    before, mutations = units.records(markers), list(monitor.mutations)
+    monitor.log = []
+    for unused in range(3):
+        assert observing(monitor, markers)[:2] == (False, ["ports@mgr"])
+    assert monitor.mutations == mutations and units.records(markers) == before
+    assert not any("--refresh" in argv for argv in monitor.log)
+    monitor.manager_services = {"dashboard": "https://192.0.2.1:8443/"}
+    assert observing(monitor, markers)[:2] == (False, ["module@prometheus"])
+    assert first(monitor, markers) == {"changed": False, "pending": True} and reconfigures(monitor) == []
+
+
+def test_lost_reconfigure_reply_is_never_repeated_within_its_apply(tmp_path):
+    monitor, markers = lagging_monitor(tmp_path)
+    run = monitor.run
+
+    def lost(argv, data=b"", timeout=60):
+        answer = run(argv, data, timeout)
+        if argv[-1] == "mgr.node-1.abcdef":
+            raise ceph_native.Refusal("native-timeout")
+        return answer
+
+    monitor.run = lost
+    with pytest.raises(ceph_native.Refusal, match="^native-timeout$"):
+        first(monitor, markers)
+    assert len(attempts(markers)) == 1
+    assert later(monitor, markers) == ASKED and later(monitor, markers) == NOTHING
+    assert reconfigures(monitor) == ["mgr.node-1.abcdef", "mgr.node-2.ghijkl"]
+    monitor.run = run
+    assert observing(monitor, markers)[:2] == (True, [])
+
+
+def test_a_lost_request_is_asked_again_once_per_apply(tmp_path):
+    monitor, markers = lagging_monitor(tmp_path)
+    run = monitor.run
+
+    def dropped(argv, data=b"", timeout=60):
+        answer = run(argv, data, timeout)
+        if argv[-1] == "mgr.node-1.abcdef":
+            monitor.realized["node-1.abcdef"]["ports"] = [8443, 8765]
+        return answer
+
+    monitor.run = dropped
+    assert first(monitor, markers) == ASKED
+    assert later(monitor, markers) == NOTHING and later(monitor, markers) == NOTHING
+    assert observing(monitor, markers)[:2] == (False, ["ports@mgr"])
+    assert reconfigures(monitor) == ["mgr.node-1.abcdef", "mgr.node-2.ghijkl"] and len(attempts(markers)) == 2
+    monitor.run = run
+    assert first(monitor, markers) == ASKED and later(monitor, markers) == NOTHING
+    assert reconfigures(monitor) == ["mgr.node-1.abcdef", "mgr.node-2.ghijkl", "mgr.node-1.abcdef"] and len(attempts(markers)) == 2
+    assert observing(monitor, markers)[:2] == (True, [])
+
+
+def test_a_later_active_manager_is_asked_within_the_same_apply(tmp_path):
+    monitor, markers = lagging_monitor(tmp_path)
+    run = monitor.run
+
+    def dropped(argv, data=b"", timeout=60):
+        answer = run(argv, data, timeout)
+        monitor.realized = manager_rows((8443, 8765))
+        return answer
+
+    monitor.run = dropped
+    assert first(monitor, markers) == ASKED and later(monitor, markers) == NOTHING
+    monitor.run = run
+    monitor.gid = 4200
+    assert later(monitor, markers) == ASKED and len(attempts(markers)) == 4
+    assert later(monitor, markers) == NOTHING and len(reconfigures(monitor)) == 4
+    assert observing(monitor, markers)[:2] == (True, [])
+
+
+def test_stopped_or_replaced_manager_and_foreign_rows(tmp_path):
+    monitor, markers = lagging_monitor(tmp_path)
+    monitor.managers["node-2.ghijkl"]["status"] = 0
+    monitor.realized["node-2.ghijkl"]["status"] = 0
+    assert first(monitor, markers) == ASKED and reconfigures(monitor) == ["mgr.node-1.abcdef"]
+    later(monitor, markers)
+    assert observing(monitor, markers)[:2] == (True, [])
+    replaced = dict(monitor.realized["node-1.abcdef"], container_id="aaaabbbbcccc", ports=[8443, 8765])
+    monitor.managers["node-1.abcdef"] = monitor.realized["node-1.abcdef"] = replaced
+    assert later(monitor, markers) == ASKED
+    assert reconfigures(monitor) == ["mgr.node-1.abcdef", "mgr.node-1.abcdef"] and len(attempts(markers)) == 2
+    foreign = dict(replaced, daemon_id="node-3.mnopqr", hostname="node-9", container_id="999999999999")
+    monitor.managers["node-3.mnopqr"] = monitor.realized["node-3.mnopqr"] = foreign
+    before = len(monitor.mutations)
+    with pytest.raises(ceph_native.Refusal, match="^foreign-service$"):
+        first(monitor, markers)
+    with pytest.raises(ceph_native.Refusal, match="^foreign-service$"):
+        observing(monitor, markers)
+    assert len(monitor.mutations) == before
+
+
+def test_readiness_wait_runs_the_port_remedy_only_while_ports_lag(tmp_path, monkeypatch):
+    monitor, markers = lagging_monitor(tmp_path)
+
+    def observe_cluster(self, evidence, daemons):
+        del daemons
+        evidence["exists"] = True
+        evidence["ready"] = self.observe_resource(evidence, True)
+        evidence["partial"] = not evidence["ready"]
+        return evidence
+
+    monkeypatch.setattr(ceph_native.Worker, "daemons", lambda self: [{"fsid": FSID, "name": "mgr.node-1.abcdef"}])
+    monkeypatch.setattr(ceph_native.Worker, "observe_cluster", observe_cluster)
+    request = monitor.request
+    calls = []
+
+    class Transport:
+        def call(self, host, phase, **options):
+            assert host["name"] == "node-1" and set(options) == {"timeout"} and 0 < options["timeout"] <= ceph_core.READ_BUDGET
+            calls.append(phase)
+            native = units.worker(monitor, markers)
+            native.bound = ceph_native_units.material(request, phase, {})
+            if phase.startswith("manager_ports"):
+                return getattr(native, phase)()
+            return dict(native.observe(), blocking=list(native.blocking))
+
+    clock = iter(range(0, 100000, 5))
+    remedy = ceph_core.ManagerPorts(request["hosts"][0], Transport())
+    observed = ceph_core.wait_unit(request, "d" * 64, request["hosts"][0], remedy.transport, lambda: next(clock), lambda seconds: None,
+                                   remedy=remedy)
+    assert observed["ready"] is True and remedy.changed is True
+    assert calls == ["observe", "manager_ports", "observe", "manager_ports_unrecorded", "observe"]
+    assert reconfigures(monitor) == ["mgr.node-1.abcdef", "mgr.node-2.ghijkl"]
+    assert ceph_native_units.PENDING.fullmatch("ports@mgr") and not ceph_native_units.PENDING.fullmatch("ports@prometheus")
 
 
 def test_unit_waits_for_available_mgr_after_module_respawn(tmp_path, monkeypatch):

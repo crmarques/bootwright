@@ -2552,6 +2552,10 @@ class Worker:
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_dashboard
         return ceph_native_dashboard.Dashboard(self).manager_containers()
 
+    def manager_daemons(self, refresh=True):
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_dashboard
+        return ceph_native_dashboard.Dashboard(self).manager_daemons(refresh)
+
     def dashboard_published(self):
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_dashboard
         return ceph_native_dashboard.Dashboard(self).dashboard_published()

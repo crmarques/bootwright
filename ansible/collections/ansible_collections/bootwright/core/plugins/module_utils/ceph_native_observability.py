@@ -6,7 +6,10 @@ alloy and promtail service as singleton documents in one `orch apply -i -` strea
 ceph-exporter the Ceph image. The hooks only read the frozen image settings, whose single writer is the cluster's
 settings block. cephadm itself enables the prometheus manager module for a declared prometheus service
 (src/pybind/mgr/cephadm/services/monitoring.py:480-489), so readiness observes it in `ceph mgr services`, which the MON
-answers from the MgrMap (src/mon/MgrMonitor.cc:1085-1094); the hooks never enable a module or write an image setting. A log agent
+answers from the MgrMap (src/mon/MgrMonitor.cc:1085-1094); the hooks never enable a module or write an image setting. cephadm
+derives a MGR's deployment ports, which it opens in firewalld, from `mgr services` only when it deploys or reconfigures that MGR
+(src/pybind/mgr/cephadm/services/cephadmservice.py, MgrService.prepare_create), and enabling the module redeploys none, so the
+unit's `manager_ports` phase asks cephadm to reconfigure each running MGR whose ports lack one it publishes. A log agent
 derives the two global file-logging options, whose own attempt and completion records guard writes and drift. The grafana
 password and SNMP credentials are bound leaves the generic unit worker splices into the apply stream only.
 
@@ -40,7 +43,9 @@ import stat
 import time
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_monitoring_template, ceph_native_nfs
-from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import NativeFailure, Refusal, canonical, dashboard_password, require
+from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import (
+    ManagerRefusal, NativeFailure, Refusal, canonical, dashboard_password, require,
+)
 
 MONITORING_TYPES = (
     "alertmanager",
@@ -85,6 +90,11 @@ MAX_TEXT = 256
 MAX_WEBHOOKS = 16
 MAX_MANAGER_SERVICES = 64
 MODULE = "prometheus"
+# Readiness names by this entry a running declared MGR whose deployment ports lack a port `mgr services` publishes; a published URL's port
+# is its first `:<digits>/`, as MgrService.prepare_create reads it.
+PORTS_ENTRY = "ports@mgr"
+PUBLISHED_PORT = re.compile(r":([0-9]+)/")
+PORTS_VERSION = "ceph-manager-ports-attempt-v1"
 GATEWAY_TYPES = (
     "mgmt-gateway",
     "oauth2-proxy",
@@ -279,26 +289,87 @@ def expected(unit):
             for document in unit["documents"]}
 
 
-def readiness(worker, unit, blocking):
-    """Read-only: with prometheus, an available manager whose map lists the prometheus module's endpoint; nothing enters evidence."""
-    if not all(ceph_monitoring_template.ready(worker, plan, descriptor) for descriptor, plan in ceph_monitoring_template.plans(worker, unit)):
-        return False
-    state = logging_state(worker, unit)
-    if state is not None and state[3] is None:
-        return False
-    if not any(document["service_type"] == "prometheus" for document in unit["documents"]):
-        return True
+def prometheus_declared(unit):
+    return any(document["service_type"] == "prometheus" for document in unit["documents"])
+
+
+def module_endpoints(worker):
+    """The MGR map's availability and active manager, and the module endpoints `mgr services` lists, once the prometheus module's is
+    among them; None before."""
     manager = worker.ceph("mgr", "dump")
     require(isinstance(manager, dict) and type(manager.get("available")) is bool, "native-output")
     services = worker.ceph("mgr", "services")
     require(isinstance(services, dict) and len(services) <= MAX_MANAGER_SERVICES
             and all(isinstance(name, str) and isinstance(value, str) for name, value in services.items()), "native-output")
-    if manager["available"] and services.get(MODULE):
+    return (manager, services) if manager["available"] and services.get(MODULE) else None
+
+
+def published_ports(services):
+    ports = set()
+    for url in services.values():
+        found = PUBLISHED_PORT.search(url)
+        if found is not None:
+            require(1 <= int(found.group(1)) <= 65535, "native-output")
+            ports.add(int(found.group(1)))
+    return ports
+
+
+def lagging(daemons, services):
+    """The running declared MGRs whose deployment ports lack a port `mgr services` publishes: cephadm opens in firewalld only a
+    MGR's deployment ports, so a scraper on another host never reaches its exporter."""
+    published = published_ports(services)
+    return sorted(daemon for daemon, (container, up, ports) in daemons.items() if container and up and not published <= set(ports))
+
+
+def readiness(worker, unit, blocking):
+    """Read-only: with prometheus, an available manager whose map lists the prometheus module's endpoint, and every running declared
+    MGR deployed with each port the map publishes, as cephadm's daemon cache lists it unrefreshed; nothing enters evidence."""
+    if not all(ceph_monitoring_template.ready(worker, plan, descriptor) for descriptor, plan in ceph_monitoring_template.plans(worker, unit)):
+        return False
+    state = logging_state(worker, unit)
+    if state is not None and state[3] is None:
+        return False
+    if not prometheus_declared(unit):
         return True
-    entry = "module@" + MODULE
+    published = module_endpoints(worker)
+    entry = "module@" + MODULE if published is None else PORTS_ENTRY
+    if published is not None and not lagging(worker.manager_daemons(refresh=False), published[1]):
+        return True
     if entry not in blocking:
         blocking.append(entry)
     return False
+
+
+def reconfigure_ports(worker, repeat):
+    """Once the prometheus module's endpoint is published: ask cephadm to reconfigure each running declared MGR whose refreshed
+    deployment ports lack a published port. cephadm's reconfigure recomputes the ports from `mgr services`, persists them and opens them
+    in firewalld without restarting the MGR; it schedules the action durably and coalesces a repeat. The intent record of a MGR
+    container, published port set and active manager instance precedes its first request. A recorded target is asked again only when
+    `repeat` holds, which the controller grants to an apply's first evaluated call alone: within one apply a lost reply repeats
+    nothing, and each later apply asks a still-lagging target once more, so a lost request never strands readiness. Whether anything
+    was asked, and whether nothing could be evaluated yet."""
+    try:
+        published = module_endpoints(worker)
+        daemons = worker.manager_daemons() if published is not None else {}
+    except ManagerRefusal:
+        return False, True
+    if published is None:
+        return False, True
+    manager, services = published
+    require(type(manager.get("active_gid")) is int, "native-output")
+    changed, scope = False, worker.recovery_scope()
+    for daemon in lagging(daemons, services):
+        intent = {"version": PORTS_VERSION, "scope": scope, "daemon": daemon, "container": daemons[daemon][0],
+                  "ports": sorted(published_ports(services)), "manager": manager["active_gid"]}
+        name = "manager-ports-" + hashlib.sha256(canonical(intent)).hexdigest() + ".json"
+        if worker.markers.read(name) is not None and not repeat:
+            continue
+        proof = worker.transport_hold()
+        with proof, worker.cache_hold():
+            worker.markers.write(name, intent)
+            worker.ceph("orch", "daemon", "reconfig", "mgr." + daemon, json_result=False)
+        changed = True
+    return changed, False
 
 
 def frontend(unit):

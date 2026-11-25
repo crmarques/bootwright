@@ -128,8 +128,8 @@ UNIT_TYPES = {
     "rbd-mirror": UnitType(mirror_validate, mirror_check, mirror_claim, mirror_settle, mirror_expected, mirror_readiness, MIRROR_TYPES, mirror_frontend,
                            {"rbd-mirror": None}, {}, frozenset(MIRROR_TYPES), None),
 }
-PHASES = frozenset(("unit", "ingress_firewall", "vip_holder", "sso_config", "sso", "nvmeof_unit_observe", "monitoring_credentials",
-                    "monitoring_credentials_held"))
+PHASES = frozenset(("unit", "ingress_firewall", "vip_holder", "sso_config", "sso", "manager_ports", "manager_ports_unrecorded",
+                    "nvmeof_unit_observe", "monitoring_credentials", "monitoring_credentials_held"))
 READ_ONLY_PHASES = frozenset(("nvmeof_unit_observe", "monitoring_credentials_held"))
 # The daemon types whose deployment proves cephadm v20.2.1 already stores a service's login: it stores both logins before it configures a
 # Prometheus daemon (PrometheusService.generate_config) and Prometheus's before it configures a Grafana daemon
@@ -165,7 +165,8 @@ ENDPOINT_ENTRIES = frozenset(("vip", "noholder", "holders", "module", "sso", "st
 PENDING = re.compile(r"(?:(?:" + "|".join(sorted({name for unit in UNIT_TYPES.values() for name in unit.daemon_types} | ENDPOINT_ENTRIES))
                      + r")@(?:(?:nfs|ingress)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}|"
                      + "|".join(ceph_native_observability.MONITORING_TYPES + ceph_native_observability.GATEWAY_TYPES + MIRROR_TYPES + CRASH_TYPES)
-                     + r")|(?:tls|http)@(?:" + "|".join(ceph_native_observability.GATEWAY_TYPES) + r"))\Z")
+                     + r")|(?:tls|http)@(?:" + "|".join(ceph_native_observability.GATEWAY_TYPES) + r")|"
+                     + re.escape(ceph_native_observability.PORTS_ENTRY) + r")\Z")
 BINDING_MEMBERS = frozenset(("path", "secretRef", "serviceRef"))
 # The non-secret stand-in a bound leaf holds wherever the worker normalizes, records or compares a document.
 BOUND = "bootwright-bound:"
@@ -754,6 +755,26 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
         self.manager_declare(enable, module=("dashboard", "ac-user-show"))
         require(ceph_native_observability.sso_enabled(self), "not-ready")
         return {"changed": True, "pending": False}
+
+    def manager_ports(self):
+        """An apply's first evaluated call of the MGR port remedy, which may ask a recorded target again."""
+        return self.manager_port_requests(True)
+
+    def manager_ports_unrecorded(self):
+        """Every later call of the same apply, which asks only a target no intent record names."""
+        return self.manager_port_requests(False)
+
+    def manager_port_requests(self, repeat):
+        """The monitoring unit's one MGR effect, on the bootstrap host while its readiness names a MGR whose deployment ports lag the
+        published module endpoints: the reconfigure requests ceph_native_observability.reconfigure_ports makes. It never enables a
+        module; while the manager restarts or the module is unpublished nothing is evaluated and the answer is pending."""
+        require(self.markers.owned(), "ownership")
+        require(self.ceph("fsid") == {"fsid": self.request["fsid"]}, "ownership")
+        unit = self.request["service"]
+        require(unit["type"] == "monitoring" and ceph_native_observability.prometheus_declared(unit))
+        require(all(self.markers.read("service-" + name + "-complete.json") is not None for name in self.unit_names()), "not-ready")
+        changed, pending = ceph_native_observability.reconfigure_ports(self, repeat)
+        return {"changed": changed, "pending": pending}
 
     def monitoring_credentials(self):
         """After the unit's readiness, on the bootstrap host and writing no record of its own: the basic-auth login cephadm keeps for each
