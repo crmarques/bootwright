@@ -26,7 +26,7 @@ const (
 )
 
 func SignOnContentDigest() string {
-	d := sha256.Sum256([]byte(SignOnImplementation + "\x00" + SignOnVersion + "\x00" + EvidenceVersion + "\x00" + PhysicalRetirementImplementation))
+	d := sha256.Sum256([]byte(SignOnImplementation + "\x00" + SignOnVersion + "\x00" + EvidenceVersion + "\x00" + SignOnSuspensionVersion + "\x00" + PhysicalRetirementImplementation))
 	return hex.EncodeToString(d[:])
 }
 
@@ -418,10 +418,14 @@ func (c SignOnCapability) prepare(ctx context.Context, e lifecycle.Execution) (S
 func signOnDeadline(operation string) (time.Duration, error) {
 	calls, waits := 0, 0
 	switch operation {
-	case "apply":
+	case "apply", "resume":
 		calls, waits = 6, 1
 	case "observe":
 		calls = 1
+	case "suspend_prepare":
+		calls = 2
+	case "suspend":
+		calls, waits = 4, 1
 	default:
 		return 0, cephRequestInvalid.Fail("the Ceph sign-on adapter runs no "+operation+" operation", "")
 	}
@@ -445,6 +449,10 @@ func signOnMaterial(e lifecycle.Execution, unit Request, operation string, reade
 }
 
 func (c SignOnCapability) run(ctx context.Context, e lifecycle.Execution, operation string, unit Request) (lifecycle.RunResult, error) {
+	return c.runLending(ctx, e, operation, operation, unit, nil)
+}
+
+func (c SignOnCapability) runLending(ctx context.Context, e lifecycle.Execution, operation, lending string, unit Request, values map[string]string) (lifecycle.RunResult, error) {
 	if c.runner == nil {
 		return lifecycle.RunResult{}, cephUnconfigured.Fail("the Ceph sign-on adapter is not configured", "")
 	}
@@ -456,13 +464,13 @@ func (c SignOnCapability) run(ctx context.Context, e lifecycle.Execution, operat
 	if err != nil {
 		return lifecycle.RunResult{}, err
 	}
-	execution, files, cleanup, err := signOnMaterial(e, unit, operation, c.proofs)
+	execution, files, cleanup, err := signOnMaterial(e, unit, lending, c.proofs)
 	if err != nil {
 		return lifecycle.RunResult{}, err
 	}
 	defer cleanup()
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{Implementation: SignOnImplementation, Operation: operation, Variable: "bootwright_ceph", Canonical: canonical,
-		Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: unit.Controller}, Materials: files, Refusals: adapterRefusals(), NativeErrors: true, Deadline: deadline}))
+		Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: unit.Controller}, Materials: files, Values: values, Refusals: adapterRefusals(), NativeErrors: true, Deadline: deadline}))
 }
 
 func (c SignOnCapability) Apply(ctx context.Context, e lifecycle.Execution) (lifecycle.Result, error) {
@@ -490,6 +498,9 @@ func (c SignOnCapability) Observe(ctx context.Context, e lifecycle.Execution) (l
 	_, unit, err := c.prepare(ctx, e)
 	if err != nil {
 		return unknown, err
+	}
+	if e.SignOn != "" {
+		return c.observeSuspended(ctx, e, unit)
 	}
 	result, err := c.run(ctx, e, "observe", unit)
 	if err != nil {

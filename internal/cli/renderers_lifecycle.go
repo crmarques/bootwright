@@ -319,6 +319,15 @@ func renderClusterInfo() commandRenderer {
 	}}
 }
 
+func renderSignOn() commandRenderer {
+	return commandRenderer{human: func(r *Runner, c renderCall) (bool, error) {
+		if c.result.signOn == nil {
+			return false, nil
+		}
+		return true, writeSignOn(r.config.Out, c.path, c.result.signOn, selectedJSON(c.command))
+	}}
+}
+
 func renderAdminCredentials() commandRenderer {
 	return commandRenderer{human: func(r *Runner, c renderCall) (bool, error) {
 		if c.result.adminCredentials == nil {

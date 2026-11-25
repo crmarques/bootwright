@@ -15,7 +15,7 @@ the owning section below.
 | One kind's fields | [environment](api/environment.md), [secrets](api/secrets.md), [machines](api/machines.md), [networks](api/networks.md), [infrastructure services](api/infrastructure-services.md), [container clusters](api/openshift-clusters.md), [storage](api/ceph.md#kinds), [add-ons](api/addons.md), [custom playbooks](api/custom-playbooks.md) |
 | Delegated SSH sessions | [session access policy](api/session-access-policy.md) |
 | Machine file transfer | [machine file copies](cli/machine-copy.md) |
-| Command behavior and journeys | [cli](cli.md); flags: [commands](cli/commands.md); streams, JSON, diagnostics: [output](cli/output.md), [stops](cli/stops.md); cluster access: [access](cli/cluster-access.md), [administrator credentials](cli/cluster-admin-credentials.md) |
+| Command behavior and journeys | [cli](cli.md); flags: [commands](cli/commands.md); streams, JSON, diagnostics: [output](cli/output.md), [stops](cli/stops.md); cluster access: [access](cli/cluster-access.md), [administrator credentials](cli/cluster-admin-credentials.md), [sign-on suspension](cli/cluster-sign-on.md) |
 | Host prerequisites, install and uninstall, the controller stage | [controller](controller.md) |
 | Contexts, frozen input, storage, locking, deletion | [contexts](contexts.md); [controller record](contexts/controller-record.md); [log root](contexts/log-root.md) |
 | Secret custody, bindings and reveal | [secrets](secrets.md) |

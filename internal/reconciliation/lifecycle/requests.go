@@ -386,6 +386,7 @@ type ResourceSummary struct {
 type StorageResourcesResult struct {
 	Clusters []ClusterSummary
 	Frozen   []reconciliation.Block
+	SignOns  map[string]string
 }
 
 type ServiceSummary struct {

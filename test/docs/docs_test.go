@@ -928,6 +928,7 @@ func notYetMetParagraph(pages map[string]markdownFile, from string, line int, te
 var askRuleMarkers = []struct{ phrase, flag string }{
 	{phrase: "planned mutation"},
 	{phrase: "credential update"},
+	{phrase: "access change"},
 	{phrase: "planned removal"},
 	{phrase: "host packages"},
 	{phrase: "download"},

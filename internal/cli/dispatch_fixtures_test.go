@@ -357,6 +357,7 @@ func dispatchSpies(record *dispatchRecord) Services {
 		EnvironmentPreflight:  environmentSpy{record},
 		EnvironmentInspection: environmentSpy{record},
 		AdminCredentials:      environmentSpy{record},
+		SignOn:                environmentSpy{record},
 		EnvironmentAccess:     environmentSpy{record},
 		Lifecycle:             lifecycleSpy{record},
 		Artifacts:             artifactsSpy{record},
@@ -420,6 +421,14 @@ func (s machineDiscoverySpy) PlanDiscovery(ctx context.Context, r diskdiscovery.
 }
 func (s machineDiscoverySpy) Inventory(ctx context.Context, r diskdiscovery.InventoryRequest) (*diskdiscovery.InventoryResult, error) {
 	return s.record.result.diskInventories, s.record.called(ctx, "machine inventory", r)
+}
+
+func (s environmentSpy) Suspend(ctx context.Context, request lifecycle.SignOnRequest) (*lifecycle.SignOnResult, error) {
+	return s.record.result.signOn, s.record.called(ctx, "cluster sign-on suspend", request)
+}
+
+func (s environmentSpy) Resume(ctx context.Context, request lifecycle.SignOnRequest) (*lifecycle.SignOnResult, error) {
+	return s.record.result.signOn, s.record.called(ctx, "cluster sign-on resume", request)
 }
 
 func (s environmentSpy) UpdateAdminCredentials(ctx context.Context, request lifecycle.UpdateAdminCredentialsRequest) (*lifecycle.UpdateAdminCredentialsResult, error) {

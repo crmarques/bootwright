@@ -231,6 +231,9 @@ func operationPlaybook() map[string]string {
 		ceph.SignOnImplementation + "/apply":                        "storage/core_apply.yml",
 		ceph.SignOnImplementation + "/observe":                      "storage/core_observe.yml",
 		ceph.SignOnImplementation + "/destroy":                      "storage/core_destroy.yml",
+		ceph.SignOnImplementation + "/suspend_prepare":              "storage/signon_suspend_prepare.yml",
+		ceph.SignOnImplementation + "/suspend":                      "storage/signon_suspend.yml",
+		ceph.SignOnImplementation + "/resume":                       "storage/signon_resume.yml",
 	}
 	for _, operation := range []string{"apply", "observe", "destroy"} {
 		bindings[mirrorfill.FilesImplementation+"/"+operation] = "infrastructureservices/mirror_files_" + operation + ".yml"

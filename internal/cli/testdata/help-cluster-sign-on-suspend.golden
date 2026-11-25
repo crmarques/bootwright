@@ -1,0 +1,32 @@
+  bootwright / cluster sign-on suspend
+      Return one managed Ceph cluster's management gateway to local sign-in while its identity
+      provider is down: remove its CephSignOn's oauth2-proxy service, wait until cephadm turns
+      the dashboard's single sign-on off and reconfigures the gateway, Grafana, Prometheus and
+      Alertmanager, then prove that the custodied dashboard admin password is valid and the
+      gateway serves its own sign-in. Requires a completed apply that realized the cluster's
+      CephSignOn. Runs over the verified administrative channel on the cluster's bootstrap host
+      and never contacts the identity provider. Records the suspension in the context before
+      changing anything; repeat an interrupted command to finish it, and a repeat over a
+      suspended cluster settles. apply never turns a suspended sign-on back on; bootwright
+      cluster sign-on resume does. cluster info --secrets --name <cluster> reveals the local
+      logins. Refuses external Ceph. --yes skips ordinary confirmation.
+
+  Usage
+    bootwright cluster sign-on suspend [flags]
+
+  Command flags
+      --name  Select the exact object name (required)
+      --yes   Confirm the command's ordinary confirmation
+
+  Common flags
+      --ascii       Use ASCII status markers
+      --color       Select terminal colors (values: auto, always, never) · default auto
+      --context     Select a context (default: current context)
+      --detail      Select human detail (values: compact, full) · default compact
+      -h, --help    Show help for this command
+      -o, --output  Select output mode (values: text, json, yaml) · default text
+      --progress    Select progress animation (values: auto, always, never) · default auto
+      --width       Set presentation width (0: automatic) · default 0
+
+  Examples
+    bootwright cluster sign-on suspend --context lab --name storage

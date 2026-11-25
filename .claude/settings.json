@@ -59,6 +59,8 @@
       "Bash(*bootwright *secret *encryption *rotate*)",
       "Bash(*bootwright *catalog *media *delete*)",
       "Bash(*bootwright *cluster update-admin-creds*)",
+      "Bash(*bootwright *cluster sign-on suspend*)",
+      "Bash(*bootwright *cluster sign-on resume*)",
       "Bash(*bootwright *cluster info*--secrets*)",
       "Bash(*bootwright *cluster info*--object-user*)",
       "Bash(*bootwright *render *effective*--sensitive*)",

@@ -25,6 +25,7 @@ type StorageProof struct {
 	Monitoring      []MonitoringAccess
 	Endpoints       []Endpoint
 	Specializations []string
+	SignOn          string
 }
 
 type Custodied struct {

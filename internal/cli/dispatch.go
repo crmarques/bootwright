@@ -83,6 +83,7 @@ type commandResult struct {
 	clusterList      *inspection.ListResult
 	clusterInfo      *inspection.InfoResult
 	adminCredentials *lifecycle.UpdateAdminCredentialsResult
+	signOn           *lifecycle.SignOnResult
 }
 
 func (r commandResult) clearSensitive() {

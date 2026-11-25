@@ -242,6 +242,18 @@ prefix_rule(
 )
 
 prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "cluster", "sign-on", "suspend"],
+    decision = "prompt",
+    justification = "bootwright cluster sign-on suspend changes a cluster's access; the owner asks for it (AGENTS.md)",
+)
+
+prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "cluster", "sign-on", "resume"],
+    decision = "prompt",
+    justification = "bootwright cluster sign-on resume changes a cluster's access; the owner asks for it (AGENTS.md)",
+)
+
+prefix_rule(
     pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "policy", "set"],
     decision = "prompt",
     justification = "bootwright policy set replaces delegated access grants; the owner asks for it (AGENTS.md)",

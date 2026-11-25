@@ -8,7 +8,7 @@ import hashlib
 import pytest
 
 from ansible_collections.bootwright.core.plugins.action import ceph_cluster_protocol
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_host_runtime, ceph_native
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_evidence, ceph_host_runtime, ceph_native
 
 LEAF = hashlib.sha256(b"cephadm-signed leaf for node-1").hexdigest()
 
@@ -117,3 +117,10 @@ def test_the_publisher_holds_a_physical_disk_row_to_its_closed_shape(row, change
     damaged = {key: value for key, value in dict(row, **changes).items() if value is not None}
     with pytest.raises(ceph_native.Refusal, match="^(evidence|device-identity)$"):
         publish(host_evidence(damaged))
+
+
+def test_the_publisher_admits_a_sign_on_suspension_evidence_alone():
+    value = {"version": ceph_evidence.SIGNON_SUSPENSION_EVIDENCE, "request": "d" * 64, "state": "suspended", "changed": True, "baseline": []}
+    assert ceph_cluster_protocol.completion({"digest": "d" * 64, "evidence": copy.deepcopy(value), "observed": False, "removed": False}) == (value, None)
+    with pytest.raises(ceph_native.Refusal, match="^evidence$"):
+        ceph_cluster_protocol.completion({"digest": "e" * 64, "evidence": copy.deepcopy(value), "observed": False, "removed": False})

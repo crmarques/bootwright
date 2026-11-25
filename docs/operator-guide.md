@@ -911,16 +911,28 @@ provider or the directory anything, so they work whatever is down.
 
 - Dashboard, Grafana, Prometheus and Alertmanager. While a
   [`CephSignOn`](../specs/ceph-resources.md#cephsignon) is on, no local sign-in
-  exists: the gateway sends every user to the provider. Run
-  `bootwright cluster sign-on suspend --name <cluster>`; it works with the
-  provider down, removes oauth2-proxy, and returns the management plane to local
-  sign-in. Read the local logins and sign in as the dashboard `admin`:
+  exists: the gateway sends every user to the provider. Suspend the sign-on; it
+  works with the provider down, removes oauth2-proxy, and returns the management
+  plane to local sign-in
+  ([sign-on suspension](../specs/cli/cluster-sign-on.md)):
+
+  ```sh
+  bootwright cluster sign-on suspend --context lab-rhel --name ceph-lab
+  ```
+
+  Read the local logins and sign in as the dashboard `admin`:
 
   ```sh
   bootwright cluster info --context lab-rhel --name ceph-lab --secrets
   ```
 
-  When the provider is back, run `bootwright cluster sign-on resume --name <cluster>`.
+  When the provider is back, restore the frozen sign-on; it refuses before any
+  change while the provider does not answer:
+
+  ```sh
+  bootwright cluster sign-on resume --context lab-rhel --name ceph-lab
+  ```
+
   Never remove oauth2-proxy by hand: cephadm reconfigures the gateway and
   Bootwright's observation reports the difference
   ([management sign-on](../specs/ceph.md#management-sign-on)).

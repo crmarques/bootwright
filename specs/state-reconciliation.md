@@ -198,7 +198,9 @@ the changed-input refusal `apply.input-changed` with its change list:
   port, which the add-on instance and the
   [management sign-on](ceph.md#sign-on-addition) implement, for a cluster the
   lineage installed, and states that the block reads bound Secret material only
-  in its own apply attempts; the sign-on admits only its own block, beside the
+  in its own apply attempts; a command that lends such material outside the
+  engine, [`cluster sign-on resume`](cli/cluster-sign-on.md#resume), reopens the
+  binding of the apply that holds the block; the sign-on admits only its own block, beside the
   cluster's management gateway and frozen oauth2-proxy image that the lineage
   installed. A capability without either refuses `apply.not-an-addition`;
 - each produced input an added block borrows has a producer in the lineage and
@@ -458,10 +460,15 @@ contexts/<name>/state/operations/
     blocks/<block-id>/state.json
     blocks/<block-id>/attempt-NNNNNN.json
     blocks/<block-id>/attempt-NNNNNN-resolution-NNNNNN.json
+    suspensions/<block-id>.json
 ```
 
 Its logs lie outside the store, under the
 [log root](contexts.md#log-root) at `contexts/<name>/operations/<operation-id>/`.
+`suspensions/<block-id>.json` is the record of a
+[sign-on suspension](cli/cluster-sign-on.md#suspension-record) of a block that
+operation holds, written only by `cluster sign-on suspend` and `resume` under
+the exclusive lease; it moves no block state and no apply reads it.
 
 `index.json` names at most one current operation. An index the closed decoder or
 its validation refuses, such as one of another version, is unreadable evidence: every lifecycle command refuses
@@ -2417,6 +2424,9 @@ their cluster's host reads this way
 | `no-effect` | absent, with the note `<block>: its observation proves none of this effect exists` |
 | `partial` | partial, with the note `<block>: part of this effect is realized as its frozen request states` |
 | `completed` | present |
+
+A [suspended sign-on](cli/cluster-sign-on.md#while-suspended) block reads its
+suspended state, never drift.
 
 A present or partial reading also carries, as the note `<block>: <message>`,
 each [warning](architecture.md#adapter-warnings-and-group-progress) its

@@ -17,12 +17,17 @@ options:
     type: dict
     required: true
   operation:
-    description: The fixed lifecycle operation.
+    description:
+      - The fixed lifecycle operation.
+      - C(suspend_prepare), C(suspend) and C(resume) run only a CephSignOn's oauth2-proxy unit.
     type: str
     choices:
       - apply
       - observe
       - destroy
+      - suspend_prepare
+      - suspend
+      - resume
     required: true
   digest:
     description: Digest of the frozen lifecycle request.
@@ -37,6 +42,8 @@ options:
       - C(reading) set to C(hosts) reads only each cluster host's state, once, for every resource observation of one C(diff --observe)
         whose request has the same reading scope; it publishes that host reading as its evidence.
       - C(hosts) carries such a host reading, as JSON; a resource observation then replays it in place of its own host state reads.
+      - C(signOn) set to C(suspended) observes a suspended sign-on; C(signOnBaseline) carries, as JSON, the before-state a suspension
+        recorded before its first effect.
     type: dict
     required: true
   outputs:
@@ -84,14 +91,14 @@ from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, 
 
 # The closed, non-secret values material may carry beside its paths. AnsibleModule masks every leaf of a no_log option as a
 # substring of each result string, so a selector left masked would censor the refusal names and evidence versions that contain it.
-SELECTORS = frozenset(("tiebreaker", "managers", "unrecorded", "hosts"))
+SELECTORS = frozenset(("tiebreaker", "managers", "unrecorded", "hosts", "suspended"))
 
 
 def main():
     module = AnsibleModule(
         argument_spec={
             "request": {"type": "dict", "required": True},
-            "operation": {"type": "str", "required": True, "choices": ["apply", "observe", "destroy"]},
+            "operation": {"type": "str", "required": True, "choices": ["apply", "observe", "destroy", "suspend_prepare", "suspend", "resume"]},
             "digest": {"type": "str", "required": True},
             "material": {"type": "dict", "required": True, "no_log": True},
             "outputs": {"type": "dict", "default": {}, "no_log": True},
@@ -107,14 +114,19 @@ def main():
         shared = ceph_core.shared_hosts(material.pop("hosts", None))
         # The cluster apply's run deadline in seconds: masked as a material leaf, its number would be censored in every result string.
         deadline = ceph_core.run_deadline(material.pop("deadline", None))
-        for selector in (retirement, reading):
+        signon = material.pop("signOn", None)
+        recorded = material.pop("signOnBaseline", None)
+        if isinstance(recorded, str):
+            module.no_log_values.discard(recorded)
+        baseline = ceph_core.suspension_baseline(recorded)
+        for selector in (retirement, reading, signon):
             if selector in SELECTORS:
                 module.no_log_values.discard(selector)
         if deadline is not None:
             module.no_log_values.discard(str(deadline))
         transport = ceph_transport.Transport(params["request"], material)
         result = ceph_core.execute(params["request"], params["operation"], params["digest"], transport, params["outputs"], retirement=retirement,
-                                   reading=reading, shared=shared, deadline=deadline)
+                                   reading=reading, shared=shared, deadline=deadline, signon=signon, baseline=baseline)
     except Exception as error:
         reason, detail = ceph_core.refusal(error, ceph_core.CLUSTER_REASONS)
         failure = {"reason": reason}

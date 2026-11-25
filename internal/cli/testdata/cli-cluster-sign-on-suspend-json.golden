@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "cluster sign-on suspend",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": "lab",
+    "cluster": "storage",
+    "signOn": {
+      "state": "suspended",
+      "provider": "corp-sso",
+      "changed": true,
+      "localLogins": [
+        "dashboard",
+        "prometheus",
+        "alertmanager",
+        "grafana"
+      ]
+    }
+  },
+  "diagnostics": [],
+  "logs": []
+}

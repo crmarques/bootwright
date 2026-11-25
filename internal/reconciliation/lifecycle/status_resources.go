@@ -98,8 +98,13 @@ func (s Service) storageResources(ctx context.Context, view View, result *Storag
 		return err
 	}
 	result.Clusters = realizedStorage(result.Clusters, realized)
-	if plan, _, err = appliedView(ctx, store, operation, plan, states); err != nil {
+	if plan, states, err = appliedView(ctx, store, operation, plan, states); err != nil {
 		return err
+	}
+	if operation.Verb == reconciliation.Apply {
+		if result.SignOns, err = signOnStates(ctx, store, s.capabilities, operation, plan, states); err != nil {
+			return err
+		}
 	}
 	for _, block := range plan.Blocks {
 		if storageFamily(api.Kind(block.Kind)) {

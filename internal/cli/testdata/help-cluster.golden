@@ -35,6 +35,9 @@
                identity; confirm or refuse an unproved host key and return the client's exit
                status
 
+  ○ Command | sign-on
+      PURPOSE  Suspend and resume a managed Ceph cluster's single sign-on
+
   ○ Command | update-admin-creds
       PURPOSE  Generate and update a cluster's administrator logins
 

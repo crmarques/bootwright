@@ -59,6 +59,8 @@ func TestDispatchEveryApplicationCommand(t *testing.T) {
 		{"validate", compilation.ValidateRequest{ContextName: "", Files: []string{"inputs"}}},
 		{"install", prerequisites.SetupRequest{DryRun: true, SkipConfirmation: true}},
 		{"cluster update-admin-creds", lifecycle.UpdateAdminCredentialsRequest{ContextName: "example", Name: "demo", Logins: []string{"prometheus", "grafana"}, SkipConfirmation: true}},
+		{"cluster sign-on suspend", lifecycle.SignOnRequest{ContextName: "example", Name: "demo", SkipConfirmation: true}},
+		{"cluster sign-on resume", lifecycle.SignOnRequest{ContextName: "example", Name: "demo", SkipConfirmation: true}},
 		{"cluster list", inspection.ListClustersRequest{ContextName: "example"}},
 		{"cluster info", inspection.ClusterInfoRequest{ContextName: "example", Names: []string{"demo"}, Secrets: true}},
 		{"cluster rsh", environmentaccess.ClusterRshRequest{ContextName: "example", Name: "demo", Node: "node-a", SSH: account}},

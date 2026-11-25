@@ -283,6 +283,24 @@ var (
 	controllerOutdatedClient = diagnostics.Stop{Code: "controller.outdated-client", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseBuild, Recovery: diagnostics.RecoveryOtherVerb,
 		Meaning: "a warning: an apply's controller stage proved a client below this build's minimum, which a settling apply and a removal keep running", Remedy: "take the apply back with destroy and apply again to install this build's default client, or keep the build that applied it"}
+	engineSignOnUnapplied = diagnostics.Stop{Code: "engine.sign-on-unapplied", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryOtherVerb,
+		Meaning: "a sign-on suspend or resume names a cluster whose sign-on no completed current apply realized", Remedy: "complete the cluster's apply before suspending or resuming its sign-on"}
+	engineSignOnClusterUnknown = diagnostics.Stop{Code: "engine.sign-on-cluster-unknown", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
+		Meaning: "a sign-on suspend or resume names a cluster the context does not select", Remedy: "bootwright cluster info --context <context> lists the selected clusters"}
+	engineSignOnExternal = diagnostics.Stop{Code: "engine.sign-on-external-cluster", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
+		Meaning: "a sign-on suspend or resume names an external cluster, whose sign-on its own administrator keeps", Remedy: "change the sign-on through the external cluster's administrator"}
+	engineSignOnAbsent = diagnostics.Stop{Code: "engine.sign-on-absent", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
+		Meaning: "a sign-on suspend or resume names a cluster no apply of the context gave a single sign-on", Remedy: "bootwright cluster info --context <context> --name <cluster> shows the cluster's sign-on"}
+	engineSignOnSuspensionDamaged = diagnostics.Stop{Code: "engine.sign-on-suspension-damaged", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "the context's sign-on suspension record is unreadable or names another block or request, so nothing ran", Remedy: "restore the context's records from a matching backup"}
+	engineSignOnMoved = diagnostics.Stop{Code: "engine.sign-on-moved", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseConcurrency, Recovery: diagnostics.RecoveryRepeat,
+		Meaning: "the context's operation, input or sign-on suspension changed while a suspend or resume was decided, so nothing ran", Remedy: "repeat the command against the current context"}
 )
 
 var stops = []diagnostics.Stop{engineRecordsFull, engineRecordsReadOnly, engineRecordsDenied, engineRecordsDevice, engineEscaped, engineStartUnrecorded,
@@ -300,7 +318,8 @@ var stops = []diagnostics.Stop{engineRecordsFull, engineRecordsReadOnly, engineR
 	engineCredentialPreparationInvalid, engineCredentialUpdateUnproved, engineControllerUnprepared, engineControllerUnbound, engineControllerOtherHost,
 	engineRuntimeUnprepared, engineClientNotInstalled, engineWiringMissing, engineLogUnmaintained, engineProducedNameInvalid,
 	planControllerOrder, planReservationKeyTooLong, planHostKeyUnreadable, planSocketConflict, planTemplateValue, planObjectUnsupported,
-	planConsumerOutlivesDestroy, storageHealth, storageNotReady, substrateShadowedRoute, controllerOutdatedClient}
+	planConsumerOutlivesDestroy, storageHealth, storageNotReady, substrateShadowedRoute, controllerOutdatedClient,
+	engineSignOnUnapplied, engineSignOnClusterUnknown, engineSignOnExternal, engineSignOnAbsent, engineSignOnSuspensionDamaged, engineSignOnMoved}
 
 var relayedWarnings = []string{storageHealth.Code, storageNotReady.Code, substrateShadowedRoute.Code, "substrate.lend-not-revoked"}
 

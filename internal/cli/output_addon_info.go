@@ -103,5 +103,6 @@ func groupShort(parent, part string) string {
 		"media":      "Manage installer media shared by contexts on this controller",
 		"render":     "Render effective desired state and external-tool artifacts",
 		"secret":     "Set, generate, check and reveal a context's Secrets",
+		"sign-on":    "Suspend and resume a managed Ceph cluster's single sign-on",
 	}[part]
 }

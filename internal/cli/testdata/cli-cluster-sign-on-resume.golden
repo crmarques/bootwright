@@ -1,0 +1,3 @@
+  ✓ Resumed single sign-on for storage through its identity provider
+      Provider  corp-sso
+      Changed   nothing; the cluster was already in this state

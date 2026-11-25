@@ -8,6 +8,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/environment/inspection"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
@@ -67,6 +68,11 @@ type managedCephPresentation struct {
 	Resources       []resourcePresentation   `json:"resources"`
 	Endpoints       []endpointPresentation   `json:"endpoints"`
 	ObjectUsers     []objectUserPresentation `json:"objectUsers,omitempty"`
+	SignOn          *signOnInfoPresentation  `json:"signOn,omitempty"`
+}
+
+type signOnInfoPresentation struct {
+	State string `json:"state"`
 }
 
 type objectUserPresentation struct {
@@ -409,6 +415,9 @@ func displayManagedCeph(ceph *inspection.ManagedCeph) *managedCephPresentation {
 		Dashboard: displayDashboard(ceph.Dashboard), Monitoring: displayMonitoring(ceph.Monitoring), Resources: make([]resourcePresentation, 0, len(ceph.Resources)),
 		Endpoints: make([]endpointPresentation, 0, len(ceph.Endpoints)),
 	}
+	if ceph.SignOn != "" {
+		shown.SignOn = &signOnInfoPresentation{State: escapeDisplayLine(ceph.SignOn)}
+	}
 	for _, user := range ceph.ObjectUsers {
 		access, _ := user.Credentials.Part(secrets.UsernamePart)
 		secret, _ := user.Credentials.Part(secrets.PasswordPart)
@@ -560,6 +569,20 @@ func managedCephTopology(ceph *inspection.ManagedCeph) []field {
 	return fields
 }
 
+func signOnFields(contextName, cluster, state string) []field {
+	fields := []field{{Label: "Sign-on", Value: escapeDisplayLine(state), Tone: "state"}}
+	switch state {
+	case lifecycle.SignOnSuspended:
+		fields = append(fields, field{Label: "Local logins", Value: "bootwright cluster info --context " + contextName + " --name " + cluster + " --secrets", Tone: "command"},
+			field{Label: "Restore", Value: "bootwright cluster sign-on resume --context " + contextName + " --name " + cluster, Tone: "command"})
+	case lifecycle.SignOnSuspending:
+		fields = append(fields, field{Label: "Next", Value: "bootwright cluster sign-on suspend --context " + contextName + " --name " + cluster, Tone: "command"})
+	case lifecycle.SignOnResuming:
+		fields = append(fields, field{Label: "Next", Value: "bootwright cluster sign-on resume --context " + contextName + " --name " + cluster, Tone: "command"})
+	}
+	return fields
+}
+
 func writeManagedCeph(text *display, contextName, cluster string, ceph *inspection.ManagedCeph, commands []inspection.AccessCommand, full bool) {
 	writeAccessCommands(text, contextName, cluster, commands, full)
 	if ceph.Status == inspection.StatusReady {
@@ -579,6 +602,9 @@ func writeManagedCeph(text *display, contextName, cluster string, ceph *inspecti
 	}
 	if len(ceph.Monitoring) != 0 {
 		text.mutedFields(monitoringAccessFields(ceph.Monitoring)...)
+	}
+	if ceph.SignOn != "" {
+		text.mutedFields(signOnFields(contextName, cluster, ceph.SignOn)...)
 	}
 	if rows := endpointAccessFields(ceph.Endpoints, full); len(rows) != 0 {
 		text.mutedFields(rows...)

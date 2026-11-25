@@ -132,8 +132,8 @@
     "fingerprint": "37d856d21b7eaee8fb75aedb46af8a27b614e4acbd373ce7aa9048bcf7f88f37"
   },
   "storage-ceph-signon-v1": {
-    "contentDigest": "9178a3a51885b66af1cd7fb5e0beba4e20a4ab0ca908ec7874a7e2abdaad61a4",
-    "fingerprint": "480ebb0c38ebe6cef75bc1276f1b63d6c12c2918172b0694c6d273e1dff35058"
+    "contentDigest": "6186bbb921b5b1bac5c9c70b861e776cfdf8b6e624337bb95df88eb62a436f28",
+    "fingerprint": "9764ffbf265b78c95de71215436d8d7c8dad609e02dd1bade4bfa22d36ddb9c8"
   },
   "storage-ceph-smb-v1": {
     "contentDigest": "8881e871ae65d1dae0f830b683954cbcd665a792c4d7dd5ee808710605c9bcda",

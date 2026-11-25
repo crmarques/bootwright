@@ -106,6 +106,7 @@ type ManagedCeph struct {
 	Resources       []Resource
 	Endpoints       []Endpoint
 	ObjectUsers     []ObjectUserAccess
+	SignOn          string
 }
 
 type MonitoringAccess struct {

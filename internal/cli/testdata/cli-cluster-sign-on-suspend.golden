@@ -1,0 +1,8 @@
+  ✓ Suspended single sign-on for storage; its management gateway signs users in locally
+      Provider            corp-sso
+      Dashboard login     local
+      Prometheus login    local
+      Alertmanager login  local
+      Grafana login       local
+      Next                bootwright cluster info --context lab --name storage --secrets
+      Restore             bootwright cluster sign-on resume --context lab --name storage

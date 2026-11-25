@@ -917,6 +917,7 @@ argument_specs:
           - C(retirement) C(tiebreaker) selects a provided stretch tiebreaker's removal or its read-only observation.
           - C(retirement) C(managers) stops and disables every data host's managers of the cluster, or reads that none runs or is enabled.
           - C(reading) C(hosts) reads each host's state once for a diff's resource observations; C(hosts) lends that reading to one.
+          - C(signOn) C(suspended) observes a suspended sign-on; C(signOnBaseline) lends a suspension its recorded before-state.
       bootwright_ceph_output:
         type: dict
         required: false
@@ -938,4 +939,16 @@ argument_specs:
 
   destroy:
     short_description: Remove a frozen Ceph resource only with proved quiescence.
+    options: *request
+
+  signon_suspend_prepare:
+    short_description: Read a frozen Ceph sign-on's dependent daemons before its suspension changes anything.
+    options: *request
+
+  signon_suspend:
+    short_description: Suspend a frozen Ceph sign-on and prove local sign-in through its management gateway.
+    options: *request
+
+  signon_resume:
+    short_description: Re-apply a suspended Ceph sign-on's frozen oauth2-proxy document and prove single sign-on again.
     options: *request

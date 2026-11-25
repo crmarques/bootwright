@@ -14,6 +14,7 @@ type Services struct {
 	EnvironmentPreflight  EnvironmentPreflightService
 	EnvironmentInspection EnvironmentInspectionService
 	AdminCredentials      AdminCredentialsService
+	SignOn                SignOnService
 	EnvironmentAccess     EnvironmentAccessService
 	Lifecycle             LifecycleService
 	Artifacts             ArtifactService

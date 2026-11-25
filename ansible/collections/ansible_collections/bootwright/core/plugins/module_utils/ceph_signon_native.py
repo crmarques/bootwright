@@ -20,6 +20,17 @@ templates make it answer, nginx's `auth_request /oauth2/auth` 401 turned by `err
 sign-in, which with `skip_provider_button= true` (templates/services/oauth2-proxy/oauth2-proxy.conf.j2) is a 302 to the issuer's
 authorization endpoint (templates/services/mgmt-gateway/external_server.conf.j2, `location /`). Any other answer is pending, never a
 pass. Like the core worker it imports only the target Python standard library and the core worker modules.
+
+`bootwright cluster sign-on suspend` returns the gateway to local sign-in without contacting the identity provider: the bootstrap host
+reads each gateway, Grafana, Prometheus and Alertmanager daemon's `last_configured` before any effect (the controller records that baseline
+before the removal), runs `ceph orch rm oauth2-proxy` only for the service this block's own records prove it applied, then the controller
+waits until cephadm lists no oauth2-proxy service or daemon, the dashboard option sso_oauth2 reads false (cephadm's oauth2-proxy post_remove
+disables the dashboard's OAuth2 single sign-on when its last daemon goes, src/pybind/mgr/cephadm/services/oauth2_proxy.py; the worker runs
+`dashboard sso disable` once only if it did not), every dependent daemon cephadm still lists was configured again after its baseline, and
+local sign-in is proved: the custodied dashboard `admin` password is checked against Ceph's bcrypt hash on the bootstrap host, where it
+never leaves the worker, and an unauthenticated `GET /` of every gateway endpoint no longer answers the identity provider's redirect.
+`resume` re-applies the frozen document through the sign-on's own apply phases, its `unit` phase admitting a service this block completed
+and the suspension removed.
 """
 
 from __future__ import annotations
@@ -81,6 +92,13 @@ MAX_TEXT = 256
 MAX_ISSUER = 2048
 DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 DNS_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\Z")
+# The daemons cephadm reconfigures when the oauth2-proxy service goes (src/pybind/mgr/cephadm/services/mgmt_gateway.py and monitoring.py
+# dependencies), each named by its type and id, with its last configuration time in cephadm's one UTC text form.
+DEPENDENT_TYPES = ("alertmanager", "grafana", "mgmt-gateway", "prometheus")
+CONFIGURED = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z\Z")
+DAEMON_NAME = re.compile(r"[a-z][a-z0-9-]*\.[A-Za-z0-9][A-Za-z0-9_.-]{0,250}\Z")
+MAX_DEPENDENTS = 64
+REDIRECTS = (301, 302, 303, 307, 308)
 
 
 def text(value, limit=MAX_TEXT):
@@ -274,6 +292,14 @@ def read_head(channel, deadline):
 def probe(address, number, name, host, pinned, issuer):
     """One unauthenticated `GET /` of a gateway endpoint without a cookie or an authorization header: "tls" unless it serves the leaf whose
     SHA-256 is pinned, "enforced" for the enforced answer, else "pending". No byte of the answer leaves this function."""
+    parsed = probe_answer(address, number, name, host, pinned)
+    if parsed == "tls":
+        return "tls"
+    return "enforced" if parsed is not None and enforced(parsed[0], parsed[1], issuer) else "pending"
+
+
+def probe_answer(address, number, name, host, pinned):
+    """The (status, Location) of one unauthenticated `GET /` of a gateway endpoint, "tls" unless it serves the pinned leaf, or None."""
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     context.minimum_version = ssl.TLSVersion.TLSv1_2
     context.check_hostname = False
@@ -288,9 +314,22 @@ def probe(address, number, name, host, pinned, issuer):
                 channel.sendall(b"GET / HTTP/1.1\r\nHost: " + host.encode("ascii") + b"\r\nAccept: text/html\r\nConnection: close\r\n\r\n")
                 data = read_head(channel, deadline)
     except (OSError, ValueError):
-        return "pending"
-    parsed = answer(data) if data is not None else None
-    return "enforced" if parsed is not None and enforced(parsed[0], parsed[1], issuer) else "pending"
+        return None
+    return answer(data) if data is not None else None
+
+
+def local(status, location, issuer):
+    """Whether an unauthenticated `GET /` reached the gateway's own sign-in: a 200, or a redirect neither to the issuer's origin nor under
+    /oauth2/; the enforced redirect, an error and anything else are not."""
+    if status == 200:
+        return True
+    if status not in REDIRECTS or location is None:
+        return False
+    target = urllib.parse.urlsplit(location)
+    wanted = origin(issuer)
+    return not target.scheme and not target.netloc and target.path.startswith("/") and not target.path.startswith("/oauth2/") or (
+        target.scheme in ("http", "https") and origin(location) is not None and origin(location) != wanted and not target.path.startswith("/oauth2/")
+        and (target.hostname or "") != (urllib.parse.urlsplit(issuer).hostname or ""))
 
 
 def gateway_targets(worker, gateway):
@@ -484,3 +523,103 @@ def proxy_verdict(fsid, inspected, bundle):
         if mounted is None or not hmac.compare_digest(mounted, bundle.encode("utf-8")):
             return "unproved", "CA bundle mount"
     return "verified", ""
+
+
+def require_signon(worker):
+    """A suspension phase runs only on the bootstrap host of an owned sign-on unit of this cluster."""
+    require(worker.markers.owned(), "ownership")
+    require(worker.ceph("fsid") == {"fsid": worker.request["fsid"]}, "ownership")
+    unit = worker.request["service"]
+    require(unit["type"] == TYPE and worker.host["name"] == worker.request["bootstrap"])
+    return unit
+
+
+def configured(row):
+    """The daemon's last configuration time, or empty while cephadm reports none."""
+    value = row.get("last_configured")
+    if value is None:
+        return ""
+    require(isinstance(value, str) and CONFIGURED.fullmatch(value) is not None, "native-output")
+    return value
+
+
+def dependents(rows):
+    """Each gateway, Grafana, Prometheus and Alertmanager daemon cephadm lists, by name, with its last configuration time."""
+    require(isinstance(rows, list) and all(isinstance(row, dict) for row in rows), "native-output")
+    found = []
+    for row in rows:
+        if row.get("daemon_type") not in DEPENDENT_TYPES:
+            continue
+        name = str(row.get("daemon_type")) + "." + str(row.get("daemon_id"))
+        require(DAEMON_NAME.fullmatch(name) is not None, "native-output")
+        found.append({"configured": configured(row), "name": name})
+    require(len(found) <= MAX_DEPENDENTS, "native-output")
+    return sorted(found, key=lambda entry: entry["name"])
+
+
+def baseline(value):
+    """The recorded before-state the controller lends: each dependent daemon's name and configuration time, sorted and unique."""
+    require(isinstance(value, list) and len(value) <= MAX_DEPENDENTS)
+    names = []
+    for entry in value:
+        require(isinstance(entry, dict) and set(entry) == {"configured", "name"} and isinstance(entry["name"], str)
+                and DAEMON_NAME.fullmatch(entry["name"]) is not None and isinstance(entry["configured"], str)
+                and (entry["configured"] == "" or CONFIGURED.fullmatch(entry["configured"]) is not None))
+        names.append(entry["name"])
+    require(names == sorted(set(names)))
+    return value
+
+
+def latest(before, removed):
+    """The baseline each dependent daemon must be configured after: the later of the recorded one and the one read just before this
+    run's removal, so a proxy that came back after the recording is waited out too."""
+    times = {entry["name"]: entry["configured"] for entry in before}
+    for entry in removed:
+        if entry["name"] in times and entry["configured"] > times[entry["name"]]:
+            times[entry["name"]] = entry["configured"]
+    return [{"configured": times[name], "name": name} for name in sorted(times)]
+
+
+def lagging(before, now):
+    """The first dependent daemon cephadm still lists that has not been configured since its recorded baseline, or None. A daemon the
+    baseline does not name was created after it, so its configuration already omits the oauth2-proxy."""
+    recorded = {entry["name"]: entry["configured"] for entry in before}
+    for entry in now:
+        if entry["name"] in recorded and (entry["configured"] == "" or entry["configured"] <= recorded[entry["name"]]):
+            return entry["name"]
+    return None
+
+
+def suspension_state(worker):
+    """Read-only, on the bootstrap host: whether cephadm still stores or runs the oauth2-proxy service, the dashboard's sso_oauth2 option,
+    and each dependent daemon's last configuration time."""
+    require_signon(worker)
+    with worker.manager_served():
+        stored = worker.unit_specs()
+        rows = worker.ceph("orch", "ps")
+    require(isinstance(rows, list) and all(isinstance(row, dict) for row in rows), "native-output")
+    daemons = sum(1 for row in rows if row.get("daemon_type") == TYPE)
+    return {"changed": False, "configured": dependents(rows), "daemons": daemons, "service": TYPE in stored, "sso": sso_enabled(worker)}
+
+
+def local_sign_in(worker):
+    """Read-only, on the bootstrap host once no oauth2-proxy runs: the custodied dashboard `admin` password matches Ceph's bcrypt hash
+    here, with the administrator role, enabled and not due for change, and every gateway endpoint answers an unauthenticated `GET /`
+    with the gateway's own sign-in over the pinned certificate. The password never leaves this worker; a mismatch refuses
+    dashboard-drift."""
+    unit = require_signon(worker)
+    require(not sso_enabled(worker), "not-ready")
+    store = worker.dashboard_store()
+    scope = {"owner": worker.request["owner"], "fsid": worker.request["fsid"], "host": worker.host["name"], "user": "admin"}
+    require(worker.markers.read(store.name("applied")) is not None, "dashboard-identity")
+    store.prove_binding(store.binding(scope, "ceph-dashboard-user-v1"))
+    worker.dashboard_verify(store.material(scope))
+    gateway = unit["signOn"]
+    targets = gateway_targets(worker, gateway)
+    wanted = 1 if gateway.get("virtualIP") is not None else gateway["count"]
+    served = 0
+    for address, name, host in targets:
+        parsed = None if address is None else probe_answer(address, gateway["port"], name, host, gateway["certificateSHA256"])
+        if parsed is not None and parsed != "tls" and local(parsed[0], parsed[1], issuer_of(unit)):
+            served += 1
+    return {"changed": False, "local": served == len(targets) >= wanted}

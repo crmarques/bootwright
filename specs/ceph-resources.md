@@ -1436,7 +1436,7 @@ is known.
 The block's plan impacts are, in order: its realization; "the management
 gateway signs users in through oauth2-proxy and OIDCProvider <name>"; "Bootwright
 enables the dashboard's OAuth2 single sign-on; local sign-in returns only after
-bootwright cluster sign-on suspend"; "cephadm reconfigures the management
+bootwright cluster sign-on suspend" ([sign-on suspension](cli/cluster-sign-on.md)); "cephadm reconfigures the management
 gateway, Grafana, Prometheus and Alertmanager for single sign-on; their blocks
 do not change"; "while sign-on is on, a manager's dashboard port 8443 accepts a
 forged token (an upstream defect); keep it reachable only from the management

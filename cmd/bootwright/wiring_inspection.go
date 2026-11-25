@@ -194,8 +194,9 @@ func (c cephInspection) ManagedStorage(ctx context.Context, contextName string, 
 		return inspection.StorageProof{}, err
 	}
 	var frozen []reconciliation.Block
+	signOn := ""
 	if resources != nil {
-		frozen = resources.Frozen
+		frozen, signOn = resources.Frozen, resources.SignOns[cluster.Name()]
 	}
 	found, reason := ceph.Inspect(catalog, cluster, frozen, proofs)
 	if reason != "" {
@@ -205,7 +206,7 @@ func (c cephInspection) ManagedStorage(ctx context.Context, contextName string, 
 		Release: administration.Release, AdminNode: administration.Node, AdminCommand: administration.Command(contextName, cluster.Name(), found.FSID),
 		FSID:            found.FSID,
 		Image:           inspection.Image{Reference: found.Image.Reference, Digest: found.Image.Digest, Platform: found.Image.Platform},
-		Specializations: found.Specializations,
+		Specializations: found.Specializations, SignOn: signOn,
 	}
 	for _, monitor := range found.Monitors {
 		proof.Monitors = append(proof.Monitors, inspection.Monitor{Host: monitor.Host, FQDN: monitor.FQDN, Address: monitor.Address})

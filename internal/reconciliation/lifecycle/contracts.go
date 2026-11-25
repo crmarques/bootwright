@@ -750,6 +750,7 @@ type Execution struct {
 	Shared           *SharedReadings
 	// Released: the operator stated on this destroy that what this block's pre-stop inverse removes from its Machine's guest was removed outside Bootwright.
 	Released bool
+	SignOn   string
 }
 
 // ReportWarning reports one warning through the execution's Warn, when it collects any.
@@ -794,6 +795,13 @@ type Observation struct {
 	Outcome  reconciliation.Outcome
 	Evidence json.RawMessage
 	Produced []Produced
+}
+
+type SignOnSuspender interface {
+	SignOnCluster(reconciliation.Block) (string, error)
+	PrepareSignOnSuspension(context.Context, Execution) (json.RawMessage, error)
+	SuspendSignOn(context.Context, Execution, json.RawMessage) (SignOnProof, error)
+	ResumeSignOn(context.Context, Execution) (SignOnProof, error)
 }
 
 type ProducedInputConsumer interface {

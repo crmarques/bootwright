@@ -428,6 +428,7 @@ func (s Service) cephEntry(ctx context.Context, selected string, catalog api.Cat
 		entry.Endpoints = proof.Endpoints
 	}
 	entry.CephCommand = proof.AdminCommand
+	entry.SignOn = proof.SignOn
 	return entry, nil
 }
 

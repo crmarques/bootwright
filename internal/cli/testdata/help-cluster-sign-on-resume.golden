@@ -1,0 +1,29 @@
+  bootwright / cluster sign-on resume
+      Restore one managed Ceph cluster's frozen single sign-on: re-prove its CephSignOn and
+      cluster, prove from each oauth2-proxy host that the identity provider's discovery
+      document answers, re-apply the frozen oauth2-proxy document with the Secrets the apply
+      bound, then prove the proxies, enable the dashboard's single sign-on and prove the
+      gateway enforces it. Requires a completed apply that realized the cluster's CephSignOn.
+      An identity provider that does not answer refuses before anything changes. Repeat an
+      interrupted command to finish it; a resume over an active sign-on proves and repairs it.
+      Refuses external Ceph. --yes skips ordinary confirmation.
+
+  Usage
+    bootwright cluster sign-on resume [flags]
+
+  Command flags
+      --name  Select the exact object name (required)
+      --yes   Confirm the command's ordinary confirmation
+
+  Common flags
+      --ascii       Use ASCII status markers
+      --color       Select terminal colors (values: auto, always, never) · default auto
+      --context     Select a context (default: current context)
+      --detail      Select human detail (values: compact, full) · default compact
+      -h, --help    Show help for this command
+      -o, --output  Select output mode (values: text, json, yaml) · default text
+      --progress    Select progress animation (values: auto, always, never) · default auto
+      --width       Set presentation width (0: automatic) · default 0
+
+  Examples
+    bootwright cluster sign-on resume --context lab --name storage

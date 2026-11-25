@@ -205,6 +205,7 @@ func assembleServices(deps serviceDependencies) cli.Services {
 	services.MachinePower, services.MachineTrust = machine.MachinePower, machine.MachineTrust
 	services.ClusterAccess = wireClusterAccess(services.DesiredState, secrets.binder, deps.Selection, reconciler)
 	services.AdminCredentials = reconciler.AdminCredentials()
+	services.SignOn = reconciler.SignOn()
 	services.EnvironmentInspection = wireInspection(services.DesiredState, reconciler, secrets.binder, deps.Selection, deps.Trust)
 	storagePreflight := wireStoragePreflight(services.DesiredState, reconciler, deps)
 	clusters := clusterpreflight.Service{Graph: effectiveGraph{state: services.DesiredState}, Selection: currentSelection(deps.Selection), Container: wireContainerPreflight(services.DesiredState, reconciler, deps), Storage: storagePreflight}

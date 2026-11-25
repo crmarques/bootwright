@@ -44,6 +44,7 @@ func cephMarkerSources() map[string][]string {
 		"ceph_export_native.py":            {export},
 		"ceph_smb_native.py":               {smb},
 		"ceph_replication_native.py":       {replication},
+		"ceph_signon_native.py":            {signon},
 	}
 }
 

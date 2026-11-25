@@ -116,6 +116,9 @@ options:
       - sign-on-provider-unreachable
       - sign-on-unprotected
       - sign-on-unenforced
+      - sign-on-foreign
+      - sign-on-suspend-unproved
+      - sign-on-suspension-drift
       - stretch-intent
       - stretch-interrupted
       - stretch-location

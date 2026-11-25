@@ -1,0 +1,46 @@
+  ○ cluster | storage · ready
+    Topology
+      Type        CephCluster
+      Management  managed
+      Release     9.9.1.2
+      Admin node  rhel-01
+    Access
+      cluster exec        ready
+      bootwright cluster exec --context lab --name storage --node rhel-01 -- <command>...
+      cluster keyring     ready
+      bootwright cluster keyring --context lab --name storage --client <client>
+      cluster kubeconfig  not-applicable
+      cluster kubectl     not-applicable
+      cluster oc          not-applicable
+      cluster rsh         ready
+      bootwright cluster rsh --context lab --name storage --node rhel-01
+      Monitors  rhel-01  rhel-01.lab.test  192.0.2.11
+                rhel-02  rhel-02.lab.test  192.0.2.12
+                rhel-03  rhel-03.lab.test  192.0.2.13
+      Ceph command  bootwright cluster exec --context lab --name storage --node rhel-01 -- sudo -n ceph --conf /var/lib/bootwright/ceph/6b8f1c2e-4d7a-5e3f-9a1b-0c2d4e6f8a1b/ceph.conf --keyring /var/lib/bootwright/ceph/6b8f1c2e-4d7a-5e3f-9a1b-0c2d4e6f8a1b/ceph.client.admin.keyring
+      Dashboard            https://mgr.storage.lab.test:9443/  (via management gateway)
+      Certificate SHA-256  CD:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E
+                           (cephadm-signed; compare before accepting the browser warning)
+      Direct               https://rhel-01.lab.test:8443/  (active MGR rhel-01 at last
+                           observation)
+      Direct SHA-256       AB:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C
+                           (self-signed; compare before accepting the browser warning)
+      Dashboard status     ready
+      Alertmanager  https://mgr.storage.lab.test:9443/alertmanager/
+      Grafana       https://mgr.storage.lab.test:9443/grafana/
+      Prometheus    https://mgr.storage.lab.test:9443/prometheus/
+      Sign-on       suspended
+      Local logins  bootwright cluster info --context lab --name storage --secrets
+      Restore       bootwright cluster sign-on resume --context lab --name storage
+      Endpoint mgmt-gateway  ready  (as the apply proved it; diff --observe reads it live)
+      Endpoint nfs.files     ready  (as the apply proved it; diff --observe reads it live)
+      Endpoint rgw.objects   unproved: the apply did not prove this endpoint reachable
+    Evidence
+      Status  ready
+    Resources
+      CephPool/rbd-data          done
+      CephClient/rbd-canary      done
+      CephObjectGateway/objects  unsupported
+    Custody
+      User      admin
+      Password  hidden; rerun with --secrets --name storage

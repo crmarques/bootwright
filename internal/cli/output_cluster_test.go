@@ -187,6 +187,13 @@ func clusterGoldens() []cliGolden {
 		r.result.adminCredentials = &lifecycle.UpdateAdminCredentialsResult{Context: "lab", Cluster: "storage", Logins: []lifecycle.AdminLoginResult{
 			{Login: "dashboard", User: "admin"}, {Login: "prometheus", User: "prometheus-secret-user"}, {Login: "alertmanager", User: "alertmanager-secret-user"}, {Login: "grafana", User: "admin"}}}
 	}
+	suspended := func(r *dispatchRecord) {
+		r.result.signOn = &lifecycle.SignOnResult{Context: "lab", Cluster: "storage", State: lifecycle.SignOnSuspended, Provider: "corp-sso", Changed: true,
+			LocalLogins: []string{"dashboard", "prometheus", "alertmanager", "grafana"}}
+	}
+	resumed := func(r *dispatchRecord) {
+		r.result.signOn = &lifecycle.SignOnResult{Context: "lab", Cluster: "storage", State: lifecycle.SignOnActive, Provider: "corp-sso", LocalLogins: []string{}}
+	}
 	warning := "  warning  access.unproved\n" +
 		"    the dashboard administrator password of CephCluster storage was kept from an apply that\n" +
 		"    never proved the dashboard reachable, so the access it grants was not proved\n"
@@ -195,6 +202,9 @@ func clusterGoldens() []cliGolden {
 			r.result.adminCredentials = &lifecycle.UpdateAdminCredentialsResult{Context: "lab", Cluster: "edge", Logins: []lifecycle.AdminLoginResult{{Login: "console", User: "kubeadmin"}}}
 		}},
 		{golden: "cli-cluster-admin-update-json", args: "cluster update-admin-creds --name storage --yes --output json", record: cephAdminUpdate},
+		{golden: "cli-cluster-sign-on-suspend", args: "cluster sign-on suspend --name storage --yes", record: suspended},
+		{golden: "cli-cluster-sign-on-suspend-json", args: "cluster sign-on suspend --name storage --yes --output json", record: suspended},
+		{golden: "cli-cluster-sign-on-resume", args: "cluster sign-on resume --name storage --yes", record: resumed},
 		{golden: "cli-cluster-admin-update-ceph", args: "cluster update-admin-creds --name storage --yes", record: cephAdminUpdate},
 		{golden: "cli-cluster-info-console-secrets", args: "cluster info --name edge --secrets", record: console},
 		{golden: "cli-cluster-info-console-secrets-json", args: "cluster info --name edge --secrets --output json", record: console},
@@ -206,6 +216,16 @@ func clusterGoldens() []cliGolden {
 		{golden: "cli-cluster-info-full", args: "cluster info --detail full", record: ready},
 		{golden: "cli-cluster-info-gateway", args: "cluster info --name storage", record: gateway},
 		{golden: "cli-cluster-info-gateway-json", args: "cluster info --name storage --output json", record: gateway},
+		{golden: "cli-cluster-info-sign-on-suspended", args: "cluster info --name storage", record: func(r *dispatchRecord) {
+			ceph := gatewayCeph()
+			ceph.SignOn = lifecycle.SignOnSuspended
+			r.result.clusterInfo = storageOnly(ceph)
+		}},
+		{golden: "cli-cluster-info-sign-on-active-json", args: "cluster info --name storage --output json", record: func(r *dispatchRecord) {
+			ceph := gatewayCeph()
+			ceph.SignOn = lifecycle.SignOnActive
+			r.result.clusterInfo = storageOnly(ceph)
+		}},
 		{golden: "cli-cluster-info-gateway-secrets", args: "cluster info --name storage --secrets", record: gatewaySecrets},
 		{golden: "cli-cluster-info-gateway-secrets-json", args: "cluster info --name storage --secrets --output json", record: gatewaySecrets},
 		{golden: "cli-cluster-info-unavailable", args: "cluster info", record: missing},

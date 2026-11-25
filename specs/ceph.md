@@ -2458,7 +2458,14 @@ SHA-256 once every endpoint passed. A readiness timeout names
 ends with only the enforcement entries refuses `sign-on-unenforced`.
 Observation reads the daemons, their stability, the option and the enforcement proof once; the gateway route proof runs only in apply. cephadm's only dashboard
 single sign-on write disables it when it removes the last running oauth2-proxy
-daemon, so observation then reads the block not ready. The block retires
+daemon, so observation then reads the block not ready, unless
+[`cluster sign-on suspend`](cli/cluster-sign-on.md) removed it: a suspended
+block observes that the proxy and the single sign-on stay off and reads
+present, never drift, and `cluster sign-on resume` runs this apply protocol
+again over the frozen request. The block's suspension operations are
+`suspend_prepare` (1380 s), `suspend` (3600 s) and `resume` (4920 s); their
+evidence is `ceph-signon-suspension-v1`, closed `version`, `request`, `state`
+(`prepared` or `suspended`), `changed` and `baseline`. The block retires
 offline with its cluster's hosts; while the hosts survive its removal refuses
 `ceph-hosts-survive` ([B491](milestones/m2.md#b491)), and destroy leaves the
 dashboard's single sign-on setting to whole-cluster retirement. A sign-on

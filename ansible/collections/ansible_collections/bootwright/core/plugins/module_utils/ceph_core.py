@@ -72,6 +72,10 @@ HOST_REASONS = (
 )
 # The retirement selector of the round that stops every data host's managers before any FSID removal.
 MANAGERS_RETIREMENT = "managers"
+# A sign-on's suspension operations (specs/cli/cluster-sign-on.md), and the selector of a suspended sign-on's observation.
+SIGNON_OPERATIONS = ("suspend_prepare", "suspend", "resume")
+SIGNON_SUSPENDED = "suspended"
+MAX_PREPARATION = 12288
 CLUSTER_REASONS = (
     "fips-policy", "cephx-policy",
     "unsupported-release", "runtime-profile", "device-identity", "cache-unproved", "enrollment-budget",
@@ -91,6 +95,7 @@ CLUSTER_REASONS = (
     "monitoring-login-unsupported",
     "ingress-firewall", "service-credential-foreign", "ssh-policy-host-excluded", "ssh-policy-unavailable", "tunnel-host-key-excluded",
     "sso-unverified", "sign-on-provider-unreachable", "sign-on-unprotected", "sign-on-unenforced",
+    "sign-on-foreign", "sign-on-suspend-unproved", "sign-on-suspension-drift",
     "stretch-intent", "stretch-interrupted", "stretch-location", "stretch-weight", "stretch-rule", "stretch-foreign", "stretch-pools",
     "stretch-drift", "tiebreaker-foreign", "tiebreaker-unreachable", "managers-running", "device-not-empty", "foreign-osd",
     "osd-partial", "osd-clear-failed", "osd-clear-unproved", "osd-orphan-booted", "osd-orphan-unproved", "osd-class-drift",
@@ -747,13 +752,20 @@ def shared_hosts(value):
 
 
 def execute(request, operation, request_digest, transport, outputs=None, *, now=time.monotonic, pause=time.sleep, connect=tls_certificate,
-            retirement=None, reading=None, shared=None, deadline=None):
+            retirement=None, reading=None, shared=None, deadline=None, signon=None, baseline=None):
     """Keep read-only observation distinct from any preparation or mutation; only an observation no operation records reads unrecorded.
     A `hosts` reading reads only each host's state; a shared host reading replaces those reads of a resource observation. Only a cluster
-    apply states its run deadline, which this module's run began within."""
+    apply states its run deadline, which this module's run began within. A sign-on's suspension operations, and the observation of a
+    suspended sign-on, run only on its own oauth2-proxy unit."""
     run_end = None if deadline is None else now() + deadline - RUN_MARGIN
     ceph_native.validate(request)
-    ceph_native.require(operation in ("apply", "observe", "destroy"))
+    ceph_native.require(operation in ("apply", "observe", "destroy") + SIGNON_OPERATIONS)
+    if operation in SIGNON_OPERATIONS or signon is not None or baseline is not None:
+        ceph_native.require(ceph_evidence.signon(request) and retirement is None and reading is None and shared is None and deadline is None
+                            and not outputs and ceph_native.digest(request_digest), "request")
+        ceph_native.require(ceph_native.supported_transport(request) or operation == "observe", "unsupported-release")
+        bootstrap = next(h for h in request["hosts"] if h["name"] == request["bootstrap"])
+        return execute_suspension(request, operation, request_digest, transport, bootstrap, now=now, pause=pause, signon=signon, baseline=baseline)
     ceph_native.require(deadline is None or request["action"] == "cluster" and operation == "apply", "request")
     ceph_native.require(ceph_native.digest(request_digest))
     admit_selectors(request, operation, outputs, retirement, reading, shared)
@@ -1228,13 +1240,13 @@ class SignOnRoutes:
         return [] if self.round(min(ROUTE_CALL, remaining)) else [ROUTE_ENTRY]
 
 
-def execute_signon(request, request_digest, transport, bootstrap, bound, seen, *, now, pause):
+def execute_signon(request, request_digest, transport, bootstrap, bound, seen, *, now, pause, resume=False):
     """A sign-on's apply after its preparation proof: issuer discovery on every proxy host before any effect, its one unit stream, the
     rendered-configuration proof on every proxy host, the gateway route proof on every gateway host, the one single sign-on write, then
     its readiness wait, which proves the gateway enforces sign-on and renders the corrections; a wait that ends still unenforced refuses
-    sign-on-unenforced."""
+    sign-on-unenforced. A resume runs the same phases, its stream admitting the document its suspension removed."""
     signon_discovery(request, transport)
-    produced = transport.call(bootstrap, "unit", bound)
+    produced = transport.call(bootstrap, "signon_resume_unit" if resume else "unit", bound)
     ceph_native.require(isinstance(produced, dict) and set(produced) == {"changed"} and type(produced["changed"]) is bool, "evidence")
     sso_proof(request, transport, now, pause)
     routes = SignOnRoutes(request, bootstrap, transport)
@@ -1305,7 +1317,90 @@ def execute_nvmeof(request, operation, request_digest, transport, bootstrap, *, 
     return observed({"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}, operation, blocking)
 
 
-def execute_unit(request, operation, request_digest, transport, bootstrap, *, now, pause, phases=("unit",), outputs=None):
+def suspension_evidence(request_digest, state, changed, before):
+    value = {"version": ceph_evidence.SIGNON_SUSPENSION_EVIDENCE, "request": request_digest, "state": state, "changed": changed, "baseline": before}
+    return ceph_evidence.suspension_evidence(value, request_digest)
+
+
+def suspension_reading(produced):
+    """One read-only reading of what a suspension waits for, as the bootstrap host reports it."""
+    ceph_native.require(isinstance(produced, dict) and set(produced) == {"changed", "configured", "daemons", "service", "sso"}
+                        and produced["changed"] is False and type(produced["daemons"]) is int and produced["daemons"] >= 0
+                        and type(produced["service"]) is bool and type(produced["sso"]) is bool, "evidence")
+    ceph_signon_native.baseline(produced["configured"])
+    return produced
+
+
+def suspension_baseline(value):
+    """The before-state the controller recorded before the suspension's first effect, as it lends it beside the material."""
+    if value is None:
+        return None
+    ceph_native.require(isinstance(value, str) and 0 < len(value) <= MAX_PREPARATION, "request")
+    try:
+        decoded = json.loads(value)
+    except ValueError:
+        raise ceph_native.Refusal("request") from None
+    ceph_native.require(isinstance(decoded, dict) and set(decoded) == {"baseline"}, "request")
+    return ceph_signon_native.baseline(decoded["baseline"])
+
+
+def execute_suspension(request, operation, request_digest, transport, bootstrap, *, now, pause, signon, baseline):
+    """A sign-on's suspension, on the bootstrap host over the verified tunnel and never toward its identity provider. suspend_prepare
+    reads, before any effect, each dependent daemon's configuration time; suspend removes the owned oauth2-proxy service and waits until
+    none is stored or runs, the dashboard's single sign-on is off (disabled once only if cephadm did not), every dependent daemon was
+    configured since that baseline and local sign-in is proved, else refuses sign-on-suspend-unproved naming what it waited for. resume
+    runs the sign-on's apply phases again. The observation of a suspended sign-on reads that none of it came back."""
+    if operation == "observe":
+        ceph_native.require(signon == SIGNON_SUSPENDED and baseline is None, "request")
+        reading = suspension_reading(transport.call(bootstrap, "signon_state"))
+        if reading["service"] or reading["daemons"] or reading["sso"]:
+            raise ceph_native.Refusal("sign-on-suspension-drift")
+        return {"changed": False, "evidence": suspension_evidence(request_digest, SIGNON_SUSPENDED, False, [])}
+    ceph_native.require(signon is None and (baseline is not None) == (operation == "suspend"), "request")
+    if operation == "resume":
+        return execute_unit(request, "apply", request_digest, transport, bootstrap, now=now, pause=pause, resume=True)
+    transport.call(bootstrap, "prerequisites")
+    if operation == "suspend_prepare":
+        produced = transport.call(bootstrap, "signon_baseline")
+        ceph_native.require(isinstance(produced, dict) and set(produced) == {"changed", "daemons"} and produced["changed"] is False, "evidence")
+        return {"changed": False, "evidence": suspension_evidence(request_digest, "prepared", False, ceph_signon_native.baseline(produced["daemons"]))}
+    removed = transport.call(bootstrap, "signon_remove")
+    ceph_native.require(isinstance(removed, dict) and set(removed) == {"changed", "configured"} and type(removed["changed"]) is bool, "evidence")
+    baseline = ceph_signon_native.latest(baseline, ceph_signon_native.baseline(removed["configured"]))
+    changed, asked, pending = removed["changed"], False, "the oauth2-proxy removal"
+    deadline = now() + READINESS_TIMEOUT
+    while True:
+        remaining = deadline - now()
+        if remaining <= 0:
+            raise ceph_native.NativeFailure("sign-on-suspend-unproved", "sign-on suspension", "waited for " + pending)
+        reading = suspension_reading(transport.call(bootstrap, "signon_state", timeout=min(READ_BUDGET, remaining)))
+        lag = ceph_signon_native.lagging(baseline, reading["configured"])
+        if reading["service"] or reading["daemons"]:
+            pending = "the oauth2-proxy removal"
+        elif reading["sso"] and not asked:
+            produced = transport.call(bootstrap, "signon_sso_disable", timeout=min(READ_BUDGET, max(remaining, 1)))
+            ceph_native.require(isinstance(produced, dict) and set(produced) == {"changed", "pending"} and type(produced["changed"]) is bool
+                                and type(produced["pending"]) is bool and not (produced["changed"] and produced["pending"]), "evidence")
+            asked, changed = not produced["pending"], produced["changed"] or changed
+            pending = "the dashboard's single sign-on to turn off"
+            continue
+        elif reading["sso"]:
+            pending = "the dashboard's single sign-on to turn off"
+        elif lag is not None:
+            pending = "cephadm to reconfigure " + lag
+        else:
+            proof = transport.call(bootstrap, "signon_local", timeout=min(READ_BUDGET, remaining))
+            ceph_native.require(isinstance(proof, dict) and set(proof) == {"changed", "local"} and proof["changed"] is False
+                                and type(proof["local"]) is bool, "evidence")
+            if proof["local"]:
+                return {"changed": changed, "evidence": suspension_evidence(request_digest, SIGNON_SUSPENDED, changed, [])}
+            pending = "local sign-in through the management gateway"
+        remaining = deadline - now()
+        if remaining > 0:
+            pause(min(READINESS_INTERVAL, remaining))
+
+
+def execute_unit(request, operation, request_digest, transport, bootstrap, *, now, pause, phases=("unit",), outputs=None, resume=False):
     """A service unit runs its apply phases only on the bootstrap host: its preparation proof, with an ingress the firewall check on each
     ingress host, its apply phases in order (a sign-on's are execute_signon's), then its own readiness wait, which for a management
     gateway includes the route proof on each gateway host, and in which a monitoring unit with prometheus asks cephadm to reconfigure each
@@ -1322,7 +1417,7 @@ def execute_unit(request, operation, request_digest, transport, bootstrap, *, no
             ingress_firewall(request, transport, ingress_fronts(request))
         bound = transport.unit_material("unit") if bound_unit else {}
         if ceph_evidence.signon(request):
-            changed, observation = execute_signon(request, request_digest, transport, bootstrap, bound, seen, now=now, pause=pause)
+            changed, observation = execute_signon(request, request_digest, transport, bootstrap, bound, seen, now=now, pause=pause, resume=resume)
             return observed({"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}, operation, pending)
         for phase in phases:
             produced = transport.call(bootstrap, phase, bound) if bound and phase == "unit" else transport.call(bootstrap, phase)

@@ -133,10 +133,12 @@ UNIT_TYPES = {
                            {"rbd-mirror": None}, {}, frozenset(MIRROR_TYPES), None),
 }
 PHASES = frozenset(("unit", "ingress_firewall", "vip_holder", "signon_discovery", "signon_routes", "signon_route_proof", "sso_config", "sso",
+                    "signon_baseline", "signon_remove", "signon_state", "signon_sso_disable", "signon_local", "signon_resume_unit",
                     "manager_ports", "manager_ports_unrecorded",
                     "nvmeof_unit_observe", "monitoring_credentials", "monitoring_credentials_held", "grafana_route", "grafana_route_proof",
                     "grafana_reconfig"))
-READ_ONLY_PHASES = frozenset(("nvmeof_unit_observe", "monitoring_credentials_held", "signon_discovery", "signon_routes", "signon_route_proof"))
+READ_ONLY_PHASES = frozenset(("nvmeof_unit_observe", "monitoring_credentials_held", "signon_discovery", "signon_routes", "signon_route_proof",
+                              "signon_baseline", "signon_state", "signon_local"))
 # The daemon types whose deployment proves cephadm v20.2.1 already stores a service's login: it stores both logins before it configures a
 # Prometheus daemon (PrometheusService.generate_config) and Prometheus's before it configures a Grafana daemon
 # (GrafanaService.get_dependencies), src/pybind/mgr/cephadm/services/monitoring.py.
@@ -230,7 +232,7 @@ def material_names(request, phase="unit"):
     leaves = UNIT_TYPES[unit["type"]].leaves
     types = {service_name(document): document["service_type"] for document in unit["documents"]}
     names = frozenset(leaves[(types[binding["serviceRef"]], binding["path"])] for binding in unit.get("bindings", []))
-    if phase == "unit":
+    if phase in ("unit", "signon_resume_unit"):
         return names
     if phase in ("sso_config", "signon_discovery"):
         return names & {ceph_signon_native.CA_VARIABLE}
@@ -640,8 +642,9 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
         require(all(isinstance(group, list) and len(group) == 1 and isinstance(group[0], dict) for group in services), "ownership")
         return [group[0] for group in services]
 
-    def unit_records(self, values, observed, scope):
-        """Each document's attempt and completion equal its intent; a stored specification needs this operation's attempt."""
+    def unit_records(self, values, observed, scope, resume=False):
+        """Each document's attempt and completion equal its intent; a stored specification needs this operation's attempt. Only a sign-on's
+        resume admits a completed document no longer stored, which its suspension removed."""
         for name, value in zip(self.unit_names(), values):
             prefix = "service-" + name
             intent = {"scope": scope, "service": value}
@@ -650,9 +653,9 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
             require(complete is None or complete == intent and attempt == intent, "ownership")
             present = observed.get(name)
             require(present is None or attempt == intent and present == value, "foreign-service")
-            require(complete is None or present == value, "foreign-service")
+            require(complete is None or present == value or resume and present is None, "foreign-service")
 
-    def unit(self):
+    def unit(self, resume=False):
         """Ownership and the type's checks before any write; then the inputs record, record checks, attempts, one batch, readback, completions."""
         require(self.markers.owned(), "ownership")
         require(self.ceph("fsid") == {"fsid": self.request["fsid"]}, "ownership")
@@ -662,7 +665,7 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
         values = [group[0] for group in self.normalized_services(self.unit_groups(), record=self.unit_key() + "-inputs.json")]
         scope = self.recovery_scope()
         observed = self.bound_specs(self.manager_retry(self.unit_specs))
-        self.unit_records(values, observed, scope)
+        self.unit_records(values, observed, scope, resume)
         claimed = hooks.claim(self, unit, checked)
         names = self.unit_names()
         missing = [(name, value) for name, value in zip(names, values) if name not in observed]
@@ -769,6 +772,64 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
         self.manager_declare(enable, module=("dashboard", "ac-user-show"))
         require(ceph_signon_native.sso_enabled(self), "not-ready")
         return {"changed": True, "pending": False}
+
+    def signon_resume_unit(self):
+        """A sign-on resume's one stream: the frozen oauth2-proxy document again, its completion record kept from the apply."""
+        self.sso_proxy()
+        require(self.unit_inputs() is not None, "ownership")
+        return self.unit(resume=True)
+
+    def signon_baseline(self):
+        """Read-only, on the bootstrap host before a suspension's first effect: each dependent daemon's last configuration time, which
+        the controller records before it asks for the removal."""
+        ceph_signon_native.require_signon(self)
+        return {"changed": False, "daemons": ceph_signon_native.dependents(self.manager_retry(self.ceph, "orch", "ps"))}
+
+    def signon_remove(self):
+        """A suspension's one orchestrator effect: `ceph orch rm oauth2-proxy`, only of the document this block's own inputs and attempt
+        records prove it applied; an absent service writes nothing and another one refuses sign-on-foreign."""
+        ceph_signon_native.require_signon(self)
+        values = self.unit_inputs()
+        require(values is not None, "ownership")
+        name = self.unit_names()[0]
+        present = self.bound_specs(self.manager_retry(self.unit_specs)).get(name)
+        if present is None:
+            return {"changed": False, "configured": []}
+        intent = {"scope": self.recovery_scope(), "service": values[0]}
+        require(self.markers.read("service-" + name + "-attempt.json") == intent and present == values[0], "sign-on-foreign")
+        configured = ceph_signon_native.dependents(self.manager_retry(self.ceph, "orch", "ps"))
+        self.manager_declare(self.tunnel_effect, "orch", "rm", name, json_result=False)
+        return {"changed": True, "configured": configured}
+
+    def signon_state(self):
+        """Read-only: what a suspension waits for, ceph_signon_native.suspension_state."""
+        return ceph_signon_native.suspension_state(self)
+
+    def signon_sso_disable(self):
+        """A suspension's one dashboard write, only once cephadm lists no oauth2-proxy daemon and sso_oauth2 still reads true:
+        `dashboard sso disable`, read back. A repeat across a manager restart reads the option first, so it is never sent twice."""
+        ceph_signon_native.require_signon(self)
+        rows = self.manager_retry(self.ceph, "orch", "ps", "--daemon_type", ceph_signon_native.TYPE)
+        require(isinstance(rows, list) and all(isinstance(row, dict) for row in rows), "native-output")
+        if any(row.get("daemon_type") == ceph_signon_native.TYPE for row in rows):
+            return {"changed": False, "pending": True}
+        if not ceph_signon_native.sso_enabled(self):
+            return {"changed": False, "pending": False}
+        sent = []
+
+        def disable():
+            if sent and not ceph_signon_native.sso_enabled(self):
+                return
+            sent.append(True)
+            self.tunnel_effect("dashboard", "sso", "disable", json_result=False)
+
+        self.manager_declare(disable, module=("dashboard", "ac-user-show"))
+        require(not ceph_signon_native.sso_enabled(self), "not-ready")
+        return {"changed": True, "pending": False}
+
+    def signon_local(self):
+        """Read-only: local sign-in through the gateway, ceph_signon_native.local_sign_in."""
+        return ceph_signon_native.local_sign_in(self)
 
     def grafana_gateway(self):
         """The unit's mgmt-gateway document: only a management gateway unit fronting a declared Grafana or declaring an oauth2-proxy has

@@ -1,5 +1,5 @@
 implementation: storage-ceph-signon-v1
-content-digest: 9178a3a51885b66af1cd7fb5e0beba4e20a4ab0ca908ec7874a7e2abdaad61a4
+content-digest: 6186bbb921b5b1bac5c9c70b861e776cfdf8b6e624337bb95df88eb62a436f28
 request-version: ceph-signon-v1
 automation-formats: none
 mark-formats: none

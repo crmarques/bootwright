@@ -211,14 +211,22 @@ func (s Service) inspect(ctx context.Context, view RunView, store recordReader, 
 	if recorded, ok := capability.(NothingLive); ok {
 		return recordedReading(ctx, store, read, block, recorded)
 	}
+	suspension, cluster, err := signOnSuspension(ctx, store, s.capabilities, read.owning, block)
+	if err != nil {
+		return blockReading{state: sideUnknown, reason: firstMessage(err), remedy: "restore what the reason names, then " + repeatObserved(read.context.Name)}
+	}
+	if suspension == SignOnSuspending || suspension == SignOnResuming {
+		return interruptedSignOn(suspension, read.context.Name, cluster)
+	}
 	var observation Observation
 	warned := &warningCollector{}
-	err := s.withPython(ctx, approved, func(launch prerequisites.PythonLaunch) error {
+	err = s.withPython(ctx, approved, func(launch prerequisites.PythonLaunch) error {
 		execution, err := s.inspection(ctx, view, store, approved, launch, read, block, material, shared)
 		if err != nil {
 			return err
 		}
 		execution.Warn = warned.collect
+		execution.SignOn = suspension
 		lend, release, lendErr := s.producedLender(block, planDefinitions(read.owningPlan), false, s.producedInContext(read.context.Name))
 		if lendErr != nil {
 			return lendErr
@@ -235,7 +243,11 @@ func (s Service) inspect(ctx context.Context, view RunView, store recordReader, 
 		observation = observed
 		return err
 	})
-	return withWarnings(s.reading(ctx, store, read, block, observation, err), block, warned.reported(), material)
+	reading := s.reading(ctx, store, read, block, observation, err)
+	if suspension == SignOnSuspended && reading.state == sidePresent {
+		reading.notes = append(reading.notes, suspendedNote(block, read.context.Name, cluster))
+	}
+	return withWarnings(reading, block, warned.reported(), material)
 }
 
 func withWarnings(reading blockReading, block reconciliation.Block, warned []operationstore.Warning, material map[string]secrets.Material) blockReading {
