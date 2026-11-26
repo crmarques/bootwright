@@ -418,11 +418,11 @@ func TestEveryRemedyOverAStagedDestroyRepeatsItsFloor(t *testing.T) {
 
 // A remedy that repeats its invocation's own verb builds its flags through
 // invocationFlags, the one place that carries a staged destroy's floor; the
-// functions named here pass flags through, only ever repeat an apply, or name
-// an abandonment, which no staged destroy admits.
+// functions named here pass flags through, only ever repeat an apply or a
+// preparation command, or name an abandonment, which no staged destroy admits.
 func TestARemedyRepeatingItsVerbCarriesTheFloor(t *testing.T) {
 	t.Parallel()
-	passing := map[string]bool{"planCommand": true, "preparationCommand": true, "resolutionRemedy": true, "refuseUnattendedAbandonment": true, "abandonExit": true}
+	passing := map[string]bool{"planCommand": true, "preparationCommand": true, "preparationScopeCommand": true, "resolutionRemedy": true, "refuseUnattendedAbandonment": true, "abandonExit": true}
 	sources, err := filepath.Glob("*.go")
 	if err != nil {
 		t.Fatal(err)
