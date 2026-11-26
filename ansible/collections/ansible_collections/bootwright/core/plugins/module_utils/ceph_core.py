@@ -1852,7 +1852,6 @@ def execute_host(request, operation, request_digest, transport, kept=False):
     ceph_native.require(not kept or operation in ("destroy", "observe-remove"), "request")
     host = next(item for item in cluster["hosts"] if item["name"] == request["host"])
     if kept:
-        ceph_native.require(not host.get("physical"), "request")
         result = transport.call(host, "host_release" if operation == "destroy" else "host_release_observe")
         members = {"changed", "removed"} if operation == "destroy" else {"removed"}
         ceph_native.require(isinstance(result, dict) and set(result) == members and all(type(result[key]) is bool for key in members), "evidence")

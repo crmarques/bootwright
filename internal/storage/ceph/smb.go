@@ -521,6 +521,9 @@ func (c SMBCapability) Observe(ctx context.Context, e lifecycle.Execution) (life
 }
 
 func (c SMBCapability) Destroy(ctx context.Context, e lifecycle.Execution) (lifecycle.Result, error) {
+	if keptBlock(e.Block) {
+		return destroyKeptWith(ctx, e)
+	}
 	if e.RetiredWithHosts {
 		return c.retire(ctx, e)
 	}
@@ -531,6 +534,9 @@ func (c SMBCapability) Destroy(ctx context.Context, e lifecycle.Execution) (life
 }
 
 func (c SMBCapability) ObserveRemoval(ctx context.Context, e lifecycle.Execution) (lifecycle.Observation, error) {
+	if keptBlock(e.Block) {
+		return observeKeptWith(ctx, e)
+	}
 	if e.RetiredWithHosts {
 		return c.observeRetirement(ctx, e)
 	}
@@ -542,6 +548,9 @@ func (c SMBCapability) ObserveRemoval(ctx context.Context, e lifecycle.Execution
 }
 
 func (SMBCapability) Quiescent(ctx context.Context, probe lifecycle.Probe) (lifecycle.Quiescence, error) {
+	if keptBlock(probe.Block) && ctx.Err() == nil {
+		return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: keptReason}, nil
+	}
 	if err := ctx.Err(); err != nil {
 		return lifecycle.Quiescence{State: lifecycle.Unproved}, err
 	}

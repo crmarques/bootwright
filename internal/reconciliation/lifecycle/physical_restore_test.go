@@ -395,7 +395,7 @@ func TestAnExplicitDiscoveryOverATrimmedContextRefuses(t *testing.T) {
 type releasedStorage struct{ *testCapability }
 
 func (releasedStorage) KeptHostsRefusal(reconciliation.Block, RemovalRecords, bool) string {
-	return "its hosts are physical, which no staged destroy takes a Ceph cluster back from (B1885)"
+	return "it handed out its dashboard login (B491)"
 }
 
 func (c releasedStorage) KeptHostsRemoval(ctx context.Context, block reconciliation.Block) (Removal, error) {
@@ -420,8 +420,8 @@ func (r releasedStorageResolver) Resolve(kind, implementation string) (Capabilit
 
 // B1864, B1885: a storage step on a physical Machine the staged destroy
 // releases is not planned as the whole destroy plans it while its capability
-// refuses physical hosts: the staged destroy refuses with that reason and the
-// whole destroy as its remedy, registering nothing.
+// refuses it: the staged destroy refuses with that reason and the whole
+// destroy as its remedy, registering nothing.
 func TestAStorageStepOnAReleasedPhysicalMachineRefusesTheStagedDestroy(t *testing.T) {
 	t.Parallel()
 	storage := physicalDefinition("storage", reconciliation.StageClusters, "os-install-node")
@@ -433,7 +433,7 @@ func TestAStorageStepOnAReleasedPhysicalMachineRefusesTheStagedDestroy(t *testin
 	_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, Floor: string(reconciliation.StageMachines), SkipConfirmation: true})
 	reported := diagnostics.Of(err)
 	if firstCode(err) != destroyStageKeepsHost.Code || !strings.Contains(reported[0].Message, "the step storage runs on Machine/node") ||
-		!strings.Contains(reported[0].Message, "(B1885)") || !strings.Contains(reported[0].Remediation, "take back the whole context with bootwright destroy --context lab") {
+		!strings.Contains(reported[0].Message, "(B491)") || !strings.Contains(reported[0].Remediation, "take back the whole context with bootwright destroy --context lab") {
 		t.Fatalf("destroy --stage machines over storage on a released physical Machine returned %v", reported)
 	}
 	before.require(t, h)

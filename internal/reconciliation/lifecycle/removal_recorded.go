@@ -144,7 +144,41 @@ func applyRecordsOf(ctx context.Context, store recordReader, operation operation
 	if err != nil {
 		return RemovalRecords{}, err
 	}
-	return RemovalRecords{State: record.State, Previous: previous, Dependents: dependents, Preparations: preparations}, nil
+	completed, err := everCompleted(ctx, store, held, block)
+	if err != nil {
+		return RemovalRecords{}, err
+	}
+	return RemovalRecords{State: record.State, Completed: completed, Previous: previous, Dependents: dependents, Preparations: preparations}, nil
+}
+
+func everCompleted(ctx context.Context, store recordReader, held lineage, block string) (bool, error) {
+	for _, member := range held {
+		state, planned := member.states[block]
+		if !planned {
+			continue
+		}
+		if state == reconciliation.BlockDone {
+			return true, nil
+		}
+		record, err := store.Block(ctx, member.operation.ID, block)
+		if err != nil {
+			return false, err
+		}
+		for number := 1; number <= record.Attempts; number++ {
+			attempted, err := store.Attempt(ctx, member.operation.ID, block, number)
+			if err != nil {
+				return false, err
+			}
+			resolved, found, err := store.LastResolution(ctx, member.operation.ID, block, number)
+			if err != nil {
+				return false, err
+			}
+			if attempted.Effect == reconciliation.EffectCompleted || found && resolved.Effect == reconciliation.EffectCompleted {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 func proveRecorded(ctx context.Context, capabilities CapabilityResolver, store recordReader, plan reconciliation.Plan, operation operationstore.Operation) error {

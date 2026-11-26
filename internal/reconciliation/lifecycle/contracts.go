@@ -299,6 +299,7 @@ type RecordedRemoval interface {
 
 type RemovalRecords struct {
 	State        reconciliation.BlockState
+	Completed    bool
 	Previous     json.RawMessage
 	Dependents   []BlockEvidence
 	Preparations []json.RawMessage

@@ -14,15 +14,19 @@ from types import SimpleNamespace
 import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    ceph_core, ceph_evidence, ceph_host_runtime, ceph_native, ceph_native_kept as kept, ceph_packages,
+    ceph_core, ceph_evidence, ceph_export_native, ceph_host_runtime, ceph_native, ceph_native_kept as kept, ceph_packages,
 )
-from ansible_collections.bootwright.core.tests.unit.plugins.module_utils.test_ceph_host_execution import host_request, request_value  # noqa: F401 pylint: disable=unused-import
+from ansible_collections.bootwright.core.tests.unit.plugins.module_utils.test_ceph_host_execution import host_request, request_value, retained_host_request  # noqa: F401 pylint: disable=unused-import
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_tiebreaker_removal as base
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils.test_ceph_tiebreaker_removal import tiebreaker  # noqa: F401 pylint: disable=unused-import
 
 FSID, OTHER_FSID = base.FSID, base.OTHER_FSID
 NODE, STABLE, OTHER_NODE = "/dev/vdb", "/dev/disk/by-id/virtio-node-5", "/dev/vdc"
 PV, OTHER_PV = "aaaaaa-bbbb-cccc-dddd-eeee-ffff-000001", "aaaaaa-bbbb-cccc-dddd-eeee-ffff-000002"
+DEVICE_NODES = kept.KeptHostRemoval.device_nodes
+WWN_PATH, WWN_NODE = "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4", "/dev/sdb"
+SERIAL_PATH, ALIAS, ALIAS_NODE = "/dev/disk/by-serial/S3EVNX0K123456", "/dev/disk/by-id/nvme-SAMSUNG_MZ7LH_S3EVNX0K123456", "/dev/nvme0n1"
+SERIAL_PV = "aaaaaa-bbbb-cccc-dddd-eeee-ffff-000003"
 
 
 class DirMarkers:
@@ -295,6 +299,75 @@ def test_a_host_holding_what_this_cluster_cannot_prove_its_own_refuses_before_an
     assert base.tree(host.root) == before and host.native == [] and host.commands == [] and host.sshd == []
 
 
+@pytest.fixture
+def physical(host, monkeypatch):  # pylint: disable=redefined-outer-name
+    """The kept host as a physical one: this cluster's volumes on a WWN selection and on a serial selection, each reached only by the stable
+    path the request or the host preparation's binding names, which resolve to kernel nodes no call is ever given."""
+    monkeypatch.setattr(kept.KeptHostRemoval, "device_nodes", DEVICE_NODES)
+    host.host.update(physical=True, devices=[{"path": WWN_PATH, "wwn": "0x5000c500a1b2c3d4", "serial": "", "sizeBytes": 0},
+                                             {"path": SERIAL_PATH, "serial": "S3EVNX0K123456", "sizeBytes": 1 << 40}])
+    host.lvs = [dict(row, devices=WWN_NODE + "(0)") if row["lv_uuid"] == "lv-1" else row for row in host.lvs] + [
+        {"lv_path": "/dev/ceph-p/osd-block-3", "lv_uuid": "lv-3", "devices": ALIAS_NODE + "(0)", "lv_tags": "ceph.cluster_fsid=" + FSID + ",ceph.osd_id=1"}]
+    host.pvs = [dict(row, pv_name=WWN_NODE) if row["pv_uuid"] == PV else row for row in host.pvs] + [
+        {"pv_name": ALIAS_NODE, "pv_uuid": SERIAL_PV, "vg_name": "ceph-p"}]
+    host.devices_file.add(SERIAL_PV.replace("-", ""))
+    with open(host.markers.real("owner.json"), "wb") as handle:
+        handle.write(ceph_native.canonical(ceph_native.marker_identity(host.request)))
+    host.stable = {WWN_PATH: WWN_NODE, ALIAS: ALIAS_NODE}
+    host.bound = {SERIAL_PATH: {"path": SERIAL_PATH, "serial": "S3EVNX0K123456", "alias": ALIAS, "kernelPath": ALIAS_NODE, "wwn": "", "sizeBytes": 1 << 40},
+                  WWN_PATH: {"path": WWN_PATH, "serial": "WD-1", "wwn": "0x5000c500a1b2c3d4", "kernelPath": WWN_NODE, "sizeBytes": 1 << 40}}
+    host.binding_reads, host.binding_failure = [], None
+
+    def physical_devices():
+        host.binding_reads.append(True)
+        if host.binding_failure is not None:
+            raise ceph_native.Refusal(host.binding_failure)
+        return dict(host.bound)
+
+    real = os.path.realpath
+    monkeypatch.setattr(os.path, "realpath", lambda path, *options: host.stable.get(path) or real(path, *options))
+    host.physical_devices = physical_devices
+    return host
+
+
+def test_a_physical_host_zaps_its_disks_only_by_their_stable_paths_and_reads_them_free(physical):  # pylint: disable=redefined-outer-name
+    results = drained(physical)
+    assert [result["remaining"] for result in results] == [True, True, False] and results[-1]["removed"] is True
+    zapped = [argv[-1] for argv in physical.native if "ceph-volume" in argv]
+    assert sorted(zapped) == sorted([WWN_PATH, ALIAS]) and not [path for path in zapped if path in (WWN_NODE, ALIAS_NODE, SERIAL_PATH)]
+    assert physical.binding_reads and [row["lv_uuid"] for row in physical.lvs] == ["lv-2"] and [row["pv_name"] for row in physical.pvs] == [OTHER_NODE]
+    assert physical.devices_file == {OTHER_PV.replace("-", "")} and physical.commands == [[physical.tool, "rm-cluster", "--fsid", FSID, "--force"]]
+    assert removal(physical).observe() == {"removed": True, "attempted": False} and removal(physical).tagged() == []
+
+
+@pytest.mark.parametrize("change", ["no-binding", "serial-unbound", "wwn-unbound", "wwn-moved", "duplicate-node", "readback-failed"])
+def test_a_physical_disk_its_binding_no_longer_proves_refuses_before_any_effect(physical, change):  # pylint: disable=redefined-outer-name
+    if change == "no-binding":
+        physical.bound = {}
+    elif change == "serial-unbound":
+        del physical.bound[SERIAL_PATH]
+    elif change == "wwn-unbound":
+        del physical.bound[WWN_PATH]
+    elif change == "wwn-moved":
+        physical.bound[WWN_PATH] = dict(physical.bound[WWN_PATH], kernelPath="/dev/sdc")
+    elif change == "duplicate-node":
+        physical.stable[ALIAS] = WWN_NODE
+        physical.bound[SERIAL_PATH] = dict(physical.bound[SERIAL_PATH], kernelPath=WWN_NODE)
+    else:
+        physical.binding_failure = "device-identity"
+    before = base.tree(physical.root)
+    with pytest.raises(ceph_native.Refusal, match="^device-identity$"):
+        removal(physical).remove()
+    assert base.tree(physical.root) == before and physical.native == [] and physical.commands == []
+
+
+def test_an_unclaimed_physical_host_reads_no_binding_and_a_volume_of_this_fsid_on_its_serial_disk_refuses(physical):  # pylint: disable=redefined-outer-name
+    os.unlink(physical.markers.real("owner.json"))
+    with pytest.raises(ceph_native.Refusal, match="^tiebreaker-foreign$"):
+        removal(physical).tagged()
+    assert physical.binding_reads == [] and physical.native == []
+
+
 def test_a_fresh_bootstrap_after_the_teardown_finds_nothing_foreign(host):  # pylint: disable=redefined-outer-name
     restored = dict(host.request, owner="op-" + "e" * 32, fsid="1b2c3d4e-5f60-4a7b-8c9d-0e1f2a3b4c5d")
 
@@ -439,6 +512,14 @@ def test_a_kept_host_release_runs_only_its_release_phase(host_request):  # noqa:
         ceph_core.execute_host(host_request, "observe", base.DIGEST, transport, kept=True)
 
 
+def test_a_kept_physical_host_release_runs_only_its_release_phase(retained_host_request):  # noqa: F811 pylint: disable=redefined-outer-name
+    transport = ReleaseTransport()
+    released = ceph_core.execute_host(retained_host_request, "destroy", base.DIGEST, transport, kept=True)
+    observed = ceph_core.execute_host(retained_host_request, "observe-remove", base.DIGEST, transport, kept=True)
+    assert transport.calls == [("node-2", "host_release"), ("node-2", "host_release_observe")]
+    assert released["evidence"]["removed"] is True and observed["evidence"]["removed"] is True
+
+
 def test_the_host_release_removes_its_preparation_records_and_keeps_the_package_records(request_value, tmp_path, monkeypatch):  # noqa: F811 pylint: disable=redefined-outer-name
     real_fstat = os.fstat
 
@@ -499,7 +580,8 @@ class UsageWorker:
 def usage(monkeypatch):
     worker = UsageWorker(request())
     worker.daemons = ["mon." + worker.host["name"], "mgr." + worker.host["name"] + ".x"]
-    monkeypatch.setattr(kept, "listing", lambda path: list(worker.daemons) if path == "/var/lib/ceph/" + FSID else [])
+    monkeypatch.setattr(kept, "listing", lambda path: list(worker.daemons) if path == "/var/lib/ceph/" + FSID
+                        else sorted(worker.markers.records) if path == worker.markers.path else [])
     return worker
 
 
@@ -569,6 +651,37 @@ def test_a_host_the_cluster_never_reached_or_never_held_a_monitor_on_passes_with
         usage.daemons = ["crash." + usage.host["name"]]
     assert check(usage) == {"unused": True}
     assert usage.reads == [] and usage.markers.read(kept.UNUSED) is None
+
+
+def dependents(usage):  # pylint: disable=redefined-outer-name
+    """What an SMB cluster or a consumer would leave had it run: a dependent of a cluster taken back here never ran, so none of it passes."""
+    usage.request = dict(usage.request, delegated=[{"name": "smb.files", "hosts": [usage.host["name"]]}])
+    scope = {"owner": usage.request["owner"], "fsid": usage.request["fsid"], "export": {"name": "vault", "principals": ["health"]}}
+    usage.markers.records.update({"export-vault.json": scope, "export-vault-health.json": scope})
+    return ceph_export_native.prefix({"scope": {"owner": usage.request["owner"]}, "name": "vault"})
+
+
+@pytest.mark.parametrize("entity", ["client.smb.fs.cluster.files", "client.smb.config.files.node-1.abcdef", "consumer"])
+def test_a_dependents_key_refuses_even_beside_its_own_records(usage, entity):  # pylint: disable=redefined-outer-name
+    identifier = dependents(usage)
+    usage.entities.append("client." + identifier + "-health" if entity == "consumer" else entity)
+    with pytest.raises(ceph_native.Refusal, match="^kept-foreign-client$"):
+        check(usage)
+    assert usage.markers.read(kept.UNUSED) is None
+
+
+def test_the_smb_managers_pool_holding_objects_refuses_even_with_a_delegated_smb_cluster(usage):  # pylint: disable=redefined-outer-name
+    dependents(usage)
+    usage.pools.append({"name": ".smb", "id": 3, "stats": {"objects": 7, "stored": 4096}})
+    with pytest.raises(ceph_native.Refusal, match="^kept-user-data$"):
+        check(usage)
+
+
+@pytest.mark.parametrize("entity", ["client.rbd-mirror-peer", "client.rbd-mirror.node-1.abcdef"])
+def test_a_replications_peer_key_still_refuses(usage, entity):  # pylint: disable=redefined-outer-name
+    usage.entities.append(entity)
+    with pytest.raises(ceph_native.Refusal, match="^kept-foreign-client$"):
+        check(usage)
 
 
 def test_another_clusters_pass_record_refuses_ownership(usage):  # pylint: disable=redefined-outer-name

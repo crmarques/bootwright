@@ -1,5 +1,5 @@
 implementation: storage-ceph-kept-teardown-v1
-content-digest: ce752da4a82920f588a3c23c41c293eaa6341961744dd63719969f64aa1df728
+content-digest: 989326624321166c6dcc503942ca0bf15af474a13b9ed4d4d375387768c877d9
 request-version: ceph-core-v1
 automation-formats: ceph-kept-host-removal-v1
 mark-formats: none
@@ -12,6 +12,9 @@ effect-pins:
   fsid-records-removed-last
   auth-and-pools-unused-before-manager-stop
   one-device-zap-per-call
+  physical-disks-by-bound-alias-never-kernel-name
+  claimed-physical-disks-each-reproved
+  dependents-go-with-the-teardown
 request-identity:
   cluster
   fsid

@@ -103,7 +103,7 @@ per-step binding are owned by
 | A cluster install failed before any node booted the image | `--stage clusters` takes back the agent installation on kept nodes ([removal on kept nodes](../openshift-clusters.md#removal-on-kept-nodes)) |
 | A staged destroy fails halfway and the operator widens it | A lower floor or no `--stage` supersedes it behind the widening confirmation ([staged destroy](../state-reconciliation.md#staged-destroy)) |
 | `--clusters` narrows a staged destroy | Takes back the named clusters' steps and keeps the others ([staged destroy](../state-reconciliation.md#staged-destroy)) |
-| A Ceph cluster whose hosts are physical, or with an SMB share, consumer, replication or sign-on, is in the scope | Refuses `destroy.stage-keeps-host` ([B1885](../milestones/m2.md#b1885)) |
+| A Ceph cluster, on physical hosts or with an SMB share, consumer, replication or sign-on, none of whose access steps completed | `--stage clusters` takes it back while its hosts run ([a never-used cluster on kept hosts](../ceph.md#a-never-used-cluster-on-kept-hosts)); a lower floor that deletes or releases some of its hosts refuses ([B1895](../milestones/m2.md#b1895)) |
 | A Ceph cluster that handed out access is in the scope | Refuses `destroy.stage-keeps-host` until B491's serving-cluster contract ([B491](../milestones/m2.md#b491)) |
 
 ## Capabilities
@@ -118,7 +118,7 @@ unlocks the part that refuses.
 | OpenShift agent installation | Taken back on kept nodes when no node was handed the image | [B1860](../milestones/delivered.md#x760--an-agent-installation-no-node-booted-is-taken-back-on-kept-nodes) |
 | OpenShift physical nodes after a boot | Stays open: the installed system would be recorded as residue, the nodes proved off and the next install would consume data loss as it does now | the owner's decision |
 | KubeVirt node Machines after a boot | The install step's inverse blanks the root disks through the KubeVirt arm's root-disk reset | [B1880](../milestones/m1.md#b1880) |
-| Ceph on kept hosts | Taken back on virtual and provided hosts while no step that hands out access completed ([X763](../milestones/delivered.md#x763--a-never-used-ceph-cluster-is-taken-back-on-kept-hosts)); physical hosts, SMB, consumers, replication and sign-on refuse; serving clusters wait for B491's client-fencing contract | [B1885](../milestones/m2.md#b1885), [B491](../milestones/m2.md#b491) |
+| Ceph on kept hosts | Taken back on virtual, provided and physical hosts while no step that hands out access completed, SMB, consumers, replication and sign-on included ([a never-used cluster on kept hosts](../ceph.md#a-never-used-cluster-on-kept-hosts)); a scope that deletes or releases only some of a cluster's hosts refuses; serving clusters wait for B491's client-fencing contract | [B1895](../milestones/m2.md#b1895), [B491](../milestones/m2.md#b491) |
 | Add-on instances | Retire offline with their cluster's install in the scope | [B769](../milestones/backlog.md#b769) for one instance online |
 
 ## Open for the owner

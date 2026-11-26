@@ -364,10 +364,10 @@ func TestAnUnresolvedStorageClusterRefusesItsKeptHostRemovalNamingApply(t *testi
 	}
 }
 
-// L-2: a step that runs beside a storage cluster on the hosts the cluster is
-// taken back from while they run, and has no removal of its own there,
-// refuses naming B1885 and the whole destroy.
-func TestAStepBesideAStorageClusterOnRunningKeptHostsNamesB1885(t *testing.T) {
+// L-2, B1885: a step that runs beside a storage cluster on the hosts the
+// cluster is taken back from while they run, and states no removal of its own
+// there, refuses naming the whole destroy.
+func TestAStepBesideAStorageClusterOnRunningKeptHostsRefuses(t *testing.T) {
 	t.Parallel()
 	cluster := keptOnlineHarness(t, keptOnlineOptions{share: true})
 	h := cluster.h
@@ -376,7 +376,7 @@ func TestAStepBesideAStorageClusterOnRunningKeptHostsNamesB1885(t *testing.T) {
 	_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, Floor: string(reconciliation.StageClusters), SkipConfirmation: true})
 	reported := diagnostics.Of(err)
 	if firstCode(err) != destroyStageKeepsHost.Code || !strings.Contains(reported[0].Message, "the step share runs on") ||
-		!strings.Contains(reported[0].Message, "the step storage is taken back from these Machines while they run") || !strings.Contains(reported[0].Message, "(B1885)") ||
+		!strings.Contains(reported[0].Message, "the step storage is taken back from these Machines while they run") || !strings.Contains(reported[0].Message, "states no removal of its own there") || strings.Contains(reported[0].Message, "B1885") ||
 		strings.Contains(reported[0].Message, "B1861") || reported[0].Remediation != "take back the whole context with bootwright destroy --context lab" {
 		t.Fatalf("destroy --stage clusters over a step beside the storage cluster returned %v", reported)
 	}

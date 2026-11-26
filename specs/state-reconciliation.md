@@ -2253,7 +2253,10 @@ set, its own scope with what every staged destroy it `replaces` took back.
   Machines stay (`lifecycle.KeptHostRemoval`) is admitted instead, freezing
   them as its inverse's `keptHosts`, and a step that retires offline where a
   step it depends on keeps every Machine it reaches; a refusal names the
-  capability's reason. One complete only if the same removal blanks their
+  capability's reason. One whose removal runs there while they run
+  (`lifecycle.OnlineKeptHosts`) refuses while the scope deletes or releases
+  its other hosts ([B1895](milestones/m2.md#b1895)) or keeps a step it
+  depends on that also runs so, whose teardown its removal goes with. One complete only if the same removal blanks their
   root disks is admitted where each is virtual, offers
   `lifecycle.RootDiskReset` and holds no other kept step, any kept step
   that runs on it, its own Machine steps included, since no step states
@@ -2262,8 +2265,8 @@ set, its own scope with what every staged destroy it `replaces` took back.
   step, which only releases its claim (`lifecycle.MachineRelease`), is in the
   scope is released: each step on it not answering `lifecycle.KeptHostRemoval`
   is taken back as the whole destroy takes it back, and one answering it so
-  only where its capability states no refusal (a Ceph step there refuses,
-  [B1885](milestones/m2.md#b1885)), its claim on the server
+  only where its capability states no refusal, as a never-used Ceph
+  cluster's erase-backed retirement, its claim on the server
   holds the `releasing` mark until a restore reserves it again, and it is no
   kept power target. A step that read its disks
   (`lifecycle.DiskRereading`) must prove from its records that it did, or

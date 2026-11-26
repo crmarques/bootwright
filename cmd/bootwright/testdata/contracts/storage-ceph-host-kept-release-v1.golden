@@ -1,5 +1,5 @@
 implementation: storage-ceph-host-kept-release-v1
-content-digest: fc9be8783b3857b21d2b393446e9f8f11b7dd98c2529a2ce9f4fe3b4fc5fe85e
+content-digest: 84513c593ac4137c1ac6fe782a824646090b8e4a9277e90ada84ff8c4e3d5043
 request-version: ceph-host-v1
 automation-formats: none
 mark-formats: none
@@ -7,6 +7,7 @@ proof-ids: none
 fixed-places: none
 effect-pins:
   host-records-removed-packages-and-image-kept
+  physical-host-records-removed
 request-identity:
   host
   cluster.cluster

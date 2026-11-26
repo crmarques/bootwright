@@ -10,7 +10,9 @@ bootstrap and its frozen services create, and `ceph df` shows no object and no s
 The entities are closed: `mon.`, `client.admin`, cephadm's bootstrap keys `client.bootstrap-{mds,mgr,osd,rbd,rbd-mirror,rgw}`, each
 `mgr.<id>`, `osd.<n>`, `client.crash.<id>` and `client.ceph-exporter.<id>` daemon key, and `mds.<id>` only while the frozen services
 place an MDS. A cluster request carries no other service (gateways, NFS and NVMe-oF are blocks of their own), so a key of any other
-name is a client someone created outside this cluster's teardown scope, possibly through `cluster rsh`.
+name is a client someone created outside this cluster's teardown scope, possibly through `cluster rsh`. An SMB, consumer, replication or
+sign-on step of a cluster taken back here never ran, since each needs a done cluster step, which refuses first (B1885), so none of
+their keys, pools or data is admitted.
 """
 
 from __future__ import annotations
@@ -33,6 +35,7 @@ MAX_ENTITIES, MAX_POOLS = 4096, 4096
 ATTEMPT, COMPLETE = "kept-host-removal-attempt.json", "kept-host-removal-complete.json"
 UNUSED = "kept-unused.json"
 ZAP_PREFIX = "kept-host-zap-"
+SERIAL_PREFIX = "/dev/disk/by-serial/"
 # A marker directory being discarded is first renamed to this name beside it, so no reader ever sees part of its records.
 DISCARD_PREFIX = ".discard-"
 ENTITIES = frozenset(("mon.", "client.admin", "client.bootstrap-mds", "client.bootstrap-mgr", "client.bootstrap-osd", "client.bootstrap-rbd",
@@ -180,13 +183,26 @@ class KeptHostRemoval(PhysicalHostRemoval):
         self.record = removal_record(self.request, self.host)
 
     def device_nodes(self):
-        """Each device the frozen request names for this host, by the kernel node its stable path resolves to."""
+        """Each device the frozen request names for this host, by the kernel node its stable path resolves to: a virtual disk's by-id path,
+        a physical WWN selection's own path, and a physical serial selection's by-id alias its host preparation bound. On a claimed physical
+        host every named disk must be a row of that binding, whose identity its record proves again on every read, and resolve to the row's
+        kernel node, so a disk that died, changed or gained another link refuses device-identity before any effect. No kernel name reaches
+        the zap. A host the cluster never claimed reads no binding: its serial selections name no node, so a volume of this FSID there
+        refuses as on an unnamed device."""
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_osd
         devices = ceph_native_osd.Devices(self.worker)
+        claimed = self.host.get("physical") and self.markers.owned()
+        bound = self.worker.physical_devices() if claimed else {}
         nodes = {}
         for device in self.host.get("devices", []):
-            path = devices.stable_device_path(self.host, device)
-            nodes[os.path.realpath(path)] = path
+            require(not claimed or device["path"] in bound, "device-identity")
+            if device["path"].startswith(SERIAL_PREFIX) and not claimed:
+                continue
+            row = bound.get(device["path"], device)
+            path = devices.stable_device_path(self.host, row if device["path"].startswith(SERIAL_PREFIX) else device)
+            node = os.path.realpath(path)
+            require(node not in nodes and (not claimed or node == row.get("kernelPath")), "device-identity")
+            nodes[node] = path
         return nodes
 
     def volumes(self):

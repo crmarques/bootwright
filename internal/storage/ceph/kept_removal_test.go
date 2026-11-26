@@ -11,6 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 type keptRunner struct {
@@ -60,7 +61,7 @@ func keptRequestBlock(t *testing.T, r Request) reconciliation.Block {
 // the cluster (its dashboard login) and each access-producing block refuse
 // once done, and while unknown or running, since resolving them may prove
 // them done; they are admitted only failed or pending. A pool never refuses,
-// and a physical host always refuses (B1885).
+// and a physical host is admitted as any other (B1885).
 func TestACephBlockIsTakenBackFromKeptHostsOnlyWhileNothingHandedOutAccess(t *testing.T) {
 	capability := New(api.CephCluster, nil)
 	access := map[string]func(*Request){
@@ -86,6 +87,9 @@ func TestACephBlockIsTakenBackFromKeptHostsOnlyWhileNothingHandedOutAccess(t *te
 				t.Fatalf("a %s block handing out %s answered %q", state, handed, refusal)
 			}
 		}
+		if refusal := capability.KeptHostsRefusal(block, lifecycle.RemovalRecords{State: reconciliation.BlockFailed, Completed: true}, false); !strings.Contains(refusal, "B491") {
+			t.Fatalf("a failed block an earlier record completed, handing out %s, answered %q", handed, refusal)
+		}
 	}
 	pool := coreRequest()
 	pool.Action, pool.Pool = "pool", &Pool{Name: "data"}
@@ -96,8 +100,11 @@ func TestACephBlockIsTakenBackFromKeptHostsOnlyWhileNothingHandedOutAccess(t *te
 	}
 	physical := coreRequest()
 	physical.Hosts[0].Physical = true
-	if refusal := capability.KeptHostsRefusal(keptRequestBlock(t, physical), lifecycle.RemovalRecords{State: reconciliation.BlockFailed}, false); !strings.Contains(refusal, "B1885") {
-		t.Fatalf("a cluster with a physical host answered %q", refusal)
+	if refusal := capability.KeptHostsRefusal(keptRequestBlock(t, physical), lifecycle.RemovalRecords{State: reconciliation.BlockFailed}, false); refusal != "" {
+		t.Fatalf("a failed cluster with a physical host answered %q", refusal)
+	}
+	if refusal := capability.KeptHostsRefusal(keptRequestBlock(t, physical), lifecycle.RemovalRecords{State: reconciliation.BlockDone}, false); !strings.Contains(refusal, "B491") {
+		t.Fatalf("a done cluster with a physical host answered %q", refusal)
 	}
 	hosts, err := capability.OnlineKeptHosts(keptRequestBlock(t, providedStretchRequest(t)))
 	if err != nil || !slices.Equal(hosts, requestMachines(providedStretchRequest(t))) || !slices.Contains(hosts, "tie") {
@@ -168,6 +175,47 @@ func TestTheKeptTeardownIsObservedPerHost(t *testing.T) {
 	var recorded KeptTeardown
 	if err != nil || len(runner.runs) != 0 || json.Unmarshal(result.Evidence, &recorded) != nil || recorded.Version != KeptTeardownVersion || len(recorded.Hosts) != 0 {
 		t.Fatalf("a pool's kept removal recorded %s %+v after %d runs", result.Evidence, diagnostics.Of(err), len(runner.runs))
+	}
+}
+
+// B1885: a cluster on physical hosts is torn down from them as from any kept
+// host, through its disks' bound identities, the teardown naming its disks
+// free and no erase among what it does.
+func TestAPhysicalKeptHostIsTornDownWithoutAnErase(t *testing.T) {
+	_, e, cluster, _ := physicalRetirementFixture(t)
+	for _, pair := range e.RemovalProved {
+		if pair.Applied.Implementation == HostImplementation {
+			e.ApplyProved = append(e.ApplyProved, pair.Applied)
+		}
+	}
+	e.ApplyProved = append(e.ApplyProved, imageProof(t, cluster.Cluster, cluster.Image, resolvedDigest))
+	e.RemovalProved = nil
+	cluster.Controller, cluster.Owner, cluster.FSID = "controller", "apply-original", FSIDFor("apply-original", cluster.Cluster)
+	e.Material = map[string]secrets.Material{}
+	for i := range cluster.Hosts {
+		if cluster.Hosts[i].HostKeyRef == "" {
+			cluster.Hosts[i].HostKeyRef = cluster.Hosts[i].Name + "-host-key"
+		}
+		e.Material[cluster.Hosts[i].HostKeyRef] = secrets.NewMaterial(map[secrets.Part][]byte{secrets.PublicKeyPart: hostPublicKey()})
+	}
+	frozen := cluster
+	frozen.Owner, frozen.FSID = "", ""
+	canonical, _ := frozen.Canonical()
+	e.Block = retirementBlock(t, ClusterBlockID(cluster.Cluster), string(api.CephCluster), cluster.Cluster, Implementation, canonical)
+	e.Block.Inverse = &reconciliation.Inverse{KeptHosts: requestMachines(cluster)}
+	e.Operation, e.Attempt = "destroy-later", 1
+	runner := &keptRunner{}
+	proofs := physicalProofs{identity: PhysicalIdentity{UUID: "11111111-1111-4111-8111-111111111111", MACs: []string{"02:00:00:00:00:01"}}}
+	result, err := New(api.CephCluster, runner).WithProofs(proofs).Destroy(context.Background(), e)
+	if err != nil || result.Outcome != reconciliation.OutcomeChanged || len(runner.runs) != 1 || runner.runs[0].MaterialValues["retirement"] != keptRetirement {
+		t.Fatalf("the physical kept teardown returned %+v %+v after %d runs", result, diagnostics.Of(err), len(runner.runs))
+	}
+	if _, found := runner.runs[0].Refusals["device-identity"]; !found {
+		t.Fatal("the physical kept teardown names no refusal for a disk its binding no longer names")
+	}
+	removal, err := New(api.CephCluster, nil).KeptHostsRemoval(context.Background(), e.Block)
+	if err != nil || !slices.ContainsFunc(removal.Retains, func(retained string) bool { return strings.Contains(retained, "no erase blanks") }) {
+		t.Fatalf("the physical kept teardown retains %v (%v)", removal.Retains, err)
 	}
 }
 

@@ -581,6 +581,9 @@ func (c SignOnCapability) Observe(ctx context.Context, e lifecycle.Execution) (l
 }
 
 func (c SignOnCapability) Destroy(ctx context.Context, e lifecycle.Execution) (lifecycle.Result, error) {
+	if keptBlock(e.Block) {
+		return destroyKeptWith(ctx, e)
+	}
 	if e.RetiredWithHosts {
 		evidence, err := c.retirement(ctx, e)
 		if err != nil {
@@ -595,6 +598,9 @@ func (c SignOnCapability) Destroy(ctx context.Context, e lifecycle.Execution) (l
 }
 
 func (c SignOnCapability) ObserveRemoval(ctx context.Context, e lifecycle.Execution) (lifecycle.Observation, error) {
+	if keptBlock(e.Block) {
+		return observeKeptWith(ctx, e)
+	}
 	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
 	if e.RetiredWithHosts {
 		evidence, err := c.retirement(ctx, e)
@@ -643,6 +649,9 @@ func (SignOnCapability) HostMachines(block reconciliation.Block) ([]string, erro
 }
 
 func (SignOnCapability) Quiescent(ctx context.Context, probe lifecycle.Probe) (lifecycle.Quiescence, error) {
+	if keptBlock(probe.Block) && ctx.Err() == nil {
+		return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: keptReason}, nil
+	}
 	if err := ctx.Err(); err != nil {
 		return lifecycle.Quiescence{State: lifecycle.Unproved}, err
 	}

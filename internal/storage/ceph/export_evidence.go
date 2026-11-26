@@ -237,6 +237,9 @@ func (c ConsumerCapability) retirement(ctx context.Context, e lifecycle.Executio
 	return json.Marshal(Retirement{Action: "export", Cluster: r.Cluster, FSID: FSIDFor(e.ApplyOperation, r.Cluster), RetiredWith: r.Machines, PendingErase: len(pending) != 0})
 }
 func (c ConsumerCapability) Destroy(ctx context.Context, e lifecycle.Execution) (lifecycle.Result, error) {
+	if keptBlock(e.Block) {
+		return destroyKeptWith(ctx, e)
+	}
 	data, err := c.retirement(ctx, e)
 	if err != nil {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
@@ -244,6 +247,9 @@ func (c ConsumerCapability) Destroy(ctx context.Context, e lifecycle.Execution) 
 	return lifecycle.Result{Outcome: reconciliation.OutcomeChanged, Evidence: data}, nil
 }
 func (c ConsumerCapability) ObserveRemoval(ctx context.Context, e lifecycle.Execution) (lifecycle.Observation, error) {
+	if keptBlock(e.Block) {
+		return observeKeptWith(ctx, e)
+	}
 	data, err := c.retirement(ctx, e)
 	if err != nil {
 		return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, err
@@ -251,6 +257,9 @@ func (c ConsumerCapability) ObserveRemoval(ctx context.Context, e lifecycle.Exec
 	return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: data}, nil
 }
 func (c ConsumerCapability) Quiescent(ctx context.Context, p lifecycle.Probe) (lifecycle.Quiescence, error) {
+	if keptBlock(p.Block) && ctx.Err() == nil {
+		return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: keptReason}, nil
+	}
 	if err := ctx.Err(); err != nil {
 		return lifecycle.Quiescence{State: lifecycle.Unproved}, err
 	}

@@ -316,6 +316,9 @@ func (c ReplicationCapability) retirement(ctx context.Context, e lifecycle.Execu
 	}{r.Object, e.ApplyOperation, pending, FSIDFor(e.ApplyOperation, r.Primary.Cluster), machines, FSIDFor(e.ApplyOperation, r.Secondary.Cluster)}, "Ceph replication retirement")
 }
 func (c ReplicationCapability) Destroy(ctx context.Context, e lifecycle.Execution) (lifecycle.Result, error) {
+	if keptBlock(e.Block) {
+		return destroyKeptWith(ctx, e)
+	}
 	data, err := c.retirement(ctx, e)
 	if err != nil {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
@@ -323,6 +326,9 @@ func (c ReplicationCapability) Destroy(ctx context.Context, e lifecycle.Executio
 	return lifecycle.Result{Outcome: reconciliation.OutcomeChanged, Evidence: data}, nil
 }
 func (c ReplicationCapability) ObserveRemoval(ctx context.Context, e lifecycle.Execution) (lifecycle.Observation, error) {
+	if keptBlock(e.Block) {
+		return observeKeptWith(ctx, e)
+	}
 	data, err := c.retirement(ctx, e)
 	if err != nil {
 		return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, err
@@ -330,6 +336,9 @@ func (c ReplicationCapability) ObserveRemoval(ctx context.Context, e lifecycle.E
 	return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: data}, nil
 }
 func (c ReplicationCapability) Quiescent(ctx context.Context, p lifecycle.Probe) (lifecycle.Quiescence, error) {
+	if keptBlock(p.Block) && ctx.Err() == nil {
+		return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: keptReason}, nil
+	}
 	if err := ctx.Err(); err != nil {
 		return lifecycle.Quiescence{State: lifecycle.Unproved}, err
 	}

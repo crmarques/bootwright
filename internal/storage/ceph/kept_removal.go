@@ -19,13 +19,15 @@ const (
 )
 
 func KeptHostContentDigest() string {
-	return reconciliation.ContentDigestOf(KeptHostImplementation, HostVersion, HostEvidenceVersion, "host-records-removed-packages-and-image-kept")
+	return reconciliation.ContentDigestOf(KeptHostImplementation, HostVersion, HostEvidenceVersion, "host-records-removed-packages-and-image-kept",
+		"physical-host-records-removed")
 }
 
 func KeptContentDigest() string {
 	return reconciliation.ContentDigestOf(KeptImplementation, Version, KeptTeardownVersion, "managers-stopped-before-fsid-removal",
 		"fsid-tagged-named-volume-zap", "positive-absence-per-host", "fsid-records-removed-last",
-		"auth-and-pools-unused-before-manager-stop", "one-device-zap-per-call")
+		"auth-and-pools-unused-before-manager-stop", "one-device-zap-per-call", "physical-disks-by-bound-alias-never-kernel-name",
+		"claimed-physical-disks-each-reproved", "dependents-go-with-the-teardown")
 }
 
 const (
@@ -49,10 +51,6 @@ type KeptTeardownHost struct {
 
 func keptBlock(block reconciliation.Block) bool {
 	return block.Inverse != nil && len(block.Inverse.KeptHosts) != 0
-}
-
-func keptPhysicalRefusal() string {
-	return "a physical Ceph host keeps what the cluster wrote to its disks, and no staged destroy takes a cluster back from one yet (B1885)"
 }
 
 func handedOut(r Request) string {
@@ -82,15 +80,17 @@ func (Capability) KeptHostsRefusal(block reconciliation.Block, records lifecycle
 	if err != nil {
 		return "its frozen request cannot be read"
 	}
-	if physicalHosts(r.Hosts) {
-		return keptPhysicalRefusal()
-	}
-	access := handedOut(r)
+	return keptAccessRefusal(handedOut(r), records)
+}
+
+func keptAccessRefusal(access string, records lifecycle.RemovalRecords) string {
 	switch {
-	case access == "" || records.State == reconciliation.BlockFailed || records.State == reconciliation.BlockPending:
+	case access == "":
 		return ""
-	case records.State == reconciliation.BlockDone:
-		return "the step completed and handed out " + access + ", so a data client may hold access to the cluster; taking back a cluster that was used while its hosts stay waits for B491"
+	case records.State == reconciliation.BlockDone || records.Completed:
+		return "the step completed and handed out " + access + ", so a data client may hold access to the cluster, and a staged destroy takes back only a cluster no data client was handed access to (B491)"
+	case records.State == reconciliation.BlockFailed || records.State == reconciliation.BlockPending:
+		return ""
 	}
 	return "the step's outcome is " + string(records.State) + ", and resolving it may prove it completed and handed out " + access +
 		", so it is taken back while its hosts stay only once bootwright apply resolved it failed"
@@ -138,6 +138,9 @@ func (c Capability) KeptHostsRemoval(ctx context.Context, block reconciliation.B
 	removal.Retains = []string{"the Ceph packages and the pulled image on each host, by design",
 		"each host's firewall openings, which its own host firewall step keeps",
 		"every disk, volume and file of another cluster or of none, which the teardown never touches"}
+	if physicalHosts(r.Hosts) {
+		removal.Retains = append(removal.Retains, "each physical host's disks, which no erase blanks: the zap leaves each named one with no volume, signature or label of the cluster, so the next bootstrap reads it free")
+	}
 	return removal, nil
 }
 
@@ -153,9 +156,6 @@ func (c Capability) keptTeardown(ctx context.Context, e lifecycle.Execution, ope
 	r, err := c.identity(ctx, e)
 	if err != nil {
 		return KeptTeardown{}, nil, err
-	}
-	if physicalHosts(r.Hosts) {
-		return KeptTeardown{}, nil, physicalRemovalRefusal()
 	}
 	if r.Action != "cluster" {
 		teardown := KeptTeardown{FSID: r.FSID, Hosts: []KeptTeardownHost{}, Owner: r.Owner, Request: e.Block.RequestDigest, Version: KeptTeardownVersion}
@@ -241,6 +241,8 @@ func keptRefusals(r Request) map[string]error {
 			"check that every host Machine of the cluster runs and answers SSH with its fleet key and pinned host key, then repeat the destroy"),
 		"tiebreaker-foreign": cephBoundaryUnproved.Fail("a kept host of Ceph cluster "+r.Cluster+" holds Ceph state this cluster cannot prove its own: another cluster's directory or daemon, a volume of this cluster on a device the request does not name or beside another's volume, or a key line, drop-in or credential other than the recorded ones",
 			"inspect the host as the native error names and remove what another tool placed there, then repeat the destroy; Bootwright never removes what it cannot prove its own"),
+		"device-identity": cephBoundaryUnproved.Fail("a named disk of a kept physical host of Ceph cluster "+r.Cluster+" no longer reads as its host preparation bound it, so the teardown cannot prove which disk holds the cluster's volumes and zaps none",
+			"inspect the disk the native error names and restore the bound disk, then repeat the destroy, or take back the whole context with bootwright destroy --context <context>; Bootwright never zaps a disk it cannot identify"),
 		"managers-running": cephBoundaryUnproved.Fail("a manager of Ceph cluster "+r.Cluster+" still runs or stays enabled on a kept host after the stop round, so no host's FSID removal started",
 			"inspect the attempt's adapter output, then repeat the destroy; the stop round repeats first"),
 	})
@@ -248,12 +250,8 @@ func keptRefusals(r Request) map[string]error {
 }
 
 func (HostCapability) KeptHostsRefusal(block reconciliation.Block, _ lifecycle.RemovalRecords, _ bool) string {
-	r, err := DecodeHostRequest(block.Request)
-	if err != nil {
+	if _, err := DecodeHostRequest(block.Request); err != nil {
 		return "its frozen request cannot be read"
-	}
-	if host, _ := r.target(); host.Physical {
-		return keptPhysicalRefusal()
 	}
 	return ""
 }
@@ -287,9 +285,6 @@ func (c HostCapability) releaseKept(ctx context.Context, e lifecycle.Execution, 
 	r, err := c.prepare(ctx, e)
 	if err != nil {
 		return HostEvidence{}, nil, err
-	}
-	if host, _ := r.target(); host.Physical {
-		return HostEvidence{}, nil, physicalRemovalRefusal()
 	}
 	result, err := c.run(ctx, e, operation, r, operation == "observe")
 	if err != nil {
