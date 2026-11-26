@@ -254,6 +254,19 @@ func TestDiscoveryInventoryBecomesAnExactInstallerTarget(t *testing.T) {
 		if owner.NothingRecorded(block, lifecycle.RemovalRecords{State: reconciliation.BlockUnknown, Previous: completed}) || !owner.DecidedAtRun() {
 			t.Fatal("an unfinished apply's discovery was decided before the check that settles it ran")
 		}
+		for _, read := range []struct {
+			records lifecycle.RemovalRecords
+			refused bool
+		}{
+			{lifecycle.RemovalRecords{State: reconciliation.BlockDone, Previous: completed}, false},
+			{lifecycle.RemovalRecords{State: reconciliation.BlockPending}, false},
+			{lifecycle.RemovalRecords{State: reconciliation.BlockUnknown, Previous: completed}, true},
+			{lifecycle.RemovalRecords{State: reconciliation.BlockFailed}, true},
+		} {
+			if refusal := owner.RereadRefusal(block, read.records); (refusal != "") != read.refused {
+				t.Fatalf("a staged destroy over the discovery records %s reads %q", read.records.State, refusal)
+			}
+		}
 		removal, err := owner.NothingRemoval(ctx, block)
 		if err != nil || removal.Nothing == "" || len(removal.Impacts) != 0 || len(removal.Groups) != 0 {
 			t.Fatalf("the frozen removal = %+v (%v)", removal, err)

@@ -10,9 +10,10 @@ frozen inverse of every destroy step, slice 1, its branches once decided at
 run time, slice 2, the ownership fold, slice 3, `destroy --stage` and the
 trimmed resting state, slice 4, the restoring apply, slice 5, its changed
 input, slice 6, an agent installation taken back on kept nodes before a
-boot, slice 7, the root disks of kept libvirt nodes blanked after one, and
+boot, slice 7, the root disks of kept libvirt nodes blanked after one,
 slice 8, a Ceph cluster no data client was handed access to taken back on kept
-hosts, are implemented and are owned by
+hosts, and slice 9, a physical Machine's installation and erase taken back
+with its release, are implemented and are owned by
 [state reconciliation](../state-reconciliation.md#staged-destroy),
 its [restoring apply](../state-reconciliation.md#restoring-apply),
 [removal on kept nodes](../openshift-clusters.md#removal-on-kept-nodes),
@@ -21,9 +22,9 @@ delivered records
 [X757](../milestones/delivered.md#x757--the-restoring-apply-restores-what-a-staged-destroy-took-back),
 [X759](../milestones/delivered.md#x759--a-restore-admits-changed-input-inside-what-a-staged-destroy-took-back),
 [X760](../milestones/delivered.md#x760--an-agent-installation-no-node-booted-is-taken-back-on-kept-nodes),
-[X762](../milestones/delivered.md#x762--a-staged-destroy-blanks-the-root-disks-of-kept-libvirt-nodes)
-and
-[X763](../milestones/delivered.md#x763--a-never-used-ceph-cluster-is-taken-back-on-kept-hosts).
+[X762](../milestones/delivered.md#x762--a-staged-destroy-blanks-the-root-disks-of-kept-libvirt-nodes),
+[X763](../milestones/delivered.md#x763--a-never-used-ceph-cluster-is-taken-back-on-kept-hosts)
+and item [B1864](../milestones/m1.md#b1864).
 
 Words used below:
 
@@ -68,12 +69,11 @@ causes.
 | 7 | [B1861](../milestones/delivered.md#x762--a-staged-destroy-blanks-the-root-disks-of-kept-libvirt-nodes) | Root disks of kept libvirt nodes are blanked through their substrate |
 | 7b | [B1880](../milestones/m1.md#b1880) | Root disks of kept KubeVirt nodes are blanked through their substrate |
 | 8 | [B1862](../milestones/delivered.md#x763--a-never-used-ceph-cluster-is-taken-back-on-kept-hosts) | A Ceph cluster no data client was handed access to is taken back on kept hosts |
+| 9 | [B1864](../milestones/m1.md#b1864) | A physical Machine's installation and erase are taken back, and the restore discovers its disks again |
 
-A further outcome follows the restoring apply and stays parked: physical
-installs in a staged scope
-([B1864](../milestones/backlog.md#b1864)). `--clusters` narrowing of a staged
-destroy is delivered ([B1865](../milestones/delivered.md#x764--a-staged-destroy-narrows-to-the-named-clusters)). Online removal of
-one add-on instance is [B769](../milestones/backlog.md#b769).
+`--clusters` narrowing of a staged destroy is delivered
+([B1865](../milestones/delivered.md#x764--a-staged-destroy-narrows-to-the-named-clusters)).
+Online removal of one add-on instance is [B769](../milestones/backlog.md#b769).
 
 ## The trimmed resting state
 
@@ -102,7 +102,6 @@ per-step binding are owned by
 | Cluster provisioning failed and the nodes are KubeVirt VMs that booted | `--stage clusters` refuses `destroy.stage-keeps-host` until the KubeVirt root-disk reset exists ([B1880](../milestones/m1.md#b1880)) |
 | A cluster install failed before any node booted the image | `--stage clusters` takes back the agent installation on kept nodes ([removal on kept nodes](../openshift-clusters.md#removal-on-kept-nodes)) |
 | A staged destroy fails halfway and the operator widens it | A lower floor or no `--stage` supersedes it behind the widening confirmation ([staged destroy](../state-reconciliation.md#staged-destroy)) |
-| A physical install is in the scope | Refuses; the physical restore is parked ([B1864](../milestones/backlog.md#b1864)) |
 | `--clusters` narrows a staged destroy | Takes back the named clusters' steps and keeps the others ([staged destroy](../state-reconciliation.md#staged-destroy)) |
 | A Ceph cluster whose hosts are physical, or with an SMB share, consumer, replication or sign-on, is in the scope | Refuses `destroy.stage-keeps-host` ([B1885](../milestones/m2.md#b1885)) |
 | A Ceph cluster that handed out access is in the scope | Refuses `destroy.stage-keeps-host` until B491's serving-cluster contract ([B491](../milestones/m2.md#b491)) |
@@ -115,7 +114,6 @@ unlocks the part that refuses.
 | Capability | In a staged scope | Unlocked by |
 | --- | --- | --- |
 | libvirt and KubeVirt Machines | Deleted by the scope, or kept with their steps below the floor | [B166](../milestones/delivered.md#x756--a-staged-destroy-takes-back-a-stage-and-the-context-rests-trimmed) |
-| Physical Machines | Always kept; an install or erase in the scope refuses | [B1864](../milestones/backlog.md#b1864) |
 | Infrastructure services (mirror content, DNS, registry, hardware claims, enrollment) and the controller | Always kept | none; the whole destroy takes them back |
 | OpenShift agent installation | Taken back on kept nodes when no node was handed the image | [B1860](../milestones/delivered.md#x760--an-agent-installation-no-node-booted-is-taken-back-on-kept-nodes) |
 | OpenShift physical nodes after a boot | Stays open: the installed system would be recorded as residue, the nodes proved off and the next install would consume data loss as it does now | the owner's decision |

@@ -279,6 +279,13 @@ edge into an owned step frozen as a `prerequisite`.
   ([access-credential rebind](#access-credential-rebind)); the restore records
   that rebind as `rebound` and its issued binding beside its own, so its
   continuation and every later removal present the new version.
+- **Preparation.** Where an automatic preparation would run, as the disk
+  discovery of a released physical Machine does, the restore is that
+  preparation, freezing its scope. Before any effect it admits the whole
+  input, planned over the evidence the lineage held before the take-back. The
+  apply after it adds the rest as one after a preparation does, admitted again
+  over the new inventory under the restore's contract and custody proofs, and
+  presents its steps its own binding.
 - **Identity.** A re-created step takes the restoring apply's identity, its
   attempt records and ownership marks, as an added block does; a kept step
   keeps its creator's.
@@ -2191,7 +2198,8 @@ the removal, as a lost frozen plan does.
 
 The removal presents each step one Secret binding: the one of the
 [restoring apply](#restoring-apply) that created the step, and the first
-binding of the root apply for every other step, never an additive head's;
+binding of the root apply for every other step, never an additive head's
+other than the apply after a restoring preparation;
 each as an [access-credential rebind](#access-credential-rebind) of a removal
 or restore since replaced it, which that operation records as `rebound`, a
 fresh removal beside the replacements of the removals it replaces. It
@@ -2240,8 +2248,17 @@ set, its own scope with what every staged destroy it `replaces` took back.
   capability's reason. One complete only if the same removal blanks their
   root disks is admitted where each is virtual, offers
   `lifecycle.RootDiskReset` and holds no other kept step, freezing them as
-  `blanks` with an impact each and `data-loss`. A physical Machine is always kept, since its own step
-  only releases a claim. Every frozen leaves-with names a scoped step.
+  `blanks` with an impact each and `data-loss`. A physical Machine whose own
+  step, which only releases its claim (`lifecycle.MachineRelease`), is in the
+  scope is released: each step on it not answering `lifecycle.KeptHostRemoval`
+  is taken back as the whole destroy takes it back, and one answering it so
+  only where its capability states no refusal (a Ceph step there refuses,
+  [B1885](milestones/m2.md#b1885)), its claim on the server
+  holds the `releasing` mark until a restore reserves it again, and it is no
+  kept power target. A step that read its disks
+  (`lifecycle.DiskRereading`) must prove from its records that it did, or
+  refuses, since nothing then proves the restore reads them again. Any other
+  physical Machine is kept. Every frozen leaves-with names a scoped step.
 - **Clusters.** `--clusters <list>`, only with the `clusters` or `add-ons`
   floor, keeps as seeds only the steps whose frozen cluster ownership names a
   listed cluster; a step two clusters own, such as Ceph replication, is one
@@ -2301,9 +2318,8 @@ set, its own scope with what every staged destroy it `replaces` took back.
   and every other claim loses it. Its finalization repeats
   those writes and is complete once that evidence stands and only such claims
   hold a mark.
-- **Afterwards** `apply` starts a [restoring apply](#restoring-apply), which
-  runs no automatic preparation and refuses `prepare.refused` where one would
-  run; `machine discover` and `machine enroll` refuse that stop too, naming
+- **Afterwards** `apply` starts a [restoring apply](#restoring-apply);
+  `machine discover` and `machine enroll` refuse `prepare.refused`, naming
   the restore. A `destroy`
   without `--stage` removes what the context still owns, replacing the staged
   destroy, and ends pristine; a lower floor replaces it with a staged destroy

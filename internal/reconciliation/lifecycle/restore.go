@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 )
@@ -23,17 +24,19 @@ func restoredLineage(ctx context.Context, store recordReader, removal operations
 }
 
 type restorePlan struct {
-	removal   string
-	head      operationstore.Operation
-	chain     lineage
-	live      reconciliation.Plan
-	fresh     reconciliation.Plan
-	binding   capabilityBinding
-	unplanned error
+	removal     string
+	preparation *reconciliation.PreparationScope
+	head        operationstore.Operation
+	chain       lineage
+	live        reconciliation.Plan
+	fresh       reconciliation.Plan
+	judged      reconciliation.Plan
+	binding     capabilityBinding
+	unplanned   error
 }
 
 func (d decider) planRestore(ctx context.Context, view View, store recordReader, removal operationstore.Operation) (restorePlan, error) {
-	if d.restore != nil && d.restore.removal == removal.ID {
+	if d.restore != nil && d.restore.removal == removal.ID && d.restore.preparation == d.preparation {
 		return *d.restore, nil
 	}
 	head, err := store.ReadOperation(ctx, removal.Source)
@@ -51,16 +54,38 @@ func (d decider) planRestore(ctx context.Context, view View, store recordReader,
 	if err != nil {
 		return restorePlan{}, unremovable(head, err)
 	}
-	planned := restorePlan{removal: removal.ID, head: head, chain: chain, live: live}
-	state, err := d.sources.compile(ctx, view)
+	planned := restorePlan{removal: removal.ID, head: head, chain: chain, live: live, preparation: d.preparation}
+	scope, err := d.restorePreparation(ctx, view)
+	var state *compilation.State
 	if err == nil {
-		err = d.planner.refuseUnsupported(state, nil)
+		state, err = d.sources.compile(ctx, view)
 	}
 	if err == nil {
-		planned.fresh, planned.binding, err = d.planner.planFrom(ctx, view, state, nil)
+		err = d.planner.refuseUnsupported(state, scope)
+	}
+	if err == nil {
+		planned.fresh, planned.binding, err = d.planner.planFrom(ctx, view, state, scope)
+	}
+	planned.judged = planned.fresh
+	if err == nil && scope != nil {
+		taken := func(ctx context.Context, store recordReader, _ lineageMember) ([]lineageMember, error) {
+			return sourceLineage(ctx, store, removal.Source)
+		}
+		planned.judged, _, err = d.planner.planFromEvidence(ctx, view, state, nil, taken)
 	}
 	planned.unplanned = err
 	return planned, nil
+}
+
+func (d decider) restorePreparation(ctx context.Context, view View) (*reconciliation.PreparationScope, error) {
+	if d.preparation != nil || len(d.preparations) == 0 {
+		return d.preparation, nil
+	}
+	scope, _, err := d.planner.automaticScope(ctx, view, reconciliation.Selection{})
+	if err != nil || scope == nil {
+		return nil, err
+	}
+	return d.planner.admitPreparation(*scope)
 }
 
 func (d decider) restorable(ctx context.Context, view View, store recordReader, removal operationstore.Operation) (bool, error) {
@@ -76,7 +101,7 @@ func (d decider) admitRestore(name string, removal operationstore.Operation, pla
 	if planned.unplanned != nil {
 		return KeptChange{Removal: removal.ID, Unchecked: firstMessage(planned.unplanned)}, planned.unplanned
 	}
-	if changed, remedy := d.planner.keptChanges(name, planned.live, planned.fresh); len(changed) != 0 {
+	if changed, remedy := d.planner.keptChanges(name, planned.live, planned.judged); len(changed) != 0 {
 		why := "would freeze it differently"
 		if changed[0].Change == reconciliation.Removed {
 			why = "plans it no more"
@@ -89,8 +114,8 @@ func (d decider) admitRestore(name string, removal operationstore.Operation, pla
 	}
 	restorable := append(slices.Clone(removal.Stage.TakenBack), planned.chain.unstarted()...)
 	var added, unknown []string
-	for _, block := range planned.fresh.Blocks {
-		if _, held := planned.live.Block(block.ID); held {
+	for _, block := range slices.Concat(planned.judged.Blocks, planned.fresh.Blocks) {
+		if _, held := planned.live.Block(block.ID); held || slices.Contains(added, block.ID) {
 			continue
 		}
 		added = append(added, block.ID)

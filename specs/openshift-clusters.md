@@ -1123,8 +1123,8 @@ it also blanks each node's root disk, its own inverse effect frozen as
 nodes, through their [root reset](substrates.md#machine-realization). The
 work area's marks are then expected and read nowhere. Otherwise a recorded
 boot refuses `destroy.stage-keeps-host` naming why: a KubeVirt node waits for
-[B1880](milestones/m1.md#b1880), a physical one for
-[B1864](milestones/backlog.md#b1864)
+[B1880](milestones/m1.md#b1880), and a physical one refuses, since no step of
+a context blanks a physical node's disks
 (`TestAStagedDestroyBlanksTheRootDisksOfVirtualNodesAnInstallationBooted`). The
 restoring apply then installs on the kept nodes under its own identity,
 reading no earlier boot, after proving them off, a blank root disk falling

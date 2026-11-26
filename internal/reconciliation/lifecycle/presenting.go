@@ -69,7 +69,7 @@ func (l lineage) presenting() presenting {
 	}
 	presents := presenting{lineage: ownBinding(l[0].operation)}
 	for _, holding := range l.ownership().Holdings() {
-		if holding.Incarnation < 0 || l[holding.Incarnation].operation.Restores == "" {
+		if holding.Incarnation < 0 || !l.restores(holding.Incarnation) {
 			continue
 		}
 		if presents.steps == nil {

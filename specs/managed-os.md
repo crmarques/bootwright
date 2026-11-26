@@ -1818,6 +1818,10 @@ collects a new report. Temporary-boot cleanup is part of discovery completion,
 and removal of an interrupted discovery uses the ownership checks above. A
 removal planned over a settled completed discovery freezes that its step has
 nothing to take back ([frozen inverse](state-reconciliation.md#frozen-requests-and-contract-guards)).
+A [staged destroy](state-reconciliation.md#staged-destroy) that releases the
+Machine takes the discovery back only when its records hold that completed
+inventory, and its restore discovers the disks again through the automatic
+preparation, under its own identity, before it installs.
 
 ## Root-disk encryption
 

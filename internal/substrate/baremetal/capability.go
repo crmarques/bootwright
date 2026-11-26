@@ -130,6 +130,10 @@ func (c MachineCapability) Destroy(ctx context.Context, execution lifecycle.Exec
 	return lifecycle.MutateBlock(ctx, c.mutation("destroy"), execution, "destroy")
 }
 
+func (MachineCapability) ReleasesMachine(block reconciliation.Block) bool {
+	return block.Kind == Kind && block.Implementation == Implementation
+}
+
 func (c MachineCapability) mutation(operation string) lifecycle.Mutation[Request] {
 	return lifecycle.Mutation[Request]{
 		Prepare: c.prepare, Run: func(ctx context.Context, execution lifecycle.Execution, _ string, request Request) (lifecycle.RunResult, error) {

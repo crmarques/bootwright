@@ -410,11 +410,11 @@ func TestARestoreContinuationRefusesALostPrerequisite(t *testing.T) {
 	}
 }
 
-// A restore runs no automatic preparation: it consults each automatic
-// preparation as a fresh apply does, proceeds when none needs to run, and
-// refuses prepare.refused, naming the Machines and the whole destroy, when one
-// would, so no restore installs a physical Machine without its preparation.
-func TestARestoreRunsNoAutomaticPreparation(t *testing.T) {
+// B1864: a restore consults each automatic preparation as a fresh apply does.
+// With none needed it is an ordinary restore; with one needed it runs that
+// preparation as its first member, a restoring preparation that freezes the
+// preparation's scope and re-creates only what the staged destroy took back.
+func TestARestoreRunsTheAutomaticPreparationItNeedsAsItsFirstMember(t *testing.T) {
 	t.Parallel()
 	for name, targets := range map[string][]string{"none is needed": nil, "one is needed": {"node-01"}} {
 		t.Run(name, func(t *testing.T) {
@@ -435,22 +435,16 @@ func TestARestoreRunsNoAutomaticPreparation(t *testing.T) {
 			}}
 			completeApply(t, h)
 			stagedDestroy(t, h, reconciliation.StageClusters)
+			removal, _ := currentRecord(t, h)
 			needed = true
 			h.capability.applies = nil
 			_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
-			current, _ := currentRecord(t, h)
-			if len(targets) == 0 {
-				if err != nil || current.Restores == "" {
-					t.Fatalf("a restore no preparation needs returned %v over %+v", err, current)
-				}
-				return
+			current, plan := currentRecord(t, h)
+			if err != nil || current.Restores != removal.ID || len(h.capability.applies) == 0 {
+				t.Fatalf("a restore returned %v over %+v and ran %v", err, current, h.capability.applies)
 			}
-			reported := diagnostics.Of(err)
-			if firstCode(err) != prepareRefused.Code || !strings.Contains(reported[0].Message, "node-01") || !strings.Contains(reported[0].Remediation, "bootwright destroy --context lab") {
-				t.Fatalf("a restore a preparation needs returned %v", reported)
-			}
-			if !trimmed(current) || len(h.capability.applies) != 0 {
-				t.Fatalf("a refused restore left %+v current and ran %v", current, h.capability.applies)
+			if prepared := plan.Preparation; len(targets) == 0 && prepared != nil || len(targets) != 0 && (prepared == nil || !slices.Equal(prepared.Targets, targets)) {
+				t.Fatalf("a restore froze the preparation %+v, want targets %v", prepared, targets)
 			}
 		})
 	}

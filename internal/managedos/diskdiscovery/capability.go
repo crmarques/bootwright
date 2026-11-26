@@ -510,6 +510,13 @@ func (Capability) NothingRemoval(ctx context.Context, b reconciliation.Block) (l
 
 func (Capability) DecidedAtRun() bool { return true }
 
+func (c Capability) RereadRefusal(block reconciliation.Block, records lifecycle.RemovalRecords) string {
+	if records.State == reconciliation.BlockPending && len(records.Previous) == 0 || c.NothingRecorded(block, records) {
+		return ""
+	}
+	return "its apply recorded no completed, cleaned-up disk inventory under its frozen request"
+}
+
 func (c Capability) Removal(ctx context.Context, b reconciliation.Block) (lifecycle.Removal, error) {
 	r, err := DecodeDiscoveryRequest(b.Request)
 	if err != nil {

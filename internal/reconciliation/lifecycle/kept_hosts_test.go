@@ -333,7 +333,7 @@ func TestAKeptNodeThatIsOnRefusesEveryInvocationOfTheStagedDestroy(t *testing.T)
 // A node that was handed the image keeps refusing: the installation's records
 // hold a boot, so the staged destroy names why and what unlocks it, the
 // root-disk blanking of a kept virtual node (B1861) or, for a physical node,
-// the owner's decision on physical installs (B1864).
+// that no step of the context blanks its disks (decision 8 of D288).
 func TestAStagedDestroyRefusesAnInstallationThatRecordedABoot(t *testing.T) {
 	t.Parallel()
 	for name, test := range map[string]struct {
@@ -341,7 +341,7 @@ func TestAStagedDestroyRefusesAnInstallationThatRecordedABoot(t *testing.T) {
 		reason, remedy string
 	}{
 		"virtual nodes":  {reason: "(B1880)", remedy: "bootwright destroy --dry-run --context lab --stage machines"},
-		"physical nodes": {physical: true, reason: "(B1864)", remedy: "take back the whole context with bootwright destroy --context lab"},
+		"physical nodes": {physical: true, reason: "no step of this context blanks a node's disks", remedy: "take back the whole context with bootwright destroy --context lab"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

@@ -129,6 +129,13 @@ func TestARemovalRetainsTheMachineAndChangesNothing(t *testing.T) {
 	if destroy.Description != "release the claim on server and retain the machine" {
 		t.Fatalf("description = %q", destroy.Description)
 	}
+	var capability any = MachineCapability{}
+	release, releases := capability.(lifecycle.MachineRelease)
+	other := reconciliation.Block{BlockDefinition: apply}
+	other.Implementation = "machine-other-v1"
+	if !releases || !release.ReleasesMachine(reconciliation.Block{BlockDefinition: apply}) || release.ReleasesMachine(other) {
+		t.Fatal("a staged destroy does not read the claim's removal as the release of its physical Machine")
+	}
 }
 
 // The frozen request carries every declared address in one settled order, so

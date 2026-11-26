@@ -367,6 +367,14 @@ type MachineDeletion interface {
 	DeletesMachine(reconciliation.Block) bool
 }
 
+type MachineRelease interface {
+	ReleasesMachine(reconciliation.Block) bool
+}
+
+type DiskRereading interface {
+	RereadRefusal(reconciliation.Block, RemovalRecords) string
+}
+
 // SharedClaimer names the shared host reservations one frozen block plans.
 type SharedClaimer interface {
 	SharedClaims(reconciliation.Block) ([]infrastructureservices.HostReservation, error)
@@ -630,6 +638,7 @@ type decisionRecords interface {
 
 type decisionPlanner interface {
 	planFrom(context.Context, View, *compilation.State, *reconciliation.PreparationScope) (reconciliation.Plan, capabilityBinding, error)
+	planFromEvidence(context.Context, View, *compilation.State, *reconciliation.PreparationScope, ownersOf) (reconciliation.Plan, capabilityBinding, error)
 	planInput(View, *compilation.State, string, *reconciliation.PreparationScope) PlanInput
 	refuseUnsupported(*compilation.State, *reconciliation.PreparationScope) error
 	freshDestroy(context.Context, string, operationstore.Executable, string, removalScope, bool) (operationPlan, error)
@@ -637,6 +646,8 @@ type decisionPlanner interface {
 	stagedScope(context.Context, string, stagedFloor, liveState) ([]string, keptAnswer, error)
 	keptChanges(string, reconciliation.Plan, reconciliation.Plan) ([]reconciliation.BlockChange, string)
 	addedSecrets(reconciliation.Plan, capabilityBinding) (capabilityBinding, error)
+	automaticScope(context.Context, View, reconciliation.Selection) (*reconciliation.PreparationScope, []string, error)
+	admitPreparation(reconciliation.PreparationScope) (*reconciliation.PreparationScope, error)
 }
 
 type decisionProofs interface {

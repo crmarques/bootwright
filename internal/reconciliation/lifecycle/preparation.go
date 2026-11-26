@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strings"
 
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -114,7 +115,7 @@ type preparationResolver struct {
 
 func (r preparationResolver) Bindings() []CapabilityBinding { return slices.Clone(r.bindings) }
 
-func (s Service) preparationOwned(ctx context.Context, view View) (reconciliation.Plan, error) {
+func (s Service) preparationOwned(ctx context.Context, view View, scope reconciliation.PreparationScope) (reconciliation.Plan, error) {
 	store := s.store(view)
 	index, err := store.Index(ctx)
 	if err != nil || index.Current == "" {
@@ -125,6 +126,13 @@ func (s Service) preparationOwned(ctx context.Context, view View) (reconciliatio
 		return reconciliation.Plan{}, err
 	}
 	if operation.Verb != reconciliation.Apply {
+		if trimmed(operation) && scope.Command == string(reconciliation.Apply) {
+			chain, err := restoredLineage(ctx, store, operation)
+			if err != nil {
+				return reconciliation.Plan{}, err
+			}
+			return chain.ownedPlan()
+		}
 		if trimmed(operation) {
 			return reconciliation.Plan{}, refuseTrimmed(view.Identity().Name, operation)
 		}
@@ -148,7 +156,7 @@ func (s Service) retainPreparedOwnership(ctx context.Context, view View, definit
 	if scope == nil {
 		return definitions, nil
 	}
-	owned, err := s.preparationOwned(ctx, view)
+	owned, err := s.preparationOwned(ctx, view, *scope)
 	if err != nil {
 		return nil, err
 	}
@@ -242,6 +250,29 @@ func (d decider) preparationCommand(name string, plan reconciliation.Plan) strin
 	return preparationScopeCommand(name, explicit)
 }
 
+func (d decider) completedRestore(ctx context.Context, view View, store recordReader, operation operationstore.Operation, chain lineage, owned, added reconciliation.Plan) error {
+	removal, err := store.ReadOperation(ctx, operation.Restores)
+	if err != nil {
+		return err
+	}
+	if !trimmed(removal) {
+		return engineRecordsDamaged.Fail("the operation the restoring preparation "+operation.ID+" restores is no completed staged destroy", "restore the context store")
+	}
+	restorable := append(slices.Clone(removal.Stage.TakenBack), chain.unstarted()...)
+	var unknown []string
+	for _, block := range added.Blocks {
+		if !slices.Contains(restorable, block.ID) {
+			unknown = append(unknown, block.ID)
+		}
+	}
+	if len(unknown) != 0 {
+		name := view.Identity().Name
+		return applyRestoreAddsNew.Fail("the selected input declares the step "+strings.Join(unknown, ", ")+", which no staged destroy of this context took back, and the apply after the restoring preparation "+operation.ID+" re-creates only what one took back",
+			"restore without it by importing an input that does not declare it and running "+contextCommand(name, string(reconciliation.Apply))+", or take back the whole context with "+contextCommand(name, "destroy --dry-run"))
+	}
+	return d.proofs.restoreProved(ctx, view, chain, owned, added)
+}
+
 func (d decider) preparationAddition(ctx context.Context, view View, store recordReader, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, proveCustody bool) (*additiveAdmission, error) {
 	if operation.Verb != reconciliation.Apply || operation.State != reconciliation.OperationDone || (frozen.Preparation == nil && d.preparation == nil) {
 		return nil, nil
@@ -305,6 +336,12 @@ func (d decider) preparationAddition(ctx context.Context, view View, store recor
 		return nil, err
 	}
 	admission := &additiveAdmission{plan: added, merged: merged, secrets: binding.secrets, controller: binding.controller, preparedBinding: &binding}
+	if operation.Restores != "" {
+		if err := d.completedRestore(ctx, view, store, operation, chain, owned, added); err != nil {
+			return nil, refusal(err)
+		}
+		return admission, nil
+	}
 	if proveCustody {
 		if err := d.proofs.custodyProved(ctx, view, chain, added); err != nil {
 			return nil, err

@@ -18717,7 +18717,7 @@ media's removal, and its mark names the staged destroy and step
 ([root reset](../substrates.md#machine-realization)). A kill-harness journey
 covers the reset killed before and after its mark. KubeVirt nodes refuse
 until [B1880](m1.md#b1880); physical nodes until
-[B1864](backlog.md#b1864).
+[B1864](m1.md#b1864).
 
 **Guard tests:** `TestAStagedDestroyBlanksTheRootDisksOfVirtualNodesAnInstallationBooted`,
 `TestABootedInstallationIsKeptOnlyWhereItsNodesRootDisksCanBeBlanked`,

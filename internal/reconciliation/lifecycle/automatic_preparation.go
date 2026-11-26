@@ -18,7 +18,6 @@ func (s Service) automaticPreparation(ctx context.Context, name string, selectio
 	}
 	var scope *reconciliation.PreparationScope
 	var outside []string
-	var restoring string
 	err := s.workspace.ReadLifecycle(ctx, name, func(view View) error {
 		store := s.store(view)
 		index, err := store.Index(ctx)
@@ -29,9 +28,6 @@ func (s Service) automaticPreparation(ctx context.Context, name string, selectio
 			operation, err := store.ReadOperation(ctx, index.Current)
 			if err != nil {
 				return err
-			}
-			if trimmed(operation) {
-				restoring = operation.ID
 			}
 			if operation.State != reconciliation.OperationDone {
 				frozen, err := store.ReadPlan(ctx, operation.ID)
@@ -44,51 +40,11 @@ func (s Service) automaticPreparation(ctx context.Context, name string, selectio
 				return nil
 			}
 		}
-		state, err := s.compile(ctx, view)
-		if err != nil {
-			return err
-		}
-		controller, err := controllerMachine(state)
-		if err != nil {
-			return err
-		}
-		input := s.planInput(view, state, controller, nil)
-		members := clusterMachineOwners(state.Effective())
-		for _, definition := range s.options.Preparations {
-			if definition.Automatic == nil {
-				continue
-			}
-			targets, err := definition.Automatic(ctx, input, selection)
-			if err != nil {
-				return err
-			}
-			if len(targets) == 0 {
-				continue
-			}
-			if scope != nil {
-				return engineRequestDefect.Fail("multiple preparations compete for the next apply phase", "run each owner's explicit preparation command")
-			}
-			targets = slices.Clone(targets)
-			slices.Sort(targets)
-			scope = &reconciliation.PreparationScope{Kind: definition.Kind, Command: string(reconciliation.Apply), Targets: slices.Compact(targets), PreparePrerequisites: true}
-			if selection.Targeted() {
-				for _, target := range scope.Targets {
-					selected := slices.Contains(selection.Machines, target) || slices.Contains(selection.Clusters, members[target])
-					if !selected {
-						outside = append(outside, target)
-					}
-				}
-			}
-		}
-		return nil
+		scope, outside, err = s.automaticScope(ctx, view, selection)
+		return err
 	})
 	if err != nil || scope == nil {
 		return nil, false, err
-	}
-	if restoring != "" {
-		return nil, false, prepareRefused.Fail(
-			"the staged destroy "+restoring+" trimmed the context, and a restoring apply runs no automatic preparation, which these Machines need: "+strings.Join(scope.Targets, ", "),
-			"take back what the context keeps with "+contextCommand(name, string(reconciliation.Destroy))+", then apply again")
 	}
 	if len(outside) != 0 {
 		return nil, false, applyTargetBeforePreparation.Fail(
@@ -100,6 +56,47 @@ func (s Service) automaticPreparation(ctx context.Context, name string, selectio
 	}
 	prepared, err := s.admitPreparation(*scope)
 	return prepared, err == nil, err
+}
+
+func (s Service) automaticScope(ctx context.Context, view View, selection reconciliation.Selection) (*reconciliation.PreparationScope, []string, error) {
+	state, err := s.compile(ctx, view)
+	if err != nil {
+		return nil, nil, err
+	}
+	controller, err := controllerMachine(state)
+	if err != nil {
+		return nil, nil, err
+	}
+	input := s.planInput(view, state, controller, nil)
+	members := clusterMachineOwners(state.Effective())
+	var scope *reconciliation.PreparationScope
+	var outside []string
+	for _, definition := range s.options.Preparations {
+		if definition.Automatic == nil {
+			continue
+		}
+		targets, err := definition.Automatic(ctx, input, selection)
+		if err != nil {
+			return nil, nil, err
+		}
+		if len(targets) == 0 {
+			continue
+		}
+		if scope != nil {
+			return nil, nil, engineRequestDefect.Fail("multiple preparations compete for the next apply phase", "run each owner's explicit preparation command")
+		}
+		targets = slices.Clone(targets)
+		slices.Sort(targets)
+		scope = &reconciliation.PreparationScope{Kind: definition.Kind, Command: string(reconciliation.Apply), Targets: slices.Compact(targets), PreparePrerequisites: true}
+		if selection.Targeted() {
+			for _, target := range scope.Targets {
+				if !slices.Contains(selection.Machines, target) && !slices.Contains(selection.Clusters, members[target]) {
+					outside = append(outside, target)
+				}
+			}
+		}
+	}
+	return scope, outside, nil
 }
 
 func (s Service) applyPrepared(ctx context.Context, request ApplyRequest, selection reconciliation.Selection, scope *reconciliation.PreparationScope) (*OperationResult, error) {

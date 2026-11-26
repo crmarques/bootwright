@@ -246,7 +246,7 @@ func TestARootDiskResetPresentsTheRebindOfTheKeptNodesAccessCredential(t *testin
 // The blanking is admitted only where nothing kept lives on the disk and the
 // substrate can blank it: a kept step on a node refuses naming it, a substrate
 // without the port names the item that brings it, and its own refusal is
-// named; a physical node still refuses (B1864).
+// named; a physical node still refuses (decision 8 of D288).
 func TestABootedInstallationIsKeptOnlyWhereItsNodesRootDisksCanBeBlanked(t *testing.T) {
 	t.Parallel()
 	for name, test := range map[string]struct {
