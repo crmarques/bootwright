@@ -322,7 +322,7 @@ func (s Service) proveKeptPower(ctx context.Context, store recordReader, name st
 	if err != nil || len(blocked) == 0 && len(stopped) == 0 && len(unreadable) == 0 {
 		return err
 	}
-	repeat := contextCommand(name, string(reconciliation.Destroy), invocationFlags(stage.Floor, reconciliation.Selection{}, authorizingUnfixed(decided.plan))...)
+	repeat := contextCommand(name, string(reconciliation.Destroy), invocationFlags(floorOf(stage), reconciliation.Selection{}, authorizingUnfixed(decided.plan))...)
 	off := "power them off"
 	if len(stops) != 0 {
 		off = "stop them with " + strings.Join(stops, ", then ")

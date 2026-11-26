@@ -37,7 +37,7 @@ func (s Service) applyWithin(ctx context.Context, request ApplyRequest, scope *r
 func (s Service) Destroy(ctx context.Context, request DestroyRequest) (*OperationResult, error) {
 	s, err := s.relaxingFor(relaxingDestroy, request.Relaxations, request.Unregistered).withParallelism(request.Parallelism)
 	if err == nil {
-		s, err = s.withFloor(request.Floor, request.Relaxations)
+		s, err = s.withFloor(request.Floor, request.Clusters, request.Relaxations)
 	}
 	if err != nil {
 		return nil, err

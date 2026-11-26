@@ -221,6 +221,9 @@ func writeLifecycleSteps(text *display, result lifecycle.PlanResult) {
 	}
 	if scope := result.Scope; scope != nil {
 		closing = append(closing, field{Label: "Floor", Value: scope.Floor + " and every stage built on it"})
+		if len(scope.Clusters) != 0 {
+			closing = append(closing, field{Label: "Clusters", Value: strings.Join(scope.Clusters, ", ")})
+		}
 		if len(scope.Kept) != 0 {
 			closing = append(closing, field{Label: "Keeps", Value: strings.Join(scope.Kept, ", ")})
 		}
@@ -471,6 +474,16 @@ func blockStatusToken(state string) string {
 	return "[FAIL]"
 }
 
+func floorName(floor string, clusters []string) string {
+	switch len(clusters) {
+	case 0:
+		return "the " + floor + " stage"
+	case 1:
+		return "the " + floor + " stage of cluster " + clusters[0]
+	}
+	return "the " + floor + " stage of clusters " + strings.Join(clusters, ", ")
+}
+
 func planOpening(result *lifecycle.PlanResult) string {
 	switch {
 	case result.AddsTo != "":
@@ -478,9 +491,9 @@ func planOpening(result *lifecycle.PlanResult) string {
 	case result.Restores != "":
 		return "restores what operation " + result.Restores + " took back; runs none of the steps the context keeps"
 	case result.Widens != nil && result.Scope != nil:
-		return "this destroy widens the unfinished staged destroy " + result.Widens.Operation + " from the " + result.Widens.From + " stage to the " + result.Scope.Floor + " stage"
+		return "this destroy widens the unfinished staged destroy " + result.Widens.Operation + " from " + floorName(result.Widens.From, result.Widens.FromClusters) + " to " + floorName(result.Scope.Floor, result.Scope.Clusters)
 	case result.Widens != nil:
-		return "this destroy widens the unfinished staged destroy " + result.Widens.Operation + " from the " + result.Widens.From + " stage to the whole context"
+		return "this destroy widens the unfinished staged destroy " + result.Widens.Operation + " from " + floorName(result.Widens.From, result.Widens.FromClusters) + " to the whole context"
 	}
 	return ""
 }

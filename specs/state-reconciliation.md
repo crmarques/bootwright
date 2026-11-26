@@ -693,8 +693,8 @@ sends the operator back to `status`, which needs the same unreadable record.
 | destroy running | continue that exact destroy, or, under a relaxation its frozen plan does not hold, start a fresh destroy of what it has not removed, which resolves every unproved block first |
 | destroy paused | continue that exact destroy, or, under a relaxation its frozen plan does not hold, start a fresh destroy of what it has not removed, which resolves every unproved block first |
 | destroy failed | start a fresh destroy of what it has not removed |
-| staged destroy done (trimmed) | `apply` starts a [restoring apply](#restoring-apply), which refuses an input or build that would change a step the context keeps, that declares nothing the staged destroy took back, or that declares a step no staged destroy took back, and then the preview and next action name `destroy`; `destroy` starts a fresh destroy of what the context still owns, which replaces the staged destroy; `destroy --stage` at the same or a later stage settles without effect, and at an earlier one starts a fresh staged destroy of what the context still owns, which replaces it; `context update` is admitted, since the context guard reads `{none, retained}` as no mutation |
-| staged destroy running, paused, unknown or failed | the row of that destroy's state, at the stage it froze: `destroy --stage` at that stage continues it, or replaces a failed one with a fresh staged destroy of what it has not removed; `destroy` without `--stage` replaces it with a fresh destroy of what the context still owns, and `destroy --stage` at an earlier stage with a fresh staged destroy of what the context still owns, each [widening](#staged-destroy) it and resolving its unproved blocks first; at a later stage it refuses |
+| staged destroy done (trimmed) | `apply` starts a [restoring apply](#restoring-apply), which refuses an input or build that would change a step the context keeps, that declares nothing the staged destroy took back, or that declares a step no staged destroy took back, and then the preview and next action name `destroy`; `destroy` starts a fresh destroy of what the context still owns, which replaces the staged destroy; `destroy --stage` settles without effect when what the staged destroy froze covers it, at the same or a later stage naming the clusters it froze, a subset of them, or none when it froze none, and otherwise starts a fresh staged destroy of what the context still owns, which replaces it; `context update` is admitted, since the context guard reads `{none, retained}` as no mutation |
+| staged destroy running, paused, unknown or failed | the row of that destroy's state, at the stage and clusters it froze: `destroy --stage` at that stage with those clusters continues it, or replaces a failed one with a fresh staged destroy of what it has not removed; `destroy` without `--stage` replaces it with a fresh destroy of what the context still owns, and `destroy --stage` at an earlier stage, or naming more clusters or none, with a fresh staged destroy of what the context still owns, each [widening](#staged-destroy) it and resolving its unproved blocks first; at a later stage, or naming clusters that leave out one it froze, it refuses |
 | restoring apply running, paused, unknown or failed | the row of that apply's state: `apply` continues it; `destroy` starts a fresh destroy of what the context owns, the steps it started and every step it keeps; `destroy --stage` starts a fresh staged destroy of what the context owns, which also takes back the steps it never started |
 | destroy unknown | continue it, resolving every unproved block first and then retrying what resolution leaves `failed` (D146), or, under a relaxation its frozen plan does not hold, start a fresh destroy of what it has not removed, which resolves them first |
 
@@ -2242,6 +2242,32 @@ set, its own scope with what every staged destroy it `replaces` took back.
   `lifecycle.RootDiskReset` and holds no other kept step, freezing them as
   `blanks` with an impact each and `data-loss`. A physical Machine is always kept, since its own step
   only releases a claim. Every frozen leaves-with names a scoped step.
+- **Clusters.** `--clusters <list>`, only with the `clusters` or `add-ons`
+  floor, keeps as seeds only the steps whose frozen cluster ownership names a
+  listed cluster; a step two clusters own, such as Ceph replication, is one
+  when either is named, since removing either end takes it back. The closure
+  and every proof above then hold unchanged. A scoped step only unnamed
+  clusters own, such as an add-on of a kept OpenShift cluster consuming a
+  named Ceph cluster, refuses `destroy.stage-other-cluster`, naming it and the
+  command that names its cluster too, and a kept unfinished step's
+  `destroy.stage-keeps-unfinished` also offers naming its cluster. A name no
+  apply of the lineage owns a step of, a name whose cluster holds no step at
+  or above the floor, and a frozen plan holding a cluster child with no
+  cluster ownership, which a scoped apply over it also refuses, each refuse
+  `engine.input-invalid`. The kept-host proof checks only the never-started
+  steps the named clusters' closure over the lineage plan reaches, so another
+  cluster's never-started step freezes no power target; the taken-back set
+  still holds every step the lineage never started, as the fold requires, so
+  a restore re-creates it. Under the
+  [power entry rule](#power-before-a-new-apply-or-destroy) that restore
+  proves off each kept managed Machine a step it re-creates is bound to by
+  its dependencies, hosts or nodes, whether
+  or not that step ever started and whichever staged destroy took it back,
+  and refuses `lifecycle.start-power` naming a running one
+  (`TestANarrowedStagedDestroyLeavesAnotherClustersNeverStartedSteps`). The
+  record freezes them in
+  `stage.clusters`, part of its floor
+  (`TestAStagedDestroyNarrowedToAClusterKeepsTheOtherCluster`).
 - **Kept power targets.** The record freezes in `stage.keptPower` each Machine
   a `keptHosts` names, by its managed Machine step, with the state its steps
   need: `off`, or `on` when a step's removal runs there while it runs
@@ -2288,11 +2314,14 @@ set, its own scope with what every staged destroy it `replaces` took back.
   or replaces a failed one. A `destroy` without `--stage` replaces it with a
   whole removal of what the context still owns, which leaves out what it and
   the staged destroys it replaces proved gone, and a lower floor with a staged
-  destroy whose cumulative taken-back set grows; a later floor refuses
-  `destroy.stage-changed`. Either names it by `replaces` and resolves its
+  destroy whose cumulative taken-back set grows, as do the same or a lower floor
+  naming its clusters and more, or none; a later floor, or clusters leaving one
+  of its own out, refuses `destroy.stage-changed`, naming the floor covering
+  both. Either names it by `replaces` and resolves its
   unproved blocks first, under a remedy that repeats the widening. The preview
   opens with `this destroy widens the unfinished staged destroy <id> from the
-  <floor> stage to the whole context`, or `to the <floor> stage`, beside
+  <floor> stage to the whole context`, or `to the <floor> stage`, each with
+  ` of cluster <name>` or ` of clusters <names>` when narrowed, beside
   `widens`, and the confirmation states it. The digest covers every step it
   takes back, so it tells a widening from the staged destroy only when the
   widening removes a step the staged destroy kept, and otherwise the plans are
@@ -2300,13 +2329,14 @@ set, its own scope with what every staged destroy it `replaces` took back.
   `authorize.stale`, as `--yes` without a digest does
   (`TestAWideningIsNamedAndAuthorizedAgainstItsOwnPlan`).
 - Every `destroy` command a remedy, receipt or status names over a staged
-  destroy carries `--stage <floor>`, the floor of the destroy it repeats,
-  which a widening to the whole context drops. A done staged destroy's receipt names
+  destroy carries `--stage <floor>` and its `--clusters`, the floor of the
+  destroy it repeats, which a widening to the whole context drops. A done staged destroy's receipt names
   next `apply`, and `status` offers the restore beside the whole destroy,
   which the preview then chooses, while the restore's own admission would
   admit the selected input; otherwise `status` and the preview name `destroy`
-  and only the whole destroy. The plan and operation results carry `scope` (floor, removed
-  and kept steps, residue, kept power targets) and status carries `stage`.
+  and only the whole destroy. The plan and operation results carry `scope` (floor, clusters,
+  removed and kept steps, residue, kept power targets), `widens` its `from`
+  and `fromClusters`, and status carries `stage` with its clusters.
 
 ## Frozen requests and contract guards
 

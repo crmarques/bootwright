@@ -25,7 +25,7 @@ type operationPlan struct {
 	keeps      bool
 	stage      *operationstore.Stage
 	widens     *widening
-	requested  reconciliation.Stage
+	requested  stagedFloor
 	kept       []string
 	keptBlocks []reconciliation.Block
 	verb       reconciliation.Verb

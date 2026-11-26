@@ -18787,3 +18787,38 @@ sign-on steps, refuse ([B1885](m2.md#b1885)); the proof is in-tree, over
 scripted hosts, not a live run, so the native footprint, the zap after the
 target stop and the worker ceiling with several devices wait for B1885's live
 acceptance.
+
+## X764 — A staged destroy narrows to the named clusters
+
+**Items:** B1865. **Kind:** product. **Owner:** Reconciliation and CLI.
+**Authorization:** [D288](backlog.md#d288), the slices of B1865 once
+promoted; this slice promotes it from the backlog.
+
+**Outcome:** `destroy --stage clusters|add-ons --clusters <list>` takes back
+the steps the named clusters own, a step two clusters own when either is
+named, and what depends on them, keeping the other clusters; a dependent only
+unnamed clusters own refuses `destroy.stage-other-cluster`, naming the
+command that covers its cluster. The record freezes `stage.clusters` beside
+the floor, so continuations, replacements, widenings, remedies, the receipt,
+status and the preview carry it
+([staged destroy](../state-reconciliation.md#staged-destroy),
+[command catalog](../cli/commands.md#command-and-flag-catalog)).
+
+**Guard tests:** `TestAStagedDestroyNarrowedToAClusterKeepsTheOtherCluster`,
+`TestANarrowedStagedDestroyTakesBackAJointStepOfEitherCluster`,
+`TestANarrowedStagedDestroyRefusesADependentOfAnotherCluster`,
+`TestANarrowedStagedDestroyRefusesAnUnknownCluster`,
+`TestAnUnfinishedNarrowedStagedDestroyContinuesAndWidensByItsClusters`,
+`TestACoveringClusterSetWidensAnUnfinishedNarrowedStagedDestroy`,
+`TestTheRestoreAfterANarrowedStagedDestroyRecreatesOnlyWhatItTookBack`,
+`TestAStagedFloorCoversOnlyAWiderScope`,
+`TestTransitionTablesMatchSpec`,
+`TestAStagedDestroyNamesItsClustersOnlyUnderAClusterFloor`,
+`TestDestroyClustersNarrowOnlyAClusterFloor`,
+`TestANarrowedStagedDestroyOnAStoppedKeptHostRepeatsItsClusters` and
+`TestADestroyPlanNamesTheClustersItNarrowsTo`.
+
+**Gates:** `make focus`; the delivering commit records the command and result.
+
+**Limits:** the proof is in-tree, over the engine's doubles, not a live run
+over two real clusters.

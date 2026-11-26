@@ -28,7 +28,7 @@ func (s Service) authorized(name string, decided operationPlan, authorizations [
 // consuming steps by their place in the presented plan and the exact command
 // that passes, which keeps the Machines the invocation names unregistered.
 // An unattended invocation must bind each token to its steps' digest (Q117).
-func authorize(contextName string, verb reconciliation.Verb, floor reconciliation.Stage, selection reconciliation.Selection, plan, scoped reconciliation.Plan, authorizations []string, unattended bool) error {
+func authorize(contextName string, verb reconciliation.Verb, floor stagedFloor, selection reconciliation.Selection, plan, scoped reconciliation.Plan, authorizations []string, unattended bool) error {
 	consumers := map[string][]string{}
 	required := requiredTokens(scoped)
 	digests := map[string]string{}
@@ -90,11 +90,8 @@ func authorize(contextName string, verb reconciliation.Verb, floor reconciliatio
 }
 
 // invocationFlags are the flags a remedy repeats: a destroy's floor, stage, targets, until, then authorizations.
-func invocationFlags(floor reconciliation.Stage, selection reconciliation.Selection, authorizing []string) []string {
-	var flags []string
-	if floor != "" {
-		flags = append(flags, "--stage", string(floor))
-	}
+func invocationFlags(floor stagedFloor, selection reconciliation.Selection, authorizing []string) []string {
+	flags := floor.flags()
 	if len(selection.Stages) != 0 {
 		flags = append(flags, "--stage", strings.Join(selection.Stages.Names(), ","))
 	}

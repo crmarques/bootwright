@@ -20,11 +20,11 @@ func trimmed(operation operationstore.Operation) bool {
 	return staged(operation) && operation.State == reconciliation.OperationDone
 }
 
-func frozenFloor(operation operationstore.Operation) reconciliation.Stage {
+func frozenFloor(operation operationstore.Operation) stagedFloor {
 	if !staged(operation) {
-		return ""
+		return stagedFloor{}
 	}
-	return operation.Stage.Floor
+	return floorOf(operation.Stage)
 }
 
 func (t operationPlan) staged() bool {
@@ -34,11 +34,11 @@ func (t operationPlan) staged() bool {
 func (d decider) stagedDecision(ctx context.Context, view View, store decisionRecords, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) (operationPlan, bool, error) {
 	name := view.Identity().Name
 	switch {
-	case d.floor == "" && !staged(operation):
+	case !d.floor.staged() && !staged(operation):
 		return operationPlan{}, false, nil
-	case staged(operation) && operation.State != reconciliation.OperationDone && d.floor == operation.Stage.Floor:
+	case staged(operation) && operation.State != reconciliation.OperationDone && d.floor.same(frozenFloor(operation)):
 		return operationPlan{}, false, nil
-	case staged(operation) && operation.State != reconciliation.OperationDone && d.floor != "" && d.floor.AtOrAbove(operation.Stage.Floor):
+	case staged(operation) && operation.State != reconciliation.OperationDone && d.floor.staged() && !d.floor.covers(frozenFloor(operation)):
 		return operationPlan{}, true, stageChanged(name, operation, frozen, states, d.floor)
 	case operation.Verb == reconciliation.Destroy && !staged(operation):
 		if operation.State == reconciliation.OperationDone {
@@ -52,7 +52,7 @@ func (d decider) stagedDecision(ctx context.Context, view View, store decisionRe
 	if err != nil {
 		return operationPlan{}, true, err
 	}
-	if d.floor == "" {
+	if !d.floor.staged() {
 		decided, err := d.planner.freshDestroy(ctx, name, operation.Executable, live.source, live.scope, false)
 		if err != nil {
 			return operationPlan{}, true, err
@@ -84,7 +84,7 @@ func (d decider) stagedDecision(ctx context.Context, view View, store decisionRe
 		taken = append(taken, operation.Stage.TakenBack...)
 	}
 	slices.Sort(taken)
-	decided.stage = &operationstore.Stage{Floor: d.floor, TakenBack: slices.Compact(taken), KeptPower: answered.power}
+	decided.stage = d.floor.record(slices.Compact(taken), answered.power)
 	decided.release, decided.kept = nil, keptOf(live.scope.owned, ids)
 	decided.keptBlocks = slices.DeleteFunc(slices.Clone(live.scope.owned.Blocks), func(block reconciliation.Block) bool { return slices.Contains(ids, block.ID) })
 	decided, err = d.widen(ctx, store, decided, operation, frozen, states)
@@ -93,14 +93,14 @@ func (d decider) stagedDecision(ctx context.Context, view View, store decisionRe
 
 type widening struct {
 	operation string
-	from      reconciliation.Stage
+	from      stagedFloor
 }
 
 func (d decider) widen(ctx context.Context, store decisionRecords, decided operationPlan, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) (operationPlan, error) {
 	if !staged(operation) || operation.State == reconciliation.OperationDone {
 		return decided, nil
 	}
-	decided.widens = &widening{operation: operation.ID, from: operation.Stage.Floor}
+	decided.widens = &widening{operation: operation.ID, from: floorOf(operation.Stage)}
 	return d.replacing(ctx, store, decided, operation, frozen, states)
 }
 
@@ -109,13 +109,14 @@ func (t operationPlan) widened() string {
 		return ""
 	}
 	to := "the whole context"
-	if floor := t.floor(); floor != "" {
-		to = "the " + string(floor) + " stage"
+	if floor := t.floor(); floor.staged() {
+		to = floor.named()
 	}
-	return "which widens the unfinished staged destroy " + t.widens.operation + " from the " + string(t.widens.from) + " stage to " + to
+	return "which widens the unfinished staged destroy " + t.widens.operation + " from " + t.widens.from.named() + " to " + to
 }
 
 type liveState struct {
+	chain     lineage
 	source    string
 	scope     removalScope
 	states    map[string]reconciliation.BlockState
@@ -154,7 +155,7 @@ func (d decider) liveOf(ctx context.Context, store decisionRecords, name string,
 		if err != nil {
 			return liveState{}, err
 		}
-		return liveState{source: operation.ID, scope: scope, states: held.states(), unstarted: held.unstarted(), whole: whole}, nil
+		return liveState{chain: held, source: operation.ID, scope: scope, states: held.states(), unstarted: held.unstarted(), whole: whole}, nil
 	}
 	head, err := store.ReadOperation(ctx, operation.Source)
 	if err != nil {
@@ -195,7 +196,7 @@ func (d decider) liveOf(ctx context.Context, store decisionRecords, name string,
 			scope.release = joinBindings(scope.release, member.operation.Bindings...)
 		}
 	}
-	return liveState{source: head.ID, scope: scope, states: held, whole: scope.owned}, nil
+	return liveState{chain: folded, source: head.ID, scope: scope, states: held, whole: scope.owned}, nil
 }
 
 func keptOf(live reconciliation.Plan, scope []string) []string {
@@ -208,17 +209,25 @@ func keptOf(live reconciliation.Plan, scope []string) []string {
 	return kept
 }
 
-func (s Service) stagedScope(ctx context.Context, name string, floor reconciliation.Stage, held liveState) ([]string, keptAnswer, error) {
+func (s Service) stagedScope(ctx context.Context, name string, floor stagedFloor, held liveState) ([]string, keptAnswer, error) {
 	live, states := held.scope.owned, held.states
+	if err := refuseClusters(name, floor, held); err != nil {
+		return nil, keptAnswer{}, err
+	}
 	scope := s.closure(live, floor)
-	if below := belowFloor(live, scope, floor); len(below) != 0 {
+	if foreign, wider := s.foreignClusters(live, floor, scope); len(foreign) != 0 {
+		return nil, keptAnswer{}, destroyStageOtherCluster.Fail(
+			"these steps of clusters a staged destroy from "+floor.named()+" does not name depend on what it takes back: "+strings.Join(foreign, ", "),
+			"take back their clusters too with "+contextCommand(name, "destroy --dry-run", wider.flags()...)+", or take back the whole context with "+contextCommand(name, string(reconciliation.Destroy)))
+	}
+	if below := belowFloor(live, scope, floor.stage); len(below) != 0 {
 		lower := s.widened(live, floor)
 		remedy := "take back the whole context with " + contextCommand(name, "destroy --dry-run")
-		if reconciliation.ValidFloor(lower) {
-			remedy = "take back from a lower stage with " + contextCommand(name, "destroy --dry-run", "--stage", string(lower))
+		if reconciliation.ValidFloor(lower.stage) {
+			remedy = "take back from a lower stage with " + contextCommand(name, "destroy --dry-run", lower.flags()...)
 		}
 		return nil, keptAnswer{}, destroyStageBelowFloor.Fail(
-			"these steps below the "+string(floor)+" stage depend on what a staged destroy from it takes back: "+strings.Join(below, ", "), remedy)
+			"these steps below "+floor.named()+" depend on what a staged destroy from it takes back: "+strings.Join(below, ", "), remedy)
 	}
 	var unfinished []string
 	for _, block := range live.Blocks {
@@ -230,35 +239,64 @@ func (s Service) stagedScope(ctx context.Context, name string, floor reconciliat
 		}
 	}
 	if len(unfinished) != 0 {
+		named := ""
+		if wider := floor.joined(stagedFloor{stage: floor.stage, clusters: keptOwners(live, scope, states)}); len(wider.clusters) != 0 && !wider.same(floor) {
+			named = ", take them back by naming their clusters too with " + contextCommand(name, "destroy --dry-run", wider.flags()...)
+		}
 		return nil, keptAnswer{}, destroyStageKeepsUnfinished.Fail(
-			"a staged destroy from the "+string(floor)+" stage would keep these steps, which are not done: "+strings.Join(unfinished, ", "),
-			"finish them with "+contextCommand(name, "apply")+", take them back with a lower stage, or take back the whole context with "+contextCommand(name, string(reconciliation.Destroy)))
+			"a staged destroy from "+floor.named()+" would keep these steps, which are not done: "+strings.Join(unfinished, ", "),
+			"finish them with "+contextCommand(name, "apply")+named+", take them back with a lower stage, or take back the whole context with "+contextCommand(name, string(reconciliation.Destroy)))
 	}
 	if len(scope) == 0 {
 		return scope, keptAnswer{}, nil
 	}
-	answered, err := s.keptHosts(ctx, name, floor, live, held.whole, scope, held.unstarted, held.scope.records)
+	answered, err := s.keptHosts(ctx, name, floor, live, held.whole, scope, s.unstartedWith(held, floor, scope), held.scope.records)
 	return scope, answered, err
 }
 
-func (s Service) widened(live reconciliation.Plan, floor reconciliation.Stage) reconciliation.Stage {
+func (s Service) unstartedWith(held liveState, floor stagedFloor, scope []string) []string {
+	if len(floor.clusters) == 0 {
+		return held.unstarted
+	}
+	reached := s.closureFrom(held.whole, func(block reconciliation.Block) bool {
+		return floor.seeds(held.whole, block) || slices.Contains(scope, block.ID)
+	})
+	return slices.DeleteFunc(slices.Clone(held.unstarted), func(id string) bool { return !slices.Contains(reached, id) })
+}
+
+func keptOwners(live reconciliation.Plan, scope []string, states map[string]reconciliation.BlockState) []string {
+	var owners []string
+	for _, block := range live.Blocks {
+		if !slices.Contains(scope, block.ID) && states[block.ID] != reconciliation.BlockDone {
+			owners = append(owners, reconciliation.ClusterOwners(live, block)...)
+		}
+	}
+	return owners
+}
+
+func (s Service) widened(live reconciliation.Plan, floor stagedFloor) stagedFloor {
 	lower := floor
 	for scope := s.closure(live, floor); ; {
-		next := lowestStage(live, belowFloor(live, scope, lower))
+		next := lowestStage(live, belowFloor(live, scope, lower.stage))
 		if next == "" || !reconciliation.ValidFloor(next) {
 			if next != "" {
-				lower = next
+				lower = lower.at(next)
 			}
 			return lower
 		}
-		lower, scope = next, s.closure(live, next)
+		lower = lower.at(next)
+		scope = s.closure(live, lower)
 	}
 }
 
-func (s Service) closure(live reconciliation.Plan, floor reconciliation.Stage) []string {
+func (s Service) closure(live reconciliation.Plan, floor stagedFloor) []string {
+	return s.closureFrom(live, func(block reconciliation.Block) bool { return floor.seeds(live, block) })
+}
+
+func (s Service) closureFrom(live reconciliation.Plan, seeds func(reconciliation.Block) bool) []string {
 	in := map[string]bool{}
 	for _, block := range live.Blocks {
-		if block.Stage.AtOrAbove(floor) {
+		if seeds(block) {
 			in[block.ID] = true
 		}
 	}
@@ -322,7 +360,7 @@ type keptAnswer struct {
 	power         []operationstore.KeptPower
 }
 
-func (s Service) keptHosts(ctx context.Context, name string, floor reconciliation.Stage, live, whole reconciliation.Plan, scope, unstarted []string, records func(context.Context, string) (RemovalRecords, error)) (keptAnswer, error) {
+func (s Service) keptHosts(ctx context.Context, name string, floor stagedFloor, live, whole reconciliation.Plan, scope, unstarted []string, records func(context.Context, string) (RemovalRecords, error)) (keptAnswer, error) {
 	managed, deleted, virtual := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, block := range live.Blocks {
 		if block.Kind != string(api.Machine) {
@@ -373,7 +411,7 @@ func (s Service) keptHosts(ctx context.Context, name string, floor reconciliatio
 				remedy = "resolve the step with " + contextCommand(name, string(reconciliation.Apply)) + ", then repeat " +
 					contextCommand(name, string(reconciliation.Destroy), invocationFlags(floor, reconciliation.Selection{}, nil)...) + ", or " + remedy
 			}
-			return keptAnswer{}, destroyStageKeepsHost.Fail("the step "+id+" runs on Machine/"+strings.Join(bound[id], ", Machine/")+", which stay below the "+string(floor)+" stage, and "+refusal, remedy)
+			return keptAnswer{}, destroyStageKeepsHost.Fail("the step "+id+" runs on Machine/"+strings.Join(bound[id], ", Machine/")+", which stay below the "+string(floor.stage)+" stage, and "+refusal, remedy)
 		} else if refusal != "" {
 			physical := slices.ContainsFunc(bound[id], func(machine string) bool { return !virtual[machine] })
 			blank := ""
@@ -381,7 +419,7 @@ func (s Service) keptHosts(ctx context.Context, name string, floor reconciliatio
 				blank = s.unblankable(whole, steps, bound[id])
 			}
 			if physical || blank != "" || kept.KeptHostsRefusal(block, read, true) != "" {
-				return keptAnswer{}, keptHostRefusal(name, floor, id, bound[id], refusal, blank, physical)
+				return keptAnswer{}, keptHostRefusal(name, floor.stage, id, bound[id], refusal, blank, physical)
 			}
 			answer.blanks[id] = bound[id]
 		}
@@ -393,7 +431,7 @@ func (s Service) keptHosts(ctx context.Context, name string, floor reconciliatio
 			continue
 		}
 		machines := bound[id]
-		reason := "these Machines stay below the " + string(floor) + " stage, and no staged destroy takes such a step back on a Machine it keeps"
+		reason := "these Machines stay below the " + string(floor.stage) + " stage, and no staged destroy takes such a step back on a Machine it keeps"
 		remedy := "take back from the machines stage with " + contextCommand(name, "destroy --dry-run", "--stage", string(reconciliation.StageMachines)) +
 			", or take back the whole context with " + contextCommand(name, string(reconciliation.Destroy))
 		if holder := onlineHolder(answer, machines); holder != "" {
@@ -599,30 +637,49 @@ func refuseLeavingOutside(name string, plan reconciliation.Plan) error {
 	return nil
 }
 
-func stageChanged(name string, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, floor reconciliation.Stage) error {
-	message := "the unfinished staged destroy " + operation.ID + " froze the " + string(operation.Stage.Floor) + " stage, not the " + string(floor) + " stage"
-	return destroyStageChanged.Fail(message+", and a later stage cannot narrow it",
-		"finish it with "+continuationCommand(name, operation, frozen, states)+", or review taking back the whole context with "+contextCommand(name, "destroy --dry-run")+" and run "+contextCommand(name, string(reconciliation.Destroy)))
+func stageChanged(name string, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, floor stagedFloor) error {
+	held := frozenFloor(operation)
+	message := "the unfinished staged destroy " + operation.ID + " froze " + held.named() + ", not " + floor.named()
+	widen := ""
+	if covering := held.joined(floor); !covering.same(held) {
+		widen = ", widen it with " + contextCommand(name, "destroy --dry-run", covering.flags()...)
+	}
+	return destroyStageChanged.Fail(message+", which does not cover it, so it cannot narrow it",
+		"finish it with "+continuationCommand(name, operation, frozen, states)+widen+", or review taking back the whole context with "+contextCommand(name, "destroy --dry-run")+" and run "+contextCommand(name, string(reconciliation.Destroy)))
 }
 
 func refuseTrimmed(name string, operation operationstore.Operation) error {
-	took := "the staged destroy " + operation.ID + " took back the " + string(operation.Stage.Floor) + " stage and everything built on it"
+	took := "the staged destroy " + operation.ID + " took back " + frozenFloor(operation).named() + " and everything built on it"
 	return prepareRefused.Fail(took+", and only an apply restores it", "restore it with "+contextCommand(name, string(reconciliation.Apply))+" first")
 }
 
-func (s Service) withFloor(floor string, relaxations map[string]string) (Service, error) {
+func (s Service) withFloor(floor string, clusters []string, relaxations map[string]string) (Service, error) {
+	if floor == "" && len(clusters) != 0 {
+		return s, engineInputInvalid.Fail("--clusters narrows only a staged destroy", "repeat with --stage clusters or --stage add-ons, or destroy without --clusters")
+	}
 	if floor == "" {
 		return s, nil
 	}
 	if !reconciliation.ValidFloor(reconciliation.Stage(floor)) {
 		return s, engineInputInvalid.Fail("--stage "+floor+" is no stage a destroy takes back from", "name one of substrates, machines, clusters or add-ons, or destroy without --stage")
 	}
+	if len(clusters) != 0 && !reconciliation.NarrowsToClusters(reconciliation.Stage(floor)) {
+		return s, engineInputInvalid.Fail("--clusters narrows only the clusters or add-ons floor, and the "+floor+" stage holds steps no cluster owns", "repeat with --stage clusters or --stage add-ons, or without --clusters")
+	}
+	for _, cluster := range clusters {
+		if !reconciliation.ValidSegment(cluster) {
+			return s, engineInputInvalid.Fail("--clusters names must be lowercase DNS labels", "repeat naming each cluster by its name")
+		}
+	}
 	for machine, method := range relaxations {
 		if method == Abandon {
 			return s, engineInputInvalid.Fail("--authorize abandon="+machine+" leaves steps in place, which a staged destroy never does", "repeat without abandon=, or destroy without --stage")
 		}
 	}
-	s.floor = reconciliation.Stage(floor)
+	s.floor = stagedFloor{stage: reconciliation.Stage(floor), clusters: slices.Compact(slices.Sorted(slices.Values(clusters)))}
+	if len(s.floor.clusters) == 0 {
+		s.floor.clusters = nil
+	}
 	return s, nil
 }
 
@@ -640,25 +697,25 @@ func (l lineage) keptLive() []string {
 	return slices.DeleteFunc(live, func(id string) bool { return !kept[id] })
 }
 
-func (t operationPlan) floor() reconciliation.Stage {
+func (t operationPlan) floor() stagedFloor {
 	switch {
 	case t.verb != reconciliation.Destroy:
-		return ""
+		return stagedFloor{}
 	case t.stage != nil:
-		return t.stage.Floor
-	case t.requested != "":
+		return floorOf(t.stage)
+	case t.requested.staged():
 		return t.requested
 	case staged(t.operation) && !t.fresh:
-		return t.operation.Stage.Floor
+		return floorOf(t.operation.Stage)
 	}
-	return ""
+	return stagedFloor{}
 }
 
 func confirmedAction(decided operationPlan) string {
 	floor := decided.floor()
 	action := string(decided.verb)
-	if decided.verb == reconciliation.Destroy && floor != "" {
-		action = "destroy --stage " + string(floor) + ", taking back " + strconv.Itoa(len(decided.plan.Blocks)) + " steps and keeping " + strconv.Itoa(len(decided.kept)) + ","
+	if decided.verb == reconciliation.Destroy && floor.staged() {
+		action = "destroy " + strings.Join(floor.flags(), " ") + ", taking back " + strconv.Itoa(len(decided.plan.Blocks)) + " steps and keeping " + strconv.Itoa(len(decided.kept)) + ","
 	}
 	if widened := decided.widened(); widened != "" {
 		action = strings.TrimSuffix(action, ",") + ", " + widened + ","
@@ -668,10 +725,10 @@ func confirmedAction(decided operationPlan) string {
 
 func (t operationPlan) scope() *StagedScope {
 	floor := t.floor()
-	if t.verb != reconciliation.Destroy || floor == "" {
+	if t.verb != reconciliation.Destroy || !floor.staged() {
 		return nil
 	}
-	scope := &StagedScope{Floor: string(floor), Removed: []string{}, Kept: append([]string{}, t.kept...), Residue: []string{}, KeptPowerTargets: []string{}}
+	scope := &StagedScope{Floor: string(floor.stage), Clusters: append([]string{}, floor.clusters...), Removed: []string{}, Kept: append([]string{}, t.kept...), Residue: []string{}, KeptPowerTargets: []string{}}
 	stage := t.stage
 	if stage == nil && !t.fresh && staged(t.operation) {
 		stage = t.operation.Stage
@@ -693,19 +750,21 @@ func (t operationPlan) scope() *StagedScope {
 }
 
 type Widening struct {
-	Operation string
-	From      string
+	Operation    string
+	From         string
+	FromClusters []string
 }
 
 func (t operationPlan) widening() *Widening {
 	if t.widens == nil {
 		return nil
 	}
-	return &Widening{Operation: t.widens.operation, From: string(t.widens.from)}
+	return &Widening{Operation: t.widens.operation, From: string(t.widens.from.stage), FromClusters: append([]string{}, t.widens.from.clusters...)}
 }
 
 type StagedScope struct {
 	Floor            string
+	Clusters         []string
 	Removed          []string
 	Kept             []string
 	Residue          []string

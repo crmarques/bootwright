@@ -129,8 +129,8 @@ func canDeferSourceProof(decided operationPlan, member lineageMember, settled me
 // abandonExit names, after a refusal's remedy, the abandonment that would let
 // this removal leave every effect it cannot prove in place, when each one's
 // capability offers it and no other relaxation of the plan names its Machine.
-func (s Service) abandonExit(contextName string, floor reconciliation.Stage, plan reconciliation.Plan, left []string) string {
-	if floor != "" {
+func (s Service) abandonExit(contextName string, floor stagedFloor, plan reconciliation.Plan, left []string) string {
+	if floor.staged() {
 		return ""
 	}
 	methods := frozenRelaxations(plan)
@@ -321,7 +321,7 @@ func (s Service) reportResolution(ctx context.Context, event ProgressEvent) {
 // discovering the next obstacle each time they repeat the command. A probe
 // that cannot read its target reports live, because an environment that cannot
 // prove it is idle is never assumed to be.
-func (s Service) proveQuiescent(ctx context.Context, store OperationStore, contextName string, floor reconciliation.Stage, stage *operationstore.Stage, approved approved, plan reconciliation.Plan, phases removalPhases, material stepMaterial, held lineage, skip map[string]bool) error {
+func (s Service) proveQuiescent(ctx context.Context, store OperationStore, contextName string, floor stagedFloor, stage *operationstore.Stage, approved approved, plan reconciliation.Plan, phases removalPhases, material stepMaterial, held lineage, skip map[string]bool) error {
 	var live, stops, remedies []string
 	generic := false
 	blocks := slices.DeleteFunc(slices.Clone(plan.Blocks), func(block reconciliation.Block) bool { return skip[block.ID] })

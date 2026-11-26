@@ -114,7 +114,7 @@ func TestADestroyPlanNamesTheStagedDestroyItWidens(t *testing.T) {
 			t.Fatalf("plan text = %q, missing %q", out.String(), want)
 		}
 		encoded, err := json.Marshal(displayPlan(result))
-		if err != nil || !strings.Contains(string(encoded), `"widens":{"operation":"op-1","from":"clusters"}`) {
+		if err != nil || !strings.Contains(string(encoded), `"widens":{"operation":"op-1","from":"clusters","fromClusters":[]}`) {
 			t.Fatalf("plan JSON = %s (%v)", encoded, err)
 		}
 	}

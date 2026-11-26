@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -58,6 +59,8 @@ type stateMachineCase struct {
 	staged         string
 	floor          reconciliation.Stage
 	lower, higher  string
+	clusters       []string
+	other          string
 	previewed      reconciliation.Verb
 	next           string
 	reopens        bool
@@ -87,7 +90,7 @@ type stateMachineRow struct {
 
 const restoringTransition = "the row of that apply's state: `apply` continues it; `destroy` starts a fresh destroy of what the context owns, the steps it started and every step it keeps; `destroy --stage` starts a fresh staged destroy of what the context owns, which also takes back the steps it never started"
 
-const stagedUnfinishedTransition = "the row of that destroy's state, at the stage it froze: `destroy --stage` at that stage continues it, or replaces a failed one with a fresh staged destroy of what it has not removed; `destroy` without `--stage` replaces it with a fresh destroy of what the context still owns, and `destroy --stage` at an earlier stage with a fresh staged destroy of what the context still owns, each [widening](#staged-destroy) it and resolving its unproved blocks first; at a later stage it refuses"
+const stagedUnfinishedTransition = "the row of that destroy's state, at the stage and clusters it froze: `destroy --stage` at that stage with those clusters continues it, or replaces a failed one with a fresh staged destroy of what it has not removed; `destroy` without `--stage` replaces it with a fresh destroy of what the context still owns, and `destroy --stage` at an earlier stage, or naming more clusters or none, with a fresh staged destroy of what the context still owns, each [widening](#staged-destroy) it and resolving its unproved blocks first; at a later stage, or naming clusters that leave out one it froze, it refuses"
 
 const exitByDeletion = "none: `apply` and `destroy` refuse, naming `context delete --purge`, with `--allow-orphans` unless the evidence is pristine, which cannot list what it abandons over evidence the guard cannot read"
 
@@ -302,11 +305,15 @@ func stateMachineRows() map[string]stateMachineRow {
 			},
 		},
 		"staged destroy done (trimmed)": {
-			transition: "`apply` starts a [restoring apply](#restoring-apply), which refuses an input or build that would change a step the context keeps, that declares nothing the staged destroy took back, or that declares a step no staged destroy took back, and then the preview and next action name `destroy`; `destroy` starts a fresh destroy of what the context still owns, which replaces the staged destroy; `destroy --stage` at the same or a later stage settles without effect, and at an earlier one starts a fresh staged destroy of what the context still owns, which replaces it; `context update` is admitted, since the context guard reads `{none, retained}` as no mutation",
+			transition: "`apply` starts a [restoring apply](#restoring-apply), which refuses an input or build that would change a step the context keeps, that declares nothing the staged destroy took back, or that declares a step no staged destroy took back, and then the preview and next action name `destroy`; `destroy` starts a fresh destroy of what the context still owns, which replaces the staged destroy; `destroy --stage` settles without effect when what the staged destroy froze covers it, at the same or a later stage naming the clusters it froze, a subset of them, or none when it froze none, and otherwise starts a fresh staged destroy of what the context still owns, which replaces it; `context update` is admitted, since the context guard reads `{none, retained}` as no mutation",
 			cases: map[string]stateMachineCase{
 				"a staged destroy from the clusters stage": {
 					arrange: func(t *testing.T, h *harness) { completeApply(t, h); stagedDestroy(t, h, reconciliation.StageClusters) },
 					apply:   "restore", destroy: "fresh destroy", staged: "settle", previewed: reconciliation.Apply, next: "apply", reopens: true, shown: planning("apply"),
+				},
+				"a staged destroy from the clusters stage of one cluster": {
+					arrange: func(t *testing.T, h *harness) { narrowedStagedRemoval(t, h, false) },
+					apply:   "restore", destroy: "fresh destroy", staged: "settle", clusters: []string{"b"}, other: "fresh destroy", previewed: reconciliation.Apply, next: "apply", reopens: true, shown: planning("apply"),
 				},
 				"a staged destroy from the clusters stage under a changed input": {
 					arrange: func(t *testing.T, h *harness) {
@@ -362,6 +369,9 @@ func stateMachineRows() map[string]stateMachineRow {
 			cases: map[string]stateMachineCase{
 				"a staged destroy whose block failed": {
 					arrange: failedStagedRemoval, apply: "refuse", destroy: "fresh destroy", staged: "fresh destroy", lower: "fresh destroy", higher: "refuse", previewed: reconciliation.Destroy, next: "destroy", reopens: true, shown: planning("destroy"),
+				},
+				"a staged destroy narrowed to one cluster whose block failed": {
+					arrange: func(t *testing.T, h *harness) { narrowedStagedRemoval(t, h, true) }, apply: "refuse", destroy: "fresh destroy", staged: "fresh destroy", lower: "fresh destroy", higher: "refuse", clusters: []string{"b"}, other: "refuse", previewed: reconciliation.Destroy, next: "destroy", reopens: true, shown: planning("destroy"),
 				},
 				"a staged destroy whose executor died": {
 					arrange: func(t *testing.T, h *harness) {
@@ -503,12 +513,19 @@ func checkStateMachine(t *testing.T, lines []string) {
 				}
 			}
 			if test.staged != "" {
-				floor := test.floor
-				if floor == "" {
+				floor := stagedFloor{stage: test.floor}
+				if test.floor == "" {
 					floor = currentFloor(t, h)
 				}
 				if got, decided := decisionAtFloor(t, h, floor); got != test.staged || decided.widens != nil {
 					t.Errorf("row %q, %s: the destroy at the frozen stage decides %q widening %+v, want %q widening nothing", row[0], name, got, decided.widens, test.staged)
+				}
+			}
+			if test.other != "" {
+				floor := currentFloor(t, h)
+				floor.clusters = test.clusters
+				if got, decided := decisionAtFloor(t, h, floor); got != test.other || decided.widens != nil {
+					t.Errorf("row %q, %s: the destroy at the frozen stage naming %v decides %q widening %+v, want %q widening nothing", row[0], name, test.clusters, got, decided.widens, test.other)
 				}
 			}
 			for offset, want := range map[int]string{-1: test.lower, 1: test.higher} {
@@ -563,7 +580,7 @@ func previewedDecision(t *testing.T, h *harness, test stateMachineCase) string {
 	return decisionOver(t, h, test.previewed)
 }
 
-func decisionAtFloor(t *testing.T, h *harness, floor reconciliation.Stage) (string, operationPlan) {
+func decisionAtFloor(t *testing.T, h *harness, floor stagedFloor) (string, operationPlan) {
 	t.Helper()
 	ctx := context.Background()
 	var decided operationPlan
@@ -590,19 +607,38 @@ func unfinishedStaged(t *testing.T, h *harness) bool {
 }
 
 // floorBeside is the floor offset stages from the one the current operation froze.
-func floorBeside(t *testing.T, h *harness, offset int) reconciliation.Stage {
+func floorBeside(t *testing.T, h *harness, offset int) stagedFloor {
 	t.Helper()
-	floors := reconciliation.Floors()
-	return floors[slices.Index(floors, currentFloor(t, h))+offset]
+	floors, current := reconciliation.Floors(), currentFloor(t, h)
+	return current.at(floors[slices.Index(floors, current.stage)+offset])
 }
 
-func currentFloor(t *testing.T, h *harness) reconciliation.Stage {
+func narrowedStagedRemoval(t *testing.T, h *harness, fails bool) {
+	t.Helper()
+	h.capability.definitions = []reconciliation.BlockDefinition{
+		stagedDefinition("alpha", reconciliation.StageInfrastructureServices),
+		ownedClusterBlock("cluster-a", api.OpenShiftCluster, "a", "alpha"),
+		ownedClusterBlock("cluster-b", api.OpenShiftCluster, "b", "alpha"),
+		clusterAddOn("gitops-a", "a"),
+	}
+	h.service.capabilities = anyKindResolver{testResolver{capability: h.capability}}
+	completeApply(t, h)
+	if fails {
+		h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeFailed}}
+	}
+	if _, err := clusterDestroy(h, reconciliation.StageClusters, "a"); (err != nil) != fails {
+		t.Fatalf("destroy --stage clusters --clusters a returned %v", err)
+	}
+	h.capability.outcomes = nil
+}
+
+func currentFloor(t *testing.T, h *harness) stagedFloor {
 	t.Helper()
 	operation, _ := currentRecord(t, h)
 	if operation.Stage == nil {
 		t.Fatalf("the current operation %s froze no stage", operation.ID)
 	}
-	return operation.Stage.Floor
+	return floorOf(operation.Stage)
 }
 
 func decisionOver(t *testing.T, h *harness, verb reconciliation.Verb) string {

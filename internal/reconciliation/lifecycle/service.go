@@ -79,7 +79,7 @@ type Service struct {
 	capabilities         CapabilityResolver
 	options              Options
 	relaxing             eraseRelaxing
-	floor                reconciliation.Stage
+	floor                stagedFloor
 }
 
 func New(workspace Workspace, compiler Compiler, binder SecretBinder, host HostIdentity, automation AutomationIdentity, guard ExecutionGuard, capabilities CapabilityResolver, options Options) Service {
@@ -140,7 +140,7 @@ func (s Service) Plan(ctx context.Context, request PlanRequest) (*PlanResult, er
 	if request.Floor != "" && request.Verb != reconciliation.Destroy {
 		return nil, engineInputInvalid.Fail("only a destroy takes a floor", "repeat the preview with --stage selecting what an apply starts")
 	}
-	if s, err = s.withFloor(request.Floor, request.Relaxations); err != nil {
+	if s, err = s.withFloor(request.Floor, request.FloorClusters, request.Relaxations); err != nil {
 		return nil, err
 	}
 	result, err := s.relaxingFor(relaxingPlan, request.Relaxations, request.Unregistered).planWithin(ctx, request, nil)

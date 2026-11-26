@@ -9,18 +9,19 @@ import (
 )
 
 type PlanRequest struct {
-	Verb         reconciliation.Verb
-	Readiness    bool
-	KeepGoing    bool
-	Parallelism  int
-	ContextName  string
-	Stages       []string
-	Clusters     []string
-	Machines     []string
-	Until        string
-	Relaxations  map[string]string
-	Unregistered []string
-	Floor        string
+	Verb          reconciliation.Verb
+	Readiness     bool
+	KeepGoing     bool
+	Parallelism   int
+	ContextName   string
+	Stages        []string
+	Clusters      []string
+	Machines      []string
+	Until         string
+	Relaxations   map[string]string
+	Unregistered  []string
+	Floor         string
+	FloorClusters []string
 }
 
 type StatusRequest struct {
@@ -112,6 +113,7 @@ type DestroyRequest struct {
 	Relaxations      map[string]string
 	Unregistered     []string
 	Floor            string
+	Clusters         []string
 	SkipConfirmation bool
 	Unattended       bool
 	SSH              machine.SSHOptions
@@ -438,6 +440,7 @@ type LifecycleSummary struct {
 	Executable   string
 	AnotherBuild bool
 	Floor        string
+	Clusters     []string
 	TakenBack    []string
 }
 

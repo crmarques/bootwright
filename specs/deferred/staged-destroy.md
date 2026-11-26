@@ -69,10 +69,10 @@ causes.
 | 7b | [B1880](../milestones/m1.md#b1880) | Root disks of kept KubeVirt nodes are blanked through their substrate |
 | 8 | [B1862](../milestones/delivered.md#x763--a-never-used-ceph-cluster-is-taken-back-on-kept-hosts) | A Ceph cluster no data client was handed access to is taken back on kept hosts |
 
-Two further outcomes follow the restoring apply and stay parked: physical
+A further outcome follows the restoring apply and stays parked: physical
 installs in a staged scope
-([B1864](../milestones/backlog.md#b1864)) and `--clusters` narrowing of a
-staged destroy ([B1865](../milestones/backlog.md#b1865)). Online removal of
+([B1864](../milestones/backlog.md#b1864)). `--clusters` narrowing of a staged
+destroy is delivered ([B1865](../milestones/delivered.md#x764--a-staged-destroy-narrows-to-the-named-clusters)). Online removal of
 one add-on instance is [B769](../milestones/backlog.md#b769).
 
 ## The trimmed resting state
@@ -103,7 +103,7 @@ per-step binding are owned by
 | A cluster install failed before any node booted the image | `--stage clusters` takes back the agent installation on kept nodes ([removal on kept nodes](../openshift-clusters.md#removal-on-kept-nodes)) |
 | A staged destroy fails halfway and the operator widens it | A lower floor or no `--stage` supersedes it behind the widening confirmation ([staged destroy](../state-reconciliation.md#staged-destroy)) |
 | A physical install is in the scope | Refuses; the physical restore is parked ([B1864](../milestones/backlog.md#b1864)) |
-| `--clusters` narrows a staged destroy | Parked ([B1865](../milestones/backlog.md#b1865)) |
+| `--clusters` narrows a staged destroy | Takes back the named clusters' steps and keeps the others ([staged destroy](../state-reconciliation.md#staged-destroy)) |
 | A Ceph cluster whose hosts are physical, or with an SMB share, consumer, replication or sign-on, is in the scope | Refuses `destroy.stage-keeps-host` ([B1885](../milestones/m2.md#b1885)) |
 | A Ceph cluster that handed out access is in the scope | Refuses `destroy.stage-keeps-host` until B491's serving-cluster contract ([B491](../milestones/m2.md#b491)) |
 

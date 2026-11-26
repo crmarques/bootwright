@@ -289,7 +289,7 @@ func (s Service) lifecycleSummary(ctx context.Context, view View, store Operatio
 		summary.Logs = []string{}
 	}
 	if staged(operation) {
-		summary.Floor, summary.TakenBack = string(operation.Stage.Floor), slices.Clone(operation.Stage.TakenBack)
+		summary.Floor, summary.Clusters, summary.TakenBack = string(operation.Stage.Floor), slices.Clone(operation.Stage.Clusters), slices.Clone(operation.Stage.TakenBack)
 	}
 	summary.Lineage, err = lineageEntries(ctx, store, operation, plan, states)
 	return summary, err

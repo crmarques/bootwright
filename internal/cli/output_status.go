@@ -119,6 +119,7 @@ type statusLifecycle struct {
 
 type statusStage struct {
 	Floor     string   `json:"floor"`
+	Clusters  []string `json:"clusters"`
 	TakenBack []string `json:"takenBack"`
 }
 
@@ -205,7 +206,7 @@ func displayStatus(result *lifecycle.StatusResult) statusResult {
 			AnotherBuild: summary.AnotherBuild, Blocks: blocks, Logs: displayLines(summary.Logs), Live: displayLive(summary.Live),
 		}
 		if summary.Floor != "" {
-			out.Lifecycle.Stage = &statusStage{Floor: escapeDisplayLine(summary.Floor), TakenBack: displayLines(summary.TakenBack)}
+			out.Lifecycle.Stage = &statusStage{Floor: escapeDisplayLine(summary.Floor), Clusters: displayLines(summary.Clusters), TakenBack: displayLines(summary.TakenBack)}
 		}
 		for _, entry := range summary.Lineage {
 			out.Lifecycle.Lineage = append(out.Lifecycle.Lineage, statusLineage{
@@ -390,6 +391,9 @@ func writeStatusLifecycle(text *display, result *lifecycle.StatusResult) {
 	)
 	if summary.Floor != "" {
 		text.verbatimFields(field{Label: "Stage", Value: displayValue(summary.Floor) + " and every stage built on it, taking back " + displayValue(strings.Join(summary.TakenBack, ", "))})
+		if len(summary.Clusters) != 0 {
+			text.verbatimFields(field{Label: "Clusters", Value: displayValue(strings.Join(summary.Clusters, ", "))})
+		}
 	}
 	if len(summary.Lineage) != 0 {
 		text.section("Lineage")

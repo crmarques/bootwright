@@ -159,12 +159,6 @@ decision and its plan before any effect.
 | `engine.plan-moved` | operation | none | concurrency | - | repeat | the context changed between the plan and the transition, so nothing was registered | repeat the command to plan from what the context holds now |
 | `engine.input-moved` | operation | none | input | - | fix-then-repeat | the context's input is no longer the revision the operation froze | restore the exact input revision the operation froze |
 | `engine.binding-lost` | operation | none | records | - | abandon-context | a Secret binding the operation froze is lost, so its material cannot be lent again | restore the context's keyring from a complete backup, or delete the context and remove what it named by hand |
-| `destroy.stage-selected` | operation | none | input | - | fix-then-repeat | the next operation is a destroy, which accepts no stage selection | repeat the command without --stage and --until |
-| `destroy.stage-below-floor` | operation | none | input | - | fix-then-repeat | a step below the floor depends on what a staged destroy from it takes back, so nothing was registered | repeat with the lower stage the message names, or destroy without --stage |
-| `destroy.stage-keeps-unfinished` | operation | none | records | - | other-verb | a step a staged destroy would keep is not done, so nothing was registered | finish it with apply, take it back with a lower stage, or destroy without --stage |
-| `destroy.stage-keeps-host` | operation | none | input | - | fix-then-repeat | a step a staged destroy would take back runs on a Machine it keeps, which nothing yet takes such a step back from, so nothing was registered | repeat with the stage or the item the message names, or destroy without --stage |
-| `destroy.kept-host-stopped` | removal-phase | none | target | - | fix-then-repeat | a staged destroy takes back steps on a kept Machine while it runs, and that Machine was not proved running, so it took back nothing | start the Machine the message names, then repeat the destroy |
-| `destroy.stage-changed` | operation | none | input | - | fix-then-repeat | a later floor than an unfinished staged destroy froze, or any floor over an unfinished whole destroy, would narrow it, so nothing was registered | finish it with the command the message names, or review and take back the whole context with the commands it names |
 | `apply.target-before-preparation` | operation | none | input | - | other-verb | a scoped apply cannot freeze its installation plan before inventory outside its targets exists | complete the named machine inventories and review the scoped apply again |
 | `apply.until-before-preparation` | operation | none | input | - | other-verb | the add-on boundary --until names cannot be planned before preparation completes | run apply without --until to complete preparation, then select --until |
 | `engine.records-damaged` | operation | none | records | - | abandon-context | the context's operation records do not form the lineage or removal the operation needs | restore the context store from a backup, or delete the context with what it may still own |
@@ -172,6 +166,18 @@ decision and its plan before any effect.
 | `engine.confirmation-required` | operation | none | input | - | authorize | the operation needs a confirmation the invocation cannot ask for | repeat the command on a terminal, or with --yes once the plan is reviewed |
 | `engine.input-invalid` | operation | none | input | - | fix-then-repeat | an invocation option holds a value the engine refuses | repeat the command with the value the message names |
 | `engine.credential-moved` | operation | none | concurrency | - | repeat | a cluster administrator credential changed while its update was decided or pending | repeat the credential update against the current context |
+
+### Staged destroy decisions
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `destroy.stage-selected` | operation | none | input | - | fix-then-repeat | the next operation is a destroy, which accepts no stage selection | repeat the command without --stage and --until |
+| `destroy.stage-below-floor` | operation | none | input | - | fix-then-repeat | a step below the floor depends on what a staged destroy from it takes back, so nothing was registered | repeat with the lower stage the message names, or destroy without --stage |
+| `destroy.stage-keeps-unfinished` | operation | none | records | - | other-verb | a step a staged destroy would keep is not done, so nothing was registered | finish it with apply, take it back with a lower stage, or destroy without --stage |
+| `destroy.stage-keeps-host` | operation | none | input | - | fix-then-repeat | a step a staged destroy would take back runs on a Machine it keeps, which nothing yet takes such a step back from, so nothing was registered | repeat with the stage or the item the message names, or destroy without --stage |
+| `destroy.kept-host-stopped` | removal-phase | none | target | - | fix-then-repeat | a staged destroy takes back steps on a kept Machine while it runs, and that Machine was not proved running, so it took back nothing | start the Machine the message names, then repeat the destroy |
+| `destroy.stage-other-cluster` | operation | none | input | - | fix-then-repeat | a step of a cluster a staged destroy does not name depends on what it takes back, so nothing was registered | repeat naming the clusters the message names, or destroy without --clusters |
+| `destroy.stage-changed` | operation | none | input | - | fix-then-repeat | a later floor than an unfinished staged destroy froze, clusters that do not cover the ones it froze, or any floor over an unfinished whole destroy, would narrow it, so nothing was registered | finish it with the command the message names, or review and take back the whole context with the commands it names |
 
 ### Plans, preparations and authorizations
 

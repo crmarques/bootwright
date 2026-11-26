@@ -85,7 +85,7 @@ type invocation struct {
 	unregistered   map[string]bool
 	effects        map[string]bool
 	selection      reconciliation.Selection
-	floor          reconciliation.Stage
+	floor          stagedFloor
 	repeat         string
 	stopGroups     []*removalMachineGroup
 	clusterStarts  *sync.Map
@@ -410,7 +410,7 @@ func (c *scheduler) observingCommand() string {
 		return contextCommand(name, string(reconciliation.Destroy), invocationFlags(c.floor, reconciliation.Selection{}, authorizingUnfixed(*c.removal))...)
 	}
 	if c.operation.Verb == reconciliation.Apply && !c.selection.Empty() {
-		return contextCommand(name, "apply --dry-run", invocationFlags("", c.selection, nil)...)
+		return contextCommand(name, "apply --dry-run", invocationFlags(stagedFloor{}, c.selection, nil)...)
 	}
 	if command := continuationCommand(name, c.operation, c.plan, c.states); command != "" {
 		if c.operation.Verb == reconciliation.Apply {

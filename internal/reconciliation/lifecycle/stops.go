@@ -157,9 +157,12 @@ var (
 	destroyKeptHostStopped = diagnostics.Stop{Code: "destroy.kept-host-stopped", Level: diagnostics.LevelRemoval, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
 		Meaning: "a staged destroy takes back steps on a kept Machine while it runs, and that Machine was not proved running, so it took back nothing", Remedy: "start the Machine the message names, then repeat the destroy"}
+	destroyStageOtherCluster = diagnostics.Stop{Code: "destroy.stage-other-cluster", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "a step of a cluster a staged destroy does not name depends on what it takes back, so nothing was registered", Remedy: "repeat naming the clusters the message names, or destroy without --clusters"}
 	destroyStageChanged = diagnostics.Stop{Code: "destroy.stage-changed", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryFixThenRepeat,
-		Meaning: "a later floor than an unfinished staged destroy froze, or any floor over an unfinished whole destroy, would narrow it, so nothing was registered", Remedy: "finish it with the command the message names, or review and take back the whole context with the commands it names"}
+		Meaning: "a later floor than an unfinished staged destroy froze, clusters that do not cover the ones it froze, or any floor over an unfinished whole destroy, would narrow it, so nothing was registered", Remedy: "finish it with the command the message names, or review and take back the whole context with the commands it names"}
 	applyKeptBlockChanged = diagnostics.Stop{Code: "apply.kept-block-changed", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryOtherVerb,
 		Meaning: "the selected input or this build would plan a kept step of a trimmed context otherwise", Remedy: "run the destroy the message names, then apply"}
@@ -340,7 +343,7 @@ var stops = []diagnostics.Stop{engineRecordsFull, engineRecordsReadOnly, engineR
 	planInputUncompilable, planCapabilityMissing, planCapabilityDefect, planHostKeyUnbound, planEnvironmentInvalid,
 	engineUnindexedRecords, engineRequestDefect, engineOtherBuild, destroyInverseMoved, destroyInverseUnstated, enginePlanMoved, engineInputMoved, engineBindingLost, authorizeUnneeded,
 	authorizeMissing, authorizeStale, authorizeRebindInvalid, destroyStageSelected,
-	destroyStageBelowFloor, destroyStageKeepsUnfinished, destroyStageKeepsHost, destroyKeptHostStopped, destroyStageChanged, applyKeptBlockChanged, applyRestoreEmpty, applyRestoreAddsNew, applyUntilBeforePreparation, applyTargetBeforePreparation,
+	destroyStageBelowFloor, destroyStageKeepsUnfinished, destroyStageKeepsHost, destroyKeptHostStopped, destroyStageOtherCluster, destroyStageChanged, applyKeptBlockChanged, applyRestoreEmpty, applyRestoreAddsNew, applyUntilBeforePreparation, applyTargetBeforePreparation,
 	engineRecordsDamaged, applyProducedInputMissing, engineRecaptureMismatch, engineResolvedUnperformed, engineResolvedPartial, destroyPostconditionUnknown,
 	prepareRefused, prepareUnsupported,
 	engineBorrowedSSH, engineConfirmationRequired, engineInputInvalid, engineCredentialMoved, engineFinalizationIncomplete,

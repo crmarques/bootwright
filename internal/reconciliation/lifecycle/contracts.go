@@ -634,7 +634,7 @@ type decisionPlanner interface {
 	refuseUnsupported(*compilation.State, *reconciliation.PreparationScope) error
 	freshDestroy(context.Context, string, operationstore.Executable, string, removalScope, bool) (operationPlan, error)
 	computePhases(reconciliation.Plan) removalPhases
-	stagedScope(context.Context, string, reconciliation.Stage, liveState) ([]string, keptAnswer, error)
+	stagedScope(context.Context, string, stagedFloor, liveState) ([]string, keptAnswer, error)
 	keptChanges(string, reconciliation.Plan, reconciliation.Plan) ([]reconciliation.BlockChange, string)
 	addedSecrets(reconciliation.Plan, capabilityBinding) (capabilityBinding, error)
 }

@@ -25,7 +25,7 @@ type decider struct {
 	proofs       decisionProofs
 	relaxing     eraseRelaxing
 	changeRemedy func(View) string
-	floor        reconciliation.Stage
+	floor        stagedFloor
 	restore      *restorePlan
 }
 
@@ -150,7 +150,7 @@ func (d decider) decideFrom(ctx context.Context, view View, verb reconciliation.
 			selection = reconciliation.Selection{}
 		}
 		if verb == reconciliation.Destroy && staged(operation) && operation.State != reconciliation.OperationDone {
-			d.floor = operation.Stage.Floor
+			d.floor = floorOf(operation.Stage)
 		}
 	}
 	if verb == reconciliation.Apply && d.preparation != nil && d.preparation.Command != string(reconciliation.Apply) &&
@@ -515,7 +515,7 @@ func targetedBoundary(name string, plan reconciliation.Plan, states map[string]r
 			wider.Stages = append(slices.Clone(selection.Stages), block.Stage)
 			wider.Stages, _ = reconciliation.ParseStages(wider.Stages.Names())
 			return applyStageEmpty.Fail("the selected stages leave prerequisite "+block.ID+" outside this invocation",
-				"review "+contextCommand(name, "apply --dry-run", invocationFlags("", wider, nil)...))
+				"review "+contextCommand(name, "apply --dry-run", invocationFlags(stagedFloor{}, wider, nil)...))
 		}
 	}
 	if kind == StepRetry {
@@ -573,7 +573,7 @@ func widenedApply(name string, plan reconciliation.Plan, states map[string]recon
 	stages := append(slices.Clone(selection.Stages), needed)
 	selection.Stages, _ = reconciliation.ParseStages(stages.Names())
 	bound, _ := selection.Bind(plan)
-	return contextCommand(name, "apply", invocationFlags("", bound, authorizing(authorizationPlan(plan, states, bound)))...)
+	return contextCommand(name, "apply", invocationFlags(stagedFloor{}, bound, authorizing(authorizationPlan(plan, states, bound)))...)
 }
 
 // freshApply is the one fresh-plan decision: apply registers the transition it
@@ -671,7 +671,7 @@ func (d decider) supersede(ctx context.Context, view View, store decisionRecords
 		return operationPlan{}, err
 	}
 	if staged(operation) {
-		decided.stage = &operationstore.Stage{Floor: operation.Stage.Floor, TakenBack: slices.Clone(operation.Stage.TakenBack), KeptPower: slices.Clone(operation.Stage.KeptPower)}
+		decided.stage = floorOf(operation.Stage).record(slices.Clone(operation.Stage.TakenBack), slices.Clone(operation.Stage.KeptPower))
 		if err := proveRecorded(ctx, d.capabilities, store, decided.plan, operation); err != nil {
 			return operationPlan{}, err
 		}

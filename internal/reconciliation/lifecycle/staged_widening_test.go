@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"path"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -150,7 +151,7 @@ func TestAWideningIsNamedAndAuthorizedAgainstItsOwnPlan(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if preview.Widens == nil || *preview.Widens != (Widening{Operation: staged.ID, From: string(reconciliation.StageClusters)}) || preview.Scope != nil {
+	if preview.Widens == nil || !reflect.DeepEqual(*preview.Widens, Widening{Operation: staged.ID, From: string(reconciliation.StageClusters), FromClusters: []string{}}) || preview.Scope != nil {
 		t.Fatalf("the widening preview reads %+v beside the scope %+v", preview.Widens, preview.Scope)
 	}
 	if len(preview.Authorizations) != 1 || slices.Equal(preview.Authorizations, stagedPreview.Authorizations) {
@@ -184,7 +185,7 @@ func TestALowerFloorConfirmationNamesTheWidening(t *testing.T) {
 	t.Parallel()
 	decided := operationPlan{
 		verb: reconciliation.Destroy, plan: reconciliation.Plan{Blocks: make([]reconciliation.Block, 2)}, kept: []string{"alpha"},
-		stage: &operationstore.Stage{Floor: reconciliation.StageSubstrates}, widens: &widening{operation: "op-1", from: reconciliation.StageMachines},
+		stage: &operationstore.Stage{Floor: reconciliation.StageSubstrates}, widens: &widening{operation: "op-1", from: stagedFloor{stage: reconciliation.StageMachines}},
 	}
 	want := "destroy --stage substrates, taking back 2 steps and keeping 1, which widens the unfinished staged destroy op-1 from the machines stage to the substrates stage,"
 	if got := confirmedAction(decided); got != want {

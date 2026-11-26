@@ -520,3 +520,30 @@ func TestAStagedDestroyBlanksOneKeptNodeAndTearsDownStorageOnHostsThatRun(t *tes
 		}
 	})
 }
+
+// B1865, B1862: a staged destroy narrowed to a storage cluster on kept hosts
+// that must run repeats its clusters in the kept-host-stopped remedy, and a
+// destroy narrowed so takes the cluster back once the host runs.
+func TestANarrowedStagedDestroyOnAStoppedKeptHostRepeatsItsClusters(t *testing.T) {
+	t.Parallel()
+	cluster := keptOnlineHarness(t, keptOnlineOptions{})
+	cluster.storage.definitions[0].ClusterOwners = []string{"store"}
+	h := cluster.h
+	cluster.failApply(t)
+	cluster.power("node-1", false)
+	before := untouchedOf(h)
+	_, err := clusterDestroy(h, reconciliation.StageClusters, "store")
+	reported := diagnostics.Of(err)
+	if firstCode(err) != destroyKeptHostStopped.Code || !strings.Contains(reported[0].Remediation, "bootwright machine start --context lab --name node-1") ||
+		!strings.Contains(reported[0].Remediation, "bootwright destroy --context lab --stage clusters --clusters store") {
+		t.Fatalf("a narrowed staged destroy over a stopped kept host returned %v", reported)
+	}
+	before.require(t, h)
+	cluster.power("node-1", true)
+	if _, err := clusterDestroy(h, reconciliation.StageClusters, "store"); err != nil {
+		t.Fatalf("destroy --stage clusters --clusters store: %+v", diagnostics.Of(err))
+	}
+	if current, _ := currentRecord(t, h); !trimmed(current) || !slices.Equal(current.Stage.Clusters, []string{"store"}) {
+		t.Fatalf("the narrowed staged destroy recorded %+v", current.Stage)
+	}
+}

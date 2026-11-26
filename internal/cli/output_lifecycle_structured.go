@@ -106,7 +106,7 @@ func displayPlan(result *lifecycle.PlanResult) planPresentation {
 	shown.AddsTo, shown.TakesBack, shown.Scope = escapeDisplayLine(result.AddsTo), displayLines(result.TakesBack), displayScope(result.Scope)
 	shown.Restores = escapeDisplayLine(result.Restores)
 	if w := result.Widens; w != nil {
-		shown.Widens = &wideningPresentation{Operation: escapeDisplayLine(w.Operation), From: escapeDisplayLine(w.From)}
+		shown.Widens = &wideningPresentation{Operation: escapeDisplayLine(w.Operation), From: escapeDisplayLine(w.From), FromClusters: displayLines(w.FromClusters)}
 	}
 	if b := result.AnotherBuild; b != nil {
 		shown.AnotherBuild = &planBuildPresentation{RegisteredBy: escapeDisplayLine(b.RegisteredBy), Steps: append([]int{}, b.Steps...)}
@@ -133,6 +133,7 @@ func (operationPresentation) documentedResult() {}
 
 type scopePresentation struct {
 	Floor            string   `json:"floor"`
+	Clusters         []string `json:"clusters"`
 	RemovedSteps     []string `json:"removedSteps"`
 	KeptSteps        []string `json:"keptSteps"`
 	Residue          []string `json:"residue"`
@@ -140,15 +141,16 @@ type scopePresentation struct {
 }
 
 type wideningPresentation struct {
-	Operation string `json:"operation"`
-	From      string `json:"from"`
+	Operation    string   `json:"operation"`
+	From         string   `json:"from"`
+	FromClusters []string `json:"fromClusters"`
 }
 
 func displayScope(scope *lifecycle.StagedScope) *scopePresentation {
 	if scope == nil {
 		return nil
 	}
-	return &scopePresentation{Floor: escapeDisplayLine(scope.Floor), RemovedSteps: displayLines(scope.Removed), KeptSteps: displayLines(scope.Kept), Residue: displayLines(scope.Residue), KeptPowerTargets: displayLines(scope.KeptPowerTargets)}
+	return &scopePresentation{Floor: escapeDisplayLine(scope.Floor), Clusters: displayLines(scope.Clusters), RemovedSteps: displayLines(scope.Removed), KeptSteps: displayLines(scope.Kept), Residue: displayLines(scope.Residue), KeptPowerTargets: displayLines(scope.KeptPowerTargets)}
 }
 
 type operationBlockPresentation struct {

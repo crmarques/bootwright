@@ -454,3 +454,26 @@ func TestAStagedDestroyProvesEveryKeptHostByAPowerTarget(t *testing.T) {
 		}
 	}
 }
+
+// A staged destroy's clusters are an ordered set of names under the clusters
+// or add-ons floor; any other floor, order or name is a damaged record.
+func TestAStagedDestroyNamesItsClustersOnlyUnderAClusterFloor(t *testing.T) {
+	for name, test := range map[string]struct {
+		floor    reconciliation.Stage
+		clusters []string
+		admits   bool
+	}{
+		"the clusters floor": {floor: reconciliation.StageClusters, clusters: []string{"a", "b"}, admits: true},
+		"the add-ons floor":  {floor: reconciliation.StageAddOns, clusters: []string{"a"}, admits: true},
+		"no clusters":        {floor: reconciliation.StageMachines, admits: true},
+		"the machines floor": {floor: reconciliation.StageMachines, clusters: []string{"a"}},
+		"out of order":       {floor: reconciliation.StageClusters, clusters: []string{"b", "a"}},
+		"repeated":           {floor: reconciliation.StageClusters, clusters: []string{"a", "a"}},
+		"an unsafe name":     {floor: reconciliation.StageClusters, clusters: []string{"a/b"}},
+	} {
+		err := validateStage(reconciliation.Destroy, &Stage{Floor: test.floor, Clusters: test.clusters, TakenBack: []string{"install-node-01"}})
+		if (err == nil) != test.admits {
+			t.Errorf("a staged destroy naming clusters at %s returned %v", name, err)
+		}
+	}
+}

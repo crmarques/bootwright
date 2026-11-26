@@ -421,6 +421,7 @@ func validateRebound(operation Operation) error {
 
 type Stage struct {
 	Floor     reconciliation.Stage `json:"floor"`
+	Clusters  []string             `json:"clusters,omitempty"`
 	TakenBack []string             `json:"takenBack"`
 	KeptPower []KeptPower          `json:"keptPower,omitempty"`
 }
@@ -447,6 +448,11 @@ func validateStage(verb reconciliation.Verb, stage *Stage) error {
 	if len(stage.TakenBack) == 0 || len(stage.TakenBack) > reconciliation.MaxBlocks || !slices.IsSorted(stage.TakenBack) ||
 		len(slices.Compact(slices.Clone(stage.TakenBack))) != len(stage.TakenBack) {
 		return recordError("a staged destroy's taken-back steps must form a bounded ordered set")
+	}
+	if len(stage.Clusters) != 0 && !reconciliation.NarrowsToClusters(stage.Floor) || len(stage.Clusters) > reconciliation.MaxBlocks ||
+		!slices.IsSorted(stage.Clusters) || len(slices.Compact(slices.Clone(stage.Clusters))) != len(stage.Clusters) ||
+		slices.ContainsFunc(stage.Clusters, func(name string) bool { return !reconciliation.ValidSegment(name) }) {
+		return recordError("a staged destroy's clusters must form a bounded ordered set under the clusters or add-ons floor")
 	}
 	for _, block := range stage.TakenBack {
 		if !reconciliation.ValidSegment(block) {

@@ -31,6 +31,8 @@ func Floors() []Stage { return Stages()[2:] }
 
 func ValidFloor(value Stage) bool { return slices.Contains(Floors(), value) }
 
+func NarrowsToClusters(floor Stage) bool { return floor == StageClusters || floor == StageAddOns }
+
 func (s Stage) AtOrAbove(floor Stage) bool {
 	return slices.Index(Stages(), s) >= slices.Index(Stages(), floor)
 }
@@ -104,7 +106,7 @@ func (s Selection) Targeted() bool { return len(s.Clusters) != 0 || len(s.Machin
 
 func (s Selection) Empty() bool { return len(s.Stages) == 0 && s.Until == "" && !s.Targeted() }
 
-func clusterOwners(plan Plan, block Block) []string {
+func ClusterOwners(plan Plan, block Block) []string {
 	if plan.Preparation == nil && block.Kind == string(api.Machine) {
 		return nil
 	}
@@ -118,7 +120,7 @@ func (s Selection) MissingTargets(plan Plan) []string {
 	found := map[string]bool{}
 	for _, block := range plan.Blocks {
 		if len(s.Clusters) != 0 {
-			for _, name := range clusterOwners(plan, block) {
+			for _, name := range ClusterOwners(plan, block) {
 				found[name] = true
 			}
 		}
@@ -141,7 +143,7 @@ func (s Selection) Bind(plan Plan) (Selection, bool) {
 	if s.Targeted() {
 		s.joint = map[string]bool{}
 		for _, block := range plan.Blocks {
-			owners := clusterOwners(plan, block)
+			owners := ClusterOwners(plan, block)
 			if len(owners) > 1 && slices.ContainsFunc(owners, func(name string) bool { return !slices.Contains(s.Clusters, name) }) {
 				s.joint[block.ID] = true
 			}

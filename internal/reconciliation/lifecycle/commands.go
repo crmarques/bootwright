@@ -48,7 +48,7 @@ func (s Service) resolutionRemedy(contextName string, verb reconciliation.Verb, 
 	}
 	continuation := s.preparationRetry(contextName, planCommand(contextName, frozen, authorizing(frozen)...))
 	if !selection.Empty() {
-		continuation = contextCommand(contextName, "apply --dry-run", invocationFlags("", selection, nil)...)
+		continuation = contextCommand(contextName, "apply --dry-run", invocationFlags(stagedFloor{}, selection, nil)...)
 		if partial {
 			return "review the continuation with " + continuation + ", or take back what it owns with " + contextCommand(contextName, string(reconciliation.Destroy))
 		}

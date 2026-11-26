@@ -2,29 +2,32 @@
       Remove what this context's apply owns, whether that apply completed or not, proving each
       removal before it registers; a failed destroy is replaced by a fresh removal. Stop all
       managed Machines with bootwright machine stop before starting destroy. A new destroy
-      requires every target off or absent. Once registered, destroy starts Machines for
-      required guest cleanup and stops them again. Stop after online cleanup lists the Machines
-      whose power is checked again. Repeating an unfinished destroy continues its work. Use
-      --keep-going to continue independent steps after a recorded target-local failure and
-      report the work that remains. Pair it with --dry-run to see current prerequisites and
-      what previous failures would hold back. A plan that deletes disks needs --authorize
-      data-loss; with --yes or without a terminal it must be --authorize data-loss=<digest>,
-      the digest bootwright destroy --dry-run prints for those steps. A rotated management
-      controller or registry login credential is presented at its current version only with
-      --authorize rebind=<secret>, which records a new binding version. A Machine whose
-      declared removal erase you know to be more than you need is relaxed for this destroy only
-      with --authorize erase=<machine>:metadataClear, which clears only metadata, or
-      --authorize erase=<machine>:retain, which erases nothing and leaves its data and
-      installed system in place; each Machine is named once, and the plan and its digest show
-      the relaxation. When you are sure a Machine's remaining effects can stay where they are,
-      such as an enrollment whose host refuses its proof, --authorize abandon=<machine> leaves
-      each of its steps that can be abandoned in place without contacting the host, lets the
-      destroy complete, and needs a confirmation answered in a terminal; remove what it leaves
-      by hand. A Machine whose subscription registration cannot be read and that you
-      unregistered with the subscription service's own tools is named with --unregistered.
-      --parallelism limits running steps (default 8); dependencies, exclusive resources and
-      group throttles still apply. Use --dry-run to preview the selected work and check
-      prerequisites without making changes. --yes skips ordinary confirmation during execution.
+      requires every target off or absent. --stage <floor> takes back that stage and every
+      stage built on it, keeping the stages below; with --stage clusters or --stage add-ons,
+      --clusters takes back only the named clusters' steps and what depends on them, keeping
+      the other clusters. Once registered, destroy starts Machines for required guest cleanup
+      and stops them again. Stop after online cleanup lists the Machines whose power is checked
+      again. Repeating an unfinished destroy continues its work. Use --keep-going to continue
+      independent steps after a recorded target-local failure and report the work that remains.
+      Pair it with --dry-run to see current prerequisites and what previous failures would hold
+      back. A plan that deletes disks needs --authorize data-loss; with --yes or without a
+      terminal it must be --authorize data-loss=<digest>, the digest bootwright destroy
+      --dry-run prints for those steps. A rotated management controller or registry login
+      credential is presented at its current version only with --authorize rebind=<secret>,
+      which records a new binding version. A Machine whose declared removal erase you know to
+      be more than you need is relaxed for this destroy only with --authorize
+      erase=<machine>:metadataClear, which clears only metadata, or --authorize
+      erase=<machine>:retain, which erases nothing and leaves its data and installed system in
+      place; each Machine is named once, and the plan and its digest show the relaxation. When
+      you are sure a Machine's remaining effects can stay where they are, such as an enrollment
+      whose host refuses its proof, --authorize abandon=<machine> leaves each of its steps that
+      can be abandoned in place without contacting the host, lets the destroy complete, and
+      needs a confirmation answered in a terminal; remove what it leaves by hand. A Machine
+      whose subscription registration cannot be read and that you unregistered with the
+      subscription service's own tools is named with --unregistered. --parallelism limits
+      running steps (default 8); dependencies, exclusive resources and group throttles still
+      apply. Use --dry-run to preview the selected work and check prerequisites without making
+      changes. --yes skips ordinary confirmation during execution.
 
   Usage
     bootwright destroy [flags]
@@ -37,6 +40,8 @@
                       (erase=<machine>:metadataClear or erase=<machine>:retain), or leave what
                       this destroy cannot remove from one Machine in place unmanaged
                       (abandon=<machine>) (values: data-loss)
+      --clusters      With --stage clusters or add-ons, take back the steps of the
+                      comma-separated clusters and what depends on them, keeping the others
       --dry-run       Limit work to the command's dry-run boundary
       --keep-going    Continue independent cleanup after a target-local failure or a refused
                       enrollment proof

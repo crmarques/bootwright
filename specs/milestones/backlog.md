@@ -345,7 +345,6 @@ Alias cell.
 | [B1838](#b1838) | new, 2026-11-25 (D287) | product | Storage | A `CephSignOn` names the claim path its users' dashboard roles come from | cephadm loses a `roles_path` set on a fresh single sign-on database when a manager restarts |
 | [B1839](#b1839) | new, 2026-11-25 (X739) | product | Storage | A completed object gateway rotates its LDAP bind password, its directory's CA bundle or its STS key in place | The leaves are effect material the gateway block placed; revive when an owner asks for in-place rotation |
 | [B1864](#b1864) | new, 2026-11-25 (D288) | product | Reconciliation, with Managed OS | A staged destroy takes back a physical Machine's installation and its erase, and the restoring apply rebuilds them through disk discovery | After the restoring apply ([B1858](delivered.md#x757--the-restoring-apply-restores-what-a-staged-destroy-took-back)); a physical install in a staged scope refuses |
-| [B1865](#b1865) | new, 2026-11-25 (D288) | product | Reconciliation and CLI | `destroy --stage` narrows to the selected clusters with `--clusters` | After the restoring apply ([B1858](delivered.md#x757--the-restoring-apply-restores-what-a-staged-destroy-took-back)); a staged destroy takes the whole stage |
 | [B1869](#b1869) | new, 2026-11-25 (X759 review) | product | Reconciliation | A trimmed context whose input drops what its staged destroy took back settles on the new input | It is the first reconciliation of changed desired state, which the owner asked to prepare for but not build now; the restore refuses `apply.restore-empty` and names the whole destroy |
 
 ### B82
@@ -3769,17 +3768,6 @@ such a scope, because an erased host would rest trimmed with a restore that
 cannot discover its disks. **Exit evidence:** the restore over a physical
 Machine on real hardware, and the refusal that stays for a host whose disks
 the discovery cannot read.
-
-### B1865
-
-**Owner:** Reconciliation and CLI. **Kind:** product.
-**Requires:** [B1858](delivered.md#x757--the-restoring-apply-restores-what-a-staged-destroy-took-back). **Definition:** Candidate. **Outcome:**
-`destroy --stage` accepts `--clusters`, so one cluster of a stage is taken back
-and the others stay kept. The scope, the proof that no dependent stays behind
-and the trimmed standing each hold per cluster. **Exit evidence:** a journey
-over two clusters of one context, and the proofs of the
-[staged destroy design](../state-reconciliation.md#staged-destroy) for the
-narrowed scope.
 
 ### B1869
 
@@ -10120,7 +10108,7 @@ clear best alternative in term of well-designed architecture, elegancy and ux,
 even if not cheap, you can choose this one". This authorizes the slices of
 B1856 to B1863 in the design's order, starting with
 [X754](delivered.md#x754--run-time-inverse-branches-frozen) for B1856, and the
-slices of [B1864](#b1864) and [B1865](#b1865) only once they are promoted. Each
+slices of [B1864](#b1864) and [B1865](delivered.md#x764--a-staged-destroy-narrows-to-the-named-clusters) only once they are promoted. Each
 clause below is taken by the session under the owner's delegation of
 2026-11-25, binding and outside the review queue, and replaces the clause of the
 same number above:

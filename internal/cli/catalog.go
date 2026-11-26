@@ -261,6 +261,12 @@ func floorFlag() flagSpec {
 	return flag
 }
 
+func floorClustersFlag() flagSpec {
+	flag := stringFlag("clusters", "With --stage clusters or add-ons, take back the steps of the comma-separated clusters and what depends on them, keeping the others")
+	flag.nameList = true
+	return flag
+}
+
 func loginFlag() flagSpec {
 	flag := stringFlag("login", "Select comma-separated administrator logins to update (default: all the cluster has)")
 	flag.enum, flag.enumList, flag.nameList = slices.Clone(lifecycle.AdminLoginNames), true, true

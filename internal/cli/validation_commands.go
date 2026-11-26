@@ -79,6 +79,21 @@ func validateLifecycleFlags(command *cobra.Command) string {
 }
 
 func validateDestroyFlags(command *cobra.Command) string {
+	if command.Flags().Changed("clusters") {
+		floor := stringValue(command.Flags(), "stage")
+		if floor != "clusters" && floor != "add-ons" {
+			return "--clusters narrows only --stage clusters or --stage add-ons"
+		}
+		names := normalizeNames(stringValue(command.Flags(), "clusters"))
+		if len(names) == 0 {
+			return "--clusters must name at least one target"
+		}
+		for _, name := range names {
+			if !api.ValidLexical(api.LexicalName, name) {
+				return "--clusters names must be lowercase DNS labels"
+			}
+		}
+	}
 	if command.Flags().Changed("stage") {
 		tokens, _ := authorizationTokens(command)
 		for _, token := range tokens {

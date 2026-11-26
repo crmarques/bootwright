@@ -182,7 +182,7 @@ func (s Service) keptChanges(name string, live, fresh reconciliation.Plan) ([]re
 		}
 		changed = append(changed, change)
 		block, _ := live.Block(change.Block)
-		lower := s.widened(live, block.Stage)
+		lower := s.widened(live, stagedFloor{stage: block.Stage}).stage
 		switch {
 		case !reconciliation.ValidFloor(block.Stage) || !reconciliation.ValidFloor(lower):
 			whole = true
