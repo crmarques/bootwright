@@ -18,9 +18,11 @@ import time
 from ansible.module_utils.common.yaml import yaml_load
 from ansible.plugins.action import ActionBase
 from ansible_collections.bootwright.core.plugins.module_utils import kubevirt_machine as arm
+from ansible_collections.bootwright.core.plugins.module_utils import kubevirt_root_reset
 from ansible_collections.bootwright.core.plugins.module_utils.kubevirt_api import Answered, Client, Refused, Unanswered, load
 
 BLOCKS = ("proof", "apply", "observe", "destroy")
+ROOT = ("root_reset", "root_read")
 PORTS = ("pre_boot", "state_read", "power", "boot_media", "boot_disk", "media_insert", "media_eject")
 UPLOAD_SECONDS = 1200
 
@@ -44,6 +46,17 @@ def block(operation, client, arguments, clock=time.time, sleep=time.sleep):
     if operation == "apply":
         return arm.apply(host, request, context)
     return arm.destroy(host, request, context)
+
+
+def root(operation, client, arguments, clock=time.time, sleep=time.sleep):
+    """A kept machine's root disk reset, or its reading: whether it changed anything and its evidence."""
+    request = arguments["request"]
+    host = arm.Host(client, request["namespace"], clock() + int(arguments.get("seconds", 600)), clock, sleep)
+    context = {"operation": "", "block": "", "registered": "", "pinned": arguments["pinned"]}
+    mark = kubevirt_root_reset.mark_of(arguments["removal"], arguments["step"])
+    if operation == "root_read":
+        return False, kubevirt_root_reset.read(host, request, context, mark)
+    return kubevirt_root_reset.reset(host, request, context, arguments["removal"], arguments["step"])
 
 
 def port(operation, client, arguments, upload, clock=time.time, sleep=time.sleep):
@@ -107,8 +120,13 @@ class ActionModule(ActionBase):
         arguments = dict(self._task.args)
         operation = arguments.get("operation")
         try:
-            if operation not in BLOCKS and operation not in PORTS:
+            if operation not in BLOCKS and operation not in ROOT and operation not in PORTS:
                 result = {"failed": True, "msg": "unsupported KubeVirt operation"}
+            elif operation == "root_reset" and self._task.check_mode:
+                result = {"failed": True, "msg": "a root disk reset does not run in check mode"}
+            elif operation in ROOT:
+                changed, evidence = root(operation, connect(arguments["kubeconfig"], arguments["scratch"]), arguments)
+                result = {"changed": changed, "observation": evidence}
             elif operation in BLOCKS:
                 changed, evidence = block(operation, connect(arguments["kubeconfig"], arguments["scratch"]), arguments)
                 result = {"changed": changed, "observation": evidence}

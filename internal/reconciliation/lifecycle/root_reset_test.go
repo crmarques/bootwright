@@ -289,7 +289,7 @@ func TestABootedInstallationIsKeptOnlyWhereItsNodesRootDisksCanBeBlanked(t *test
 	cluster.install.boots = true
 	completeApply(t, cluster.h)
 	_, err := cluster.h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, Floor: string(reconciliation.StageClusters), SkipConfirmation: true})
-	if reported := diagnostics.Of(err); firstCode(err) != destroyStageKeepsHost.Code || !strings.Contains(reported[0].Message, "blanks no root disk yet (B1880)") {
+	if reported := diagnostics.Of(err); firstCode(err) != destroyStageKeepsHost.Code || !strings.Contains(reported[0].Message, "blanks no root disk") {
 		t.Fatalf("destroy --stage clusters over nodes whose substrate blanks nothing returned %v", reported)
 	}
 }

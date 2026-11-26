@@ -153,7 +153,11 @@ func observeAllowlist() map[observeTaskKey]observeAllowance {
 		return func(params, _ map[string]any) bool { return params["operation"] == operation }
 	}
 	add("substrate_kubevirt_host", "observe.yml", observeCollection+"substrate_kubevirt_api", "repeats the provider proof, which only reads the host's API", kubevirtRead("proof"))
-	add("substrate_kubevirt_machine", "observe.yml", observeCollection+"substrate_kubevirt_api", "reads the VirtualMachine and what it owns, creating and deleting nothing", kubevirtRead("observe"))
+	add("substrate_kubevirt_machine", "observe.yml", observeCollection+"substrate_kubevirt_api", "reads the VirtualMachine and what it owns, or a root disk's reset mark, creating, deleting and patching nothing",
+		func(params, _ map[string]any) bool {
+			return params["operation"] == "observe" || params["operation"] == "root_read"
+		})
+	add("substrate_kubevirt_machine", "observe.yml", "ansible.builtin.meta", "ends a root disk's reading after its publication", read)
 	add("substrate_kubevirt_machine", "state_read.yml", observeCollection+"substrate_kubevirt_api", "reads the instance's power and the presented volume", kubevirtRead("state_read"))
 	for _, module := range []string{"ansible.builtin.set_fact", "ansible.builtin.assert"} {
 		add("substrate_kubevirt_machine", "state_read.yml", module, "validates the port input and retains answers in memory", read)

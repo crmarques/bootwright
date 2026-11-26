@@ -1870,9 +1870,17 @@ delivered host key as its identity channel; until then it refuses as the
 Not yet met: a KubeVirt interface on a namespaced `UserDefinedNetwork`
 refuses; tracked as [B909](milestones/backlog.md#b909).
 
-Not yet met: the machine offers no root-disk reset, so a staged destroy that
-keeps a booted KubeVirt node refuses; tracked as
-[B1880](milestones/m1.md#b1880).
+**Root reset.** Like [libvirt's](#machine-realization), under
+`machine-kubevirt-root-reset-v1`: on its own stopped VirtualMachine by UID,
+it deletes the root DataVolume by UID precondition; once its template
+remade it blank at the frozen size and class, on a new claim and volume, and
+still stopped, a UID-tested patch writes
+`bootwright.io/root-reset: <operation>/<step>/<uid>`, the old mark dropped
+first; only that mark reads completed. A Retain class keeps the old volume
+(`test_kubevirt_root_reset.py`).
+
+Not yet met: a VirtualMachine on a host cluster of the context blanks no root
+disk; tracked as [B1890](milestones/m1.md#b1890).
 
 **Port.** The realized target names, as its management controller, the
 endpoint `kubevirt:<namespace>/<vm>` and the provider's `kubeconfigRef` as its

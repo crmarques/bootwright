@@ -43,6 +43,10 @@
     "contentDigest": "c4e732ece12ed8edb121aa943d55d7d72b1fae18b451fe8fc34eddef652454f1",
     "fingerprint": "39a705c76a22a0f74c1d9926a7a77eefcde37b70de9fa253d9075d340018b82d"
   },
+  "machine-kubevirt-root-reset-v1": {
+    "contentDigest": "c10e9fa6592515169e16fb2185cfc0d7d27d0a48f96e4680975b81765f3320b4",
+    "fingerprint": "36b510d2c55b15d98d7d60dc99c0467df44301918d7a370ed99da566da8acff9"
+  },
   "machine-kubevirt-v1": {
     "contentDigest": "51ddb3590eb7ac455201230a9d7cc259fa7373e1ee5b647b9e8b3af828b40b92",
     "fingerprint": "c37608341fd76d0cee2e9d78cdb65239e7be1c752a01f5cf1e66aa458b9fffe0"

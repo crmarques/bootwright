@@ -69,6 +69,40 @@ func NewBoundJourney(t *testing.T, bound []BoundCapability, plan CapabilityPlan)
 	return &CapabilityJourney{Service: h.service, harness: h}
 }
 
+// NewPortedJourney is NewBoundJourney over capabilities that plan for
+// themselves, each resolved as it is, so every optional port it offers reaches
+// the engine; the store also admits the named root disk reset contracts, and
+// each binding pins a version of every Secret, so a reopen hands its own copy.
+func NewPortedJourney(t *testing.T, bound []BoundCapability, plan CapabilityPlan, resets ...string) *CapabilityJourney {
+	t.Helper()
+	h := newPlannedHarness(t, plan.Definitions)
+	h.service.capabilities = portedResolver(bound)
+	h.binder.versions = map[string]string{}
+	for _, name := range plan.Secrets {
+		h.binder.versions[name] = name + "-v1"
+	}
+	operations := h.service.options.Operations
+	h.service.options.Operations = func(records, logs operationstore.Area) OperationStore {
+		return operations(records, logs).(*operationstore.Store).KeptContracts(operationstore.BlanksRoots, resets...)
+	}
+	return &CapabilityJourney{Service: h.service, harness: h}
+}
+
+type portedResolver []BoundCapability
+
+func (r portedResolver) Bindings() []CapabilityBinding {
+	return sharedResolver{bound: r}.Bindings()
+}
+
+func (r portedResolver) Resolve(kind, implementation string) (Capability, bool) {
+	for _, bound := range r {
+		if bound.Binding.Kind == kind && bound.Binding.Implementation == implementation {
+			return bound.Capability, true
+		}
+	}
+	return nil, false
+}
+
 // NewScriptedJourney is the engine over the journey double's one context,
 // planning exactly definitions and answering each block's apply with its
 // scripted result, so a journey reads back evidence a capability recorded.

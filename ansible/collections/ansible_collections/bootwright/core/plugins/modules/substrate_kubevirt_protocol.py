@@ -16,13 +16,20 @@ extends_documentation_fragment:
   - bootwright.core.protocol.operation_phase
 options:
   subject:
-    description: Whether the completion is a provider proof, a machine or a lend of host access.
+    description: Whether the completion is a provider proof, a machine, a lend of host access or a root disk reset.
     type: str
     required: false
     choices:
       - host
       - machine
       - lend
+      - root-reset
+  root_reset:
+    description:
+      - The mark a reset or reading of a kept machine's root disk proves, the
+        staged destroy and step that blank it, beside subject root-reset.
+    type: str
+    required: false
   observation:
     description: What the operation read from the host cluster.
     type: dict

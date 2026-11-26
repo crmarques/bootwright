@@ -18716,7 +18716,7 @@ the block its holder froze, after the installation's eject and before the
 media's removal, and its mark names the staged destroy and step
 ([root reset](../substrates.md#machine-realization)). A kill-harness journey
 covers the reset killed before and after its mark. KubeVirt nodes refuse
-until [B1880](m1.md#b1880); physical nodes until
+until [B1880](#x766--a-staged-destroy-blanks-the-root-disks-of-kept-kubevirt-nodes); physical nodes until
 [B1864](m1.md#b1864).
 
 **Guard tests:** `TestAStagedDestroyBlanksTheRootDisksOfVirtualNodesAnInstallationBooted`,
@@ -18853,3 +18853,46 @@ moves.
 **Gates:** `make focus`; the delivering commit records the command and result.
 
 **Limits:** the proof is in-tree, over the engine's doubles, not a live run.
+
+## X766 — A staged destroy blanks the root disks of kept KubeVirt nodes
+
+**Items:** B1880. **Kind:** product. **Owner:** Substrate, with
+Reconciliation. **Authorization:** [D288](backlog.md#d288) (7), the KubeVirt
+part of the seventh slice of the
+[staged destroy design](../deferred/staged-destroy.md#program).
+
+**Outcome:** a staged destroy at `clusters` takes back an OpenShift agent
+installation that booted its KubeVirt nodes while the VirtualMachines stay:
+the KubeVirt machine capability offers `lifecycle.RootDiskReset`, so the
+installation's removal blanks each node's root DataVolume as its frozen
+`blanks` ([staged destroy](../state-reconciliation.md#staged-destroy),
+[removal on kept nodes](../openshift-clusters.md#removal-on-kept-nodes)), and
+the restore installs on the blank disks, each over a claim of its own bound to
+a new volume ([root reset](../substrates.md#kubevirt-machine-realization)). The
+VirtualMachine's UID, MACs, vTPM state and claim stay; the reset's mark is the
+one write the arm adds to an owned VirtualMachine. A VirtualMachine on a host
+cluster of the context refuses ([B1890](m1.md#b1890), which needs
+[B1622](backlog.md#b1622)).
+
+**Guard tests:** `TestARootDiskResetIsCompletedOnlyUnderItsMarkOverAFreshBlankRoot`,
+`TestARootDiskResetRefusesATargetItsApplyRecordsDoNotProve`,
+`TestAStagedDestroyBlanksTheRootDisksOfKeptKubeVirtNodesAndTheRestoreInstallsAgain`,
+`TestTheOperationStoreAdmitsTheKeptHostContracts`,
+`TestEveryImplementationContractMatchesItsGolden`,
+`TestEveryObservePlaybookRunsOnlyAllowedTasks`,
+`TestABootedInstallationIsKeptOnlyWhereItsNodesRootDisksCanBeBlanked` and
+`test_kubevirt_root_reset.py`.
+
+**Contract:** the reset is its own contract, `machine-kubevirt-root-reset-v1`,
+with its own golden (its effect pins, evidence schema and the mark
+`bootwright.io/root-reset`); the removal records it in its `contracts` and
+proves it at every attempt, resolution and continuation. The
+`machine-kubevirt-v1` content digest and golden do not move.
+
+**Gates:** `make focus`; the delivering commit records the command and result.
+
+**Limits:** the proof is in-tree, over the engine's doubles, a scripted host
+and the collection's units over a fake host API, not a live run: that the
+VirtualMachine controller recreates a stopped VirtualMachine's template
+DataVolume after its deletion, and the claim's foreground removal on a real
+storage class, wait for the owner's acceptance on a real KubeVirt host.

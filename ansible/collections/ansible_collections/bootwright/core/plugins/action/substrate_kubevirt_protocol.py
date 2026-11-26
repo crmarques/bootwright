@@ -9,12 +9,16 @@ observation reports what it found, partial and unanswered included.
 
 from __future__ import annotations
 
+import re
+
 from ansible.plugins.action import ActionBase
 from ansible_collections.bootwright.core.plugins.module_utils import adapter_protocol
 from ansible_collections.bootwright.core.plugins.module_utils.controller_channel import emit
 
 MAX_ITEMS = 64
 MAX_TEXT = 256
+# ROOT_MARK is the mark a kept machine's blanked root disk carries: the staged destroy and the step whose removal blanked it.
+ROOT_MARK = re.compile(r"op-[0-9a-f]{32}/[a-z0-9](?:[a-z0-9-]{0,251}[a-z0-9])?\Z")
 
 
 def text(value, limit=MAX_TEXT):
@@ -103,7 +107,40 @@ def lend(observation, digest):
     }
 
 
+def root_reset(arguments):
+    """The evidence of a root disk's reset or its reading, and whether it is blank under this mark.
+
+    Only the VirtualMachine's identity and power, its root DataVolume and the
+    mark it carries are published; a reset proves its postcondition only for
+    this context's own VirtualMachine, stopped, whose blank root carries this mark.
+    """
+    expected = arguments.get("root_reset")
+    if not isinstance(expected, str) or not ROOT_MARK.fullmatch(expected):
+        raise ValueError("root reset mark")
+    observed = arguments.get("observation") or {}
+    root, mark = observed.get("root") or {}, text(observed.get("rootReset"))
+    if mark and not ROOT_MARK.fullmatch(mark):
+        raise ValueError("root reset mark")
+    evidence = {
+        "answered": observed.get("answered") is True, "instance": text(observed.get("instance"), 32),
+        "kubeSystemUID": text(observed.get("kubeSystemUID")), "owned": observed.get("owned") is True, "postcondition": False,
+        "request": adapter_protocol.request_digest(arguments.get("digest")),
+        "root": {"blank": root.get("blank") is True, "name": text(root.get("name"), 253), "phase": text(root.get("phase"), 32),
+                 "present": root.get("present") is True, "storage": text(root.get("storage"), 32),
+                 "storageClass": text(root.get("storageClass"), 253), "uid": text(root.get("uid"), 128),
+                 "volume": text(root.get("volume"), 253)},
+        "rootReset": mark, "virtualMachine": text(observed.get("virtualMachine"), 128),
+    }
+    evidence["postcondition"] = (observed.get("postcondition") is True and evidence["answered"] and evidence["owned"] and mark == expected
+                                 and evidence["root"]["present"] and evidence["root"]["blank"] and bool(evidence["root"]["volume"]))
+    if adapter_protocol.publishes(evidence, arguments.get("observed")):
+        return evidence, None
+    return evidence, adapter_protocol.unreached("the root disk", "not proved blank under", ["rootReset"])
+
+
 def completion(arguments):
+    if arguments.get("subject") == "root-reset":
+        return root_reset(arguments)
     if arguments.get("subject") in ("lend", "revoke"):
         evidence = lend(arguments.get("observation") or {}, arguments.get("digest"))
         if evidence["postcondition"]:

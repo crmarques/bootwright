@@ -113,11 +113,17 @@ type kubevirtHost struct {
 	// bound holds each per-lend Secret a lend created and no revoke deleted.
 	bound   map[string]bool
 	revoked int
+	// boots records a boot of the installation it pushes; roots and marks
+	// are each VirtualMachine's root DataVolume and the reset mark it carries.
+	boots  bool
+	roots  map[string]string
+	marks  map[string]string
+	resets []string
 }
 
 func newKubevirtHost() *kubevirtHost {
 	return &kubevirtHost{machines: map[string]string{}, running: map[string]bool{}, uploaded: map[string]bool{},
-		claims: map[string]bool{}, inserts: map[string]int{}}
+		claims: map[string]bool{}, inserts: map[string]int{}, roots: map[string]string{}, marks: map[string]string{}}
 }
 
 func (h *kubevirtHost) interrupted(step string) bool {
@@ -190,6 +196,10 @@ func (h *kubevirtHost) machine(run lifecycle.RunRequest) (lifecycle.RunResult, e
 	name := request.Identity.Object
 	if run.Operation == "apply" && h.machines[name] == "" {
 		h.machines[name] = "6a1f0000-0000-4000-8000-0000000000" + name[len(name)-2:]
+		h.roots[name] = "root-installed-" + name
+	}
+	if run.MaterialValues["rootReset"] != "" {
+		return h.rootReset(run, request)
 	}
 	if run.Operation == "destroy" {
 		if h.running[name] {
@@ -206,7 +216,8 @@ func (h *kubevirtHost) machine(run lifecycle.RunRequest) (lifecycle.RunResult, e
 	}
 	if uid, ok := h.machines[name]; ok {
 		evidence.Owned, evidence.Postcondition, evidence.VirtualMachine = true, true, request.Name
-		evidence.Receipts = []kubevirt.Receipt{{Basis: "created", Kind: "VirtualMachine", Name: request.Name, UID: uid}}
+		evidence.Receipts = []kubevirt.Receipt{{Basis: "created", Kind: "VirtualMachine", Name: request.Name, UID: uid},
+			{Basis: "owner-referenced", Kind: "DataVolume", Name: request.RootVolume, UID: "root-installed-" + name}}
 		evidence.Volumes[0].Present = true
 		if h.running[name] {
 			evidence.Instance = "Running"
@@ -219,6 +230,26 @@ func (h *kubevirtHost) machine(run lifecycle.RunRequest) (lifecycle.RunResult, e
 		outcome = reconciliation.OutcomeChanged
 	}
 	return kubevirtResult(outcome, evidence)
+}
+
+// rootReset blanks a stopped VirtualMachine's root as its template creates it
+// again, then marks it, or reads that; the cluster it held is gone with it.
+func (h *kubevirtHost) rootReset(run lifecycle.RunRequest, request kubevirt.MachineRequest) (lifecycle.RunResult, error) {
+	name, mark := request.Identity.Object, run.MaterialValues["rootReset"]+"/"+run.MaterialValues["rootResetStep"]
+	if run.Operation == kubevirt.RootResetOperation {
+		if h.running[name] {
+			return lifecycle.RunResult{}, errors.New("VirtualMachine of " + name + " is running, so its root disk was not reset")
+		}
+		h.resets = append(h.resets, name)
+		if h.marks[name] != mark {
+			h.roots[name], h.marks[name], h.installed = "root-blank-"+name+"-"+string(rune('0'+len(h.resets))), mark, false
+		}
+	}
+	evidence := kubevirt.RootResetEvidence{Answered: true, KubeSystemUID: kubevirtHostUID, Owned: h.machines[name] != "", Request: run.Digest,
+		RootReset: h.marks[name], VirtualMachine: h.machines[name], Root: kubevirt.RootVolumeEvidence{Blank: true, Name: request.RootVolume, Phase: "Succeeded",
+			Present: true, Storage: "120Gi", StorageClass: "guest-block-storage", UID: h.roots[name], Volume: "pv-" + h.roots[name]}}
+	evidence.Postcondition = evidence.RootReset == mark
+	return kubevirtResult(reconciliation.OutcomeChanged, evidence)
 }
 
 func (h *kubevirtHost) media(run lifecycle.RunRequest) (lifecycle.RunResult, error) {
@@ -272,6 +303,11 @@ func (h *kubevirtHost) install(run lifecycle.RunRequest) (lifecycle.RunResult, e
 				}
 				h.inserts[node.Machine]++
 				h.uploaded[node.Machine], h.claims[node.Machine] = true, true
+				if h.boots && run.Prepare != nil {
+					if err := run.Prepare(context.Background(), json.RawMessage(`{"identity":"`+installIdentity+`"}`)); err != nil {
+						return lifecycle.RunResult{}, err
+					}
+				}
 				if h.interrupted("push") {
 					return lifecycle.RunResult{}, errors.New("the attempt was interrupted after the upload started and before the node ran")
 				}
@@ -378,6 +414,12 @@ func (c locatedMedia) Observe(ctx context.Context, execution lifecycle.Execution
 // production capability, all over one host.
 func kubevirtClusterJourney(t *testing.T) (*lifecycle.CapabilityJourney, *kubevirtHost) {
 	t.Helper()
+	bound, plan, host := kubevirtClusterPlan(t)
+	return lifecycle.NewBoundJourney(t, bound, plan), host
+}
+
+func kubevirtClusterPlan(t *testing.T) ([]lifecycle.BoundCapability, lifecycle.CapabilityPlan, *kubevirtHost) {
+	t.Helper()
 	catalog := kubevirtClusterCatalog()
 	input := lifecycle.PlanInput{Verb: reconciliation.Apply, State: compilation.NewState(catalog, catalog, nil),
 		Controller: "controller", Context: lifecycle.ContextIdentity{Name: lifecycle.JourneyContext}}
@@ -405,7 +447,69 @@ func kubevirtClusterJourney(t *testing.T) (*lifecycle.CapabilityJourney, *kubevi
 	}
 	slices.Sort(plan.Secrets)
 	plan.Secrets = slices.Compact(plan.Secrets)
-	return lifecycle.NewBoundJourney(t, bound, plan), host
+	return bound, plan, host
+}
+
+// plannedHost and its peers are each one journey capability that keeps every port it offers and
+// plans what the journey fixed: the whole plan for the first, nothing else.
+type plannedHost struct {
+	kubevirt.HostCapability
+	plan  lifecycle.CapabilityPlan
+	peers []lifecycle.BoundCapability
+}
+
+func (c plannedHost) Plan(context.Context, lifecycle.PlanInput) (lifecycle.CapabilityPlan, error) {
+	return c.plan, nil
+}
+
+func (c plannedHost) SecretReferences(block reconciliation.Block) ([]string, error) {
+	for _, peer := range c.peers {
+		if referencer, ok := peer.Capability.(lifecycle.SecretReferencer); ok && peer.Binding.Kind == block.Kind && peer.Binding.Implementation == block.Implementation {
+			return referencer.SecretReferences(block)
+		}
+	}
+	return nil, nil
+}
+
+type plannedMachine struct{ kubevirt.MachineCapability }
+
+func (plannedMachine) Plan(context.Context, lifecycle.PlanInput) (lifecycle.CapabilityPlan, error) {
+	return lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{}}, nil
+}
+
+type plannedMedia struct{ locatedMedia }
+
+func (plannedMedia) Plan(context.Context, lifecycle.PlanInput) (lifecycle.CapabilityPlan, error) {
+	return lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{}}, nil
+}
+
+type plannedInstaller struct{ locatedInstaller }
+
+func (plannedInstaller) Plan(context.Context, lifecycle.PlanInput) (lifecycle.CapabilityPlan, error) {
+	return lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{}}, nil
+}
+
+// keptKubevirtClusterJourney is the KubeVirt cluster's journey over the
+// production capabilities with every port they offer, the root disk reset
+// and the kept-host removals included, which a staged destroy reaches.
+func keptKubevirtClusterJourney(t *testing.T) (*lifecycle.CapabilityJourney, *kubevirtHost) {
+	t.Helper()
+	bound, plan, host := kubevirtClusterPlan(t)
+	for index, capability := range bound {
+		switch held := capability.Capability.(type) {
+		case kubevirt.HostCapability:
+			bound[index].Capability = plannedHost{HostCapability: held, plan: plan}
+		case kubevirt.MachineCapability:
+			bound[index].Capability, bound[index].Binding.Family = plannedMachine{held}, reconciliation.ManagedMachineFamily
+		case locatedMedia:
+			bound[index].Capability = plannedMedia{held}
+		case locatedInstaller:
+			bound[index].Capability = plannedInstaller{held}
+		}
+	}
+	peers := slices.Clone(bound)
+	bound[0].Capability = plannedHost{HostCapability: bound[0].Capability.(plannedHost).HostCapability, plan: plan, peers: peers}
+	return lifecycle.NewPortedJourney(t, bound, plan, kubevirt.RootResetImplementation), host
 }
 
 // holdKubevirtSecrets gives the cluster's Secrets fresh material before each
@@ -500,5 +604,71 @@ func TestAKubeVirtClusterIsPushedBootedReleasedContinuedAndDestroyed(t *testing.
 				t.Fatalf("the Machines were not removed after the installation's release: %v", host.calls)
 			}
 		})
+	}
+}
+
+// B1880: a staged destroy at clusters takes back an installation that booted
+// its KubeVirt nodes while the VirtualMachines stay: once the operator stops
+// them, the installation's removal blanks each node's root DataVolume through
+// the KubeVirt machine's root disk reset, marked with the staged destroy and
+// step, and removes neither a VirtualMachine nor its claim; the restore then
+// pushes and boots every kept node again, which installs on the blank disk,
+// without realizing any VirtualMachine again. A node left running refuses the
+// staged destroy before any reset.
+func TestAStagedDestroyBlanksTheRootDisksOfKeptKubeVirtNodesAndTheRestoreInstallsAgain(t *testing.T) {
+	t.Parallel()
+	journey, host := keptKubevirtClusterJourney(t)
+	host.boots = true
+	apply := lifecycle.ApplyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true}
+	holdKubevirtSecrets(journey)
+	if _, err := journey.Service.Apply(context.Background(), apply); err != nil {
+		t.Fatalf("apply: %v (calls %v)", diagnostics.Of(err), host.calls)
+	}
+	realized := map[string]string{}
+	for _, name := range kubevirtNodes {
+		realized[name] = host.machines[name]
+	}
+	staged := lifecycle.DestroyRequest{ContextName: lifecycle.JourneyContext, Floor: string(reconciliation.StageClusters),
+		Authorizations: []string{reconciliation.AuthorizationDataLoss}, SkipConfirmation: true}
+	holdKubevirtSecrets(journey)
+	if _, err := journey.Service.Destroy(context.Background(), staged); err == nil || len(host.resets) != 0 {
+		t.Fatalf("a staged destroy over running kept nodes returned %v after resets %v", err, host.resets)
+	}
+	for _, name := range kubevirtNodes {
+		host.mutex.Lock()
+		host.running[name] = false
+		host.mutex.Unlock()
+	}
+	holdKubevirtSecrets(journey)
+	if _, err := journey.Service.Destroy(context.Background(), staged); err != nil {
+		t.Fatalf("staged destroy: %v (calls %v)", diagnostics.Of(err), host.calls)
+	}
+	for _, name := range kubevirtNodes {
+		if host.machines[name] != realized[name] || !host.claims[name] || !strings.HasPrefix(host.marks[name], "op-") ||
+			!strings.HasSuffix(host.marks[name], "/"+agentinstall.InstallBlockID("kubevirt")) || !strings.HasPrefix(host.roots[name], "root-blank-") {
+			t.Fatalf("%s after the staged destroy: vm %q, claim %t, mark %q, root %q (calls %v)", name, host.machines[name], host.claims[name],
+				host.marks[name], host.roots[name], host.calls)
+		}
+	}
+	if slices.Contains(host.calls, kubevirt.MachineImplementation+" destroy") || len(host.resets) != len(kubevirtNodes) {
+		t.Fatalf("the staged destroy removed a VirtualMachine or reset %v: %v", host.resets, host.calls)
+	}
+	holdKubevirtSecrets(journey)
+	if _, err := journey.Service.Apply(context.Background(), apply); err != nil {
+		t.Fatalf("restore: %v (calls %v)", diagnostics.Of(err), host.calls)
+	}
+	applies := 0
+	for _, call := range host.calls {
+		if call == kubevirt.MachineImplementation+" apply" {
+			applies++
+		}
+	}
+	for _, name := range kubevirtNodes {
+		if host.inserts[name] != 2 || !host.running[name] || host.machines[name] != realized[name] {
+			t.Fatalf("%s after the restore: pushed %d times, running %t, vm %q", name, host.inserts[name], host.running[name], host.machines[name])
+		}
+	}
+	if applies != len(kubevirtNodes) || !host.installed {
+		t.Fatalf("the restore realized VirtualMachines again (%d applies) or left the cluster uninstalled: %v", applies, host.calls)
 	}
 }

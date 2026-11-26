@@ -81,6 +81,10 @@ argument_specs:
     short_description: Remove one frozen VirtualMachine and prove everything it owned absent.
     options: *request
 
+  root_reset:
+    short_description: Blank one kept VirtualMachine's root disk for a staged destroy, keeping the VirtualMachine.
+    options: *request
+
   # The machine port other domains compose, each entry point included by
   # exactly this key. ansible-core validates these inputs before the entry
   # point's first task and echoes a value it refuses, so the kubeconfig is

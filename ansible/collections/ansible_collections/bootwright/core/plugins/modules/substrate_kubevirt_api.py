@@ -14,6 +14,9 @@ description:
     host's Kubernetes API.
   - Block operations return the observation the protocol publishes; port
     operations return the machine port's answer.
+  - root_reset deletes a kept VirtualMachine's root DataVolume by its UID, lets
+    the VirtualMachine's template create it again blank and marks the
+    VirtualMachine; root_read only reads that, and a reset refuses check mode.
 options:
   power_only:
     description: During observation, read only exact VM and instance identities and power.
@@ -28,6 +31,8 @@ options:
       - apply
       - observe
       - destroy
+      - root_reset
+      - root_read
       - pre_boot
       - state_read
       - power
@@ -58,6 +63,12 @@ options:
   pinned:
     description: The provider proof's server, cluster identity and root class, and the block's receipts.
     type: dict
+  removal:
+    description: The staged destroy whose mark a root disk reset writes and its reading proves.
+    type: str
+  step:
+    description: The step whose removal blanks the root disk, beside removal.
+    type: str
   endpoint:
     description: The port target, kubevirt:<namespace>/<name>.
     type: str
@@ -81,7 +92,7 @@ EXAMPLES = r"""
 RETURN = r"""
 observation:
   description: A block operation's evidence before its request digest is added.
-  returned: block operations
+  returned: block and root disk operations
   type: dict
 power:
   description: On or Off.

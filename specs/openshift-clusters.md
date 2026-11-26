@@ -1120,11 +1120,11 @@ block, the kept kubeconfig copy included, leaves at completion. After a
 recorded boot the installation's removal is complete on kept nodes only where
 it also blanks each node's root disk, its own inverse effect frozen as
 `blanks` ([staged destroy](state-reconciliation.md#staged-destroy)): libvirt
-nodes, through their [root reset](substrates.md#machine-realization). The
+and KubeVirt nodes, through their root reset ([libvirt](substrates.md#machine-realization),
+[KubeVirt](substrates.md#kubevirt-machine-realization)). The
 work area's marks are then expected and read nowhere. Otherwise a recorded
-boot refuses `destroy.stage-keeps-host` naming why: a KubeVirt node waits for
-[B1880](milestones/m1.md#b1880), and a physical one refuses, since no step of
-a context blanks a physical node's disks
+boot refuses `destroy.stage-keeps-host` naming why: a physical node refuses,
+since no step of a context blanks a physical node's disks
 (`TestAStagedDestroyBlanksTheRootDisksOfVirtualNodesAnInstallationBooted`). The
 restoring apply then installs on the kept nodes under its own identity,
 reading no earlier boot, after proving them off, a blank root disk falling

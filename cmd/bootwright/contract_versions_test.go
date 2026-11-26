@@ -104,6 +104,7 @@ func contractVersions() []contractVersion {
 func operationContractVersions() []contractVersion {
 	return []contractVersion{
 		{libvirt.RootResetImplementation, libvirt.RootResetContentDigest(), reflect.TypeFor[libvirt.MachineRequest](), reflect.TypeFor[libvirt.RootResetEvidence]()},
+		{kubevirt.RootResetImplementation, kubevirt.RootResetContentDigest(), reflect.TypeFor[kubevirt.MachineRequest](), reflect.TypeFor[kubevirt.RootResetEvidence]()},
 		{ceph.KeptImplementation, ceph.KeptContentDigest(), reflect.TypeFor[ceph.Request](), reflect.TypeFor[ceph.KeptTeardown]()},
 		{ceph.KeptHostImplementation, ceph.KeptHostContentDigest(), reflect.TypeFor[ceph.HostRequest](), reflect.TypeFor[ceph.HostEvidence]()},
 	}
@@ -365,11 +366,12 @@ func automationIdentities() map[string]automationFormat {
 		"bootwright.cluster-objects.owner-v1":        fixedBy(kindMark, "the domain an applied object's owner annotation is derived under", addon, network),
 		"bootwright.io/owner":                        fixedBy(kindMark, "the annotation key of an applied object's owner mark", addon, network, kubevirt.MachineImplementation),
 		"bootwright.substrate.kubevirt.owner-v1":     fixedBy(kindMark, "the domain a VirtualMachine's and its DataVolume's owner annotation is derived under", kubevirt.MachineImplementation),
-		"bootwright.substrate.kubevirt.name-v1":      fixedBy(kindPlace, "the domain a VirtualMachine's name is derived under from its context and Machine", kubevirt.MachineImplementation),
-		"bootwright.io/context":                      fixedBy(kindMark, "the label naming the context a VirtualMachine was realized for", kubevirt.MachineImplementation),
-		"bootwright.io/machine":                      fixedBy(kindMark, "the label naming the Machine a VirtualMachine realizes", kubevirt.MachineImplementation),
+		"bootwright.substrate.kubevirt.name-v1":      fixedBy(kindPlace, "the domain a VirtualMachine's name is derived under from its context and Machine", kubevirt.MachineImplementation, kubevirt.RootResetImplementation),
+		"bootwright.io/context":                      fixedBy(kindMark, "the label naming the context a VirtualMachine was realized for", kubevirt.MachineImplementation, kubevirt.RootResetImplementation),
+		"bootwright.io/machine":                      fixedBy(kindMark, "the label naming the Machine a VirtualMachine realizes", kubevirt.MachineImplementation, kubevirt.RootResetImplementation),
 		"bootwright.io/media-identity":               fixedBy(kindProof, "the annotation naming the media an upload DataVolume holds", kubevirt.MachineImplementation),
 		"bootwright.io/lend":                         fixedBy(kindMark, "the label marking a per-lend Secret a lent host token is bound to, whose value is that token's lifetime", kubevirt.HostImplementation, kubevirt.MachineImplementation, install),
+		"bootwright.io/root-reset":                   fixedBy(kindMark, "the annotation naming the staged destroy, step and recreated root DataVolume of a kept VirtualMachine's root disk reset", kubevirt.RootResetImplementation),
 		"bootwright.io/spread":                       fixedBy(kindPlace, "the template label one cluster role's VirtualMachines prefer distinct host nodes by", kubevirt.MachineImplementation),
 		"bootwright-":                                fixedBy(kindPlace, "the prefix of the server-side apply field manager and of the install's wildcard DNS label", addon, network, install),
 		"bootwright-cluster-install":                 fixedBy(kindPlace, "the field manager of the JSON patch that places a completed cluster's node labels and taints", install),

@@ -333,7 +333,7 @@ func TestAStagedDestroyRefusesAnInstallationThatRecordedABoot(t *testing.T) {
 		physical       bool
 		reason, remedy string
 	}{
-		"virtual nodes":  {reason: "(B1880)", remedy: "bootwright destroy --dry-run --context lab --stage machines"},
+		"virtual nodes":  {reason: "blanks no root disk", remedy: "bootwright destroy --dry-run --context lab --stage machines"},
 		"physical nodes": {physical: true, reason: "no step of this context blanks a node's disks", remedy: "take back the whole context with bootwright destroy --context lab"},
 	} {
 		t.Run(name, func(t *testing.T) {

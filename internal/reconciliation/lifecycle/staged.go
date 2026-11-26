@@ -610,7 +610,7 @@ func (s Service) unblankable(whole reconciliation.Plan, steps, machines []string
 			}
 		}
 		if reset == nil {
-			return "the substrate of Machine/" + machine + " blanks no root disk yet (B1880)", nil
+			return "the substrate of Machine/" + machine + " blanks no root disk", nil
 		}
 		for _, block := range whole.Blocks {
 			deletion, deletes := s.capabilityOf(block).(MachineDeletion)

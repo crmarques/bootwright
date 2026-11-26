@@ -15,6 +15,50 @@
     phase: loaded
   no_log: true
 
+- name: Read the root disk a staged destroy blanks and its mark, changing nothing
+  bootwright.core.substrate_kubevirt_api:
+    operation: root_read
+    kubeconfig: '{{ bootwright_substrate_kubevirt_machine_material.kubeconfig }}'
+    scratch: '{{ bootwright_run_scratch }}'
+    request: '{{ bootwright_substrate_kubevirt_machine_request }}'
+    removal: '{{ bootwright_substrate_kubevirt_machine_material.rootReset }}'
+    step: '{{ bootwright_substrate_kubevirt_machine_material.rootResetStep }}'
+    pinned: '{{ bootwright_substrate_kubevirt_machine_material.pinned | from_json }}'
+    seconds: '{{ substrate_kubevirt_machine_seconds }}'
+  register: substrate_kubevirt_machine_root
+  failed_when: false
+  no_log: true
+  when: bootwright_substrate_kubevirt_machine_material.rootReset is defined
+
+- name: Stop at what the host refused of the root disk's reading
+  ansible.builtin.assert:
+    that:
+      - substrate_kubevirt_machine_root.msg is not defined
+    fail_msg: >-
+      the root disk reading of Machine {{ bootwright_substrate_kubevirt_machine_request.identity.object }} on
+      VirtualMachine {{ bootwright_substrate_kubevirt_machine_request.namespace }}/{{ bootwright_substrate_kubevirt_machine_request.name }}
+      failed: {{ (substrate_kubevirt_machine_root.msg | default('') | string | bootwright.core.printable)[:512] }}
+    quiet: true
+  when: bootwright_substrate_kubevirt_machine_material.rootReset is defined
+
+- name: Publish the root disk's bounded evidence
+  bootwright.core.substrate_kubevirt_protocol:
+    phase: completed
+    subject: root-reset
+    observed: true
+    outcome: unchanged
+    digest: '{{ bootwright_substrate_kubevirt_machine_digest }}'
+    root_reset: '{{ bootwright_substrate_kubevirt_machine_material.rootReset }}/{{ bootwright_substrate_kubevirt_machine_material.rootResetStep }}'
+    observation: '{{ substrate_kubevirt_machine_root.observation }}'
+  no_log: true
+  when: bootwright_substrate_kubevirt_machine_material.rootReset is defined
+
+# A root disk's reading publishes only that evidence, so the machine's own
+# observation does not run.
+- name: End the root disk's reading
+  ansible.builtin.meta: end_host
+  when: bootwright_substrate_kubevirt_machine_material.rootReset is defined
+
 - name: Run the observe operation through the host cluster's API
   bootwright.core.substrate_kubevirt_api:
     operation: observe
