@@ -113,6 +113,8 @@ options:
       - ssh-policy-unavailable
       - tunnel-host-key-excluded
       - sso-unverified
+      - sign-on-access-unproved
+      - sign-on-access-deployment-unproved
       - sign-on-provider-unreachable
       - sign-on-unprotected
       - sign-on-unenforced

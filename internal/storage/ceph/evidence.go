@@ -458,7 +458,8 @@ func unitDocuments(r Request) []unitDocument {
 	documents := []unitDocument{}
 	for _, raw := range raws {
 		document, err := reconciliation.DecodeEvidence[unitDocument](raw, 60*1024, "Ceph unit document")
-		if err != nil {
+		if err != nil || document.Arguments != nil &&
+			(r.Service == nil || r.Service.Type != SignOnUnitType || !validSignOnArguments(document.Arguments)) {
 			return nil
 		}
 		documents = append(documents, document)

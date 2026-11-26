@@ -2,6 +2,7 @@ package cephcluster
 
 import (
 	"net/netip"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -15,6 +16,7 @@ const (
 	SignOnCertificate  = "/spec/ssl_cert"
 	SignOnKey          = "/spec/ssl_key"
 	SignOnPort         = 4180
+	SignOnMaxGroups    = 64
 )
 
 var signOnValueSecretTypes = []string{"opaque", "token"}
@@ -58,8 +60,32 @@ func withoutRefused(a *admission, value api.Value, rows []refusedMember, field s
 	return value
 }
 
+var (
+	signOnGroup = regexp.MustCompile(`^[A-Za-z0-9_./:@+-]+( [A-Za-z0-9_./:@+-]+)*$`)
+	signOnClaim = regexp.MustCompile(`^[A-Za-z0-9_./:@+-]+$`)
+)
+
+func ValidSignOnGroup(value string) bool { return len(value) <= 256 && signOnGroup.MatchString(value) }
+func ValidSignOnClaim(value string) bool { return len(value) <= 256 && signOnClaim.MatchString(value) }
+
+func (a *admission) signOnAccess(access api.Value) {
+	groups := access.Get("allowedGroups").Items()
+	if len(groups) > SignOnMaxGroups {
+		a.invalid("$.spec.access.allowedGroups", "the sign-on allowlist has more than 64 values", "list at most 64 group or role values")
+	}
+	for i, group := range groups {
+		if group.Type() == api.String && !ValidSignOnGroup(group.Text()) {
+			a.invalid(indexed("$.spec.access.allowedGroups", i), "a group or role value is not a supported OAuth2 Proxy argument", "use 1 to 256 ASCII letters, digits, or _./:@+- with optional single internal spaces")
+		}
+	}
+	if claim := access.Get("groupsClaim"); claim.Type() == api.String && !ValidSignOnClaim(claim.Text()) {
+		a.invalid("$.spec.access.groupsClaim", "the groups claim is not a supported OIDC claim name", "use 1 to 256 ASCII letters, digits, or _./:@+-")
+	}
+}
+
 func (a *admission) signOnIntrinsic() {
 	spec := a.object.Spec()
+	a.signOnAccess(spec.Get("access"))
 	native := spec.Get("native")
 	if native.Type() != api.Mapping {
 		a.signOnSecretLeaves(spec.Get("secrets"))

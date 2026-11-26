@@ -312,7 +312,7 @@ neither kind claims that a consumer exists or that the service answers.
 | `users` | object | LDAPServer | Closed record locating the users. |
 | `users.baseDN` | string | yes | The search base DN, non-empty, at most 1024 bytes, without control characters. |
 | `users.nameAttribute` | string | yes | The attribute a sign-in name matches: letters, digits and hyphens, starting with a letter, such as `uid` for an LDAP directory and `sAMAccountName` or `cn` for Active Directory. |
-| `users.filter` | string | no | An LDAP filter that further restricts users: parenthesized with balanced parentheses, at most 1024 bytes, holding no `@USERNAME@` token, which a consumer's own search supplies. |
+| `users.filter` | string | no | An LDAP filter that further restricts users, for example by testing `memberOf` against a group DN: parenthesized with balanced parentheses, at most 1024 bytes, holding no `@USERNAME@` token, which a consumer's own search supplies. |
 | `activeDirectory` | object | no | Presence block declaring the directory an Active Directory domain. |
 | `activeDirectory.realm` | string | yes | The domain's DNS name, in any case. A consumer that joins the domain compares it without case. |
 

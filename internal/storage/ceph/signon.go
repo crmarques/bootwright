@@ -23,10 +23,14 @@ const (
 	SignOnUnitType       = api.SignOnServiceType
 	signOnImage          = "oauth2_proxy"
 	signOnCABundle       = "/custom_configs/0/content"
+	SignOnAccessRule     = "oidc-claim-allowlist-verified-argv"
+	signOnClaimArg       = "--oidc-groups-claim="
+	signOnGroupArg       = "--allowed-group="
+	signOnNoBearer       = "--skip-jwt-bearer-tokens=false"
 )
 
 func SignOnContentDigest() string {
-	d := sha256.Sum256([]byte(SignOnImplementation + "\x00" + SignOnVersion + "\x00" + EvidenceVersion + "\x00" + SignOnSuspensionVersion + "\x00" + PhysicalRetirementImplementation))
+	d := sha256.Sum256([]byte(SignOnImplementation + "\x00" + SignOnVersion + "\x00" + EvidenceVersion + "\x00" + SignOnSuspensionVersion + "\x00" + PhysicalRetirementImplementation + "\x00" + SignOnAccessRule))
 	return hex.EncodeToString(d[:])
 }
 
@@ -73,6 +77,52 @@ type SignOnRequest struct {
 	Version        string           `json:"version"`
 }
 
+type signOnArgument struct {
+	Argument string `json:"argument"`
+	Split    *bool  `json:"split"`
+}
+
+func signOnArguments(access api.Value) []signOnArgument {
+	groups := access.Get("allowedGroups").Strings()
+	if len(groups) == 0 {
+		return nil
+	}
+	slices.Sort(groups)
+	claim := access.Get("groupsClaim").Text()
+	if claim == "" {
+		claim = api.DefaultSignOnGroupsClaim
+	}
+	split := false
+	args := []signOnArgument{{Argument: signOnNoBearer, Split: &split}, {Argument: signOnClaimArg + claim, Split: &split}}
+	for _, group := range groups {
+		args = append(args, signOnArgument{Argument: signOnGroupArg + group, Split: &split})
+	}
+	return args
+}
+
+func validSignOnArguments(args []signOnArgument) bool {
+	if args == nil {
+		return true
+	}
+	if len(args) < 3 || len(args) > 2+cephcluster.SignOnMaxGroups || args[0].Argument != signOnNoBearer ||
+		slices.ContainsFunc(args, func(arg signOnArgument) bool { return arg.Split == nil || *arg.Split }) {
+		return false
+	}
+	claim, ok := strings.CutPrefix(args[1].Argument, signOnClaimArg)
+	if !ok || !cephcluster.ValidSignOnClaim(claim) {
+		return false
+	}
+	last := ""
+	for _, arg := range args[2:] {
+		group, ok := strings.CutPrefix(arg.Argument, signOnGroupArg)
+		if !ok || !cephcluster.ValidSignOnGroup(group) || group <= last {
+			return false
+		}
+		last = group
+	}
+	return true
+}
+
 type oauth2ProxySpec struct {
 	AllowlistDomains    []string `json:"allowlist_domains,omitempty"`
 	ClientID            string   `json:"client_id"`
@@ -113,7 +163,7 @@ func DecodeSignOnRequest(data []byte) (SignOnRequest, error) {
 
 func (r SignOnRequest) document() (unitDocument, oauth2ProxySpec, bool) {
 	var spec oauth2ProxySpec
-	document, err := reconciliation.Thaw[unitDocument](r.Document, "Ceph sign-on document")
+	document, err := reconciliation.DecodeEvidence[unitDocument](r.Document, 60*1024, "Ceph sign-on document")
 	if err != nil {
 		return unitDocument{}, spec, false
 	}
@@ -133,7 +183,7 @@ func (r SignOnRequest) consistent() bool {
 		return false
 	}
 	document, spec, ok := r.document()
-	if !ok || document.ServiceType != SignOnUnitType || document.ServiceID != "" || !strictlySorted(document.Placement.Hosts) || document.Placement.CountPerHost != nil ||
+	if !ok || !validSignOnArguments(document.Arguments) || document.ServiceType != SignOnUnitType || document.ServiceID != "" || !strictlySorted(document.Placement.Hosts) || document.Placement.CountPerHost != nil ||
 		spec.OIDCIssuerURL != r.Provider.IssuerURL || spec.ClientID == "" || spec.ProviderDisplayName == "" {
 		return false
 	}
@@ -169,7 +219,7 @@ func signOnDocument(cluster, object api.Object, issuer string, trustBundle bool)
 	}
 	slices.Sort(hosts)
 	spec := native.Get("spec")
-	document := unitDocument{Networks: native.Get("networks").Strings(), Placement: nativePlacement{Count: integerOf(native.Get("placement", "count")), Hosts: hosts}, ServiceType: SignOnUnitType,
+	document := unitDocument{Arguments: signOnArguments(object.Spec().Get("access")), Networks: native.Get("networks").Strings(), Placement: nativePlacement{Count: integerOf(native.Get("placement", "count")), Hosts: hosts}, ServiceType: SignOnUnitType,
 		Spec: oauth2ProxySpec{AllowlistDomains: spec.Get("allowlist_domains").Strings(), ClientID: spec.Get("client_id").Text(), HTTPSAddress: spec.Get("https_address").Text(),
 			OIDCIssuerURL: issuer, ProviderDisplayName: spec.Get("provider_display_name").Text(), RedirectURL: spec.Get("redirect_url").Text()}}
 	if trustBundle {
@@ -236,16 +286,21 @@ func signOnRequest(c api.Catalog, object api.Object, base Request, controller st
 }
 
 const (
-	signOnEnableImpact   = "Bootwright enables the dashboard's OAuth2 single sign-on; local sign-in returns only after bootwright cluster sign-on suspend"
-	signOnPortImpact     = "while sign-on is on, any client that reaches port 8443 of a manager host acts as the dashboard admin without signing in (an upstream defect); keep it reachable only from the management gateway hosts"
-	signOnDelegateImpact = "cephadm reconfigures the management gateway, Grafana, Prometheus and Alertmanager for single sign-on; their blocks do not change"
-	signOnLoginsImpact   = "while sign-on is on, cephadm turns off Grafana's login form and Prometheus and Alertmanager basic authentication: their local logins gate nothing until bootwright cluster sign-on suspend"
-	signOnAudienceImpact = "every user the identity provider signs in for this client reaches Prometheus and Alertmanager, silences included: restrict the client to Ceph operators in the provider"
+	signOnEnableImpact     = "Bootwright enables the dashboard's OAuth2 single sign-on; local sign-in returns only after bootwright cluster sign-on suspend"
+	signOnPortImpact       = "while sign-on is on, any client that reaches port 8443 of a manager host acts as the dashboard admin without signing in (an upstream defect); keep it reachable only from the management gateway hosts"
+	signOnDelegateImpact   = "cephadm reconfigures the management gateway, Grafana, Prometheus and Alertmanager for single sign-on; their blocks do not change"
+	signOnLoginsImpact     = "while sign-on is on, cephadm turns off Grafana's login form and Prometheus and Alertmanager basic authentication: their local logins gate nothing until bootwright cluster sign-on suspend"
+	signOnRestrictedImpact = "the management gateway requires an allowed value in the OIDC claim for every signed-in user and does not accept JWT bearer sign-in"
+	signOnAudienceImpact   = "every user the identity provider signs in for this client reaches Prometheus and Alertmanager, silences included: restrict the client to Ceph operators in the provider"
 )
 
 func signOnImpacts(r SignOnRequest) []string {
+	audience := signOnAudienceImpact
+	if document, _, ok := r.document(); ok && len(document.Arguments) != 0 {
+		audience = signOnRestrictedImpact
+	}
 	impacts := []string{"realize Ceph sign-on " + r.Object + " of " + r.Cluster, "the management gateway signs users in through oauth2-proxy and OIDCProvider " + r.Provider.Name,
-		signOnEnableImpact, signOnDelegateImpact, signOnLoginsImpact, signOnAudienceImpact, signOnPortImpact}
+		signOnEnableImpact, signOnDelegateImpact, signOnLoginsImpact, audience, signOnPortImpact}
 	if !slices.ContainsFunc(r.Bindings, func(b ServiceBinding) bool { return b.Path == cephcluster.SignOnCertificate }) {
 		impacts = append(impacts, "cephadm signs oauth2-proxy's TLS certificate")
 	}
@@ -465,6 +520,12 @@ func (c SignOnCapability) runLending(ctx context.Context, e lifecycle.Execution,
 	deadline, err := signOnDeadline(operation)
 	if err != nil {
 		return lifecycle.RunResult{}, err
+	}
+	if operation == "apply" || operation == "resume" {
+		documents := unitDocuments(unit)
+		if len(documents) == 1 && len(documents[0].Arguments) != 0 {
+			deadline += time.Duration(nativeCall+readinessWait) * time.Second
+		}
 	}
 	execution, files, cleanup, err := signOnMaterial(e, unit, lending, c.proofs)
 	if err != nil {

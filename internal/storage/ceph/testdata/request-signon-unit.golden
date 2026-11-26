@@ -138,6 +138,20 @@
             "mount_path": "/etc/pki/tls/certs/oauth2-proxy-idp-ca.pem"
           }
         ],
+        "extra_entrypoint_args": [
+          {
+            "argument": "--skip-jwt-bearer-tokens=false",
+            "split": false
+          },
+          {
+            "argument": "--oidc-groups-claim=ceph_roles",
+            "split": false
+          },
+          {
+            "argument": "--allowed-group=ceph-operator",
+            "split": false
+          }
+        ],
         "placement": {
           "count": 1,
           "hosts": [

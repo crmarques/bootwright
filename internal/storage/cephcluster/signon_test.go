@@ -272,6 +272,29 @@ func TestSignOnPlacementAndValueRulesFollowTheNativeGrammar(t *testing.T) {
 	}
 }
 
+func TestSignOnAccessValidatesGroupAndClaimValues(t *testing.T) {
+	catalog := signOnCatalog(t)
+	base := signOnObject("sign-on", signOnNative(signOnSpec()), requiredSignOnSecrets())
+	for _, tc := range []struct {
+		access api.Value
+		field  string
+	}{
+		{m("groupsClaim", "ceph_roles", "allowedGroups", api.StringList("/storage/ceph", "Ceph Operators")), ""},
+		{m("allowedGroups", api.StringList("ops,all")), "$.spec.access.allowedGroups[0]"},
+		{m("allowedGroups", api.StringList(" ops")), "$.spec.access.allowedGroups[0]"},
+		{m("allowedGroups", api.StringList("/ops\n")), "$.spec.access.allowedGroups[0]"},
+		{m("groupsClaim", "ceph roles", "allowedGroups", api.StringList("ops")), "$.spec.access.groupsClaim"},
+	} {
+		sign := base.WithSpec(base.Spec().With("access", tc.access))
+		full, partial := signOnIssues(catalog, sign)
+		for _, issues := range [][]api.Issue{full, partial} {
+			if tc.field == "" && len(issues) != 0 || tc.field != "" && len(issuesAt(issues, tc.field)) != 1 {
+				t.Fatalf("policy field %q: %#v", tc.field, issues)
+			}
+		}
+	}
+}
+
 func TestSignOnPortClashesWithADeclaredListener(t *testing.T) {
 	const clash = "the oauth2-proxy port 4180 is already bound on host node-1 by "
 	const remedy = "place oauth2-proxy on other hosts, or move the other listener to another port"

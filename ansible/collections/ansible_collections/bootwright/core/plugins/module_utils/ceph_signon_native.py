@@ -67,7 +67,17 @@ CA_VARIABLE = "oauth2ProxyCABundle"
 # planner's cephcluster.OAuth2ProxyCABundlePath names it.
 CA_PATH = "/etc/pki/tls/certs/oauth2-proxy-idp-ca.pem"
 MEMBERS = frozenset(("allowlist_domains", "client_id", "https_address", "oidc_issuer_url", "provider_display_name", "redirect_url"))
-DOCUMENT_MEMBERS = frozenset(("custom_configs", "networks", "placement", "service_type", "spec"))
+DOCUMENT_MEMBERS = frozenset(("custom_configs", "extra_entrypoint_args", "networks", "placement", "service_type", "spec"))
+GROUP_PREFIX = "--allowed-group="
+CLAIM_PREFIX = "--oidc-groups-claim="
+NO_BEARER = "--skip-jwt-bearer-tokens=false"
+CLAIM = re.compile(r"[A-Za-z0-9_./:@+-]{1,256}\Z")
+GROUP = re.compile(r"[A-Za-z0-9_./:@+-]+(?: [A-Za-z0-9_./:@+-]+)*\Z")
+MAX_GROUPS = 64
+# With a policy, cephadm's regular proxy configuration cannot exempt a request from authorization.
+AUTH_BYPASSES = ("skip_auth_routes", "skip_auth_regex", "skip_auth_preflight", "trusted_ips", "htpasswd_file", "htpasswd_user_groups",
+                 "ping_path", "ready_path", "ping_user_agent", "gcp_healthchecks")
+CEPHADM_TLS_ARGS = ["--tls-cert-file=/etc/oauth2-proxy.crt", "--tls-key-file=/etc/oauth2-proxy.key"]
 TARGET_MEMBERS = frozenset(("certificateSHA256", "count", "endpoint", "grafana", "hosts", "port", "virtualIP"))
 PORT = ":4180"
 SSO_OPTION = "mgr/dashboard/sso_oauth2"
@@ -125,6 +135,21 @@ def oauth2_spec(spec):
     require(isinstance(domains, list) and domains and all(text(domain) for domain in domains))
 
 
+def access_arguments(document):
+    """Only the frozen, unsplit policy arguments may be added to the proxy's command line."""
+    if "extra_entrypoint_args" not in document:
+        return []
+    records = document["extra_entrypoint_args"]
+    require(isinstance(records, list) and 3 <= len(records) <= MAX_GROUPS + 2)
+    require(all(isinstance(row, dict) and set(row) == {"argument", "split"} and row["split"] is False and
+                isinstance(row["argument"], str) for row in records))
+    args = [row["argument"] for row in records]
+    require(args[0] == NO_BEARER and args[1].startswith(CLAIM_PREFIX) and CLAIM.fullmatch(args[1][len(CLAIM_PREFIX):]) is not None)
+    groups = [arg[len(GROUP_PREFIX):] for arg in args[2:] if arg.startswith(GROUP_PREFIX)]
+    require(len(groups) == len(args) - 2 and groups == sorted(set(groups)) and all(len(group) <= MAX_TEXT and GROUP.fullmatch(group) for group in groups))
+    return args
+
+
 def canonical_address(value):
     try:
         return isinstance(value, str) and str(ipaddress.ip_address(value)) == value
@@ -162,6 +187,7 @@ def validate(unit, request, hosts):
     require(document["service_type"] == TYPE and "service_id" not in document and set(document) <= DOCUMENT_MEMBERS)
     require(document.get("custom_configs", [{"mount_path": CA_PATH}]) == [{"mount_path": CA_PATH}])
     oauth2_spec(document.get("spec"))
+    access_arguments(document)
     if "networks" in document:
         ceph_native_nfs.networks(document["networks"])
     bindings(unit, document)
@@ -535,7 +561,30 @@ def rendered_skip(value):
     return "insecure" if found[0] == "true" else "verified"
 
 
-def proxy_verdict(fsid, inspected, bundle):
+def rendered_access(args, environment, config, policy):
+    """The policy is the entire set of extra arguments and no configuration source supplies a request exemption."""
+    if args != args[:1] + CEPHADM_TLS_ARGS + policy or not args[0].startswith("--config="):
+        return False
+    if any(entry.partition("=")[0] in {"OAUTH2_PROXY_" + name.upper() for name in AUTH_BYPASSES} for entry in environment):
+        return False
+    return not any(name in line for line in config.splitlines() if not line.lstrip().startswith("#") for name in AUTH_BYPASSES)
+
+
+def proxy_config(fsid, inspected, source, owners, restricted):
+    """A restricted proxy must have started after the mounted config was written."""
+    read = ceph_native_observability.stamped_file(fsid, source, owners)
+    if read is None:
+        return None
+    data, stamped = read
+    if restricted:
+        state = inspected.get("State")
+        started = ceph_native_observability.started_ns(state.get("StartedAt")) if isinstance(state, dict) else None
+        if started is None or started < stamped:
+            return None
+    return data
+
+
+def proxy_verdict(fsid, inspected, bundle, policy):
     """(verdict, where) for one deployed proxy container: "insecure" naming where it skips verification, "verified" when its arguments,
     environment and mounted configuration do not skip it and, with a bound CA bundle, its CA mount holds exactly that bundle, else
     "unproved". No path, byte, argument or environment value leaves this function."""
@@ -546,13 +595,16 @@ def proxy_verdict(fsid, inspected, bundle):
     owners = ceph_native_observability.proxy_owners(user)
     path = config_path(args)
     sources = [source for destination, source in mounts if destination == path]
-    rendered = ceph_native_observability.rendered_file(fsid, sources[0], owners) if path is not None and len(sources) == 1 else None
+    rendered = proxy_config(fsid, inspected, sources[0], owners, bool(policy)) if path is not None and len(sources) == 1 else None
     try:
-        verdict = "unproved" if rendered is None else rendered_skip(rendered.decode("utf-8"))
+        config = rendered.decode("utf-8") if rendered is not None else None
+        verdict = "unproved" if config is None else rendered_skip(config)
     except UnicodeError:
         verdict = "unproved"
     if verdict != "verified":
         return verdict, "configuration"
+    if policy and not rendered_access(args, environment, config, policy):
+        return "unproved", "access policy"
     if bundle is not None:
         sources = [source for destination, source in mounts if destination == CA_PATH]
         mounted = ceph_native_observability.rendered_file(fsid, sources[0], owners) if len(sources) == 1 else None

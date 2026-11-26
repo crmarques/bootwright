@@ -1402,6 +1402,9 @@ and readiness are the [management sign-on](ceph.md#management-sign-on).
 | --- | --- |
 | `clusterRef` | Required managed CephCluster that declares a `mgmt-gateway` service; an external cluster, or one without a gateway, refuses at `$.spec.clusterRef`. A cluster has at most one CephSignOn: a second one, later in name order, refuses as a duplicate at `$.spec.clusterRef`. |
 | `oidcProviderRef` | Required OIDCProvider. Its `issuerURL` becomes the proxy's `oidc_issuer_url`, and its `trustBundleRef`, when set, the proxy's one `custom_configs` entry, mounted at `/etc/pki/tls/certs/oauth2-proxy-idp-ca.pem` and added to the container's trust store. |
+| `access` | Optional management-gateway OIDC policy. Omission leaves the OAuth2 client's audience unrestricted by Bootwright. |
+| `access.allowedGroups` | Required within `access`. One to 64 distinct, case-sensitive group or role values. OAuth2 Proxy requires at least one exact match in the selected claim. |
+| `access.groupsClaim` | OIDC claim containing group or mapped role values. Defaults to `groups`. Use a top-level claim with a list of strings. |
 | `native` | Required cephadm `oauth2-proxy` service document in native spelling: required `service_type: oauth2-proxy`, `placement` (the native placement grammar, its hosts resolved to the cluster's topology nodes) and `spec` with required `client_id` and `provider_display_name`; optional `redirect_url`, `allowlist_domains`, `https_address` and `networks`. |
 | `secrets` | Required bindings `{path, secretRef}`: `/spec/client_secret` and `/spec/cookie_secret`, each an `opaque` or `token` Secret, both required; optional `/spec/ssl_cert` and `/spec/ssl_key`, one `tlsCertificate` Secret bound at both or at neither. Without the pair cephadm signs oauth2-proxy's certificate. |
 
@@ -1430,6 +1433,14 @@ placement hosts clashes with any other listener there, refused at
 after URL-safe base64 decoding when it decodes, else as text, as IBM's
 `OAuth2ProxySpec.validate` requires; binding time, not admission, checks it.
 
+Each claim name and allowed value holds 1 to 256 ASCII letters, digits, or
+`_./:@+-`. Allowed values may also contain single internal spaces. An empty
+allowlist refuses. Configure the provider's `groups` scope for this client
+and map the groups or roles into the configured claim. With the policy set,
+missing or nonmatching values deny access through the management gateway.
+This policy does not grant application roles, affect RGW STS or LDAP, or
+protect backend ports reached directly.
+
 `CephCluster.spec.images.oauth2_proxy` is admitted whenever the cluster
 declares a `mgmt-gateway` and required by a CephSignOn, which
 [refuses at planning](ceph.md#refusal-table) without it. Every host pre-pulls
@@ -1445,7 +1456,9 @@ do not change"; "while sign-on is on, cephadm turns off Grafana's login form
 and Prometheus and Alertmanager basic authentication: their local logins gate
 nothing until bootwright cluster sign-on suspend"; "every user the identity
 provider signs in for this client reaches Prometheus and Alertmanager, silences
-included: restrict the client to Ceph operators in the provider"; "while
+included: restrict the client to Ceph operators in the provider" when no
+policy is declared, or an impact describing the OIDC claim restriction and
+bearer sign-in disabled with a policy; "while
 sign-on is on, any client that reaches port 8443 of a manager host acts as the
 dashboard admin without signing in (an upstream defect); keep it reachable only
 from the management gateway hosts" ([B1829](milestones/m2.md#b1829)); without the TLS pair
@@ -1457,7 +1470,7 @@ The frozen request is `ceph.SignOnRequest`: the cluster, object and
 controller, the cluster's Machines and host key references, the OIDCProvider's
 name, issuer URL and whether it binds a trust bundle, the authored
 `oauth2_proxy` image reference, the oauth2-proxy document with the derived
-`oidc_issuer_url` and `custom_configs` mount, the bindings (the authored ones
+`oidc_issuer_url`, the optional access arguments and `custom_configs` mount, the bindings (the authored ones
 and the derived `/custom_configs/0/content` to the provider's trust bundle
 Secret), and the management gateway's hosts, port, virtual IP, endpoint name,
 daemon count and whether it fronts Grafana. Its request digest moves only

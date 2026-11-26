@@ -280,6 +280,43 @@ func signOnReady(t *testing.T, e lifecycle.Execution, unit Request, change func(
 	return evidenceBytes(t, evidence)
 }
 
+func TestSignOnAccessFreezesOnlyVerifiedProxyArguments(t *testing.T) {
+	access := requestMap("allowedGroups", api.StringList("Ceph Operators", "/storage/ceph"))
+	definition := signOnDefinition(t, signOnCatalog(t, true, signOnObject("access", access)))
+	r, err := DecodeSignOnRequest(definition.Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	document, _, ok := r.document()
+	want := []string{"--skip-jwt-bearer-tokens=false", "--oidc-groups-claim=groups", "--allowed-group=/storage/ceph", "--allowed-group=Ceph Operators"}
+	if !ok || len(document.Arguments) != len(want) || !slices.Contains(definition.Impacts, signOnRestrictedImpact) ||
+		slices.Contains(definition.Impacts, signOnAudienceImpact) {
+		t.Fatalf("unexpected frozen policy and impacts: %s, %v", r.Document, definition.Impacts)
+	}
+	for i, arg := range document.Arguments {
+		if arg.Argument != want[i] || arg.Split == nil || *arg.Split {
+			t.Fatalf("argument %d is %+v", i, arg)
+		}
+	}
+	badArgs := [][]signOnArgument{document.Arguments[:2], append(slices.Clone(document.Arguments), document.Arguments[2]),
+		{{Argument: "--skip-auth-route=^/"}}, {{Argument: want[0]}, document.Arguments[1], document.Arguments[2]}}
+	for _, args := range badArgs {
+		bad := r
+		document.Arguments = args
+		bad.Document, err = json.Marshal(document)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := bad.Canonical()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := DecodeSignOnRequest(data); err == nil {
+			t.Fatal("inconsistent access policy decoded")
+		}
+	}
+}
+
 func TestSignOnTakesItsOwnerFromTheClusterProofNotTheApplyingOperation(t *testing.T) {
 	_, e := signOnRun(t, "apply-additive")
 	_, unit, err := NewSignOn(nil).prepare(context.Background(), e)
@@ -294,6 +331,15 @@ func TestSignOnTakesItsOwnerFromTheClusterProofNotTheApplyingOperation(t *testin
 		return a.Name == "oauth2_proxy" && strings.Contains(a.Image, "@sha256:")
 	}) {
 		t.Fatalf("the sign-on unit runs %+v", unit.Auxiliary)
+	}
+	access := requestMap("groupsClaim", "ceph_roles", "allowedGroups", api.StringList("ceph-operator"))
+	r, err := DecodeSignOnRequest(signOnDefinition(t, signOnCatalog(t, true, signOnObject("access", access))).Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unit.Service.Documents = []json.RawMessage{r.Document}
+	if len(unitDocuments(unit)) != 1 {
+		t.Fatal("the worker request does not decode the restricted proxy document")
 	}
 	canonical, err := unit.Canonical()
 	if err != nil {

@@ -7,6 +7,10 @@ spec:
   clusterRef: ceph-lab
   oidcProviderRef: qualification-idp
 
+  access:
+    allowedGroups:
+      - /ceph-operators
+
   native:
     service_type: oauth2-proxy
     placement:

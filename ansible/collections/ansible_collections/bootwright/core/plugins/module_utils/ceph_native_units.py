@@ -132,13 +132,13 @@ UNIT_TYPES = {
     "rbd-mirror": UnitType(mirror_validate, mirror_check, mirror_claim, mirror_settle, mirror_expected, mirror_readiness, MIRROR_TYPES, mirror_frontend,
                            {"rbd-mirror": None}, {}, frozenset(MIRROR_TYPES), None),
 }
-PHASES = frozenset(("unit", "ingress_firewall", "vip_holder", "signon_discovery", "signon_routes", "signon_route_proof", "sso_config", "sso",
+PHASES = frozenset(("unit", "ingress_firewall", "vip_holder", "signon_discovery", "signon_routes", "signon_route_proof", "signon_access", "sso_config", "sso",
                     "signon_baseline", "signon_remove", "signon_state", "signon_sso_disable", "signon_local", "signon_resume_unit", "sso_withdraw",
                     "manager_ports", "manager_ports_unrecorded",
                     "nvmeof_unit_observe", "monitoring_credentials", "monitoring_credentials_held", "grafana_route", "grafana_route_proof",
                     "grafana_reconfig"))
 READ_ONLY_PHASES = frozenset(("nvmeof_unit_observe", "monitoring_credentials_held", "signon_discovery", "signon_routes", "signon_route_proof",
-                              "signon_baseline", "signon_state", "signon_local"))
+                              "signon_baseline", "signon_state", "signon_local", "signon_access"))
 # The daemon types whose deployment proves cephadm v20.2.1 already stores a service's login: it stores both logins before it configures a
 # Prometheus daemon (PrometheusService.generate_config) and Prometheus's before it configures a Grafana daemon
 # (GrafanaService.get_dependencies), src/pybind/mgr/cephadm/services/monitoring.py.
@@ -165,11 +165,10 @@ RICH_PORT = re.compile(r'rule (?:family="(ipv4|ipv6)" )?port port="([0-9]{1,5})(
 DNS_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\Z")
 GATEWAY_MONITORED = ("alertmanager", "grafana", "prometheus")
 DOCUMENT_MEMBERS = frozenset(("networks", "placement", "service_id", "service_type", "spec"))
-# A sign-on's oauth2-proxy document alone also carries its one custom_configs entry, the OIDCProvider's trust bundle mount.
-PROXY_MEMBERS = DOCUMENT_MEMBERS | {"custom_configs"}
+PROXY_MEMBERS = ceph_signon_native.DOCUMENT_MEMBERS
 INPUTS_VERSION = "ceph-service-inputs-v1"
 MAX_DAEMONS = 256
-ENDPOINT_ENTRIES = frozenset(("vip", "noholder", "holders", "module", "sso", "standby", "route", "stable", "enforce"))
+ENDPOINT_ENTRIES = frozenset(("vip", "noholder", "holders", "module", "sso", "standby", "route", "stable", "enforce", "access"))
 PENDING = re.compile(r"(?:(?:" + "|".join(sorted({name for unit in UNIT_TYPES.values() for name in unit.daemon_types} | ENDPOINT_ENTRIES))
                      + r")@(?:(?:nfs|ingress)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}|"
                      + "|".join(ceph_native_observability.MONITORING_TYPES + ceph_native_observability.GATEWAY_TYPES + ceph_signon_native.DAEMON_TYPES
@@ -663,6 +662,10 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
         hooks = UNIT_TYPES[unit["type"]]
         checked = hooks.check(self, unit)
         values = [group[0] for group in self.normalized_services(self.unit_groups(), record=self.unit_key() + "-inputs.json")]
+        if unit["type"] == ceph_signon_native.TYPE:
+            args = "extra_entrypoint_args"
+            if values[0].get(args) != ceph_signon_native.document_of(unit).get(args):
+                raise NativeFailure("sign-on-access-unproved", self.native_coordinate(), "cephadm changed the OIDC allowlist arguments; no proxy applied")
         scope = self.recovery_scope()
         observed = self.bound_specs(self.manager_retry(self.unit_specs))
         self.unit_records(values, observed, scope, resume)
@@ -675,14 +678,25 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
         changed = bool(missing)
         if missing:
             data = b"---\n".join(canonical(self.splice_bound(value)) + b"\n" for unused, value in missing)
-            self.manager_declare(self.tunnel_effect, "orch", "apply", "-i", "-", data=data, json_result=False)
-            observed = self.bound_specs(self.manager_retry(self.unit_specs))
-            require(all(observed.get(name) == value for name, value in zip(names, values)), "not-ready")
+            self.apply_documents(data, names, values)
         for name, value in zip(names, values):
             if self.markers.read("service-" + name + "-complete.json") is None:
                 self.markers.write("service-" + name + "-complete.json", {"scope": scope, "service": value})
         settled = hooks.settle(self, unit)
         return {"changed": changed or claimed is True or settled is True}
+
+    def apply_documents(self, data, names, values):
+        """Publish the native stream and prove its readback, preserving an uncertain restricted proxy deployment for withdrawal."""
+        try:
+            self.manager_declare(self.tunnel_effect, "orch", "apply", "-i", "-", data=data, json_result=False)
+            observed = self.bound_specs(self.manager_retry(self.unit_specs))
+            require(all(observed.get(name) == value for name, value in zip(names, values)), "not-ready")
+        except Refusal:
+            unit = self.request["service"]
+            if unit["type"] == ceph_signon_native.TYPE and "extra_entrypoint_args" in ceph_signon_native.document_of(unit):
+                raise NativeFailure("sign-on-access-deployment-unproved", self.native_coordinate(),
+                                    "the submitted proxy specification did not prove its readback") from None
+            raise
 
     def ingress_frontend(self):
         return frontend(self.request)
@@ -715,7 +729,7 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
         """Read-only, before any effect of a sign-on's apply, on one oauth2-proxy host: its issuer's discovery document proves the issuer."""
         return ceph_signon_native.discovery(self)
 
-    def sso_config(self):
+    def sso_config(self, observing=False):
         """Read-only, after the unit's apply and on one oauth2-proxy host: each running oauth2-proxy container of this cluster here neither
         skips the identity provider's certificate verification in its arguments, environment or mounted configuration nor, with a bound
         CA bundle, mounts another bundle. A skip refuses; anything not yet proved is reported unproved. No path, byte, argument or
@@ -727,6 +741,7 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
         rows = self.command([PODMAN, "ps", "--all", "--format", "json", "--filter", "name=^" + prefix + "[.-]"], timeout=SSO_TIMEOUT)
         require(isinstance(rows, list) and len(rows) <= MAX_PROXY_CONTAINERS and all(isinstance(row, dict) for row in rows), "native-output")
         bundle = self.bound.get(ceph_signon_native.CA_VARIABLE) if isinstance(self.bound, dict) else None
+        policy = ceph_signon_native.access_arguments(proxy)
         daemons, proved = 0, True
         for row in rows:
             names = row.get("Names")
@@ -738,13 +753,21 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
             require(isinstance(identifier, str) and CONTAINER_ID.fullmatch(identifier) is not None, "native-output")
             inspected = self.command([PODMAN, "inspect", "--type", "container", identifier], timeout=SSO_TIMEOUT)
             require(isinstance(inspected, list) and len(inspected) == 1 and isinstance(inspected[0], dict), "native-output")
-            verdict, where = ceph_signon_native.proxy_verdict(fsid, inspected[0], bundle)
+            verdict, where = ceph_signon_native.proxy_verdict(fsid, inspected[0], bundle, policy)
             if verdict == "insecure":
                 raise NativeFailure("sso-unverified", self.native_coordinate(), "host " + self.host["name"] + " daemon " + names[0]
                                     + ": oauth2-proxy skips identity provider certificate verification in its " + where)
+            if where == "access policy" and not observing:
+                raise NativeFailure("sign-on-access-unproved", self.native_coordinate(), "host " + self.host["name"] + " daemon " + names[0]
+                                    + ": oauth2-proxy does not run the frozen OIDC allowlist")
             daemons += 1
             proved = proved and verdict == "verified"
         return {"changed": False, "daemons": daemons, "proved": proved}
+
+    def signon_access(self):
+        """Read-only observation of the frozen policy, with no bound material."""
+        require("extra_entrypoint_args" in self.sso_proxy() and not self.bound)
+        return self.sso_config(observing=True)
 
     def sso(self):
         """The unit's one dashboard write, on the bootstrap host after every proxy host proved its rendered configuration: enable the

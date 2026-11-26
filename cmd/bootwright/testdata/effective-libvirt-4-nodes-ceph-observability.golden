@@ -716,6 +716,10 @@ metadata:
 spec:
   clusterRef: ceph-lab
   oidcProviderRef: qualification-idp
+  access:
+    allowedGroups:
+      - /ceph-operators
+    groupsClaim: groups
   secrets:
     - path: /spec/client_secret
       secretRef: oidc-client

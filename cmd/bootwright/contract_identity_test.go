@@ -178,7 +178,7 @@ func contractRecipes() map[string]digestRecipe {
 		ceph.SMBImplementation: digestOf(partImplementation(ceph.SMBImplementation), partRequest(ceph.SMBVersion), partVersion(ceph.SMBEvidenceVersion),
 			partPin(ceph.PhysicalRetirementImplementation)),
 		ceph.SignOnImplementation: digestOf(partImplementation(ceph.SignOnImplementation), partRequest(ceph.SignOnVersion), partVersion(ceph.EvidenceVersion),
-			partVersion(ceph.SignOnSuspensionVersion), partPin(ceph.PhysicalRetirementImplementation)),
+			partVersion(ceph.SignOnSuspensionVersion), partPin(ceph.PhysicalRetirementImplementation), partPin(ceph.SignOnAccessRule)),
 		ceph.ReplicationImplementation: digestOf(partImplementation(ceph.ReplicationImplementation), partRequest(ceph.ReplicationVersion), partVersion(ceph.ReplicationEvidenceVersion),
 			partPin(ceph.PhysicalRetirementImplementation), partPin("typed-pool-journal")),
 		ceph.ConsumerImplementation: digestOf(partImplementation(ceph.ConsumerImplementation), partRequest(ceph.ConsumerVersion), partVersion(ceph.ConsumerEvidenceVersion), partPin("typed-pool-journal")),

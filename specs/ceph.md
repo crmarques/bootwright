@@ -2384,14 +2384,20 @@ name, daemon count, whether it fronts Grafana, and the certificate SHA-256 its
 own apply proof reports). The owner and FSID are the cluster creation proof's
 operation, never the operation that runs the sign-on block. Its deadline is
 apply 5580 s (seven native calls and one readiness wait) and observe 1380 s
-(the observation and one gateway route round).
+(the observation, one gateway route round and, when configured, one proxy
+policy round). A restricted apply or resume reserves one more native call
+and one readiness wait for withdrawal.
 
 While sign-on is on, cephadm turns off Grafana's login form and Prometheus and
 Alertmanager basic authentication, so their local logins gate nothing until
 [`cluster sign-on suspend`](cli/cluster-sign-on.md); every user the identity
 provider signs in for the sign-on's client reaches Prometheus and Alertmanager,
 silences included, so the operator restricts that client to Ceph operators in
-the provider. The plan states both as impacts of the block.
+the provider when no `access` policy is declared. With a policy, OAuth2
+Proxy admits only a matching group or mapped role through the gateway and
+disables JWT bearer sign-in. The policy does not replace role assignment in
+the dashboard, Grafana's fixed Viewer mapping, or RGW authorization. The plan
+states the applicable audience and local-login impacts.
 
 Its apply, in order:
 
@@ -2426,7 +2432,12 @@ Its apply, in order:
    container only through the document's `custom_configs` entry, which
    cephadm mounts at `/etc/pki/tls/certs/oauth2-proxy-idp-ca.pem`; no plan,
    record, argument, evidence or diagnostic carries a bundle or secret byte or
-   a hash of one.
+   a hash of one. When `access` is declared, the document passes one unsplit
+   `--allowed-group` argument per value, `--oidc-groups-claim`, and
+   `--skip-jwt-bearer-tokens=false` through cephadm's
+   `extra_entrypoint_args`. Raw entrypoint arguments remain prohibited in
+   authored input. If cephadm's normalization changes the policy, the block
+   refuses `sign-on-access-unproved` before applying the proxy.
 3. Each proxy host proves read-only, in concurrent rounds of at most 120 s,
    10 s apart, within a 600 s window, that every running oauth2-proxy
    container of this cluster there skips no identity provider certificate
@@ -2437,8 +2448,19 @@ Its apply, in order:
    line naming the key other than as its bare assignment leaves the daemon
    unproved), and, with a bound bundle, its CA mount holds exactly that
    bundle. A skip refuses `sso-unverified`, naming the host, the daemon and
-   whether the argument, environment or configuration skips. Until the placed
-   daemon count runs proved, the window's exhaustion refuses `not-ready`.
+   whether the argument, environment or configuration skips. Each running
+   proxy must also carry the exact frozen policy arguments without a request
+   exemption when a policy is declared. A restricted proxy's mounted
+   configuration must predate its container start. If the proxy proof fails
+   with a policy declared, the block withdraws the owned proxy and proves
+   local sign-in using the same removal and readiness checks as suspension.
+   An uncertain deployment readback takes the same withdrawal path. The
+   `sign-on-access-unproved` refusal states whether withdrawal was proved.
+   A first apply that withdrew its completed native service requires destroy
+   and a fresh apply after correcting the cause.
+   Without a policy, the window's exhaustion refuses `not-ready`. Observation of an
+   active sign-on reports `access@oauth2-proxy` pending if a declared policy is
+   no longer proved.
 4. Each management gateway host proves, in the same kind of rounds within its
    own 600 s window, that every running gateway container renders the
    protected sign-on routes, whatever the

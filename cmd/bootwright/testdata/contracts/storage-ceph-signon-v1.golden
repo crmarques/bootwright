@@ -1,5 +1,5 @@
 implementation: storage-ceph-signon-v1
-content-digest: 6186bbb921b5b1bac5c9c70b861e776cfdf8b6e624337bb95df88eb62a436f28
+content-digest: f64536dd0aed4341ba508697fc96165d9552c83f870bef50af312716d7743a7a
 request-version: ceph-signon-v1
 automation-formats: none
 mark-formats: none
@@ -7,6 +7,7 @@ proof-ids: marker:-attempt, marker:-attempt-%d.json, marker:-attempt.json, marke
 fixed-places: /var/lib/bootwright/ceph
 effect-pins:
   storage-ceph-physical-retirement-v1
+  oidc-claim-allowlist-verified-argv
 request-identity:
   cluster
   object

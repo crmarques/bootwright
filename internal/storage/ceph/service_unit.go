@@ -148,12 +148,13 @@ type customConfig struct {
 }
 
 type unitDocument struct {
-	CustomConfigs []customConfig  `json:"custom_configs,omitempty"`
-	Networks      []string        `json:"networks,omitempty"`
-	Placement     nativePlacement `json:"placement"`
-	ServiceID     string          `json:"service_id,omitempty"`
-	ServiceType   string          `json:"service_type"`
-	Spec          any             `json:"spec,omitempty"`
+	CustomConfigs []customConfig   `json:"custom_configs,omitempty"`
+	Arguments     []signOnArgument `json:"extra_entrypoint_args,omitempty"`
+	Networks      []string         `json:"networks,omitempty"`
+	Placement     nativePlacement  `json:"placement"`
+	ServiceID     string           `json:"service_id,omitempty"`
+	ServiceType   string           `json:"service_type"`
+	Spec          any              `json:"spec,omitempty"`
 }
 
 func documentName(d unitDocument) string {

@@ -61,6 +61,8 @@ SSO_MATERIAL = {"oauth2ProxyCABundle": CA, "oauth2ProxyClientSecret": CLIENT, "o
 SECRET_MARKS = [line for text in (CA, PROXY_CERT, PROXY_KEY) for line in text.splitlines() if "-----" not in line] + [CLIENT, COOKIE]
 CONFIG = "/etc/oauth2-proxy.conf"
 CONTAINER = "ceph-" + FSID + "-oauth2-proxy-node-1"
+POLICY = ["--skip-jwt-bearer-tokens=false", "--oidc-groups-claim=ceph_roles", "--allowed-group=Ceph Operator", "--allowed-group=storage-reader"]
+PROXY_ARGS = ["--config=" + CONFIG, "--tls-cert-file=/etc/oauth2-proxy.crt", "--tls-key-file=/etc/oauth2-proxy.key"]
 PIN = gateway.LEAF_SHA256
 STARTED = "2026-11-25T10:00:00.000000Z"
 REFRESHED = "2026-11-25T10:01:00.000000Z"
@@ -89,6 +91,12 @@ def sso_request():
     request = dict(units.cluster(), action="service", service=service)
     request["delegated"] = [{"hosts": list(gateway.TWO), "name": "oauth2-proxy"}]
     request["auxiliary"] = [{"image": OAUTH2, "name": "oauth2_proxy"}]
+    return request
+
+
+def restricted_request():
+    request = sso_request()
+    request["service"]["documents"][0]["extra_entrypoint_args"] = [{"argument": arg, "split": False} for arg in POLICY]
     return request
 
 
@@ -159,10 +167,10 @@ def applying(monitor, markers, material=None):
     return gateway.applying(monitor, markers, SSO_MATERIAL if material is None else material)
 
 
-def proving(request, monitor, markers, bundle=CA):
+def proving(request, monitor, markers, bundle=CA, observing=False):
     native = ceph_native_units.UnitWorker(request, "node-1", run=monitor.run, markers=markers)
     native.bound = ceph_native_units.material(request, "sso_config", {"oauth2ProxyCABundle": bundle})
-    return native.sso_config()
+    return native.sso_config(observing=observing)
 
 
 def observing(monitor, markers):
@@ -188,6 +196,67 @@ class Probes:
         assert name.strip("[]").lower() in own
         self.targets.append((address, number, name, host_header, pinned, authorized))
         return self.verdicts[address] if isinstance(self.verdicts, dict) else self.verdicts
+
+
+def test_restricted_proxy_must_run_exact_policy_arguments(host, tmp_path):
+    request = restricted_request()
+    assert ceph_native.validate(copy.deepcopy(request)) is not None
+    root, conf, ca = host
+    markers = units.markers_for(tmp_path, request)
+    exempt = rendered(root, "oauth2-proxy.node-1/etc/exempt.conf", 'skip_auth_routes = ["^/"]')
+    for args, environment, config, proved in (
+        (PROXY_ARGS + POLICY, (), conf, True),
+        (PROXY_ARGS, (), conf, False),
+        (PROXY_ARGS + POLICY[:-1], (), conf, False),
+        (PROXY_ARGS + POLICY + ["--allowed-group=everyone"], (), conf, False),
+        (PROXY_ARGS + POLICY + ["--skip-jwt-bearer-tokens=true"], (), conf, False),
+        (PROXY_ARGS + POLICY, ("OAUTH2_PROXY_TRUSTED_IPS=0.0.0.0/0",), conf, False),
+        (PROXY_ARGS + POLICY, (), exempt, False),
+    ):
+        running = dict(inspected(config, ca, args, environment), State={"StartedAt": "2100-01-01T00:00:00Z"})
+        monitor = SSOMonitor(request, containers=[(CONTAINER, "running", running)])
+        assert proving(request, monitor, markers, observing=True) == {"changed": False, "daemons": 1, "proved": proved}
+        if not proved:
+            with pytest.raises(ceph_native.NativeFailure, match="^sign-on-access-unproved$"):
+                proving(request, monitor, markers)
+    running = dict(inspected(conf, ca, PROXY_ARGS + POLICY), State={"StartedAt": "2000-01-01T00:00:00Z"})
+    monitor = SSOMonitor(request, containers=[(CONTAINER, "running", running)])
+    assert proving(request, monitor, markers)["proved"] is False
+
+
+def test_normalization_must_preserve_the_policy_before_orchestrator_apply(tmp_path, monkeypatch):
+    request = restricted_request()
+    monitor = SSOMonitor(request)
+    worker = applying(monitor, units.markers_for(tmp_path, request))
+    normalize = worker.normalized_services
+
+    def missing(groups, **kwargs):
+        normalized = normalize(groups, **kwargs)
+        normalized[0][0].pop("extra_entrypoint_args")
+        return normalized
+
+    monkeypatch.setattr(worker, "normalized_services", missing)
+    with pytest.raises(ceph_native.NativeFailure, match="^sign-on-access-unproved$"):
+        worker.unit()
+    assert monitor.stdin == []
+
+
+def test_a_frozen_proxy_policy_refuses_raw_or_split_arguments():
+    request = restricted_request()
+    document = request["service"]["documents"][0]
+    good = document["extra_entrypoint_args"]
+    for length in (256, 257):
+        document["extra_entrypoint_args"] = [good[0], {"argument": "--oidc-groups-claim=" + "c" * length, "split": False}, *good[2:]]
+        if length == 256:
+            assert ceph_native.validate(copy.deepcopy(request)) is not None
+        else:
+            with pytest.raises(ceph_native.Refusal):
+                ceph_native.validate(copy.deepcopy(request))
+    for records in ([], good[:2], good + [good[-1]], good + [{"argument": "--skip-auth-preflight", "split": False}],
+                    good[:-1] + [{"argument": good[-1]["argument"], "split": True}]):
+        document["extra_entrypoint_args"] = records
+        with pytest.raises(ceph_native.Refusal):
+            ceph_native.validate(copy.deepcopy(request))
 
 
 def test_the_request_is_valid_and_places_one_proxy_document():
@@ -798,7 +867,7 @@ class SSOTransport(units.Transport):
             if isinstance(answer, Exception):
                 raise answer
             return answer
-        if phase == "sso_config":
+        if phase in ("sso_config", "signon_access"):
             assert 0 < timeout <= ceph_core.SSO_CALL
             result = self.proofs.pop(0)
             if isinstance(result, Exception):
@@ -1062,6 +1131,49 @@ def test_only_a_sign_on_observation_takes_a_lent_canonical_authorization_origin(
     assert ceph_native.services_arguments("unit", dict(envelope))[1] == {}
     with pytest.raises(ceph_native.Refusal):
         ceph_native.dispatch(dict(envelope, phase="unit"))
+
+
+@pytest.mark.parametrize("withdrawn", (True, False))
+@pytest.mark.parametrize("failed_stage", ("unit", "sso_config"))
+def test_failed_access_policy_proof_withdraws_the_owned_proxy_before_enabling_sso(withdrawn, failed_stage, monkeypatch):
+    request = restricted_request()
+    error = ceph_native.NativeFailure("sign-on-access-unproved", "proxy proof", "the frozen policy is missing")
+    transport = SSOTransport(request, [error, error])
+    original = transport.call
+    called = []
+
+    def answer(host, phase, *args, **kwargs):
+        called.append(phase)
+        if phase == failed_stage == "unit":
+            raise ceph_native.RemoteRefusal("native-refusal:sign-on-access-deployment-unproved@remote")
+        if phase == "signon_remove":
+            if not withdrawn:
+                raise ceph_native.Refusal("sign-on-foreign")
+            return {"changed": True, "configured": []}
+        if phase == "signon_state":
+            return {"changed": False, "configured": [], "daemons": 0, "service": False, "sso": False}
+        if phase == "signon_local":
+            return {"changed": False, "local": True}
+        return original(host, phase, *args, **kwargs)
+
+    monkeypatch.setattr(transport, "call", answer)
+    with pytest.raises(ceph_native.NativeFailure, match="^sign-on-access-unproved$") as caught:
+        ceph_core.execute(request, "apply", "d" * 64, transport, now=lambda: 0, pause=lambda seconds: None)
+    assert ("was withdrawn" if withdrawn else "withdrawal could not be proved") in caught.value.native_error["cause"]
+    assert called.index("unit") <= called.index(failed_stage) < called.index("signon_remove")
+    assert "sso" not in called and ("signon_local" in called) is withdrawn
+
+
+def test_an_observation_notices_access_policy_drift_without_lending_any_material():
+    request = restricted_request()
+    one = {"changed": False, "daemons": 1, "proved": True}
+    missing = dict(one, proved=False)
+    for proofs, pending in (([one, one], []), ([one, missing], ["access@oauth2-proxy"])):
+        transport = SSOTransport(request, proofs)
+        result = ceph_core.execute(request, "observe", "d" * 64, transport, now=lambda: 0, pause=lambda seconds: None)
+        assert result["evidence"]["ready"] is not bool(pending)
+        assert result.get("pending", []) == pending
+        assert sorted((host, held) for host, phase, held in transport.private if phase == "signon_access") == [("node-1", []), ("node-2", [])]
 
 
 def test_the_readiness_wait_lends_the_discovered_authorization_endpoint_to_every_observation():
