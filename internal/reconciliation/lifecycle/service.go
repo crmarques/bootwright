@@ -327,10 +327,14 @@ func (s Service) preview(ctx context.Context, decision decider, view View, previ
 		result.Verb = string(verb)
 		result.Receipt = Receipt{Operation: "none", Verb: "plan", State: "preview", Next: string(verb)}
 	case decided.fresh:
-		result = s.presentation(decided)
+		if result, err = s.presentation(decided); err != nil {
+			return nil, operationPlan{}, basis{}, err
+		}
 		result.Receipt = Receipt{Operation: "none", Verb: "plan", State: "preview", Next: string(decided.verb)}
 	default:
-		result = s.presentation(decided)
+		if result, err = s.presentation(decided); err != nil {
+			return nil, operationPlan{}, basis{}, err
+		}
 		result.Receipt = Receipt{Operation: decided.operation.ID, Verb: "plan", State: "preview", Next: nextAction(decided.operation, decided.plan, decided.states)}
 	}
 	result.Context, result.Bound = view.Identity(), s.Concurrency()

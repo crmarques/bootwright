@@ -183,7 +183,7 @@ func (s Service) proveStartPower(ctx context.Context, name string, decided opera
 	return nil
 }
 
-func (s Service) powerTargets(decided operationPlan) []reconciliation.Block {
+func (s Service) powerTargets(decided operationPlan) ([]reconciliation.Block, error) {
 	bindings := s.capabilities.Bindings()
 	plan := decided.removed()
 	if decided.restores != "" {
@@ -196,11 +196,15 @@ func (s Service) powerTargets(decided operationPlan) []reconciliation.Block {
 		}
 	}
 	if decided.restores == "" {
-		return blocks
+		return blocks, nil
 	}
 	for _, added := range decided.plan.Blocks {
 		block, _ := decided.lineagePlan.Block(added.ID)
-		for _, machine := range s.boundMachines(decided.lineagePlan, block) {
+		machines, err := s.runsOn(decided.lineagePlan, block)
+		if err != nil {
+			return nil, err
+		}
+		for _, machine := range machines {
 			for _, kept := range decided.lineagePlan.Blocks {
 				if kept.Kind == string(api.Machine) && kept.Object == machine && managedPowerTarget(bindings, kept) && !slices.Contains(decided.running, machine) &&
 					!slices.ContainsFunc(blocks, func(held reconciliation.Block) bool { return held.ID == kept.ID }) {
@@ -209,7 +213,7 @@ func (s Service) powerTargets(decided operationPlan) []reconciliation.Block {
 			}
 		}
 	}
-	return blocks
+	return blocks, nil
 }
 
 func startOwners(ctx context.Context, store recordReader, decided operationPlan) (lineage, error) {
@@ -231,7 +235,10 @@ func startOwners(ctx context.Context, store recordReader, decided operationPlan)
 }
 
 func (s Service) startBlocks(ctx context.Context, view View, decided operationPlan) ([]reconciliation.Block, error) {
-	blocks := s.powerTargets(decided)
+	blocks, err := s.powerTargets(decided)
+	if err != nil {
+		return nil, err
+	}
 	bindings := s.capabilities.Bindings()
 	if decided.verb != reconciliation.Apply || decided.restores != "" || decided.removed().Preparation == nil {
 		return blocks, nil

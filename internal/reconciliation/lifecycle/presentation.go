@@ -12,7 +12,10 @@ func (s Service) present(ctx context.Context, name string, decided operationPlan
 	if s.options.Presenter == nil {
 		return engineRequestDefect.Fail("lifecycle plan presentation is not configured", "")
 	}
-	result := s.presentation(decided)
+	result, err := s.presentation(decided)
+	if err != nil {
+		return err
+	}
 	result.Context, result.Bound = ContextIdentity{Name: name}, s.Concurrency()
 	result.Receipt = Receipt{Operation: "none", Verb: string(decided.verb), State: "preview", Next: string(decided.verb)}
 	if !decided.fresh {
@@ -24,7 +27,7 @@ func (s Service) present(ctx context.Context, name string, decided operationPlan
 
 // presentation is the plan a transition shows: what apply and destroy present
 // before they confirm, and what plan previews of the same transition.
-func (s Service) presentation(decided operationPlan) PlanResult {
+func (s Service) presentation(decided operationPlan) (PlanResult, error) {
 	result := planPreview(decided.plan, decided.states, decided.selection, s.Throttle())
 	result.Verb, result.Warnings = string(decided.verb), s.removalWarnings(decided.removed())
 	result.KeepGoing = s.keepGoing && decided.verb == reconciliation.Destroy
@@ -45,7 +48,11 @@ func (s Service) presentation(decided operationPlan) PlanResult {
 		result.Stops = s.stopsFirst(decided.plan, decided.phases)
 	}
 	if s.startsFlow(decided) {
-		for _, block := range s.powerTargets(decided) {
+		blocks, err := s.powerTargets(decided)
+		if err != nil {
+			return PlanResult{}, err
+		}
+		for _, block := range blocks {
 			result.Stops = append(result.Stops, block.Object)
 		}
 		slices.Sort(result.Stops)
@@ -57,7 +64,7 @@ func (s Service) presentation(decided operationPlan) PlanResult {
 	if result.Continuation && !result.Finalizes && decided.operation.ID != "" && s.otherBuild(decided.operation) && decided.executionProof.proved {
 		result.AnotherBuild = anotherBuildOf(decided.operation, result.Steps)
 	}
-	return result
+	return result, nil
 }
 
 func anotherBuildOf(operation operationstore.Operation, steps []PlanStep) *AnotherBuild {

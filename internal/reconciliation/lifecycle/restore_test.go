@@ -491,18 +491,18 @@ func TestARestoreRefusesAnotherExecutionContract(t *testing.T) {
 // never-started step bound to a Machine its scope keeps refuses it as a
 // scoped step does, naming the same remedy: the restore would otherwise
 // install on a Machine it never proved off. A physical Machine, whose own
-// step never deletes it, is always kept.
+// step never deletes it, is always kept, and that step runs on it.
 func TestAStagedDestroyRefusesANeverStartedStepOnAKeptMachine(t *testing.T) {
 	t.Parallel()
 	for name, test := range map[string]struct {
-		deletes        map[string]bool
-		floor          reconciliation.Stage
-		reason, remedy string
+		deletes              map[string]bool
+		floor                reconciliation.Stage
+		step, reason, remedy string
 	}{
 		"a virtual Machine": {deletes: map[string]bool{"machine": true}, floor: reconciliation.StageClusters,
-			reason: "stay below the clusters stage", remedy: "--stage machines"},
+			step: "service", reason: "stay below the clusters stage", remedy: "--stage machines"},
 		"a physical Machine": {deletes: map[string]bool{}, floor: reconciliation.StageMachines,
-			reason: "a physical Machine is always kept", remedy: "take back the whole context with bootwright destroy --context lab"},
+			step: "machine", reason: "a physical Machine is always kept", remedy: "take back the whole context with bootwright destroy --context lab"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -524,7 +524,7 @@ func TestAStagedDestroyRefusesANeverStartedStepOnAKeptMachine(t *testing.T) {
 			before := untouchedOf(h)
 			_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, Floor: string(test.floor), SkipConfirmation: true})
 			reported := diagnostics.Of(err)
-			if firstCode(err) != destroyStageKeepsHost.Code || !strings.Contains(reported[0].Message, "the step service runs on Machine/machine") ||
+			if firstCode(err) != destroyStageKeepsHost.Code || !strings.Contains(reported[0].Message, "the step "+test.step+" runs on Machine/machine") ||
 				!strings.Contains(reported[0].Message, test.reason) || !strings.Contains(reported[0].Remediation, test.remedy) {
 				t.Fatalf("destroy --stage %s over a never-started step on a kept Machine returned %v", test.floor, reported)
 			}

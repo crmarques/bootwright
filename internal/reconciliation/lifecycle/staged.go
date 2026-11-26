@@ -366,9 +366,11 @@ func (s Service) keptHosts(ctx context.Context, name string, floor stagedFloor, 
 	steps, bound := slices.Concat(scope, unstarted), map[string][]string{}
 	for _, id := range steps {
 		block, _ := whole.Block(id)
-		machines := s.boundMachines(whole, block)
-		slices.Sort(machines)
-		bound[id] = slices.DeleteFunc(slices.Compact(machines), func(machine string) bool { return !managed[machine] || deleted[machine] })
+		machines, err := s.runsOn(whole, block)
+		if err != nil {
+			return keptAnswer{}, err
+		}
+		bound[id] = slices.DeleteFunc(machines, func(machine string) bool { return !managed[machine] || deleted[machine] })
 	}
 	answer, settled := keptAnswer{hosts: map[string][]string{}, blanks: map[string][]string{}, online: map[string]bool{}}, map[string]bool{}
 	readOf := func(id string) (RemovalRecords, error) {
@@ -406,7 +408,9 @@ func (s Service) keptHosts(ctx context.Context, name string, floor stagedFloor, 
 			physical := slices.ContainsFunc(hosts, func(machine string) bool { return !virtual[machine] })
 			blank := ""
 			if !physical {
-				blank = s.unblankable(whole, steps, hosts)
+				if blank, err = s.unblankable(whole, steps, hosts); err != nil {
+					return keptAnswer{}, err
+				}
 			}
 			if physical || blank != "" || kept.KeptHostsRefusal(block, read, true) != "" {
 				return keptAnswer{}, keptHostRefusal(name, floor.stage, id, hosts, refusal, blank, physical)
@@ -439,10 +443,10 @@ func (s Service) keptHosts(ctx context.Context, name string, floor stagedFloor, 
 }
 
 func (s Service) keptNamed(whole reconciliation.Plan, block reconciliation.Block, keeps bool) ([]string, bool, error) {
-	named := s.namedMachines(whole, block)
+	named, err := s.namedMachines(whole, block)
 	online, runs := s.capabilityOf(block).(OnlineKeptHosts)
-	if !keeps || !runs {
-		return named, false, nil
+	if err != nil || !keeps || !runs {
+		return named, false, err
 	}
 	hosts, err := online.OnlineKeptHosts(block)
 	return append(named, hosts...), true, err
@@ -554,32 +558,37 @@ func keptHostRefusal(name string, floor reconciliation.Stage, id string, machine
 			", or take back the whole context with "+contextCommand(name, string(reconciliation.Destroy)))
 }
 
-func (s Service) unblankable(whole reconciliation.Plan, steps, machines []string) string {
+func (s Service) unblankable(whole reconciliation.Plan, steps, machines []string) (string, error) {
 	for _, machine := range machines {
 		var reset RootDiskReset
 		for _, block := range whole.Blocks {
 			if candidate, resets := s.capabilityOf(block).(RootDiskReset); resets && block.Kind == string(api.Machine) && block.Object == machine {
 				if refusal := candidate.RootResetRefusal(block); refusal != "" {
-					return "Machine/" + machine + " " + refusal
+					return "Machine/" + machine + " " + refusal, nil
 				}
 				reset = candidate
 			}
 		}
 		if reset == nil {
-			return "the substrate of Machine/" + machine + " blanks no root disk yet (B1880)"
+			return "the substrate of Machine/" + machine + " blanks no root disk yet (B1880)", nil
 		}
 		for _, block := range whole.Blocks {
 			deletion, deletes := s.capabilityOf(block).(MachineDeletion)
 			own := block.Kind == string(api.Machine) && block.Object == machine && deletes && deletion.DeletesMachine(block)
-			if !slices.Contains(steps, block.ID) && !own && slices.Contains(s.boundMachines(whole, block), machine) {
-				return "the step " + block.ID + ", which stays, lives on Machine/" + machine
+			if slices.Contains(steps, block.ID) || own {
+				continue
+			}
+			if lives, err := s.runsOn(whole, block); err != nil {
+				return "", err
+			} else if slices.Contains(lives, machine) {
+				return "the step " + block.ID + ", which stays, lives on Machine/" + machine, nil
 			}
 		}
 	}
-	return ""
+	return "", nil
 }
 
-func (s Service) namedMachines(whole reconciliation.Plan, block reconciliation.Block) []string {
+func (s Service) namedMachines(whole reconciliation.Plan, block reconciliation.Block) ([]string, error) {
 	var machines []string
 	for _, id := range block.Dependencies {
 		if dependency, found := whole.Block(id); found && dependency.Kind == string(api.Machine) {
@@ -587,14 +596,20 @@ func (s Service) namedMachines(whole reconciliation.Plan, block reconciliation.B
 		}
 	}
 	if bound, binds := s.capabilityOf(block).(HostBound); binds {
-		hosts, _ := bound.HostMachines(block)
+		hosts, err := bound.HostMachines(block)
+		if err != nil {
+			return nil, err
+		}
 		machines = append(machines, hosts...)
 	}
 	if bound, binds := s.capabilityOf(block).(NodeBound); binds {
-		nodes, _ := bound.NodeMachines(block)
+		nodes, err := bound.NodeMachines(block)
+		if err != nil {
+			return nil, err
+		}
 		machines = append(machines, nodes...)
 	}
-	return machines
+	return machines, nil
 }
 
 func (s Service) retiresWith(whole reconciliation.Plan, block reconciliation.Block, answered map[string][]string, machines []string) bool {
@@ -669,39 +684,32 @@ func powerWord(power string) string {
 	return "powered " + power
 }
 
-func (s Service) boundMachines(live reconciliation.Plan, block reconciliation.Block) []string {
+func (s Service) runsOn(plan reconciliation.Plan, block reconciliation.Block) ([]string, error) {
 	var machines []string
-	seen := map[string]bool{block.ID: true}
-	pending := slices.Clone(block.Dependencies)
+	seen, pending := map[string]bool{}, []reconciliation.Block{block}
 	for len(pending) != 0 {
-		id := pending[0]
+		step := pending[0]
 		pending = pending[1:]
-		if seen[id] {
+		if seen[step.ID] {
 			continue
 		}
-		seen[id] = true
-		dependency, found := live.Block(id)
-		if !found {
-			continue
+		seen[step.ID] = true
+		if step.Kind == string(api.Machine) {
+			machines = append(machines, step.Object)
 		}
-		if dependency.Kind == string(api.Machine) {
-			machines = append(machines, dependency.Object)
+		named, err := s.namedMachines(plan, step)
+		if err != nil {
+			return nil, err
 		}
-		pending = append(pending, dependency.Dependencies...)
+		machines = append(machines, named...)
+		for _, id := range step.Dependencies {
+			if dependency, found := plan.Block(id); found && dependency.Kind != string(api.Machine) && dependency.Stage.AtOrAbove(reconciliation.StageClusters) {
+				pending = append(pending, dependency)
+			}
+		}
 	}
-	capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
-	if !ok {
-		return machines
-	}
-	if bound, binds := capability.(HostBound); binds {
-		hosts, _ := bound.HostMachines(block)
-		machines = append(machines, hosts...)
-	}
-	if bound, binds := capability.(NodeBound); binds {
-		nodes, _ := bound.NodeMachines(block)
-		machines = append(machines, nodes...)
-	}
-	return machines
+	slices.Sort(machines)
+	return slices.Compact(machines), nil
 }
 
 func physicalInScope(live reconciliation.Plan, scope []string, machine string) bool {

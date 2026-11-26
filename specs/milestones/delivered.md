@@ -18651,7 +18651,7 @@ registration write, so no kill-harness journey is added.
 
 **Limits:** a kept Machine a step reaches only through what it depends on (the
 hosts of its DNS, NTP, Proxy and artifact services, a KubeVirt node's host
-cluster, a nested libvirt host) still refuses ([B1875](m1.md#b1875)); the proof is in-tree, over the engine's
+cluster, a nested libvirt host) still refuses ([B1875](#x768--a-staged-destroy-reads-a-kept-machine-a-step-only-uses-as-none-of-its-hosts)); the proof is in-tree, over the engine's
 doubles and the capability's own answer, not a live run.
 ## X761 — A restore binds what its added steps name, and a removal presents each step its creator's binding
 
@@ -18822,3 +18822,34 @@ status and the preview carry it
 
 **Limits:** the proof is in-tree, over the engine's doubles, not a live run
 over two real clusters.
+
+## X768 — A staged destroy reads a kept Machine a step only uses as none of its hosts
+
+**Items:** B1875. **Kind:** product. **Owner:** Reconciliation, with Container
+cluster. **Authorization:** [D288](backlog.md#d288), a slice of the
+[staged destroy design](../deferred/staged-destroy.md#program).
+
+**Outcome:** the [staged destroy](../state-reconciliation.md#staged-destroy)
+host rule, its kept power targets and blanks, and the restoring apply's
+[power targets](../state-reconciliation.md#power-before-a-new-apply-or-destroy) read one answer to which Machines a step runs on: its own
+Machine, the Machine steps it depends on, its hosts and nodes, and what the
+cluster and add-on steps it depends on run on. The Machines of the DNS, NTP,
+proxy and artifact services it uses, a KubeVirt node's host cluster and a
+nested libvirt guest's host stay kept, untouched and no power target, so an
+agent installation on kept nodes is taken back wherever those run. The answer
+reads only the frozen plan's Machine steps, stages and the capabilities' host
+and node bindings; a binding that does not decode refuses with its error.
+A blank counts every kept step of the Machine as living on its root disk,
+since no step states otherwise. No plan field, content digest or golden
+moves.
+
+**Guard tests:** `TestAStagedDestroyTakesBackAnInstallationWhateverItsServicesRunOn`,
+`TestAnAddonOfAKeptInstallationRunsOnItsNodes`,
+`TestAnInstallationRunsOnAMachineItRequiresDirectly`,
+`TestAnUndecodableBindingRefusesRatherThanNamingNoMachine`,
+`TestABootedInstallationIsKeptOnlyWhereItsNodesRootDisksCanBeBlanked` and
+`TestAStagedDestroyRefusesANeverStartedStepOnAKeptMachine`.
+
+**Gates:** `make focus`; the delivering commit records the command and result.
+
+**Limits:** the proof is in-tree, over the engine's doubles, not a live run.

@@ -258,6 +258,11 @@ func TestABootedInstallationIsKeptOnlyWhereItsNodesRootDisksCanBeBlanked(t *test
 			os.Object = "node-1"
 			cluster.h.service.capabilities.(keptResolver)[CapabilityBinding{Kind: "Machine", Implementation: "os-v1"}] = &testCapability{definitions: []reconciliation.BlockDefinition{os}}
 		}, "the step os, which stays, lives on Machine/node-1"},
+		"a kept step of the node Machine itself": {func(cluster *keptCluster, _ *blankingNodeMachine) {
+			own := keptBlock("own", "Machine", "own-v1", reconciliation.StageMachines)
+			own.Object = "node-1"
+			cluster.h.service.capabilities.(keptResolver)[CapabilityBinding{Kind: "Machine", Implementation: "own-v1"}] = &testCapability{definitions: []reconciliation.BlockDefinition{own}}
+		}, "the step own, which stays, lives on Machine/node-1"},
 		"a substrate refusal": {func(_ *keptCluster, machine *blankingNodeMachine) {
 			machine.refusal = "was realized by another build"
 		}, "Machine/node-1 was realized by another build"},

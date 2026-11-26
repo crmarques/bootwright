@@ -2236,18 +2236,28 @@ set, its own scope with what every staged destroy it `replaces` took back.
   back, or the whole destroy at an infrastructure service;
   `destroy.stage-keeps-unfinished` when a kept step is not `done`; and
   `destroy.stage-keeps-host` when a scoped step, or one the lineage never
-  started, which it also takes back, is bound, by its dependencies, hosts or
-  nodes, to a Machine the scope keeps: any Machine a step of this
-  context names, a substrate machine or the hardware or enrollment step of a
-  physical, provided or bootstrap Machine, whose deletion step
-  (`lifecycle.MachineDeletion`) is outside the scope. A step whose capability
+  started, which it also takes back, runs on a Machine the scope keeps: any
+  Machine a step of this context names, a substrate machine or the hardware
+  or enrollment step of a physical, provided or bootstrap Machine, whose
+  deletion step (`lifecycle.MachineDeletion`) is outside the scope. A step
+  runs on its own Machine when it is a Machine step, on each Machine step it
+  depends on, on its hosts (`lifecycle.HostBound`) and nodes
+  (`lifecycle.NodeBound`), and on what each cluster or add-on step it depends
+  on runs on (`TestAnAddonOfAKeptInstallationRunsOnItsNodes`). Any other
+  dependency, an infrastructure service such as DNS, NTP, a proxy or an
+  artifact server, or a substrate, and what a Machine it depends on depends
+  on, such as a KubeVirt node's host cluster or a nested guest's host, is one
+  it uses: its Machines stay kept, untouched and no power target
+  (`TestAStagedDestroyTakesBackAnInstallationWhateverItsServicesRunOn`). A step whose capability
   answers from its apply's records that its removal is complete while those
   Machines stay (`lifecycle.KeptHostRemoval`) is admitted instead, freezing
   them as its inverse's `keptHosts`, and a step that retires offline where a
   step it depends on keeps every Machine it reaches; a refusal names the
   capability's reason. One complete only if the same removal blanks their
   root disks is admitted where each is virtual, offers
-  `lifecycle.RootDiskReset` and holds no other kept step, freezing them as
+  `lifecycle.RootDiskReset` and holds no other kept step, any kept step
+  that runs on it, its own Machine steps included, since no step states
+  that it lives off the root disk, freezing them as
   `blanks` with an impact each and `data-loss`. A physical Machine whose own
   step, which only releases its claim (`lifecycle.MachineRelease`), is in the
   scope is released: each step on it not answering `lifecycle.KeptHostRemoval`
@@ -2277,8 +2287,7 @@ set, its own scope with what every staged destroy it `replaces` took back.
   still holds every step the lineage never started, as the fold requires, so
   a restore re-creates it. Under the
   [power entry rule](#power-before-a-new-apply-or-destroy) that restore
-  proves off each kept managed Machine a step it re-creates is bound to by
-  its dependencies, hosts or nodes, whether
+  proves off each kept managed Machine a step it re-creates runs on, whether
   or not that step ever started and whichever staged destroy took it back,
   and refuses `lifecycle.start-power` naming a running one
   (`TestANarrowedStagedDestroyLeavesAnotherClustersNeverStartedSteps`). The
@@ -3037,10 +3046,10 @@ regardless of completion order.
 
 A staged or additive apply checks its managed fleet. A
 [restoring apply](#restoring-apply) checks the Machines it realizes and each
-kept Machine an added step names by its dependencies, hosts or nodes; any
+kept Machine an added step [runs on](#staged-destroy); any
 other kept Machine reads in either state, as a continuation of its lineage
 reads it. A staged destroy refuses a step it takes back, started or not, that
-is bound to a Machine it keeps unless its removal is complete there and that
+runs on a Machine it keeps unless its removal is complete there and that
 Machine is a [kept power target](#staged-destroy), and a restore refuses a step
 new to the lineage (`apply.restore-adds-new`,
 `TestARestoreRefusesAStepNoStagedDestroyTookBack`), so only a step the restore

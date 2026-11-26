@@ -66,7 +66,11 @@ func (s Service) admitRebinds(ctx context.Context, name string, decided operatio
 			return operationPlan{}, authorizeRebindInvalid.Fail(
 				"the Secret binding "+strings.Join(frozen, ", ")+" this "+string(decided.verb)+" reopens pins no version of Secret "+secret, without+secret)
 		}
-		presenting, err := s.presentedOnly(decided, s.rebindTargets(decided), secret, without+secret)
+		targets, err := s.rebindTargets(decided)
+		if err != nil {
+			return operationPlan{}, err
+		}
+		presenting, err := s.presentedOnly(decided, targets, secret, without+secret)
 		if err != nil {
 			return operationPlan{}, err
 		}
@@ -104,20 +108,21 @@ func (s Service) pinnedVersions(ctx context.Context, name, binding string) (map[
 }
 
 // rebindTargets are a restore's kept Machines it proves off or acts on, with a continued restore's own steps, else the plan's steps with a staged destroy's kept power targets.
-func (s Service) rebindTargets(decided operationPlan) []reconciliation.Block {
+func (s Service) rebindTargets(decided operationPlan) ([]reconciliation.Block, error) {
 	if !decided.restoring() {
-		return append(slices.Clone(decided.plan.Blocks), decided.keptPowerBlocks()...)
+		return append(slices.Clone(decided.plan.Blocks), decided.keptPowerBlocks()...), nil
 	}
 	var targets []reconciliation.Block
 	if !decided.fresh {
 		targets = slices.Clone(decided.plan.Blocks)
 	}
-	for _, block := range s.powerTargets(decided) {
+	kept, err := s.powerTargets(decided)
+	for _, block := range kept {
 		if _, added := decided.plan.Block(block.ID); !added {
 			targets = append(targets, block)
 		}
 	}
-	return targets
+	return targets, err
 }
 
 func (t operationPlan) keptPowerBlocks() []reconciliation.Block {
@@ -222,7 +227,11 @@ func (s Service) rebind(ctx context.Context, name string, decided operationPlan)
 		return decided, nil
 	}
 	named := map[string][]string{}
-	for _, block := range s.rebindTargets(decided) {
+	targets, err := s.rebindTargets(decided)
+	if err != nil {
+		return operationPlan{}, err
+	}
+	for _, block := range targets {
 		capability, found := s.capabilities.Resolve(block.Kind, block.Implementation)
 		referencer, names := capability.(SecretReferencer)
 		if !found || !names {

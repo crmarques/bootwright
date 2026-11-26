@@ -71,12 +71,15 @@ func (m *keptNodeMachine) StartPower(_ context.Context, probe Probe) (Quiescence
 
 type keptNodeInstall struct {
 	*testCapability
-	nodes  []string
-	boots  bool
-	refuse string
+	nodes    []string
+	nodesErr error
+	boots    bool
+	refuse   string
 }
 
-func (c *keptNodeInstall) NodeMachines(reconciliation.Block) ([]string, error) { return c.nodes, nil }
+func (c *keptNodeInstall) NodeMachines(reconciliation.Block) ([]string, error) {
+	return c.nodes, c.nodesErr
+}
 
 func (c *keptNodeInstall) KeptHostsRefusal(_ reconciliation.Block, records RemovalRecords, blanked bool) string {
 	switch {
@@ -139,9 +142,8 @@ func keptBlock(id, kind, implementation string, stage reconciliation.Stage, depe
 // keptClusterHarness holds an OpenShift cluster on two virtual node Machines:
 // its media reads the first node's volume, its installation runs on both, and
 // an add-on that retires offline rides on the installation, unless addonOn
-// binds the add-on to a node directly; through adds a service on a third
-// Machine the installation reaches only through that service.
-func keptClusterHarness(t *testing.T, physical bool, addonOn string, through ...bool) keptCluster {
+// binds the add-on to a node directly.
+func keptClusterHarness(t *testing.T, physical bool, addonOn string) keptCluster {
 	t.Helper()
 	h := newHarness(t)
 	host := keptBlock("host", "InfraProvider", "host-v1", reconciliation.StageSubstrates)
@@ -153,14 +155,6 @@ func keptClusterHarness(t *testing.T, physical bool, addonOn string, through ...
 	}
 	media := keptBlock("media", "ClusterMedia", "media-v1", reconciliation.StageClusters, "node-1")
 	install := keptBlock("install", "OpenShiftCluster", "install-v1", reconciliation.StageClusters, "media", "node-1", "node-2")
-	services := []reconciliation.BlockDefinition{}
-	if len(through) != 0 && through[0] {
-		server := keptBlock("server", "Machine", "node-machine-v1", reconciliation.StageMachines, "host")
-		server.Object = "server"
-		nodes = append(nodes, server)
-		services = append(services, keptBlock("service", "ArtifactServer", "artifact-server-nginx-v1", reconciliation.StageMachines, "server"))
-		install.Dependencies = append(install.Dependencies, "service")
-	}
 	media.Object, install.Object = "edge", "edge"
 	addon := keptBlock("addon", "OpenShiftAddon", "addon-v1", reconciliation.StageAddOns, "install")
 	if addonOn != "" {
@@ -179,7 +173,6 @@ func keptClusterHarness(t *testing.T, physical bool, addonOn string, through ...
 		{Kind: "ClusterMedia", Implementation: "media-v1"}:                                                keptNodeMedia{cluster.media},
 		{Kind: "OpenShiftCluster", Implementation: "install-v1"}:                                          cluster.install,
 		{Kind: "OpenShiftAddon", Implementation: "addon-v1"}:                                              keptNodeAddon{cluster.addon},
-		{Kind: "ArtifactServer", Implementation: "artifact-server-nginx-v1"}:                              &testCapability{definitions: services},
 	}
 	h.capability = cluster.install.testCapability
 	return cluster
@@ -436,22 +429,6 @@ func TestATakenBackInstallationsCustodyGivesWayToTheRestoresNewCluster(t *testin
 	if held := kept(h); !slices.Equal(held, []string{"install/console-password=authority-b\nsecond", "install/kubeconfig=authority-b\nsecond"}) {
 		t.Fatalf("the restore keeps custody %v", held)
 	}
-}
-
-// A step is taken back on kept Machines only where it names them itself: an
-// installation that also reaches a kept Machine through a service it depends
-// on refuses as any step on a kept Machine does, and no kept power target
-// demands that service's host off.
-func TestAnInstallationReachingAKeptMachineThroughAServiceRefuses(t *testing.T) {
-	t.Parallel()
-	cluster := keptClusterHarness(t, false, "", true)
-	completeApply(t, cluster.h)
-	before := untouchedOf(cluster.h)
-	_, err := cluster.h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, Floor: string(reconciliation.StageClusters), SkipConfirmation: true})
-	if reported := diagnostics.Of(err); firstCode(err) != destroyStageKeepsHost.Code || !strings.Contains(reported[0].Message, "the step install runs on Machine/node-1, Machine/node-2, Machine/server") {
-		t.Fatalf("destroy --stage clusters over an installation reaching a service host returned %v", reported)
-	}
-	before.require(t, cluster.h)
 }
 
 // A physical node is kept and its installation taken back while no node was
