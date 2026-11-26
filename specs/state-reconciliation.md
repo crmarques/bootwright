@@ -3611,7 +3611,10 @@ token:
   take no rebind;
 - the steps it presents the Secret to are its plan's, or a restore's kept
   Machines it proves off or acts on, a continued restore's own steps with
-  them; a binding presenting one of them pins
+  them, or, beside a staged destroy's plan steps, fresh, replacing or
+  continuing, the kept Machines it proves off (its
+  [kept power targets](#staged-destroy),
+  `TestAStagedDestroyRebindsTheAccessCredentialOfAKeptNodeItProvesOff`); a binding presenting one of them pins
   a version of the Secret, and the Secret is refused as already presented at
   its current version only when every such binding pins the version current
   now, read and validated as a binding reads one;

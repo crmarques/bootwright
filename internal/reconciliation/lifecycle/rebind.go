@@ -103,10 +103,10 @@ func (s Service) pinnedVersions(ctx context.Context, name, binding string) (map[
 	return pinned, nil
 }
 
-// rebindTargets are a restore's kept Machines it proves off or acts on, with a continued restore's own steps, else the plan's steps.
+// rebindTargets are a restore's kept Machines it proves off or acts on, with a continued restore's own steps, else the plan's steps with a staged destroy's kept power targets.
 func (s Service) rebindTargets(decided operationPlan) []reconciliation.Block {
 	if !decided.restoring() {
-		return decided.plan.Blocks
+		return append(slices.Clone(decided.plan.Blocks), decided.keptPowerBlocks()...)
 	}
 	var targets []reconciliation.Block
 	if !decided.fresh {
@@ -118,6 +118,24 @@ func (s Service) rebindTargets(decided operationPlan) []reconciliation.Block {
 		}
 	}
 	return targets
+}
+
+func (t operationPlan) keptPowerBlocks() []reconciliation.Block {
+	stage := t.stage
+	if stage == nil && !t.fresh && staged(t.operation) {
+		stage = t.operation.Stage
+	}
+	if stage == nil {
+		return nil
+	}
+	var blocks []reconciliation.Block
+	for _, block := range t.keptSteps() {
+		_, planned := t.plan.Block(block.ID)
+		if !planned && slices.ContainsFunc(stage.KeptPower, func(target operationstore.KeptPower) bool { return target.Block == block.ID }) {
+			blocks = append(blocks, block)
+		}
+	}
+	return blocks
 }
 
 func stepName(decided operationPlan, block reconciliation.Block) string {

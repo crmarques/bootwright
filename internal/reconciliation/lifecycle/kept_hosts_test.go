@@ -605,3 +605,67 @@ func TestAReplacedStagedDestroyProvesKeptNodesOffWithTheirOwnBinding(t *testing.
 		t.Fatalf("the replacement's kept-power readings presented %v, want the version the nodes' restore bound", read)
 	}
 }
+
+// nodeOnlyBMC is bmcKeptCluster whose installation names no Secret, so only
+// the kept nodes present bmc.
+func nodeOnlyBMC(t *testing.T) keptCluster {
+	t.Helper()
+	cluster := bmcKeptCluster(t)
+	cluster.install.definitions[0].Request = json.RawMessage(`{"name":"install"}`)
+	cluster.install.secrets, cluster.install.testCapability.access = nil, nil
+	return cluster
+}
+
+// A staged destroy rebinds the rotated BMC credential only its kept nodes
+// present, for the kept Machines it proves off, and records the rebind, so
+// its kept-power reading and the restore's present the new version.
+func TestAStagedDestroyRebindsTheAccessCredentialOfAKeptNodeItProvesOff(t *testing.T) {
+	t.Parallel()
+	cluster := nodeOnlyBMC(t)
+	h := cluster.h
+	completeApply(t, h)
+	h.binder.versions["bmc"] = "ver-2"
+	cluster.takeReadings()
+	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, Floor: string(reconciliation.StageClusters), SkipConfirmation: true, Authorizations: []string{RebindAuthorization + "bmc"}}); err != nil {
+		t.Fatalf("the rebound staged destroy: %+v", diagnostics.Of(err))
+	}
+	removal, _ := currentRecord(t, h)
+	if !trimmed(removal) || len(removal.Rebound) != 1 {
+		t.Fatalf("the staged destroy recorded %+v", removal)
+	}
+	if read := cluster.takeReadings(); !allOf(read["node-1"], "second") || !allOf(read["node-2"], "second") {
+		t.Fatalf("the kept-power readings presented %v, want the rebound version", read)
+	}
+	restoreWith(t, h)
+	if read := cluster.takeReadings(); !allOf(read["node-1"], "second") || !allOf(read["node-2"], "second") {
+		t.Fatalf("the restore read the kept nodes' power presenting %v, want the rebound version", read)
+	}
+}
+
+// A continued staged destroy rebinds the BMC credential of its kept nodes,
+// rotated after it started, and proves them off presenting the new version.
+func TestAContinuedStagedDestroyRebindsTheAccessCredentialOfAKeptNode(t *testing.T) {
+	t.Parallel()
+	cluster := nodeOnlyBMC(t)
+	h := cluster.h
+	completeApply(t, h)
+	cluster.install.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
+	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, Floor: string(reconciliation.StageClusters), SkipConfirmation: true}); err == nil {
+		t.Fatal("a staged destroy whose step is unknown completed")
+	}
+	cluster.install.outcomes = nil
+	cluster.install.observations = []Observation{{Effect: reconciliation.EffectCompleted, Evidence: json.RawMessage(`{"ok":true}`)}}
+	started, _ := currentRecord(t, h)
+	h.binder.versions["bmc"] = "ver-2"
+	cluster.takeReadings()
+	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, Floor: string(reconciliation.StageClusters), SkipConfirmation: true, Authorizations: []string{RebindAuthorization + "bmc"}}); err != nil {
+		t.Fatalf("the rebound continuation: %+v", diagnostics.Of(err))
+	}
+	removal, _ := currentRecord(t, h)
+	if removal.ID != started.ID || !trimmed(removal) || len(removal.Rebound) != 1 {
+		t.Fatalf("the continuation recorded %+v after %+v", removal, started)
+	}
+	if read := cluster.takeReadings(); !allOf(read["node-1"], "second") || !allOf(read["node-2"], "second") {
+		t.Fatalf("the continuation's kept-power readings presented %v, want the rebound version", read)
+	}
+}
