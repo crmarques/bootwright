@@ -99,24 +99,6 @@ func holdingOperation(operation operationstore.Operation) string {
 	return "the " + string(operation.Verb) + " " + operation.ID + " (" + string(operation.State) + ")"
 }
 
-func (s Service) effectMaterial(plan reconciliation.Plan) ([]string, bool) {
-	var effect []string
-	for _, block := range plan.Blocks {
-		capability, _ := s.capabilities.Resolve(block.Kind, block.Implementation)
-		held, classified := EffectMaterial(capability, block)
-		if !classified {
-			return nil, false
-		}
-		for _, reference := range held {
-			if !slices.Contains(effect, reference) {
-				effect = append(effect, reference)
-			}
-		}
-	}
-	slices.Sort(effect)
-	return effect, true
-}
-
 func EffectMaterial(capability Capability, block reconciliation.Block) ([]string, bool) {
 	referencer, named := capability.(SecretReferencer)
 	classifier, classifies := capability.(SecretClassifier)
