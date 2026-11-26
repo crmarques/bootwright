@@ -88,6 +88,7 @@ type Inverse struct {
 	LeavesWith []string `json:"leavesWith,omitempty"`
 	Nothing    string   `json:"nothing,omitempty"`
 	KeptHosts  []string `json:"keptHosts,omitempty"`
+	Blanks     []string `json:"blanks,omitempty"`
 }
 
 func (i *Inverse) Stated() bool {
@@ -609,6 +610,12 @@ func validateInverse(definition BlockDefinition) error {
 	if len(inverse.KeptHosts) != 0 && len(definition.Impacts) == 0 {
 		return planError("lifecycle block keeps hosts for a removal that names no effect it performs")
 	}
+	if !uniqueSorted(inverse.Blanks) || slices.ContainsFunc(inverse.Blanks, func(machine string) bool { return !slices.Contains(inverse.KeptHosts, machine) }) {
+		return planError("lifecycle block blanks the root disk of a Machine it does not keep, or out of order")
+	}
+	if len(inverse.Blanks) != 0 && !slices.Contains(definition.Consumes, AuthorizationDataLoss) {
+		return planError("lifecycle block blanks a root disk without consuming data-loss")
+	}
 	if inverse.Nothing == "" {
 		return nil
 	}
@@ -706,6 +713,7 @@ func clone(definition BlockDefinition) BlockDefinition {
 	if definition.Inverse != nil {
 		inverse := *definition.Inverse
 		inverse.Retains, inverse.LeavesWith, inverse.KeptHosts = slices.Clone(inverse.Retains), slices.Clone(inverse.LeavesWith), slices.Clone(inverse.KeptHosts)
+		inverse.Blanks = slices.Clone(inverse.Blanks)
 		definition.Inverse = &inverse
 	}
 	return definition

@@ -91,6 +91,9 @@ func (d decider) withPhases(ctx context.Context, store recordReader, decided ope
 	if !decided.fresh {
 		err = proveRecorded(ctx, d.capabilities, store, decided.plan, decided.operation)
 	}
+	if err == nil && !decided.fresh {
+		err = d.proofs.proveResetContracts(ctx, store, decided.plan, decided.operation)
+	}
 	return decided, err
 }
 
@@ -662,7 +665,7 @@ func (d decider) supersede(ctx context.Context, view View, store decisionRecords
 	if err != nil {
 		return operationPlan{}, err
 	}
-	scope.keptHosts = frozenKept(frozen)
+	scope.keptHosts, scope.blanks = frozenKept(frozen), frozenBlanks(frozen)
 	decided, err := d.planner.freshDestroy(ctx, name, operation.Executable, operation.Source, scope, false)
 	if err != nil {
 		return operationPlan{}, err

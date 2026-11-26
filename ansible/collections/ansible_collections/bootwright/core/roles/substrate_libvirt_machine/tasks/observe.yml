@@ -12,6 +12,33 @@
     phase: loaded
   no_log: true
 
+- name: Read the root disk a staged destroy blanks and its mark, changing nothing
+  bootwright.core.libvirt_root_reset:
+    request: '{{ bootwright_substrate_machine_request }}'
+    removal: '{{ bootwright_substrate_machine_material.rootReset }}'
+    step: '{{ bootwright_substrate_machine_material.rootResetStep }}'
+    reset: false
+  register: substrate_libvirt_machine_root
+  when: bootwright_substrate_machine_material.rootReset is defined
+
+- name: Publish the root disk's bounded evidence
+  bootwright.core.substrate_libvirt_machine_protocol:
+    phase: completed
+    observed: true
+    outcome: unchanged
+    digest: '{{ bootwright_substrate_machine_digest }}'
+    root_reset: '{{ bootwright_substrate_machine_material.rootReset }}/{{ bootwright_substrate_machine_material.rootResetStep }}'
+    root_size: '{{ bootwright_substrate_machine_request.disks[0].sizeGiB | int }}'
+    observation: '{{ substrate_libvirt_machine_root.observation }}'
+  no_log: true
+  when: bootwright_substrate_machine_material.rootReset is defined
+
+# A root disk's reading publishes only that evidence, so the machine's own
+# observation does not run.
+- name: End the root disk's reading
+  ansible.builtin.meta: end_host
+  when: bootwright_substrate_machine_material.rootReset is defined
+
 - name: Observe the machine without changing any of it
   bootwright.core.libvirt_domain_inspect:
     bootstrap: '{{ bootwright_substrate_machine_material.bootstrap | default(false) | bool }}'

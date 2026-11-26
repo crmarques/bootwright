@@ -23,6 +23,7 @@ from ansible_collections.bootwright.core.plugins.modules import (
     libvirt_firewall_ready,
     libvirt_host_inspect,
     libvirt_nm_connections,
+    libvirt_root_reset,
     libvirt_routing,
     libvirt_vlan_refusal,
 )
@@ -32,6 +33,8 @@ ARGV = [substrate_libvirt.VIRSH, "--connect", "qemu:///system", "version"]
 CASES = [
     (libvirt_domain_inspect, "observe_machine", {"request": {}}, "the machine could not be observed: TimeoutError"),
     (libvirt_host_inspect, "observe_host", {"request": {}}, "the provider host could not be observed: TimeoutError"),
+    (libvirt_root_reset, "observe", {"request": {}, "removal": "op-" + "0" * 32, "step": "cluster-install-edge"},
+     "the root disk could not be reset: TimeoutError"),
     (libvirt_firewall_ready, "manage", {"request": {}}, "the owned firewall readiness barrier could not be changed safely"),
     (libvirt_routing, "manage", {"request": {}}, "the owned routing table could not be changed safely"),
     (libvirt_vlan_refusal, "manage", {"request": {}}, "the owned VLAN refusal routes could not be changed safely"),

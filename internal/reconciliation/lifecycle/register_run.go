@@ -52,6 +52,11 @@ func (s Service) register(ctx context.Context, tx Transaction, store OperationSt
 	if err != nil {
 		return fail(err)
 	}
+	if decided.verb == reconciliation.Destroy {
+		if err := s.recordResetContracts(ctx, store, decided.plan, decided.source, decided.stage, contracts); err != nil {
+			return fail(err)
+		}
+	}
 	closure := located.closure
 	if decided.predecessor == "" || decided.reserveAddition || decided.restores != "" {
 		if err := s.reserve(ctx, tx, decided, opened.material); err != nil {

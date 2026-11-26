@@ -1106,6 +1106,25 @@ reports. Because the deleted disks may hold an installed operating system, the
 block consumes `data-loss` on destroy, so the operator acknowledges the loss
 before the plan registers.
 
+**Root reset.** For a [staged destroy](state-reconciliation.md#staged-destroy)
+that keeps the Machine, the block offers `lifecycle.RootDiskReset` (operation
+`root_reset`) under its own contract `machine-libvirt-root-reset-v1`, its
+evidence never the Machine's; the removal records it and proves it, and the
+Machine block's contract, before each attempt, resolution and continuation.
+The reset first proves its target as the apply derives it: the directory
+`/var/lib/libvirt/images/bootwright/<context>/machines/<object>`, resolving to
+itself, its `root.qcow2` a regular file or absent, and the domain's `vda`
+reading it. On this context's own domain, shut off, it deletes the mark
+`<directory>/root-reset.mark` and the root image, creates the image with
+`qemu-img create -f qcow2` at its frozen path and size, and, the domain still
+shut off, writes the mark `<operation>/<step>` `0600` through a rename. The
+domain, its UUID, MACs, data disks, TPM state, BMC unit and claims stay. Its
+reading, in check mode too, is completed only under that mark at the frozen
+size with the domain shut off, so a reset cut short is redone. The mark stays
+after the restore; the disk directory's removal takes it
+(`TestARootDiskResetIsCompletedOnlyUnderItsMarkAtTheFrozenSize`,
+`test_libvirt_root_reset.py`).
+
 Observation is read-only, and a removal's resolution reads the same
 observation for what the removal takes back, not for what the apply proves:
 
@@ -1850,6 +1869,10 @@ delivered host key as its identity channel; until then it refuses as the
 
 Not yet met: a KubeVirt interface on a namespaced `UserDefinedNetwork`
 refuses; tracked as [B909](milestones/backlog.md#b909).
+
+Not yet met: the machine offers no root-disk reset, so a staged destroy that
+keeps a booted KubeVirt node refuses; tracked as
+[B1880](milestones/m1.md#b1880).
 
 **Port.** The realized target names, as its management controller, the
 endpoint `kubevirt:<namespace>/<vm>` and the provider's `kubeconfigRef` as its

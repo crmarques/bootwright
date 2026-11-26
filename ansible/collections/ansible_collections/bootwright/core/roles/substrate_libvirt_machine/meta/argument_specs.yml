@@ -76,6 +76,10 @@ argument_specs:
     short_description: Remove one frozen virtual machine and prove its absence.
     options: *request
 
+  root_reset:
+    short_description: Blank one kept virtual machine's root disk for a staged destroy, keeping the machine.
+    options: *request
+
   # The machine port other domains compose, each entry point included by
   # exactly this key. ansible-core validates these inputs before the entry
   # point's first task. That validation is not hidden from output and echoes a

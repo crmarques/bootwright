@@ -1,0 +1,48 @@
+---
+# The root disk of a kept machine whose installation a staged destroy takes
+# back: only that image is created again, empty, at its frozen path and size,
+# and marked with the staged destroy and step, so the domain, its MACs, UUID,
+# controller and data disks stay as the apply left them, and its boot order,
+# root disk first and optical media second, sends the next boot to the
+# installer media the restore inserts.
+- name: Validate the frozen machine request
+  ansible.builtin.assert:
+    that:
+      - bootwright_substrate_machine_request.version == 'machine-libvirt-v1'
+      - bootwright_substrate_machine_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$(?!\n)')
+      - bootwright_substrate_machine_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$(?!\n)')
+      - bootwright_substrate_machine_request.directory == '/var/lib/libvirt/images/bootwright/'
+        ~ bootwright_substrate_machine_request.identity.context ~ '/machines/' ~ bootwright_substrate_machine_request.identity.object
+      - bootwright_substrate_machine_request.disks[0].path == bootwright_substrate_machine_request.directory ~ '/root.qcow2'
+      - bootwright_substrate_machine_digest is match('^[0-9a-f]{64}$(?!\n)')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.substrate_libvirt_machine_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Prove the context's hosted machine directories before any effect
+  bootwright.core.hosted_area:
+    context: '{{ bootwright_substrate_machine_request.identity.context }}'
+    path: '{{ substrate_libvirt_machine_area }}'
+    state: proved
+
+- name: Blank the root disk under the staged destroy's mark
+  bootwright.core.libvirt_root_reset:
+    request: '{{ bootwright_substrate_machine_request }}'
+    removal: '{{ bootwright_substrate_machine_material.rootReset }}'
+    step: '{{ bootwright_substrate_machine_material.rootResetStep }}'
+    reset: true
+  register: substrate_libvirt_machine_root
+
+- name: Publish the root disk's bounded evidence
+  bootwright.core.substrate_libvirt_machine_protocol:
+    phase: completed
+    outcome: "{{ 'changed' if substrate_libvirt_machine_root.changed else 'unchanged' }}"
+    digest: '{{ bootwright_substrate_machine_digest }}'
+    root_reset: '{{ bootwright_substrate_machine_material.rootReset }}/{{ bootwright_substrate_machine_material.rootResetStep }}'
+    root_size: '{{ bootwright_substrate_machine_request.disks[0].sizeGiB | int }}'
+    observation: '{{ substrate_libvirt_machine_root.observation }}'
+  no_log: true

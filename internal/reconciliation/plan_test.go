@@ -180,6 +180,8 @@ func TestOnlyARemovalFreezesAnInverseAndTheDigestCoversIt(t *testing.T) {
 		"unsafe kept host":       stated(Inverse{KeptHosts: []string{"node/1"}}, "remove-unit alpha"),
 		"nothing beside kept":    stated(Inverse{KeptHosts: []string{"node-1"}, Nothing: "nothing"}),
 		"kept with no impacts":   stated(Inverse{KeptHosts: []string{"node-1"}}),
+		"blanks a host it drops": stated(Inverse{KeptHosts: []string{"node-1"}, Blanks: []string{"node-2"}}, "remove-unit alpha"),
+		"blanks without loss":    stated(Inverse{KeptHosts: []string{"node-1"}, Blanks: []string{"node-1"}}, "remove-unit alpha"),
 	} {
 		if _, err := NewPlan(Destroy, definitions); err == nil {
 			t.Errorf("a removal froze the %s inverse", name)
@@ -195,6 +197,11 @@ func TestOnlyARemovalFreezesAnInverseAndTheDigestCoversIt(t *testing.T) {
 	kept, err := NewPlan(Destroy, stated(Inverse{KeptHosts: []string{"node-1", "node-2"}}, "remove-unit alpha"))
 	if encoded, _ := json.Marshal(kept); err != nil || !strings.Contains(string(encoded), `"inverse":{"keptHosts":["node-1","node-2"]}`) {
 		t.Fatalf("a removal complete on kept hosts encodes %s (%v)", encoded, diagnostics.Of(err))
+	}
+	blanked := stated(Inverse{KeptHosts: []string{"node-1", "node-2"}, Blanks: []string{"node-1", "node-2"}}, "remove-unit alpha")
+	blanked[0].Consumes = []string{AuthorizationDataLoss}
+	if blanks, err := NewPlan(Destroy, blanked); err != nil || !slices.Equal(blanks.Blocks[0].Inverse.Blanks, []string{"node-1", "node-2"}) {
+		t.Fatalf("a removal that blanks its kept hosts' root disks froze %+v (%v)", blanks, diagnostics.Of(err))
 	}
 	plain, err := NewPlan(Destroy, []BlockDefinition{definition("alpha"), definition("bravo", "alpha")})
 	if err != nil {

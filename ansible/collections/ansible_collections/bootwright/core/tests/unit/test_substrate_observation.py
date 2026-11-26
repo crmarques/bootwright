@@ -26,6 +26,7 @@ def publications(role, action):
     return [
         task[action] for task in parsed
         if isinstance(task, dict) and isinstance(task.get(action), dict) and task[action].get("phase") == "completed"
+        and "root_reset" not in task[action]
     ]
 
 

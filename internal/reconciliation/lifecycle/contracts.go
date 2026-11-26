@@ -305,8 +305,22 @@ type RemovalRecords struct {
 }
 
 type KeptHostRemoval interface {
-	KeptHostsRefusal(reconciliation.Block, RemovalRecords) string
+	KeptHostsRefusal(block reconciliation.Block, records RemovalRecords, blanked bool) string
 	KeptHostsRemoval(context.Context, reconciliation.Block) (Removal, error)
+}
+
+type RootDiskReset interface {
+	RootResetContract() (implementation, contentDigest string)
+	RootResetSecrets(reconciliation.Block) ([]string, error)
+	RootResetRefusal(reconciliation.Block) string
+	ResetRootDisk(context.Context, RootReset) (reconciliation.Outcome, reconciliation.EffectState, error)
+	ObserveRootDisk(context.Context, RootReset) (reconciliation.EffectState, error)
+}
+
+type RootReset struct {
+	Execution
+	Removal string
+	Step    string
 }
 
 type RemovalUnregisterer interface {
@@ -621,6 +635,7 @@ type decisionProofs interface {
 	proveExecution(context.Context, View, operationstore.Operation, reconciliation.Plan, map[string]reconciliation.BlockState) executionProof
 	verifyRemovalHost(context.Context, View) error
 	verifyContinuation(context.Context, View, operationstore.Operation, executionProof, *approved) error
+	proveResetContracts(context.Context, recordReader, reconciliation.Plan, operationstore.Operation) error
 	custodyProved(context.Context, View, lineage, reconciliation.Plan) error
 	restoreProved(context.Context, View, lineage, reconciliation.Plan, reconciliation.Plan) error
 }

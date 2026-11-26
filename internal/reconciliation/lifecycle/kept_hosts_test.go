@@ -78,11 +78,11 @@ type keptNodeInstall struct {
 
 func (c *keptNodeInstall) NodeMachines(reconciliation.Block) ([]string, error) { return c.nodes, nil }
 
-func (c *keptNodeInstall) KeptHostsRefusal(_ reconciliation.Block, records RemovalRecords) string {
+func (c *keptNodeInstall) KeptHostsRefusal(_ reconciliation.Block, records RemovalRecords, blanked bool) string {
 	switch {
 	case c.refuse != "":
 		return c.refuse
-	case len(records.Preparations) != 0:
+	case len(records.Preparations) != 0 && !blanked:
 		return "its installation recorded a boot"
 	}
 	return ""
@@ -105,7 +105,7 @@ func (c *keptNodeInstall) Apply(ctx context.Context, execution Execution) (Resul
 
 type keptNodeMedia struct{ *testCapability }
 
-func (keptNodeMedia) KeptHostsRefusal(reconciliation.Block, RemovalRecords) string { return "" }
+func (keptNodeMedia) KeptHostsRefusal(reconciliation.Block, RemovalRecords, bool) string { return "" }
 func (c keptNodeMedia) KeptHostsRemoval(ctx context.Context, block reconciliation.Block) (Removal, error) {
 	return c.Removal(ctx, block)
 }
@@ -340,7 +340,7 @@ func TestAStagedDestroyRefusesAnInstallationThatRecordedABoot(t *testing.T) {
 		physical       bool
 		reason, remedy string
 	}{
-		"virtual nodes":  {reason: "(B1861)", remedy: "bootwright destroy --dry-run --context lab --stage machines"},
+		"virtual nodes":  {reason: "(B1880)", remedy: "bootwright destroy --dry-run --context lab --stage machines"},
 		"physical nodes": {physical: true, reason: "(B1864)", remedy: "take back the whole context with bootwright destroy --context lab"},
 	} {
 		t.Run(name, func(t *testing.T) {

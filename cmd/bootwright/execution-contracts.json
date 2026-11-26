@@ -47,6 +47,10 @@
     "contentDigest": "51ddb3590eb7ac455201230a9d7cc259fa7373e1ee5b647b9e8b3af828b40b92",
     "fingerprint": "c37608341fd76d0cee2e9d78cdb65239e7be1c752a01f5cf1e66aa458b9fffe0"
   },
+  "machine-libvirt-root-reset-v1": {
+    "contentDigest": "901612fa75032213210790390df85fd44ccd9316d5cda86e61853a684101a908",
+    "fingerprint": "ccaed82fac961105f1149e0327c7724468920b4e61b4f08309c903c93522b185"
+  },
   "machine-libvirt-v1": {
     "contentDigest": "27d017d249d6121f4e3dab49d246824d3c5a534fa867a2a923ce49ca5748381f",
     "fingerprint": "492574a8defa3bc4847b76e06b4d78a3155f194af4ca9818c64b747044dc552f"

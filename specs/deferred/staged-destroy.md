@@ -9,16 +9,18 @@ page. A rule that the code already holds is not stated here: slice 0, the
 frozen inverse of every destroy step, slice 1, its branches once decided at
 run time, slice 2, the ownership fold, slice 3, `destroy --stage` and the
 trimmed resting state, slice 4, the restoring apply, slice 5, its changed
-input, and slice 6, an agent installation taken back on kept nodes before a
-boot, are implemented and are owned by
+input, slice 6, an agent installation taken back on kept nodes before a
+boot, and slice 7, the root disks of kept libvirt nodes blanked after one, are
+implemented and are owned by
 [state reconciliation](../state-reconciliation.md#staged-destroy),
 its [restoring apply](../state-reconciliation.md#restoring-apply),
 [removal on kept nodes](../openshift-clusters.md#removal-on-kept-nodes) and the
 delivered records
 [X757](../milestones/delivered.md#x757--the-restoring-apply-restores-what-a-staged-destroy-took-back),
-[X759](../milestones/delivered.md#x759--a-restore-admits-changed-input-inside-what-a-staged-destroy-took-back)
+[X759](../milestones/delivered.md#x759--a-restore-admits-changed-input-inside-what-a-staged-destroy-took-back),
+[X760](../milestones/delivered.md#x760--an-agent-installation-no-node-booted-is-taken-back-on-kept-nodes)
 and
-[X760](../milestones/delivered.md#x760--an-agent-installation-no-node-booted-is-taken-back-on-kept-nodes).
+[X762](../milestones/delivered.md#x762--a-staged-destroy-blanks-the-root-disks-of-kept-libvirt-nodes).
 
 Words used below:
 
@@ -60,7 +62,8 @@ causes.
 | 5 | [B1859](../milestones/delivered.md#x759--a-restore-admits-changed-input-inside-what-a-staged-destroy-took-back) | A restore admits changed input inside the taken-back part |
 | 5b | [B1868](../milestones/delivered.md#x761--a-restore-binds-what-its-added-steps-name-and-a-removal-presents-each-step-its-creators-binding) | A restore binds its added steps' Secrets, and a whole removal reopens each member's binding |
 | 6 | [B1860](../milestones/delivered.md#x760--an-agent-installation-no-node-booted-is-taken-back-on-kept-nodes) | An agent installation whose nodes never booted is taken back on kept nodes |
-| 7 | [B1861](../milestones/m1.md#b1861) | Root disks of kept virtual nodes are blanked through their substrate |
+| 7 | [B1861](../milestones/delivered.md#x762--a-staged-destroy-blanks-the-root-disks-of-kept-libvirt-nodes) | Root disks of kept libvirt nodes are blanked through their substrate |
+| 7b | [B1880](../milestones/m1.md#b1880) | Root disks of kept KubeVirt nodes are blanked through their substrate |
 | 8 | [B1862](../milestones/m2.md#b1862) | A Ceph cluster is taken back on kept hosts |
 
 Two further outcomes follow the restoring apply and stay parked: physical
@@ -101,7 +104,7 @@ per-step binding are owned by
 
 | Scenario | Result |
 | --- | --- |
-| Cluster provisioning failed and the nodes are virtual, installed and proved | `--stage clusters` is admitted once the node Machines are kept and the root-disk reset exists ([B1861](../milestones/m1.md#b1861)); before that it refuses with `destroy.stage-keeps-host` |
+| Cluster provisioning failed and the nodes are KubeVirt VMs that booted | `--stage clusters` refuses `destroy.stage-keeps-host` until the KubeVirt root-disk reset exists ([B1880](../milestones/m1.md#b1880)) |
 | A cluster install failed before any node booted the image | `--stage clusters` takes back the agent installation on kept nodes ([removal on kept nodes](../openshift-clusters.md#removal-on-kept-nodes)) |
 | A staged destroy fails halfway and the operator widens it | A lower floor or no `--stage` supersedes it behind the widening confirmation ([staged destroy](../state-reconciliation.md#staged-destroy)) |
 | A kept host is in the wrong power state | Stops with the `machine start` or `machine stop` command |
@@ -121,7 +124,7 @@ unlocks the part that refuses.
 | Infrastructure services (mirror content, DNS, registry, hardware claims, enrollment) and the controller | Always kept | none; the whole destroy takes them back |
 | OpenShift agent installation | Taken back on kept nodes when no node was handed the image | [B1860](../milestones/delivered.md#x760--an-agent-installation-no-node-booted-is-taken-back-on-kept-nodes) |
 | OpenShift physical nodes after a boot | Stays open: the installed system would be recorded as residue, the nodes proved off and the next install would consume data loss as it does now | the owner's decision |
-| Virtual node Machines after a boot | The install step's inverse blanks the root disks through a substrate port, with every other step on that disk in the scope | [B1861](../milestones/m1.md#b1861) |
+| KubeVirt node Machines after a boot | The install step's inverse blanks the root disks through the KubeVirt arm's root-disk reset | [B1880](../milestones/m1.md#b1880) |
 | Ceph on kept hosts | First the unwind of a cluster no data client can hold access to: hosts on, `rm-cluster` scoped to the FSID, zap of exactly the volumes tagged with it, removal of the drop-in, the key line, the registry credential and the markers, and an observation that each host is absent; then serving clusters under B491's client-fencing contract | [B1862](../milestones/m2.md#b1862), requiring [B491](../milestones/m2.md#b491) |
 | Add-on instances | Retire offline with their cluster's install in the scope | [B769](../milestones/backlog.md#b769) for one instance online |
 

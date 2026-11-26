@@ -1363,12 +1363,19 @@ func (s *Store) LastAttempt(ctx context.Context, id, block string) (int, error) 
 }
 
 func checkContracts(operation Operation, plan reconciliation.Plan) error {
-	used := map[string]bool{}
+	used, blanks := map[string]bool{}, false
 	for _, block := range plan.Blocks {
 		used[block.Implementation] = true
+		blanks = blanks || block.Inverse != nil && len(block.Inverse.Blanks) != 0
 	}
-	if len(used) != len(operation.Contracts) {
+	resets := len(operation.Contracts) - len(used)
+	if resets < 0 || (resets != 0) != (blanks && operation.Verb == reconciliation.Destroy) {
 		return recordError("lifecycle operation execution contracts do not match its plan")
+	}
+	for _, fingerprint := range operation.Contracts {
+		if fingerprint == "" {
+			return recordError("lifecycle operation execution contracts do not match its plan")
+		}
 	}
 	for implementation := range used {
 		if operation.Contracts[implementation] == "" {

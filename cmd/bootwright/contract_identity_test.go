@@ -126,6 +126,8 @@ func contractRecipes() map[string]digestRecipe {
 		libvirt.MachineImplementation: digestOf(partDomain("bootwright.substrate.libvirt.machine-v1"), partImplementation(libvirt.MachineImplementation), partRequest("machine-libvirt-v1"),
 			partPin("quay.io/metal3-io/sushy-tools@sha256:f760343718e1175343f230ec43496a4f0d850f1d0a3139b92db1e475ac91d11e"),
 			partPin(substrate.ImagePrefix), partPin(substrate.Prefix), partPin("data-media-ssd-scsi-v1"), partPin("shared-bmc-claim"), partPin("attached-disk-evidence-v1"), partPin(substrate.RedfishMediaPolicy)),
+		libvirt.RootResetImplementation: digestOf(partDomain("bootwright.substrate.libvirt.machine-root-reset-v1"), partImplementation(libvirt.RootResetImplementation), partRequest("machine-libvirt-v1"),
+			partPin("blank-root-image-v1"), partPin(libvirt.RootResetMark)),
 		kubevirt.HostImplementation: digestOf(partDomain("bootwright.substrate.kubevirt.host-v1"), partImplementation(kubevirt.HostImplementation), partRequest("substrate-host-kubevirt-v1"),
 			partVersion("substrate-host-kubevirt-evidence-v1"), partPin("access-reviews"), partPin("root-class-rwx"), partPin("kube-system-uid"), partPin("ingress-ca"),
 			partPin("substrate-access-kubevirt-v1"), partPin("substrate-access-kubevirt-evidence-v1"), partPin("lend-bound-secret"), partPin("root-class-first-set"),
@@ -204,6 +206,7 @@ func requestIdentities() map[string][]string {
 			"networks[].bridge", "firewallReadyUnit", "vlanRefusalUnit", "trunks[].bridge", "trunks[].name", "trunks[].uuid", "legs[].name", "legs[].device", "legs[].uuid", "routing.unit"},
 		libvirt.MachineImplementation: {"identity.context", "identity.object", "identity.block", "uri", "domain", "uuid", "directory", "poolName",
 			"poolPath", "disks[].name", "disks[].path", "interfaces[].macAddress", "controller.unit", "controller.port"},
+		libvirt.RootResetImplementation:       {"identity.context", "identity.object", "uri", "domain", "uuid", "directory", "disks[].name", "disks[].path", "disks[].sizeGiB", "disks[].target"},
 		baremetal.Implementation:              {"identity.context", "identity.object", "identity.block", "provider", "controller.endpoint", "hardware[].macAddress"},
 		kubevirt.HostImplementation:           {"identity.context", "identity.object", "identity.block", "namespace", "kubeconfigRef", "hostCluster"},
 		kubevirt.MachineImplementation:        {"identity.context", "identity.object", "identity.block", "provider", "namespace", "name", "rootVolume", "mediaVolume", "interfaces[].macAddress"},
@@ -278,7 +281,7 @@ func TestCheckCommitsContractPathsCoverEveryImplementation(t *testing.T) {
 		"ansible/" + automationCollection + "plugins/":   "the collection's plugins",
 		"ansible/" + automationCollection + "roles/":     "the collection's roles",
 	}
-	for _, version := range contractVersions() {
+	for _, version := range append(contractVersions(), operationContractVersions()...) {
 		for _, defined := range []reflect.Type{version.request, version.evidence} {
 			required[strings.TrimPrefix(defined.PkgPath(), module)+"/"] = version.implementation
 		}

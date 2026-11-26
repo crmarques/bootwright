@@ -50,6 +50,8 @@ SUBSTRATES = {"libvirt": "substrate_libvirt_machine", "baremetal": "substrate_ba
 UNCOMPOSED = {"kubevirt": ("substrate_kubevirt_machine", "test_containercluster_kubevirt_port.py")}
 PORT = {"pre_boot", "boot_media", "boot_disk", "identity_read", "state_read", "media_insert", "media_eject", "power"}
 LIFECYCLE = {"apply", "observe", "destroy"}
+# The lifecycle entry points an arm adds for a staged destroy that keeps its machine.
+KEPT = {"libvirt": {"root_reset"}}
 INSTALLATIONS = ("containercluster_install_agent", "managedos_install_anaconda")
 MANAGED_OS = "managedos_install_anaconda"
 CLUSTER = "containercluster_install_agent"
@@ -360,7 +362,7 @@ def test_what_each_include_renders_passes_its_entry_points_validation(consumer):
 @pytest.mark.parametrize("arm", sorted(SUBSTRATES))
 def test_each_machine_role_declares_exactly_the_port_beside_its_lifecycle(arm):
     declared = specs(arm)
-    assert set(declared) == PORT | LIFECYCLE
+    assert set(declared) == PORT | LIFECYCLE | KEPT.get(arm, set())
     for entry, spec in declared.items():
         assert (ROLES / SUBSTRATES[arm] / "tasks" / (entry + ".yml")).is_file(), entry
         assert spec.get("short_description"), entry

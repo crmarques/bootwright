@@ -103,7 +103,7 @@ func (s Service) runAttempt(ctx context.Context, run invocation, block reconcili
 		if operation.Verb == reconciliation.Destroy {
 			execution.RetiredWithHosts = retired[block.ID]
 			if reread {
-				if result, settled, err := rereadBeforeRemoval(inner, capability, execution); settled {
+				if result, settled, err := rereadBeforeRemoval(inner, s.removalObserver(run, capability), execution); settled {
 					return result, err
 				}
 			}
@@ -111,7 +111,7 @@ func (s Service) runAttempt(ctx context.Context, run invocation, block reconcili
 				return Result{Outcome: reconciliation.OutcomeFailed}, err
 			}
 			execution.Warn = warnings.collect
-			return capability.Destroy(inner, execution)
+			return s.removeBlanking(inner, run, capability, execution)
 		}
 		execution.Warn = warnings.collect
 		return s.applyAdmitted(inner, plan, capability, execution, operation.Predecessor != "")
@@ -304,7 +304,7 @@ func (s Service) resolveUnknown(ctx context.Context, run invocation, block recon
 		_, runErr := s.invoke(ctx, run, target, invokeRecords{applyProved: applyProved, preparations: preparations, log: log, attempt: attemptNumber, resolution: number}, position, total, func(inner context.Context, execution Execution) (Result, error) {
 			observe := capability.Observe
 			if as == reconciliation.Destroy {
-				observe = capability.ObserveRemoval
+				observe = s.removalObserver(run, capability)
 				execution.RetiredWithHosts = reading.retired[target.ID]
 				if err := s.removalResolutionExecution(inner, run, &execution, target.ID); err != nil {
 					return Result{Outcome: reconciliation.OutcomeUnknown}, err
@@ -1012,8 +1012,8 @@ func rereads(ctx context.Context, store OperationStore, operation operationstore
 	return found && last.Effect == reconciliation.EffectInconclusive, err
 }
 
-func rereadBeforeRemoval(ctx context.Context, capability Capability, execution Execution) (Result, bool, error) {
-	observed, err := capability.ObserveRemoval(ctx, execution)
+func rereadBeforeRemoval(ctx context.Context, observe func(context.Context, Execution) (Observation, error), execution Execution) (Result, bool, error) {
+	observed, err := observe(ctx, execution)
 	switch {
 	case err == nil && observed.Effect == reconciliation.EffectCompleted:
 		return Result{Outcome: reconciliation.OutcomeUnchanged, Evidence: observed.Evidence}, true, nil

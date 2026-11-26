@@ -10074,7 +10074,7 @@ the owner's request, out of sequence. The program, in order, is the items of the
 inverse of every destroy step ([B1855](delivered.md#x753--every-destroy-step-states-its-inverse), [B1856](delivered.md#x754--run-time-inverse-branches-frozen)), one
 ownership fold ([B1857](delivered.md#x755--one-fold-answers-what-a-contexts-operations-own)), `destroy --stage` (B166), the restoring
 apply ([B1858](delivered.md#x757--the-restoring-apply-restores-what-a-staged-destroy-took-back), [B1859](delivered.md#x759--a-restore-admits-changed-input-inside-what-a-staged-destroy-took-back)), and the per-capability
-unlocks ([B1860](delivered.md#x760--an-agent-installation-no-node-booted-is-taken-back-on-kept-nodes), [B1861](m1.md#b1861),
+unlocks ([B1860](delivered.md#x760--an-agent-installation-no-node-booted-is-taken-back-on-kept-nodes), [B1861](delivered.md#x762--a-staged-destroy-blanks-the-root-disks-of-kept-libvirt-nodes),
 [B1862](m2.md#b1862)). This decision authorizes X753, the slice of B1855, and
 no other slice. Each later slice needs its own authorization, and the
 restoring apply is the fifth apply scenario, which
@@ -10143,7 +10143,7 @@ same number above:
    contradicts refuses and is finished with its build (X753).
 7. After the restoring apply: the OpenShift agent installation before boot
    ([B1860](delivered.md#x760--an-agent-installation-no-node-booted-is-taken-back-on-kept-nodes)), then the blank root disks of kept virtual nodes
-   ([B1861](m1.md#b1861)), then Ceph on kept hosts for a cluster no data client
+   ([B1861](delivered.md#x762--a-staged-destroy-blanks-the-root-disks-of-kept-libvirt-nodes)), then Ceph on kept hosts for a cluster no data client
    was ever handed access to ([B1862](m2.md#b1862)), which defines that part of
    [B491](m2.md#b491).
 8. Physical OpenShift nodes after a boot are refused unless the step that

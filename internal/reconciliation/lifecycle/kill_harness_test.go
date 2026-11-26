@@ -17,6 +17,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
@@ -136,12 +137,15 @@ type killHost struct {
 	// claims names the artifact servers beside a that each plan claims, so a
 	// journey can hold the claim of an object a staged destroy takes back.
 	claims []string
+	// marks names, per kept node, the removal and step its root disk's reset
+	// names.
+	marks map[string]string
 }
 
 func newKillHost(definitions []reconciliation.BlockDefinition) *killHost {
 	return &killHost{
 		definitions: definitions, realized: map[string]bool{}, effects: map[string]int{}, failures: map[string]int{},
-		lost: map[string]int{}, partial: map[string]bool{}, foreign: map[string]bool{}, silent: map[string]bool{},
+		lost: map[string]int{}, partial: map[string]bool{}, foreign: map[string]bool{}, silent: map[string]bool{}, marks: map[string]string{},
 	}
 }
 
@@ -151,7 +155,7 @@ func (h *killHost) clone() *killHost {
 	return &killHost{
 		definitions: h.definitions, realized: maps.Clone(h.realized), effects: maps.Clone(h.effects), failures: maps.Clone(h.failures),
 		lost: maps.Clone(h.lost), partial: maps.Clone(h.partial), foreign: maps.Clone(h.foreign), silent: maps.Clone(h.silent), online: maps.Clone(h.online),
-		claims: h.claims,
+		claims: h.claims, marks: maps.Clone(h.marks),
 	}
 }
 
@@ -341,6 +345,9 @@ func (h *killHost) realizedBlocks() []string {
 	for block := range h.partial {
 		out = append(out, block+" (partly)")
 	}
+	for machine := range h.marks {
+		out = append(out, machine+" (blank)")
+	}
 	slices.Sort(out)
 	return out
 }
@@ -368,10 +375,88 @@ func killDefinitions() []reconciliation.BlockDefinition {
 	return []reconciliation.BlockDefinition{a, b, c}
 }
 
-// killRig is one journey's harness and the host it acts on.
+// killRig is one journey's harness and the host it acts on, through a node
+// Machine and an installation on it when nodes is set.
 type killRig struct {
 	harness *harness
 	host    *killHost
+	nodes   bool
+}
+
+// killNodes is the host acting as a virtual node Machine and an installation
+// that booted it, whose removal keeps the node and blanks its root disk.
+type killNodes struct {
+	*killHost
+	machine bool
+}
+
+func (n killNodes) Plan(ctx context.Context, input PlanInput) (CapabilityPlan, error) {
+	plan, err := n.killHost.Plan(ctx, input)
+	plan.Definitions = slices.DeleteFunc(plan.Definitions, func(d reconciliation.BlockDefinition) bool { return (d.Kind == "Machine") != n.machine })
+	if n.machine {
+		plan.Reservations, plan.Secrets = nil, nil
+	}
+	return plan, err
+}
+
+func (n killNodes) DeletesMachine(block reconciliation.Block) bool { return block.Kind == "Machine" }
+
+func (n killNodes) NodeMachines(block reconciliation.Block) ([]string, error) {
+	if block.Kind == "Machine" {
+		return nil, nil
+	}
+	return []string{"node"}, nil
+}
+
+func (n killNodes) KeptHostsRefusal(_ reconciliation.Block, _ RemovalRecords, blanked bool) string {
+	if blanked {
+		return ""
+	}
+	return "its installation recorded a boot"
+}
+
+func (n killNodes) KeptHostsRemoval(ctx context.Context, block reconciliation.Block) (Removal, error) {
+	return n.Removal(ctx, block)
+}
+
+func (n killNodes) StartPowerSecrets(reconciliation.Block) ([]string, error) { return nil, nil }
+
+func (n killNodes) StartPower(context.Context, Probe) (Quiescence, error) {
+	return Quiescence{State: Quiescent, Reason: "its domain is shut off"}, nil
+}
+
+func (n killNodes) RootResetContract() (string, string) {
+	return "machine-kill-root-reset-v1", "kill-root-reset"
+}
+
+func (n killNodes) RootResetSecrets(reconciliation.Block) ([]string, error) { return nil, nil }
+
+func (n killNodes) RootResetRefusal(reconciliation.Block) string { return "" }
+
+func (n killNodes) ResetRootDisk(_ context.Context, reset RootReset) (reconciliation.Outcome, reconciliation.EffectState, error) {
+	n.mutex.Lock()
+	defer n.mutex.Unlock()
+	n.marks[reset.Block.Object] = reset.Removal + "/" + reset.Step
+	return reconciliation.OutcomeChanged, reconciliation.EffectCompleted, nil
+}
+
+func (n killNodes) ObserveRootDisk(_ context.Context, reset RootReset) (reconciliation.EffectState, error) {
+	n.mutex.Lock()
+	defer n.mutex.Unlock()
+	if n.marks[reset.Block.Object] == reset.Removal+"/"+reset.Step {
+		return reconciliation.EffectCompleted, nil
+	}
+	return reconciliation.EffectNoEffect, nil
+}
+
+func (r *killRig) resolver(host *killHost) CapabilityResolver {
+	if !r.nodes {
+		return testResolver{capability: host}
+	}
+	return keptResolver{
+		{Kind: "Machine", Implementation: "node-machine-v1", Family: reconciliation.ManagedMachineFamily}: killNodes{host, true},
+		{Kind: "OpenShiftCluster", Implementation: "install-v1"}:                                          killNodes{host, false},
+	}
 }
 
 func newKillRig(t *testing.T) *killRig {
@@ -413,7 +498,7 @@ func (r *killRig) over(snapshot *killSnapshot) Service {
 	service := r.harness.service
 	service.workspace = snapshot.workspace
 	service.binder = snapshot.binder
-	service.capabilities = testResolver{capability: snapshot.host}
+	service.capabilities = r.resolver(snapshot.host)
 	return service
 }
 
@@ -567,7 +652,11 @@ func killInvoke(ctx context.Context, service Service, verb reconciliation.Verb) 
 
 func killInvokeAt(ctx context.Context, service Service, verb reconciliation.Verb, floor reconciliation.Stage) error {
 	if verb == reconciliation.Destroy {
-		_, err := service.Destroy(ctx, DestroyRequest{ContextName: testContextName, Floor: string(floor), SkipConfirmation: true})
+		request := DestroyRequest{ContextName: testContextName, Floor: string(floor), SkipConfirmation: true}
+		if _, nodes := service.capabilities.(keptResolver); nodes {
+			request.Authorizations = []string{reconciliation.AuthorizationDataLoss}
+		}
+		_, err := service.Destroy(ctx, request)
 		return err
 	}
 	_, err := service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
@@ -1015,6 +1104,17 @@ func killJourneys() []killJourney {
 		trimmedAt(reconciliation.StageClusters)(ctx, t, rig)
 		killApplyAt(ctx, t, rig, killRestoreReserved)
 	}
+	booted := func(ctx context.Context, t *testing.T, rig *killRig) {
+		t.Helper()
+		node := keptBlock("node", "Machine", "node-machine-v1", reconciliation.StageMachines)
+		install := keptBlock("install", "OpenShiftCluster", "install-v1", reconciliation.StageClusters, "node")
+		node.Object, install.Object = "node", "edge"
+		rig.nodes, rig.host.definitions = true, []reconciliation.BlockDefinition{node, install}
+		rig.harness.service.capabilities = rig.resolver(rig.host)
+		if err := killInvoke(ctx, rig.harness.service, reconciliation.Apply); err != nil {
+			t.Fatalf("the apply a root-disk reset starts from failed: %+v", diagnostics.Of(err))
+		}
+	}
 	restored := func(ctx context.Context, t *testing.T, rig *killRig) {
 		t.Helper()
 		trimmedAt(reconciliation.StageClusters)(ctx, t, rig)
@@ -1025,6 +1125,7 @@ func killJourneys() []killJourney {
 		{name: "restore-then-whole", bound: killBoundDestroy, start: restored, run: reconciliation.Destroy, retry: reconciliation.Destroy},
 		{name: "killed-restore-lower-floor", bound: killBoundDestroy, start: claimedRestoreKilled, run: reconciliation.Destroy, retry: reconciliation.Destroy, floor: reconciliation.StageSubstrates},
 		{name: "staged", bound: killBoundDestroy, start: stagedPlan, run: reconciliation.Destroy, retry: reconciliation.Destroy, floor: reconciliation.StageClusters},
+		{name: "staged-root-reset", bound: killBoundDestroy, start: booted, run: reconciliation.Destroy, retry: reconciliation.Destroy, floor: reconciliation.StageClusters, reaches: killRootReset()},
 		{name: "staged-replacement", bound: killBoundReplacement, start: stagedFailed, run: reconciliation.Destroy, retry: reconciliation.Destroy, floor: reconciliation.StageClusters},
 		{name: "staged-lower-floor", bound: killBoundDestroy, start: trimmedAt(reconciliation.StageClusters), run: reconciliation.Destroy, retry: reconciliation.Destroy, floor: reconciliation.StageSubstrates},
 		{name: "staged-failed-widened", bound: killBoundReplacement, start: stagedFailed, run: reconciliation.Destroy, retry: reconciliation.Destroy},
@@ -1061,6 +1162,13 @@ func killRemovalResolution() []string {
 		"replace <op>/blocks/b/state.json#1",
 		"replace <op>/operation.json#1",
 	}
+}
+
+// killRootReset is the record a removal that blanks a kept node's root disk
+// appends before the reset, after the eject, and its outcome after the reset,
+// so the harness kills on both sides of the disk's mark.
+func killRootReset() []string {
+	return []string{"append <op>/blocks/install/attempt-000001.jsonl#4", "append <op>/blocks/install/attempt-000001.jsonl#5"}
 }
 
 // killFinalization is every write of an apply's finalization, in order: the

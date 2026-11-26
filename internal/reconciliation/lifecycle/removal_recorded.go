@@ -15,6 +15,7 @@ type removalInputs struct {
 	unregistered map[string]bool
 	nothing      func(context.Context, reconciliation.Block) (bool, error)
 	keptHosts    map[string][]string
+	blanks       map[string][]string
 }
 
 func (s Service) selectedRemoval(ctx context.Context, capability Capability, block reconciliation.Block, removal Removal, inputs removalInputs) (Removal, string, error) {
@@ -76,7 +77,20 @@ func frozenNothing(plan reconciliation.Plan) func(context.Context, reconciliatio
 }
 
 func frozenInputs(plan reconciliation.Plan) removalInputs {
-	return removalInputs{relaxations: frozenRelaxations(plan), unregistered: frozenUnregistered(plan), nothing: frozenNothing(plan), keptHosts: frozenKept(plan)}
+	return removalInputs{relaxations: frozenRelaxations(plan), unregistered: frozenUnregistered(plan), nothing: frozenNothing(plan), keptHosts: frozenKept(plan), blanks: frozenBlanks(plan)}
+}
+
+func frozenBlanks(plan reconciliation.Plan) map[string][]string {
+	var blanks map[string][]string
+	for _, block := range plan.Blocks {
+		if block.Inverse != nil && len(block.Inverse.Blanks) != 0 {
+			if blanks == nil {
+				blanks = map[string][]string{}
+			}
+			blanks[block.ID] = slices.Clone(block.Inverse.Blanks)
+		}
+	}
+	return blanks
 }
 
 func frozenKept(plan reconciliation.Plan) map[string][]string {
@@ -170,7 +184,7 @@ func proveKeptHosts(ctx context.Context, capability Capability, store recordRead
 		if err != nil {
 			return err
 		}
-		refusal = kept.KeptHostsRefusal(block, read)
+		refusal = kept.KeptHostsRefusal(block, read, len(block.Inverse.Blanks) != 0)
 	}
 	if refusal == "" {
 		return nil

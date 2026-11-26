@@ -18697,3 +18697,50 @@ and administrator credential updates are [B1870](m1.md#b1870) and
 `TestARecordedRebindNamesIssuedBindingsItsOperationRecordsWithoutACycle`.
 
 **Gates:** `make focus`; the delivering commit records the command and result.
+
+## X762 — A staged destroy blanks the root disks of kept libvirt nodes
+
+**Items:** B1861. **Kind:** product. **Owner:** Substrate, with
+Reconciliation. **Authorization:** [D288](backlog.md#d288) (7), the seventh
+slice of the [staged destroy design](../deferred/staged-destroy.md#program).
+
+**Outcome:** a staged destroy at `clusters` takes back an OpenShift agent
+installation that booted its libvirt nodes while the node Machines stay: the
+installation's removal blanks each node's root disk as its own inverse
+effect, frozen as `blanks` beside `keptHosts`, named per Machine in its
+impacts and consuming `data-loss`, and admitted only where no other kept step
+is bound to the Machine ([staged destroy](../state-reconciliation.md#staged-destroy),
+[removal on kept nodes](../openshift-clusters.md#removal-on-kept-nodes)). The
+reset runs through the libvirt machine's `lifecycle.RootDiskReset` port over
+the block its holder froze, after the installation's eject and before the
+media's removal, and its mark names the staged destroy and step
+([root reset](../substrates.md#machine-realization)). A kill-harness journey
+covers the reset killed before and after its mark. KubeVirt nodes refuse
+until [B1880](m1.md#b1880); physical nodes until
+[B1864](backlog.md#b1864).
+
+**Guard tests:** `TestAStagedDestroyBlanksTheRootDisksOfVirtualNodesAnInstallationBooted`,
+`TestABootedInstallationIsKeptOnlyWhereItsNodesRootDisksCanBeBlanked`,
+`TestALostRootDiskResetIsResolvedByItsMark`,
+`TestAJourneyKilledAtAnyWriteLeavesAUsableStoreAndConvergesOnRetry` (journey
+`staged-root-reset`),
+`TestARootDiskResetIsCompletedOnlyUnderItsMarkAtTheFrozenSize`,
+`TestAContinuedRootDiskResetIsReprovedBeforeAnyEffect`,
+`TestARemovalThatBlanksKeepsItsOwnOutcomeAndEvidence`,
+`TestARemovalThatBlanksRecordsItsResetContract`,
+`TestAKeptRemovalThatBlanksItsNodesRootDisksAdmitsABootedWorkArea`,
+`TestOnlyARemovalFreezesAnInverseAndTheDigestCoversIt`,
+`TestEveryImplementationContractMatchesItsGolden` and
+`test_libvirt_root_reset.py`.
+
+**Contract:** the reset is its own contract, `machine-libvirt-root-reset-v1`,
+with its own golden (its effect, evidence schema and the fixed place
+`root-reset.mark`); the removal records it in its `contracts` and proves it at
+every attempt, resolution and continuation. The `machine-libvirt-v1` content
+digest and golden do not move, so a Machine an earlier build of that contract
+realized is blanked too.
+
+**Gates:** `make focus`; the delivering commit records the command and result.
+
+**Limits:** the proof is in-tree, over the engine's doubles and the
+collection's units, not a live run.

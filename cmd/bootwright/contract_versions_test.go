@@ -97,6 +97,23 @@ func contractVersions() []contractVersion {
 	return versions
 }
 
+// operationContractVersions are the contracts of operations an implementation
+// runs outside any plan block, such as the root disk reset a staged destroy
+// records beside its step's own contract. Each has a golden and a manifest
+// entry like a block's, but no example plans it and no binding offers it.
+func operationContractVersions() []contractVersion {
+	return []contractVersion{
+		{libvirt.RootResetImplementation, libvirt.RootResetContentDigest(), reflect.TypeFor[libvirt.MachineRequest](), reflect.TypeFor[libvirt.RootResetEvidence]()},
+	}
+}
+
+// operationPlaces names the fixed places of an operation contract that no
+// automation literal scan sees, each of which its automation must still carry
+// as a quoted literal.
+func operationPlaces() map[string][]string {
+	return map[string][]string{libvirt.RootResetImplementation: {libvirt.RootResetMark}}
+}
+
 // Automation literal classes: what a versioned literal, or a literal naming a
 // Bootwright host path, name prefix or mark, in the embedded collection names.
 // A persisted format or a fixed value belongs to the contract of every
@@ -231,9 +248,9 @@ func automationFormats() map[string]automationFormat {
 		"-custody-v1": persistedBy(ceph.Implementation, ceph.ConsumerImplementation),
 
 		// The namespace of the ownership metadata a libvirt network, pool or
-		// domain carries.
+		// domain carries, which a root disk reset also proves its domain by.
 		"https://bootwright.io/substrate/v1": {class: formatPersisted, kind: kindMark,
-			implementations: []string{libvirt.HostImplementation, libvirt.MachineImplementation}},
+			implementations: []string{libvirt.HostImplementation, libvirt.MachineImplementation, libvirt.RootResetImplementation}},
 
 		"ceph-host-image-v1":                         transient("the image facts a contained probe prints and the same call reads back"),
 		"ceph-host-device-id-v1":                     transient("the device identity a contained probe prints and the same call reads back"),
@@ -650,6 +667,16 @@ func automationLiterals() (map[string][]string, []string) {
 	return found, unread
 }
 
+// automationCarries is whether any of the collection's embedded automation files carries text.
+func automationCarries(text string) bool {
+	for name, content := range ansible.Automation() {
+		if strings.HasPrefix(name, automationCollection) && strings.Contains(string(content), text) {
+			return true
+		}
+	}
+	return false
+}
+
 // TestEveryAutomationVersionLiteralIsClassified holds the classification of
 // the quoted literals ending in a version, of the tokens naming a
 // bootwright.io URI or key or a Bootwright host path, name prefix or mark, and
@@ -678,7 +705,7 @@ func TestEveryAutomationVersionLiteralIsClassified(t *testing.T) {
 		}
 	}
 	implementations := map[string]bool{}
-	for _, version := range contractVersions() {
+	for _, version := range append(contractVersions(), operationContractVersions()...) {
 		implementations[version.implementation] = true
 	}
 	for _, literal := range slices.Sorted(maps.Keys(found)) {
@@ -747,10 +774,21 @@ func TestEveryImplementationContractMatchesItsGolden(t *testing.T) {
 		}
 		sections[implementation]["proof-ids"] = append(sections[implementation]["proof-ids"], proofs...)
 	}
+	for implementation, places := range operationPlaces() {
+		for _, place := range places {
+			if !automationCarries(`"` + place + `"`) {
+				t.Errorf("%s: no embedded automation carries its fixed place %q", implementation, place)
+			}
+		}
+		if sections[implementation] == nil {
+			sections[implementation] = map[string][]string{}
+		}
+		sections[implementation]["fixed-places"] = append(sections[implementation]["fixed-places"], places...)
+	}
 	directory := filepath.Join("testdata", "contracts")
 	wanted := map[string]bool{}
 	manifest := map[string]lifecycle.ExecutionContract{}
-	for _, version := range versions {
+	for _, version := range append(versions, operationContractVersions()...) {
 		name := version.implementation + ".golden"
 		wanted[name] = true
 		recipe, ok := recipes[version.implementation]

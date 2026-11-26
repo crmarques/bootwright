@@ -206,8 +206,46 @@ def completion(arguments):
     return evidence, unproved(evidence), "not proved"
 
 
+# ROOT_MARK is the mark a kept machine's blanked root disk carries: the staged destroy and the step whose removal blanked it.
+ROOT_MARK = re.compile(r"op-[0-9a-f]{32}/[a-z0-9](?:[a-z0-9-]{0,251}[a-z0-9])?\Z")
+
+
+def root_reset(arguments):
+    """The evidence of a root disk's reset or its reading, and whether it is blank under this mark.
+
+    Only the domain's identity and state, the root disk and the mark read beside
+    it are published; a reset proves its postcondition only for this context's
+    own domain, shut off, whose root disk carries this mark at its frozen size.
+    """
+    if arguments.get("removed") or arguments.get("power_only"):
+        raise ValueError("a root reset is no removal and no power reading")
+    expected, size = arguments.get("root_reset"), arguments.get("root_size")
+    if not isinstance(expected, str) or not ROOT_MARK.fullmatch(expected) or type(size) is not int:
+        raise ValueError("root reset mark")
+    observed = arguments.get("observation") or {}
+    mark = observed.get("mark", "")
+    if not isinstance(mark, str) or (mark and not ROOT_MARK.fullmatch(mark)):
+        raise ValueError("root reset mark")
+    disks = disks_of(observed)
+    if len(disks) != 1 or disks[0]["name"] != "root":
+        raise ValueError("root disk")
+    evidence = {
+        "absent": observed.get("absent") is True, "answered": observed.get("answered") is True, "disks": disks,
+        "domain": str(observed.get("domain", "")), "owned": observed.get("owned") is True, "postcondition": False,
+        "request": adapter_protocol.request_digest(arguments.get("digest")), "rootReset": mark,
+        "state": state(observed.get("state")), "system": str(observed.get("uuid", "")),
+    }
+    evidence["postcondition"] = (evidence["answered"] and evidence["owned"] and bool(evidence["domain"]) and evidence["state"] == "shut off"
+                                 and mark == expected and disks[0]["present"] and disks[0]["sizeGiB"] == size)
+    if publishes(evidence, arguments.get("observed")):
+        return evidence, None
+    return evidence, unreached("the root disk", "not proved blank under", ["rootReset"])
+
+
 def concluded(arguments):
     """The evidence one completion publishes, or the refusal naming what is unmet."""
+    if "root_reset" in arguments:
+        return root_reset(arguments)
     if arguments.get("power_only"):
         if not arguments.get("observed") or arguments.get("removed"):
             raise ValueError("a power reading is read-only")

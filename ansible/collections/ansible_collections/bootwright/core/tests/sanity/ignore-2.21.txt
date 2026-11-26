@@ -30,6 +30,7 @@ plugins/modules/infrastructureservices_mirror_release.py validate-modules:missin
 plugins/modules/infrastructureservices_mirror_release_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/libvirt_domain_inspect.py validate-modules:missing-gplv3-license
 plugins/modules/libvirt_host_inspect.py validate-modules:missing-gplv3-license
+plugins/modules/libvirt_root_reset.py validate-modules:missing-gplv3-license
 plugins/modules/lifecycle_scratch.py validate-modules:missing-gplv3-license
 plugins/modules/machine_hardware_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/machine_hardware_read.py validate-modules:missing-gplv3-license

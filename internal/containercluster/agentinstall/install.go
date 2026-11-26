@@ -205,10 +205,10 @@ func (c InstallCapability) Removal(ctx context.Context, block reconciliation.Blo
 	}, nil
 }
 
-// KeptHostsRefusal admits taking the installation back on nodes that stay only
-// while its apply recorded no boot, which it records before any node is handed the image.
-func (InstallCapability) KeptHostsRefusal(_ reconciliation.Block, records lifecycle.RemovalRecords) string {
-	if len(records.Preparations) != 0 {
+// KeptHostsRefusal admits it on kept nodes while its apply recorded no boot,
+// recorded before any node is handed the image, or where their roots are blanked.
+func (InstallCapability) KeptHostsRefusal(_ reconciliation.Block, records lifecycle.RemovalRecords, blanked bool) string {
+	if len(records.Preparations) != 0 && !blanked {
 		return "its installation recorded a boot, so a node may have been handed the image and hold the installed system on its disk"
 	}
 	return ""
@@ -224,6 +224,10 @@ const keepsHosts = "hosts"
 
 func kept(block reconciliation.Block) bool {
 	return block.Inverse != nil && len(block.Inverse.KeptHosts) != 0
+}
+
+func blanks(block reconciliation.Block) bool {
+	return block.Inverse != nil && len(block.Inverse.Blanks) != 0
 }
 
 // refuseHandedKeptNodes stops a kept removal before the media's removal discards that proof.
@@ -275,7 +279,10 @@ func (c InstallCapability) mutate(ctx context.Context, execution lifecycle.Execu
 	case operation == "apply":
 		err = ValidateInstallPresence(result.Evidence, request, digest)
 	case kept(execution.Block):
-		if err = refuseHandedKeptNodes(execution, request, result.Evidence); err == nil {
+		if !blanks(execution.Block) {
+			err = refuseHandedKeptNodes(execution, request, result.Evidence)
+		}
+		if err == nil {
 			err = ValidateInstallKeptAbsence(result.Evidence, digest)
 		}
 	default:
@@ -373,7 +380,7 @@ func (c InstallCapability) observe(ctx context.Context, execution lifecycle.Exec
 		lifecycle.ClearProduced(result.Produced)
 		return unknown, err
 	}
-	if verb == reconciliation.Destroy && kept(execution.Block) {
+	if verb == reconciliation.Destroy && kept(execution.Block) && !blanks(execution.Block) {
 		if err := refuseHandedKeptNodes(execution, request, result.Evidence); err != nil {
 			return unknown, err
 		}

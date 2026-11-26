@@ -138,6 +138,43 @@ func TestExecutionContractMetadataRefusesBeforePublication(t *testing.T) {
 	}
 }
 
+// B1861: a removal whose step blanks a kept Machine's root disk records the
+// reset's own contract beside its plan's, and only such a removal may.
+func TestARemovalThatBlanksRecordsItsResetContract(t *testing.T) {
+	definition := testPlan(t, "alpha").Blocks[0].BlockDefinition
+	definition.Impacts, definition.Consumes = []string{"blank the root disk of Machine/node-1"}, []string{reconciliation.AuthorizationDataLoss}
+	definition.Inverse = &reconciliation.Inverse{KeptHosts: []string{"node-1"}, Blanks: []string{"node-1"}}
+	blanking, err := reconciliation.NewPlan(reconciliation.Destroy, []reconciliation.BlockDefinition{definition})
+	if err != nil {
+		t.Fatal(err)
+	}
+	definition.Inverse = &reconciliation.Inverse{KeptHosts: []string{"node-1"}}
+	keeping, err := reconciliation.NewPlan(reconciliation.Destroy, []reconciliation.BlockDefinition{definition})
+	if err != nil {
+		t.Fatal(err)
+	}
+	step := strings.Repeat("4", 64)
+	reset := map[string]string{"artifact-server-nginx-v1": step, "machine-reset-v1": strings.Repeat("5", 64)}
+	for name, test := range map[string]struct {
+		plan      reconciliation.Plan
+		contracts map[string]string
+		admitted  bool
+	}{
+		"its reset's":             {blanking, reset, true},
+		"no reset's":              {blanking, map[string]string{"artifact-server-nginx-v1": step}, false},
+		"one blanking nothing":    {keeping, reset, false},
+		"an empty reset contract": {blanking, map[string]string{"artifact-server-nginx-v1": step, "machine-reset-v1": ""}, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			operation := testOperation(t, test.plan)
+			operation.Contracts = test.contracts
+			if err := checkContracts(operation, test.plan); (err == nil) != test.admitted {
+				t.Fatalf("the removal's contracts %v read %v", test.contracts, err)
+			}
+		})
+	}
+}
+
 func TestRegisterRoundTripsItsRecords(t *testing.T) {
 	ctx := context.Background()
 	store, area := newStore(t)

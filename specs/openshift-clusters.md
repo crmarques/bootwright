@@ -1116,12 +1116,19 @@ installation's, discards that work area; it names the whole destroy, or
 (`TestAKeptNodeRemovalStopsWhereTheWorkAreaProvesANodeWasHandedTheImage`).
 The cluster's add-ons and secondary
 networks retire offline with it, and every custody entry of the installation
-block, the kept kubeconfig copy included, leaves at completion. A recorded
-boot refuses `destroy.stage-keeps-host` naming why: a kept virtual node waits
-for its root disk to be blanked ([B1861](milestones/m1.md#b1861)), a physical
-one for [B1864](milestones/backlog.md#b1864). The restoring apply then
-installs on the kept nodes under its own identity, reading no earlier boot,
-after proving them off
+block, the kept kubeconfig copy included, leaves at completion. After a
+recorded boot the installation's removal is complete on kept nodes only where
+it also blanks each node's root disk, its own inverse effect frozen as
+`blanks` ([staged destroy](state-reconciliation.md#staged-destroy)): libvirt
+nodes, through their [root reset](substrates.md#machine-realization). The
+work area's marks are then expected and read nowhere. Otherwise a recorded
+boot refuses `destroy.stage-keeps-host` naming why: a KubeVirt node waits for
+[B1880](milestones/m1.md#b1880), a physical one for
+[B1864](milestones/backlog.md#b1864)
+(`TestAStagedDestroyBlanksTheRootDisksOfVirtualNodesAnInstallationBooted`). The
+restoring apply then installs on the kept nodes under its own identity,
+reading no earlier boot, after proving them off, a blank root disk falling
+through to the inserted media
 (`TestAStagedDestroyTakesBackAnInstallationNoNodeBootedOnItsKeptNodes`,
 `TestAnInstallationIsTakenBackOnKeptNodesOnlyBeforeItRecordedABoot`).
 

@@ -1626,15 +1626,15 @@ keeps it all continue a live operation, and an automation-only fix needs no
 setup.
 
 Every operation records a bounded `contracts` map: exactly the implementations
-its saved plan uses, each identified by a SHA-256 fingerprint of its reviewed
-contract manifest. The manifest includes the content digest, request and
-evidence schemas, persisted-format and ownership identifiers, fixed places,
-request identity fields and effect pins. Composition embeds only the current
-manifest, generated and checked by
-`TestEveryImplementationContractMatchesItsGolden`; `make build` runs that guard
-before producing a binary. Missing metadata is unsupported state under the
-[development policy](project.md#design-priorities-and-non-goals), never an
-invitation to infer an older contract. No earlier manifest is retained.
+its saved plan uses, plus a removal's root disk resets (`blanks`), each
+identified by a SHA-256 fingerprint of its reviewed contract manifest. The
+manifest includes the content digest, request and evidence schemas,
+persisted-format and ownership identifiers, fixed places, request identity
+fields and effect pins. Composition embeds only the current manifest, generated
+and checked by `TestEveryImplementationContractMatchesItsGolden`; `make build`
+runs that guard before producing a binary. Missing metadata is unsupported
+state under the [development policy](project.md#design-priorities-and-non-goals),
+never an invitation to infer an older contract.
 
 Before continuation restores logs, changes records, binds material or starts an
 observation, it proves each saved block's fingerprint and content digest against
@@ -2237,7 +2237,10 @@ set, its own scope with what every staged destroy it `replaces` took back.
   Machines stay (`lifecycle.KeptHostRemoval`) is admitted instead, freezing
   them as its inverse's `keptHosts`, and a step that retires offline where a
   step it depends on keeps every Machine it reaches; a refusal names the
-  capability's reason. A physical Machine is always kept, since its own step
+  capability's reason. One complete only if the same removal blanks their
+  root disks is admitted where each is virtual, offers
+  `lifecycle.RootDiskReset` and holds no other kept step, freezing them as
+  `blanks` with an impact each and `data-loss`. A physical Machine is always kept, since its own step
   only releases a claim. Every frozen leaves-with names a scoped step.
 - **Kept power targets.** The record freezes in `stage.keptPower` each Machine
   a `keptHosts` names, by its managed Machine step, with the state `off`.
@@ -2246,7 +2249,11 @@ set, its own scope with what every staged destroy it `replaces` took back.
   stop command, so a step taken back there may derive its quiescence from
   them (`TestAKeptNodeThatIsOnRefusesEveryInvocationOfTheStagedDestroy`).
   Every later decision reads the records again and refuses
-  `destroy.inverse-moved` once they no longer admit a frozen `keptHosts`. An empty scope settles keeping everything,
+  `destroy.inverse-moved` once they no longer admit a frozen `keptHosts`.
+- **Root reset.** A step with `blanks` then resets each root disk in its
+  attempt through the block its holder froze, marked with the staged destroy
+  and step; a resolution reads it removed only with every mark
+  (`TestALostRootDiskResetIsResolvedByItsMark`). An empty scope settles keeping everything,
   and refuses an `--unregistered` acknowledgement `authorize.unneeded`.
 - **Completion** releases no Secret binding and collects none on any path, and
   runs no context-wide release check at registration. In the transaction that
@@ -2971,8 +2978,8 @@ new to the lineage (`apply.restore-adds-new`,
 `TestARestoreRefusesAStepNoStagedDestroyTookBack`), so only a step the restore
 re-creates acts on a kept one, and the restore proves that Machine off first
 (D288, `TestAStagedDestroyTakesBackAnInstallationNoNodeBootedOnItsKeptNodes`);
-[B1861](milestones/m1.md#b1861) takes steps back on kept virtual Machines whose
-nodes booted. A destroy derives its
+after a boot a step is taken back on a kept virtual Machine only where its
+removal blanks that Machine's root disk (`blanks`). A destroy derives its
 targets from the frozen work it takes back. Destroy over an incomplete apply
 starts a new flow. Continuing the same registered flow, including replacing
 a failed destroy over its remaining work, proceeds from the durable records

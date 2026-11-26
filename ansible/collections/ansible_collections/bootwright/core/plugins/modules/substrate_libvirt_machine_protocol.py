@@ -19,6 +19,17 @@ options:
     description: Report the domain identity and power from a native read for lifecycle admission.
     type: bool
     required: false
+  root_reset:
+    description:
+      - The mark a reset or reading of the root disk proves, the staged destroy
+        and step that blank it; with it only the root disk's evidence is
+        published.
+    type: str
+    required: false
+  root_size:
+    description: The root disk's frozen size in GiB, beside root_reset.
+    type: int
+    required: false
   observation:
     description: The bounded host observation completion evidence is built from.
     type: dict

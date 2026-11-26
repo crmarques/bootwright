@@ -205,12 +205,15 @@ func TestAnInstallationIsTakenBackOnKeptNodesOnlyBeforeItRecordedABoot(t *testin
 	ctx := context.Background()
 	block := reconciliation.Block{BlockDefinition: installPlan(t, singleNodeCatalog(), reconciliation.Apply).Definitions[0]}
 	install := NewInstall(nil)
-	if refusal := install.KeptHostsRefusal(block, lifecycle.RemovalRecords{State: reconciliation.BlockFailed}); refusal != "" {
+	if refusal := install.KeptHostsRefusal(block, lifecycle.RemovalRecords{State: reconciliation.BlockFailed}, false); refusal != "" {
 		t.Fatalf("an installation that recorded no boot refuses %q", refusal)
 	}
 	booted := lifecycle.RemovalRecords{State: reconciliation.BlockFailed, Preparations: []json.RawMessage{json.RawMessage(`{"boot":true}`)}}
-	if refusal := install.KeptHostsRefusal(block, booted); !strings.Contains(refusal, "recorded a boot") {
+	if refusal := install.KeptHostsRefusal(block, booted, false); !strings.Contains(refusal, "recorded a boot") {
 		t.Fatalf("an installation that recorded a boot refuses %q", refusal)
+	}
+	if refusal := install.KeptHostsRefusal(block, booted, true); refusal != "" {
+		t.Fatalf("an installation that recorded a boot on nodes whose root disks are blanked refuses %q", refusal)
 	}
 	removal, err := install.Removal(ctx, block)
 	if err != nil {
@@ -220,7 +223,7 @@ func TestAnInstallationIsTakenBackOnKeptNodesOnlyBeforeItRecordedABoot(t *testin
 	if err != nil || len(removal.Retains) == 0 || len(kept.Retains) != 0 || !slices.Equal(kept.Impacts, removal.Impacts) || kept.Description != removal.Description {
 		t.Fatalf("the kept removal reads %+v beside %+v (%v)", kept, removal, err)
 	}
-	if refusal := NewMedia(nil, nil).KeptHostsRefusal(applyRequest(t), booted); refusal != "" {
+	if refusal := NewMedia(nil, nil).KeptHostsRefusal(applyRequest(t), booted, false); refusal != "" {
 		t.Fatalf("the media refuses %q", refusal)
 	}
 }
@@ -276,6 +279,28 @@ func TestAKeptNodeRemovalStopsWhereTheWorkAreaProvesANodeWasHandedTheImage(t *te
 				t.Fatalf("the refused kept removal reads %+v and %+v", result, observation)
 			}
 		})
+	}
+}
+
+// B1861: a kept removal whose nodes' root disks the same removal blanks reads
+// the work area's boot mark as expected, so it completes once no node presents
+// this cluster's image, as the unmarked kept removal does.
+func TestAKeptRemovalThatBlanksItsNodesRootDisksAdmitsABootedWorkArea(t *testing.T) {
+	execution, _ := installExecution(t, singleNodeCatalog(), testDigest)
+	execution.Context = testContext
+	execution.Block.Inverse = &reconciliation.Inverse{KeptHosts: []string{"sno-01"}, Blanks: []string{"sno-01"}}
+	evidence := installEvidence(t, testDigest, func(e *InstallEvidence) {
+		e.Absent, e.Postcondition, e.Cluster, e.Powered, e.Booted = true, true, "", []string{}, true
+		e.Media, e.OwnMedia = []string{"sno-01"}, []string{}
+	})
+	runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: evidence}}
+	result, err := NewInstall(runner).Destroy(context.Background(), execution)
+	observation, observed := NewInstall(runner).ObserveRemoval(context.Background(), execution)
+	if err != nil || result.Outcome != reconciliation.OutcomeChanged || observed != nil || observation.Effect != reconciliation.EffectCompleted {
+		t.Fatalf("a blanking kept removal over a booted work area reads %+v (%v) and %+v (%v)", result, err, observation, observed)
+	}
+	if runner.requests[0].MaterialValues["keeps"] != "hosts" {
+		t.Fatalf("the adapter was not told the removal keeps its nodes: %v", runner.requests[0].MaterialValues)
 	}
 }
 

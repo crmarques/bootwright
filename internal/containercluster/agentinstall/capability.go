@@ -168,7 +168,7 @@ func (c MediaCapability) Removal(ctx context.Context, block reconciliation.Block
 
 // KeptHostsRefusal admits the media's removal while its nodes stay, since it
 // touches only what the controller published; its installation's answer decides.
-func (MediaCapability) KeptHostsRefusal(reconciliation.Block, lifecycle.RemovalRecords) string {
+func (MediaCapability) KeptHostsRefusal(reconciliation.Block, lifecycle.RemovalRecords, bool) string {
 	return ""
 }
 

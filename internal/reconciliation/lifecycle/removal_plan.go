@@ -31,7 +31,7 @@ func (s Service) freshDestroy(ctx context.Context, contextName string, frozenBy 
 	if err := s.proveContracts(scope.owned, scope.contracts); err != nil {
 		return operationPlan{}, engineOtherBuild.Fail(contractMessage(err), removeWith(frozenBy))
 	}
-	plan, err := s.removalOf(ctx, scope.owned, frozenBy, removalInputs{relaxations: s.relaxing.methods, unregistered: s.relaxing.unregistered, nothing: s.nothingRecorded(scope.records), keptHosts: scope.keptHosts})
+	plan, err := s.removalOf(ctx, scope.owned, frozenBy, removalInputs{relaxations: s.relaxing.methods, unregistered: s.relaxing.unregistered, nothing: s.nothingRecorded(scope.records), keptHosts: scope.keptHosts, blanks: scope.blanks})
 	if err != nil {
 		return operationPlan{}, err
 	}
@@ -86,6 +86,7 @@ func (s Service) removalOf(ctx context.Context, owned reconciliation.Plan, execu
 		hosts, relaxation := inputs.keptHosts[block.ID], ""
 		if len(hosts) != 0 {
 			removal, err = keptRemoval(ctx, capability, block, executable)
+			removal = blankedRemoval(removal, inputs.blanks[block.ID])
 		} else {
 			removal, relaxation, err = s.selectedRemoval(ctx, capability, block, removal, inputs)
 		}
@@ -101,7 +102,7 @@ func (s Service) removalOf(ctx context.Context, owned reconciliation.Plan, execu
 		definition.Requires = nil
 		definition.Description, definition.Impacts = removal.Description, removal.Impacts
 		definition.Consumes, definition.Groups = removal.Consumes, removal.Groups
-		definition.Inverse = inverseOf(removal.Retains, removal.Nothing, nil, hosts)
+		definition.Inverse = inverseOf(removal.Retains, removal.Nothing, nil, hosts, inputs.blanks[block.ID])
 		definitions = append(definitions, definition)
 	}
 	plan, err := reconciliation.NewPlan(reconciliation.Destroy, definitions)
@@ -121,6 +122,19 @@ func keptRemoval(ctx context.Context, capability Capability, block reconciliatio
 		return Removal{}, unreadable(block, executable, err)
 	}
 	return removal, nil
+}
+
+func blankedRemoval(removal Removal, machines []string) Removal {
+	if len(machines) == 0 {
+		return removal
+	}
+	removal.Impacts = slices.Clone(removal.Impacts)
+	for _, machine := range machines {
+		removal.Impacts = append(removal.Impacts, "blank the root disk of Machine/"+machine+", erasing the system installed on it",
+			"keep the data disks and TPM state of Machine/"+machine+" with their contents")
+	}
+	removal.Consumes = slices.Compact(slices.Sorted(slices.Values(append(slices.Clone(removal.Consumes), reconciliation.AuthorizationDataLoss))))
+	return removal
 }
 
 // invertOwned shapes the owned set as a removal. An apply's plan is inverted so

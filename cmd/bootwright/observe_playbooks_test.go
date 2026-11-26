@@ -255,6 +255,10 @@ func addObserveReads(add func(string, string, string, string, func(map[string]an
 	add("substrate_baremetal_machine", "identity_read.yml", "ansible.builtin.set_fact", "names the answers in memory", read)
 	add("substrate_libvirt_host", "observe.yml", observeCollection+"libvirt_host_inspect", "reads the provider host", read)
 	add("substrate_libvirt_machine", "observe.yml", observeCollection+"libvirt_domain_inspect", "reads the domain", read)
+	add("substrate_libvirt_machine", "observe.yml", observeCollection+"libvirt_root_reset", "reads the root disk and its reset mark without writing either", func(params, _ map[string]any) bool {
+		return params["reset"] == false
+	})
+	add("substrate_libvirt_machine", "observe.yml", "ansible.builtin.meta", "ends a root disk's reading after its publication", read)
 	add("substrate_libvirt_machine", "observe.yml", observeCollection+"redfish_system_read", "reads the machine's power from its controller", read)
 	add("substrate_libvirt_machine", "identity_agent.yml", observeCollection+"guest_agent_read", "reads a guest file through the guest agent", read)
 	add("substrate_libvirt_machine", "identity_read.yml", "ansible.builtin.set_fact", "publishes the answers in memory", read)
