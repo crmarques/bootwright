@@ -154,7 +154,7 @@ func (s Service) protect(ctx context.Context, name string, decided operationPlan
 // revision and digest do not describe. It returns the completed operation the
 // apply follows, if any.
 func (s Service) verifyFreshApply(ctx context.Context, tx Transaction, store OperationStore, decided operationPlan) (operationstore.Operation, error) {
-	changed := func(current basis) error { return contextChanged(decided.verb, decided.basis, current) }
+	changed := func(current basis) error { return s.contextChanged(decided.verb, decided.basis, current) }
 	previous, _, _, err := s.verifyBasis(ctx, store, decided.basis, changed)
 	if err != nil {
 		return operationstore.Operation{}, err
@@ -479,7 +479,7 @@ func (s Service) releaseUnclaimed(ctx context.Context, name string, decided oper
 	held := s.held(ctx, name)
 	err := s.workspace.MutateLifecycle(ctx, name, func(tx Transaction) error {
 		store := s.store(tx)
-		changed := func(current basis) error { return contextChanged(decided.verb, decided.basis, current) }
+		changed := func(current basis) error { return s.contextChanged(decided.verb, decided.basis, current) }
 		if _, _, _, err := s.verifyBasis(ctx, store, decided.basis, changed); err != nil {
 			return err
 		}

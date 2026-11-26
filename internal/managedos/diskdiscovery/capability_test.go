@@ -519,3 +519,21 @@ func TestABMCInventoryFreezesASerialRootTheInstallerReproves(t *testing.T) {
 		t.Fatalf("a WWN-named claim was decided against a BMC inventory: %v", found)
 	}
 }
+
+func TestDiscoveryMissingPrerequisitesNamesTheExactPreview(t *testing.T) {
+	t.Parallel()
+	catalog := discoveryCatalog()
+	target := installation.InstalledMachines(catalog)[0].Name()
+	scope := reconciliation.PreparationScope{Kind: DiscoveryPreparation, Command: "machine discover", Targets: []string{target}}
+	input := lifecycle.PlanInput{
+		Context: lifecycle.ContextIdentity{Name: testContext}, Controller: "controller",
+		State: compilation.NewState(catalog, catalog, nil), Preparation: &scope,
+		AppliedEvidence: func(context.Context, string, string) ([]lifecycle.BlockEvidence, error) { return nil, nil },
+	}
+	err := New(nil).WithMedia(labMedia()).ValidatePreparation(context.Background(), input, scope)
+	report := diagnostics.Of(err)
+	want := "bootwright machine discover --context " + testContext + " --name " + target + " --stage controller --dry-run"
+	if len(report) != 1 || report[0].Code != "discovery.prerequisites-missing" || report[0].Remediation != want {
+		t.Fatalf("missing prerequisites = %+v, want %s", report, want)
+	}
+}

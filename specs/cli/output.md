@@ -585,6 +585,8 @@ structured output, each entry includes `machine` and `disks`. The
 `operation` and `source` fields are present for a completed report. A name
 requested with `machine inventory` that has no completed report in the
 current apply lineage has an empty `disks` array and omits both fields.
+A completed discovery with reports names the read-only `machine inventory`
+command for the reported targets in its resolved context.
 
 `machine info` extends the inventory row with optional `session` and
 `lifecyclePlacement` records. Each reports its applicable `user`,

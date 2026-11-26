@@ -41,6 +41,7 @@ type commandSpec struct {
 	render           commandRenderer
 	results          []jsonResult
 	operation        bool
+	lifecycleLabel   string
 	controllerReport bool
 	separateProgress bool
 }

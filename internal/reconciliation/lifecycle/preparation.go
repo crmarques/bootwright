@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
-	"strings"
 
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -63,6 +62,7 @@ func (s Service) Prepare(ctx context.Context, request PrepareRequest) (*Operatio
 	if err != nil {
 		return nil, err
 	}
+	s = s.withExplicitPreparation(scope, false)
 	return s.applyWithin(ctx, ApplyRequest{ContextName: request.ContextName, SkipConfirmation: request.SkipConfirmation}, scope)
 }
 
@@ -71,7 +71,7 @@ func (s Service) PlanPreparation(ctx context.Context, request PrepareRequest) (*
 	if err != nil {
 		return nil, err
 	}
-	return s.planWithin(ctx, PlanRequest{Verb: reconciliation.Apply, ContextName: request.ContextName}, scope)
+	return s.withExplicitPreparation(scope, true).planWithin(ctx, PlanRequest{Verb: reconciliation.Apply, ContextName: request.ContextName}, scope)
 }
 
 func (s Service) requestedPreparation(request PrepareRequest) (*reconciliation.PreparationScope, error) {
@@ -179,10 +179,48 @@ func (d decider) admitPreparationCommand(frozen reconciliation.Plan, operation o
 	if reflect.DeepEqual(frozen.Preparation, d.preparation) {
 		return nil
 	}
-	if frozen.Preparation != nil {
+	held, requested := frozen.Preparation, d.preparation
+	if held != nil && requested != nil {
+		definition, ok := d.preparationDefinition(held.Kind)
+		if held.Command == string(reconciliation.Apply) && ok && definition.Automatic != nil &&
+			requested.Kind == held.Kind && requested.Command == definition.Command {
+			if samePreparationEffects(held, requested) {
+				return nil
+			}
+			exact := *held
+			exact.Command = definition.Command
+			return prepareRefused.Fail("the targets and prerequisite selection must match the unfinished automatic preparation",
+				preparationScopeCommand(operation.Context, exact, "--dry-run"))
+		}
+		return prepareRefused.Fail("this command or scope does not match the unfinished preparation", d.preparationCommand(operation.Context, frozen))
+	}
+	if held != nil {
 		return prepareRefused.Fail("the unfinished operation is a frozen preparation and cannot become an installation", d.preparationCommand(operation.Context, frozen))
 	}
 	return prepareRefused.Fail("finish or remove the current operation before starting preparation", "continue its recorded command or destroy it with its original executable")
+}
+
+func samePreparationEffects(held, requested *reconciliation.PreparationScope) bool {
+	return held.Kind == requested.Kind && held.PreparePrerequisites == requested.PreparePrerequisites && slices.Equal(held.Targets, requested.Targets)
+}
+
+func (s Service) withExplicitPreparation(scope *reconciliation.PreparationScope, preview bool) Service {
+	definition, _ := s.preparationDefinition(scope.Kind)
+	if definition.Automatic != nil {
+		s.explicitPreparation = scope
+		s.previewPreparation = preview
+	}
+	return s
+}
+
+func (s Service) preparationRetry(name, fallback string, flags ...string) string {
+	if s.explicitPreparation == nil {
+		return fallback
+	}
+	if s.previewPreparation && !slices.Contains(flags, "--dry-run") {
+		flags = append(flags, "--dry-run")
+	}
+	return preparationScopeCommand(name, *s.explicitPreparation, flags...)
 }
 
 func (d decider) preparationCommand(name string, plan reconciliation.Plan) string {
@@ -196,11 +234,9 @@ func (d decider) preparationCommand(name string, plan reconciliation.Plan) strin
 	if plan.Preparation.Command == string(reconciliation.Apply) {
 		return contextCommand(name, string(reconciliation.Apply))
 	}
-	flags := []string{"--name", strings.Join(plan.Preparation.Targets, ",")}
-	if plan.Preparation.PreparePrerequisites {
-		flags = append(flags, "--stage", "controller")
-	}
-	return contextCommand(name, definition.Command, flags...)
+	explicit := *plan.Preparation
+	explicit.Command = definition.Command
+	return preparationScopeCommand(name, explicit)
 }
 
 func (d decider) preparationAddition(ctx context.Context, view View, store recordReader, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, proveCustody bool) (*additiveAdmission, error) {
@@ -220,7 +256,7 @@ func (d decider) preparationAddition(ctx context.Context, view View, store recor
 	if inputDrift(view, operation) != "" {
 		previous, _, ok := d.compiledBoth(ctx, view, operation)
 		if !ok {
-			return nil, refusal(prepareRefused.Fail("the preparation input cannot be compared with its recorded revision", changeRemedy(view)))
+			return nil, refusal(prepareRefused.Fail("the preparation input cannot be compared with its recorded revision", d.changeRemedy(view)))
 		}
 		before = previous
 	}
@@ -241,7 +277,7 @@ func (d decider) preparationAddition(ctx context.Context, view View, store recor
 	}
 	delta := reconciliation.Compare(owned, fresh)
 	if first, changed := delta.First(); changed && first.Change != reconciliation.Added {
-		return nil, refusal(prepareRefused.Fail(fmt.Sprintf("preparation transition would change owned block %s", first.Block), changeRemedy(view)))
+		return nil, refusal(prepareRefused.Fail(fmt.Sprintf("preparation transition would change owned block %s", first.Block), d.changeRemedy(view)))
 	}
 	if delta.Count(reconciliation.Added) == 0 {
 		return nil, nil

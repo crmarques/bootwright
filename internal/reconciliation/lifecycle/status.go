@@ -469,7 +469,7 @@ func (s Service) continuation(ctx context.Context, view View, operation operatio
 	if !slices.ContainsFunc(view.Controller().State.Bindings, func(item prerequisites.ControllerBinding) bool {
 		return item.Context == view.Identity().Name
 	}) {
-		return refusalExit(view, engineControllerUnbound.Fail("this context is not bound to a controller host", unboundExit(view, operation)))
+		return refusalExit(view, engineControllerUnbound.Fail("this context is not bound to a controller host", s.unboundExit(view, operation)))
 	}
 	located, err := s.locateRuntime(ctx, false)
 	if err != nil {

@@ -3,6 +3,7 @@ package diskdiscovery
 import (
 	"context"
 	"slices"
+	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/machine"
@@ -95,7 +96,8 @@ func (c Capability) ValidatePreparation(ctx context.Context, input lifecycle.Pla
 			if !slices.ContainsFunc(owned, func(record lifecycle.BlockEvidence) bool {
 				return record.Verb == reconciliation.Apply && record.State == reconciliation.BlockDone
 			}) {
-				return discoveryPrerequisitesMissing.Fail("discovery prerequisites are not applied for Machine/"+r.Identity.Object, "repeat bootwright machine discover with --stage controller to review and confirm controller and infrastructure setup")
+				return discoveryPrerequisitesMissing.Fail("discovery prerequisites are not applied for Machine/"+r.Identity.Object,
+					"bootwright machine discover --context "+input.Context.Name+" --name "+strings.Join(scope.Targets, ",")+" --stage controller --dry-run")
 			}
 		}
 	}

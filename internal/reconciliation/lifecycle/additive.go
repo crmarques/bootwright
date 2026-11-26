@@ -159,7 +159,7 @@ func (d decider) addition(ctx context.Context, view View, store recordReader, op
 	if first, differs := delta.First(); differs && first.Change != reconciliation.Added {
 		return nil, refusal(applyNotAnAddition.Fail(
 			"this executable would freeze the block "+first.Block+" differently from the plan this apply froze, so the input is no addition to it",
-			changeRemedy(view)+"; "+contextCommand(view.Identity().Name, "diff")+" shows each change"))
+			d.changeRemedy(view)+"; "+contextCommand(view.Identity().Name, "diff")+" shows each change"))
 	}
 	if delta.Count(reconciliation.Added) == 0 {
 		return nil, nil
@@ -196,7 +196,7 @@ func (d decider) refuseNewReservations(ctx context.Context, view View, before *c
 		return !slices.ContainsFunc(held.hostKeyed, func(other hostKeyedClaim) bool { return reflect.DeepEqual(claim, other) })
 	}
 	if slices.ContainsFunc(after.reservations, unheld) || slices.ContainsFunc(after.hostKeyed, unkeyed) {
-		return refusal(applyNotAnAddition.Fail("the added blocks need a host reservation or an SSH reservation, which an additive apply never takes", changeRemedy(view)))
+		return refusal(applyNotAnAddition.Fail("the added blocks need a host reservation or an SSH reservation, which an additive apply never takes", d.changeRemedy(view)))
 	}
 	return nil
 }
@@ -211,7 +211,7 @@ func (d decider) refuseUnnamedSecrets(view View, chain lineage, admission *addit
 			capability, found := d.capabilities.Resolve(block.Kind, block.Implementation)
 			referencer, names := capability.(SecretReferencer)
 			if !found || !names {
-				return refusal(applyNotAnAddition.Fail("the block "+block.ID+" cannot name the Secrets it references, so no Secret is added beside it", changeRemedy(view)))
+				return refusal(applyNotAnAddition.Fail("the block "+block.ID+" cannot name the Secrets it references, so no Secret is added beside it", d.changeRemedy(view)))
 			}
 			references, err := referencer.SecretReferences(block)
 			if err != nil {
@@ -222,7 +222,7 @@ func (d decider) refuseUnnamedSecrets(view View, chain lineage, admission *addit
 	}
 	for _, name := range added {
 		if !slices.Contains(admission.secrets, name) || slices.Contains(held, name) {
-			return refusal(applyNotAnAddition.Fail("the Secret "+name+" is added, and no added block names it for the first time, so the input is no addition to the completed apply", changeRemedy(view)))
+			return refusal(applyNotAnAddition.Fail("the Secret "+name+" is added, and no added block names it for the first time, so the input is no addition to the completed apply", d.changeRemedy(view)))
 		}
 	}
 	return nil
@@ -268,7 +268,7 @@ func (d decider) admission(ctx context.Context, view View, chain lineage, held, 
 }
 
 func (d decider) admitted(ctx context.Context, held reconciliation.Plan, block reconciliation.Block, view View) ([]string, error) {
-	remedy := changeRemedy(view)
+	remedy := d.changeRemedy(view)
 	refuse := func(why string) error {
 		return refusal(applyNotAnAddition.Fail("the block "+block.ID+" cannot be added to the completed apply: "+why, remedy))
 	}
@@ -307,14 +307,14 @@ func (s Service) custodyProved(ctx context.Context, view View, chain lineage, ad
 		}
 		lend, release, err := s.producedLender(block, chain.definitions(), false, s.producedInContext(view.Identity().Name))
 		if err != nil {
-			return refusal(applyNotAnAddition.Fail("the block "+block.ID+" cannot be added: "+firstMessage(err), changeRemedy(view)))
+			return refusal(applyNotAnAddition.Fail("the block "+block.ID+" cannot be added: "+firstMessage(err), s.changeRemedy(view)))
 		}
 		for _, reference := range references {
 			material, err := lend(ctx, reference)
 			material.Clear()
 			if err != nil {
 				release()
-				return refusal(applyNotAnAddition.Fail("the block "+block.ID+" cannot be added: "+firstMessage(err), changeRemedy(view)))
+				return refusal(applyNotAnAddition.Fail("the block "+block.ID+" cannot be added: "+firstMessage(err), s.changeRemedy(view)))
 			}
 		}
 		release()
@@ -322,9 +322,9 @@ func (s Service) custodyProved(ctx context.Context, view View, chain lineage, ad
 	return nil
 }
 
-func changeRemedy(view View) string {
+func (s Service) changeRemedy(view View) string {
 	name := view.Identity().Name
-	return "take back what it owns with " + contextCommand(name, string(reconciliation.Destroy)) + ", then run " + contextCommand(name, string(reconciliation.Apply))
+	return "take back what it owns with " + contextCommand(name, string(reconciliation.Destroy)) + ", then run " + s.preparationRetry(name, contextCommand(name, string(reconciliation.Apply)))
 }
 
 func (d decider) additiveTransition(view View, operation operationstore.Operation, admission *additiveAdmission, selection reconciliation.Selection) (operationPlan, error) {

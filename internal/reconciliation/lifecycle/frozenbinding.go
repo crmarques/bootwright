@@ -95,7 +95,7 @@ func (s Service) lostBinding(ctx context.Context, name string, decided operation
 			current.state, current.record = operation.State, operation
 		}
 		if current.operation != read.operation || current.state != read.state {
-			return contextChanged(decided.verb, read, current)
+			return s.contextChanged(decided.verb, read, current)
 		}
 		return nil
 	})
@@ -106,9 +106,13 @@ func (s Service) lostBinding(ctx context.Context, name string, decided operation
 	if !decided.fresh {
 		objects = objectsOf(coveredBy(decided.operation, decided.plan, decided.states))
 	}
+	repeat := contextCommand(name, string(decided.verb))
+	if decided.verb == reconciliation.Apply {
+		repeat = s.preparationRetry(name, repeat)
+	}
 	return engineBindingLost.Fail(
 		lostBindingMessage(decided.basis.record, binding, why, objects),
-		"restore the context's keyring from a complete backup and repeat "+contextCommand(name, string(decided.verb))+
+		"restore the context's keyring from a complete backup and repeat "+repeat+
 			", or run "+lostBindingExit(name)+" and then remove the objects named here by hand")
 }
 

@@ -36,7 +36,7 @@ func (p *LifecyclePlanPresenter) PresentLifecyclePlan(ctx context.Context, resul
 		return diagnostics.NewFailure("runtime.internal", "lifecycle plan presentation is not configured", "")
 	}
 	var text display
-	text.headline("", lifecycleHeadline(result))
+	text.headline("", lifecycleHeadline(p.out, result))
 	writeLifecycleSteps(&text, result)
 	if err := ctx.Err(); err != nil {
 		return err
@@ -142,8 +142,15 @@ func (p *LifecycleProgressPresenter) ReportLogLocation(ctx context.Context, loca
 	p.progress.fields(logFields(location.Path, logsHint{Context: location.Context, Operation: location.Operation, Run: location.Run, Running: true})...)
 }
 
-func lifecycleHeadline(result lifecycle.PlanResult) string {
-	verb := strings.ToUpper(result.Verb[:1]) + result.Verb[1:]
+func lifecycleDisplayVerb(out io.Writer, verb string) string {
+	if label := specFor(presentationFor(out).Command).lifecycleLabel; label != "" {
+		return label
+	}
+	return strings.ToUpper(verb[:1]) + verb[1:]
+}
+
+func lifecycleHeadline(out io.Writer, result lifecycle.PlanResult) string {
+	verb := lifecycleDisplayVerb(out, result.Verb)
 	if result.Finalizes {
 		return verb + " finalization"
 	}
@@ -344,7 +351,7 @@ func startSummary(result lifecycle.PlanResult) string {
 
 func writeLifecyclePlan(out io.Writer, result *lifecycle.PlanResult) error {
 	var text display
-	text.headline("", lifecycleHeadline(*result))
+	text.headline("", lifecycleHeadline(out, *result))
 	text.lines([]string{"Preview only; no changes have been made."})
 	if result.Settled {
 		text.lines([]string{"Nothing to do."})
@@ -377,7 +384,7 @@ func writeLifecycleOperationAs(out io.Writer, result *lifecycle.OperationResult,
 	if result.Receipt.State == "unknown" {
 		status = "UNKNOWN"
 	}
-	verb := strings.ToUpper(result.Verb[:1]) + result.Verb[1:]
+	verb := lifecycleDisplayVerb(out, result.Verb)
 	title := verb + " " + result.Receipt.State
 	if stopped && result.Receipt.State == "paused" {
 		status, title = "PAUSED", title+" until the operator acts on the error below"

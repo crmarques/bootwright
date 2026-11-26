@@ -19,7 +19,10 @@ func planCommand(contextName string, plan reconciliation.Plan, flags ...string) 
 	if plan.Preparation == nil || plan.Preparation.Command == string(reconciliation.Apply) {
 		return contextCommand(contextName, string(plan.Verb), flags...)
 	}
-	scope := plan.Preparation
+	return preparationScopeCommand(contextName, *plan.Preparation, flags...)
+}
+
+func preparationScopeCommand(contextName string, scope reconciliation.PreparationScope, flags ...string) string {
 	scoped := []string{"--name", strings.Join(scope.Targets, ",")}
 	if scope.PreparePrerequisites {
 		scoped = append(scoped, "--stage", "controller")
@@ -36,14 +39,14 @@ func planCommand(contextName string, plan reconciliation.Plan, flags ...string) 
 // proved gone once the whole run settles, which one block's resolution cannot
 // know while others run, so it defers to the result's last diagnostic, which
 // names that destroy exactly.
-func resolutionRemedy(contextName string, verb reconciliation.Verb, frozen reconciliation.Plan, selection reconciliation.Selection, partial bool) string {
+func (s Service) resolutionRemedy(contextName string, verb reconciliation.Verb, frozen reconciliation.Plan, selection reconciliation.Selection, partial bool) string {
 	if verb != reconciliation.Apply {
 		if partial {
 			return "run the destroy this result's last diagnostic names, which converges it"
 		}
 		return "run the destroy this result's last diagnostic names, which performs it"
 	}
-	continuation := planCommand(contextName, frozen, authorizing(frozen)...)
+	continuation := s.preparationRetry(contextName, planCommand(contextName, frozen, authorizing(frozen)...))
 	if !selection.Empty() {
 		continuation = contextCommand(contextName, "apply --dry-run", invocationFlags(selection, nil, nil)...)
 		if partial {

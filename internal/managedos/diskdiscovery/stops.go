@@ -21,7 +21,7 @@ var (
 		Meaning: "the Machine already has installation ownership, so booting it for discovery would disturb that installation", Remedy: "retain the existing installation or remove it through its recorded lifecycle first"}
 	discoveryPrerequisitesMissing = diagnostics.Stop{Code: "discovery.prerequisites-missing", Level: diagnostics.LevelContext, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryOtherVerb,
-		Meaning: "the controller and infrastructure setup a discovery boot needs is not applied", Remedy: "repeat bootwright machine discover --context <context> --name <machine> with --stage controller to review and confirm controller and infrastructure setup"}
+		Meaning: "the controller and infrastructure setup a discovery boot needs is not applied", Remedy: "bootwright machine discover --context <context> --name <list> --stage controller --dry-run"}
 	discoveryRefinementRefused = diagnostics.Stop{Code: "discovery.refinement-refused", Level: diagnostics.LevelContext, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
 		Meaning: "a change after preparation reaches beyond the disk-selection fields that may follow it", Remedy: "keep prepared ownership unchanged and update only the disk-selection fields"}

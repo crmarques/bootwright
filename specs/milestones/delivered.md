@@ -18262,6 +18262,15 @@ interpreter environment when a dependency lock changes. The regression keeps
 the old environment intact and proves that an unchanged lock reuses its
 prepared interpreter. The delivering commit records verification.
 
+## X751 — Explicit disk discovery continuation
+
+**Owner:** Managed OS and Reconciliation. **Item:** B1852 (safety).
+**Authority:** explicit request to finish disk discovery independently of installation.
+
+The [discovery contract](../managed-os.md#automatic-root-disk-discovery)
+admits the recorded preparation through the inventory-only command. The
+delivering commit records host-independent verification.
+
 ## X748 — Disk inventory fixture isolates descriptor calls
 
 **Owner:** Verification tooling. **Item:** B1849 (defect).

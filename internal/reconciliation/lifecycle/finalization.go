@@ -138,7 +138,7 @@ func (s Service) finalizeFirst(ctx context.Context, name string, verb reconcilia
 	if decided.finalize {
 		return operationPlan{}, ContextIdentity{}, engineFinalizationIncomplete.Fail(
 			"the operation's finalization did not complete",
-			"repeat "+contextCommand(name, string(verb)))
+			"repeat "+s.preparationRetry(name, contextCommand(name, string(verb))))
 	}
 	return decided, identity, nil
 }
@@ -159,7 +159,7 @@ func (s Service) finalize(ctx context.Context, name string, decided operationPla
 	var completion removalCompletion
 	err := s.mutateAdmitted(ctx, name, s.startCheck, func(tx Transaction) error {
 		store := s.store(tx)
-		changed := func(current basis) error { return contextChanged(decided.verb, decided.basis, current) }
+		changed := func(current basis) error { return s.contextChanged(decided.verb, decided.basis, current) }
 		operation, frozen, states, err := s.verifyBasis(ctx, store, decided.basis, changed)
 		if err != nil {
 			return err
@@ -245,7 +245,7 @@ func (s Service) completeRemoval(ctx context.Context, name string, completion re
 	}
 	return s.workspace.MutateLifecycle(ctx, name, func(tx Transaction) error {
 		store := s.store(tx)
-		changed := func(current basis) error { return contextChanged(reconciliation.Destroy, completion.basis, current) }
+		changed := func(current basis) error { return s.contextChanged(reconciliation.Destroy, completion.basis, current) }
 		if _, _, _, err := s.verifyBasis(ctx, store, completion.basis, changed); err != nil {
 			return err
 		}

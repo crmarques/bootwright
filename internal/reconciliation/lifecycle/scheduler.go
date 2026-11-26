@@ -408,6 +408,9 @@ func (c *scheduler) observingCommand() string {
 		return contextCommand(name, "apply --dry-run", invocationFlags(c.selection, nil, nil)...)
 	}
 	if command := continuationCommand(name, c.operation, c.plan, c.states); command != "" {
+		if c.operation.Verb == reconciliation.Apply {
+			return c.service.preparationRetry(name, command)
+		}
 		return command
 	}
 	return contextCommand(name, string(c.operation.Verb))

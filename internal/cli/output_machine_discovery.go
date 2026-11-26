@@ -43,8 +43,12 @@ func (diskInventoriesPresentation) documentedResult()  {}
 
 func displayMachineDiscovery(result *diskdiscovery.DiscoverResult) machineDiscoveryPresentation {
 	out := machineDiscoveryPresentation{Operation: displayOperation(result.Operation), Inventories: displayDiskInventories(result.Inventories)}
-	if result.Operation.Receipt.State == "done" {
-		out.Next = "bootwright apply --dry-run --context " + escapeDisplayLine(result.Operation.Context.Name)
+	if result.Operation.Receipt.State == "done" && len(out.Inventories) != 0 {
+		names := make([]string, 0, len(out.Inventories))
+		for _, inventory := range out.Inventories {
+			names = append(names, inventory.Machine)
+		}
+		out.Next = "bootwright machine inventory --context " + escapeDisplayLine(result.Operation.Context.Name) + " --name " + strings.Join(names, ",")
 	}
 	return out
 }
@@ -84,9 +88,9 @@ func writeMachineDiscovery(out io.Writer, path string, result *diskdiscovery.Dis
 	}
 	var text display
 	appendDiskInventories(&text, shown.Inventories)
-	if result.Operation.Receipt.State == "done" {
+	if shown.Next != "" {
 		text.section("")
-		text.verbatimFields(field{Label: "Next", Value: "bootwright apply --dry-run --context " + result.Operation.Context.Name, Tone: "command"})
+		text.verbatimFields(field{Label: "Next", Value: shown.Next, Tone: "command"})
 	}
 	if len(text.blocks) != 0 {
 		if _, err := io.WriteString(out, "\n"); err != nil {

@@ -1597,6 +1597,9 @@ disk identities from the BMC's drive inventory, or from Linux through a
 confirmed inventory boot when the BMC cannot answer. `apply`
 automatically prepares missing inventory before it plans installation; the
 explicit `machine discover` command runs the same preparation independently.
+An operator collecting facts for another context uses the explicit command and
+adds `--stage controller` when discovery needs its controller and infrastructure
+setup. The command finishes at inventory and does not plan or start installation.
 Both entry points use the same request derivation, runner and native procedure.
 The discovery plan pins and qualifies only the image the inventory boot
 remasters, under the [media store](#media-store) rules. It neither pins nor
@@ -1776,9 +1779,16 @@ missing raw inventory opens an automatic preparation phase. `apply --dry-run` pr
 that complete phase without effects. Controller and infrastructure stage
 selections can prepare prerequisites while leaving inventory pending; only a
 selected machine stage may boot inventory. Interrupted automatic preparation
-continues through `apply` with its frozen target set, while an unfinished manual
-discovery retains its explicit command. After preparation completes, `apply`
-builds and presents the installation plan and requires its own authorization.
+continues through `apply` with its frozen target set. For an inventory-only
+continuation, `machine discover` may finish that same automatic operation when
+its target set and setup selection match the frozen scope. The continuation
+uses the frozen plan without replacing the operation, changing its plan, or
+repeating finished setup. A discovery request that differs in targets or setup
+selection refuses with `prepare.refused` and names a preview of the recorded
+discovery scope.
+An unfinished explicit discovery retains its explicit command. After
+preparation completes, `apply` builds and presents the installation plan and
+requires its own authorization.
 `apply --dry-run` previews an unfinished manual discovery's frozen scope without converting
 it to an automatic preparation or performing its continuation.
 Unused authorization refuses before preparation, so a token for an unresolved
@@ -1788,6 +1798,12 @@ consumers. `--until` requires completed preparation before its add-on boundary
 can be planned. An ambiguous selection retains the inventory and refuses
 installation without another boot. Plan and validation never boot a host or
 obtain live hardware credentials.
+
+Code: [preparation admission](../internal/reconciliation/lifecycle/preparation.go).
+Held by: `TestExplicitDiscoveryFinishesPausedAutomaticPreparationWithoutInstallation`,
+`TestExplicitDiscoveryRetryKeepsItsCommandOnAutomaticPreparation`,
+`TestExplicitDiscoveryChecksFrozenScopeBeforeFinalization`, and
+`TestExplicitDiscoveryRecoveryNamesItsOwnCommand`.
 
 To replace a report after a hardware or discovery-request change, review the
 context's full removal with `bootwright destroy --dry-run`. After a completed

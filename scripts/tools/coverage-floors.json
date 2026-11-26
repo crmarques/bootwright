@@ -69,7 +69,7 @@
     "internal/machine/sessionpolicy": 92.4,
     "internal/machine/sshlocal": 84.9,
     "internal/managedos": 96.7,
-    "internal/managedos/diskdiscovery": 66.5,
+    "internal/managedos/diskdiscovery": 68.6,
     "internal/managedos/hostfirewall": 88.5,
     "internal/managedos/installation": 88.9,
     "internal/managedos/installationtest": 0.0,

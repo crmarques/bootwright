@@ -24,12 +24,13 @@ type decider struct {
 	planner      decisionPlanner
 	proofs       decisionProofs
 	relaxing     eraseRelaxing
+	changeRemedy func(View) string
 }
 
 func (s Service) decider(scope *reconciliation.PreparationScope) decider {
 	return decider{
 		preparation: scope, sources: newCompilations(s.compiler), operations: s.options.Operations,
-		capabilities: s.capabilities, preparations: s.options.Preparations, planner: s, proofs: s, relaxing: s.relaxing,
+		capabilities: s.capabilities, preparations: s.options.Preparations, planner: s, proofs: s, relaxing: s.relaxing, changeRemedy: s.changeRemedy,
 	}
 }
 
@@ -120,6 +121,12 @@ func (d decider) decideFrom(ctx context.Context, view View, verb reconciliation.
 		held.additive = admitted != nil
 		if verb = chosenVerb(held); verb == reconciliation.Destroy {
 			selection = reconciliation.Selection{}
+		}
+	}
+	if verb == reconciliation.Apply && d.preparation != nil && d.preparation.Command != string(reconciliation.Apply) &&
+		frozen.Preparation != nil && frozen.Preparation.Command == string(reconciliation.Apply) {
+		if err := d.admitPreparationCommand(frozen, operation); err != nil {
+			return operationPlan{}, verb, err
 		}
 	}
 	if marked, err := finalization(ctx, view, store, verb, operation, frozen, states, attempts); err != nil || marked.finalize {
@@ -358,7 +365,7 @@ func inputDrift(view View, operation operationstore.Operation) string {
 func (d decider) changedInput(ctx context.Context, view View, operation operationstore.Operation) error {
 	const message = "the desired state changed after this apply completed"
 	name := view.Identity().Name
-	remedy := changeRemedy(view)
+	remedy := d.changeRemedy(view)
 	named, ok := d.namedChange(ctx, view, operation)
 	if err := ctx.Err(); err != nil {
 		return err

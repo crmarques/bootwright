@@ -97,7 +97,7 @@ func (s Service) prepareStart(ctx context.Context, view View, decided operationP
 	}
 	identity := view.Identity()
 	return func(current View) error {
-		refuse := func(latest basis) error { return contextChanged(decided.verb, before, latest) }
+		refuse := func(latest basis) error { return s.contextChanged(decided.verb, before, latest) }
 		if _, _, _, err := s.verifyBasis(ctx, s.store(current), before, refuse); err != nil {
 			return err
 		}
@@ -312,7 +312,7 @@ func (s Service) finishBeforeStart(ctx context.Context, identity ContextIdentity
 	marked.verb = marked.operation.Verb
 	result := settled(identity, marked, RecoveredBeforeStart)
 	result.Receipt.Next = string(next)
-	result.NextCommand = contextCommand(identity.Name, "apply --dry-run", invocationFlags(selection, nil, nil)...)
+	result.NextCommand = s.preparationRetry(identity.Name, contextCommand(identity.Name, "apply --dry-run", invocationFlags(selection, nil, nil)...), "--dry-run")
 	return result, nil
 }
 

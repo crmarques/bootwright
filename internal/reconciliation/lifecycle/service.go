@@ -68,6 +68,8 @@ type Service struct {
 	startCheck func(View) error
 	// Only the installation phase following this invocation's completed preparation inherits admission.
 	completedPreparation string
+	explicitPreparation  *reconciliation.PreparationScope
+	previewPreparation   bool
 	workspace            Workspace
 	compiler             Compiler
 	binder               SecretBinder
@@ -189,7 +191,7 @@ func (s Service) planWithin(ctx context.Context, request PlanRequest, scope *rec
 		if view.Identity() != result.Context || decided.basis.input != "" && inputDigest(view) != decided.basis.input {
 			return engineInputMoved.Fail("the input changed before preview checks", "repeat the dry run for this context")
 		}
-		refuse := func(latest basis) error { return contextChanged(decided.verb, read, latest) }
+		refuse := func(latest basis) error { return s.contextChanged(decided.verb, read, latest) }
 		if _, _, _, err := s.verifyBasis(ctx, s.store(view), read, refuse); err != nil {
 			return err
 		}

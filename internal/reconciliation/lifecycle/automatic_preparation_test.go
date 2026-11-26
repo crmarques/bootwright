@@ -3,6 +3,7 @@ package lifecycle
 import (
 	"context"
 	"errors"
+	"path"
 	"slices"
 	"strings"
 	"testing"
@@ -208,5 +209,215 @@ func TestScopedPreparationPreservesClusterMachineOwnershipAcrossPhases(t *testin
 	result, err := h.service.Apply(ctx, request)
 	if err != nil || result.Receipt.State != "done" || !slices.Equal(h.capability.applies, []string{"setup", "inventory", "installation", "storage-core"}) {
 		t.Fatalf("scoped install = %+v, %v, effects = %v", result, diagnostics.Of(err), h.capability.applies)
+	}
+}
+
+func TestExplicitDiscoveryFinishesPausedAutomaticPreparationWithoutInstallation(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h := automaticHarness(t)
+	h.capability.definitions = append(h.capability.definitions, stagedDefinition("media-service", reconciliation.StageInfrastructureServices, "setup"))
+	h.capability.definitions[1].Dependencies = []string{"media-service"}
+	first, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, Stages: []string{"controller"}, SkipConfirmation: true})
+	if err != nil || first == nil || first.Receipt.State != "paused" || !slices.Equal(h.capability.applies, []string{"setup"}) {
+		t.Fatalf("controller setup = %+v, %v, effects = %v", first, err, h.capability.applies)
+	}
+
+	record, _ := durableOperation(t, h)
+	request := requestPreparation()
+	h.service.options.Preparations[0].Automatic = func(context.Context, PlanInput, reconciliation.Selection) ([]string, error) {
+		t.Fatal("explicit discovery reevaluated automatic targets")
+		return nil, nil
+	}
+	const review = "bootwright machine discover --context lab --name example-node --stage controller --dry-run"
+	before := previewEffects(h)
+	wrongTargets := request
+	wrongTargets.Targets, wrongTargets.PreparePrerequisites = []string{"other-node"}, true
+	for _, wrong := range []PrepareRequest{request, wrongTargets} {
+		_, err := h.service.Prepare(ctx, wrong)
+		report := diagnostics.Of(err)
+		if len(report) != 1 || report[0].Code != "prepare.refused" || report[0].Remediation != review {
+			t.Errorf("mismatched continuation = %+v, want the exact discovery preview", report)
+		}
+		if after := previewEffects(h); !slices.Equal(before, after) {
+			t.Fatalf("mismatched discovery performed effects: %v -> %v", before, after)
+		}
+	}
+
+	request.PreparePrerequisites = true
+	preview, err := h.service.PlanPreparation(ctx, request)
+	if err != nil || preview == nil || !preview.Continuation || preview.Receipt.Operation != first.Receipt.Operation || len(preview.Authorizations) != 0 {
+		t.Fatalf("discovery preview = %+v, %v", preview, diagnostics.Of(err))
+	}
+	if after := previewEffects(h); !slices.Equal(before, after) {
+		t.Fatalf("discovery preview performed effects: %v -> %v", before, after)
+	}
+	h.confirmer.decline = true
+	request.SkipConfirmation = false
+	if _, err := h.service.Prepare(ctx, request); err == nil || !slices.Equal(h.capability.applies, []string{"setup"}) {
+		t.Fatalf("declined discovery advanced: %v, effects = %v", err, h.capability.applies)
+	}
+	h.confirmer.decline = false
+	result, err := h.service.Prepare(ctx, request)
+	if err != nil || result == nil || result.Receipt.Operation != first.Receipt.Operation || result.Receipt.State != "done" {
+		t.Fatalf("discovery did not finish the same operation: %+v, %v", result, diagnostics.Of(err))
+	}
+	if finished, _ := durableOperation(t, h); finished.PlanDigest != record.PlanDigest {
+		t.Fatal("discovery changed the frozen plan")
+	}
+	if !slices.Equal(h.capability.applies, []string{"setup", "media-service", "inventory"}) {
+		t.Fatalf("discovery repeated setup or left inventory scope: %v", h.capability.applies)
+	}
+}
+
+func TestExplicitDiscoveryRetryKeepsItsCommandOnAutomaticPreparation(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h := automaticHarness(t)
+	first, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, Stages: []string{"controller"}, SkipConfirmation: true})
+	if err != nil || first == nil {
+		t.Fatalf("stage controller: %+v, %v", first, err)
+	}
+	request := requestPreparation()
+	request.PreparePrerequisites = true
+	h.capability.outcomeFor = map[string]Result{"inventory": {Outcome: reconciliation.OutcomeUnknown}}
+	result, err := h.service.Prepare(ctx, request)
+	const repeat = "bootwright machine discover --context lab --name example-node --stage controller"
+	if err == nil || result == nil || result.Receipt.State != "unknown" || result.NextCommand != repeat {
+		t.Fatalf("interrupted discovery = %+v, %v, want discovery retry", result, diagnostics.Of(err))
+	}
+	h.capability.outcomeFor = nil
+	h.capability.observations = []Observation{{Effect: reconciliation.EffectNoEffect}}
+	result, err = h.service.Prepare(ctx, request)
+	if err != nil || result == nil || result.Receipt.State != "done" || result.Receipt.Operation != first.Receipt.Operation {
+		t.Fatalf("discovery retry = %+v, %v", result, diagnostics.Of(err))
+	}
+	if !slices.Equal(h.capability.applies, []string{"setup", "inventory", "inventory"}) {
+		t.Fatalf("discovery retry changed its scope: %v", h.capability.applies)
+	}
+}
+
+func TestExplicitDiscoveryRefusesToContinueAnInstallationPlan(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h := prepareHarness(t, "setup", "installation")
+	h.capability.definitions[0].Stage = reconciliation.StageController
+	h.capability.definitions[1].Stage = reconciliation.StageMachines
+	first, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, Stages: []string{"controller"}, SkipConfirmation: true})
+	if err != nil || first == nil || first.Receipt.State != "paused" {
+		t.Fatalf("fixture did not pause installation: %+v, %v", first, err)
+	}
+	before := previewEffects(h)
+	request := requestPreparation()
+	request.PreparePrerequisites = true
+	if _, err := h.service.Prepare(ctx, request); firstCode(err) != "prepare.refused" {
+		t.Fatalf("discovery did not refuse to continue installation: %v", diagnostics.Of(err))
+	}
+	if after := previewEffects(h); !slices.Equal(before, after) {
+		t.Fatalf("refused discovery had effects: %v -> %v", before, after)
+	}
+}
+
+func TestExplicitDiscoveryChecksFrozenScopeBeforeFinalization(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h := automaticHarness(t)
+	if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, Stages: []string{"controller"}, SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	request := requestPreparation()
+	request.PreparePrerequisites = true
+	if _, err := h.service.Prepare(ctx, request); err != nil {
+		t.Fatal(err)
+	}
+	id := leaveFailedWithEveryBlockDone(t, h)
+	before := previewEffects(h)
+	wrong := request
+	wrong.Targets = []string{"other-node"}
+	if _, err := h.service.PlanPreparation(ctx, wrong); firstCode(err) != "prepare.refused" {
+		t.Fatalf("wrong finalization preview = %v", diagnostics.Of(err))
+	}
+	if _, err := h.service.Prepare(ctx, wrong); firstCode(err) != "prepare.refused" {
+		t.Fatalf("wrong finalization = %v", diagnostics.Of(err))
+	}
+	if after := previewEffects(h); !slices.Equal(before, after) {
+		t.Fatalf("mismatched scope finalized the operation: %v -> %v", before, after)
+	}
+	result, err := h.service.Prepare(ctx, request)
+	if err != nil || result == nil || result.Receipt.Operation != id || result.Recovered != RecoveredFinalization ||
+		!slices.Equal(h.capability.applies, []string{"setup", "inventory"}) {
+		t.Fatalf("matching finalization = %+v, %v, effects = %v", result, diagnostics.Of(err), h.capability.applies)
+	}
+}
+
+func TestExplicitDiscoveryRecoveryNamesItsOwnCommand(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	const repeat = "bootwright machine discover --context lab --name example-node --stage controller"
+	for _, phase := range []string{"lost binding", "lost binding preview", "moved basis"} {
+		t.Run(phase, func(t *testing.T) {
+			h := automaticHarness(t)
+			if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, Stages: []string{"controller"}, SkipConfirmation: true}); err != nil {
+				t.Fatal(err)
+			}
+			record, _ := durableOperation(t, h)
+			request := requestPreparation()
+			request.PreparePrerequisites = true
+			wantCommand, wantCode := repeat, "engine.binding-lost"
+			if phase == "moved basis" {
+				wantCode = "engine.plan-moved"
+				h.workspace.beforeMutation = func() {
+					h.workspace.beforeMutation = nil
+					rewriteState(t, h, path.Join(record.ID, "operation.json"), string(reconciliation.OperationFailed))
+				}
+			} else {
+				if len(record.Bindings) == 0 {
+					t.Fatal("fixture did not freeze a binding")
+				}
+				h.binder.lost = slices.Clone(record.Bindings)
+			}
+			var err error
+			if phase == "lost binding preview" {
+				wantCommand += " --dry-run"
+				_, err = h.service.PlanPreparation(ctx, request)
+			} else {
+				_, err = h.service.Prepare(ctx, request)
+			}
+			report := diagnostics.Of(err)
+			if len(report) != 1 || report[0].Code != wantCode || !strings.Contains(report[0].Remediation, wantCommand) ||
+				strings.Contains(report[0].Remediation, "bootwright apply") {
+				t.Fatalf("retry advice = %+v, want %s with %s", report, wantCode, wantCommand)
+			}
+			if !slices.Equal(h.capability.applies, []string{"setup"}) {
+				t.Fatalf("refusal reached an adapter effect: %v", h.capability.applies)
+			}
+		})
+	}
+}
+
+func TestExplicitDiscoveryWithChangedInputKeepsRecoveryScoped(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h := automaticHarness(t)
+	if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, Stages: []string{"controller"}, SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	request := requestPreparation()
+	request.PreparePrerequisites = true
+	if _, err := h.service.Prepare(ctx, request); err != nil {
+		t.Fatal(err)
+	}
+	leaveFailedWithEveryBlockDone(t, h)
+	h.workspace.revision = "rev-" + strings.Repeat("b", 32)
+	before := previewEffects(h)
+	_, err := h.service.PlanPreparation(ctx, request)
+	report := diagnostics.Of(err)
+	const review = "bootwright machine discover --context lab --name example-node --stage controller --dry-run"
+	if len(report) != 1 || report[0].Code != "prepare.refused" || !strings.Contains(report[0].Remediation, review) ||
+		strings.Contains(report[0].Remediation, "bootwright apply") {
+		t.Fatalf("refusal over changed input = %+v, want scoped preview %s", report, review)
+	}
+	if after := previewEffects(h); !slices.Equal(before, after) {
+		t.Fatalf("refused preview performed effects: %v -> %v", before, after)
 	}
 }

@@ -128,7 +128,7 @@ func recordsMoved(planned, current basis) (string, bool) {
 // and what the context holds now, because repeating the command decides again
 // from the latter, which is the only plan it may register. The operation
 // records are compared first, and the input and evidence only once they agree.
-func contextChanged(verb reconciliation.Verb, planned, current basis) error {
+func (s Service) contextChanged(verb reconciliation.Verb, planned, current basis) error {
 	message := "the context changed after this command read it: it was planned from " + planned.describe() +
 		", and the context now holds " + current.describe()
 	records, moved := recordsMoved(planned, current)
@@ -144,7 +144,11 @@ func contextChanged(verb reconciliation.Verb, planned, current basis) error {
 	case !slices.Equal(current.claims, planned.claims):
 		message += " with an operation claimed since it was read"
 	}
-	return enginePlanMoved.Fail(message, "repeat "+contextCommand(planned.context, string(verb))+" to plan from what the context holds now")
+	repeat := contextCommand(planned.context, string(verb))
+	if verb == reconciliation.Apply {
+		repeat = s.preparationRetry(planned.context, repeat)
+	}
+	return enginePlanMoved.Fail(message, "repeat "+repeat+" to plan from what the context holds now")
 }
 
 // verifyContinuation re-proves everything a continuation depends on before it
@@ -157,7 +161,7 @@ func (s Service) verifyContinuation(ctx context.Context, view View, operation op
 	if err != nil {
 		return err
 	}
-	if err := verifyHostBinding(view.Controller(), view.Identity(), host, unboundExit(view, operation), false); err != nil {
+	if err := verifyHostBinding(view.Controller(), view.Identity(), host, s.unboundExit(view, operation), false); err != nil {
 		return err
 	}
 	if err := s.prerequisitesRefusal(ctx, view, operation); err != nil {

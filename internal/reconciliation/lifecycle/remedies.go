@@ -61,12 +61,15 @@ func registeredWith(executable operationstore.Executable) string {
 // supersedes the operation takes back what it owns where one may, and the
 // apply after it binds again. Otherwise only the binding's restoration or the
 // context's deletion remains.
-func unboundExit(view View, operation operationstore.Operation) string {
+func (s Service) unboundExit(view View, operation operationstore.Operation) string {
 	const restore = "restore the controller state that recorded this context's binding from a matching backup"
 	if supersedable(operation) {
 		name := view.Identity().Name
-		return "take back what this operation owns with " + contextCommand(name, string(reconciliation.Destroy)) +
-			", after which " + contextCommand(name, string(reconciliation.Apply)) + " binds the context again, or " + restore
+		takeBack := "take back what this operation owns with " + contextCommand(name, string(reconciliation.Destroy))
+		if s.explicitPreparation != nil {
+			return takeBack + " and then repeat " + s.preparationRetry(name, "") + ", or " + restore
+		}
+		return takeBack + ", after which " + contextCommand(name, string(reconciliation.Apply)) + " binds the context again, or " + restore
 	}
 	return restore + ", or " + deletionExit(view)
 }

@@ -358,9 +358,9 @@ func (s Service) resolveUnknown(ctx context.Context, run invocation, block recon
 	case resolvedEffect == reconciliation.EffectNoEffect:
 		return state, engineResolvedUnperformed.Fail(
 			"the frozen effect was never performed",
-			resolutionRemedy(tx.Identity().Name, operation.Verb, plan, run.selection, false))
+			s.resolutionRemedy(tx.Identity().Name, operation.Verb, plan, run.selection, false))
 	case resolvedEffect == reconciliation.EffectPartial || resolvedEffect == reconciliation.EffectInconclusive:
-		return state, engineResolvedPartial.Fail(retriedEffect[resolvedEffect], resolutionRemedy(tx.Identity().Name, operation.Verb, plan, run.selection, true))
+		return state, engineResolvedPartial.Fail(retriedEffect[resolvedEffect], s.resolutionRemedy(tx.Identity().Name, operation.Verb, plan, run.selection, true))
 	}
 	explanation := s.explainIn(ctx, store, operation, verb, observed, observation.Evidence)
 	_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "unresolved", Block: block.ID, Detail: explanation.Reason})
@@ -569,7 +569,8 @@ func (s Service) invoke(ctx context.Context, run invocation, block reconciliatio
 		var prepare func(context.Context, json.RawMessage) error
 		if operation.Verb == reconciliation.Apply && resolution == 0 {
 			if run.selection.Empty() {
-				continuation = contextCommand(tx.Identity().Name, string(reconciliation.Apply), authorizing(plan)...)
+				name := tx.Identity().Name
+				continuation = s.preparationRetry(name, contextCommand(name, string(reconciliation.Apply), authorizing(plan)...))
 			} else {
 				continuation = contextCommand(tx.Identity().Name, "apply --dry-run", invocationFlags(run.selection, nil, nil)...)
 			}
@@ -823,6 +824,9 @@ func (s Service) finish(ctx context.Context, tx Transaction, store OperationStor
 	}
 	name := tx.Identity().Name
 	command := continuationCommand(name, current, plan, states)
+	if command != "" && operation.Verb == reconciliation.Apply {
+		command = s.preparationRetry(name, command)
+	}
 	if result.KeepGoing && command != "" {
 		command += " --keep-going"
 	}

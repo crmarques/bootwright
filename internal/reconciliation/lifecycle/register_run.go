@@ -101,7 +101,7 @@ func (s Service) resume(ctx context.Context, tx Transaction, store OperationStor
 	fail := func(err error) (operationstore.Operation, reconciliation.Plan, *operationstore.Log, error) {
 		return operationstore.Operation{}, reconciliation.Plan{}, nil, err
 	}
-	changed := func(current basis) error { return contextChanged(decided.verb, decided.basis, current) }
+	changed := func(current basis) error { return s.contextChanged(decided.verb, decided.basis, current) }
 	operation, plan, _, err := s.verifyBasis(ctx, store, decided.basis, changed)
 	if err != nil {
 		return fail(err)
@@ -152,7 +152,7 @@ func (s Service) reprove(ctx context.Context, tx Transaction, store OperationSto
 	current := decided.basis
 	current.evidence, current.claims = tx.Evidence(), claimed
 	if !bytes.Equal(current.evidence, decided.basis.evidence) || !slices.Equal(current.claims, decided.basis.claims) {
-		return contextChanged(decided.verb, decided.basis, current)
+		return s.contextChanged(decided.verb, decided.basis, current)
 	}
 	// A completed removal that latched a log fault blocks the next apply
 	// until its boundary is restored, as it would block its own work.
@@ -174,7 +174,7 @@ func (s Service) proveHostBinding(ctx context.Context, tx Transaction, previous 
 	if err != nil {
 		return err
 	}
-	return verifyHostBinding(tx.Controller(), tx.Identity(), host, unboundExit(tx, previous), false)
+	return verifyHostBinding(tx.Controller(), tx.Identity(), host, s.unboundExit(tx, previous), false)
 }
 
 // reserve claims the exclusive host resources the plan needs before any effect.

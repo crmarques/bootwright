@@ -264,7 +264,13 @@ func cliGoldens() []cliGolden {
 		}},
 	}
 	discoveryOutput := func(r *dispatchRecord) {
-		r.result.machineDiscovery = &diskdiscovery.DiscoverResult{Operation: operation("done"), Inventories: []diskdiscovery.DiscoveryInventory{discoveryInventory}}
+		result := operation("done")
+		result.Blocks = []lifecycle.BlockResult{
+			result.Blocks[0],
+			{ID: "machine-rhel-01", Description: "claim the physical machine rhel-01 and prove its identity", Stage: "machines", State: "done"},
+			{ID: "os-disk-discovery-rhel-01", Description: "inventory Linux-visible disks of rhel-01 in RAM, then power off", Stage: "machines", State: "done"},
+		}
+		r.result.machineDiscovery = &diskdiscovery.DiscoverResult{Operation: result, Inventories: []diskdiscovery.DiscoveryInventory{discoveryInventory}}
 	}
 	inventoryOutput := func(r *dispatchRecord) {
 		r.result.diskInventories = &diskdiscovery.InventoryResult{Inventories: []diskdiscovery.DiscoveryInventory{discoveryInventory, {Machine: "rhel-02"}}}

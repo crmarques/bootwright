@@ -21,24 +21,16 @@
           "attempts": 0
         },
         {
-          "id": "substrate-host-lab-libvirt",
-          "description": "realize the libvirt host of lab-libvirt on controller",
-          "stage": "substrates",
-          "state": "done",
-          "outcome": "",
-          "attempts": 0
-        },
-        {
           "id": "machine-rhel-01",
-          "description": "realize the virtual machine rhel-01 and its emulated BMC",
+          "description": "claim the physical machine rhel-01 and prove its identity",
           "stage": "machines",
           "state": "done",
           "outcome": "",
           "attempts": 0
         },
         {
-          "id": "os-install-rhel-01",
-          "description": "install the operating system of rhel-01",
+          "id": "os-disk-discovery-rhel-01",
+          "description": "inventory Linux-visible disks of rhel-01 in RAM, then power off",
           "stage": "machines",
           "state": "done",
           "outcome": "",
@@ -76,7 +68,7 @@
         ]
       }
     ],
-    "next": "bootwright apply --dry-run --context lab"
+    "next": "bootwright machine inventory --context lab --name rhel-01"
   },
   "diagnostics": [],
   "logs": []
