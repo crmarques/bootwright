@@ -67,7 +67,10 @@ func (s Service) prepareStart(ctx context.Context, view View, decided operationP
 	if err != nil {
 		return nil, err
 	}
-	owned := held.owners()
+	owned, presents := held.owners(), held.presenting()
+	if decided.verb == reconciliation.Destroy || decided.restores != "" {
+		presents = decided.presents
+	}
 	targets := make([]startTarget, 0, len(blocks))
 	for _, block := range blocks {
 		capability, _ := s.capabilities.Resolve(block.Kind, block.Implementation)
@@ -80,10 +83,7 @@ func (s Service) prepareStart(ctx context.Context, view View, decided operationP
 			return nil, err
 		}
 		if owner, _, found := owned.of(block.ID); found {
-			target.binding = ownBinding(owner.operation)
-			if decided.verb == reconciliation.Destroy || decided.restores != "" {
-				target.binding = decided.presents.of(block.ID)
-			}
+			target.binding = presents.of(block.ID)
 			target.probe.ApplyOperation = owner.operation.ID
 			if target.probe.PreviousEvidence, err = previousBlockEvidence(ctx, store, owner.operation.ID, block.ID); err != nil {
 				return nil, err

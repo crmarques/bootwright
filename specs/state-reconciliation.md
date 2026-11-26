@@ -200,7 +200,7 @@ the changed-input refusal `apply.input-changed` with its change list:
   lineage installed, and states that the block reads bound Secret material only
   in its own apply attempts; a command that lends such material outside the
   engine, [`cluster sign-on resume`](cli/cluster-sign-on.md#resume), reopens the
-  binding of the apply that holds the block; the sign-on admits only its own block, beside the
+  binding that [presents](#removal-over-a-lineage) the block; the sign-on admits only its own block, beside the
   cluster's management gateway and frozen oauth2-proxy image that the lineage
   installed. A capability without either refuses `apply.not-an-addition`;
 - each produced input an added block borrows has a producer in the lineage and
@@ -2196,11 +2196,10 @@ removal takes back an additive apply alone, because added blocks retire
 offline with their cluster and would leave what they created unmanaged. A predecessor record the store lost refuses
 the removal, as a lost frozen plan does.
 
-The removal presents each step one Secret binding: the one of the
-[restoring apply](#restoring-apply) that created the step, and the first
-binding of the root apply for every other step, never an additive head's
-other than the apply after a restoring preparation;
-each as an [access-credential rebind](#access-credential-rebind) of a removal
+The removal presents each step one Secret binding: the one the apply that
+created the step froze, the root, an [additive](#additive-apply) or
+[restoring](#restoring-apply) apply or the apply after a preparation, and none
+where that apply froze none; each as an [access-credential rebind](#access-credential-rebind) of a removal
 or restore since replaced it, which that operation records as `rebound`, a
 fresh removal beside the replacements of the removals it replaces. It
 reopens only the lineage's binding and those presenting a step of its plan
@@ -2210,16 +2209,18 @@ is never reopened, and its `bindings` are those and every binding its
 host keys of its claims, `status`, `diff --observe`, the start-power reading
 and the sign-on of a kept cluster read the binding that presents that step,
 and every power reading or drive of a Machine, whichever step runs it,
-presents that Machine's own. A rebind may name only Secrets those bindings
+presents that Machine's own. A step presented another binding than the
+lineage's whose capability reads bound material only in its own apply
+attempts, as every added step's does, gets that binding only while the keyring
+still lists it: the removal neither freezes nor records it on that step's
+account, a lost one refuses nothing and `status` names none, and the holds
+still keep it. A rebind may name only Secrets those bindings
 hold. Its completion releases the bindings of every member of the lineage.
-
-Not yet met: an additive apply's steps are presented the root apply's
-binding rather than the additive apply's own, which created them; tracked as
-[B1870](milestones/m1.md#b1870).
-
-Not yet met: an administrator credential update reads and rewrites its
-owner's binding, not a rebind a staged destroy or a restore recorded since;
-tracked as [B1871](milestones/m1.md#b1871).
+An [administrator credential update](cli/cluster-admin-credentials.md#grafana-administrator-password)
+reads the binding that presents its login step and replaces it in the record
+that issued it: the `bindings` of the apply that froze it, or the `bindings`
+and `rebound` of the removal or restore whose rebind issued it, so every
+later reader and removal finds the new binding by the rule above.
 
 ## Staged destroy
 

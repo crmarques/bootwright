@@ -75,11 +75,6 @@ func restoredMember(ctx context.Context, store recordReader, id, predecessor str
 	return lineageMember{operation: record, plan: reconciliation.Plan{Verb: reconciliation.Destroy}, states: map[string]reconciliation.BlockState{}, takenBack: slices.Clone(record.Stage.TakenBack)}, nil
 }
 
-func (l lineage) restores(at int) bool {
-	completes := at > 0 && l[at-1].operation.Restores != "" && l[at-1].plan.Preparation != nil && l[at].operation.Predecessor == l[at-1].operation.ID
-	return l[at].operation.Restores != "" || completes
-}
-
 func (l lineage) applies() lineage {
 	return slices.DeleteFunc(slices.Clone(l), func(member lineageMember) bool { return member.operation.Verb != reconciliation.Apply })
 }

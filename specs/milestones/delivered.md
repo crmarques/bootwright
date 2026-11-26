@@ -18677,8 +18677,8 @@ Secret, and the removal records it as `rebound`; completion releases every
 member's binding. While trimmed, the
 [holds](../secrets.md#immutable-binding-and-contexts) keep only what steps not
 taken back pin. `apply.restore-unbound` is retired. An additive apply's steps
-and administrator credential updates are [B1870](m1.md#b1870) and
-[B1871](m1.md#b1871).
+and administrator credential updates are [B1870](#x769--an-additive-apply-presents-its-own-binding-and-an-administrator-update-replaces-the-presenting-binding) and
+[B1871](#x769--an-additive-apply-presents-its-own-binding-and-an-administrator-update-replaces-the-presenting-binding).
 
 **Guard tests:** `TestARestoreBindsTheCurrentVersionsOfWhatItsAddedStepsName`,
 `TestARestoreBindsASecretNoLineageBindingPins`,
@@ -18896,3 +18896,44 @@ and the collection's units over a fake host API, not a live run: that the
 VirtualMachine controller recreates a stopped VirtualMachine's template
 DataVolume after its deletion, and the claim's foreground removal on a real
 storage class, wait for the owner's acceptance on a real KubeVirt host.
+
+## X769 — An additive apply presents its own binding, and an administrator update replaces the presenting binding
+
+**Items:** B1870, B1871. **Kind:** defect. **Owner:** Reconciliation, with
+Container clusters. **Authorization:** [D288](backlog.md#d288), the follow-up
+of X761 in the [staged destroy design](../deferred/staged-destroy.md#program).
+
+**Outcome:** a [removal over a lineage](../state-reconciliation.md#removal-over-a-lineage)
+presents each step the binding the apply that created it froze, the root, an
+additive or restoring apply or the apply after a preparation, then each later
+rebind, across attempts, resolutions, quiescence probes, Machine power, the
+rebind and lost-binding checks, `status`, `diff --observe`, the start-power
+reading and a sign-on's resume, and the holds keep its effect material under
+that binding; a lost binding presented only to steps that read bound material
+in their own apply attempts alone refuses nothing (B1870). A
+[Grafana or monitoring administrator update](../cli/cluster-admin-credentials.md#grafana-administrator-password)
+reads the binding that presents its login step and replaces it in the record
+that issued it, the apply that froze it or the removal or restore whose rebind
+issued it, so every later reader and removal finds it (B1871); its durable
+write sequence is unchanged.
+
+**Guard tests:** `TestAWholeDestroyPresentsAnAddedStepTheSecretOnlyItsAdditiveApplyBound`,
+`TestAWholeDestroyPresentsAnAddedStepTheVersionItsAdditiveApplyBound`,
+`TestARemovalPresentsTheAddedStepTheAdditiveApplysBinding`,
+`TestARebindDuringALineageRemovalReachesWhatTheAdditiveApplysBindingHolds`,
+`TestAFailedAdditiveHeadReopensTheRootsAndItsOwnBindingForStatus`,
+`TestALostAdditiveBindingLeavesAStepThatReadsNoMaterialAtRemovalRemovable`,
+`TestALostAdditiveBindingRefusesTheRemovalOfAStepThatReadsMaterialAtRemoval`,
+`TestAStepWhoseAdditiveApplyFrozeNoBindingIsPresentedNothing`,
+`TestAWholeDestroyAfterAPreparationPresentsTheApplyAfterItsOwnBinding`,
+`TestAStagedDestroyRebindsTheRotatedSecretOfAnAddedStep`,
+`TestAnAdditiveApplysStartPowerPresentsAStagedRebindOfAKeptMachine`,
+`TestAGrafanaUpdateAfterAStagedRebindAndARestoreRebindsThePresentingBinding`,
+`TestAGrafanaUpdateOverAStagedRebindRecoversAfterRebindBeforeRecord`,
+`TestTwoGrafanaUpdatesOverAStagedRebindEachReplaceThePresentingBinding`,
+`TestAGrafanaUpdateAfterTwoStagedDestroysAndRestoresReplacesTheFirstRebind`
+and `TestAGrafanaUpdateRefusesWhileAStagedDestroyIsCurrent`.
+
+**Gates:** `make focus`; the delivering commit records the command and result.
+
+**Limits:** the proof is in-tree, over the engine's doubles, not a live run.

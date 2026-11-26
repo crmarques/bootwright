@@ -86,11 +86,6 @@ func (l lineage) released() []string {
 	return l.bindings()
 }
 
-func removalBinding(ctx context.Context, store recordReader, applied operationstore.Operation) (string, error) {
-	presents, err := appliedPresenting(ctx, store, applied)
-	return presents.lineage, err
-}
-
 func sourceBindings(ctx context.Context, store recordReader, source string) ([]string, error) {
 	held, err := sourceLineage(ctx, store, source)
 	if err != nil {

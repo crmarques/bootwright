@@ -2,6 +2,7 @@ package lifecycle
 
 import (
 	"context"
+	"encoding/json"
 	"path"
 	"slices"
 	"strings"
@@ -13,9 +14,23 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 )
 
+// applyOnlyCapability reads bound material only in the apply attempts of the
+// named blocks, as every capability an addition admits states.
+type applyOnlyCapability struct {
+	*testCapability
+	blocks []string
+}
+
+func (c applyOnlyCapability) ReadsMaterialOnlyInApply(block reconciliation.Block) bool {
+	return slices.Contains(c.blocks, block.ID)
+}
+
+// completedLineage adds the consumer, which reads bound material only in its
+// own apply attempts, to a completed apply.
 func completedLineage(t *testing.T) (*harness, *lineageFixture) {
 	t.Helper()
 	h := newHarness(t, "producer-a")
+	h.service.capabilities = testResolver{capability: applyOnlyCapability{testCapability: h.capability, blocks: []string{"consumer"}}}
 	f := newLineageFixture(t, h, consumerDefinition())
 	f.finish(t, "consumer", `{"head":true}`)
 	f.complete(t)
@@ -65,7 +80,7 @@ func TestOneDestroyTakesTheWholeLineageBackTheAddedBlockFirst(t *testing.T) {
 		t.Fatalf("the root's block waits for %v, want its dependent", root.Dependencies)
 	}
 	if !slices.Equal(removal.Bindings, f.root.Bindings) {
-		t.Fatalf("the removal reopened %v, want the root's %v and never the head's", removal.Bindings, f.root.Bindings)
+		t.Fatalf("the removal recorded %v, want the root's %v: the head's presents only a step that reads no material at removal", removal.Bindings, f.root.Bindings)
 	}
 	released := slices.Clone(h.binder.released)
 	slices.Sort(released)
@@ -242,7 +257,9 @@ func TestALostPredecessorRecordRefusesTheRemovalBeforeAnythingRuns(t *testing.T)
 	}
 }
 
-func TestARemovalReopensTheRootsBindingNotTheHeads(t *testing.T) {
+// B1870: a removal presents the lineage the root's binding and the added
+// step the binding of the additive apply that created it.
+func TestARemovalPresentsTheAddedStepTheAdditiveApplysBinding(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	_, f := completedLineage(t)
@@ -250,8 +267,8 @@ func TestARemovalReopensTheRootsBindingNotTheHeads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if scope.presents.lineage != f.root.Bindings[0] || scope.presents.lineage == f.head.Bindings[0] {
-		t.Fatalf("reopen = %q, want the root's %q", scope.presents.lineage, f.root.Bindings[0])
+	if scope.presents.lineage != f.root.Bindings[0] || scope.presents.of("consumer") != f.head.Bindings[0] || scope.presents.of("producer-a") != f.root.Bindings[0] {
+		t.Fatalf("presents = %+v, want the root's %q and the head's %q for its step", scope.presents, f.root.Bindings[0], f.head.Bindings[0])
 	}
 	if !slices.Equal(scope.release, slices.Concat(f.root.Bindings, f.head.Bindings)) {
 		t.Fatalf("release = %v", scope.release)
@@ -266,37 +283,48 @@ func TestARemovalReopensTheRootsBindingNotTheHeads(t *testing.T) {
 	if err != nil || replacement.presents.lineage != "rebound-1" || len(replacement.release) != 3 {
 		t.Fatalf("a rebound removal reopens %q and releases %v (%v)", replacement.presents.lineage, replacement.release, err)
 	}
-	binding, err := removalBinding(ctx, f.store, f.head)
-	if err != nil || binding != f.root.Bindings[0] {
-		t.Fatalf("diff reopens %q (%v), want the root's", binding, err)
+	presents, err := appliedPresenting(ctx, f.store, f.head)
+	if err != nil || presents.lineage != f.root.Bindings[0] || presents.of("consumer") != f.head.Bindings[0] {
+		t.Fatalf("diff presents %+v (%v), want the root's and the head's for its step", presents, err)
 	}
-	reopened, err := frozenReopenOf(ctx, f.store)
+	reopened, err := frozenReopenOf(ctx, f.store, f.h.service.capabilities)
 	if err != nil || !slices.Equal(reopened.bindings(), f.root.Bindings) {
-		t.Fatalf("status reads the head's removal reopening %q (%v), want the root's", reopened.bindings(), err)
+		t.Fatalf("status reads the head's removal reopening %q (%v), want the root's alone: the head's presents only a step that reads no material at removal", reopened.bindings(), err)
 	}
 }
 
-func TestARebindDuringALineageRemovalNamesOnlyWhatTheRootBindingHolds(t *testing.T) {
+// B1870: a whole removal presents the added step the additive apply's
+// binding, so a rebind of an access credential only that binding pins is
+// admitted, and one no step of the removal names is refused.
+func TestARebindDuringALineageRemovalReachesWhatTheAdditiveApplysBindingHolds(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	h, f := completedLineage(t)
+	h := newHarness(t, "producer-a")
+	consumer := consumerDefinition()
+	consumer.Request = json.RawMessage(`{"name":"consumer","tokenRef":"head-only"}`)
+	h.capability.access = map[string][]string{"consumer": {"head-only"}}
+	f := newLineageFixture(t, h, consumer)
+	f.finish(t, "consumer", `{"head":true}`)
+	f.complete(t)
 	h.binder.versions = map[string]string{"shared": "v2", "head-only": "v2"}
 	h.binder.pins = map[string]map[string]string{
 		f.root.Bindings[0]: {"shared": "v1"},
-		f.head.Bindings[0]: {"shared": "v1", "head-only": "v1"},
+		f.head.Bindings[0]: {"head-only": "v1"},
 	}
 	var decided operationPlan
 	err := h.workspace.ReadLifecycle(ctx, testContextName, func(view View) (decideErr error) {
 		decided, decideErr = h.service.decider(nil).decide(ctx, view, reconciliation.Destroy, reconciliation.Selection{})
 		return decideErr
 	})
-	if err != nil || decided.reopen != f.root.Bindings[0] {
-		t.Fatalf("the removal reopens %q (%v)", decided.reopen, err)
+	if err != nil || decided.reopen != f.root.Bindings[0] || decided.presenter("consumer") != f.head.Bindings[0] {
+		t.Fatalf("the removal reopens %q and presents the added step %q (%v)", decided.reopen, decided.presenter("consumer"), err)
 	}
-	_, err = h.service.admitRebinds(ctx, testContextName, decided, []string{"head-only"})
-	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "authorize.rebind-invalid" {
-		t.Fatalf("a rebind of a Secret only the head's binding holds = %+v (%v)", reported, err)
+	if _, err := h.service.admitRebinds(ctx, testContextName, decided, []string{"head-only"}); err != nil {
+		t.Fatalf("a rebind of the added step's access credential = %+v", diagnostics.Of(err))
+	}
+	_, err = h.service.admitRebinds(ctx, testContextName, decided, []string{"shared"})
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "authorize.rebind-invalid" {
+		t.Fatalf("a rebind of a Secret no step presents = %+v (%v)", reported, err)
 	}
 }
 

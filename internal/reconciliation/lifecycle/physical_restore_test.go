@@ -40,9 +40,15 @@ func (c *physicalTestCapability) Plan(ctx context.Context, input PlanInput) (Cap
 		return plan, err
 	}
 	if input.Preparation != nil {
+		var dropped []string
 		plan.Definitions = slices.DeleteFunc(slices.Clone(plan.Definitions), func(d reconciliation.BlockDefinition) bool {
-			return !slices.Contains([]string{"setup", "services", "machine-node", "discovery-node"}, d.ID)
+			drop := !slices.Contains([]string{"setup", "services", "machine-node", "discovery-node"}, d.ID)
+			if refs, _ := requestRefs(d.Request); drop {
+				dropped = append(dropped, refs...)
+			}
+			return drop
 		})
+		plan.Secrets = slices.DeleteFunc(slices.Clone(plan.Secrets), func(name string) bool { return slices.Contains(dropped, name) })
 		return plan, nil
 	}
 	inventoried, err := c.inventoried(ctx, input)

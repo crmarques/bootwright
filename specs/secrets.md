@@ -432,11 +432,11 @@ is lent its certificate alone. A
 registration that provably did not happen releases the binding it created, and
 one that may have happened keeps it, because the operation it may have
 registered reopens it for every later attempt and its removal. An additive
-apply's binding is reopened only for its own attempts. A restoring apply binds
+apply's binding is reopened for its own attempts and its steps' removal. A restoring apply binds
 the current versions of what its added steps name in a binding of its own,
 beside any rebind of a kept Machine's access credential it records. The
-removal of a lineage presents each step the binding of the restoring apply that
-created it and the root apply's otherwise, and releases every member's
+removal of a lineage presents each step the binding of the apply that created
+it, and releases every member's
 ([removal over a lineage](state-reconciliation.md#removal-over-a-lineage)). A binding no
 operation names, which an interrupted registration leaves, is released under
 the [collection rule](state-reconciliation.md#context-mutation-evidence): after

@@ -12,7 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 )
 
-// presenting is each step's binding: its restoring apply's, else the lineage's.
+// presenting is each step's binding: the one the apply that created it froze, none when it froze none.
 type presenting struct {
 	lineage string
 	steps   map[string]string
@@ -69,13 +69,17 @@ func (l lineage) presenting() presenting {
 	}
 	presents := presenting{lineage: ownBinding(l[0].operation)}
 	for _, holding := range l.ownership().Holdings() {
-		if holding.Incarnation < 0 || !l.restores(holding.Incarnation) {
+		if holding.Incarnation < 0 || l[holding.Incarnation].operation.Verb != reconciliation.Apply {
+			continue
+		}
+		created := ownBinding(l[holding.Incarnation].operation)
+		if holding.Incarnation == 0 || created == presents.lineage {
 			continue
 		}
 		if presents.steps == nil {
 			presents.steps = map[string]string{}
 		}
-		presents.steps[holding.Block.ID] = ownBinding(l[holding.Incarnation].operation)
+		presents.steps[holding.Block.ID] = created
 	}
 	for _, member := range l {
 		presents = presents.replaced(member.operation.Rebound)
@@ -203,7 +207,9 @@ func (t operationPlan) keptSteps() []reconciliation.Block {
 func (t operationPlan) presented() []string {
 	held := joinBindings(nil, t.presents.lineage)
 	for _, block := range t.plan.Blocks {
-		held = joinBindings(held, t.presents.of(block.ID))
+		if !t.applyOnly[block.ID] {
+			held = joinBindings(held, t.presents.of(block.ID))
+		}
 	}
 	for _, block := range t.keptSteps() {
 		if block.Kind == string(api.Machine) {
@@ -212,6 +218,34 @@ func (t operationPlan) presented() []string {
 	}
 	slices.Sort(held)
 	return held
+}
+
+func (t operationPlan) lenient() []string {
+	strict := t.presented()
+	var held []string
+	for _, block := range t.plan.Blocks {
+		if binding := t.presents.of(block.ID); t.applyOnly[block.ID] && !slices.Contains(strict, binding) {
+			held = joinBindings(held, binding)
+		}
+	}
+	return held
+}
+
+func applyOnlySteps(capabilities CapabilityResolver, presents presenting, plan reconciliation.Plan) map[string]bool {
+	var steps map[string]bool
+	for _, block := range plan.Blocks {
+		if _, routed := presents.steps[block.ID]; !routed {
+			continue
+		}
+		capability, found := capabilities.Resolve(block.Kind, block.Implementation)
+		if scoped, scopes := capability.(ApplyOnlyMaterial); found && scopes && scoped.ReadsMaterialOnlyInApply(block) {
+			if steps == nil {
+				steps = map[string]bool{}
+			}
+			steps[block.ID] = true
+		}
+	}
+	return steps
 }
 
 // recorded are the bindings it presents and every one its rebinds issued.

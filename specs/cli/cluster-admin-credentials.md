@@ -61,8 +61,8 @@ One exclusive mutation lease covers the whole run: identity reproof,
 preparation, remote change and custody publication of every selected login.
 Logins run one after another in the canonical order, so Grafana runs last: a
 Prometheus update reconfigures Grafana. Each login follows the same protocol with
-its own retained candidate. Secrets come from the original frozen binding,
-re-proved inside that lease. The native operation proves the original cluster and
+its own retained candidate. Secrets come from the frozen binding that presents the
+login's step, re-proved inside that lease. The native operation proves the original cluster and
 account before changing anything. A generated candidate, old-account guard and
 previous active-password digest are retained in encrypted produced custody
 before remote mutation. A failed or interrupted command reuses that candidate on
@@ -204,9 +204,10 @@ material writes nothing, and the declaration's fingerprint must be the bound
 version's, else `engine.credential-moved`); the second proves the current
 version holds the candidate and rebinds with that Secret pinned at it. Until the
 operation record names the new binding, the replaced one still pins the bound
-version, which keeps the Secret held against `secret set` and renewal. The rebind replaces the binding of the operation that applied
-the monitoring unit's block, falling back to the lineage root's, so that
-operation's record names it, an operation-log `rebind` record notes it, and the
+version, which keeps the Secret held against `secret set` and renewal. The rebind replaces the binding that presents
+the monitoring unit's block in the record that issued it
+([removal over a lineage](../state-reconciliation.md#removal-over-a-lineage)),
+so that operation's record names it, an operation-log `rebind` record notes it, and the
 replaced binding is released. Because the binding holds the new version, the
 Secret's [hold](../secrets.md#effect-material-under-a-live-binding) stays
 satisfied and a later apply over unchanged input settles with nothing to bind. A
@@ -246,7 +247,7 @@ login: Prometheus's and Alertmanager's basic-auth logins from the gateway
 block's produced output `monitoring`
 ([management gateway unit](../ceph.md#resources-readiness-and-access)), and
 Grafana's user `admin` with the version of the Secret the frozen monitoring
-unit binds at `/spec/initial_admin_password` that the owner binding holds: the
+unit binds at `/spec/initial_admin_password` that the binding presenting the unit's block holds: the
 version that unit applied, or the one a later
 [credential update](#administrator-credential-updates) proved
 ([secrets](../secrets.md#effect-material-under-a-live-binding)); the current

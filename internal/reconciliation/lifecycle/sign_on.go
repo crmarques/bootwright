@@ -328,12 +328,7 @@ func (s SignOnService) signOnBasis(ctx context.Context, view View, store Operati
 	if record.State != reconciliation.BlockDone {
 		return unapplied()
 	}
-	if basis.binding = ownBinding(basis.owner); basis.binding == "" {
-		if basis.binding, err = removalBinding(ctx, store, operation); err != nil {
-			return signOnBasis{}, err
-		}
-	}
-	basis.binding = chain.rebound(basis.binding)
+	basis.binding = chain.presenting().of(basis.block.ID)
 	basis.record, err = readSuspension(ctx, store, basis.owner.ID, basis.block)
 	return basis, err
 }

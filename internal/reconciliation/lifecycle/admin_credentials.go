@@ -450,14 +450,31 @@ func selectLogins(cluster string, available map[string]loginBasis, unavailable m
 }
 
 func (s AdminCredentialService) loginBinding(ctx context.Context, store recordReader, operation operationstore.Operation, block string) (string, error) {
-	owner, err := routedIn(ctx, store, operation, block)
-	if err != nil {
-		return "", err
+	presents, err := appliedPresenting(ctx, store, operation)
+	return presents.of(block), err
+}
+
+// bindingIssuer is the record whose rebind issued a presented binding, else the apply that froze it.
+func bindingIssuer(ctx context.Context, store recordReader, applied operationstore.Operation, binding string) (operationstore.Operation, error) {
+	chain := lineage{{operation: applied}}
+	if applied.Predecessor != "" {
+		held, err := appliedLineage(ctx, store, applied)
+		if err != nil {
+			return operationstore.Operation{}, err
+		}
+		chain = held
 	}
-	if binding := ownBinding(owner); binding != "" {
-		return binding, nil
+	for _, member := range slices.Backward(chain) {
+		if slices.Contains(slices.Collect(maps.Values(member.operation.Rebound)), binding) {
+			return store.ReadOperation(ctx, member.operation.ID)
+		}
 	}
-	return removalBinding(ctx, store, operation)
+	for _, member := range chain.applies() {
+		if ownBinding(member.operation) == binding {
+			return store.ReadOperation(ctx, member.operation.ID)
+		}
+	}
+	return operationstore.Operation{}, engineCredentialCustody.Fail("no operation record names the binding "+binding+" that presents the administrator password", "restore the original credential custody")
 }
 
 func (s AdminCredentialService) sharedSecret(ctx context.Context, store recordReader, operation operationstore.Operation, owner reconciliation.Block, secret string) (bool, error) {
@@ -865,30 +882,23 @@ func (s AdminCredentialService) publishBound(ctx context.Context, tx Transaction
 		return err
 	}
 	store := s.store(tx)
-	owner, err := routedIn(ctx, store, basis.operation, login.block.ID)
-	if err != nil {
-		return err
-	}
-	record, err := store.ReadOperation(ctx, owner.ID)
+	record, err := bindingIssuer(ctx, store, basis.operation, login.binding)
 	if err != nil {
 		return err
 	}
 	replaced := slices.Index(record.Bindings, login.binding)
 	if replaced < 0 {
-		holder, err := s.rootOf(ctx, store, basis.operation)
-		if err != nil {
-			return err
-		}
-		if record, err = store.ReadOperation(ctx, holder); err != nil {
-			return err
-		}
-		if replaced = slices.Index(record.Bindings, login.binding); replaced < 0 {
-			return engineCredentialCustody.Fail("no operation record names the binding of the "+login.login.Name+" administrator password", "restore the original credential custody")
-		}
+		return engineCredentialCustody.Fail("no operation record names the binding of the "+login.login.Name+" administrator password", "restore the original credential custody")
 	}
 	record.Bindings = slices.Clone(record.Bindings)
 	record.Bindings[replaced] = issued.ID
 	slices.Sort(record.Bindings)
+	record.Rebound = maps.Clone(record.Rebound)
+	for from, to := range record.Rebound {
+		if to == login.binding {
+			record.Rebound[from] = issued.ID
+		}
+	}
 	if err := store.UpdateOperation(ctx, record); err != nil {
 		return err
 	}
@@ -908,17 +918,6 @@ func (s AdminCredentialService) publishBound(ctx context.Context, tx Transaction
 		})
 	}
 	return nil
-}
-
-func (s AdminCredentialService) rootOf(ctx context.Context, store recordReader, operation operationstore.Operation) (string, error) {
-	if operation.Predecessor == "" {
-		return operation.ID, nil
-	}
-	held, err := appliedLineage(ctx, store, operation)
-	if err != nil {
-		return "", err
-	}
-	return held[0].operation.ID, nil
 }
 
 func (s AdminCredentialService) adminProduced(ctx context.Context, tx Transaction, block, name string) (secretstore.ProducedMaterial, bool, error) {

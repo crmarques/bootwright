@@ -80,6 +80,7 @@ func (d decider) withPhases(ctx context.Context, store recordReader, decided ope
 		return decided, err
 	}
 	decided.phases = d.planner.computePhases(decided.plan)
+	decided.applyOnly = applyOnlySteps(d.capabilities, decided.presents, decided.plan)
 	if decided.noop || decided.finalize {
 		return decided, nil
 	}

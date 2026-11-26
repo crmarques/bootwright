@@ -216,7 +216,7 @@ func reopensOf(presents presenting, plan reconciliation.Plan) []reopened {
 	return reopens
 }
 
-func frozenReopenOf(ctx context.Context, store OperationStore) (frozenReopen, error) {
+func frozenReopenOf(ctx context.Context, store OperationStore, capabilities CapabilityResolver) (frozenReopen, error) {
 	index, err := store.Index(ctx)
 	if err != nil || index.Current == "" {
 		return frozenReopen{}, err
@@ -257,8 +257,13 @@ func frozenReopenOf(ctx context.Context, store OperationStore) (frozenReopen, er
 	if presents.lineage == "" && len(presents.steps) == 0 {
 		return frozenReopen{}, nil
 	}
+	covered := coveredBy(operation, plan, states)
+	if operation.Verb == reconciliation.Destroy || operation.State == reconciliation.OperationDone {
+		unread := applyOnlySteps(capabilities, presents, covered)
+		covered.Blocks = slices.DeleteFunc(slices.Clone(covered.Blocks), func(block reconciliation.Block) bool { return unread[block.ID] })
+	}
 	return frozenReopen{
-		operation: operation, reopens: reopensOf(presents, coveredBy(operation, plan, states)),
+		operation: operation, reopens: reopensOf(presents, covered),
 		finalizes: operation.Verb == reconciliation.Apply && own == transitionFinalize,
 	}, nil
 }

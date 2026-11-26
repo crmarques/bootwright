@@ -39,7 +39,7 @@ func (s Service) Status(ctx context.Context, request StatusRequest) (*StatusResu
 			}
 			result.Warnings = append(result.Warnings, warnings...)
 		}
-		frozen, err = frozenReopenOf(ctx, s.store(view))
+		frozen, err = frozenReopenOf(ctx, s.store(view), s.capabilities)
 		return err
 	})
 	if err != nil {

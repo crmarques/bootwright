@@ -692,7 +692,7 @@ func currentFrozenReopen(t *testing.T, h *harness) frozenReopen {
 	var reopened frozenReopen
 	err := h.workspace.ReadLifecycle(ctx, testContextName, func(view View) error {
 		var err error
-		reopened, err = frozenReopenOf(ctx, h.service.store(view))
+		reopened, err = frozenReopenOf(ctx, h.service.store(view), h.service.capabilities)
 		return err
 	})
 	if err != nil {

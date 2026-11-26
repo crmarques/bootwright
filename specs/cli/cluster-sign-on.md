@@ -23,9 +23,11 @@ the confirmation, any custody read and any lease, in this order:
 | The lineage's sign-on block of the cluster is not `done` | `engine.sign-on-unapplied` |
 | The suspension record is unreadable, names another block or another request digest | `engine.sign-on-suspension-damaged` |
 
-The command reopens the Secret binding of the apply that holds the sign-on
+The command reopens the Secret binding that
+[presents](../state-reconciliation.md#removal-over-a-lineage) the sign-on
 block, the one an [additive apply](../state-reconciliation.md#additive-apply)
-registered when the sign-on was added, else the lineage root's, then confirms,
+froze when the sign-on was added, else the lineage root's, as a later rebind
+replaced it, then confirms,
 then takes one exclusive mutation lease of the context. Inside the lease it
 reads the same basis again: a changed current operation, input revision,
 sign-on block, request digest, binding or suspension record refuses

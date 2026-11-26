@@ -147,6 +147,13 @@ func (s Service) bind(ctx context.Context, name string, decided operationPlan) (
 		}
 		return held, err
 	}
+	for _, binding := range decided.lenient() {
+		if _, err := s.reopenEach(ctx, name, []string{binding}, held.material); err != nil && ctx.Err() != nil {
+			held.material.clear()
+			held.material = stepMaterial{}
+			return held, err
+		}
+	}
 	return held, nil
 }
 

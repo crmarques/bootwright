@@ -15,6 +15,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
+	"github.com/crmarques/bootwright/internal/secrets/custody"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
 
@@ -79,9 +80,13 @@ func newLineageFixture(t *testing.T, h *harness, added ...reconciliation.BlockDe
 	if err != nil {
 		t.Fatal(err)
 	}
+	bound, err := h.binder.Bind(ctx, custody.BindRequest{ContextName: testContextName})
+	if err != nil {
+		t.Fatal(err)
+	}
 	head := root
 	head.ID, head.Predecessor, head.PlanDigest, head.State = headID, root.ID, digest, reconciliation.OperationRunning
-	head.Created, head.Updated, head.Bindings = headCreated, headCreated, []string{root.Bindings[0] + "-additive"}
+	head.Created, head.Updated, head.Bindings = headCreated, headCreated, []string{bound.ID}
 	if err := store.Register(ctx, head, headPlan); err != nil {
 		t.Fatalf("registering the addition: %v", diagnostics.Of(err))
 	}

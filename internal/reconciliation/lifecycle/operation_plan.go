@@ -28,6 +28,7 @@ type operationPlan struct {
 	requested  stagedFloor
 	kept       []string
 	keptBlocks []reconciliation.Block
+	applyOnly  map[string]bool
 	verb       reconciliation.Verb
 	operation  operationstore.Operation
 	plan       reconciliation.Plan

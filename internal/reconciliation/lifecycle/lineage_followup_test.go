@@ -30,15 +30,15 @@ func (f *lineageFixture) failHead(t *testing.T, block string) {
 	}
 }
 
-func TestAFailedAdditiveHeadReopensTheRootsBindingForStatus(t *testing.T) {
+func TestAFailedAdditiveHeadReopensTheRootsAndItsOwnBindingForStatus(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "producer-a")
 	f := newLineageFixture(t, h, consumerDefinition())
 	f.failHead(t, "consumer")
-	reopened, err := frozenReopenOf(ctx, f.store)
-	if err != nil || !slices.Equal(reopened.bindings(), f.root.Bindings[:1]) {
-		t.Fatalf("a failed additive head reopens %q (%v), want the root's %q", reopened.bindings(), err, f.root.Bindings[0])
+	reopened, err := frozenReopenOf(ctx, f.store, f.h.service.capabilities)
+	if err != nil || !slices.Equal(reopened.bindings(), []string{f.root.Bindings[0], f.head.Bindings[0]}) {
+		t.Fatalf("a failed additive head reopens %q (%v), want the root's %q and its own", reopened.bindings(), err, f.root.Bindings[0])
 	}
 }
 
@@ -136,7 +136,14 @@ func TestALineageRemovalRebindFailedAndReplacedReleasesTheReboundBinding(t *test
 	f.finish(t, "consumer", `{}`)
 	f.complete(t)
 	h.binder.versions["bmc"] = "ver-2"
-	seen := presentedTo(h)
+	seen := &[]string{}
+	h.capability.presenting = func(execution Execution) bool {
+		if execution.Block.ID != "alpha" {
+			return true
+		}
+		*seen = append(*seen, presented(execution))
+		return presented(execution) == "second"
+	}
 	if err := destroyWith(h); err == nil {
 		t.Fatal("a removal presenting the rotated-out password completed")
 	}
@@ -149,7 +156,7 @@ func TestALineageRemovalRebindFailedAndReplacedReleasesTheReboundBinding(t *test
 		t.Fatalf("the rebound removal is %+v", rebound)
 	}
 	if err := destroyWith(h); err != nil {
-		t.Fatalf("the replacement: %v", err)
+		t.Fatalf("the replacement: %+v", diagnostics.Of(err))
 	}
 	for _, binding := range slices.Concat(f.root.Bindings, f.head.Bindings, rebound.Bindings) {
 		if !slices.Contains(h.binder.released, binding) {
