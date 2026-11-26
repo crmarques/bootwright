@@ -22,6 +22,7 @@ type blankingNodeMachine struct {
 	fail       error
 	marks      map[string]string
 	resets     []RootReset
+	presented  []string
 	observed   []string
 	lose       map[string]string
 	installed  func() int
@@ -44,7 +45,7 @@ func implementationsOf(plan reconciliation.Plan) map[string]bool {
 }
 
 func (m *blankingNodeMachine) RootResetSecrets(reconciliation.Block) ([]string, error) {
-	return nil, nil
+	return slices.Clone(m.access), nil
 }
 
 func (m *blankingNodeMachine) RootResetRefusal(reconciliation.Block) string { return m.refusal }
@@ -54,6 +55,7 @@ func (m *blankingNodeMachine) ResetRootDisk(_ context.Context, reset RootReset) 
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.resets = append(m.resets, reset)
+	m.presented = append(m.presented, reset.Block.Object+"="+presentedMaterial(reset.Material))
 	m.beforeMark = append(m.beforeMark, installed, media)
 	if m.fail != nil {
 		return reconciliation.OutcomeUnknown, reconciliation.EffectUnknown, m.fail
@@ -202,6 +204,35 @@ func TestAStagedDestroyBlanksTheRootDisksOfVirtualNodesAnInstallationBooted(t *t
 	}
 	if len(cluster.machine.applies) != nodeApplies {
 		t.Fatalf("the restore applied the kept nodes again: %v", cluster.machine.applies)
+	}
+}
+
+// B1861 with B1868: each reset presents the kept node Machine's own binding
+// with the staged destroy's rebind, never the binding of the step it runs
+// under. After a restore re-installed the cluster under its own binding, which
+// names no Secret, the rotated BMC credential only the nodes present is
+// rebound by the next staged destroy, and every reset presents the new version.
+func TestARootDiskResetPresentsTheRebindOfTheKeptNodesAccessCredential(t *testing.T) {
+	t.Parallel()
+	cluster, machine := blankingCluster(t, presentBMC, installNamesNoSecret)
+	h := cluster.h
+	completeApply(t, h)
+	if _, err := blankingDestroy(h); err != nil {
+		t.Fatalf("the first staged destroy: %v", diagnostics.Of(err))
+	}
+	restoreWith(t, h)
+	h.binder.versions["bmc"] = "ver-2"
+	_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, Floor: string(reconciliation.StageClusters), SkipConfirmation: true,
+		Authorizations: []string{reconciliation.AuthorizationDataLoss, RebindAuthorization + "bmc"}})
+	if err != nil {
+		t.Fatalf("the rebound staged destroy: %v", diagnostics.Of(err))
+	}
+	removal, plan := currentRecord(t, h)
+	if !trimmed(removal) || len(removal.Rebound) != 1 || !slices.Equal(blanksOf(plan, "install"), []string{"node-1", "node-2"}) {
+		t.Fatalf("the rebound staged destroy recorded %+v", removal)
+	}
+	if want := []string{"node-1=first", "node-2=first", "node-1=second", "node-2=second"}; !slices.Equal(machine.presented, want) {
+		t.Fatalf("the resets presented %v, want %v", machine.presented, want)
 	}
 }
 

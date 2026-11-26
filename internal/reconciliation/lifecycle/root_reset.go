@@ -207,9 +207,9 @@ func (s Service) rootReset(ctx context.Context, run invocation, execution Execut
 	if err != nil {
 		return RootReset{}, err
 	}
-	lent := map[string]secrets.Material{}
+	presented, lent := run.material.of(original.ID), map[string]secrets.Material{}
 	for _, reference := range references {
-		value, found := run.material[reference]
+		value, found := presented[reference]
 		if !found {
 			return RootReset{}, startPowerRefused.Fail("the staged destroy's binding holds no access for the kept Machine/"+original.Object, "restore its frozen credentials")
 		}

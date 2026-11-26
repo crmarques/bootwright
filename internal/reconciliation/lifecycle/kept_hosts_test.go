@@ -558,6 +558,11 @@ func TestAStagedDestroyProvesKeptNodesOffPresentingTheirRebind(t *testing.T) {
 func bmcKeptCluster(t *testing.T) keptCluster {
 	t.Helper()
 	cluster := keptClusterHarness(t, false, "")
+	presentBMC(&cluster)
+	return cluster
+}
+
+func presentBMC(cluster *keptCluster) {
 	for index, definition := range cluster.machine.definitions {
 		cluster.machine.definitions[index].Request = json.RawMessage(`{"credentialsRef":"bmc","name":"` + definition.ID + `"}`)
 	}
@@ -568,7 +573,6 @@ func bmcKeptCluster(t *testing.T) keptCluster {
 	cluster.h.binder.material = map[string]secrets.Material{"bmc": password("first")}
 	cluster.h.binder.versions = map[string]string{"bmc": "ver-1"}
 	cluster.h.binder.versionMaterial = map[string]secrets.Material{"ver-1": password("first"), "ver-2": password("second"), "ver-3": password("third")}
-	return cluster
 }
 
 func (c keptCluster) takeReadings() map[string][]string {
@@ -611,9 +615,13 @@ func TestAReplacedStagedDestroyProvesKeptNodesOffWithTheirOwnBinding(t *testing.
 func nodeOnlyBMC(t *testing.T) keptCluster {
 	t.Helper()
 	cluster := bmcKeptCluster(t)
+	installNamesNoSecret(&cluster)
+	return cluster
+}
+
+func installNamesNoSecret(cluster *keptCluster) {
 	cluster.install.definitions[0].Request = json.RawMessage(`{"name":"install"}`)
 	cluster.install.secrets, cluster.install.testCapability.access = nil, nil
-	return cluster
 }
 
 // A staged destroy rebinds the rotated BMC credential only its kept nodes
