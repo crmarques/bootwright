@@ -10,6 +10,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 type removalMachineGroup struct {
@@ -260,7 +261,7 @@ func heldRemovalBlocks(plan reconciliation.Plan, deferred map[string]error) map[
 	return held
 }
 
-func (s Service) proveKeptPower(ctx context.Context, store recordReader, name string, located approved, decided operationPlan, material map[string]secrets.Material) error {
+func (s Service) proveKeptPower(ctx context.Context, store recordReader, name string, located approved, decided operationPlan, material stepMaterial) error {
 	stage, source := decided.stage, decided.source
 	if !decided.fresh {
 		stage, source = decided.operation.Stage, decided.operation.Source
@@ -284,7 +285,7 @@ func (s Service) proveKeptPower(ctx context.Context, store recordReader, name st
 			event := ProgressEvent{Phase: CheckPhase, Block: "kept-power-" + target.Block, Position: index + 1, Total: len(stage.KeptPower),
 				Description: "prove the kept Machine/" + target.Machine + " is powered off, changing nothing", Status: "running"}
 			s.report(ctx, event)
-			state, err := s.readKeptPower(ctx, store, name, member.operation.ID, original, reader, launch, material)
+			state, err := s.readKeptPower(ctx, store, name, member.operation.ID, original, reader, launch, material.of(original.ID))
 			event.Status = "ok"
 			if err != nil || !state.Settled() {
 				event.Status = "failed"

@@ -3,6 +3,7 @@ package lifecycle
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -41,12 +42,14 @@ type keptNodeMachine struct {
 	on       map[string]bool
 	powered  []string
 	probed   []Probe
+	access   []string
+	read     map[string][]string
 }
 
 func (m *keptNodeMachine) DeletesMachine(reconciliation.Block) bool { return !m.physical }
 func (m *keptNodeMachine) RemovesHost(reconciliation.Block) bool    { return !m.physical }
 func (m *keptNodeMachine) StartPowerSecrets(reconciliation.Block) ([]string, error) {
-	return nil, nil
+	return slices.Clone(m.access), nil
 }
 
 func (m *keptNodeMachine) StartPower(_ context.Context, probe Probe) (Quiescence, error) {
@@ -54,6 +57,12 @@ func (m *keptNodeMachine) StartPower(_ context.Context, probe Probe) (Quiescence
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.probed = append(m.probed, probe)
+	if len(m.access) != 0 {
+		if m.read == nil {
+			m.read = map[string][]string{}
+		}
+		m.read[probe.Block.Object] = append(m.read[probe.Block.Object], presentedMaterial(probe.Material))
+	}
 	if m.on[probe.Block.Object] {
 		return Quiescence{State: Live, Reason: "powered on", Stop: "bootwright machine stop " + probe.Block.Object + " --context lab"}, nil
 	}
@@ -515,5 +524,84 @@ func TestAStagedDestroyKeepsTheCustodyOfAKeptStep(t *testing.T) {
 	stagedDestroy(t, h, reconciliation.StageClusters)
 	if held := kept(h); !slices.Equal(held, []string{"node-1/kubeconfig=node"}) {
 		t.Fatalf("the trimmed context keeps custody %v, want only the kept node's", held)
+	}
+}
+
+// B1868 with B1860: the restore after a staged destroy at machines re-created
+// the nodes under its own binding, and the staged destroy at clusters rebinds
+// the rotated BMC credential, so the kept-power reading of each kept node
+// presents the rebound version, never the lineage root's nor the restore's.
+func TestAStagedDestroyProvesKeptNodesOffPresentingTheirRebind(t *testing.T) {
+	t.Parallel()
+	cluster := bmcKeptCluster(t)
+	h := cluster.h
+	completeApply(t, h)
+	stagedDestroy(t, h, reconciliation.StageMachines)
+	h.binder.versions["bmc"] = "ver-2"
+	restoreWith(t, h)
+	h.binder.versions["bmc"] = "ver-3"
+	cluster.takeReadings()
+	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, Floor: string(reconciliation.StageClusters), SkipConfirmation: true, Authorizations: []string{RebindAuthorization + "bmc"}}); err != nil {
+		t.Fatalf("the rebound staged destroy: %+v", diagnostics.Of(err))
+	}
+	removal, _ := currentRecord(t, h)
+	if !trimmed(removal) || !slices.Equal(removal.Stage.KeptPower, keptPower("node-1", "node-2")) || len(removal.Rebound) != 1 {
+		t.Fatalf("the staged destroy recorded %+v", removal)
+	}
+	if read := cluster.takeReadings(); !allOf(read["node-1"], "third") || !allOf(read["node-2"], "third") {
+		t.Fatalf("the kept-power readings presented %v, want the rebound version", read)
+	}
+}
+
+// bmcKeptCluster is keptClusterHarness whose nodes' power reading and
+// installation present bmc as an access credential, at version ver-1.
+func bmcKeptCluster(t *testing.T) keptCluster {
+	t.Helper()
+	cluster := keptClusterHarness(t, false, "")
+	for index, definition := range cluster.machine.definitions {
+		cluster.machine.definitions[index].Request = json.RawMessage(`{"credentialsRef":"bmc","name":"` + definition.ID + `"}`)
+	}
+	cluster.install.definitions[0].Request = json.RawMessage(`{"credentialsRef":"bmc","name":"install"}`)
+	cluster.machine.access, cluster.machine.secrets, cluster.install.secrets = []string{"bmc"}, []string{"bmc"}, []string{"bmc"}
+	cluster.machine.testCapability.access = map[string][]string{"node-1": {"bmc"}, "node-2": {"bmc"}}
+	cluster.install.testCapability.access = map[string][]string{"install": {"bmc"}}
+	cluster.h.binder.material = map[string]secrets.Material{"bmc": password("first")}
+	cluster.h.binder.versions = map[string]string{"bmc": "ver-1"}
+	cluster.h.binder.versionMaterial = map[string]secrets.Material{"ver-1": password("first"), "ver-2": password("second"), "ver-3": password("third")}
+	return cluster
+}
+
+func (c keptCluster) takeReadings() map[string][]string {
+	c.machine.mutex.Lock()
+	defer c.machine.mutex.Unlock()
+	read := maps.Clone(c.machine.read)
+	c.machine.read = nil
+	return read
+}
+
+// A replacement of a staged destroy proves each kept node off with the binding
+// that presents it, here a restore's that no step it takes back presents.
+func TestAReplacedStagedDestroyProvesKeptNodesOffWithTheirOwnBinding(t *testing.T) {
+	t.Parallel()
+	cluster := bmcKeptCluster(t)
+	h := cluster.h
+	completeApply(t, h)
+	stagedDestroy(t, h, reconciliation.StageMachines)
+	h.binder.versions["bmc"] = "ver-2"
+	restoreWith(t, h)
+	stagedDestroy(t, h, reconciliation.StageClusters)
+	h.binder.versions["bmc"] = "ver-3"
+	restoreWith(t, h)
+	cluster.install.outcomes = []Result{{Outcome: reconciliation.OutcomeFailed}}
+	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, Floor: string(reconciliation.StageClusters), SkipConfirmation: true}); err == nil {
+		t.Fatal("a staged destroy whose step failed completed")
+	}
+	cluster.install.outcomes = nil
+	cluster.takeReadings()
+	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, Floor: string(reconciliation.StageClusters), SkipConfirmation: true}); err != nil {
+		t.Fatalf("the replacement staged destroy: %+v", diagnostics.Of(err))
+	}
+	if read := cluster.takeReadings(); !allOf(read["node-1"], "second") || !allOf(read["node-2"], "second") {
+		t.Fatalf("the replacement's kept-power readings presented %v, want the version the nodes' restore bound", read)
 	}
 }

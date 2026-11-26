@@ -539,9 +539,13 @@ func keptSteps(ctx context.Context, store recordReader, operation operationstore
 	if err != nil {
 		return nil, err
 	}
-	live, _ := folded.live()
-	kept := folded.kept()
-	return slices.DeleteFunc(live, func(id string) bool { return !kept[id] }), nil
+	return folded.keptLive(), nil
+}
+
+func (l lineage) keptLive() []string {
+	live, _ := l.live()
+	kept := l.kept()
+	return slices.DeleteFunc(live, func(id string) bool { return !kept[id] })
 }
 
 func (t operationPlan) floor() reconciliation.Stage {

@@ -2213,7 +2213,7 @@ Not yet met: an administrator credential update reads and rewrites its
 owner's binding, not a rebind a staged destroy or a restore recorded since;
 tracked as [B1871](milestones/m1.md#b1871).
 
-### Staged destroy
+## Staged destroy
 
 `destroy --stage <floor>` takes back one stage, `substrates`, `machines`,
 `clusters` or `add-ons`, and every stage built on it, and the context rests

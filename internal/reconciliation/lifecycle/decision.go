@@ -673,9 +673,11 @@ func (d decider) supersede(ctx context.Context, view View, store decisionRecords
 			return operationPlan{}, err
 		}
 		decided.release = nil
-		if decided.kept, err = keptSteps(ctx, store, operation, frozen, states); err != nil {
+		folded, err := removalLineage(ctx, store, lineageMember{operation: operation, plan: frozen, states: states})
+		if err != nil {
 			return operationPlan{}, err
 		}
+		decided.kept, decided.keptBlocks = folded.keptLive(), folded.keptBlocks()
 	}
 	if decided, err = d.replacing(ctx, store, decided, operation, frozen, states); err != nil {
 		return operationPlan{}, err
