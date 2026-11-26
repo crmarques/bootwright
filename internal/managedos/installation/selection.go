@@ -382,20 +382,44 @@ func storeMedia(reference, checksum, field, identity string) (Media, error) {
 // size and one whose record differs from the digest its MachineImage declares.
 func PinMedia(catalog api.Catalog, request Request, records map[string]MediaRecord) (Request, error) {
 	profile, _ := catalog.Find(api.MachineInstallProfile, request.Identity.Profile)
-	image, _ := catalog.Find(api.MachineImage, profile.Spec().Get("installer", "anaconda", "imageRef").Text())
-	boot, err := pinned(request.BootMedia, records, image.Identity(), "spec.bootMedia", image.Identity())
+	boot, err := pinBootMedia(catalog, profile, request.BootMedia, records)
 	if err != nil {
 		return Request{}, err
 	}
 	request.BootMedia = boot
 	if request.TreeMedia != nil {
-		tree, err := pinned(*request.TreeMedia, records, profile.Identity(), "spec.installer.anaconda.packageSource.hostedTree.fromMedia", image.Identity())
+		tree, err := pinned(*request.TreeMedia, records, profile.Identity(), "spec.installer.anaconda.packageSource.hostedTree.fromMedia", imageIdentity(catalog, profile))
 		if err != nil {
 			return Request{}, err
 		}
 		request.TreeMedia = &tree
 	}
 	return request, nil
+}
+
+// PinDiscoveryBootMedia qualifies only the image the inventory boot remasters.
+// Its release must agree with the profile, but only package media needs a
+// release family when the catalog has none.
+func PinDiscoveryBootMedia(catalog api.Catalog, request Request, records map[string]MediaRecord) (Media, error) {
+	profile, _ := catalog.Find(api.MachineInstallProfile, request.Identity.Profile)
+	boot, err := pinBootMedia(catalog, profile, request.BootMedia, records)
+	if err != nil {
+		return Media{}, err
+	}
+	if err := refusedRelease(boot.Name, records, profile, false); err != nil {
+		return Media{}, err
+	}
+	return boot, nil
+}
+
+func pinBootMedia(catalog api.Catalog, profile api.Object, media Media, records map[string]MediaRecord) (Media, error) {
+	image := imageIdentity(catalog, profile)
+	return pinned(media, records, image, "spec.bootMedia", image)
+}
+
+func imageIdentity(catalog api.Catalog, profile api.Object) string {
+	image, _ := catalog.Find(api.MachineImage, profile.Spec().Get("installer", "anaconda", "imageRef").Text())
+	return image.Identity()
 }
 
 // pinned is one image frozen at its store record. owner and field name where

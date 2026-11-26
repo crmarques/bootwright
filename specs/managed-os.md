@@ -166,12 +166,13 @@ table states; for a release with no family the arch message names only
 | The image installs packages from: the boot image of a profile with no `packageSource`, a hosted tree's DVD | always | always | always |
 | The boot image of a [subscription](managed-os-subscription-source.md) profile, from which the installation installs nothing | always | never; the family is refused only when it is named | arch and version always, family only when named |
 | The boot image of a hosted-tree profile | never; held only when its record names a release | never | only when its record names a release: arch and version always, family only when named |
+| The boot image of [disk discovery](#automatic-root-disk-discovery) | always | never; the family is refused only when it is named | arch and version always, family only when named |
 
 A hosted-tree boot image with no release is bounded by its DVD's release and
 the installed system's `VERSION_ID` that
 [update within release](#update-within-release) proves. A plan therefore never
 installs one minor under a profile declaring another.
-`RefusedReleases` holds the table, and
+`RefusedReleases` holds the installation rows, and
 `TestAHostedTreeBootImageIsComparedOnlyWhenItNamesARelease` and
 `TestASubscriptionSourceBootImageMayNameNoFamily` hold its two boot-image rows.
 
@@ -1597,6 +1598,10 @@ confirmed inventory boot when the BMC cannot answer. `apply`
 automatically prepares missing inventory before it plans installation; the
 explicit `machine discover` command runs the same preparation independently.
 Both entry points use the same request derivation, runner and native procedure.
+The discovery plan pins and qualifies only the image the inventory boot
+remasters, under the [media store](#media-store) rules. It neither pins nor
+validates the installation's package media. `TestDiscoveryPinsOnlyBootMedia`
+and `TestDiscoveryRefusesInvalidBootMedia` hold those planner boundaries.
 The controller-local procedure streams fixed progress phases through the
 adapter channel before and after native work, including inventory waiting and
 temporary-boot cleanup. Progress carries no private values and is never

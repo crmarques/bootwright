@@ -85,11 +85,8 @@ func discoveryRequest(catalog api.Catalog, m api.Object, input lifecycle.PlanInp
 	if !boot.Target.Physical || !boot.Placement.Local() || boot.Private == nil || boot.TLSCertificateRef == "" || boot.Target.Hardware == nil || boot.Target.Controller.TLSVerification == "none" || !boot.Target.Controller.TLSVerify {
 		return DiscoveryRequest{}, needs, discoveryUnsupported.Fail("disk discovery requires physical RHEL, controller-local private HTTPS media and verified BMC TLS", "use a controller-local HTTPS artifact server and full or certificate BMC verification")
 	}
-	boot, err = installation.PinMedia(catalog, boot, records)
+	boot.BootMedia, err = installation.PinDiscoveryBootMedia(catalog, boot, records)
 	if err != nil {
-		return DiscoveryRequest{}, needs, err
-	}
-	if err := installation.RefusedReleases(catalog, boot, records); err != nil {
 		return DiscoveryRequest{}, needs, err
 	}
 	profile, _ := catalog.Find(api.MachineInstallProfile, boot.Identity.Profile)

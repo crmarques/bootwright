@@ -101,6 +101,35 @@ func checksummedImage(checksum string) api.Object {
 	))
 }
 
+func TestDiscoveryMediaKeepsTheDeclaredBootChecksumAndRelease(t *testing.T) {
+	catalog := labCatalog(cdromProfile(), checksummedImage(bootDigest))
+	request, _ := onlyRequest(t, catalog)
+	record := labRecords()[bootImageName]
+	record.Release.Family = ""
+	records := map[string]MediaRecord{bootImageName: record}
+
+	pinned, err := PinDiscoveryBootMedia(catalog, request, records)
+	if err != nil || pinned.SHA256 != bootDigest || pinned.Size != record.Size {
+		t.Fatalf("discovery boot media = %+v, %v", pinned, diagnostics.Of(err))
+	}
+	if reported := onlyDiagnostic(t, RefusedReleases(catalog, request, records)); !strings.Contains(reported.Message, "names no release family") {
+		t.Fatalf("installation release check = %+v", reported)
+	}
+
+	record.SHA256 = dvdDigest
+	records[bootImageName] = record
+	if _, err := PinDiscoveryBootMedia(catalog, request, records); !strings.Contains(onlyDiagnostic(t, err).Message, "spec.checksum") {
+		t.Fatalf("discovery checksum refusal = %v", diagnostics.Of(err))
+	}
+
+	record.SHA256 = bootDigest
+	record.Release.Version = "9.7"
+	records[bootImageName] = record
+	if _, err := PinDiscoveryBootMedia(catalog, request, records); !strings.Contains(onlyDiagnostic(t, err).Message, "holds release 9.7") {
+		t.Fatalf("discovery release refusal = %v", diagnostics.Of(err))
+	}
+}
+
 func TestPlanFreezesTheStoreRecordsSizeAndDigest(t *testing.T) {
 	media := labMedia()
 	request := plannedRequest(t, media, labCatalog())

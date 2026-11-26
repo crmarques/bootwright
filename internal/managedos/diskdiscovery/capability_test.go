@@ -14,6 +14,7 @@ import (
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/machine/diskselection"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
+	"github.com/crmarques/bootwright/internal/managedos/installationtest"
 	"github.com/crmarques/bootwright/internal/managedos/physicalerase"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -333,6 +334,70 @@ func TestDiscoveryStorageRefinementCannotBypassInstallationOwnership(t *testing.
 		if err := owner.refinement(before, after, owned, nil); err == nil {
 			t.Fatal("storage owner bypassed installation/erase ownership")
 		}
+	}
+}
+
+func TestDiscoveryPinsOnlyBootMedia(t *testing.T) {
+	for _, hostedTree := range []bool{false, true} {
+		name := "boot image alone"
+		if hostedTree {
+			name = "package DVD unavailable"
+		}
+		t.Run(name, func(t *testing.T) {
+			catalog := discoveryCatalog()
+			if !hostedTree {
+				objects := catalog.Objects()
+				for i, object := range objects {
+					if object.Kind() == api.MachineInstallProfile {
+						anaconda := object.Spec().Get("installer", "anaconda").Without("packageSource")
+						objects[i] = object.WithSpec(object.Spec().WithPath(anaconda, "installer", "anaconda"))
+					}
+				}
+				catalog = api.NewCatalog(objects)
+			}
+			media := labMedia()
+			boot := media.Records[installationtest.BootImageName]
+			boot.Release.Family = ""
+			media.Records = map[string]installation.MediaRecord{installationtest.BootImageName: boot}
+			input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: testContext}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
+			plan, err := New(nil).WithMedia(media).Plan(t.Context(), input)
+			if err != nil || len(plan.Definitions) != 1 {
+				t.Fatalf("discovery planning = %d definitions, %v", len(plan.Definitions), diagnostics.Of(err))
+			}
+			request, err := DecodeDiscoveryRequest(plan.Definitions[0].Request)
+			if err != nil || request.BootMedia.Name != installationtest.BootImageName || request.BootMedia.SHA256 != boot.SHA256 || request.BootMedia.Size != boot.Size {
+				t.Fatalf("boot media = %+v, %v", request.BootMedia, err)
+			}
+		})
+	}
+}
+
+func TestDiscoveryRefusesInvalidBootMedia(t *testing.T) {
+	catalog := discoveryCatalog()
+	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: testContext}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
+	for _, test := range []struct {
+		name   string
+		mutate func(*installation.MediaRecord)
+		want   string
+	}{
+		{"missing release", func(r *installation.MediaRecord) { r.Release.Version, r.Release.Arch, r.Release.Family = "", "", "" }, "holds no release"},
+		{"wrong release", func(r *installation.MediaRecord) { r.Release.Version = "9.7" }, "holds release 9.7"},
+		{"wrong architecture", func(r *installation.MediaRecord) { r.Release.Arch = "aarch64" }, "aarch64"},
+		{"wrong named family", func(r *installation.MediaRecord) { r.Release.Family = "Other Linux" }, "Other Linux"},
+		{"missing digest", func(r *installation.MediaRecord) { r.SHA256 = "" }, "names no SHA-256"},
+		{"changed size", func(r *installation.MediaRecord) { r.Observed++ }, "no longer has the size"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			media := labMedia()
+			boot := media.Records[installationtest.BootImageName]
+			test.mutate(&boot)
+			media.Records[installationtest.BootImageName] = boot
+			plan, err := New(nil).WithMedia(media).Plan(t.Context(), input)
+			reports := diagnostics.Of(err)
+			if len(plan.Definitions) != 0 || len(reports) != 1 || reports[0].Code != "install.media-unusable" || !strings.Contains(reports[0].Message, test.want) {
+				t.Fatalf("invalid media planned %d definitions, diagnostics = %+v", len(plan.Definitions), reports)
+			}
+		})
 	}
 }
 
