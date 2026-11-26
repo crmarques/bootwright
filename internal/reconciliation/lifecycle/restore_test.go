@@ -16,8 +16,6 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
-	"github.com/crmarques/bootwright/internal/secrets"
-	"github.com/crmarques/bootwright/internal/secrets/custody"
 )
 
 func restoreWith(t *testing.T, h *harness) *OperationResult {
@@ -109,8 +107,8 @@ func TestARestoringApplyCreatesOnlyWhatAStagedDestroyTookBack(t *testing.T) {
 	if !slices.Equal(h.capability.applies, []string{"charlie"}) || result.Receipt.State != "done" {
 		t.Fatalf("the restore ran %v and returned %+v", h.capability.applies, result.Receipt)
 	}
-	if !slices.Equal(restoring.Bindings, removal.Bindings) || h.binder.issued != issued {
-		t.Fatalf("the restore reopened %v beside %v, issuing %d, want the lineage's binding and no new one", restoring.Bindings, removal.Bindings, h.binder.issued-issued)
+	if len(restoring.Bindings) != 0 || h.binder.issued != issued || len(removal.Bindings) != 1 {
+		t.Fatalf("the restore recorded %v beside %v, issuing %d, want no binding for an added step that names no Secret", restoring.Bindings, removal.Bindings, h.binder.issued-issued)
 	}
 	if settled := restoreWith(t, h); !settled.Settled {
 		t.Fatalf("an apply over the completed restore returned %+v", settled)
@@ -311,48 +309,6 @@ func TestARestoreReservesTheWholePlannedSet(t *testing.T) {
 	want := []infrastructureservices.HostReservation{server("alpha"), server("charlie")}
 	if !slices.EqualFunc(h.workspace.reservations, want, func(x, y infrastructureservices.HostReservation) bool { return reflect.DeepEqual(x, y) }) {
 		t.Fatalf("the restore holds %+v, want %+v", h.workspace.reservations, want)
-	}
-}
-
-// Correction 6 and the rebind: while trimmed, the holds keep every Secret the
-// lineage's binding pins, the taken-back step's included, so the restore
-// reopens the version that created it; a rotated access credential the
-// restored step presents is rebound through --authorize rebind=, and the
-// restore records the rebound binding, which its removal then reopens.
-func TestARestoreReopensTheLineagesBindingAndRebindsAnAccessCredential(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	base, cluster := stagedDefinition("base", reconciliation.StageInfrastructureServices), stagedDefinition("cluster", reconciliation.StageClusters, "base")
-	base.Request = json.RawMessage(`{"name":"base"}`)
-	cluster.Request = json.RawMessage(`{"credentialsRef":"bmc","name":"cluster","secretRef":"pull"}`)
-	h := newPlannedHarness(t, []reconciliation.BlockDefinition{base, cluster})
-	h.capability.secrets = []string{"bmc", "pull"}
-	h.capability.access = map[string][]string{"cluster": {"bmc"}}
-	h.binder.material = map[string]secrets.Material{"bmc": password("first"), "pull": password("pull")}
-	h.binder.versions = map[string]string{"bmc": "ver-1", "pull": "pull-1"}
-	h.binder.versionMaterial = map[string]secrets.Material{"ver-1": password("first"), "ver-2": password("second"), "pull-1": password("pull")}
-	completeApply(t, h)
-	applied, _ := durableOperation(t, h)
-	stagedDestroy(t, h, reconciliation.StageClusters)
-	holds, err := h.service.SecretHolds(ctx, testContextName)
-	if err != nil || !slices.ContainsFunc(holds.Bindings, func(hold custody.Hold) bool { return slices.Contains(hold.Secrets, "pull") }) {
-		t.Fatalf("the trimmed context holds %+v (%v), want the taken-back step's Secret held", holds, err)
-	}
-	h.binder.versions["bmc"] = "ver-2"
-	seen := presentedTo(h)
-	if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true, Authorizations: []string{RebindAuthorization + "bmc"}}); err != nil {
-		t.Fatal(err)
-	}
-	restoring, _ := currentRecord(t, h)
-	if restoring.Restores == "" || slices.Equal(restoring.Bindings, applied.Bindings) || len(restoring.Bindings) != 1 || !slices.Equal(*seen, []string{"second"}) {
-		t.Fatalf("the rebound restore recorded %+v and presented %q", restoring, *seen)
-	}
-	*seen = nil
-	if err := destroyWith(h); err != nil {
-		t.Fatalf("the whole destroy over the rebound restore presented %q: %v", *seen, err)
-	}
-	if !slices.Contains(*seen, "second") {
-		t.Fatalf("the removal presented %q, want the rebound version", *seen)
 	}
 }
 
@@ -628,30 +584,6 @@ func TestARestoreRefusesAStepNoStagedDestroyTookBack(t *testing.T) {
 	restoreWith(t, h)
 }
 
-// M2: the binding a restore reopens must pin every Secret an added step
-// names, or the restore refuses apply.restore-unbound before it registers.
-func TestARestoreRefusesASecretItsReopenedBindingDoesNotPin(t *testing.T) {
-	t.Parallel()
-	base, cluster := stagedDefinition("base", reconciliation.StageInfrastructureServices), stagedDefinition("cluster", reconciliation.StageClusters, "base")
-	cluster.Request = json.RawMessage(`{"name":"cluster","secretRef":"pull"}`)
-	h := newPlannedHarness(t, []reconciliation.BlockDefinition{base, cluster})
-	h.capability.secrets = []string{"pull"}
-	h.binder.material = map[string]secrets.Material{"pull": password("pull"), "token": password("token")}
-	h.binder.versions = map[string]string{"pull": "pull-1", "token": "token-1"}
-	h.binder.versionMaterial = map[string]secrets.Material{"pull-1": password("pull"), "token-1": password("token")}
-	completeApply(t, h)
-	stagedDestroy(t, h, reconciliation.StageClusters)
-	h.capability.definitions[1].Request = json.RawMessage(`{"name":"cluster","secretRef":"pull","tokenRef":"token"}`)
-	h.capability.applies = nil
-	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
-	if reported := diagnostics.Of(err); firstCode(err) != applyRestoreUnbound.Code || !strings.Contains(reported[0].Message, "Secret token, which the step cluster names") {
-		t.Fatalf("a restore naming an unpinned Secret returned %v", reported)
-	}
-	if current, _ := currentRecord(t, h); !trimmed(current) || len(h.capability.applies) != 0 {
-		t.Fatalf("a refused restore left %+v current and ran %v", current, h.capability.applies)
-	}
-}
-
 // M2: an added consumer of a kept producer borrows from that producer's
 // custody entry, which the restore proves before it registers. The consumer
 // never started, so the staged destroy took it back without removing it.
@@ -863,47 +795,6 @@ func TestKeptChangesNamesWhatARestoreWouldRefuse(t *testing.T) {
 	h.capability.planErr = planCapabilityDefect.Fail("the host plan broke", "")
 	if kept, err := h.service.KeptChanges(ctx, testContextName, candidate); err != nil || kept.Removal != removal.ID || kept.Unchecked != "the host plan broke" || len(kept.Steps) != 0 {
 		t.Fatalf("a comparison that could not plan named %+v (%v)", kept, err)
-	}
-}
-
-// L2: a failed whole destroy over a rebound restore that records no binding
-// of its own has status read the binding its replacement reopens: the
-// restore's, never the lineage root's.
-func TestAFailedDestroyOverARestoreReadsTheRestoresBinding(t *testing.T) {
-	t.Parallel()
-	base, cluster := stagedDefinition("base", reconciliation.StageInfrastructureServices), stagedDefinition("cluster", reconciliation.StageClusters, "base")
-	cluster.Request = json.RawMessage(`{"credentialsRef":"bmc","name":"cluster"}`)
-	h := newPlannedHarness(t, []reconciliation.BlockDefinition{base, cluster})
-	h.capability.secrets = []string{"bmc"}
-	h.capability.access = map[string][]string{"cluster": {"bmc"}}
-	h.binder.material = map[string]secrets.Material{"bmc": password("first")}
-	h.binder.versions = map[string]string{"bmc": "ver-1"}
-	h.binder.versionMaterial = map[string]secrets.Material{"ver-1": password("first"), "ver-2": password("second")}
-	completeApply(t, h)
-	applied, _ := durableOperation(t, h)
-	stagedDestroy(t, h, reconciliation.StageClusters)
-	h.binder.versions["bmc"] = "ver-2"
-	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName, SkipConfirmation: true, Authorizations: []string{RebindAuthorization + "bmc"}}); err != nil {
-		t.Fatal(err)
-	}
-	restoring, _ := currentRecord(t, h)
-	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeFailed}}
-	if err := destroyWith(h); err == nil {
-		t.Fatal("a whole destroy whose first block failed reported success")
-	}
-	failed, _ := currentRecord(t, h)
-	if failed.Verb != reconciliation.Destroy || failed.State != reconciliation.OperationFailed {
-		t.Fatalf("the failed destroy recorded %+v", failed)
-	}
-	record := failed.ID + "/operation.json"
-	h.workspace.area.mutex.Lock()
-	h.workspace.area.files[record] = bytes.Replace(h.workspace.area.files[record], []byte(`"bindings":["`+restoring.Bindings[0]+`"]`), []byte(`"bindings":[]`), 1)
-	h.workspace.area.mutex.Unlock()
-	if unbound, _ := currentRecord(t, h); len(unbound.Bindings) != 0 {
-		t.Fatalf("the failed destroy still records %v", unbound.Bindings)
-	}
-	if reopened := currentFrozenReopen(t, h); reopened.binding != restoring.Bindings[0] || reopened.binding == applied.Bindings[0] {
-		t.Fatalf("status reads the failed destroy reopening %q, want the restore's %q", reopened.binding, restoring.Bindings[0])
 	}
 }
 

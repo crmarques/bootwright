@@ -25,6 +25,10 @@ func (r recordedOperations) ReadOperation(_ context.Context, id string) (operati
 	return operationstore.Operation{}, errors.New("operation record missing")
 }
 
+func (recordedOperations) ReadPlan(context.Context, string) (reconciliation.Plan, error) {
+	return reconciliation.Plan{Verb: reconciliation.Apply}, nil
+}
+
 func provedMachine(operation, object string, state reconciliation.BlockState) BlockEvidence {
 	block := reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{ID: "machine-first-v1-" + object, Kind: "Machine", Object: object, Implementation: "machine-first-v1"}}
 	return BlockEvidence{Operation: operation, Block: block, Kind: "Machine", Object: object, Implementation: "machine-first-v1", State: state, Evidence: json.RawMessage(`{}`)}

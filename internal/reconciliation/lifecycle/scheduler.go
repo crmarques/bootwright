@@ -11,7 +11,6 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
-	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 // MaxRunningBlocks defaults the invocation's running-block limit.
@@ -96,7 +95,7 @@ type invocation struct {
 	boundary       *logBoundary
 	operation      operationstore.Operation
 	plan           reconciliation.Plan
-	material       map[string]secrets.Material
+	material       stepMaterial
 }
 
 // removalReading reads a block by the block of plan that takes it back, when plan is set.

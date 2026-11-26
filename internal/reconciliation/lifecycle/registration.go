@@ -246,10 +246,12 @@ func retainedExit(ctx context.Context, view View, store OperationStore, verb rec
 // present the material for. A
 // release that fails leaves the binding for the next registration or destroy
 // to collect, so it never hides the failure being reported.
-func (s Service) unregistered(ctx context.Context, name string, decided operationPlan, binding string, record *registering, cause error) error {
+func (s Service) unregistered(ctx context.Context, name string, decided operationPlan, created string, record *registering, cause error) error {
 	recording := recordingContext(ctx)
-	if decided.fresh && binding != "" && (decided.reopen == "" || binding == decided.rebound.binding) {
-		_, _ = s.binder.Release(recording, custody.BindingRequest{ContextName: name, BindingID: binding})
+	if decided.fresh {
+		for _, binding := range joinBindings(decided.rebound.issued(), created) {
+			_, _ = s.binder.Release(recording, custody.BindingRequest{ContextName: name, BindingID: binding})
+		}
 	}
 	return beside(cause, s.restoreEvidence(recording, name, record))
 }

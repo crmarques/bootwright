@@ -11,7 +11,6 @@ import (
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
-	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 // Each gate is one step, and the blocks it covers are that step's sub-steps, so
@@ -25,7 +24,7 @@ const (
 )
 
 // proveRemovable settles source evidence under the exclusive lock before any inverse starts.
-func (s Service) proveRemovable(ctx context.Context, tx Transaction, store OperationStore, approved approved, decided operationPlan, material map[string]secrets.Material) (map[string]error, error) {
+func (s Service) proveRemovable(ctx context.Context, tx Transaction, store OperationStore, approved approved, decided operationPlan, material stepMaterial) (map[string]error, error) {
 	name := tx.Identity().Name
 	replaced, frozen, states, err := s.verifyBasis(ctx, store, decided.basis, func(basis) error {
 		return enginePlanMoved.Fail(
@@ -162,7 +161,7 @@ type memberResolution struct {
 	causes       map[string]error
 }
 
-func (s Service) resolveMember(ctx context.Context, tx Transaction, store OperationStore, approved approved, decided operationPlan, material map[string]secrets.Material, member lineageMember, abandoned map[string]bool) (memberResolution, error) {
+func (s Service) resolveMember(ctx context.Context, tx Transaction, store OperationStore, approved approved, decided operationPlan, material stepMaterial, member lineageMember, abandoned map[string]bool) (memberResolution, error) {
 	replaced := member.operation
 	frozen, states := member.record()
 	unproved := member.unproved(abandoned)
@@ -322,7 +321,7 @@ func (s Service) reportResolution(ctx context.Context, event ProgressEvent) {
 // discovering the next obstacle each time they repeat the command. A probe
 // that cannot read its target reports live, because an environment that cannot
 // prove it is idle is never assumed to be.
-func (s Service) proveQuiescent(ctx context.Context, store OperationStore, contextName string, floor reconciliation.Stage, stage *operationstore.Stage, approved approved, plan reconciliation.Plan, phases removalPhases, material map[string]secrets.Material, held lineage, skip map[string]bool) error {
+func (s Service) proveQuiescent(ctx context.Context, store OperationStore, contextName string, floor reconciliation.Stage, stage *operationstore.Stage, approved approved, plan reconciliation.Plan, phases removalPhases, material stepMaterial, held lineage, skip map[string]bool) error {
 	var live, stops, remedies []string
 	generic := false
 	blocks := slices.DeleteFunc(slices.Clone(plan.Blocks), func(block reconciliation.Block) bool { return skip[block.ID] })
@@ -392,7 +391,7 @@ func (s Service) proveQuiescent(ctx context.Context, store OperationStore, conte
 	return destroyInUse.Fail("this removal would take back state that is still in use: "+strings.Join(live, ", "), remediation)
 }
 
-func (s Service) probeQuiescent(ctx context.Context, store OperationStore, contextName string, plan reconciliation.Plan, stage *operationstore.Stage, phases removalPhases, material map[string]secrets.Material, held lineage, launch prerequisites.PythonLaunch, block reconciliation.Block) (Quiescence, error) {
+func (s Service) probeQuiescent(ctx context.Context, store OperationStore, contextName string, plan reconciliation.Plan, stage *operationstore.Stage, phases removalPhases, material stepMaterial, held lineage, launch prerequisites.PythonLaunch, block reconciliation.Block) (Quiescence, error) {
 	capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
 	if !ok {
 		return Quiescence{}, engineOtherBuild.Fail(
@@ -414,7 +413,7 @@ func (s Service) probeQuiescent(ctx context.Context, store OperationStore, conte
 	}
 	defer release()
 	return capability.Quiescent(ctx, Probe{
-		ApplyOperation: applyOperation, ApplyProved: applyProved, Context: contextName, Block: block, Launch: launch, Material: material,
+		ApplyOperation: applyOperation, ApplyProved: applyProved, Context: contextName, Block: block, Launch: launch, Material: material.of(block.ID),
 		RetiredWithHosts: phases.retired[block.ID], LendProduced: lend,
 	})
 }

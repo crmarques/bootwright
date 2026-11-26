@@ -49,7 +49,7 @@ type diffRead struct {
 	delta         reconciliation.Delta
 	rebuilt       []string
 	basis         basis
-	binding       string
+	presents      presenting
 	digest        string
 	observed      bool
 	blocks        DiffBlocks
@@ -177,8 +177,10 @@ func (s Service) readDiff(ctx context.Context, view View, observed bool) (diffRe
 		read.adds = added != nil
 	}
 	read.basis = recorded(read.operation, read.states, attempts)
-	if read.binding, err = removalBinding(ctx, store, read.owning); err != nil {
-		return diffRead{}, err
+	if observed {
+		if read.presents, err = currentPresenting(ctx, store, read.operation, read.plan, read.states, read.owning); err != nil {
+			return diffRead{}, err
+		}
 	}
 	read.digest = inputDigest(view)
 	if read.operation.Verb == reconciliation.Apply {

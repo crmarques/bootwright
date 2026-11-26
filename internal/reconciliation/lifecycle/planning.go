@@ -404,10 +404,10 @@ func publishedSSHClaims(catalog api.Catalog, controller string, placed []SSHRese
 	return published, keyed, nil
 }
 
-func hostKeyedReservations(binding capabilityBinding, material map[string]secrets.Material, controllerKeys []infrastructureservices.Qualifier) ([]infrastructureservices.HostReservation, error) {
+func hostKeyedReservations(binding capabilityBinding, material func(hostKeyedClaim) map[string]secrets.Material, controllerKeys []infrastructureservices.Qualifier) ([]infrastructureservices.HostReservation, error) {
 	reservations := slices.Clone(binding.reservations)
 	for _, claim := range binding.hostKeyed {
-		qualifier, err := pinnedHostQualifier(claim, material)
+		qualifier, err := pinnedHostQualifier(claim, material(claim))
 		if err != nil {
 			reservation := reservations[claim.reservation]
 			return nil, planHostKeyUnreadable.Fail(
@@ -456,6 +456,27 @@ func controllerKeyQualifiers(ctx context.Context, keys ControllerHostKeys) ([]in
 		}
 	}
 	return qualifiers, nil
+}
+
+// hostKeysOf reads a claim its own steps make from its own binding, a kept claim from its Machine's.
+func hostKeysOf(plan, own reconciliation.Plan, material stepMaterial) func(hostKeyedClaim) map[string]secrets.Material {
+	return func(claim hostKeyedClaim) map[string]secrets.Material {
+		if slices.ContainsFunc(own.Blocks, func(block reconciliation.Block) bool {
+			return block.Kind == string(api.Machine) && block.Object == claim.machine
+		}) {
+			return material.of("")
+		}
+		for _, block := range plan.Blocks {
+			if block.Kind != string(api.Machine) || block.Object != claim.machine {
+				continue
+			}
+			held := material.of(block.ID)
+			if _, pinned := held[claim.knownHostsRef]; pinned {
+				return held
+			}
+		}
+		return material.of("")
+	}
 }
 
 func pinnedHostQualifier(claim hostKeyedClaim, material map[string]secrets.Material) (infrastructureservices.Qualifier, error) {

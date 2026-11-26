@@ -437,7 +437,7 @@ func TestAnObservedDiffRefusesAnUnreopenableBinding(t *testing.T) {
 		t.Fatalf("an unreopenable binding still observed: %+v", result)
 	}
 	refusedWith(t, err, "engine.binding-lost",
-		"the Secret binding apply "+operation+" froze cannot be reopened, so diff cannot observe its effects: the keyring cannot decrypt the binding",
+		"the Secret binding bind-1 the lineage of apply "+operation+" froze cannot be reopened, so diff cannot observe its effects: the keyring cannot decrypt the binding",
 		"restore the context's keyring from a complete backup, or run bootwright diff --context lab without --observe")
 }
 

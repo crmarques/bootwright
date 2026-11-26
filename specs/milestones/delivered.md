@@ -18600,7 +18600,7 @@ staged destroy took back stays taken back.
 does not pin refuses `apply.restore-unbound`, the holds keep every pinned
 Secret while trimmed, so a Secret replaced since the staged destroy is
 presented at its pinned version, and a whole removal reopens one binding
-([B1868](m1.md#b1868)); an input that drops what the staged destroy took back
+([B1868](#x761--a-restore-binds-what-its-added-steps-name-and-a-removal-presents-each-step-its-creators-binding)); an input that drops what the staged destroy took back
 refuses rather than settles ([B1869](backlog.md#b1869)).
 
 ## X760 — An agent installation no node booted is taken back on kept nodes
@@ -18653,3 +18653,47 @@ registration write, so no kill-harness journey is added.
 hosts of its DNS, NTP, Proxy and artifact services, a KubeVirt node's host
 cluster, a nested libvirt host) still refuses ([B1875](m1.md#b1875)); the proof is in-tree, over the engine's
 doubles and the capability's own answer, not a live run.
+## X761 — A restore binds what its added steps name, and a removal presents each step its creator's binding
+
+**Items:** B1868. **Kind:** product. **Owner:** Reconciliation, with Secrets.
+**Authorization:** [D288](backlog.md#d288), the follow-up of X759 in the
+[staged destroy design](../deferred/staged-destroy.md#program).
+
+**Outcome:** a [restoring apply](../state-reconciliation.md#restoring-apply)
+binds the current versions of the Secrets its added steps name, and the host
+keys its claims pin, in a binding of its own; kept steps keep the binding that
+created them, and its only rebind is the access credential of a kept Machine
+it proves off or acts on, which it records as `rebound`. A
+[removal over a lineage](../state-reconciliation.md#removal-over-a-lineage)
+presents each step the binding of the restoring apply that created it and the
+root's otherwise, across attempts, resolutions, quiescence probes, claim host
+keys, the lost-binding refusal, `status` and `diff --observe`, and reopens only
+the bindings its plan's steps and kept Machines need; every Machine power
+reading or drive presents the Machine's own binding, and the start-power
+reading and a kept cluster's sign-on read the binding that presents their
+step. A rebind replaces each binding presenting the Secret to a step it
+touches, refusing when a kept step that binding also presents rests on the
+Secret, and the removal records it as `rebound`; completion releases every
+member's binding. While trimmed, the
+[holds](../secrets.md#immutable-binding-and-contexts) keep only what steps not
+taken back pin. `apply.restore-unbound` is retired. An additive apply's steps
+and administrator credential updates are [B1870](m1.md#b1870) and
+[B1871](m1.md#b1871).
+
+**Guard tests:** `TestARestoreBindsTheCurrentVersionsOfWhatItsAddedStepsName`,
+`TestARestoreBindsASecretNoLineageBindingPins`,
+`TestARebindOverARestoredLineageReplacesThePresentingMembersBinding`,
+`TestALostRestoreBindingNamesItselfAndWhatItPresents`,
+`TestARestoreRefusesARebind`,
+`TestAWholeDestroyOverATrimmedContextReopensTheRebindingItsStagedDestroyMade`,
+`TestSecretHoldsCoverEffectMaterialAlone`,
+`TestAWholeDestroyAfterARestoreStopsAKeptMachineWithItsOwnBinding`,
+`TestAStagedDestroysRebindReachesTheKeptMachinesPowerThroughTheRestoreAndTheWholeDestroy`,
+`TestARestoreRebindsTheAccessCredentialOfAKeptMachineItProvesOff`,
+`TestAStagedRebindRefusesASecretAKeptStepRestsOn`,
+`TestAWholeDestroyReopensNoBindingOnlyATakenBackStepPresents`,
+`TestAnObservedDiffDuringAnUnfinishedRemovalReadsItsRebind`,
+`TestASignOnOfAKeptClusterReadsTheStagedRebind` and
+`TestARecordedRebindNamesIssuedBindingsItsOperationRecordsWithoutACycle`.
+
+**Gates:** `make focus`; the delivering commit records the command and result.

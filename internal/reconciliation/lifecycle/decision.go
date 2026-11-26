@@ -172,6 +172,9 @@ func (d decider) decideOver(ctx context.Context, view View, store decisionRecord
 		return decided, err
 	}
 	decided, err = withLineagePlan(ctx, store, decided, operation, frozen, states)
+	if err == nil {
+		decided, err = withPresenting(ctx, store, decided, operation, frozen, states)
+	}
 	if err == nil && decided.noop && verb == reconciliation.Apply && selection.Targeted() {
 		plan := frozen
 		if len(decided.lineagePlan.Blocks) != 0 {

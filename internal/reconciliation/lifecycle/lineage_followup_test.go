@@ -37,8 +37,8 @@ func TestAFailedAdditiveHeadReopensTheRootsBindingForStatus(t *testing.T) {
 	f := newLineageFixture(t, h, consumerDefinition())
 	f.failHead(t, "consumer")
 	reopened, err := frozenReopenOf(ctx, f.store)
-	if err != nil || reopened.binding != f.root.Bindings[0] || reopened.binding == f.head.Bindings[0] {
-		t.Fatalf("a failed additive head reopens %q (%v), want the root's %q", reopened.binding, err, f.root.Bindings[0])
+	if err != nil || !slices.Equal(reopened.bindings(), f.root.Bindings[:1]) {
+		t.Fatalf("a failed additive head reopens %q (%v), want the root's %q", reopened.bindings(), err, f.root.Bindings[0])
 	}
 }
 

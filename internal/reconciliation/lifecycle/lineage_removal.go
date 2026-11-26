@@ -9,12 +9,12 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 )
 
-// removalScope is what a fresh removal takes back and the Secret bindings it
-// reopens and releases; started counts the blocks the lineage's head started.
+// removalScope is what a fresh removal takes back, presents and releases.
 type removalScope struct {
 	owned      reconciliation.Plan
 	started    int
-	reopen     string
+	presents   presenting
+	inherited  map[string]string
 	release    []string
 	operations []string
 	contracts  map[string]string
@@ -23,7 +23,7 @@ type removalScope struct {
 }
 
 func removalOver(ctx context.Context, store recordReader, applied operationstore.Operation, frozen, started reconciliation.Plan) (removalScope, error) {
-	scope := removalScope{contracts: applied.Contracts, owned: started, started: len(started.Blocks), reopen: firstBinding(applied.Bindings), release: applied.Bindings, records: recordsFrom(store, applied)}
+	scope := removalScope{contracts: applied.Contracts, owned: started, started: len(started.Blocks), presents: presenting{lineage: firstBinding(applied.Bindings)}, release: applied.Bindings, records: recordsFrom(store, applied)}
 	if applied.Predecessor == "" {
 		return scope, nil
 	}
@@ -43,18 +43,9 @@ func removalOver(ctx context.Context, store recordReader, applied operationstore
 	if scope.owned, err = held.removalPlan(started); err != nil {
 		return removalScope{}, unremovable(applied, err)
 	}
-	scope.reopen, scope.release = held.reopened(), held.bindings()
+	scope.presents, scope.release = held.presenting(), held.bindings()
 	scope.operations = held.applies().operationIDs()
 	return scope, nil
-}
-
-func (l lineage) reopened() string {
-	for index := len(l) - 1; index >= 0; index-- {
-		if l[index].operation.Restores != "" {
-			return firstBinding(l[index].operation.Bindings)
-		}
-	}
-	return firstBinding(l[0].operation.Bindings)
 }
 
 func unremovable(applied operationstore.Operation, cause error) error {
@@ -67,7 +58,7 @@ func unremovable(applied operationstore.Operation, cause error) error {
 
 func replacementOf(ctx context.Context, store recordReader, removal operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) (removalScope, error) {
 	remaining := reconciliation.RemainingSubset(frozen, states)
-	scope := removalScope{contracts: removal.Contracts, owned: remaining, started: len(remaining.Blocks), reopen: firstBinding(removal.Bindings), release: slices.Clone(removal.Bindings), records: recordsFrom(store, removal)}
+	scope := removalScope{contracts: removal.Contracts, owned: remaining, started: len(remaining.Blocks), presents: presenting{lineage: firstBinding(removal.Bindings)}, release: slices.Clone(removal.Bindings), records: recordsFrom(store, removal)}
 	if removal.Source == "" {
 		return scope, nil
 	}
@@ -83,9 +74,7 @@ func replacementOf(ctx context.Context, store recordReader, removal operationsto
 	}
 	scope.release = joinBindings(scope.release, held.released()...)
 	scope.operations = held.operationIDs()
-	if scope.reopen == "" {
-		scope.reopen = held.reopened()
-	}
+	scope.presents, scope.inherited = folded.presenting(), folded.replacedRebounds()
 	return scope, nil
 }
 
@@ -97,14 +86,8 @@ func (l lineage) released() []string {
 }
 
 func removalBinding(ctx context.Context, store recordReader, applied operationstore.Operation) (string, error) {
-	if applied.Predecessor == "" {
-		return firstBinding(applied.Bindings), nil
-	}
-	held, err := appliedLineage(ctx, store, applied)
-	if err != nil {
-		return "", err
-	}
-	return held.reopened(), nil
+	presents, err := appliedPresenting(ctx, store, applied)
+	return presents.lineage, err
 }
 
 func sourceBindings(ctx context.Context, store recordReader, source string) ([]string, error) {

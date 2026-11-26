@@ -39,16 +39,16 @@ func (s Service) execute(ctx context.Context, name string, decided operationPlan
 		return nil, s.unregistered(ctx, name, decided, "", record, err)
 	}
 	decided = rebound
-	if decided.rebound.binding != "" {
+	if len(decided.rebound) != 0 {
 		s.startCheck = nil
 	}
-	binding, material, err := s.bind(ctx, name, decided)
+	opened, err := s.bind(ctx, name, decided)
 	if err != nil {
-		return nil, s.unregistered(ctx, name, decided, binding, record, err)
+		return nil, s.unregistered(ctx, name, decided, opened.created, record, err)
 	}
-	defer clearMaterial(material)
-	if err := s.proveBindings(ctx, name, decided, material); err != nil {
-		return nil, s.unregistered(ctx, name, decided, binding, record, err)
+	defer opened.material.clear()
+	if err := s.proveBindings(ctx, name, decided, opened.material); err != nil {
+		return nil, s.unregistered(ctx, name, decided, opened.created, record, err)
 	}
 	var result *OperationResult
 	var completion removalCompletion
@@ -56,7 +56,7 @@ func (s Service) execute(ctx context.Context, name string, decided operationPlan
 	var kept []string
 	var keptErr error
 	err = s.mutateAdmitted(ctx, name, s.startCheck, func(tx Transaction) error {
-		result, err = s.run(ctx, tx, decided, binding, material, record)
+		result, err = s.run(ctx, tx, decided, opened, record)
 		if decided.fresh && decided.verb == reconciliation.Apply && record.outcome == registered {
 			kept, keptErr = lineageBindings(recordingContext(ctx), s.store(tx), record.operation)
 		}
@@ -67,13 +67,13 @@ func (s Service) execute(ctx context.Context, name string, decided operationPlan
 		// removal whose record reads done owes both even once the invocation
 		// is interrupted, so they run under the recording boundary.
 		if completedRemoval(decided, result) && !decided.staged() {
-			completion, unreleased = captureRemoval(recordingContext(ctx), s.store(tx), result.Receipt.Operation, joinBindings(slices.Clone(decided.release), binding))
+			completion, unreleased = captureRemoval(recordingContext(ctx), s.store(tx), result.Receipt.Operation, joinBindings(slices.Clone(decided.release), opened.recorded...))
 		}
 		return err
 	})
 	switch record.outcome {
 	case notRegistered:
-		return nil, s.unregistered(ctx, name, decided, binding, record, err)
+		return nil, s.unregistered(ctx, name, decided, opened.created, record, err)
 	case possiblyRegistered:
 		// The index may name the operation, so it may own this binding and its
 		// running evidence for its whole lifetime: every later attempt reopens
@@ -93,47 +93,61 @@ func (s Service) execute(ctx context.Context, name string, decided operationPlan
 		}
 	}
 	if collect && keptErr == nil {
-		s.collect(ctx, name, held, joinBindings(joinBindings(slices.Clone(decided.release), binding), kept...))
+		s.collect(ctx, name, held, joinBindings(joinBindings(slices.Clone(decided.release), opened.recorded...), kept...))
 	}
 	return result, err
 }
 
-func (s Service) bind(ctx context.Context, name string, decided operationPlan) (string, map[string]secrets.Material, error) {
-	references := decided.binding.secrets
-	// A removal inherits its apply's binding, so it neither re-binds current
-	// declarations nor needs the plan to have named any.
-	if !decided.fresh || decided.reopen != "" {
-		references = nil
-	}
-	identity := ""
-	if len(references) != 0 {
-		result, err := s.binder.Bind(ctx, custody.BindRequest{ContextName: name, Names: references})
+type bound struct {
+	created  string
+	recorded []string
+	material stepMaterial
+}
+
+// bind binds a fresh apply's Secrets and reopens each step's presenting binding.
+func (s Service) bind(ctx context.Context, name string, decided operationPlan) (bound, error) {
+	held := bound{material: stepMaterial{bound: map[string]map[string]secrets.Material{}}}
+	if decided.fresh && decided.verb == reconciliation.Apply && decided.reopen == "" && len(decided.binding.secrets) != 0 {
+		result, err := s.binder.Bind(ctx, custody.BindRequest{ContextName: name, Names: decided.binding.secrets})
 		if err != nil {
-			return "", nil, err
+			return held, err
 		}
-		identity = result.ID
+		held.created = result.ID
 	}
-	if decided.reopen != "" {
-		identity = decided.reopen
-	}
-	if !decided.fresh && len(decided.operation.Bindings) != 0 {
-		identity = decided.operation.Bindings[0]
-	}
-	if identity == "" {
-		return "", map[string]secrets.Material{}, nil
-	}
-	bound, err := s.binder.Reopen(ctx, custody.BindingRequest{ContextName: name, BindingID: identity})
-	if err != nil {
-		if frozen := frozenBinding(decided); frozen != "" {
-			err = s.unreopenable(ctx, name, decided, frozen, err)
+	var reopen []string
+	switch {
+	case decided.verb == reconciliation.Destroy:
+		held.material.base, held.material.steps = decided.presents.lineage, decided.presents.steps
+		reopen = decided.presented()
+		held.recorded = decided.recorded(reopen...)
+	case decided.restoring():
+		held.material.base = held.created
+		if !decided.fresh {
+			held.material.base = ownBinding(decided.operation)
 		}
-		return identity, nil, err
+		held.material.steps = map[string]string{}
+		for _, block := range decided.keptSteps() {
+			held.material.steps[block.ID] = decided.presents.of(block.ID)
+		}
+		reopen = joinBindings(decided.presents.bindings(), held.material.base)
+		held.recorded = decided.recorded(held.created)
+	case decided.fresh:
+		held.material.base = held.created
+		held.recorded = joinBindings([]string{}, held.created)
+		reopen = joinBindings(nil, held.created)
+	default:
+		held.material.base = firstBinding(decided.operation.Bindings)
+		held.recorded, reopen = joinBindings([]string{}, held.material.base), joinBindings(nil, held.material.base)
 	}
-	material := make(map[string]secrets.Material, len(bound))
-	for _, item := range bound {
-		material[item.Version.Declaration.Name] = item.Material
+	if failed, err := s.reopenEach(ctx, name, reopen, held.material); err != nil {
+		held.material.clear()
+		held.material = stepMaterial{}
+		if slices.Contains(frozenBindings(decided), failed) {
+			err = s.unreopenable(ctx, name, decided, failed, err)
+		}
+		return held, err
 	}
-	return identity, material, nil
+	return held, nil
 }
 
 func clearMaterial(material map[string]secrets.Material) {
@@ -143,7 +157,8 @@ func clearMaterial(material map[string]secrets.Material) {
 }
 
 // run joins every adapter before releasing its execution scope and transaction.
-func (s Service) run(ctx context.Context, tx Transaction, decided operationPlan, binding string, material map[string]secrets.Material, record *registering) (*OperationResult, error) {
+func (s Service) run(ctx context.Context, tx Transaction, decided operationPlan, opened bound, record *registering) (*OperationResult, error) {
+	material := opened.material
 	if err := s.admitApplyView(ctx, tx, decided); err != nil {
 		return nil, err
 	}
@@ -173,7 +188,7 @@ func (s Service) run(ctx context.Context, tx Transaction, decided operationPlan,
 		return nil, err
 	}
 	decided.deferredSourceProofs = slices.Sorted(maps.Keys(deferred))
-	operation, plan, log, err := s.register(ctx, tx, store, decided, binding, material, record, located)
+	operation, plan, log, err := s.register(ctx, tx, store, decided, opened, record, located)
 	if err != nil {
 		return nil, err
 	}
@@ -191,8 +206,8 @@ func (s Service) run(ctx context.Context, tx Transaction, decided operationPlan,
 		}
 	}
 	defer logging.close(ctx, log)
-	if decided.rebound.binding != "" {
-		if err := logging.append(ctx, log, decided.rebound.record()); err != nil {
+	for _, rebound := range decided.rebound {
+		if err := logging.append(ctx, log, rebound.record()); err != nil {
 			return result, err
 		}
 	}

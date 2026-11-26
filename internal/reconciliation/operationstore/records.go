@@ -170,6 +170,7 @@ type Operation struct {
 	Predecessor          string                        `json:"predecessor,omitempty"`
 	Restores             string                        `json:"restores,omitempty"`
 	Bindings             []string                      `json:"bindings"`
+	Rebound              map[string]string             `json:"rebound,omitempty"`
 	State                reconciliation.OperationState `json:"state"`
 	LogFault             bool                          `json:"logFault"`
 	Created              string                        `json:"created"`
@@ -368,6 +369,9 @@ func validateOperation(operation Operation) error {
 	if len(slices.Compact(slices.Clone(operation.Bindings))) != len(operation.Bindings) {
 		return recordError("lifecycle operation bindings must be unique")
 	}
+	if err := validateRebound(operation); err != nil {
+		return err
+	}
 	return validateTimestamps(operation.Created, operation.Updated)
 }
 
@@ -391,6 +395,28 @@ func validateOperationLinks(operation Operation) error {
 		return recordError("lifecycle operation restore is invalid")
 	}
 	return validateStage(operation.Verb, operation.Stage)
+}
+
+func validateRebound(operation Operation) error {
+	if len(operation.Rebound) == 0 {
+		return nil
+	}
+	if operation.Verb != reconciliation.Destroy && operation.Restores == "" || len(operation.Rebound) > MaxBindings {
+		return recordError("only a removal or a restore records the bindings its rebinds replaced")
+	}
+	for replaced, issued := range operation.Rebound {
+		if replaced == "" || issued == "" || len(replaced) > maxIdentifier || len(issued) > maxIdentifier || replaced == issued || !slices.Contains(operation.Bindings, issued) {
+			return recordError("a rebind names an invalid binding or one its operation does not record")
+		}
+		steps := 0
+		for next, found := operation.Rebound[issued]; found && steps <= len(operation.Rebound); next, found = operation.Rebound[next] {
+			steps++
+		}
+		if steps > len(operation.Rebound) {
+			return recordError("the rebinds an operation records replace one another in a cycle")
+		}
+	}
+	return nil
 }
 
 type Stage struct {

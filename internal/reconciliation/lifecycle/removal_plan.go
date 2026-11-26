@@ -37,7 +37,7 @@ func (s Service) freshDestroy(ctx context.Context, contextName string, frozenBy 
 	}
 	return operationPlan{
 		fresh: true, verb: reconciliation.Destroy, plan: plan,
-		source: source, reopen: scope.reopen, release: scope.release, takes: scope.operations,
+		source: source, reopen: scope.presents.lineage, presents: scope.presents, replacements: scope.inherited, release: scope.release, takes: scope.operations,
 	}, nil
 }
 

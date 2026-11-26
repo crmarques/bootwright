@@ -3,12 +3,12 @@ package lifecycle
 import (
 	"bytes"
 	"context"
+	"maps"
 	"slices"
 
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
-	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 // register publishes the operation this transition runs, or re-opens the one
@@ -21,7 +21,7 @@ import (
 // and claimed its directory in a transaction of its own, so it re-proves both
 // here and registers into that directory. Nothing is projected after the
 // registration: the evidence already protects the operation it names.
-func (s Service) register(ctx context.Context, tx Transaction, store OperationStore, decided operationPlan, binding string, material map[string]secrets.Material, record *registering, located approved) (operationstore.Operation, reconciliation.Plan, *operationstore.Log, error) {
+func (s Service) register(ctx context.Context, tx Transaction, store OperationStore, decided operationPlan, opened bound, record *registering, located approved) (operationstore.Operation, reconciliation.Plan, *operationstore.Log, error) {
 	fail := func(err error) (operationstore.Operation, reconciliation.Plan, *operationstore.Log, error) {
 		return operationstore.Operation{}, reconciliation.Plan{}, nil, err
 	}
@@ -54,7 +54,7 @@ func (s Service) register(ctx context.Context, tx Transaction, store OperationSt
 	}
 	closure := located.closure
 	if decided.predecessor == "" || decided.reserveAddition || decided.restores != "" {
-		if err := s.reserve(ctx, tx, decided, material); err != nil {
+		if err := s.reserve(ctx, tx, decided, opened.material); err != nil {
 			return fail(err)
 		}
 	}
@@ -63,9 +63,9 @@ func (s Service) register(ctx context.Context, tx Transaction, store OperationSt
 		return fail(err)
 	}
 	stamp := s.options.Clock.Now().UTC().Truncate(1e9).Format("2006-01-02T15:04:05Z07:00")
-	bindings := []string{}
-	if binding != "" {
-		bindings = append(bindings, binding)
+	bindings := slices.Clone(opened.recorded)
+	if bindings == nil {
+		bindings = []string{}
 	}
 	operation := operationstore.Operation{
 		Version: operationstore.OperationVersion, ID: identity, Verb: decided.verb,
@@ -74,6 +74,7 @@ func (s Service) register(ctx context.Context, tx Transaction, store OperationSt
 		Executable: operationstore.Executable{Version: s.options.Executable.Version, Commit: s.options.Executable.Commit},
 		Closure:    &closure, Contracts: contracts,
 		Source: decided.source, DeferredSourceProofs: decided.deferredSourceProofs, Predecessor: decided.predecessor, Restores: decided.restores, Stage: decided.stage, Bindings: bindings, State: reconciliation.OperationRunning,
+		Rebound: decided.replacements,
 		Created: stamp, Updated: stamp,
 	}
 	if decided.verb == reconciliation.Destroy && decided.basis.record.Verb == reconciliation.Destroy &&
@@ -117,11 +118,11 @@ func (s Service) resume(ctx context.Context, tx Transaction, store OperationStor
 	if err == nil {
 		err = s.raise(ctx, tx, operation.Verb, record)
 	}
-	rebound := decided.rebound.binding != "" && !slices.Equal(operation.Bindings, []string{decided.rebound.binding})
+	rebound := len(decided.rebound) != 0 && (!slices.Equal(operation.Bindings, decided.operation.Bindings) || !maps.Equal(operation.Rebound, decided.operation.Rebound))
 	if err == nil && (rebound || operation.State != reconciliation.OperationRunning) {
 		operation.State = reconciliation.OperationRunning
 		if rebound {
-			operation.Bindings = []string{decided.rebound.binding}
+			operation.Bindings, operation.Rebound = decided.operation.Bindings, decided.operation.Rebound
 		}
 		err = store.UpdateOperation(ctx, operation)
 	}
@@ -180,7 +181,7 @@ func (s Service) proveHostBinding(ctx context.Context, tx Transaction, previous 
 // reserve claims the exclusive host resources the plan needs before any effect.
 // A destroy needs no new claim and releases at completion, so it refuses when
 // that release would strand another context's use of what it removes.
-func (s Service) reserve(ctx context.Context, tx Transaction, decided operationPlan, material map[string]secrets.Material) error {
+func (s Service) reserve(ctx context.Context, tx Transaction, decided operationPlan, material stepMaterial) error {
 	if decided.verb == reconciliation.Destroy && decided.stage != nil {
 		return nil
 	}
@@ -195,7 +196,7 @@ func (s Service) reserve(ctx context.Context, tx Transaction, decided operationP
 		}
 		controllerKeys = keys
 	}
-	planned, err := hostKeyedReservations(decided.binding, material, controllerKeys)
+	planned, err := hostKeyedReservations(decided.binding, hostKeysOf(decided.removed(), decided.plan, material), controllerKeys)
 	if err != nil {
 		return err
 	}

@@ -14,7 +14,7 @@ import (
 )
 
 func (s Service) schedulerOver(tx Transaction, store OperationStore, approved approved, logging *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material, selection reconciliation.Selection) *scheduler {
-	return s.newScheduler(invocation{tx: tx, store: store, approved: approved, boundary: logging, operation: operation, plan: plan, material: material}, states, selection, s.computePhases(plan), removalPhases{})
+	return s.newScheduler(invocation{tx: tx, store: store, approved: approved, boundary: logging, operation: operation, plan: plan, material: singleMaterial(material)}, states, selection, s.computePhases(plan), removalPhases{})
 }
 
 func decidedDestroy(t *testing.T, h *harness) operationPlan {

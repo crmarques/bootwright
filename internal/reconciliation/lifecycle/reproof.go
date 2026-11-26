@@ -39,16 +39,17 @@ func (s Service) proveShared(ctx context.Context, name string, decided operation
 		_, err := s.approvedRuntime(ctx)
 		return err
 	})
-	binding := frozenBinding(decided)
-	if err == nil || binding == "" {
+	if err == nil {
 		return err
 	}
-	bound, reopened := s.binder.Reopen(ctx, custody.BindingRequest{ContextName: name, BindingID: binding})
-	for _, item := range bound {
-		item.Material.Clear()
-	}
-	if why, unreadable := unreadableMaterial(reopened); unreadable {
-		return s.lostBinding(ctx, name, decided, decided.basis, binding, why)
+	for _, binding := range frozenBindings(decided) {
+		bound, reopened := s.binder.Reopen(ctx, custody.BindingRequest{ContextName: name, BindingID: binding})
+		for _, item := range bound {
+			item.Material.Clear()
+		}
+		if why, unreadable := unreadableMaterial(reopened); unreadable {
+			return s.lostBinding(ctx, name, decided, decided.basis, binding, why)
+		}
 	}
 	return err
 }

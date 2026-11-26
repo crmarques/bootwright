@@ -8,7 +8,6 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
-	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 func restoredLineage(ctx context.Context, store recordReader, removal operationstore.Operation) (lineage, error) {
@@ -141,15 +140,36 @@ func (d decider) restoring(ctx context.Context, view View, store decisionRecords
 	if err := refuseStageBoundary(name, added, nil, selection); err != nil {
 		return operationPlan{}, err
 	}
-	reopen := firstBinding(removal.Bindings)
-	if reopen == "" {
-		reopen = chain.applies().reopened()
+	binding, err := d.planner.addedSecrets(added, planned.binding)
+	if err != nil {
+		return operationPlan{}, err
 	}
 	return operationPlan{
-		fresh: true, verb: reconciliation.Apply, plan: added, selection: selection, binding: planned.binding,
-		predecessor: head.ID, restores: removal.ID, lineagePlan: merged, reopen: reopen,
+		fresh: true, verb: reconciliation.Apply, plan: added, selection: selection, binding: binding,
+		predecessor: head.ID, restores: removal.ID, lineagePlan: merged, presents: chain.presenting().narrowed(live.Blocks),
 		basis: basis{revision: view.Identity().Revision, input: inputDigest(view)},
 	}, nil
+}
+
+func (s Service) addedSecrets(added reconciliation.Plan, binding capabilityBinding) (capabilityBinding, error) {
+	named := []string{}
+	for _, claim := range binding.hostKeyed {
+		named = joinBindings(named, claim.knownHostsRef)
+	}
+	for _, block := range added.Blocks {
+		capability, found := s.capabilities.Resolve(block.Kind, block.Implementation)
+		referencer, names := capability.(SecretReferencer)
+		if !found || !names {
+			continue
+		}
+		references, err := referencer.SecretReferences(block)
+		if err != nil {
+			return capabilityBinding{}, err
+		}
+		named = joinBindings(named, references...)
+	}
+	binding.secrets = slices.DeleteFunc(slices.Clone(binding.secrets), func(secret string) bool { return !slices.Contains(named, secret) })
+	return binding, nil
 }
 
 func (s Service) keptChanges(name string, live, fresh reconciliation.Plan) ([]reconciliation.BlockChange, string) {
@@ -254,31 +274,6 @@ func (s Service) restoreProved(ctx context.Context, view View, chain lineage, li
 			}
 		}
 		release()
-	}
-	return nil
-}
-
-func (s Service) proveRestoredBinding(name string, decided operationPlan, material map[string]secrets.Material) error {
-	if decided.restores == "" {
-		return nil
-	}
-	for _, block := range decided.plan.Blocks {
-		capability, found := s.capabilities.Resolve(block.Kind, block.Implementation)
-		referencer, names := capability.(SecretReferencer)
-		if !found || !names {
-			continue
-		}
-		references, err := referencer.SecretReferences(block)
-		if err != nil {
-			return err
-		}
-		for _, reference := range references {
-			if _, pinned := material[reference]; !pinned {
-				return applyRestoreUnbound.Fail(
-					"the Secret binding "+decided.reopen+" this restore reopens pins no version of Secret "+reference+", which the step "+block.ID+" names",
-					"take back what the context keeps with "+contextCommand(name, string(reconciliation.Destroy))+", then apply again")
-			}
-		}
 	}
 	return nil
 }

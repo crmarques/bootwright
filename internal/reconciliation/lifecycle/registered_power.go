@@ -62,22 +62,29 @@ func (s Service) machinePower(run invocation, execution Execution) func(context.
 				}))
 				return start.(func() error)()
 			}
-			return s.options.DriveMachine(ctx, execution, proof, on)
+			return s.options.DriveMachine(ctx, run.machineExecution(execution, proof.Block.ID), proof, on)
 		}
 		return engineRecordsDamaged.Fail("no proved managed Machine/"+name+" is available for this power transition", "restore its original apply evidence")
 	}
 }
 
 func (s Service) drivePredecessor(ctx context.Context, run invocation, execution Execution, proof BlockEvidence) error {
+	if run.material.routes(proof.Block.ID) {
+		return s.options.DriveMachine(ctx, run.machineExecution(execution, proof.Block.ID), proof, true)
+	}
 	owner, err := run.store.ReadOperation(ctx, proof.Operation)
 	if err != nil {
 		return err
 	}
-	binding := firstBinding(owner.Bindings)
+	binding := ownBinding(owner)
 	if binding == "" {
 		return engineRecordsDamaged.Fail("the Machine's apply holds no binding for its management credential", "restore its original Secret binding")
 	}
-	values, err := s.binder.Reopen(ctx, custody.BindingRequest{ContextName: execution.Context, BindingID: binding})
+	chain, err := appliedLineage(ctx, run.store, run.operation)
+	if err != nil {
+		return err
+	}
+	values, err := s.binder.Reopen(ctx, custody.BindingRequest{ContextName: execution.Context, BindingID: chain.rebound(binding)})
 	if err != nil {
 		return err
 	}
@@ -88,6 +95,12 @@ func (s Service) drivePredecessor(ctx context.Context, run invocation, execution
 	defer clearMaterial(material)
 	execution.Material = material
 	return s.options.DriveMachine(ctx, execution, proof, true)
+}
+
+// machineExecution presents a Machine's power its own step's binding, never the running step's.
+func (run invocation) machineExecution(execution Execution, machine string) Execution {
+	execution.Material = run.material.of(machine)
+	return execution
 }
 
 func (s Service) machineStopped(run invocation, execution Execution) func(context.Context, string) (bool, error) {

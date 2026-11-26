@@ -10,7 +10,6 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/reconciliation"
-	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 type removalMachineGroup struct {
@@ -145,7 +144,7 @@ func (s Service) recordedMachinePower(ctx context.Context, run invocation, execu
 	if err != nil {
 		return BlockEvidence{}, Quiescence{}, err
 	}
-	state, err := reader.StartPower(ctx, Probe{ApplyOperation: owner, Context: execution.Context, Block: original, ApplyProved: deps, PreviousEvidence: proof.Evidence, Launch: execution.Launch, Material: execution.Material})
+	state, err := reader.StartPower(ctx, Probe{ApplyOperation: owner, Context: execution.Context, Block: original, ApplyProved: deps, PreviousEvidence: proof.Evidence, Launch: execution.Launch, Material: run.material.of(original.ID)})
 	return proof, state, err
 }
 
@@ -174,7 +173,7 @@ func (s Service) stopRemovalGroup(ctx context.Context, run invocation, execution
 		live = append(live, proof)
 	}
 	for _, proof := range live {
-		if err := s.options.DriveMachine(ctx, execution, proof, false); err != nil {
+		if err := s.options.DriveMachine(ctx, run.machineExecution(execution, proof.Block.ID), proof, false); err != nil {
 			return err
 		}
 	}
@@ -193,7 +192,7 @@ func (s Service) stopRemovalGroup(ctx context.Context, run invocation, execution
 	return nil
 }
 
-func (s Service) removalStart(ctx context.Context, tx Transaction, store OperationStore, located approved, decided operationPlan, material map[string]secrets.Material) ([]*removalMachineGroup, map[string]error, error) {
+func (s Service) removalStart(ctx context.Context, tx Transaction, store OperationStore, located approved, decided operationPlan, material stepMaterial) ([]*removalMachineGroup, map[string]error, error) {
 	if decided.verb != reconciliation.Destroy {
 		return nil, nil, nil
 	}

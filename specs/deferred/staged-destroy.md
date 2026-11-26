@@ -58,7 +58,7 @@ causes.
 | 3b | [B1867](../milestones/delivered.md#x758--a-destroy-widens-an-unfinished-staged-destroy) | A `destroy` without `--stage`, or a lower floor, supersedes an unfinished staged destroy |
 | 4 | [B1858](../milestones/delivered.md#x757--the-restoring-apply-restores-what-a-staged-destroy-took-back) | The restoring apply over unchanged input |
 | 5 | [B1859](../milestones/delivered.md#x759--a-restore-admits-changed-input-inside-what-a-staged-destroy-took-back) | A restore admits changed input inside the taken-back part |
-| 5b | [B1868](../milestones/m1.md#b1868) | A restore binds its added steps' Secrets, and a whole removal reopens each member's binding |
+| 5b | [B1868](../milestones/delivered.md#x761--a-restore-binds-what-its-added-steps-name-and-a-removal-presents-each-step-its-creators-binding) | A restore binds its added steps' Secrets, and a whole removal reopens each member's binding |
 | 6 | [B1860](../milestones/delivered.md#x760--an-agent-installation-no-node-booted-is-taken-back-on-kept-nodes) | An agent installation whose nodes never booted is taken back on kept nodes |
 | 7 | [B1861](../milestones/m1.md#b1861) | Root disks of kept virtual nodes are blanked through their substrate |
 | 8 | [B1862](../milestones/m2.md#b1862) | A Ceph cluster is taken back on kept hosts |
@@ -80,14 +80,9 @@ What lands with later items:
 
 ## The restoring apply
 
-The restore, changed input included, is owned by
-[state reconciliation](../state-reconciliation.md#restoring-apply). Next, the
-restore binds the current versions of the Secrets its added steps name in a
-binding of its own, which also admits an added step whose Secret only an
-additive member's binding pins; while trimmed, the holds keep only the pinned
-Secrets kept steps name, so a Secret only taken-back steps used may rotate
-before the restore; and a whole removal reopens, for each step, the binding of
-the member that last created it ([B1868](../milestones/m1.md#b1868)).
+The restore, changed input included, its own binding and the removal's
+per-step binding are owned by
+[state reconciliation](../state-reconciliation.md#restoring-apply).
 
 ## Safety gates
 

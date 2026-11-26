@@ -85,6 +85,7 @@ func (d decider) stagedDecision(ctx context.Context, view View, store decisionRe
 	slices.Sort(taken)
 	decided.stage = &operationstore.Stage{Floor: d.floor, TakenBack: slices.Compact(taken), KeptPower: answered.power}
 	decided.release, decided.kept = nil, keptOf(live.scope.owned, ids)
+	decided.keptBlocks = slices.DeleteFunc(slices.Clone(live.scope.owned.Blocks), func(block reconciliation.Block) bool { return slices.Contains(ids, block.ID) })
 	decided, err = d.widen(ctx, store, decided, operation, frozen, states)
 	return decided, true, err
 }
@@ -186,9 +187,7 @@ func (d decider) liveOf(ctx context.Context, store decisionRecords, name string,
 		return liveState{}, err
 	}
 	scope.started = len(scope.owned.Blocks)
-	if rebound := firstBinding(operation.Bindings); rebound != "" {
-		scope.reopen = rebound
-	}
+	scope.presents, scope.inherited = folded.presenting(), folded.replacedRebounds()
 	scope.release = slices.Clone(scope.release)
 	for _, member := range folded {
 		if member.operation.Verb == reconciliation.Destroy {

@@ -264,15 +264,21 @@ edge into an owned step frozen as a `prerequisite`.
   entry; an added producer produces it in the run.
 - **Registration.** It reserves the whole planned set, which clears the
   releasing mark a gone object's claim kept, and proves the host binding as
-  an additive apply does. It binds nothing: it reopens the binding the staged
-  destroy holds, the lineage's own unless a rebind replaced it, and records
-  it as its own, so its continuation and a later removal reopen it, and
-  `--authorize rebind=` admits an access credential an added step presents.
-  A Secret that binding does not pin, as a changed input may name, refuses
-  `apply.restore-unbound`. While trimmed, the holds keep every Secret a
-  lineage binding pins, so a Secret replaced since the staged destroy is
-  presented at its pinned version; a binding of the restore's own, for its
-  added steps, is [B1868](milestones/m1.md#b1868).
+  an additive apply does. It binds, in a binding of its own, the current
+  versions of the Secrets its added steps name and of the host keys its
+  claims pin, and records that binding, which its continuation reopens;
+  each kept step keeps the binding that presents it to a
+  [removal](#removal-over-a-lineage), reopened for the claims, checks and
+  Machine power the restore makes on it. A claim on a Machine an added step
+  makes reads the restore's own host keys, and a claim on a Machine it keeps
+  that Machine's binding. So a Secret only taken-back steps used, which the
+  holds no longer keep while trimmed, may be rotated before the restore, which
+  presents the new version. Its `--authorize rebind=` names only the access
+  credential of a kept Machine it proves off or acts on, as a changed input's
+  added step running on it makes it
+  ([access-credential rebind](#access-credential-rebind)); the restore records
+  that rebind as `rebound` and its issued binding beside its own, so its
+  continuation and every later removal present the new version.
 - **Identity.** A re-created step takes the restoring apply's identity, its
   attempt records and ownership marks, as an added block does; a kept step
   keeps its creator's.
@@ -934,8 +940,7 @@ a removal covers, its survivors, which its plan inverting the merged plan
 names, and the ownership report. `TestOwnershipIsFoldedOnlyByTheFold`
 forbids any other read of a member's plan and any fold of bare plans. Three
 read one record by design: a member's own plan for its attempts and operation
-state, the Secrets each member's binding pins, which the holds keep while any
-member holds it, and the bindings a removal keeps and releases, which belong to
+state, the bindings each member records, which the holds name, and the bindings a removal keeps and releases, which belong to
 their records until the whole lineage is removed.
 
 A removal's fold also holds the removals it replaces by `replaces`, oldest
@@ -2184,12 +2189,29 @@ removal takes back an additive apply alone, because added blocks retire
 offline with their cluster and would leave what they created unmanaged. A predecessor record the store lost refuses
 the removal, as a lost frozen plan does.
 
-The removal reopens one Secret binding: its own if an
-[access-credential rebind](#access-credential-rebind) replaced it, otherwise
-the one the newest [restoring apply](#restoring-apply) records, else the first
-binding of the root apply, never the head's. A rebind may name only
-Secrets that binding holds. Its completion releases the bindings of every
-apply of the lineage.
+The removal presents each step one Secret binding: the one of the
+[restoring apply](#restoring-apply) that created the step, and the first
+binding of the root apply for every other step, never an additive head's;
+each as an [access-credential rebind](#access-credential-rebind) of a removal
+or restore since replaced it, which that operation records as `rebound`, a
+fresh removal beside the replacements of the removals it replaces. It
+reopens only the lineage's binding and those presenting a step of its plan
+or a Machine it keeps, so a binding that only steps taken back again present
+is never reopened, and its `bindings` are those and every binding its
+`rebound` issued. Each step's attempt, resolution and quiescence probe, the
+host keys of its claims, `status`, `diff --observe`, the start-power reading
+and the sign-on of a kept cluster read the binding that presents that step,
+and every power reading or drive of a Machine, whichever step runs it,
+presents that Machine's own. A rebind may name only Secrets those bindings
+hold. Its completion releases the bindings of every member of the lineage.
+
+Not yet met: an additive apply's steps are presented the root apply's
+binding rather than the additive apply's own, which created them; tracked as
+[B1870](milestones/m1.md#b1870).
+
+Not yet met: an administrator credential update reads and rewrites its
+owner's binding, not a rebind a staged destroy or a restore recorded since;
+tracked as [B1871](milestones/m1.md#b1871).
 
 ### Staged destroy
 
@@ -2244,8 +2266,8 @@ set, its own scope with what every staged destroy it `replaces` took back.
   the restore. A `destroy`
   without `--stage` removes what the context still owns, replacing the staged
   destroy, and ends pristine; a lower floor replaces it with a staged destroy
-  of what is left. Either reopens the binding the latest staged destroy holds,
-  which differs from the lineage root's only after a rebind, and the whole one
+  of what is left. Either presents each step the binding a removal over the
+  lineage would, a staged destroy's rebinds included, and the whole one
   releases every staged destroy's binding beside the lineage's.
 - **Widening.** Over an unfinished staged destroy its own floor continues it,
   or replaces a failed one. A `destroy` without `--stage` replaces it with a
@@ -2636,11 +2658,13 @@ Ceph image resolution, whose effect is the reference its record holds; its
 block is not observed and reads its owning apply's record
 ([readings](#readings-and-their-fold)).
 
-**Material.** The Secret material an observation reads is the binding the
-owning apply froze, reopened read-only before the lock is taken, binding
-nothing, and cleared when the comparison returns. A binding that cannot be
-reopened refuses `engine.binding-lost`
-`the Secret binding apply <op> froze cannot be reopened, so diff cannot observe its effects: <message>`,
+**Material.** Each observed step reads the binding a removal would present
+it ([removal over a lineage](#removal-over-a-lineage)), the rebinds of an
+unfinished removal included, each reopened
+read-only before the lock is taken, binding nothing, and cleared when the
+comparison returns. A binding that cannot be reopened refuses
+`engine.binding-lost`
+`the Secret binding <binding> the lineage of apply <op> froze cannot be reopened, so diff cannot observe its effects: <message>`,
 with the remedy of restoring the context's keyring from a
 [complete backup](contexts.md#format-and-restore-boundary) or running
 `bootwright diff` without `--observe`.
@@ -3582,13 +3606,19 @@ Secret must meet every condition below, or the invocation refuses
 `authorize.rebind-invalid` naming the condition and the command without that
 token:
 
-- the transition reopens a frozen binding, so a fresh apply and a verb that
-  settles or finalizes take no rebind;
-- that binding pins a version of the Secret, and the Secret's current version,
-  read and validated as a binding reads one, is another version;
-- every block of the plan whose frozen request names the Secret reads it, through
-  its capability, as an access credential it presents only to authenticate. A
-  block that names it for any other reason, or whose capability reads no
+- the transition reopens a frozen binding, so a fresh apply other than a
+  [restoring apply](#restoring-apply) and a verb that settles or finalizes
+  take no rebind;
+- the steps it presents the Secret to are its plan's, or a restore's kept
+  Machines it proves off or acts on, a continued restore's own steps with
+  them; a binding presenting one of them pins
+  a version of the Secret, and the Secret is refused as already presented at
+  its current version only when every such binding pins the version current
+  now, read and validated as a binding reads one;
+- every such step whose frozen request names the Secret, and every kept step
+  that a binding the rebind replaces also presents, reads it, through its
+  capability, as an access credential it presents only to authenticate. A
+  step that names it for any other reason, or whose capability reads no
   access credential, rests on the bound version as effect material and refuses
   the rebind, naming the step.
 
@@ -3599,10 +3629,15 @@ emulated BMC's credentials are effect material its libvirt host gave the
 emulator, and a trust anchor (`trustBundleRef`, `knownHostsRef`) is never
 presented (`TestAHostRebindsNoTrustAnchor`), so neither is rebound.
 
-The rebind issues a new binding version: a binding equal to the reopened one
-except that each named Secret is pinned to its current version. A fresh removal
-registers with it; a continuation writes it into its operation's record as it
-resumes, so every later attempt and the removal that follows reopen it. The
+The rebind issues a new binding version for each binding that presents the
+Secret to one of those steps: one equal to it except that each named Secret is
+pinned to its current version. A fresh removal or restore registers with them
+and records each replacement as `rebound`; a continuation writes them into its
+operation's record as it resumes, so every later attempt and the removal that
+follows reopen them. A continued removal records the issued binding in place
+of the one it replaced, which its `bindings` then no longer name, and a
+continued apply replaces its own binding; the replaced binding is released
+with the lineage, or collected once no operation names it. The
 operation log records the binding it replaced, the one it issued and the
 Secrets rebound. The replaced binding stays until the operation that names it
 is released, and a rebind whose fresh removal provably did not register is

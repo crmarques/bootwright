@@ -166,9 +166,6 @@ var (
 	applyRestoreAddsNew = diagnostics.Stop{Code: "apply.restore-adds-new", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
 		Meaning: "the selected input declares a step no staged destroy of the context took back, which a restoring apply never creates", Remedy: "restore without it, then add an add-on instance with the additive apply, or take back the whole context with destroy, then apply"}
-	applyRestoreUnbound = diagnostics.Stop{Code: "apply.restore-unbound", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
-		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryOtherVerb,
-		Meaning: "a restore's binding pins no version of a Secret an added step names", Remedy: "destroy, then apply"}
 	applyTargetBeforePreparation = diagnostics.Stop{Code: "apply.target-before-preparation", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryOtherVerb,
 		Meaning: "a scoped apply cannot freeze its installation plan before inventory outside its targets exists", Remedy: "complete the named machine inventories and review the scoped apply again"}
@@ -340,7 +337,7 @@ var stops = []diagnostics.Stop{engineRecordsFull, engineRecordsReadOnly, engineR
 	planInputUncompilable, planCapabilityMissing, planCapabilityDefect, planHostKeyUnbound, planEnvironmentInvalid,
 	engineUnindexedRecords, engineRequestDefect, engineOtherBuild, destroyInverseMoved, destroyInverseUnstated, enginePlanMoved, engineInputMoved, engineBindingLost, authorizeUnneeded,
 	authorizeMissing, authorizeStale, authorizeRebindInvalid, destroyStageSelected,
-	destroyStageBelowFloor, destroyStageKeepsUnfinished, destroyStageKeepsHost, destroyStageChanged, applyKeptBlockChanged, applyRestoreEmpty, applyRestoreAddsNew, applyRestoreUnbound, applyUntilBeforePreparation, applyTargetBeforePreparation,
+	destroyStageBelowFloor, destroyStageKeepsUnfinished, destroyStageKeepsHost, destroyStageChanged, applyKeptBlockChanged, applyRestoreEmpty, applyRestoreAddsNew, applyUntilBeforePreparation, applyTargetBeforePreparation,
 	engineRecordsDamaged, applyProducedInputMissing, engineRecaptureMismatch, engineResolvedUnperformed, engineResolvedPartial, destroyPostconditionUnknown,
 	prepareRefused, prepareUnsupported,
 	engineBorrowedSSH, engineConfirmationRequired, engineInputInvalid, engineCredentialMoved, engineFinalizationIncomplete,

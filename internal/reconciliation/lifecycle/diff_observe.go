@@ -14,7 +14,6 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
-	"github.com/crmarques/bootwright/internal/secrets/custody"
 )
 
 const (
@@ -48,18 +47,13 @@ func (s Service) observeDiff(ctx context.Context, name string, read *diffRead) e
 	if len(blocks) == 0 {
 		return nil
 	}
-	material := map[string]secrets.Material{}
-	defer clearMaterial(material)
-	if read.binding != "" {
-		bound, err := s.binder.Reopen(ctx, custody.BindingRequest{ContextName: name, BindingID: read.binding})
-		for _, item := range bound {
-			material[item.Version.Declaration.Name] = item.Material
-		}
-		if err != nil {
-			return engineBindingLost.Fail(
-				"the Secret binding apply "+read.owning.ID+" froze cannot be reopened, so diff cannot observe its effects: "+firstMessage(err),
-				"restore the context's keyring from a complete backup, or "+unobservedDiff(name))
-		}
+	presents := read.presents.narrowed(blocks)
+	material := stepMaterial{bound: map[string]map[string]secrets.Material{}, base: presents.lineage, steps: presents.steps}
+	defer material.clear()
+	if failed, err := s.reopenEach(ctx, name, presents.bindings(), material); err != nil {
+		return engineBindingLost.Fail(
+			"the Secret binding "+failed+" the lineage of apply "+read.owning.ID+" froze cannot be reopened, so diff cannot observe its effects: "+firstMessage(err),
+			"restore the context's keyring from a complete backup, or "+unobservedDiff(name))
 	}
 	return s.workspace.RunLifecycle(ctx, name, func(view RunView) error {
 		var store recordReader = s.store(view)
@@ -124,7 +118,7 @@ func (s Service) reproveDiff(ctx context.Context, view RunView, store recordRead
 }
 
 // inspectAll starts observations in frozen order, a full throttle never holding back a later block that may run.
-func (s Service) inspectAll(ctx context.Context, view RunView, store recordReader, approved approved, read *diffRead, blocks []reconciliation.Block, material map[string]secrets.Material) map[string]blockReading {
+func (s Service) inspectAll(ctx context.Context, view RunView, store recordReader, approved approved, read *diffRead, blocks []reconciliation.Block, material stepMaterial) map[string]blockReading {
 	readings := make(map[string]blockReading, len(blocks))
 	settle := func(block reconciliation.Block, reading blockReading) {
 		reading.implementation = block.Implementation
@@ -151,7 +145,7 @@ func (s Service) inspectAll(ctx context.Context, view RunView, store recordReade
 			settle(waiting[index], outcome.Value)
 		},
 	}, waiting, func(ctx context.Context, block reconciliation.Block) (blockReading, error) {
-		return s.inspect(ctx, view, store, approved, read, block, material, shared), nil
+		return s.inspect(ctx, view, store, approved, read, block, material.of(block.ID), shared), nil
 	})
 	status := "ok"
 	for _, reading := range readings {
@@ -306,7 +300,7 @@ func (s Service) reading(ctx context.Context, store recordReader, read *diffRead
 	return reading
 }
 
-func (s Service) projectReadings(read *diffRead, blocks []reconciliation.Block, readings map[string]blockReading, material map[string]secrets.Material) error {
+func (s Service) projectReadings(read *diffRead, blocks []reconciliation.Block, readings map[string]blockReading, material stepMaterial) error {
 	for _, block := range blocks {
 		reading := readings[block.ID]
 		if reading.state != sidePresent && reading.state != sidePartial || read.appliedReason != "" {
@@ -321,7 +315,7 @@ func (s Service) projectReadings(read *diffRead, blocks []reconciliation.Block, 
 		if err != nil {
 			err = planCapabilityDefect.Fail("the evidence of block "+block.ID+" could not be projected", "")
 		}
-		if lent := refuseLentMaterial(projections, material, block.ID, read.context.Name); lent != nil {
+		if lent := refuseLentMaterial(projections, material.of(block.ID), block.ID, read.context.Name); lent != nil {
 			return lent
 		}
 		var discovers []api.Kind

@@ -17,12 +17,9 @@ type bindingProver interface {
 // proveBindings asks every capability of a fresh apply's blocks, in plan
 // order, to prove the material it just bound, and returns the first refusal.
 // A continuation proves the version its operation bound in its own attempt.
-func (s Service) proveBindings(ctx context.Context, name string, decided operationPlan, material map[string]secrets.Material) error {
+func (s Service) proveBindings(ctx context.Context, name string, decided operationPlan, material stepMaterial) error {
 	if !decided.fresh || decided.verb != reconciliation.Apply {
 		return nil
-	}
-	if err := s.proveRestoredBinding(name, decided, material); err != nil {
-		return err
 	}
 	for _, block := range decided.plan.Blocks {
 		capability, found := s.capabilities.Resolve(block.Kind, block.Implementation)
@@ -30,7 +27,7 @@ func (s Service) proveBindings(ctx context.Context, name string, decided operati
 			continue
 		}
 		if prover, ok := capability.(bindingProver); ok {
-			if err := prover.ProveBinding(ctx, name, block, material); err != nil {
+			if err := prover.ProveBinding(ctx, name, block, material.of(block.ID)); err != nil {
 				return err
 			}
 		}

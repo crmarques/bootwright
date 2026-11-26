@@ -179,7 +179,6 @@ decision and its plan before any effect.
 | `apply.kept-block-changed` | operation | none | input | - | other-verb | the selected input or this build would plan a kept step of a trimmed context otherwise | run the destroy the message names, then apply |
 | `apply.restore-empty` | operation | none | input | - | other-verb | the selected input declares nothing a staged destroy took back, so a restoring apply has nothing to restore | take back the whole context with destroy, or declare again what the staged destroy took back and apply |
 | `apply.restore-adds-new` | operation | none | input | - | change-input | the selected input declares a step no staged destroy of the context took back, which a restoring apply never creates | restore without it, then add an add-on instance with the additive apply, or take back the whole context with destroy, then apply |
-| `apply.restore-unbound` | operation | none | records | - | other-verb | a restore's binding pins no version of a Secret an added step names | destroy, then apply |
 | `plan.input-uncompilable` | context | none | input | - | change-input | the context's frozen desired state could not be compiled | repair the input with validate and import it again |
 | `plan.capability-missing` | context | none | build | - | none | no lifecycle capability of this build plans the selected state | use a build that carries the capability; report it if this build should |
 | `plan.capability-defect` | context | none | defect | - | none | a capability planned a block it may not plan | report the message as a defect |

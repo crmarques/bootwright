@@ -80,7 +80,10 @@ func (s Service) prepareStart(ctx context.Context, view View, decided operationP
 			return nil, err
 		}
 		if owner, _, found := owned.of(block.ID); found {
-			target.binding = firstBinding(owner.operation.Bindings)
+			target.binding = ownBinding(owner.operation)
+			if decided.verb == reconciliation.Destroy || decided.restores != "" {
+				target.binding = decided.presents.of(block.ID)
+			}
 			target.probe.ApplyOperation = owner.operation.ID
 			if target.probe.PreviousEvidence, err = previousBlockEvidence(ctx, store, owner.operation.ID, block.ID); err != nil {
 				return nil, err

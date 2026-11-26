@@ -5,43 +5,56 @@ import (
 	"slices"
 	"strings"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 )
 
-// frozenBinding is the Secret binding a transition reopens: the one its
-// operation froze for a continuation, and the one the operation it supersedes
-// or removes froze for a fresh removal. Nothing stands in for it, so a lost one
-// leaves that operation with neither. A fresh apply binds its own, and a
-// finalization, a settled verb and a destroy of a context holding no operation
-// reopen none.
-func frozenBinding(decided operationPlan) string {
+// frozenBindings are the Secret bindings a transition reopens, none of which anything stands in for.
+func frozenBindings(decided operationPlan) []string {
 	switch {
 	case decided.noop, decided.finalize, decided.unclaimed:
-		return ""
+		return nil
+	case decided.verb == reconciliation.Destroy:
+		return decided.presented()
+	case decided.fresh && decided.restores != "":
+		return decided.presents.bindings()
+	case decided.restoring():
+		held := joinBindings(decided.presents.bindings(), ownBinding(decided.operation))
+		slices.Sort(held)
+		return held
 	case decided.fresh:
-		return decided.reopen
+		return joinBindings(nil, decided.reopen)
 	}
-	return firstBinding(decided.operation.Bindings)
+	return joinBindings(nil, firstBinding(decided.operation.Bindings))
 }
 
-// refuseLostBinding refuses a transition whose frozen binding the keyring no
-// longer lists, before it is authorized, presented or confirmed and before it
-// registers, reserves or releases anything. A listing that fails proves
-// nothing, so the reopen decides then. read is the durable state the decision
-// was read from.
+func (t operationPlan) presenter(block string) string {
+	if _, own := t.plan.Block(block); t.verb == reconciliation.Destroy || t.restoring() && (t.fresh || !own) {
+		return t.presents.of(block)
+	}
+	return ownBinding(t.operation)
+}
+
+// refuseLostBinding refuses, before anything else, a transition whose frozen
+// binding the keyring no longer lists; a failed listing proves nothing.
 func (s Service) refuseLostBinding(ctx context.Context, name string, decided operationPlan, read basis) error {
-	binding := frozenBinding(decided)
-	if binding == "" {
+	frozen := frozenBindings(decided)
+	if len(frozen) == 0 {
 		return nil
 	}
 	listed, err := s.binder.Bindings(ctx, custody.BindingsRequest{ContextName: name})
-	if err != nil || slices.Contains(listed, binding) {
+	if err != nil {
 		return nil
 	}
-	return s.lostBinding(ctx, name, decided, read, binding, "which the context's keyring no longer lists")
+	for _, binding := range frozen {
+		if !slices.Contains(listed, binding) {
+			return s.lostBinding(ctx, name, decided, read, binding, "which the context's keyring no longer lists")
+		}
+	}
+	return nil
 }
 
 // unreopenable reports a reopen of the frozen binding that failed. The binding
@@ -102,10 +115,7 @@ func (s Service) lostBinding(ctx context.Context, name string, decided operation
 	if err != nil {
 		return err
 	}
-	objects := objectsOf(decided.plan)
-	if !decided.fresh {
-		objects = objectsOf(coveredBy(decided.operation, decided.plan, decided.states))
-	}
+	objects := objectsOf(presentedBy(decided, binding))
 	repeat := contextCommand(name, string(decided.verb), invocationFlags(decided.floor(), reconciliation.Selection{}, nil)...)
 	if decided.verb == reconciliation.Apply {
 		repeat = s.preparationRetry(name, repeat)
@@ -114,6 +124,34 @@ func (s Service) lostBinding(ctx context.Context, name string, decided operation
 		lostBindingMessage(decided.basis.record, binding, why, objects),
 		"restore the context's keyring from a complete backup and repeat "+repeat+
 			", or run "+lostBindingExit(name)+" and then remove the objects named here by hand")
+}
+
+func presentedBy(decided operationPlan, binding string) reconciliation.Plan {
+	held := decided.plan
+	if !decided.fresh {
+		held = coveredBy(decided.operation, decided.plan, decided.states)
+	}
+	switch {
+	case decided.restoring():
+		kept := reconciliation.Plan{Verb: reconciliation.Apply}
+		if !decided.fresh && binding == ownBinding(decided.operation) {
+			kept.Blocks = slices.Clone(held.Blocks)
+		}
+		for _, block := range decided.keptSteps() {
+			if decided.presents.of(block.ID) == binding {
+				kept.Blocks = append(kept.Blocks, block)
+			}
+		}
+		return kept
+	case decided.verb == reconciliation.Destroy:
+		for _, block := range decided.keptSteps() {
+			if block.Kind == string(api.Machine) {
+				held.Blocks = append(slices.Clone(held.Blocks), block)
+			}
+		}
+		held.Blocks = slices.DeleteFunc(slices.Clone(held.Blocks), func(block reconciliation.Block) bool { return decided.presents.of(block.ID) != binding })
+	}
+	return held
 }
 
 // lostBindingMessage names the operation that froze the binding, the binding,
@@ -146,18 +184,36 @@ func objectsOf(plan reconciliation.Plan) []string {
 	return slices.Compact(objects)
 }
 
-// frozenReopen is what status needs to tell whether the current operation's
-// frozen binding is lost: the operation, the binding its continuation or a
-// fresh removal of it reopens, and the objects it owns. A completed destroy
-// names none, and neither does one whose blocks are all done: only its own
-// verb acts on it, and that verb finalizes it, which reopens nothing. An apply
-// whose blocks are all done finalizes too, so finalizes says its own apply is
-// still a way on, while the removal that follows reopens the binding.
+// frozenReopen is each binding status checks with the objects it presents; a
+// destroy whose blocks are all done names none, since it only finalizes.
 type frozenReopen struct {
 	operation operationstore.Operation
-	binding   string
-	objects   []string
+	reopens   []reopened
 	finalizes bool
+}
+
+type reopened struct {
+	binding string
+	objects []string
+}
+
+func (f frozenReopen) bindings() []string {
+	var held []string
+	for _, reopen := range f.reopens {
+		held = append(held, reopen.binding)
+	}
+	return held
+}
+
+func reopensOf(presents presenting, plan reconciliation.Plan) []reopened {
+	var reopens []reopened
+	for _, binding := range presents.bindings() {
+		held := reconciliation.Plan{Blocks: slices.DeleteFunc(slices.Clone(plan.Blocks), func(block reconciliation.Block) bool { return presents.of(block.ID) != binding })}
+		if len(held.Blocks) != 0 || binding == presents.lineage {
+			reopens = append(reopens, reopened{binding: binding, objects: objectsOf(held)})
+		}
+	}
+	return reopens
 }
 
 func frozenReopenOf(ctx context.Context, store OperationStore) (frozenReopen, error) {
@@ -185,28 +241,24 @@ func frozenReopenOf(ctx context.Context, store OperationStore) (frozenReopen, er
 	if operation.Verb == reconciliation.Destroy && (own == transitionSettle || own == transitionRefuse || !held.pending) {
 		return frozenReopen{}, nil
 	}
-	binding := firstBinding(operation.Bindings)
-	if operation.Verb == reconciliation.Destroy && operation.State == reconciliation.OperationFailed && operation.Source != "" {
-		held, err := sourceLineage(ctx, store, operation.Source)
+	presents := presenting{lineage: firstBinding(operation.Bindings)}
+	switch {
+	case operation.Verb == reconciliation.Destroy && operation.Source != "":
+		folded, err := removalLineage(ctx, store, lineageMember{operation: operation, plan: plan, states: states})
 		if err != nil {
 			return frozenReopen{}, err
 		}
-		if inherited := held.reopened(); inherited != "" && binding == "" {
-			binding = inherited
-		}
-	}
-	if operation.Verb == reconciliation.Apply && operation.Predecessor != "" {
-		root, err := removalBinding(ctx, store, operation)
-		if err != nil {
+		presents = folded.presenting()
+	case operation.Verb == reconciliation.Apply && operation.Predecessor != "":
+		if presents, err = appliedPresenting(ctx, store, operation); err != nil {
 			return frozenReopen{}, err
 		}
-		binding = root
 	}
-	if binding == "" {
+	if presents.lineage == "" && len(presents.steps) == 0 {
 		return frozenReopen{}, nil
 	}
 	return frozenReopen{
-		operation: operation, binding: binding, objects: objectsOf(coveredBy(operation, plan, states)),
+		operation: operation, reopens: reopensOf(presents, coveredBy(operation, plan, states)),
 		finalizes: operation.Verb == reconciliation.Apply && own == transitionFinalize,
 	}, nil
 }
@@ -221,24 +273,27 @@ func frozenReopenOf(ctx context.Context, store OperationStore) (frozenReopen, er
 // finalizes an apply whose blocks are all done, which reopens nothing, and
 // then the deletion that abandons what the operation owns.
 func (s Service) nameLostBinding(ctx context.Context, name string, result *StatusResult, frozen frozenReopen) {
-	if frozen.binding == "" {
+	if len(frozen.reopens) == 0 {
 		return
 	}
 	why := "which the context's keyring no longer lists"
 	listed, err := s.binder.Bindings(ctx, custody.BindingsRequest{ContextName: name})
-	switch {
-	case err != nil:
+	if err != nil {
 		reason, unreadable := unreadableMaterial(err)
 		if !unreadable {
 			return
 		}
 		why = reason
-	case slices.Contains(listed, frozen.binding):
-		return
 	}
-	result.Contradictions = append(result.Contradictions, lostBindingMessage(frozen.operation, frozen.binding, why, frozen.objects))
-	result.NextSteps = []string{lostBindingExit(name)}
-	if frozen.finalizes {
-		result.NextSteps = []string{contextCommand(name, string(reconciliation.Apply)), lostBindingExit(name)}
+	for _, reopen := range frozen.reopens {
+		if err == nil && slices.Contains(listed, reopen.binding) || reopen.binding == "" {
+			continue
+		}
+		result.Contradictions = append(result.Contradictions, lostBindingMessage(frozen.operation, reopen.binding, why, reopen.objects))
+		result.NextSteps = []string{lostBindingExit(name)}
+		if frozen.finalizes {
+			result.NextSteps = []string{contextCommand(name, string(reconciliation.Apply)), lostBindingExit(name)}
+		}
+		return
 	}
 }

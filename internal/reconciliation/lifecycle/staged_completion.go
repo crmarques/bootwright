@@ -147,21 +147,20 @@ func stagedFinalized(ctx context.Context, view View, store recordReader, operati
 }
 
 func trimmedReopen(ctx context.Context, store OperationStore, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState) (frozenReopen, error) {
-	binding := firstBinding(operation.Bindings)
-	if binding == "" {
-		return frozenReopen{}, nil
-	}
 	folded, err := removalLineage(ctx, store, lineageMember{operation: operation, plan: plan, states: states})
 	if err != nil {
 		return frozenReopen{}, err
 	}
-	var objects []string
+	presents := folded.presenting()
+	keeps := reconciliation.Plan{}
 	kept := folded.kept()
 	for _, holding := range folded.ownership().Holdings() {
 		if kept[holding.Block.ID] {
-			objects = append(objects, holding.Block.Kind+"/"+holding.Block.Object)
+			keeps.Blocks = append(keeps.Blocks, holding.Block)
 		}
 	}
-	slices.Sort(objects)
-	return frozenReopen{operation: operation, binding: binding, objects: slices.Compact(objects)}, nil
+	if presents.lineage == "" && len(presents.steps) == 0 {
+		return frozenReopen{}, nil
+	}
+	return frozenReopen{operation: operation, reopens: reopensOf(presents.narrowed(keeps.Blocks), keeps)}, nil
 }

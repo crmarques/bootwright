@@ -550,7 +550,7 @@ func (s Service) invoke(ctx context.Context, run invocation, block reconciliatio
 		execution := Execution{
 			Operation: operation.ID, Context: tx.Identity().Name, Incarnation: tx.Identity().Incarnation, Continuation: continuation, Attempt: attempt, Resolution: resolution, Block: block,
 			ApplyOperation: owner, ApplyProved: records.applyProved, ApplyPreparations: clonedPreparations(records.preparations), Prepare: prepare, Released: s.released(run, block),
-			Launch: launch, Material: run.material, Proved: records.proved,
+			Launch: launch, Material: run.material.of(block.ID), Proved: records.proved,
 			LocateTool: func(inner context.Context, tool evidence.InstalledTool) (string, error) {
 				return s.locateTool(inner, store, view, tx.Identity().Name, operation, plan, tool)
 			},

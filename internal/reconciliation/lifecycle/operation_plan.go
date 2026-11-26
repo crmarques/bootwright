@@ -21,26 +21,29 @@ type operationPlan struct {
 	unclaimed bool
 	// idle marks a destroy that settles beside a claim that holds nothing,
 	// which only a transaction of its own reclaims.
-	idle      bool
-	keeps     bool
-	stage     *operationstore.Stage
-	widens    *widening
-	requested reconciliation.Stage
-	kept      []string
-	verb      reconciliation.Verb
-	operation operationstore.Operation
-	plan      reconciliation.Plan
-	binding   capabilityBinding
-	source    string
+	idle       bool
+	keeps      bool
+	stage      *operationstore.Stage
+	widens     *widening
+	requested  reconciliation.Stage
+	kept       []string
+	keptBlocks []reconciliation.Block
+	verb       reconciliation.Verb
+	operation  operationstore.Operation
+	plan       reconciliation.Plan
+	binding    capabilityBinding
+	source     string
 	// reopen is the binding a fresh removal inherits: the one its apply froze,
 	// so a removal presents the material that created what it removes rather
 	// than whatever the current declarations name.
-	reopen    string
-	release   []string
-	rebinds   []string
-	rebound   rebinding
-	states    map[string]reconciliation.BlockState
-	selection reconciliation.Selection
+	reopen       string
+	release      []string
+	rebinds      []string
+	rebound      rebindings
+	presents     presenting
+	replacements map[string]string
+	states       map[string]reconciliation.BlockState
+	selection    reconciliation.Selection
 	// phases are the removal phases of plan, decided once for every destroy;
 	// replacedPhases are those of the failed removal a fresh removal replaces,
 	// whose own plan its resolution observes.

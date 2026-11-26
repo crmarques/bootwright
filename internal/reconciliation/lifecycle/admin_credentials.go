@@ -454,7 +454,7 @@ func (s AdminCredentialService) loginBinding(ctx context.Context, store recordRe
 	if err != nil {
 		return "", err
 	}
-	if binding := firstBinding(owner.Bindings); binding != "" {
+	if binding := ownBinding(owner); binding != "" {
 		return binding, nil
 	}
 	return removalBinding(ctx, store, operation)
@@ -888,6 +888,7 @@ func (s AdminCredentialService) publishBound(ctx context.Context, tx Transaction
 	}
 	record.Bindings = slices.Clone(record.Bindings)
 	record.Bindings[replaced] = issued.ID
+	slices.Sort(record.Bindings)
 	if err := store.UpdateOperation(ctx, record); err != nil {
 		return err
 	}

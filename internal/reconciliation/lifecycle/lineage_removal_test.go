@@ -250,29 +250,29 @@ func TestARemovalReopensTheRootsBindingNotTheHeads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if scope.reopen != f.root.Bindings[0] || scope.reopen == f.head.Bindings[0] {
-		t.Fatalf("reopen = %q, want the root's %q", scope.reopen, f.root.Bindings[0])
+	if scope.presents.lineage != f.root.Bindings[0] || scope.presents.lineage == f.head.Bindings[0] {
+		t.Fatalf("reopen = %q, want the root's %q", scope.presents.lineage, f.root.Bindings[0])
 	}
 	if !slices.Equal(scope.release, slices.Concat(f.root.Bindings, f.head.Bindings)) {
 		t.Fatalf("release = %v", scope.release)
 	}
 	removal := operationstore.Operation{ID: "op-" + "d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2", Verb: reconciliation.Destroy, Source: f.head.ID}
 	replacement, err := replacementOf(ctx, f.store, removal, f.rootPlan, map[string]reconciliation.BlockState{})
-	if err != nil || replacement.reopen != f.root.Bindings[0] || len(replacement.release) != 2 {
-		t.Fatalf("a removal that names no binding reopens %q and releases %v (%v)", replacement.reopen, replacement.release, err)
+	if err != nil || replacement.presents.lineage != f.root.Bindings[0] || len(replacement.release) != 2 {
+		t.Fatalf("a removal that names no binding reopens %q and releases %v (%v)", replacement.presents.lineage, replacement.release, err)
 	}
-	removal.Bindings = []string{"rebound-1"}
+	removal.Bindings, removal.Rebound = []string{"rebound-1"}, map[string]string{f.root.Bindings[0]: "rebound-1"}
 	replacement, err = replacementOf(ctx, f.store, removal, f.rootPlan, map[string]reconciliation.BlockState{})
-	if err != nil || replacement.reopen != "rebound-1" || len(replacement.release) != 3 {
-		t.Fatalf("a rebound removal reopens %q and releases %v (%v)", replacement.reopen, replacement.release, err)
+	if err != nil || replacement.presents.lineage != "rebound-1" || len(replacement.release) != 3 {
+		t.Fatalf("a rebound removal reopens %q and releases %v (%v)", replacement.presents.lineage, replacement.release, err)
 	}
 	binding, err := removalBinding(ctx, f.store, f.head)
 	if err != nil || binding != f.root.Bindings[0] {
 		t.Fatalf("diff reopens %q (%v), want the root's", binding, err)
 	}
 	reopened, err := frozenReopenOf(ctx, f.store)
-	if err != nil || reopened.binding != f.root.Bindings[0] {
-		t.Fatalf("status reads the head's removal reopening %q (%v), want the root's", reopened.binding, err)
+	if err != nil || !slices.Equal(reopened.bindings(), f.root.Bindings) {
+		t.Fatalf("status reads the head's removal reopening %q (%v), want the root's", reopened.bindings(), err)
 	}
 }
 

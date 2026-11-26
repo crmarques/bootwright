@@ -52,7 +52,7 @@ func (s Service) checkApplyStart(ctx context.Context, run invocation, states map
 		if err != nil {
 			return err
 		}
-		probe := Probe{Context: run.tx.Identity().Name, Block: block, ApplyOperation: owner, Material: run.material}
+		probe := Probe{Context: run.tx.Identity().Name, Block: block, ApplyOperation: owner, Material: run.material.of(block.ID)}
 		description := ""
 		if describer, described := capability.(applyStartDescriber); described {
 			description = describer.ApplyStartCheck(block)

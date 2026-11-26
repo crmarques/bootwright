@@ -538,7 +538,7 @@ func checkStateMachine(t *testing.T, lines []string) {
 			if next := currentNextAction(t, h); next != test.next {
 				t.Errorf("row %q, %s: the next action is %q, want %q", row[0], name, next, test.next)
 			}
-			if reopened := currentFrozenReopen(t, h); (reopened.binding != "") != test.reopens || reopened.finalizes != test.finalizes {
+			if reopened := currentFrozenReopen(t, h); (len(reopened.reopens) != 0) != test.reopens || reopened.finalizes != test.finalizes {
 				t.Errorf("row %q, %s: the frozen reopen is %+v, want reopens %v and finalizes %v", row[0], name, reopened, test.reopens, test.finalizes)
 			}
 			requirePreviewShape(t, h, row[0]+", "+name, test)

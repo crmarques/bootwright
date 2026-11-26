@@ -614,6 +614,7 @@ type decisionPlanner interface {
 	computePhases(reconciliation.Plan) removalPhases
 	stagedScope(context.Context, string, reconciliation.Stage, liveState) ([]string, keptAnswer, error)
 	keptChanges(string, reconciliation.Plan, reconciliation.Plan) ([]reconciliation.BlockChange, string)
+	addedSecrets(reconciliation.Plan, capabilityBinding) (capabilityBinding, error)
 }
 
 type decisionProofs interface {

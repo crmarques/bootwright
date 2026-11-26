@@ -432,8 +432,11 @@ is lent its certificate alone. A
 registration that provably did not happen releases the binding it created, and
 one that may have happened keeps it, because the operation it may have
 registered reopens it for every later attempt and its removal. An additive
-apply's binding is reopened only for its own attempts; the removal of its
-lineage reopens the root apply's binding and releases every member's
+apply's binding is reopened only for its own attempts. A restoring apply binds
+the current versions of what its added steps name in a binding of its own,
+beside any rebind of a kept Machine's access credential it records. The
+removal of a lineage presents each step the binding of the restoring apply that
+created it and the root apply's otherwise, and releases every member's
 ([removal over a lineage](state-reconciliation.md#removal-over-a-lineage)). A binding no
 operation names, which an interrupted registration leaves, is released under
 the [collection rule](state-reconciliation.md#context-mutation-evidence): after
@@ -530,11 +533,15 @@ operation holding it, and its remedy takes the context back with
 unnamed generation skips such a Secret and reports it unchanged.
 
 The lifecycle names the holds: each binding that the current operation, and
-the lineage it applies or takes back, names; and as its effect material every
-Secret a block of that operation references that its capability classes as
-effect material or leaves unclassified (the classes the
+the lineage it applies or takes back, names; and, under the binding of the
+member that created each step no removal proved gone and the binding presenting
+it to a removal, every Secret the step references that its capability classes
+as effect material or leaves unclassified (the classes the
 [access-credential rebind](state-reconciliation.md#access-credential-rebind)
-reads). An access credential and a trust anchor are never held, so a libvirt
+reads). A step a [staged destroy](state-reconciliation.md#staged-destroy) took
+back holds nothing, so while trimmed a Secret only taken-back steps used
+renews and the restore binds its new version
+(`TestARestoreBindsTheCurrentVersionsOfWhatItsAddedStepsName`). An access credential and a trust anchor are never held, so a libvirt
 host's SSH key and `known_hosts` entry renew and are replaced while it stays
 applied. A block whose capability cannot name or classify its Secrets holds
 every version its binding pins. A `caBundle` is never held
