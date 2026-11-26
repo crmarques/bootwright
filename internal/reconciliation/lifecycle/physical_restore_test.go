@@ -42,7 +42,7 @@ func (c *physicalTestCapability) Plan(ctx context.Context, input PlanInput) (Cap
 	if input.Preparation != nil {
 		var dropped []string
 		plan.Definitions = slices.DeleteFunc(slices.Clone(plan.Definitions), func(d reconciliation.BlockDefinition) bool {
-			drop := !slices.Contains([]string{"setup", "services", "machine-node", "discovery-node"}, d.ID)
+			drop := !slices.Contains([]string{"setup", "services", "machine-node", "discovery-node"}, d.ID) && !strings.HasPrefix(d.ID, "discovery-extra")
 			if refs, _ := requestRefs(d.Request); drop {
 				dropped = append(dropped, refs...)
 			}
@@ -443,4 +443,98 @@ func TestAStorageStepOnAReleasedPhysicalMachineRefusesTheStagedDestroy(t *testin
 		t.Fatalf("destroy --stage machines over storage on a released physical Machine returned %v", reported)
 	}
 	before.require(t, h)
+}
+
+// X765, X751: an interrupted restoring preparation continues through
+// `machine discover` as the same operation, as it continues through apply: the
+// record keeps the restore it froze and its plan, the discovery runs no
+// installation, and the apply after it completes the restore.
+func TestAnInterruptedRestoringPreparationContinuesThroughExplicitDiscovery(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h, _ := physicalHarness(t)
+	completeApply(t, h)
+	stagedDestroy(t, h, reconciliation.StageMachines)
+	removal, _ := currentRecord(t, h)
+	h.capability.applies = nil
+	h.capability.errorFor = map[string]error{"discovery-node": errors.New("fixture interruption")}
+	if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err == nil {
+		t.Fatal("the fixture did not interrupt the restoring preparation")
+	}
+	stopped, stoppedPlan := currentRecord(t, h)
+	if stopped.State == reconciliation.OperationDone || stopped.Restores != removal.ID || stoppedPlan.Preparation == nil || stoppedPlan.Preparation.Command != string(reconciliation.Apply) {
+		t.Fatalf("the interrupted restoring preparation is %+v over %+v", stopped, stoppedPlan.Preparation)
+	}
+	h.capability.errorFor = nil
+	request := PrepareRequest{ContextName: testContextName, Kind: "example-inventory", Targets: []string{"node"}, PreparePrerequisites: true, SkipConfirmation: true}
+	wrong := request
+	wrong.Targets = []string{"other"}
+	if _, err := h.service.Prepare(ctx, wrong); firstCode(err) != prepareRefused.Code {
+		t.Fatalf("a discovery with other targets returned %v", diagnostics.Of(err))
+	}
+	result, err := h.service.Prepare(ctx, request)
+	if err != nil || result == nil || result.Receipt.Operation != stopped.ID || result.Receipt.State != string(reconciliation.OperationDone) {
+		t.Fatalf("explicit discovery did not finish the restoring preparation: %+v, %v", result, diagnostics.Of(err))
+	}
+	prepared, preparedPlan := currentRecord(t, h)
+	if prepared.ID != stopped.ID || prepared.Restores != removal.ID || prepared.PlanDigest != stopped.PlanDigest || !slices.Equal(planIDs(preparedPlan), planIDs(stoppedPlan)) {
+		t.Fatalf("explicit discovery moved the restoring preparation: %+v over %v", prepared, planIDs(preparedPlan))
+	}
+	if slices.Contains(h.capability.applies, "os-install-node") {
+		t.Fatalf("explicit discovery installed: %v", h.capability.applies)
+	}
+	restoreWith(t, h)
+	installed, _ := currentRecord(t, h)
+	if installed.Predecessor != prepared.ID || installed.State != reconciliation.OperationDone || !slices.Contains(h.capability.applies, "os-install-node") {
+		t.Fatalf("the apply after explicit discovery is %+v, ran %v", installed, h.capability.applies)
+	}
+}
+
+// X765: the remedy of an addition no staged destroy took back names the
+// command that was run, as every other preparation remedy does: the explicit
+// discovery its own, the apply its own.
+func TestARestoreAdditionRemedyNamesTheCommandThatWasRun(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	for name, run := range map[string]struct {
+		prepare bool
+		want    string
+	}{
+		"explicit discovery": {true, "running bootwright machine discover --context lab --name node --stage controller, or take back"},
+		"apply":              {false, "running bootwright apply --context lab, or take back"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			h, _ := physicalHarness(t)
+			completeApply(t, h)
+			stagedDestroy(t, h, reconciliation.StageMachines)
+			h.capability.applies = nil
+			tuning := physicalDefinition("discovery-extra", reconciliation.StageMachines, "machine-node")
+			var err error
+			if run.prepare {
+				h.capability.errorFor = map[string]error{"discovery-node": errors.New("fixture interruption")}
+				if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err == nil {
+					t.Fatal("the fixture did not interrupt the restoring preparation")
+				}
+				h.capability.errorFor = nil
+				request := PrepareRequest{ContextName: testContextName, Kind: "example-inventory", Targets: []string{"node"}, PreparePrerequisites: true, SkipConfirmation: true}
+				if _, err := h.service.Prepare(ctx, request); err != nil {
+					t.Fatalf("the restoring preparation: %+v", diagnostics.Of(err))
+				}
+				h.capability.definitions = append(h.capability.definitions, tuning)
+				_, err = h.service.Prepare(ctx, request)
+			} else {
+				h.capability.planned = func() {
+					if slices.Contains(h.capability.applies, "discovery-node") && !slices.ContainsFunc(h.capability.definitions, func(d reconciliation.BlockDefinition) bool { return d.ID == tuning.ID }) {
+						h.capability.definitions = append(h.capability.definitions, tuning)
+					}
+				}
+				_, err = h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
+			}
+			reported := diagnostics.Of(err)
+			if firstCode(err) != applyRestoreAddsNew.Code || !strings.Contains(reported[0].Remediation, run.want) {
+				t.Fatalf("the refused addition returned %+v, want the remedy to name %q", reported, run.want)
+			}
+		})
+	}
 }

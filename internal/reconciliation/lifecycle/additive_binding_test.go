@@ -2,13 +2,16 @@ package lifecycle
 
 import (
 	"context"
+	"path"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 )
@@ -134,6 +137,14 @@ func TestALostAdditiveBindingLeavesAStepThatReadsNoMaterialAtRemovalRemovable(t 
 	if !slices.Contains(f.binder.released, root) {
 		t.Fatalf("the whole destroy released %v", f.binder.released)
 	}
+	removal, _ := durableOperation(t, f.harness)
+	log := string(f.workspace.logArea.files[operationstore.OperationLogPath(removal.ID)])
+	if !strings.Contains(log, `"event":"binding-unreopened"`) || !strings.Contains(log, "Secret binding "+head+" could not be reopened") {
+		t.Fatalf("the removal's log %q does not warn that the additive binding %s could not be reopened", log, head)
+	}
+	if strings.Contains(log, "Secret binding "+root+" could not be reopened") {
+		t.Fatalf("the removal's log %q warns about the root's binding %s, which reopened", log, root)
+	}
 }
 
 // B1870: an added step that may read bound material at removal keeps the
@@ -149,5 +160,89 @@ func TestALostAdditiveBindingRefusesTheRemovalOfAStepThatReadsMaterialAtRemoval(
 	if len(reported) == 0 || reported[0].Code != engineBindingLost.Code || !strings.Contains(reported[0].Message, "binding "+f.head.Bindings[0]+",") ||
 		!strings.HasSuffix(reported[0].Message, "owns: ArtifactServer/consumer") {
 		t.Fatalf("a destroy over the addition's lost binding returned %+v", reported)
+	}
+}
+
+// X769: a rebind that names a Secret only an apply-only step's binding pins is
+// refused saying no step of the removal reads it at removal, not by listing
+// the bindings the removal reopens, which the Secret was never in.
+func TestARebindOfASecretOnlyAnApplyOnlyStepsBindingPinsSaysNoStepReadsItAtRemoval(t *testing.T) {
+	t.Parallel()
+	f := additiveBindingFixture(t, nil)
+	f.root(t)
+	f.publish("rev-2", addonBinding("cluster", "nmstate"), secretObject(addonSecret, "file:one"))
+	root, head := addedHead(t, f)
+	f.binder.versions[addonSecret] = "addon-2"
+	before := slices.Clone(f.capability.destroys)
+	reported := diagnostics.Of(destroyWith(f.harness, RebindAuthorization+addonSecret))
+	if len(reported) != 1 || reported[0].Code != authorizeRebindInvalid.Code || !strings.Contains(reported[0].Message, "no step of this destroy reads Secret "+addonSecret+" at removal") ||
+		strings.Contains(reported[0].Message, root) || strings.Contains(reported[0].Message, head) {
+		t.Fatalf("the rebind returned %+v, want no step of the removal reads the Secret at removal", reported)
+	}
+	if !slices.Equal(f.capability.destroys, before) {
+		t.Fatalf("a refused rebind destroyed %v", f.capability.destroys)
+	}
+}
+
+// materialGatedAddon answers a removal's observation of an add-on instance the
+// way an adapter that cannot read its apply's Secret must: completed when the
+// removal lends it the Secret, unknown when it does not.
+type materialGatedAddon struct {
+	*addonCapability
+	mutex sync.Mutex
+	lent  map[string][]bool
+}
+
+func (c *materialGatedAddon) ObserveRemoval(ctx context.Context, execution Execution) (Observation, error) {
+	_, held := execution.Material[addonSecret]
+	c.mutex.Lock()
+	c.lent[execution.Block.ID] = append(c.lent[execution.Block.ID], held)
+	c.mutex.Unlock()
+	if strings.HasPrefix(execution.Block.ID, "addon-") && !held {
+		return Observation{Effect: reconciliation.EffectUnknown}, nil
+	}
+	return Observation{Effect: reconciliation.EffectCompleted}, nil
+}
+
+// X769: a whole destroy resolving an add-on instance its additive apply left
+// unproved observes it through ObserveRemoval, lent the additive binding's
+// Secret. When that binding is lost the observation is lent nothing and the
+// instance stays unproved, so the removal refuses before any effect instead of
+// reading completed over missing material.
+func TestADestroyResolvingAnUnprovedApplyOnlyStepOverALostBindingResolvesFailSafe(t *testing.T) {
+	t.Parallel()
+	for name, lost := range map[string]bool{"the binding stands": false, "the binding is lost": true} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			f := additiveBindingFixture(t, nil)
+			f.root(t)
+			f.publish("rev-2", addonBinding("cluster", "nmstate"), secretObject(addonSecret, "file:one"))
+			_, head := addedHead(t, f)
+			gated := &materialGatedAddon{addonCapability: f.capability, lent: map[string][]bool{}}
+			f.service.capabilities = testResolver{capability: gated}
+			operation, _ := durableOperation(t, f.harness)
+			rewriteState(t, f.harness, path.Join(operation.ID, "blocks", "addon-nmstate", "state.json"), string(reconciliation.BlockUnknown))
+			if lost {
+				f.binder.lost = []string{head}
+			}
+			err := destroyWith(f.harness)
+			reads := gated.lent["addon-nmstate"]
+			if !lost {
+				if err != nil || !slices.Equal(reads, []bool{true}) {
+					t.Fatalf("the destroy over a standing binding returned %v and observed the instance lent %v", diagnostics.Of(err), reads)
+				}
+				return
+			}
+			reported := diagnostics.Of(err)
+			if len(reported) == 0 || !unprovedCode(reported[0].Code) || !slices.Equal(reads, []bool{false}) {
+				t.Fatalf("the destroy over a lost binding returned %+v and observed the instance lent %v", reported, reads)
+			}
+			if len(f.capability.destroys) != 0 || len(f.binder.released) != 0 {
+				t.Fatalf("a refused removal destroyed %v and released %v", f.capability.destroys, f.binder.released)
+			}
+			if current, _ := durableOperation(t, f.harness); current.ID != operation.ID || current.Verb != reconciliation.Apply {
+				t.Fatalf("the context holds %+v, want the additive apply untouched", current)
+			}
+		})
 	}
 }

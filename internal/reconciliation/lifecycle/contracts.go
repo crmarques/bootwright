@@ -649,6 +649,7 @@ type decisionPlanner interface {
 	addedSecrets(reconciliation.Plan, capabilityBinding) (capabilityBinding, error)
 	automaticScope(context.Context, View, reconciliation.Selection) (*reconciliation.PreparationScope, []string, error)
 	admitPreparation(reconciliation.PreparationScope) (*reconciliation.PreparationScope, error)
+	preparationRetry(string, string, ...string) string
 }
 
 type decisionProofs interface {

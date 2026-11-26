@@ -99,9 +99,10 @@ func (s Service) execute(ctx context.Context, name string, decided operationPlan
 }
 
 type bound struct {
-	created  string
-	recorded []string
-	material stepMaterial
+	created    string
+	recorded   []string
+	unreopened []string
+	material   stepMaterial
 }
 
 // bind binds a fresh apply's Secrets and reopens each step's presenting binding.
@@ -148,10 +149,13 @@ func (s Service) bind(ctx context.Context, name string, decided operationPlan) (
 		return held, err
 	}
 	for _, binding := range decided.lenient() {
-		if _, err := s.reopenEach(ctx, name, []string{binding}, held.material); err != nil && ctx.Err() != nil {
-			held.material.clear()
-			held.material = stepMaterial{}
-			return held, err
+		if _, err := s.reopenEach(ctx, name, []string{binding}, held.material); err != nil {
+			if ctx.Err() != nil {
+				held.material.clear()
+				held.material = stepMaterial{}
+				return held, err
+			}
+			held.unreopened = append(held.unreopened, binding)
 		}
 	}
 	return held, nil
@@ -161,6 +165,21 @@ func clearMaterial(material map[string]secrets.Material) {
 	for _, value := range material {
 		value.Clear()
 	}
+}
+
+func logBindingEvents(ctx context.Context, logging *logBoundary, log *operationstore.Log, decided operationPlan, opened bound) error {
+	for _, rebound := range decided.rebound {
+		if err := logging.append(ctx, log, rebound.record()); err != nil {
+			return err
+		}
+	}
+	for _, binding := range opened.unreopened {
+		if err := logging.append(ctx, log, operationstore.LogRecord{Event: "binding-unreopened",
+			Detail: "Secret binding " + binding + " could not be reopened, so the steps it presents read no material at removal"}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // run joins every adapter before releasing its execution scope and transaction.
@@ -213,10 +232,8 @@ func (s Service) run(ctx context.Context, tx Transaction, decided operationPlan,
 		}
 	}
 	defer logging.close(ctx, log)
-	for _, rebound := range decided.rebound {
-		if err := logging.append(ctx, log, rebound.record()); err != nil {
-			return result, err
-		}
+	if err := logBindingEvents(ctx, logging, log, decided, opened); err != nil {
+		return result, err
 	}
 	// The location is named before the first effect, because its whole purpose
 	// is to be followed while the work runs.

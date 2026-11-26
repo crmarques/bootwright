@@ -268,7 +268,7 @@ func (d decider) completedRestore(ctx context.Context, view View, store recordRe
 	if len(unknown) != 0 {
 		name := view.Identity().Name
 		return applyRestoreAddsNew.Fail("the selected input declares the step "+strings.Join(unknown, ", ")+", which no staged destroy of this context took back, and the apply after the restoring preparation "+operation.ID+" re-creates only what one took back",
-			"restore without it by importing an input that does not declare it and running "+contextCommand(name, string(reconciliation.Apply))+", or take back the whole context with "+contextCommand(name, "destroy --dry-run"))
+			"restore without it by importing an input that does not declare it and running "+d.planner.preparationRetry(name, contextCommand(name, string(reconciliation.Apply)))+", or take back the whole context with "+contextCommand(name, "destroy --dry-run"))
 	}
 	return d.proofs.restoreProved(ctx, view, chain, owned, added)
 }

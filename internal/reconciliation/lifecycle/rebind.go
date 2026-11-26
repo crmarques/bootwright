@@ -63,6 +63,10 @@ func (s Service) admitRebinds(ctx context.Context, name string, decided operatio
 	}
 	for _, secret := range rebinds {
 		if !slices.ContainsFunc(frozen, func(binding string) bool { _, held := pins[binding][secret]; return held }) {
+			if s.pinnedLeniently(ctx, name, decided, secret) {
+				return operationPlan{}, authorizeRebindInvalid.Fail(
+					"no step of this "+string(decided.verb)+" reads Secret "+secret+" at removal: only a step that reads material in its own apply alone holds it", without+secret)
+			}
 			return operationPlan{}, authorizeRebindInvalid.Fail(
 				"the Secret binding "+strings.Join(frozen, ", ")+" this "+string(decided.verb)+" reopens pins no version of Secret "+secret, without+secret)
 		}
@@ -90,6 +94,17 @@ func (s Service) admitRebinds(ctx context.Context, name string, decided operatio
 	}
 	decided.rebinds = rebinds
 	return decided, nil
+}
+
+func (s Service) pinnedLeniently(ctx context.Context, name string, decided operationPlan, secret string) bool {
+	for _, binding := range decided.lenient() {
+		if pinned, err := s.pinnedVersions(ctx, name, binding); err == nil {
+			if _, held := pinned[secret]; held {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (s Service) pinnedVersions(ctx context.Context, name, binding string) (map[string]string, error) {
