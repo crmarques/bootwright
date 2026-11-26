@@ -37,6 +37,8 @@ func (*Store) Uninstall(ctx context.Context, _ func(prerequisites.UninstallTrans
 
 func (*Store) CheckInputDirectory(ctx context.Context, _ string) error { return unsupported(ctx) }
 
+func (*Store) CheckInputFile(ctx context.Context, _ string) error { return unsupported(ctx) }
+
 func (*Store) View(ctx context.Context) (contexts.Registry, error) {
 	return contexts.Registry{}, unsupported(ctx)
 }

@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
-	"path/filepath"
 	"reflect"
 	"regexp"
 	"slices"
@@ -112,92 +111,6 @@ func (s Service) confirmPresented(ctx context.Context, skip bool, action, name s
 	return true, ctx.Err()
 }
 
-func (s Service) admit(ctx context.Context, path string) (desiredstate.Sources, string, string, *compilation.Report, error) {
-	if s.reader == nil || s.compiler == nil {
-		return desiredstate.Sources{}, "", "", nil, StateError("context admission is not configured")
-	}
-	if err := s.repository.CheckInputDirectory(ctx, path); err != nil {
-		return desiredstate.Sources{}, "", "", nil, err
-	}
-	if err := ctx.Err(); err != nil {
-		return desiredstate.Sources{}, "", "", nil, err
-	}
-	sources, err := s.reader.ReadDirectory(ctx, path)
-	if err != nil {
-		return desiredstate.Sources{}, "", "", nil, err
-	}
-	if err = ctx.Err(); err != nil {
-		return desiredstate.Sources{}, "", "", nil, err
-	}
-	state, report, err := s.compiler.Compile(ctx, desiredstate.Sources{Files: slices.Clone(sources.Files), Markers: slices.Clone(sources.Markers), Roots: slices.Clone(sources.Roots)})
-	if err != nil {
-		return desiredstate.Sources{}, "", "", nil, err
-	}
-	if err = ctx.Err(); err != nil {
-		return desiredstate.Sources{}, "", "", nil, err
-	}
-	if state == nil || report == nil || len(sources.Roots) != 1 {
-		return desiredstate.Sources{}, "", "", nil, StateError("context admission returned incomplete input")
-	}
-	environments := state.Authored().OfKind(api.Environment)
-	if len(environments) != 1 {
-		return desiredstate.Sources{}, "", "", nil, StateError("context admission returned no unique Environment")
-	}
-	origin, ok := state.Origin(environments[0].Identity())
-	if !ok || !filepath.IsAbs(origin.Path) {
-		return desiredstate.Sources{}, "", "", nil, StateError("context admission returned no Environment provenance")
-	}
-	directory := filepath.Dir(origin.Path)
-	relative, err := filepath.Rel(sources.Roots[0], directory)
-	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		return desiredstate.Sources{}, "", "", nil, StateError("Environment is outside the admitted input directory")
-	}
-	effectiveEnvironment, found := state.Effective().Find(api.Environment, environments[0].Name())
-	if !found {
-		return desiredstate.Sources{}, "", "", nil, StateError("context admission returned no effective Environment")
-	}
-	return sources, directory, effectiveEnvironment.Spec().Get("controller", "machineRef").Text(), report, nil
-}
-
-func (s Service) configuration(ctx context.Context, name, path string) (Configuration, error) {
-	config := DefaultConfiguration(name)
-	if path != "" {
-		if s.options.ConfigurationReader == nil {
-			return Configuration{}, ConfigurationError("Context configuration reader is not configured")
-		}
-		data, err := s.options.ConfigurationReader.ReadFile(ctx, path, MaxConfigurationBytes)
-		if err != nil {
-			return Configuration{}, reshapeFailure(err, func(reported *diagnostics.Diagnostic) {
-				if reported.Remediation == "" {
-					reported.Remediation = configurationFileRemediation
-				}
-			})
-		}
-		config, err = ParseConfiguration(name, data)
-		if err != nil {
-			return Configuration{}, underConfigurationFile(err, path)
-		}
-	}
-	if s.options.ValidateConfiguration == nil {
-		return Configuration{}, ConfigurationError("secret store implementation resolver is not configured")
-	}
-	if err := s.options.ValidateConfiguration(ctx, config); err != nil {
-		return Configuration{}, underConfigurationFile(err, path)
-	}
-	return config, ctx.Err()
-}
-
-func underConfigurationFile(err error, path string) error {
-	if path == "" {
-		return err
-	}
-	return reshapeFailure(err, func(reported *diagnostics.Diagnostic) {
-		if reported.Source == nil {
-			reported.Source = &diagnostics.SourceLocation{Path: path}
-		}
-	})
-}
-
 func selectionFor(record Record) Selection {
 	return Selection{Version: SelectionVersion, Name: record.Name}
 }
@@ -231,19 +144,17 @@ func (s Service) Init(ctx context.Context, request InitRequest) (*AdmissionResul
 	if !request.Check && (s.options.Selection == nil || s.options.InitializeSecrets == nil) {
 		return nil, StateError("context selection or secret initialization is not configured")
 	}
-	config, err := s.configuration(ctx, request.Name, request.ConfigurationFile)
+	admitted, err := s.admitInputs(ctx, request.Name, request.InputFile, request.InputDirectory)
 	if err != nil {
 		return nil, err
 	}
-	var sources desiredstate.Sources
-	var environment string
-	var report *compilation.Report
-	if request.InputDirectory != "" {
-		sources, environment, _, report, err = s.admit(ctx, request.InputDirectory)
-		if err != nil {
-			return nil, err
-		}
+	config := DefaultConfiguration(request.Name)
+	if admitted.config != nil {
+		config = *admitted.config
+	} else if err := s.validateConfiguration(ctx, config); err != nil {
+		return nil, err
 	}
+	sources, environment, report := admitted.sources, admitted.environment, admitted.report
 	if request.Check {
 		err := s.repository.Inspect(ctx, "", func(tx Transaction) error {
 			reg := tx.Registry()
@@ -279,7 +190,7 @@ func (s Service) Init(ctx context.Context, request InitRequest) (*AdmissionResul
 		}); err != nil {
 			return err
 		}
-		if request.InputDirectory != "" {
+		if report != nil {
 			record.Revision, err = tx.Publish(ctx, record.Name, environment, sources)
 			if err != nil {
 				return err
@@ -319,17 +230,6 @@ func admissionResult(record Record, selected Selection, sources desiredstate.Sou
 	return result
 }
 
-// admittedUpdate is what an update admits before it takes any lock: the
-// Context configuration it compares and the input it would publish.
-type admittedUpdate struct {
-	config      Configuration
-	sources     desiredstate.Sources
-	environment string
-	controller  string
-	report      *compilation.Report
-	addsTo      string
-}
-
 func (s Service) Update(ctx context.Context, request UpdateRequest) (*AdmissionResult, error) {
 	if err := s.ready(ctx); err != nil {
 		return nil, err
@@ -337,7 +237,7 @@ func (s Service) Update(ctx context.Context, request UpdateRequest) (*AdmissionR
 	if err := validName(request.Name); err != nil {
 		return nil, err
 	}
-	if request.ConfigurationFile == "" && request.InputDirectory == "" {
+	if request.InputFile == "" && request.InputDirectory == "" {
 		return nil, ConfigurationError("context update requires --file or --input-dir")
 	}
 	var selected Selection
@@ -348,11 +248,11 @@ func (s Service) Update(ctx context.Context, request UpdateRequest) (*AdmissionR
 			return nil, err
 		}
 	}
-	admitted, err := s.admitUpdate(ctx, request)
+	admitted, err := s.admitInputs(ctx, request.Name, request.InputFile, request.InputDirectory)
 	if err != nil {
 		return nil, err
 	}
-	if request.InputDirectory != "" && s.options.AddsTo != nil {
+	if admitted.report != nil && s.options.AddsTo != nil {
 		admitted.addsTo = s.options.AddsTo(ctx, request.Name, admitted.sources)
 	}
 	if request.Check {
@@ -369,7 +269,7 @@ func (s Service) Update(ctx context.Context, request UpdateRequest) (*AdmissionR
 		return result, nil
 	}
 	var presented *updateDecision
-	if !request.SkipConfirmation && request.InputDirectory != "" {
+	if !request.SkipConfirmation && admitted.report != nil {
 		if presented, err = s.confirmUpdate(ctx, request, admitted); err != nil {
 			return nil, absentWhenEmpty(err, request.Name)
 		}
@@ -396,7 +296,7 @@ type updateDecision struct {
 	plan      UpdatePlan
 }
 
-func (s Service) inspectUpdate(ctx context.Context, request UpdateRequest, admitted admittedUpdate) (updateDecision, error) {
+func (s Service) inspectUpdate(ctx context.Context, request UpdateRequest, admitted admittedInput) (updateDecision, error) {
 	var decided updateDecision
 	err := s.repository.Inspect(ctx, "", func(tx Transaction) error {
 		var err error
@@ -406,7 +306,7 @@ func (s Service) inspectUpdate(ctx context.Context, request UpdateRequest, admit
 	return decided, err
 }
 
-func (s Service) confirmUpdate(ctx context.Context, request UpdateRequest, admitted admittedUpdate) (*updateDecision, error) {
+func (s Service) confirmUpdate(ctx context.Context, request UpdateRequest, admitted admittedInput) (*updateDecision, error) {
 	decided, err := s.inspectUpdate(ctx, request, admitted)
 	if err != nil {
 		return nil, err
@@ -422,19 +322,19 @@ func (s Service) confirmUpdate(ctx context.Context, request UpdateRequest, admit
 	return &decided, nil
 }
 
-func (s Service) decideUnder(ctx context.Context, tx Transaction, request UpdateRequest, admitted admittedUpdate) (updateDecision, error) {
+func (s Service) decideUnder(ctx context.Context, tx Transaction, request UpdateRequest, admitted admittedInput) (updateDecision, error) {
 	reg := tx.Registry()
 	record, err := readyRecord(reg, request.Name)
 	if err != nil {
 		return updateDecision{}, err
 	}
-	if request.ConfigurationFile != "" {
-		if err := sameConfiguration(ctx, tx, record.Name, admitted.config); err != nil {
+	if admitted.config != nil {
+		if err := sameConfiguration(ctx, tx, record.Name, *admitted.config); err != nil {
 			return updateDecision{}, err
 		}
 	}
 	decided := updateDecision{record: record}
-	if request.InputDirectory == "" {
+	if admitted.report == nil {
 		return decided, nil
 	}
 	if decided.unchanged, decided.warnings, err = s.decideUpdate(ctx, tx, reg, record, admitted); err != nil {
@@ -442,8 +342,9 @@ func (s Service) decideUnder(ctx context.Context, tx Transaction, request Update
 	}
 	if !decided.unchanged {
 		decided.plan = UpdatePlan{
-			Context: record.Name, InputDirectory: admitted.sources.Roots[0], FilesCopied: len(admitted.sources.Files) + len(admitted.sources.Markers),
-			Counts: admitted.report.Counts, Diagnostics: slices.Clone(decided.warnings),
+			Context: record.Name, InputDirectory: admitted.sources.Roots[0], InputFile: admitted.file,
+			FilesCopied: len(admitted.sources.Files) + len(admitted.sources.Markers),
+			Counts:      admitted.report.Counts, Diagnostics: slices.Clone(decided.warnings),
 		}
 	}
 	return decided, nil
@@ -454,29 +355,11 @@ func changedWhileConfirming(name, action string) error {
 		"repeat the command, which presents what it now changes")
 }
 
-// admitUpdate reads and compiles what an update was given, before any lock.
-func (s Service) admitUpdate(ctx context.Context, request UpdateRequest) (admittedUpdate, error) {
-	var admitted admittedUpdate
-	var err error
-	if request.ConfigurationFile != "" {
-		if admitted.config, err = s.configuration(ctx, request.Name, request.ConfigurationFile); err != nil {
-			return admittedUpdate{}, err
-		}
-	}
-	if request.InputDirectory != "" {
-		admitted.sources, admitted.environment, admitted.controller, admitted.report, err = s.admit(ctx, request.InputDirectory)
-		if err != nil {
-			return admittedUpdate{}, err
-		}
-	}
-	return admitted, nil
-}
-
 // updateUnder is the update under the root lock: it compares the Context
 // configuration, decides the input update, and publishes changed input once
 // its plan was presented and confirmed. Input equal to the selected revision
 // keeps that revision, publishing nothing and asking nothing.
-func (s Service) updateUnder(ctx context.Context, tx Transaction, request UpdateRequest, selected Selection, admitted admittedUpdate, presented *updateDecision) (*AdmissionResult, error) {
+func (s Service) updateUnder(ctx context.Context, tx Transaction, request UpdateRequest, selected Selection, admitted admittedInput, presented *updateDecision) (*AdmissionResult, error) {
 	decided, err := s.decideUnder(ctx, tx, request, admitted)
 	if err != nil {
 		return nil, err
@@ -485,7 +368,7 @@ func (s Service) updateUnder(ctx context.Context, tx Transaction, request Update
 		return nil, changedWhileConfirming(decided.record.Name, "update")
 	}
 	record := decided.record
-	if request.InputDirectory == "" {
+	if admitted.report == nil {
 		return admissionResult(record, selected, desiredstate.Sources{}, nil), nil
 	}
 	if decided.unchanged {
@@ -539,7 +422,7 @@ func sameConfiguration(ctx context.Context, tx Transaction, name string, config 
 // Changed input returns its warnings: admission's, and over a completed apply
 // the warning that apply adds it to that apply, when an additive apply would
 // admit it, or otherwise refuses it until a destroy.
-func (s Service) decideUpdate(ctx context.Context, tx Transaction, reg Registry, record Record, admitted admittedUpdate) (bool, []diagnostics.Diagnostic, error) {
+func (s Service) decideUpdate(ctx context.Context, tx Transaction, reg Registry, record Record, admitted admittedInput) (bool, []diagnostics.Diagnostic, error) {
 	if reg.Controller != (ControllerDescriptor{}) {
 		if err := tx.CheckControllerInput(ctx, record.Name, admitted.controller); err != nil {
 			return false, nil, err

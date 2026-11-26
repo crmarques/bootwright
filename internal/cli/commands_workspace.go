@@ -10,8 +10,8 @@ func workspaceCommands() []commandSpec {
 	purge := boolFlag("purge", "Acknowledge permanent context data deletion")
 	purge.required = true
 	return []commandSpec{
-		available(commandSpec{path: "context init", results: []jsonResult{contextAdmissionPresentation{}}, render: renderAdmission(false), validate: firstRefusal(validateContextName, validateContextFile), example: "--name lab --input-dir ./input", contextFree: true, invoke: Services.invokeContextInit, short: "Initialize a configured context and select it", flags: []flagSpec{nameFlag(), boolFlag("check", "Check admission without publishing anything"), contextFileFlag(), directoryFlag("input-dir", "Import an Environment input directory")}}),
-		available(commandSpec{path: "context update", results: []jsonResult{contextAdmissionPresentation{}}, render: renderAdmission(true), validate: firstRefusal(validateContextName, validateContextFile), missingInput: missingContextUpdateInput, example: "--name lab --input-dir ./input", contextFree: true, invoke: Services.invokeContextUpdate, short: "Replace a context’s definition", long: "Update Context configuration with --file, replace Environment input with --input-dir, or supply both.", flags: []flagSpec{nameFlag(), boolFlag("check", "Check admission without publishing anything"), contextFileFlag(), directoryFlag("input-dir", "Replace the Environment input directory"), confirmationFlag()}}),
+		available(commandSpec{path: "context init", results: []jsonResult{contextAdmissionPresentation{}}, render: renderAdmission(false), validate: firstRefusal(validateContextName, validateContextFile), example: "--name lab --file ./environment.yaml", contextFree: true, invoke: Services.invokeContextInit, short: "Initialize a configured context and select it", long: "Initialize and select a context. Import desired state from one YAML file with --file or from a directory with --input-dir. To use both flags, pass a standalone Context with --file.", flags: []flagSpec{nameFlag(), boolFlag("check", "Check admission without publishing anything"), contextFileFlag(), directoryFlag("input-dir", "Import an Environment input directory")}}),
+		available(commandSpec{path: "context update", results: []jsonResult{contextAdmissionPresentation{}}, render: renderAdmission(true), validate: firstRefusal(validateContextName, validateContextFile), missingInput: missingContextUpdateInput, example: "--name lab --file ./environment.yaml", contextFree: true, invoke: Services.invokeContextUpdate, short: "Replace a context’s definition", long: "Replace desired state from one YAML file with --file or from a directory with --input-dir. To use both flags, pass a standalone Context with --file.", flags: []flagSpec{nameFlag(), boolFlag("check", "Check admission without publishing anything"), contextFileFlag(), directoryFlag("input-dir", "Replace the Environment input directory"), confirmationFlag()}}),
 		available(commandSpec{path: "context use", results: []jsonResult{contextPresentation{}}, render: renderContextUse(), validate: validateContextName, example: "--name lab", contextFree: true, invoke: Services.invokeContextUse, short: "Select the current context", flags: []flagSpec{nameFlag()}}),
 		available(commandSpec{path: "context list", results: []jsonResult{contextListPresentation{}}, render: renderContextList(), example: "", contextFree: true, invoke: Services.invokeContextList, short: "List contexts"}),
 		available(commandSpec{path: "context current", results: []jsonResult{contextPresentation{}}, render: renderContextCurrent(), example: "--short", contextFree: true, invoke: Services.invokeContextCurrent, short: "Show the current context", flags: []flagSpec{boolFlag("short", "Print only the context name")}}),
@@ -33,10 +33,10 @@ func (s Services) invokeContextInit(ctx context.Context, values *requestValues, 
 		return commandResult{}, errMissingService
 	}
 	result, err := invokeResult(ctx, values, contexts.InitRequest{
-		Name:              values.text("name"),
-		ConfigurationFile: values.singleFile(),
-		InputDirectory:    values.text("input-dir"),
-		Check:             values.boolean("check"),
+		Name:           values.text("name"),
+		InputFile:      values.singleFile(),
+		InputDirectory: values.text("input-dir"),
+		Check:          values.boolean("check"),
 	}, s.Contexts.Init)
 	return commandResult{admission: result}, err
 }
@@ -46,11 +46,11 @@ func (s Services) invokeContextUpdate(ctx context.Context, values *requestValues
 		return commandResult{}, errMissingService
 	}
 	result, err := invokeResult(ctx, values, contexts.UpdateRequest{
-		Name:              values.text("name"),
-		ConfigurationFile: values.singleFile(),
-		InputDirectory:    values.text("input-dir"),
-		Check:             values.boolean("check"),
-		SkipConfirmation:  values.boolean("yes"),
+		Name:             values.text("name"),
+		InputFile:        values.singleFile(),
+		InputDirectory:   values.text("input-dir"),
+		Check:            values.boolean("check"),
+		SkipConfirmation: values.boolean("yes"),
 	}, s.Contexts.Update)
 	return commandResult{admission: result}, err
 }

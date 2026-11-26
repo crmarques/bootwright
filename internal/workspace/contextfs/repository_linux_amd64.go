@@ -75,6 +75,17 @@ func (s *Store) CheckInputDirectory(ctx context.Context, path string) error {
 	return nil
 }
 
+func (s *Store) CheckInputFile(ctx context.Context, path string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if !canonicalPath(path) || !validFrozenPath(filepath.Base(path), "yaml") {
+		return diagnostics.NewFailureWithRemediation("input.read", "input file path cannot be recorded in a frozen revision", "",
+			"pass a YAML file with a bounded UTF-8 path")
+	}
+	return s.CheckInputDirectory(ctx, filepath.Dir(path))
+}
+
 func safeError(err error) error {
 	if err == nil {
 		return nil

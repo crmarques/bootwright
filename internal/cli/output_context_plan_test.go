@@ -32,6 +32,21 @@ func contextUpdatePlan() contexts.UpdatePlan {
 	}
 }
 
+func TestContextUpdatePlanNamesTheSingleInputFile(t *testing.T) {
+	var out, errOut bytes.Buffer
+	plan := contexts.UpdatePlan{
+		Context: "lab", InputDirectory: "/srv/inputs/lab", InputFile: "/srv/inputs/lab/environment.yaml",
+		FilesCopied: 1, Counts: compilation.Counts{FilesSeen: 1, ObjectsDecoded: 2},
+	}
+	if err := NewContextPlanPresenter(&out, &errOut).PresentUpdate(t.Context(), plan); err != nil {
+		t.Fatal(err)
+	}
+	matchesTextGolden(t, "context-update-file-plan", out.Bytes())
+	if errOut.Len() != 0 {
+		t.Fatal(errOut.String())
+	}
+}
+
 // The update plan names the input directory and counts on standard output and
 // every warning on standard error, where the prompt follows it.
 func TestTheContextUpdatePlanNamesItsInputCountsAndWarnings(t *testing.T) {

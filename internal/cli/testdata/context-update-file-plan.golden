@@ -1,0 +1,7 @@
+  Context update plan
+
+    Name             lab
+    Input file       /srv/inputs/lab/environment.yaml
+    Files to copy    1
+    Files seen       1
+    Objects decoded  2

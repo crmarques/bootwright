@@ -1,13 +1,13 @@
   bootwright / context update
-      Update Context configuration with --file, replace Environment input with --input-dir, or
-      supply both.
+      Replace desired state from one YAML file with --file or from a directory with
+      --input-dir. To use both flags, pass a standalone Context with --file.
 
   Usage
     bootwright context update [flags]
 
   Command flags
       --check      Check admission without publishing anything
-      -f, --file   Read one standalone Context YAML file
+      -f, --file   Read one YAML file containing desired state or a standalone Context
       --input-dir  Replace the Environment input directory
       --name       Select the exact object name (required)
       --yes        Confirm the command's ordinary confirmation
@@ -22,4 +22,4 @@
       --width       Set presentation width (0: automatic) · default 0
 
   Examples
-    bootwright context update --name lab --input-dir ./input
+    bootwright context update --name lab --file ./environment.yaml

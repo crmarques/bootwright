@@ -6,18 +6,18 @@ import (
 )
 
 type InitRequest struct {
-	Name              string
-	ConfigurationFile string
-	InputDirectory    string
-	Check             bool
+	Name           string
+	InputFile      string
+	InputDirectory string
+	Check          bool
 }
 
 type UpdateRequest struct {
-	ConfigurationFile string
-	Name              string
-	InputDirectory    string
-	Check             bool
-	SkipConfirmation  bool
+	InputFile        string
+	Name             string
+	InputDirectory   string
+	Check            bool
+	SkipConfirmation bool
 }
 
 type UseRequest struct{ Name string }
@@ -58,12 +58,13 @@ type AdmissionResult struct {
 	Presented bool
 }
 
-// UpdatePlan is what an input update publishes: the admitted input directory,
+// UpdatePlan is what an input update publishes: the admitted file or directory,
 // the files it copies, the compilation counts and every warning, those of
 // admission and that of changed input over a completed apply.
 type UpdatePlan struct {
 	Context        string
 	InputDirectory string
+	InputFile      string
 	FilesCopied    int
 	Counts         compilation.Counts
 	Diagnostics    []diagnostics.Diagnostic

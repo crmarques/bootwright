@@ -64,6 +64,8 @@ type InputRepository interface {
 type Repository interface {
 	InputRepository
 	CheckInputDirectory(context.Context, string) error
+	// CheckInputFile checks manifest representability and parent containment.
+	CheckInputFile(context.Context, string) error
 	View(context.Context) (Registry, error)
 	// Transact holds the root lock throughout the callback and commit. Roots
 	// exclude the state directory from every admitted input directory. Create is
@@ -145,7 +147,7 @@ type SelectionStore interface {
 	Clear(context.Context, Selection) error
 }
 
-type ConfigurationReader interface {
+type FileReader interface {
 	ReadFile(context.Context, string, int) ([]byte, error)
 }
 
@@ -156,7 +158,7 @@ type OperationReader interface {
 type Options struct {
 	Selection             SelectionStore
 	Operations            OperationReader
-	ConfigurationReader   ConfigurationReader
+	FileReader            FileReader
 	InitializeSecrets     func(context.Context, Record, secretstore.Area) error
 	ValidateConfiguration func(context.Context, Configuration) error
 	Presenter             Presenter

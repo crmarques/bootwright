@@ -22,9 +22,13 @@ func (p *ContextPlanPresenter) PresentUpdate(ctx context.Context, plan contexts.
 	var text display
 	text.headline("", "Context update plan")
 	text.section("")
+	input := field{Label: "Input directory", Value: plan.InputDirectory}
+	if plan.InputFile != "" {
+		input = field{Label: "Input file", Value: plan.InputFile}
+	}
 	text.fields(
 		field{Label: "Name", Value: plan.Context},
-		field{Label: "Input directory", Value: plan.InputDirectory},
+		input,
 		field{Label: "Files to copy", Value: strconv.Itoa(plan.FilesCopied)},
 		field{Label: "Files seen", Value: strconv.Itoa(plan.Counts.FilesSeen)},
 		field{Label: "Objects decoded", Value: strconv.Itoa(plan.Counts.ObjectsDecoded)},

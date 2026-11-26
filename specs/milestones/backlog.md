@@ -19,6 +19,7 @@ Alias cell.
 | --- | --- | --- | --- | --- | --- |
 | [B1846](#b1846) | new, 2026-11-25 (X746 dependency audit) | enabling | Verification tooling | Retire vulnerable Ansible test-only pip, Pylint and floor pytest pins | The qualified ansible-test owns the pip and Pylint pins, and fixed pytest releases require Python 3.10 or newer |
 | [B1848](#b1848) | new, 2026-11-25 (X746 image scan) | enabling | Infrastructure services and Substrate | Qualify updated managed-service and emulated-BMC images with fewer high and critical findings | Digest changes move execution contracts and need capability-specific validation |
+| [B1854](#b1854) | new, 2026-11-26 (X752 coverage) | defect | Verification tooling, with Infrastructure services and Storage | Restore Go coverage in infrastructure services and Ceph | The shortfalls predate single-file import and need their own tests |
 | [B1611](#b1611) | new, 2026-11-18 (proxy audit) | product | Managed OS, Container cluster and State reconciliation | Observe installed proxy drift and support an owned transition between direct and proxy | Changing a completed installation needs a separate rollout and recovery contract |
 | [B1619](#b1619) | new, 2026-11-18 (proxy review) | defect | Infrastructure services | One bypass grammar with one address comparison in Go and Python | Fails closed: a non-canonical address rule sends a request through the proxy |
 | [B1622](#b1622) | new, 2026-11-18 (X627 review) | product | Substrate and Reconciliation | Prove a hosted KubeVirt Machine off or absent without creating access on its host cluster | Fails closed: a context with a hosted KubeVirt Machine refuses every new apply and destroy |
@@ -4185,6 +4186,14 @@ to select publisher digests that reduce reported exposure. A finding in an
 image is not proof that its affected code is reachable. **Exit evidence:**
 reviewed before-and-after scans and the affected service and substrate
 contracts, compatibility checks and operator gates.
+
+### B1854
+
+**Requires:** none. **Definition:** Specified.
+Restore the existing [coverage floors](../architecture.md#architecture-verification)
+with tests of the affected package behavior. Do not lower either floor.
+**Exit evidence:** `make cover` reports no shortfall for
+`internal/infrastructureservices` or `internal/storage/ceph`.
 
 ## Retired
 

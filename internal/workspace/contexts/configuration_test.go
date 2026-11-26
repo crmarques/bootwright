@@ -92,9 +92,9 @@ func FuzzContextConfiguration(f *testing.F) {
 // A Context file refusal names the offending field and its line, what the
 // document declares instead of a Context, and the file itself, also when no
 // implementation serves its secret-store type; a file the reader refuses,
-// such as a directory, gains the remedy that tells -f from --input-dir.
+// such as a directory, gains a remedy distinguishing the accepted input forms.
 func TestContextFileRefusalsNameTheFieldTheLineAndTheFile(t *testing.T) {
-	const remedy = "pass desired state with --input-dir <dir>; -f takes one standalone Context file"
+	const remedy = "pass desired-state YAML with --file alone, or pass a standalone Context file alongside --input-dir"
 	canonical := string(contexts.DefaultConfiguration("test").Canonical())
 	for name, row := range map[string]struct {
 		document, message, remediation string
@@ -125,9 +125,10 @@ func TestContextFileRefusalsNameTheFieldTheLineAndTheFile(t *testing.T) {
 			}
 			r := newRepository(t)
 			r.configInput = []byte(strings.ReplaceAll(row.document, `"test"`, "example"))
-			_, err = service(t, r, desiredstate.Sources{}).Init(context.Background(), contexts.InitRequest{Name: "example", ConfigurationFile: "/synthetic/context.yaml"})
+			_, err = service(t, r, desiredstate.Sources{}).Init(context.Background(), contexts.InitRequest{Name: "example", InputFile: "/synthetic/context.yaml", InputDirectory: "/synthetic/input"})
 			reported = diagnostics.Of(err)
-			if len(reported) != 1 || reported[0].Source == nil || reported[0].Source.Path != "/synthetic/context.yaml" || slices.Contains(r.calls, "transaction") {
+			if len(reported) != 1 || reported[0].Source == nil || reported[0].Source.Path != "/synthetic/context.yaml" ||
+				slices.Contains(r.calls, "transaction") || slices.Contains(r.calls, "preflight") {
 				t.Fatalf("the refusal does not name the file: %#v", reported)
 			}
 		})
@@ -135,7 +136,7 @@ func TestContextFileRefusalsNameTheFieldTheLineAndTheFile(t *testing.T) {
 	t.Run("unavailable-type", func(t *testing.T) {
 		r := newRepository(t)
 		r.configInput = []byte(strings.Replace(string(contexts.DefaultConfiguration("example").Canonical()), `"local-keyring"`, "vault", 1))
-		_, err := service(t, r, desiredstate.Sources{}).Init(context.Background(), contexts.InitRequest{Name: "example", ConfigurationFile: "/synthetic/context.yaml"})
+		_, err := service(t, r, desiredstate.Sources{}).Init(context.Background(), contexts.InitRequest{Name: "example", InputFile: "/synthetic/context.yaml"})
 		reported := diagnostics.Of(err)
 		if len(reported) != 1 || reported[0].Message != "unavailable implementation" || reported[0].Source == nil || reported[0].Source.Path != "/synthetic/context.yaml" || slices.Contains(r.calls, "transaction") {
 			t.Fatalf("an unavailable secret-store type does not name the file: %#v", reported)
@@ -145,7 +146,7 @@ func TestContextFileRefusalsNameTheFieldTheLineAndTheFile(t *testing.T) {
 		r := newRepository(t)
 		r.failure = "read-config"
 		r.failureErr = diagnostics.NewFailure("input.read", "input source must be a regular file without symbolic links", "/synthetic/input")
-		_, err := service(t, r, desiredstate.Sources{}).Init(context.Background(), contexts.InitRequest{Name: "example", ConfigurationFile: "/synthetic/input"})
+		_, err := service(t, r, desiredstate.Sources{}).Init(context.Background(), contexts.InitRequest{Name: "example", InputFile: "/synthetic/input"})
 		reported := diagnostics.Of(err)
 		if len(reported) != 1 || reported[0].Code != "input.read" || reported[0].Source == nil || reported[0].Source.Path != "/synthetic/input" || reported[0].Remediation != remedy {
 			t.Fatalf("a directory passed to -f lacks its remedy: %#v", reported)

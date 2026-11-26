@@ -226,8 +226,8 @@ func TestContextConfigurationAndInputFlagsAreIndependent(t *testing.T) {
 		args []string
 		want any
 	}{
-		{[]string{"context", "init", "--name", "test", "-f", "context.yaml", "--input-dir", "input"}, contexts.InitRequest{Name: "test", ConfigurationFile: "context.yaml", InputDirectory: "input"}},
-		{[]string{"context", "update", "--name", "test", "-f", "context.yaml"}, contexts.UpdateRequest{Name: "test", ConfigurationFile: "context.yaml"}},
+		{[]string{"context", "init", "--name", "test", "-f", "context.yaml", "--input-dir", "input"}, contexts.InitRequest{Name: "test", InputFile: "context.yaml", InputDirectory: "input"}},
+		{[]string{"context", "update", "--name", "test", "-f", "context.yaml"}, contexts.UpdateRequest{Name: "test", InputFile: "context.yaml"}},
 		{[]string{"context", "update", "--name", "test", "--input-dir", "input", "--yes"}, contexts.UpdateRequest{Name: "test", InputDirectory: "input", SkipConfirmation: true}},
 	} {
 		record := &dispatchRecord{result: syntheticContextResults()}

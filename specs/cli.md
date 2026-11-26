@@ -204,10 +204,15 @@ plan, or continuation.
 The set is compiled as one ordered desired-state input universe under
 [the API contract](api.md). Supplying `--input-dir` makes validation
 context-free. Omission uses the selected context input. For `context init`
-and `context update`, `-f/--file` accepts one standalone Context configuration
-file and `--input-dir` accepts one desired-state directory for immutable
-import. Both are optional at init. Update requires at least one. Omission
-never discovers the working directory. `context init --check` requires an unused name,
+and `context update`, `-f/--file` reads one file. The file contains either a
+standalone [Context configuration](contexts.md#context-configuration) or a
+complete desired-state YAML stream with one or more documents for
+[immutable import](contexts.md#frozen-input-and-provenance). Bootwright does
+not merge a Context document with desired state in one stream. `--input-dir`
+imports one desired-state directory. When both flags are supplied, `--file`
+must contain a standalone Context. Both flags are optional at init. Update
+requires at least one. Omission never discovers the working directory.
+`context init --check` requires an unused name,
 including when the store does not exist. `context update --check` requires a ready
 name and applies the same read-only admission decision and lifecycle guards
 as update. Both forms inspect the supplied files without selecting a
@@ -428,7 +433,7 @@ elevated child whose sudo is gone, which refuses. Ignore spoofed sudo metadata o
 account homes without `HOME`. An unverifiable account refuses
 `runtime.privilege`, naming why, and names a local account or a clean root
 login (`su -`, `sudo su -` or a root SSH session) with `--context` as the
-remedy. The input directory and Context file, a media source file, secret
+remedy. The input directory and named Context or desired-state YAML file, a media source file, secret
 files, a key offered with `--ssh-id-file` and the selection files are opened
 with the invoking account's credentials: a bounded helper passes each
 descriptor to root, which keeps every type, stability and ownership proof.

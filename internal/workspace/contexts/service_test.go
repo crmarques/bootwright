@@ -125,6 +125,10 @@ func (r *repository) CheckInputDirectory(ctx context.Context, path string) error
 	return r.step(ctx, "preflight")
 }
 
+func (r *repository) CheckInputFile(ctx context.Context, path string) error {
+	return r.CheckInputDirectory(ctx, filepath.Dir(path))
+}
+
 func (r *repository) ReadInputs(context.Context, string) (desiredstate.Sources, error) {
 	r.t.Fatal("context management used the inspection input port")
 	return desiredstate.Sources{}, nil
@@ -1010,7 +1014,7 @@ func (c configurationReader) ReadFile(ctx context.Context, path string, maximum 
 }
 
 func options(r *repository) contexts.Options {
-	return contexts.Options{Selection: selectionStore{r}, ConfigurationReader: configurationReader{r}, ValidateConfiguration: func(ctx context.Context, c contexts.Configuration) error {
+	return contexts.Options{Selection: selectionStore{r}, FileReader: configurationReader{r}, ValidateConfiguration: func(ctx context.Context, c contexts.Configuration) error {
 		if c.SecretStore.Type != "local-keyring" {
 			return contexts.ConfigurationError("unavailable implementation")
 		}
@@ -1048,7 +1052,7 @@ func TestEquivalentConfigurationUpdateDoesNotPublishOrConfirm(t *testing.T) {
 	r := existingRepository(t)
 	r.configInput = contexts.DefaultConfiguration("example").Canonical()
 	before := cloneRegistry(r.registry)
-	got, err := service(t, r, desiredstate.Sources{}).Update(context.Background(), contexts.UpdateRequest{Name: "example", ConfigurationFile: "context.yaml"})
+	got, err := service(t, r, desiredstate.Sources{}).Update(context.Background(), contexts.UpdateRequest{Name: "example", InputFile: "context.yaml"})
 	if err != nil || got == nil || got.InputChanged || !reflect.DeepEqual(before, r.registry) {
 		t.Fatal("equivalent configuration changed state", got, err)
 	}
@@ -1059,11 +1063,37 @@ func TestEquivalentConfigurationUpdateDoesNotPublishOrConfirm(t *testing.T) {
 	}
 }
 
+func TestSingleFileUpdateSharesTheMutationGuardAndConfirmation(t *testing.T) {
+	const path = "/synthetic/input/bundle.yaml"
+	for _, pending := range []bool{false, true} {
+		r := existingRepository(t)
+		input := sourceFixture("/synthetic/input")
+		r.configInput = input.Files[0].Bytes()
+		r.configInput = append(r.configInput, []byte("\n---\n")...)
+		r.configInput = append(r.configInput, input.Files[1].Bytes()...)
+		if pending {
+			r.evidence["example"] = []byte(`{"version":1,"operation":"pending","ownership":"none"}`)
+		}
+		got, err := service(t, r, input).Update(t.Context(), contexts.UpdateRequest{Name: "example", InputFile: path})
+		if !slices.Contains(r.calls, "guard") || slices.Contains(r.calls, "read") {
+			t.Fatalf("file update did not follow the guarded single-file path: %v", r.calls)
+		}
+		if pending {
+			if err == nil || got != nil || slices.Contains(r.calls, "present") || slices.Contains(r.calls, "publish") {
+				t.Fatalf("file update bypassed pending-operation evidence: %+v (%v), calls %v", got, err, r.calls)
+			}
+		} else if err != nil || got == nil || !got.Presented || !slices.Contains(r.calls, "confirm") ||
+			r.updatePlan == nil || r.updatePlan.InputFile != path || r.updatePlan.FilesCopied != 1 {
+			t.Fatalf("file update lacked a precise confirmed plan: %+v (%v), plan %+v, calls %v", got, err, r.updatePlan, r.calls)
+		}
+	}
+}
+
 func TestConfigurationAdmissionFailurePrecedesStateWrites(t *testing.T) {
 	for _, config := range []string{"kind: Environment\n", strings.ReplaceAll(string(contexts.DefaultConfiguration("example").Canonical()), "local-keyring", "unavailable-store")} {
 		r := newRepository(t)
 		r.configInput = []byte(config)
-		got, err := service(t, r, desiredstate.Sources{}).Init(context.Background(), contexts.InitRequest{Name: "example", ConfigurationFile: "context.yaml"})
+		got, err := service(t, r, desiredstate.Sources{}).Init(context.Background(), contexts.InitRequest{Name: "example", InputFile: "context.yaml"})
 		if err == nil || got != nil || slices.Contains(r.calls, "transaction") || r.selection.Name != "" {
 			t.Fatal("invalid or unavailable configuration reached state mutation", got, err, r.calls)
 		}

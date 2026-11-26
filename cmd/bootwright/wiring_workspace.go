@@ -19,7 +19,7 @@ func wireContexts(deps serviceDependencies, compiler compilation.Compiler, secre
 	reader := inputReader(deps.Files)
 	options := contexts.Options{
 		Selection:             deps.Selection,
-		ConfigurationReader:   reader,
+		FileReader:            reader,
 		ValidateConfiguration: secrets.Validate,
 		InitializeSecrets:     secrets.Initialize,
 	}

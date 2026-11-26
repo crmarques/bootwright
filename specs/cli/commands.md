@@ -102,8 +102,8 @@ by a related noun, and `--short` is the one flag that prints names only.
 
 | Invocation | Command flags and defaults | Successful result | Effects |
 | --- | --- | --- | --- |
-| `bootwright context init` | `--check` false; required `--name <name>`; optional `-f, --file <context.yaml>` and `--input-dir <dir>` | initialized context and user selection; optional imported-input summary | local context and keyring creation; with `--check`, bounded admission reads |
-| `bootwright context update` | `--check` false; required `--name <name>`; at least one of `-f, --file <context.yaml>` or `--input-dir <dir>`; `--yes` false | unchanged configuration or imported-input summary | local atomic input replacement; with `--check`, bounded admission reads |
+| `bootwright context init` | `--check` false; required `--name <name>`; optional `-f, --file <yaml>` and `--input-dir <dir>` | initialized context and user selection; optional imported-input summary | local context and keyring creation; with `--check`, bounded admission reads |
+| `bootwright context update` | `--check` false; required `--name <name>`; at least one of `-f, --file <yaml>` or `--input-dir <dir>`; `--yes` false | unchanged configuration or imported-input summary | local atomic input replacement; with `--check`, bounded admission reads |
 | `bootwright context use` | required `--name <name>` | selected-current-context summary | local current-context update |
 | `bootwright policy set` | required `-f, --file <file>`; `--check` false | every grant with its subjects and expanded Machines | atomically replace the context authorization policy; with `--check`, validation only |
 | `bootwright policy show` | none | the installed document | read local state |

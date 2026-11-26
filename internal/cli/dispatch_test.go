@@ -36,8 +36,8 @@ func TestDispatchEveryApplicationCommand(t *testing.T) {
 		path string
 		want any
 	}{
-		{"context init", contexts.InitRequest{Check: true, Name: "demo", ConfigurationFile: "inputs", InputDirectory: "inputs"}},
-		{"context update", contexts.UpdateRequest{Check: true, Name: "demo", ConfigurationFile: "inputs", InputDirectory: "inputs", SkipConfirmation: true}},
+		{"context init", contexts.InitRequest{Check: true, Name: "demo", InputFile: "inputs", InputDirectory: "inputs"}},
+		{"context update", contexts.UpdateRequest{Check: true, Name: "demo", InputFile: "inputs", InputDirectory: "inputs", SkipConfirmation: true}},
 		{"context use", contexts.UseRequest{Name: "demo"}},
 		{"context list", contexts.ListRequest{}},
 		{"context current", contexts.CurrentRequest{}},

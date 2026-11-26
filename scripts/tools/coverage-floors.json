@@ -2,7 +2,7 @@
   "go": {
     "ansible": 93.2,
     "api/v1alpha1": 81.7,
-    "cmd/bootwright": 82.8,
+    "cmd/bootwright": 83.0,
     "internal/acquisition": 61.7,
     "internal/acquisition/listing": 11.0,
     "internal/adapterprotocol": 94.7,

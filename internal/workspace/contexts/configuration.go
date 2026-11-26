@@ -14,7 +14,7 @@ import (
 
 const MaxConfigurationBytes = 64 << 10
 
-const configurationFileRemediation = "pass desired state with --input-dir <dir>; -f takes one standalone Context file"
+const configurationFileRemediation = "pass desired-state YAML with --file alone, or pass a standalone Context file alongside --input-dir"
 
 func ConfigurationError(message string) error {
 	return diagnostics.NewFailure("context.configuration", message, "")
@@ -28,6 +28,15 @@ func (c Configuration) Canonical() []byte {
 	return fmt.Appendf(nil, "apiVersion: bootwright.io/v1alpha1\nkind: Context\nmetadata:\n  name: %q\n\nspec:\n  secretStore:\n    type: %q\n", c.Name, c.SecretStore.Type)
 }
 
+func startsWithContext(data []byte) bool {
+	var document yaml.Node
+	if err := yaml.NewDecoder(bytes.NewReader(data)).Decode(&document); err != nil || len(document.Content) != 1 {
+		return false
+	}
+	root := document.Content[0]
+	return mapping(root) && configurationString(mappingValue(root, "kind")) == "Context"
+}
+
 // ParseConfiguration admits only a standalone controller configuration document.
 func ParseConfiguration(name string, data []byte) (Configuration, error) {
 	if validName(name) != nil || len(data) == 0 || len(data) > MaxConfigurationBytes || !utf8.Valid(data) {
@@ -36,7 +45,9 @@ func ParseConfiguration(name string, data []byte) (Configuration, error) {
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
 	var document, extra yaml.Node
 	if err := decoder.Decode(&document); err != nil || decoder.Decode(&extra) != io.EOF || len(document.Content) != 1 {
-		return Configuration{}, ConfigurationError("Context configuration requires exactly one valid YAML document")
+		return Configuration{}, diagnostics.NewFailureWithRemediation("context.configuration",
+			"Context configuration requires exactly one valid YAML document", "",
+			"keep the Context document in its own file and import desired state separately")
 	}
 	budget := 2048
 	if !safeConfigurationNode(&document, 0, &budget) {

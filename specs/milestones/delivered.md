@@ -18298,3 +18298,15 @@ and [vulnerability gate](../security.md#the-vulnerability-gate) hold the new
 pins. Residual test-only findings and managed-image requalification are tracked
 by [B1846](backlog.md#b1846) and [B1848](backlog.md#b1848).
 The delivering commit records publisher checks and the full gate results.
+
+## X752 — Single-file context input
+
+**Owner:** Contexts. **Item:** B1853 (product).
+**Authority:** explicit request to accept multi-document YAML through `--file`.
+
+The [input flags](../cli.md#parsing-and-input-conventions) support
+[single-file import](../contexts.md#frozen-input-and-provenance).
+The command tests exercise read-only admission, exact-byte import, updates
+and frozen replay without sibling discovery. The delivering commit records
+the verification results. The independent coverage run found pre-existing
+shortfalls tracked in [B1854](backlog.md#b1854).

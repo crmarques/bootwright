@@ -209,6 +209,33 @@ func TestMissingStoreAndInputPreflight(t *testing.T) {
 	}
 }
 
+func TestSingleFilePreflightChecksTheManifestPathAndItsParent(t *testing.T) {
+	t.Parallel()
+	store, sources := fixture(t)
+	parent := sources.Roots[0]
+	path := sources.Files[0].Path()
+	if err := store.CheckInputFile(t.Context(), path); err != nil {
+		t.Fatal(err)
+	}
+	for _, invalid := range []string{
+		"relative.yaml",
+		filepath.Join(parent, "bundle\xff.yaml"),
+		filepath.Join(parent, strings.Repeat("a", maxPath)+".yaml"),
+		filepath.Join(parent, "bundle.txt"),
+	} {
+		if err := store.CheckInputFile(t.Context(), invalid); err == nil {
+			t.Fatalf("admitted unrecordable file path of %d bytes", len(invalid))
+		}
+	}
+	unsafe := New(testOptions(filepath.Join(parent, "state")))
+	expectState(t, unsafe.CheckInputFile(t.Context(), path))
+	canceled, cancel := context.WithCancel(t.Context())
+	cancel()
+	if err := store.CheckInputFile(canceled, path); !errors.Is(err, context.Canceled) {
+		t.Fatalf("preflight ignored cancellation: %v", err)
+	}
+}
+
 func TestEmptyRootViewRemainsReadOnly(t *testing.T) {
 	t.Parallel()
 	store, _ := fixture(t)

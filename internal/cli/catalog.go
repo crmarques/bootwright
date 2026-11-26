@@ -244,7 +244,7 @@ func sensitiveFlag() flagSpec {
 }
 
 func contextFileFlag() flagSpec {
-	flag := fileFlag("file", "Read one standalone Context YAML file")
+	flag := fileFlag("file", "Read one YAML file containing desired state or a standalone Context")
 	flag.short, flag.kind = "f", "stringArray"
 	return flag
 }

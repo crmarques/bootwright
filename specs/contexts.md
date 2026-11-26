@@ -171,24 +171,28 @@ type defaults to `local-keyring`; its current configuration has no additional
 parameters. Unknown types/fields, duplicate keys, aliases, conflicting names,
 and malformed values refuse before publication, under the file's path. An
 unknown or duplicate field is named by its field path and YAML line; a
-document that is not a Context is refused naming the apiVersion and kind it
-declares, with the remedy that desired state is passed with
-`--input-dir <dir>` and `-f` takes one standalone Context file, a remedy a
-refused file read without its own also carries. Configuration contains no
+document offered as Context configuration that declares a different kind or
+version is refused naming the apiVersion and kind it declares. The remedy
+distinguishes the [accepted file and directory combinations](cli.md#parsing-and-input-conventions).
+Configuration contains no
 material, runtime identity, path override or user selection.
 
 Store the canonical defaulted document as `context.yaml`. Context commands
 admit it independently of desired-state compilation; it does not participate
 in Environment resources, defaults, or effective rendering. Init without a
-file synthesizes the default configuration without input discovery. Current
+Context document synthesizes the default configuration. Current
 configuration fields are immutable: an equivalent configuration-only update
 succeeds without writes or confirmation; backend changes refuse.
 
 ## Frozen input and provenance
 
-An explicitly supplied `--input-dir` opens one directory and compiles its
-entire acquired input before creating or changing runtime state. Omission at
-init creates a context without desired state; omission at update preserves its
+Context init and update compile all acquired desired state before creating or
+changing runtime state. A directory import opens one directory and acquires
+its candidates. A desired-state file import acquires only the named `.yaml`
+or `.yml` stream under the invoking account. Bootwright uses the file's
+parent as the input directory for provenance and containment checks without
+scanning it or acquiring companion files. Omission of desired state at init
+creates a context without desired state; omission at update preserves its
 selected input revision. An input update preserves the context's name, secrets
 and runtime state, and the
 [mutation guard](state-reconciliation.md#context-mutation-evidence) refuses one
@@ -211,7 +215,7 @@ back what that apply owns, and that importing the original files again does
 not undo the update: they become a new revision, which apply refuses the same
 way.
 
-Before discovery, resolve the
+Before directory discovery or file compilation, resolve the
 state-root location read-only and reject a root within the input directory;
 revalidate containment through held handles at publication. Freeze every
 acquired YAML candidate and permitted marker, including streams excluded by
@@ -231,6 +235,9 @@ Logical compiler paths are original input directory plus manifest-relative
 path. This preserves selection, counts, diagnostics and field-level
 provenance through recompilation. Import does not rebase typed payload
 references or copy, inspect or expand the paths they name.
+
+Code: [context admission](../internal/workspace/contexts/admission.go).
+Held by: `TestContextFileImportsOnlyTheNamedYAMLStream`.
 
 ## Storage, locking and publication
 

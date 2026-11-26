@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -50,6 +51,103 @@ func contextRun(t *testing.T, services cli.Services, want int, args ...string) (
 		t.Fatalf("%v: code=%d want=%d\nstdout=%s\nstderr=%s", args, code, want, out.String(), errOut.String())
 	}
 	return out.String(), errOut.String()
+}
+
+func TestContextFileImportsOnlyTheNamedYAMLStream(t *testing.T) {
+	t.Parallel()
+	services, repository, input, root := contextFixture(t)
+	path := filepath.Join(input, "bundle.yaml")
+	stream := []byte("# authored bundle\n" + syntheticEnvironment + "\n---\n" + serviceHost)
+	write := func(data []byte) {
+		t.Helper()
+		if err := os.WriteFile(path, data, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(stream)
+	// The sibling files contain duplicate objects and would defeat directory discovery.
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "-f", path, "--check")
+	if _, err := os.Stat(root); !os.IsNotExist(err) {
+		t.Fatalf("init check created the store: %v", err)
+	}
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--file", path)
+
+	update := append([]byte("# replacement\n"), stream...)
+	write(update)
+	before := stateFingerprint(t, root)
+	contextRun(t, services, 0, "context", "update", "--name", "alpha", "--file", path, "--check")
+	if after := stateFingerprint(t, root); !reflect.DeepEqual(before, after) {
+		t.Fatal("update check changed the selected state")
+	}
+	contextRun(t, services, 0, "context", "update", "--name", "alpha", "--file", path, "--yes")
+	before = stateFingerprint(t, root)
+	contextRun(t, services, 0, "context", "update", "--name", "alpha", "--file", path)
+	if after := stateFingerprint(t, root); !reflect.DeepEqual(before, after) {
+		t.Fatal("an identical update changed the selected state")
+	}
+
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	frozen, err := repository.ReadInputs(t.Context(), "alpha")
+	if err != nil || len(frozen.Files) != 1 || len(frozen.Markers) != 0 ||
+		frozen.Files[0].Path() != path || !bytes.Equal(frozen.Files[0].Bytes(), update) {
+		t.Fatalf("frozen input did not preserve the single supplied stream and its path: %+v, %v", frozen, err)
+	}
+	contextRun(t, services, 0, "validate", "--context", "alpha")
+}
+
+func TestContextFileRejectsAmbiguousOrInvalidInputBeforePublication(t *testing.T) {
+	t.Parallel()
+	config := string(contexts.DefaultConfiguration("alpha").Canonical())
+	stream := syntheticEnvironment + "\n---\n" + serviceHost
+	for _, row := range []struct {
+		name, data, code string
+		alsoDirectory    bool
+	}{
+		{name: "Context first", data: config + "\n---\n" + stream, code: "context.configuration"},
+		{name: "Context last", data: stream + "\n---\n" + config, code: "api.kind"},
+		{name: "invalid later document", data: stream + "\n---\n[", code: "yaml.syntax"},
+		{name: "both desired-state flags", data: stream, code: "context.configuration", alsoDirectory: true},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			services, _, input, root := contextFixture(t)
+			path := filepath.Join(t.TempDir(), "bundle.yaml")
+			if err := os.WriteFile(path, []byte(row.data), 0600); err != nil {
+				t.Fatal(err)
+			}
+			args := []string{"context", "init", "--name", "alpha", "--file", path}
+			if row.alsoDirectory {
+				args = append(args, "--input-dir", input)
+			}
+			_, diagnostic := contextRun(t, services, 1, args...)
+			if !strings.Contains(diagnostic, row.code) || !strings.Contains(diagnostic, path) {
+				t.Fatalf("refusal lacks the code or the supplied path: %s", diagnostic)
+			}
+			if _, err := os.Stat(root); !os.IsNotExist(err) {
+				t.Fatalf("refused input created the store: %v", err)
+			}
+		})
+	}
+}
+
+func TestContextFileRefusesUnrecordablePathsBeforePublication(t *testing.T) {
+	t.Parallel()
+	services, _, input, root := contextFixture(t)
+	path := filepath.Join(input, "bundle\xff.yaml")
+	if err := os.WriteFile(path, []byte(syntheticEnvironment+"\n---\n"+serviceHost), 0600); err != nil {
+		t.Fatal(err)
+	}
+	args := []string{"context", "init", "--name", "alpha", "--file", path}
+	for _, invocation := range [][]string{append(slices.Clone(args), "--check"), args} {
+		_, diagnostic := contextRun(t, services, 1, invocation...)
+		if !strings.Contains(diagnostic, "input file path cannot be recorded") {
+			t.Fatalf("refusal does not name the unrecordable path: %s", diagnostic)
+		}
+		if _, err := os.Stat(root); !os.IsNotExist(err) {
+			t.Fatalf("refused input created the store: %v", err)
+		}
+	}
 }
 
 // reviewedDataLoss is the data-loss authorization bound to the steps the
