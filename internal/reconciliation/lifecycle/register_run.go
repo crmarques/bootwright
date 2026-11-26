@@ -53,7 +53,7 @@ func (s Service) register(ctx context.Context, tx Transaction, store OperationSt
 		return fail(err)
 	}
 	if decided.verb == reconciliation.Destroy {
-		if err := s.recordResetContracts(ctx, store, decided.plan, decided.source, decided.stage, contracts); err != nil {
+		if err := s.recordKeptContracts(ctx, store, decided.plan, decided.source, decided.stage, contracts); err != nil {
 			return fail(err)
 		}
 	}

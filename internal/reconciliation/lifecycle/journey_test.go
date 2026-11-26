@@ -1918,7 +1918,7 @@ func newPlannedHarness(t *testing.T, definitions []reconciliation.BlockDefinitio
 			Selection:   func(context.Context) (string, error) { return testContextName, nil },
 			Executable:  Executable{Version: "devel", Commit: "abcdef1"},
 			Operations: func(records, logs operationstore.Area) OperationStore {
-				return operationstore.New(records, logs, clock.Now)
+				return testOperationStore(records, logs, clock.Now)
 			},
 			Setup: setup,
 			Lock:  testLock,

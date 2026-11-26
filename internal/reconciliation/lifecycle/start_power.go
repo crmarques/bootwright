@@ -202,7 +202,7 @@ func (s Service) powerTargets(decided operationPlan) []reconciliation.Block {
 		block, _ := decided.lineagePlan.Block(added.ID)
 		for _, machine := range s.boundMachines(decided.lineagePlan, block) {
 			for _, kept := range decided.lineagePlan.Blocks {
-				if kept.Kind == string(api.Machine) && kept.Object == machine && managedPowerTarget(bindings, kept) &&
+				if kept.Kind == string(api.Machine) && kept.Object == machine && managedPowerTarget(bindings, kept) && !slices.Contains(decided.running, machine) &&
 					!slices.ContainsFunc(blocks, func(held reconciliation.Block) bool { return held.ID == kept.ID }) {
 					blocks = append(blocks, kept)
 				}

@@ -92,7 +92,7 @@ func (d decider) withPhases(ctx context.Context, store recordReader, decided ope
 		err = proveRecorded(ctx, d.capabilities, store, decided.plan, decided.operation)
 	}
 	if err == nil && !decided.fresh {
-		err = d.proofs.proveResetContracts(ctx, store, decided.plan, decided.operation)
+		err = d.proofs.proveKeptContracts(ctx, store, decided.plan, decided.operation)
 	}
 	return decided, err
 }

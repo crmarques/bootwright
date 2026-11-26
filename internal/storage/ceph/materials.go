@@ -470,6 +470,7 @@ func adapterRefusals() map[string]error {
 	maps.Copy(out, osdDeviceRefusals())
 	maps.Copy(out, stretchRefusals())
 	out["managers-running"] = managersRunning()
+	maps.Copy(out, keptUsageRefusals("of this context"))
 	out["tunnel-host-key-excluded"] = cephSSHPolicyExcluded.Fail("the SSH crypto policy inside the selected Ceph image admits none of the algorithms of a Ceph host's pinned host key, so cephadm's tunnel could not reach that host; the cluster block refused before this apply claimed or authorized any Ceph host", "the native error names the host and its key type; the apply froze this input, so take back what it owns with bootwright destroy --context <context>, then with bootwright context update select a Ceph image whose SSH crypto policy admits that type, or change spec.customizations.security.fips on that host's MachineInstallProfile so its fresh installation generates a host key of an admitted type (ssh-ed25519 with fips off, ecdsa-sha2-nistp256 with fips on), then apply")
 	out["pool-drift"] = cephDrifted.Fail("a setting this operation completed on the Ceph pool (size, min_size, a quota, a compression option, erasure-coded overwrites or its application) no longer has the value its CephPool or CephObjectGateway froze", "compare ceph osd pool ls detail with the CephPool and set that setting back to its frozen value outside Bootwright, then apply again; or take back what this context owns with bootwright destroy --context <context>, then apply; Bootwright never rewrites a completed pool setting")
 	maps.Copy(out, signOnReasons())

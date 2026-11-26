@@ -10,6 +10,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
@@ -274,27 +275,42 @@ func (s Service) proveKeptPower(ctx context.Context, store recordReader, name st
 		return err
 	}
 	owned := held.owners()
-	var blocked, stops []string
+	var blocked, stops, stopped, unreadable []string
 	err = s.withPython(ctx, located, func(launch prerequisites.PythonLaunch) error {
 		for index, target := range stage.KeptPower {
+			if target.Power == operationstore.Reachable {
+				continue
+			}
 			member, original, found := owned.of(target.Block)
 			reader, reads := s.capabilityOf(original).(MachineStartPower)
 			if !found || original.Kind != string(api.Machine) || original.Object != target.Machine || !reads {
 				return engineRecordsDamaged.Fail("the staged destroy keeps Machine/"+target.Machine+", which no step of its lineage can read the power of", "restore the context store")
 			}
 			event := ProgressEvent{Phase: CheckPhase, Block: "kept-power-" + target.Block, Position: index + 1, Total: len(stage.KeptPower),
-				Description: "prove the kept Machine/" + target.Machine + " is powered off, changing nothing", Status: "running"}
+				Description: "prove the kept Machine/" + target.Machine + " is " + powerWord(target.Power) + ", changing nothing", Status: "running"}
 			s.report(ctx, event)
 			state, err := s.readKeptPower(ctx, store, name, member.operation.ID, original, reader, launch, material.of(original.ID))
+			proved := state.Settled()
+			if target.Power == operationstore.PoweredOn {
+				proved = state.State == Live
+			}
 			event.Status = "ok"
-			if err != nil || !state.Settled() {
+			if err != nil || !proved {
 				event.Status = "failed"
 			}
 			s.report(ctx, event)
 			if err != nil {
 				return err
 			}
-			if !state.Settled() {
+			if !proved && target.Power == operationstore.PoweredOn && state.State == Quiescent {
+				stopped = append(stopped, target.Machine)
+				continue
+			}
+			if !proved && target.Power == operationstore.PoweredOn {
+				unreadable = append(unreadable, "Machine/"+target.Machine+" ("+state.Reason+")")
+				continue
+			}
+			if !proved {
 				blocked = append(blocked, "Machine/"+target.Machine+" ("+state.Reason+")")
 				if state.Stop != "" && !slices.Contains(stops, state.Stop) {
 					stops = append(stops, state.Stop)
@@ -303,15 +319,36 @@ func (s Service) proveKeptPower(ctx context.Context, store recordReader, name st
 		}
 		return nil
 	})
-	if err != nil || len(blocked) == 0 {
+	if err != nil || len(blocked) == 0 && len(stopped) == 0 && len(unreadable) == 0 {
 		return err
 	}
 	repeat := contextCommand(name, string(reconciliation.Destroy), invocationFlags(stage.Floor, reconciliation.Selection{}, authorizingUnfixed(decided.plan))...)
-	remedy := "power them off, then repeat " + repeat
+	off := "power them off"
 	if len(stops) != 0 {
-		remedy = "stop them with " + strings.Join(stops, ", then ") + ", then repeat " + repeat
+		off = "stop them with " + strings.Join(stops, ", then ")
 	}
-	return destroyInUse.Fail("the staged destroy takes back steps on kept Machines that must stay powered off: "+strings.Join(blocked, ", "), remedy)
+	if len(stopped) == 0 && len(unreadable) == 0 {
+		return destroyInUse.Fail("the staged destroy takes back steps on kept Machines that must stay powered off: "+strings.Join(blocked, ", "), off+", then repeat "+repeat)
+	}
+	var found, remedies []string
+	if len(stopped) != 0 {
+		starts := make([]string, 0, len(stopped))
+		for _, machine := range stopped {
+			starts = append(starts, contextCommand(name, "machine start", "--name", machine))
+		}
+		found = append(found, "these kept Machines that must run were found powered off: Machine/"+strings.Join(stopped, ", Machine/"))
+		remedies = append(remedies, "start them with "+strings.Join(starts, ", then "))
+	}
+	if len(unreadable) != 0 {
+		found = append(found, "the power of these kept Machines that must run could not be read: "+strings.Join(unreadable, ", "))
+		remedies = append(remedies, "make their power controller answer")
+	}
+	if len(blocked) != 0 {
+		found = append(found, "these kept Machines that must stay powered off were not proved off: "+strings.Join(blocked, ", "))
+		remedies = append(remedies, off)
+	}
+	return destroyKeptHostStopped.Fail("the staged destroy takes back steps on kept Machines in the power state each needs, and "+strings.Join(found, "; "),
+		strings.Join(remedies, ", ")+", then repeat "+repeat)
 }
 
 func (s Service) readKeptPower(ctx context.Context, store recordReader, name, owner string, original reconciliation.Block, reader MachineStartPower, launch prerequisites.PythonLaunch, material map[string]secrets.Material) (Quiescence, error) {

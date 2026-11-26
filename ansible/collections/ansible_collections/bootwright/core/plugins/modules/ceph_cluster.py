@@ -37,6 +37,7 @@ options:
     description:
       - Runner-owned private material file paths.
       - C(retirement) set to C(tiebreaker) selects a provided stretch tiebreaker's removal on destroy, or its read-only observation on observe.
+      - C(retirement) set to C(kept) takes a never-used cluster back from every kept host while it runs on destroy, or reads that teardown on observe.
       - C(reading) set to C(unrecorded) marks a cluster observation no operation records, which alone lists the cluster's pools and the
         OSDs no declared service places.
       - C(reading) set to C(hosts) reads only each cluster host's state, once, for every resource observation of one C(diff --observe)

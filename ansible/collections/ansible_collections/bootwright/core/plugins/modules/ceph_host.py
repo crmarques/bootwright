@@ -60,7 +60,10 @@ options:
     type: str
     required: true
   material:
-    description: Runner-owned private material file paths.
+    description:
+      - Runner-owned private material file paths.
+      - C(removal) set to C(true) observes the host's release instead of its preparation.
+      - C(kept) set to C(true) releases a kept host that stays running, removing its preparation records and keeping packages and image.
     type: dict
     required: true
 author:
@@ -133,7 +136,9 @@ def main():
     try:
         material = dict(params["material"])
         removal = material.pop("removal", "false")
+        kept = material.pop("kept", "false")
         ceph_native.require(removal in ("true", "false") and (removal == "false" or params["operation"] == "observe"), "request")
+        ceph_native.require(kept in ("true", "false") and (kept == "false" or params["operation"] == "destroy" or removal == "true"), "request")
         request = ceph_core.host_request(params["request"], removal=params["operation"] == "destroy" or removal == "true")
         transport = ceph_transport.Transport(request["cluster"], material, scope=True)
         if params["operation"] == "apply":
@@ -143,7 +148,7 @@ def main():
             if params["step"] is not None or params["pull"] is not None:
                 raise ceph_native.Refusal("request")
             operation = "observe-remove" if params["operation"] == "observe" and removal == "true" else params["operation"]
-            result = ceph_core.execute_host(request, operation, params["digest"], transport)
+            result = ceph_core.execute_host(request, operation, params["digest"], transport, **({"kept": True} if kept == "true" else {}))
     except Exception as error:
         reason, detail = ceph_core.refusal(error, ceph_core.HOST_REASONS)
         failure = {"reason": reason}

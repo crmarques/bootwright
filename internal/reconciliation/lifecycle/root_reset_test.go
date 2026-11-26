@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -31,6 +32,12 @@ type blankingNodeMachine struct {
 }
 
 const testResetContract = "machine-test-root-reset-v1"
+
+// testOperationStore is the operation store the harness composes: like the
+// command's, it admits the root disk reset contracts of its node Machines.
+func testOperationStore(records, logs operationstore.Area, clock func() time.Time) *operationstore.Store {
+	return operationstore.New(records, logs, clock).KeptContracts(operationstore.BlanksRoots, testResetContract, killResetContract)
+}
 
 func (m *blankingNodeMachine) RootResetContract() (string, string) {
 	return testResetContract, "test-root-reset"

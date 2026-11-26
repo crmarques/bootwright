@@ -114,6 +114,7 @@ def test_actual_shipped_command_works_inside_supervised_remote_group(tmp_path):
                "bounded_process": inspect.getsource(bounded_process),
                "ceph_tunnel": '"""Fixed fixture."""\n', "ceph_tunnel_staging": '"""Fixed fixture."""\n', "ceph_tunnel_custody": '"""Fixed fixture."""\n',
                "ceph_native_observe": '"""Fixed fixture."""\n', "ceph_native_stretch": '"""Fixed fixture."""\n',
+               "ceph_native_kept": '"""Fixed fixture."""\n',
                "ceph_host_device_probe": '"""Fixed fixture."""\n', "ceph_host_image_probe": '"""Fixed fixture."""\n',
                "ceph_host_label_probe": '"""Fixed fixture."""\n',
                "ceph_host_route_probe": '"""Fixed fixture."""\n',

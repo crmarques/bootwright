@@ -83,7 +83,8 @@ PULL_CONCURRENCY = 3
 # for its connections), each process and pause ending within a second of the cancellation. The images launcher's
 # signal comes CANCEL_RESERVE (ceph_host_worker) before its supervisor's deadline to leave this wait its time.
 PULL_CANCEL_SECONDS = 1 + 31 + 3
-PHASES = frozenset(("images", "profile", "route", "device_identity", "host_devices", "host_observe", "fips_observe"))
+PHASES = frozenset(("images", "profile", "route", "device_identity", "host_devices", "host_observe", "fips_observe", "host_release",
+                    "host_release_observe"))
 ARTIFACTS = ("/usr/sbin/cephadm", "/usr/share/ceph/mgr/cephadm/ssh.py", "/usr/share/ceph/mgr/cephadm/module.py",
              "/usr/share/ceph/mgr/cephadm/serve.py", "/usr/bin/ceph", "/usr/bin/ceph-authtool")
 SOURCE_PATHS = ARTIFACTS[1:4]
@@ -899,6 +900,23 @@ class HostRuntime:
                 evidence["devices"] = [{key: entry for key, entry in value.items() if key != "host"} for value in values]
             evidence["ready"] = bool(evidence["planDigest"] and evidence["route"] and identified)
         return evidence
+
+    def host_release_observe(self):
+        """Read-only: whether this host's preparation records for the cluster are gone; the packages and the image always stay."""
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_kept
+        return {"removed": not ceph_native_kept.directory_present((self.markers or ceph_native.Markers(self.request, root=ROOT)).path)}
+
+    def host_release(self):
+        """A kept host's preparation records for the cluster removed once its scope record proves them this cluster's; the packages,
+        the package records and the pulled image stay by design."""
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_kept
+        durable = self.markers or ceph_native.Markers(self.request, root=ROOT)
+
+        def proved():
+            if durable.owned():
+                require(canonical(durable.read("scope.json")) == canonical(self.scope()), "ownership")
+        changed = ceph_native_kept.discard_directory(durable.path, proved)
+        return {"changed": changed, "removed": True}
 
 
 def observes_fips(request, host):

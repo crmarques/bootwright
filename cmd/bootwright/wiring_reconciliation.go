@@ -506,7 +506,9 @@ func operationStores(clock systemClock, executable lifecycle.Executable) lifecyc
 }
 
 func operationStore(clock systemClock, executable lifecycle.Executable, records, logs operationstore.Area) *operationstore.Store {
-	store := operationstore.New(records, logs, clock.Now)
+	store := operationstore.New(records, logs, clock.Now).
+		KeptContracts(operationstore.KeepsHosts, ceph.KeptImplementation, ceph.KeptHostImplementation).
+		KeptContracts(operationstore.BlanksRoots, libvirt.RootResetImplementation)
 	if !executable.Modified {
 		store.Running(operationstore.Executable{Version: executable.Version, Commit: executable.Commit})
 	}

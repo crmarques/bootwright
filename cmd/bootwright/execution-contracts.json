@@ -119,6 +119,10 @@
     "contentDigest": "d114ec21a893590884d8ca65b2feb3cc2b0e6f6a431e08d7ec72307ab0b85883",
     "fingerprint": "1d203916238f3f3a0e83d64036cd3baa80f48c483bac8de18577f304f356567f"
   },
+  "storage-ceph-host-kept-release-v1": {
+    "contentDigest": "fc9be8783b3857b21d2b393446e9f8f11b7dd98c2529a2ce9f4fe3b4fc5fe85e",
+    "fingerprint": "fc511c0e40e7f1610d5d1c08c753365ab2cc9d834253d7e7ad760eb666baa86e"
+  },
   "storage-ceph-host-v1": {
     "contentDigest": "69938e53f4f41a3b75a1a92e0adb03e573291644aade560892d894ef0e7bb57d",
     "fingerprint": "e3e35f6ac2061ff9cd43267e95d05acdd8fb38aa689ffc27b2661be027be6e22"
@@ -126,6 +130,10 @@
   "storage-ceph-image-v1": {
     "contentDigest": "f0822b3d0eb59977829abbed7248c391a51d33a21602d3cbba5e3035d50b62d8",
     "fingerprint": "affaf3a5fa4eb4efa5ca15672d90a0915dccccca0a4d85fc41a2ad1e3688c111"
+  },
+  "storage-ceph-kept-teardown-v1": {
+    "contentDigest": "ce752da4a82920f588a3c23c41c293eaa6341961744dd63719969f64aa1df728",
+    "fingerprint": "f2c39d8075667ff0894d2c4108d86c13002a3b91b3cf6fb3da4a9a1956fc20eb"
   },
   "storage-ceph-physical-retirement-v1": {
     "contentDigest": "ae17123d1a8ca9d6479c714b8bc88b4393f7392033ef0ed24a1cc0655a54d93c",

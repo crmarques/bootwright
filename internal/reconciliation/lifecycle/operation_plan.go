@@ -52,7 +52,10 @@ type operationPlan struct {
 	lineagePlan            reconciliation.Plan
 	predecessor            string
 	restores               string
-	takes                  []string
+	// running are the kept Machines the restored staged destroy proved running,
+	// whose restored steps ran on them while they ran.
+	running []string
+	takes   []string
 	// basis is the durable state this transition was planned from. For a fresh
 	// removal it is the incomplete operation the removal takes the place of,
 	// which is the context's current operation. It is not always source: a

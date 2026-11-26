@@ -140,6 +140,9 @@ type killHost struct {
 	// marks names, per kept node, the removal and step its root disk's reset
 	// names.
 	marks map[string]string
+	// keptOnline names, by block, the Machines whose removal on them runs while
+	// they stay powered on, so a staged destroy keeps them running.
+	keptOnline map[string][]string
 }
 
 func newKillHost(definitions []reconciliation.BlockDefinition) *killHost {
@@ -155,7 +158,7 @@ func (h *killHost) clone() *killHost {
 	return &killHost{
 		definitions: h.definitions, realized: maps.Clone(h.realized), effects: maps.Clone(h.effects), failures: maps.Clone(h.failures),
 		lost: maps.Clone(h.lost), partial: maps.Clone(h.partial), foreign: maps.Clone(h.foreign), silent: maps.Clone(h.silent), online: maps.Clone(h.online),
-		claims: h.claims, marks: maps.Clone(h.marks),
+		claims: h.claims, marks: maps.Clone(h.marks), keptOnline: h.keptOnline,
 	}
 }
 
@@ -170,7 +173,7 @@ func (h *killHost) Claimed(catalog api.Catalog) []string {
 }
 
 func (h *killHost) Plan(_ context.Context, input PlanInput) (CapabilityPlan, error) {
-	definitions := slices.Clone(h.definitions)
+	definitions := slices.DeleteFunc(slices.Clone(h.definitions), func(d reconciliation.BlockDefinition) bool { return d.Kind == "Machine" })
 	if input.Preparation != nil {
 		definitions = slices.DeleteFunc(definitions, func(d reconciliation.BlockDefinition) bool { return d.ID == "installation" })
 	}
@@ -391,12 +394,10 @@ type killNodes struct {
 }
 
 func (n killNodes) Plan(ctx context.Context, input PlanInput) (CapabilityPlan, error) {
-	plan, err := n.killHost.Plan(ctx, input)
-	plan.Definitions = slices.DeleteFunc(plan.Definitions, func(d reconciliation.BlockDefinition) bool { return (d.Kind == "Machine") != n.machine })
 	if n.machine {
-		plan.Reservations, plan.Secrets = nil, nil
+		return CapabilityPlan{Definitions: slices.DeleteFunc(slices.Clone(n.definitions), func(d reconciliation.BlockDefinition) bool { return d.Kind != "Machine" })}, nil
 	}
-	return plan, err
+	return n.killHost.Plan(ctx, input)
 }
 
 func (n killNodes) DeletesMachine(block reconciliation.Block) bool { return block.Kind == "Machine" }
@@ -425,8 +426,10 @@ func (n killNodes) StartPower(context.Context, Probe) (Quiescence, error) {
 	return Quiescence{State: Quiescent, Reason: "its domain is shut off"}, nil
 }
 
+const killResetContract = "machine-kill-root-reset-v1"
+
 func (n killNodes) RootResetContract() (string, string) {
-	return "machine-kill-root-reset-v1", "kill-root-reset"
+	return killResetContract, "kill-root-reset"
 }
 
 func (n killNodes) RootResetSecrets(reconciliation.Block) ([]string, error) { return nil, nil }
@@ -451,7 +454,7 @@ func (n killNodes) ObserveRootDisk(_ context.Context, reset RootReset) (reconcil
 
 func (r *killRig) resolver(host *killHost) CapabilityResolver {
 	if !r.nodes {
-		return testResolver{capability: host}
+		return killResolverOf(host)
 	}
 	return keptResolver{
 		{Kind: "Machine", Implementation: "node-machine-v1", Family: reconciliation.ManagedMachineFamily}: killNodes{host, true},
@@ -463,7 +466,7 @@ func newKillRig(t *testing.T) *killRig {
 	t.Helper()
 	h := newPlannedHarness(t, killDefinitions())
 	host := newKillHost(killDefinitions())
-	h.service.capabilities = testResolver{capability: host}
+	h.service.capabilities = killResolverOf(host)
 	return &killRig{harness: h, host: host}
 }
 
@@ -653,7 +656,10 @@ func killInvoke(ctx context.Context, service Service, verb reconciliation.Verb) 
 func killInvokeAt(ctx context.Context, service Service, verb reconciliation.Verb, floor reconciliation.Stage) error {
 	if verb == reconciliation.Destroy {
 		request := DestroyRequest{ContextName: testContextName, Floor: string(floor), SkipConfirmation: true}
-		if _, nodes := service.capabilities.(keptResolver); nodes {
+		if resolver, kept := service.capabilities.(keptResolver); kept && slices.ContainsFunc(slices.Collect(maps.Values(resolver)), func(capability Capability) bool {
+			_, nodes := capability.(killNodes)
+			return nodes
+		}) {
 			request.Authorizations = []string{reconciliation.AuthorizationDataLoss}
 		}
 		_, err := service.Destroy(ctx, request)
@@ -739,7 +745,7 @@ func killUnreleased(binder *testBinder) int {
 // operation or a completed removal), or holding an incomplete operation.
 func killRest(w *testWorkspace) string {
 	ctx := context.Background()
-	store := operationstore.New(w.area, w.logArea, killClock)
+	store := testOperationStore(w.area, w.logArea, killClock)
 	index, err := store.Index(ctx)
 	if err != nil {
 		return "unreadable index"
@@ -766,7 +772,7 @@ func killRest(w *testWorkspace) string {
 // and the operation it replaced, as a later invocation would.
 func killReadBack(w *testWorkspace) []string {
 	ctx := context.Background()
-	store := operationstore.New(w.area, w.logArea, killClock)
+	store := testOperationStore(w.area, w.logArea, killClock)
 	index, err := store.Index(ctx)
 	if err != nil {
 		return []string{"the index does not read back: " + err.Error()}
@@ -862,7 +868,7 @@ func killTrimmedCustody(snapshot *killSnapshot) []string {
 	if err != nil || !bytes.Equal(snapshot.workspace.evidence, trimmed) {
 		return nil
 	}
-	store := operationstore.New(snapshot.workspace.area, snapshot.workspace.logArea, killClock)
+	store := testOperationStore(snapshot.workspace.area, snapshot.workspace.logArea, killClock)
 	index, err := store.Index(ctx)
 	if err != nil || index.Current == "" {
 		return []string{"the evidence reads trimmed beside no operation"}
@@ -884,7 +890,7 @@ func killTrimmedCustody(snapshot *killSnapshot) []string {
 // attempts every operation of that verb recorded for the block.
 func killUnrecordedEffects(snapshot *killSnapshot) []string {
 	ctx := context.Background()
-	store := operationstore.New(snapshot.workspace.area, snapshot.workspace.logArea, killClock)
+	store := testOperationStore(snapshot.workspace.area, snapshot.workspace.logArea, killClock)
 	entries, err := snapshot.workspace.area.Entries(ctx, "")
 	if err != nil {
 		return []string{"the operation area does not list: " + err.Error()}
@@ -1115,6 +1121,15 @@ func killJourneys() []killJourney {
 			t.Fatalf("the apply a root-disk reset starts from failed: %+v", diagnostics.Of(err))
 		}
 	}
+	keptOnline := func(ctx context.Context, t *testing.T, rig *killRig) {
+		t.Helper()
+		node := stagedDefinition("node", reconciliation.StageMachines)
+		node.Kind, node.Implementation = "Machine", killMachineImplementation
+		rig.host.definitions = []reconciliation.BlockDefinition{node, stagedDefinition("b", reconciliation.StageClusters, "node")}
+		rig.host.keptOnline = map[string][]string{"b": {"node"}}
+		rig.harness.service.capabilities = killResolverOf(rig.host)
+		applied(ctx, t, rig)
+	}
 	restored := func(ctx context.Context, t *testing.T, rig *killRig) {
 		t.Helper()
 		trimmedAt(reconciliation.StageClusters)(ctx, t, rig)
@@ -1132,6 +1147,7 @@ func killJourneys() []killJourney {
 		{name: "staged-failed-lower-floor", bound: killBoundReplacement, start: stagedFailed, run: reconciliation.Destroy, retry: reconciliation.Destroy, floor: reconciliation.StageSubstrates},
 		{name: "staged-killed-widened", bound: killBoundPartial, start: stagedKilled, run: reconciliation.Destroy, retry: reconciliation.Destroy, reaches: killRemovalResolution()},
 		{name: "staged-then-whole", bound: killBoundDestroy, start: trimmedAt(reconciliation.StageClusters), run: reconciliation.Destroy, retry: reconciliation.Destroy},
+		{name: "staged-kept-online", bound: killBoundDestroy, start: keptOnline, run: reconciliation.Destroy, retry: reconciliation.Destroy, floor: reconciliation.StageClusters},
 		{name: "a", bound: killBoundFreshApply, run: reconciliation.Apply, retry: reconciliation.Apply},
 		{name: "b", bound: killBoundDestroy, start: applied, run: reconciliation.Destroy, retry: reconciliation.Destroy},
 		{name: "c", bound: killBoundContinuation, start: failedOnce, run: reconciliation.Apply, retry: reconciliation.Apply},
@@ -1257,7 +1273,7 @@ func killJourneyOutcomes(ctx context.Context, t *testing.T, journey killJourney,
 	names := &killPoints{counts: map[string]int{}}
 	rig.arm(names)
 	if err := killInvokeAt(ctx, rig.harness.service, journey.run, journey.floor); err != nil {
-		t.Fatalf("the uninterrupted journey failed: %v", err)
+		t.Fatalf("the uninterrupted journey failed: %+v", diagnostics.Of(err))
 	}
 	rig.harness.workspace.area.landing, rig.harness.workspace.logArea.landing, rig.harness.workspace.runArea.landing, rig.harness.workspace.kill = nil, nil, nil, nil
 	rig.harness.binder.kill = nil

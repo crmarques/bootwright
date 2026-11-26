@@ -156,6 +156,9 @@ options:
       - osd-orphan-booted
       - osd-orphan-unproved
       - osd-class-drift
+      - kept-foreign-client
+      - kept-user-data
+      - kept-unread
       - device-serial-absent
       - device-serial-ambiguous
       - device-serial-mismatch

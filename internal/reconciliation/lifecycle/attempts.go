@@ -102,10 +102,8 @@ func (s Service) runAttempt(ctx context.Context, run invocation, block reconcili
 	result, runErr := s.invoke(ctx, run, block, invokeRecords{proved: proved, applyProved: applyProved, preparations: preparations, log: log, attempt: number}, position, total, func(inner context.Context, execution Execution) (Result, error) {
 		if operation.Verb == reconciliation.Destroy {
 			execution.RetiredWithHosts = retired[block.ID]
-			if reread {
-				if result, settled, err := rereadBeforeRemoval(inner, s.removalObserver(run, capability), execution); settled {
-					return result, err
-				}
+			if result, settled, err := s.proveAndReread(inner, run, capability, execution, reread); settled {
+				return result, err
 			}
 			if err := s.keepBeforeRemoval(inner, tx, boundary, log, capability, execution); err != nil {
 				return Result{Outcome: reconciliation.OutcomeFailed}, err
@@ -370,7 +368,7 @@ func (s Service) resolveUnknown(ctx context.Context, run invocation, block recon
 func (s Service) removalResolutionExecution(ctx context.Context, run invocation, execution *Execution, target string) error {
 	execution.MachineStopped = s.machineStopped(run, *execution)
 	if run.operation.Verb != reconciliation.Apply {
-		return nil
+		return s.proveKeptContract(ctx, run.store, run.operation, execution.Block)
 	}
 	dependents, err := originalRemovalDependents(ctx, run.store, run.operation, target)
 	if err != nil {

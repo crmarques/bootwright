@@ -569,7 +569,7 @@ func (c HostCapability) run(ctx context.Context, e lifecycle.Execution, operatio
 	}
 	execution, files, cleanup := e, []lifecycle.MaterialFile(nil), func() {}
 	hostForRemoval, _ := r.target()
-	if operation != "destroy" || hostForRemoval.RetainRoot {
+	if operation != "destroy" || hostForRemoval.RetainRoot || keptBlock(e.Block) {
 		execution, files, cleanup, err = hostMaterial(e, r, operation, c.proofs)
 		if err != nil {
 			return lifecycle.RunResult{}, err
@@ -590,6 +590,9 @@ func (c HostCapability) run(ctx context.Context, e lifecycle.Execution, operatio
 	values := map[string]string{}
 	if len(removal) != 0 && removal[0] {
 		values["removal"] = "true"
+	}
+	if keptBlock(e.Block) && (operation == "destroy" || values["removal"] == "true") {
+		values["kept"] = "true"
 	}
 	deadline := hostDeadline(operation)
 	if operation == "destroy" && host.RetainRoot {
@@ -655,6 +658,13 @@ func (c HostCapability) Destroy(ctx context.Context, e lifecycle.Execution) (lif
 		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, decodeErr
 	}
 	host, _ := frozen.target()
+	if keptBlock(e.Block) {
+		_, evidence, err := c.releaseKept(ctx, e, "destroy")
+		if err != nil {
+			return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
+		}
+		return lifecycle.Result{Outcome: reconciliation.OutcomeChanged, Evidence: evidence}, nil
+	}
 	if host.Physical {
 		evidence, err := physicalHostRelease(e, frozen)
 		if err != nil {
@@ -695,6 +705,16 @@ func (c HostCapability) ObserveRemoval(ctx context.Context, e lifecycle.Executio
 		return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, decodeErr
 	}
 	host, _ := frozen.target()
+	if keptBlock(e.Block) {
+		observed, evidence, err := c.releaseKept(ctx, e, "observe")
+		if err != nil {
+			return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, err
+		}
+		if observed.Removed {
+			return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: evidence}, nil
+		}
+		return lifecycle.Observation{Effect: reconciliation.EffectNoEffect}, nil
+	}
 	if host.Physical {
 		evidence, err := physicalHostRelease(e, frozen)
 		if err != nil {

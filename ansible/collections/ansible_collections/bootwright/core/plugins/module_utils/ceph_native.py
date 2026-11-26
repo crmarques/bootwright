@@ -60,7 +60,8 @@ MAX_REGISTRY = 65536
 # route rather than treating a version identifier as transport trust.
 DEVICE_IDENTITIES = "device-identities.json"
 DEVICE_IDENTITIES_VERSION = "ceph-cluster-device-identities-v1"
-HOST_PHASES = frozenset(("images", "profile", "route", "device_identity", "host_devices", "host_observe", "fips_observe"))
+HOST_PHASES = frozenset(("images", "profile", "route", "device_identity", "host_devices", "host_observe", "fips_observe", "host_release",
+                         "host_release_observe"))
 WORKER_DEADLINE = None
 
 SCOPE_MEMBERS = frozenset(("controller", "version", "cluster", "owner", "fsid", "image", "cephadm", "bootstrap", "hosts", "services", "clusterSSHUser",
@@ -87,9 +88,11 @@ CORE_PHASES = frozenset(("prerequisites", "claim", "devices", "osd_prepare", "tu
                          "tunnel_configure", "tunnel_mount",
                          "cache", "enroll", "license", "services", "stretch_locate", "stretch_enable", "dashboard", "dashboard_read", "dashboard_present",
                          "observe", "unrecorded_observe", "bootstrap_state", "host_state", "destroy", "tiebreaker_observe", "tiebreaker_remove",
-                         "physical_host_observe", "physical_host_remove", "managers_observe", "managers_stop"))
+                         "physical_host_observe", "physical_host_remove", "managers_observe", "managers_stop",
+                         "kept_managers_observe", "kept_managers_stop", "kept_host_observe", "kept_host_remove", "kept_unused"))
 CORE_READ_ONLY_PHASES = frozenset(("prerequisites", "devices", "tunnel_preflight", "observe", "unrecorded_observe", "bootstrap_state", "host_state",
-                                   "dashboard_read", "dashboard_present", "tiebreaker_observe", "physical_host_observe", "managers_observe"))
+                                   "dashboard_read", "dashboard_present", "tiebreaker_observe", "physical_host_observe", "managers_observe",
+                                   "kept_managers_observe", "kept_host_observe"))
 # The cluster observation of a read no operation records, such as `bootwright diff --observe`: the only phase that lists the cluster's
 # pools and reports an OSD no declared service places instead of refusing it foreign-osd.
 UNRECORDED_OBSERVE = "unrecorded_observe"
@@ -2610,6 +2613,26 @@ class Worker:
     def managers_stop(self):
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_stretch
         return ceph_native_stretch.ManagerStop(self).stop()
+
+    def kept_managers_observe(self):
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_kept
+        return ceph_native_kept.KeptManagerStop(self).observe()
+
+    def kept_managers_stop(self):
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_kept
+        return ceph_native_kept.KeptManagerStop(self).stop()
+
+    def kept_unused(self):
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_kept
+        return ceph_native_kept.KeptUsage(self).check()
+
+    def kept_host_observe(self):
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_kept
+        return ceph_native_kept.KeptHostRemoval(self).observe()
+
+    def kept_host_remove(self):
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_kept
+        return ceph_native_kept.KeptHostRemoval(self).remove()
 
     def dashboard_scope(self):
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_dashboard

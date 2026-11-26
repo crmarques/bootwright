@@ -1,0 +1,141 @@
+implementation: storage-ceph-host-kept-release-v1
+content-digest: fc9be8783b3857b21d2b393446e9f8f11b7dd98c2529a2ce9f4fe3b4fc5fe85e
+request-version: ceph-host-v1
+automation-formats: none
+mark-formats: none
+proof-ids: none
+fixed-places: none
+effect-pins:
+  host-records-removed-packages-and-image-kept
+request-identity:
+  host
+  cluster.cluster
+  cluster.fsid
+  cluster.owner
+request-schema:
+  cluster struct ceph.ClusterScope
+  cluster.ansiblePackageVersion string
+  cluster.auxiliary []struct ceph.AuxiliaryReference omitempty
+  cluster.auxiliary[].image string
+  cluster.auxiliary[].name string
+  cluster.bootstrap string
+  cluster.callHome string
+  cluster.callHomeProxy string omitempty
+  cluster.cephadm struct ceph.Tool
+  cluster.cephadm.packageVersion string
+  cluster.cephadm.path string
+  cluster.cluster string
+  cluster.clusterKeyRef string
+  cluster.clusterNetworks []string
+  cluster.clusterSSHTransport string
+  cluster.clusterSSHUser string
+  cluster.config map[string]map[string]string omitempty
+  cluster.controller string
+  cluster.delegated []struct ceph.DelegatedService omitempty
+  cluster.delegated[].hosts []string
+  cluster.delegated[].name string
+  cluster.fsid string omitempty
+  cluster.hosts []struct ceph.Host
+  cluster.hosts[].address string
+  cluster.hosts[].devices []struct ceph.Device
+  cluster.hosts[].devices[].path string
+  cluster.hosts[].devices[].rotational bool omitempty
+  cluster.hosts[].devices[].serial string
+  cluster.hosts[].devices[].sizeBytes int64
+  cluster.hosts[].devices[].wwn string omitempty
+  cluster.hosts[].hardware *struct ceph.PhysicalIdentity omitempty
+  cluster.hosts[].hardware.macs []string
+  cluster.hosts[].hardware.uuid string
+  cluster.hosts[].hostKeyRef string omitempty
+  cluster.hosts[].knownHosts string omitempty
+  cluster.hosts[].knownHostsRef string omitempty
+  cluster.hosts[].labels []string
+  cluster.hosts[].location map[string]string
+  cluster.hosts[].machine string
+  cluster.hosts[].name string
+  cluster.hosts[].physical bool omitempty
+  cluster.hosts[].port int
+  cluster.hosts[].provided bool omitempty
+  cluster.hosts[].retainRoot bool omitempty
+  cluster.hosts[].rootSerial string omitempty
+  cluster.hosts[].rootWWN string omitempty
+  cluster.hosts[].sshKeyRef string
+  cluster.hosts[].user string
+  cluster.image string
+  cluster.monIP string
+  cluster.nfsGaneshaPackageVersion string omitempty
+  cluster.owner string omitempty
+  cluster.packageRepository string
+  cluster.packageRepositoryKey string
+  cluster.packages *struct ceph.PackageRequest omitempty
+  cluster.packages.licenseAccepted bool
+  cluster.packages.packageRepositoryTrustBundleRef string omitempty
+  cluster.packages.repositoryProxy string
+  cluster.packages.sources []struct ceph.PackageSource
+  cluster.packages.sources[].certificateRef string
+  cluster.packages.sources[].host string
+  cluster.packages.sources[].media string omitempty
+  cluster.packages.sources[].mediaSHA256 string omitempty
+  cluster.packages.sources[].mediaSize int64 omitempty
+  cluster.packages.sources[].profile string
+  cluster.packages.sources[].publicationPath string omitempty
+  cluster.packages.sources[].subscription *struct ceph.SubscriptionSource omitempty
+  cluster.packages.sources[].subscription.contentBaseURL string
+  cluster.packages.sources[].subscription.hostname string
+  cluster.packages.sources[].url string omitempty
+  cluster.packages.version string
+  cluster.publicNetworks []string
+  cluster.registry string
+  cluster.registryProxy string omitempty
+  cluster.registryRef string
+  cluster.registryTrustBundleRef string omitempty
+  cluster.release string
+  cluster.security *struct ceph.Security omitempty
+  cluster.security.cephxKeyType string omitempty
+  cluster.security.fips bool
+  cluster.services []opaque
+  cluster.singleHostDefaults bool omitempty
+  cluster.stretch *struct ceph.Stretch omitempty
+  cluster.stretch.dataSites []string
+  cluster.stretch.failureDomain string
+  cluster.stretch.rule string
+  cluster.stretch.tiebreaker string
+  cluster.stretch.tiebreakerSite string
+  cluster.version string
+  host string
+  imagesSeconds int
+  pulls []struct ceph.ImagePull
+  pulls[].group string
+  pulls[].names []string
+  version string
+evidence-schema:
+  cephadmSHA256 string
+  nativeRemoved bool omitempty
+  devices []struct ceph.HostDevice
+  devices[].alias string omitempty
+  devices[].deviceID string
+  devices[].kernelPath string omitempty
+  devices[].path string
+  devices[].rotational bool omitempty
+  devices[].serial string
+  devices[].sizeBytes int64 omitempty
+  devices[].wwn string omitempty
+  fips *struct ceph.HostFIPS omitempty
+  fips.kernel string
+  fips.policy string
+  fsid string
+  gid int
+  host string
+  image string
+  imageID string
+  label string
+  owner string
+  planDigest string
+  policySHA256 string
+  ready bool
+  removed bool
+  request string
+  route bool
+  specializations []string omitempty
+  uid int
+  version string

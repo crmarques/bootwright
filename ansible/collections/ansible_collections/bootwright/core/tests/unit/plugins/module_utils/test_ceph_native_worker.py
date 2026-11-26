@@ -31,6 +31,7 @@ def source_bundle():
             "held_directory": '"""Fixed fixture."""\n', "registry_auth": '"""Fixed fixture."""\n', "private_files": '"""Fixed fixture."""\n',
             "ceph_tunnel": '"""Fixed fixture."""\n', "ceph_tunnel_staging": '"""Fixed fixture."""\n', "ceph_tunnel_custody": '"""Fixed fixture."""\n',
             "ceph_native_observe": '"""Fixed fixture."""\n', "ceph_native_stretch": '"""Fixed fixture."""\n', "ceph_native_resources": '"""Fixed fixture."""\n',
+            "ceph_native_kept": '"""Fixed fixture."""\n',
             "ceph_native_nvmeof": '"""Fixed fixture."""\n', "ceph_native_nfs": '"""Fixed fixture."""\n', "ceph_native_observability": '"""Fixed fixture."""\n',
             "ceph_signon_native": '"""Fixed fixture."""\n',
             "ceph_native_units": '"""Fixed fixture."""\n',

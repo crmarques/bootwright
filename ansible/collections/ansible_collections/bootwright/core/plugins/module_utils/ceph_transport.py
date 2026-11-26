@@ -18,12 +18,12 @@ from ansible_collections.bootwright.core.plugins.module_utils import (
     bounded_process, canonical_json, ceph_admin_credentials_native, ceph_crypto_policy, ceph_evidence, ceph_export_dns, ceph_export_native,
     ceph_host_device_probe, ceph_host_image_probe, ceph_host_label_probe, ceph_host_route_probe, ceph_host_runtime, ceph_host_worker,
     ceph_monitoring_logins_native, ceph_monitoring_template, ceph_native, ceph_native_bootstrap, ceph_native_dashboard,
-    ceph_native_nfs, ceph_native_nvmeof, ceph_native_object, ceph_native_observability, ceph_native_observe, ceph_native_osd, ceph_native_registry,
-    ceph_native_resources, ceph_native_stretch, ceph_native_units, ceph_native_validate, ceph_native_worker, ceph_package_sources,
-    ceph_package_worker, ceph_packages, ceph_pull_broker, ceph_registry_discovery, ceph_replication_native, ceph_signon_native, ceph_smb_native,
-    ceph_ssh_policy, ceph_tunnel, ceph_tunnel_custody, ceph_tunnel_staging, held_directory, managedos_guest_ssh, native_apply, native_diagnostics,
-    native_resolution, native_signatures, native_specializations, physical_erase_worker, physical_machine_identity,
-    private_files, registry_auth, remote_command, tls_trust,
+    ceph_native_kept, ceph_native_nfs, ceph_native_nvmeof, ceph_native_object, ceph_native_observability, ceph_native_observe, ceph_native_osd,
+    ceph_native_registry, ceph_native_resources, ceph_native_stretch, ceph_native_units, ceph_native_validate, ceph_native_worker,
+    ceph_package_sources, ceph_package_worker, ceph_packages, ceph_pull_broker, ceph_registry_discovery, ceph_replication_native,
+    ceph_signon_native, ceph_smb_native, ceph_ssh_policy, ceph_tunnel, ceph_tunnel_custody, ceph_tunnel_staging, held_directory,
+    managedos_guest_ssh, native_apply, native_diagnostics, native_resolution, native_signatures, native_specializations, physical_erase_worker,
+    physical_machine_identity, private_files, registry_auth, remote_command, tls_trust,
     transport_faults,
 )
 
@@ -93,7 +93,7 @@ def shipped_native_sources():
                ceph_native_registry, ceph_native_osd, ceph_native_dashboard, ceph_native_bootstrap, ceph_native_validate,
                ceph_host_device_probe, ceph_host_image_probe, ceph_host_label_probe, ceph_host_route_probe, ceph_pull_broker,
                physical_machine_identity, physical_erase_worker,
-               ceph_host_runtime, ceph_admin_credentials_native, ceph_monitoring_logins_native)
+               ceph_host_runtime, ceph_admin_credentials_native, ceph_monitoring_logins_native, ceph_native_kept)
     sources = {module.__name__.rsplit(".", 1)[-1]: inspect.getsource(module) for module in modules}
     ceph_native.require(tuple(sources) == ceph_native_worker.MODULES, "transport")
     return tuple(sources.items())

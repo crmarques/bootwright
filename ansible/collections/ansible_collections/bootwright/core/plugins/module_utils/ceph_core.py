@@ -75,6 +75,8 @@ HOST_REASONS = (
 )
 # The retirement selector of the round that stops every data host's managers before any FSID removal.
 MANAGERS_RETIREMENT = "managers"
+# The retirement selector of a never-used cluster taken back from kept hosts that stay running (a staged destroy, B1862).
+KEPT_RETIREMENT = "kept"
 # A sign-on's suspension operations (specs/cli/cluster-sign-on.md), and the selector of a suspended sign-on's observation.
 SIGNON_OPERATIONS = ("suspend_prepare", "suspend", "resume")
 SIGNON_SUSPENDED = "suspended"
@@ -103,6 +105,7 @@ CLUSTER_REASONS = (
     "stretch-intent", "stretch-interrupted", "stretch-location", "stretch-weight", "stretch-rule", "stretch-foreign", "stretch-pools",
     "stretch-drift", "tiebreaker-foreign", "tiebreaker-unreachable", "managers-running", "device-not-empty", "foreign-osd",
     "osd-partial", "osd-clear-failed", "osd-clear-unproved", "osd-orphan-booted", "osd-orphan-unproved", "osd-class-drift",
+    "kept-foreign-client", "kept-user-data", "kept-unread",
 )
 # The refusals an administrator login's module may publish, each one its Go caller names (loginRefusals in internal/storage/ceph).
 ADMIN_REASONS = (
@@ -731,10 +734,62 @@ def execute_managers(request, operation, request_digest, transport, outputs):
     return {"changed": changed, "evidence": ceph_evidence.managers_evidence(value, request_digest, request)}
 
 
+def execute_kept(request, operation, request_digest, transport, outputs):
+    """A never-used cluster taken back from every kept host while it runs, or the read-only observation of that teardown.
+
+    A removal first proves on the bootstrap host that the cluster holds no client or data its own steps did not create, then stops and disables every host's
+    managers in one round and reads them stopped in a second, so no manager writes the FSID back onto a host just cleaned; then each host
+    removes the FSID and the records kept of it, one device zap per call, in rounds over the hosts that still report work remaining. A
+    host that does not answer refuses `transport`, which leaves the outcome unknown, never absent.
+    """
+    ceph_native.require(operation in ("observe", "destroy") and request["action"] == "cluster" and not outputs, "request")
+    hosts = request["hosts"]
+    changed = False
+    if operation == "destroy":
+        bootstrap = next(host for host in hosts if host["name"] == request["bootstrap"])
+        ceph_native.require(transport.call(bootstrap, "kept_unused") == {"unused": True}, "evidence")
+        stops = host_round(transport, hosts, "kept_managers_stop")
+        ceph_native.require(all(isinstance(stop, dict) and set(stop) == {"changed"} and type(stop["changed"]) is bool for stop in stops), "evidence")
+        readings = host_round(transport, hosts, "kept_managers_observe")
+        ceph_native.require(all(isinstance(read, dict) and set(read) == {"stopped"} and type(read["stopped"]) is bool for read in readings), "evidence")
+        ceph_native.require(all(read["stopped"] for read in readings), "managers-running")
+        changed = any(stop["changed"] for stop in stops)
+        results = kept_removal_rounds(transport, hosts)
+    else:
+        results = host_round(transport, hosts, "kept_host_observe")
+        ceph_native.require(all(isinstance(result, dict) and set(result) == {"removed", "attempted"}
+                                and all(type(result[key]) is bool for key in result) for result in results), "evidence")
+    changed = changed or any(result.get("changed", False) for result in results)
+    value = {"version": ceph_evidence.KEPT_EVIDENCE, "request": request_digest, "owner": request["owner"], "fsid": request["fsid"],
+             "hosts": [{"host": host["name"], "removed": result["removed"], "attempted": result["attempted"]} for host, result in zip(hosts, results)]}
+    return {"changed": changed, "evidence": ceph_evidence.kept_evidence(value, request_digest, request)}
+
+
+def kept_removal_rounds(transport, hosts):
+    """Each host's FSID removal, repeated over the hosts that report work remaining: one device zap per call, then one call for the
+    rest, so a host needs at most its device count plus one call, and one round more is allowed; any host still remaining after that
+    refuses not-removed. Each result is the host's last, its changed and attempted members joined over every call."""
+    members = {"changed", "removed", "attempted", "remaining"}
+    results, pending = [None] * len(hosts), list(range(len(hosts)))
+    for unused in range(max(len(host.get("devices", [])) for host in hosts) + 2):
+        answers = host_round(transport, [hosts[index] for index in pending], "kept_host_remove")
+        ceph_native.require(all(isinstance(answer, dict) and set(answer) == members and all(type(answer[key]) is bool for key in members)
+                                and not (answer["removed"] and answer["remaining"]) for answer in answers), "evidence")
+        for index, answer in zip(pending, answers):
+            earlier = results[index] or {"changed": False, "attempted": False}
+            results[index] = {"changed": earlier["changed"] or answer["changed"], "removed": answer["removed"],
+                              "attempted": earlier["attempted"] or answer["attempted"]}
+        pending = [index for index, answer in zip(pending, answers) if answer["remaining"]]
+        if not pending:
+            break
+    ceph_native.require(not pending and all(result["removed"] for result in results), "not-removed")
+    return results
+
+
 def admit_selectors(request, operation, outputs, retirement, reading, shared=None):
     """The closed selectors beside the material: a tiebreaker's or the managers' retirement; the unrecorded reading only a cluster
     observation with no output takes; and the host reading a resource observation with no output either takes or replays, never both."""
-    ceph_native.require(retirement in (None, "tiebreaker", MANAGERS_RETIREMENT), "request")
+    ceph_native.require(retirement in (None, "tiebreaker", MANAGERS_RETIREMENT, KEPT_RETIREMENT), "request")
     ceph_native.require(reading in (None, HOSTS_READING) or reading == UNRECORDED_READING and operation == "observe" and retirement is None
                         and request["action"] == "cluster" and not outputs, "request")
     hosts = reading == HOSTS_READING or shared is not None
@@ -782,6 +837,8 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
         ceph_native.require(ceph_native.supported_transport(request), "unsupported-release")
     if retirement == MANAGERS_RETIREMENT:
         return execute_managers(request, operation, request_digest, transport, outputs)
+    if retirement == KEPT_RETIREMENT:
+        return execute_kept(request, operation, request_digest, transport, outputs)
     if retirement is not None:
         return execute_tiebreaker(request, operation, request_digest, transport, outputs)
     bootstrap = next(h for h in request["hosts"] if h["name"] == request["bootstrap"])
@@ -1785,13 +1842,23 @@ def host_step(request, step, request_digest, transport, *, plan_digest="", appli
     return {"changed": False, "evidence": observation}
 
 
-def execute_host(request, operation, request_digest, transport):
-    """An observation or a release; an apply is its role's ordered host steps, composed here in the same order."""
+def execute_host(request, operation, request_digest, transport, kept=False):
+    """An observation or a release; an apply is its role's ordered host steps, composed here in the same order. A kept host's release,
+    in a staged destroy that keeps it running, removes its preparation records for the cluster and keeps its packages and image."""
     host_request(request, removal=operation in ("destroy", "observe-remove"))
     cluster = request["cluster"]
     ceph_native.require(operation in ("apply", "observe", "destroy", "observe-remove"))
     ceph_native.require(ceph_native.digest(request_digest))
+    ceph_native.require(not kept or operation in ("destroy", "observe-remove"), "request")
     host = next(item for item in cluster["hosts"] if item["name"] == request["host"])
+    if kept:
+        ceph_native.require(not host.get("physical"), "request")
+        result = transport.call(host, "host_release" if operation == "destroy" else "host_release_observe")
+        members = {"changed", "removed"} if operation == "destroy" else {"removed"}
+        ceph_native.require(isinstance(result, dict) and set(result) == members and all(type(result[key]) is bool for key in members), "evidence")
+        ceph_native.require(operation != "destroy" or result["removed"], "not-removed")
+        observation = dict(released(request, request_digest), removed=result["removed"])
+        return {"changed": result.get("changed", False), "evidence": ceph_evidence.host_evidence(observation, request_digest, request)}
     if host.get("physical") and host.get("retainRoot") and operation in ("destroy", "observe-remove"):
         phase = "physical_host_remove" if operation == "destroy" else "physical_host_observe"
         if operation == "destroy":

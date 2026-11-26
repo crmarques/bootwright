@@ -154,6 +154,9 @@ var (
 	destroyStageKeepsHost = diagnostics.Stop{Code: "destroy.stage-keeps-host", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryFixThenRepeat,
 		Meaning: "a step a staged destroy would take back runs on a Machine it keeps, which nothing yet takes such a step back from, so nothing was registered", Remedy: "repeat with the stage or the item the message names, or destroy without --stage"}
+	destroyKeptHostStopped = diagnostics.Stop{Code: "destroy.kept-host-stopped", Level: diagnostics.LevelRemoval, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "a staged destroy takes back steps on a kept Machine while it runs, and that Machine was not proved running, so it took back nothing", Remedy: "start the Machine the message names, then repeat the destroy"}
 	destroyStageChanged = diagnostics.Stop{Code: "destroy.stage-changed", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryFixThenRepeat,
 		Meaning: "a later floor than an unfinished staged destroy froze, or any floor over an unfinished whole destroy, would narrow it, so nothing was registered", Remedy: "finish it with the command the message names, or review and take back the whole context with the commands it names"}
@@ -337,7 +340,7 @@ var stops = []diagnostics.Stop{engineRecordsFull, engineRecordsReadOnly, engineR
 	planInputUncompilable, planCapabilityMissing, planCapabilityDefect, planHostKeyUnbound, planEnvironmentInvalid,
 	engineUnindexedRecords, engineRequestDefect, engineOtherBuild, destroyInverseMoved, destroyInverseUnstated, enginePlanMoved, engineInputMoved, engineBindingLost, authorizeUnneeded,
 	authorizeMissing, authorizeStale, authorizeRebindInvalid, destroyStageSelected,
-	destroyStageBelowFloor, destroyStageKeepsUnfinished, destroyStageKeepsHost, destroyStageChanged, applyKeptBlockChanged, applyRestoreEmpty, applyRestoreAddsNew, applyUntilBeforePreparation, applyTargetBeforePreparation,
+	destroyStageBelowFloor, destroyStageKeepsUnfinished, destroyStageKeepsHost, destroyKeptHostStopped, destroyStageChanged, applyKeptBlockChanged, applyRestoreEmpty, applyRestoreAddsNew, applyUntilBeforePreparation, applyTargetBeforePreparation,
 	engineRecordsDamaged, applyProducedInputMissing, engineRecaptureMismatch, engineResolvedUnperformed, engineResolvedPartial, destroyPostconditionUnknown,
 	prepareRefused, prepareUnsupported,
 	engineBorrowedSSH, engineConfirmationRequired, engineInputInvalid, engineCredentialMoved, engineFinalizationIncomplete,

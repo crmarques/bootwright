@@ -916,6 +916,7 @@ argument_specs:
           - Runner-owned private material file paths.
           - C(retirement) C(tiebreaker) selects a provided stretch tiebreaker's removal or its read-only observation.
           - C(retirement) C(managers) stops and disables every data host's managers of the cluster, or reads that none runs or is enabled.
+          - C(retirement) C(kept) takes a never-used cluster back from every kept host while it runs, or reads that teardown.
           - C(reading) C(hosts) reads each host's state once for a diff's resource observations; C(hosts) lends that reading to one.
           - C(signOn) C(suspended) observes a suspended sign-on; C(signOnBaseline) lends a suspension its recorded before-state.
       bootwright_ceph_output:

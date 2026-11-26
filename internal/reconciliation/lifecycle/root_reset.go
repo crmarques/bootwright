@@ -26,7 +26,7 @@ func (s Service) removeBlanking(ctx context.Context, run invocation, capability 
 	if len(frozenBlanked(execution.Block)) == 0 {
 		return capability.Destroy(ctx, execution)
 	}
-	targets, err := s.resetTargets(ctx, run.store, run.operation, execution.Block, true)
+	targets, err := s.resetTargets(ctx, run.store, run.operation, execution.Block)
 	if err != nil {
 		return Result{Outcome: reconciliation.OutcomeFailed}, err
 	}
@@ -58,7 +58,7 @@ func (s Service) observeBlanking(ctx context.Context, run invocation, capability
 	if run.operation.Verb != reconciliation.Destroy || len(frozenBlanked(execution.Block)) == 0 {
 		return capability.ObserveRemoval(ctx, execution)
 	}
-	targets, err := s.resetTargets(ctx, run.store, run.operation, execution.Block, true)
+	targets, err := s.resetTargets(ctx, run.store, run.operation, execution.Block)
 	if err != nil {
 		return Observation{Effect: reconciliation.EffectUnknown}, err
 	}
@@ -107,7 +107,7 @@ func (s Service) rootDisks(ctx context.Context, run invocation, execution Execut
 	return changed, combined, nil
 }
 
-func (s Service) resetTargets(ctx context.Context, store recordReader, operation operationstore.Operation, block reconciliation.Block, proved bool) ([]resetTarget, error) {
+func (s Service) resetTargets(ctx context.Context, store recordReader, operation operationstore.Operation, block reconciliation.Block) ([]resetTarget, error) {
 	held, err := sourceLineage(ctx, store, operation.Source)
 	if err != nil {
 		return nil, err
@@ -125,15 +125,6 @@ func (s Service) resetTargets(ctx context.Context, store recordReader, operation
 		}
 		if err := s.proveContracts(reconciliation.Plan{Blocks: []reconciliation.Block{target.original}}, target.member.operation.Contracts); err != nil {
 			return nil, err
-		}
-		if proved {
-			implementation, fingerprint, err := s.resetContract(target)
-			if err != nil {
-				return nil, err
-			}
-			if operation.Contracts[implementation] != fingerprint {
-				return nil, contractFailure("this executable does not support the recorded root reset contract of Machine/%s", machine)
-			}
 		}
 		targets = append(targets, target)
 	}
@@ -155,50 +146,6 @@ func (s Service) resetTargetOf(operation operationstore.Operation, owned owners,
 		}
 	}
 	return resetTarget{}, false
-}
-
-func (s Service) resetContract(target resetTarget) (string, string, error) {
-	implementation, digest := target.port.RootResetContract()
-	contract := reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{ID: target.original.ID + "/root-reset", Kind: target.original.Kind, Object: target.original.Object,
-		Implementation: implementation, ContentDigest: digest}}
-	contracts, err := s.executionContracts(reconciliation.Plan{Blocks: []reconciliation.Block{contract}})
-	return implementation, contracts[implementation], err
-}
-
-func (s Service) recordResetContracts(ctx context.Context, store recordReader, plan reconciliation.Plan, source string, stage *operationstore.Stage, contracts map[string]string) error {
-	operation := operationstore.Operation{Source: source, Stage: stage}
-	for _, block := range plan.Blocks {
-		if len(frozenBlanked(block)) == 0 {
-			continue
-		}
-		targets, err := s.resetTargets(ctx, store, operation, block, false)
-		if err != nil {
-			return err
-		}
-		for _, target := range targets {
-			implementation, fingerprint, err := s.resetContract(target)
-			if err != nil {
-				return err
-			}
-			if held, found := contracts[implementation]; found && held != fingerprint {
-				return contractFailure("block %s names a conflicting execution contract", block.ID)
-			}
-			contracts[implementation] = fingerprint
-		}
-	}
-	return nil
-}
-
-func (s Service) proveResetContracts(ctx context.Context, store recordReader, plan reconciliation.Plan, operation operationstore.Operation) error {
-	for _, block := range plan.Blocks {
-		if len(frozenBlanked(block)) == 0 {
-			continue
-		}
-		if _, err := s.resetTargets(ctx, store, operation, block, true); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (s Service) rootReset(ctx context.Context, run invocation, execution Execution, target resetTarget) (RootReset, error) {

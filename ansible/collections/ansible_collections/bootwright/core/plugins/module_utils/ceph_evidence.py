@@ -26,6 +26,9 @@ TIEBREAKER_EVIDENCE = "ceph-tiebreaker-evidence-v1"
 TIEBREAKER_MEMBERS = frozenset(("version", "request", "owner", "fsid", "host", "removed", "attempted"))
 MANAGERS_EVIDENCE = "ceph-managers-evidence-v1"
 MANAGERS_MEMBERS = frozenset(("version", "request", "owner", "fsid", "stopped"))
+KEPT_EVIDENCE = "ceph-kept-teardown-evidence-v1"
+KEPT_MEMBERS = frozenset(("version", "request", "owner", "fsid", "hosts"))
+KEPT_HOST_MEMBERS = frozenset(("host", "removed", "attempted"))
 SIGNON_SUSPENSION_EVIDENCE = "ceph-signon-suspension-v1"
 SUSPENSION_MEMBERS = frozenset(("version", "request", "state", "changed", "baseline"))
 SUSPENSION_DAEMON = re.compile(r"[a-z][a-z0-9-]*\.[A-Za-z0-9][A-Za-z0-9_.-]{0,250}\Z")
@@ -341,6 +344,22 @@ def managers_evidence(value, request_digest, request=None):
                         and ceph_native.SUBVOLUME_UUID.fullmatch(value["fsid"]) is not None and type(value["stopped"]) is bool, "evidence")
     if request is not None:
         ceph_native.require(value["owner"] == request["owner"] and value["fsid"] == request["fsid"], "evidence")
+    return value
+
+
+def kept_evidence(value, request_digest, request=None):
+    """The closed evidence of a cluster's teardown from its kept hosts, or its observation: for each host in request order, whether nothing
+    of the FSID and no record of it remains, and whether a removal was attempted there; never a host's native output."""
+    ceph_native.require(isinstance(value, dict) and set(value) == KEPT_MEMBERS and value["version"] == KEPT_EVIDENCE, "evidence")
+    ceph_native.require(ceph_native.digest(request_digest) and value["request"] == request_digest, "evidence")
+    ceph_native.require(ceph_native.named(value["owner"]) and isinstance(value["fsid"], str)
+                        and ceph_native.SUBVOLUME_UUID.fullmatch(value["fsid"]) is not None and isinstance(value["hosts"], list), "evidence")
+    for host in value["hosts"]:
+        ceph_native.require(isinstance(host, dict) and set(host) == KEPT_HOST_MEMBERS and ceph_native.named(host["host"])
+                            and type(host["removed"]) is bool and type(host["attempted"]) is bool, "evidence")
+    if request is not None:
+        ceph_native.require(value["owner"] == request["owner"] and value["fsid"] == request["fsid"]
+                            and [host["host"] for host in value["hosts"]] == [host["name"] for host in request["hosts"]], "evidence")
     return value
 
 

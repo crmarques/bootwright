@@ -18744,3 +18744,46 @@ realized is blanked too.
 
 **Limits:** the proof is in-tree, over the engine's doubles and the
 collection's units, not a live run.
+
+## X763 — A never-used Ceph cluster is taken back on kept hosts
+
+**Items:** B1862. **Kind:** product. **Owner:** Storage, with Reconciliation.
+**Authorization:** [D288](backlog.md#d288) (7), the eighth slice of the
+[staged destroy design](../deferred/staged-destroy.md#program), defining the
+part of B491 for a cluster no data client was handed access to.
+
+**Outcome:** a staged destroy at `clusters` takes a Ceph cluster back from its
+kept virtual and provided hosts while no step of it that hands out access ever
+completed ([a never-used cluster on kept hosts](../ceph.md#a-never-used-cluster-on-kept-hosts)).
+Its steps answer `lifecycle.KeptHostRemoval` and `lifecycle.OnlineKeptHosts`,
+so `stage.keptPower` freezes their Machines `on`, or `reachable` when provided,
+and every invocation proves them running or refuses
+`destroy.kept-host-stopped` naming `machine start`
+([staged destroy](../state-reconciliation.md#staged-destroy)). The teardown
+stops every manager, removes the FSID, its tagged volumes on named devices and
+its key line, drop-in, credential and records from each host, and observes
+each absent; the restore's new FSID finds nothing foreign. The teardown and the
+host release are their own contracts, `storage-ceph-kept-teardown-v1` and
+`storage-ceph-host-kept-release-v1`, so no existing content digest moves. The
+kill harness gains the `staged-kept-online` journey.
+
+**Guard tests:** `TestAStagedDestroyTakesBackAStorageClusterOnKeptHostsThatStayRunning`,
+`TestAKeptHostThatMustRunRefusesWhileItIsOff`,
+`TestAStorageClusterThatHandedOutAccessRefusesItsKeptHostRemoval`,
+`TestAKeptHostNeededBothRunningAndOffRefuses`,
+`TestAStagedDestroyBlanksOneKeptNodeAndTearsDownStorageOnHostsThatRun`,
+`TestTheKeptOnlineJourneyKeepsItsMachineRunning`,
+`TestACephBlockIsTakenBackFromKeptHostsOnlyWhileNothingHandedOutAccess`,
+`TestTheClusterBlockTearsTheClusterDownFromItsKeptHosts`,
+`TestTheKeptTeardownIsObservedPerHost`,
+`TestAKeptHostReleaseRemovesOnlyItsPreparationRecords`,
+`TestAStagedDestroyProvesEveryKeptHostByAPowerTarget` and
+`test_ceph_kept_removal.py`.
+
+**Gates:** `make focus`; the delivering commit records the command and result.
+
+**Limits:** physical hosts, and clusters with SMB, consumer, replication or
+sign-on steps, refuse ([B1885](m2.md#b1885)); the proof is in-tree, over
+scripted hosts, not a live run, so the native footprint, the zap after the
+target stop and the worker ceiling with several devices wait for B1885's live
+acceptance.

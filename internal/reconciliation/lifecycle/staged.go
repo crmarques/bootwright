@@ -2,6 +2,7 @@ package lifecycle
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -317,6 +318,7 @@ func lowestStage(live reconciliation.Plan, ids []string) reconciliation.Stage {
 
 type keptAnswer struct {
 	hosts, blanks map[string][]string
+	online        map[string]bool
 	power         []operationstore.KeptPower
 }
 
@@ -339,11 +341,19 @@ func (s Service) keptHosts(ctx context.Context, name string, floor reconciliatio
 		slices.Sort(machines)
 		bound[id] = slices.DeleteFunc(slices.Compact(machines), func(machine string) bool { return !managed[machine] || deleted[machine] })
 	}
-	answer := keptAnswer{hosts: map[string][]string{}, blanks: map[string][]string{}}
+	answer := keptAnswer{hosts: map[string][]string{}, blanks: map[string][]string{}, online: map[string]bool{}}
 	for _, id := range steps {
 		block, _ := whole.Block(id)
 		kept, keeps := s.capabilityOf(block).(KeptHostRemoval)
 		named := s.namedMachines(whole, block)
+		online, runs := s.capabilityOf(block).(OnlineKeptHosts)
+		if keeps && runs {
+			hosts, err := online.OnlineKeptHosts(block)
+			if err != nil {
+				return keptAnswer{}, err
+			}
+			named, answer.online[id] = append(named, hosts...), true
+		}
 		if len(bound[id]) == 0 || !keeps || slices.ContainsFunc(bound[id], func(machine string) bool { return !slices.Contains(named, machine) }) {
 			continue
 		}
@@ -354,7 +364,17 @@ func (s Service) keptHosts(ctx context.Context, name string, floor reconciliatio
 				return keptAnswer{}, err
 			}
 		}
-		if refusal := kept.KeptHostsRefusal(block, read, false); refusal != "" {
+		if refusal := kept.KeptHostsRefusal(block, read, false); refusal != "" && answer.online[id] {
+			remedy := "take back the whole context with " + contextCommand(name, string(reconciliation.Destroy))
+			if !slices.ContainsFunc(bound[id], func(machine string) bool { return !virtual[machine] }) {
+				remedy = "take back from the machines stage with " + contextCommand(name, "destroy --dry-run", "--stage", string(reconciliation.StageMachines)) + ", which deletes them, or " + remedy
+			}
+			if read.State == reconciliation.BlockUnknown || read.State == reconciliation.BlockRunning {
+				remedy = "resolve the step with " + contextCommand(name, string(reconciliation.Apply)) + ", then repeat " +
+					contextCommand(name, string(reconciliation.Destroy), invocationFlags(floor, reconciliation.Selection{}, nil)...) + ", or " + remedy
+			}
+			return keptAnswer{}, destroyStageKeepsHost.Fail("the step "+id+" runs on Machine/"+strings.Join(bound[id], ", Machine/")+", which stay below the "+string(floor)+" stage, and "+refusal, remedy)
+		} else if refusal != "" {
 			physical := slices.ContainsFunc(bound[id], func(machine string) bool { return !virtual[machine] })
 			blank := ""
 			if !physical {
@@ -376,13 +396,25 @@ func (s Service) keptHosts(ctx context.Context, name string, floor reconciliatio
 		reason := "these Machines stay below the " + string(floor) + " stage, and no staged destroy takes such a step back on a Machine it keeps"
 		remedy := "take back from the machines stage with " + contextCommand(name, "destroy --dry-run", "--stage", string(reconciliation.StageMachines)) +
 			", or take back the whole context with " + contextCommand(name, string(reconciliation.Destroy))
-		if slices.ContainsFunc(machines, func(machine string) bool { return physicalInScope(live, scope, machine) }) {
+		if holder := onlineHolder(answer, machines); holder != "" {
+			reason = "the step " + holder + " is taken back from these Machines while they run, and no staged destroy takes back a step that runs beside it on them yet (B1885)"
+			remedy = "take back the whole context with " + contextCommand(name, string(reconciliation.Destroy))
+		} else if slices.ContainsFunc(machines, func(machine string) bool { return physicalInScope(live, scope, machine) }) {
 			reason = "a physical Machine is always kept, and no staged destroy takes back an installation on it yet (B1864)"
 			remedy = "take back the whole context with " + contextCommand(name, string(reconciliation.Destroy))
 		}
 		return keptAnswer{}, destroyStageKeepsHost.Fail("the step "+id+" runs on Machine/"+strings.Join(machines, ", Machine/")+": "+reason, remedy)
 	}
 	return answer, s.keptPower(name, whole, &answer)
+}
+
+func onlineHolder(answer keptAnswer, machines []string) string {
+	for _, id := range slices.Sorted(maps.Keys(answer.hosts)) {
+		if answer.online[id] && slices.ContainsFunc(machines, func(machine string) bool { return slices.Contains(answer.hosts[id], machine) }) {
+			return id
+		}
+	}
+	return ""
 }
 
 func keptHostRefusal(name string, floor reconciliation.Stage, id string, machines []string, refusal, blank string, physical bool) error {
@@ -462,9 +494,21 @@ func (s Service) retiresWith(whole reconciliation.Plan, block reconciliation.Blo
 }
 
 func (s Service) keptPower(name string, whole reconciliation.Plan, answer *keptAnswer) error {
+	needs, by := map[string]string{}, map[string]string{}
 	var machines []string
-	for _, hosts := range answer.hosts {
-		machines = append(machines, hosts...)
+	for _, id := range slices.Sorted(maps.Keys(answer.hosts)) {
+		power := operationstore.PoweredOff
+		if answer.online[id] {
+			power = operationstore.PoweredOn
+		}
+		for _, machine := range answer.hosts[id] {
+			if needs[machine] != "" && needs[machine] != power {
+				return destroyStageKeepsHost.Fail("the step "+by[machine]+" is taken back while Machine/"+machine+" is "+powerWord(needs[machine])+
+					", and the step "+id+" only while it is "+powerWord(power), "take back the whole context with "+contextCommand(name, string(reconciliation.Destroy)))
+			}
+			needs[machine], by[machine] = power, id
+			machines = append(machines, machine)
+		}
 	}
 	slices.Sort(machines)
 	bindings := s.capabilities.Bindings()
@@ -472,16 +516,31 @@ func (s Service) keptPower(name string, whole reconciliation.Plan, answer *keptA
 		found := false
 		for _, block := range whole.Blocks {
 			if block.Kind == string(api.Machine) && block.Object == machine && managedPowerTarget(bindings, block) {
-				answer.power, found = append(answer.power, operationstore.KeptPower{Block: block.ID, Machine: machine, Power: operationstore.PoweredOff}), true
+				answer.power, found = append(answer.power, operationstore.KeptPower{Block: block.ID, Machine: machine, Power: needs[machine]}), true
+			}
+		}
+		if !found && needs[machine] == operationstore.PoweredOn {
+			at := slices.IndexFunc(whole.Blocks, func(block reconciliation.Block) bool {
+				return block.Kind == string(api.Machine) && block.Object == machine
+			})
+			if at >= 0 {
+				answer.power, found = append(answer.power, operationstore.KeptPower{Block: whole.Blocks[at].ID, Machine: machine, Power: operationstore.Reachable}), true
 			}
 		}
 		if !found {
-			return destroyStageKeepsHost.Fail("no step of this context can prove the kept Machine/"+machine+" powered off",
+			return destroyStageKeepsHost.Fail("no step of this context can prove the kept Machine/"+machine+" "+powerWord(needs[machine]),
 				"take back the whole context with "+contextCommand(name, string(reconciliation.Destroy)))
 		}
 	}
 	slices.SortFunc(answer.power, func(x, y operationstore.KeptPower) int { return strings.Compare(x.Block, y.Block) })
 	return nil
+}
+
+func powerWord(power string) string {
+	if power == operationstore.Reachable {
+		return "reachable over its own connection"
+	}
+	return "powered " + power
 }
 
 func (s Service) boundMachines(live reconciliation.Plan, block reconciliation.Block) []string {
@@ -619,7 +678,7 @@ func (t operationPlan) scope() *StagedScope {
 	}
 	if stage != nil {
 		for _, target := range stage.KeptPower {
-			scope.KeptPowerTargets = append(scope.KeptPowerTargets, "Machine/"+target.Machine+" powered "+target.Power)
+			scope.KeptPowerTargets = append(scope.KeptPowerTargets, "Machine/"+target.Machine+" "+powerWord(target.Power))
 		}
 	}
 	for _, block := range t.plan.Blocks {

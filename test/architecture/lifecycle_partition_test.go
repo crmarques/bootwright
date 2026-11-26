@@ -25,7 +25,7 @@ func lifecycleFileClasses() map[string]string {
 		"contradictions.go": "planner", "decision.go": "planner", "lineage.go": "planner", "lineage_removal.go": "planner",
 		"operation_plan.go": "planner", "other_build.go": "planner", "planning.go": "planner", "presentation.go": "planner",
 		"removal_inverse.go": "planner", "removal_phases.go": "planner", "removal_plan.go": "planner", "removal_recorded.go": "planner", "reservations.go": "planner", "secret_references.go": "planner",
-		"stage_tails.go": "planner", "restore.go": "planner", "staged.go": "planner", "staged_completion.go": "executor", "target_owners.go": "planner", "transitions.go": "planner",
+		"stage_tails.go": "planner", "kept_contracts.go": "planner", "restore.go": "planner", "staged.go": "planner", "staged_completion.go": "executor", "target_owners.go": "planner", "transitions.go": "planner",
 		"access_tool.go": "reader", "apply_start.go": "executor", "destroy_start.go": "executor", "attempts.go": "executor", "evidence.go": "executor", "executor.go": "executor", "frozenbinding.go": "executor", "presenting.go": "executor",
 		"installed_placement.go": "executor", "invocation.go": "executor", "logging.go": "executor", "mutation.go": "executor", "online_gates.go": "executor", "produced.go": "executor",
 		"rebind.go": "executor", "register_run.go": "executor", "registration.go": "executor",

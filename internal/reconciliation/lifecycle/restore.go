@@ -146,7 +146,7 @@ func (d decider) restoring(ctx context.Context, view View, store decisionRecords
 	}
 	return operationPlan{
 		fresh: true, verb: reconciliation.Apply, plan: added, selection: selection, binding: binding,
-		predecessor: head.ID, restores: removal.ID, lineagePlan: merged, presents: chain.presenting().narrowed(live.Blocks),
+		predecessor: head.ID, restores: removal.ID, running: keptRunning(removal.Stage), lineagePlan: merged, presents: chain.presenting().narrowed(live.Blocks),
 		basis: basis{revision: view.Identity().Revision, input: inputDigest(view)},
 	}, nil
 }
@@ -276,4 +276,17 @@ func (s Service) restoreProved(ctx context.Context, view View, chain lineage, li
 		release()
 	}
 	return nil
+}
+
+func keptRunning(stage *operationstore.Stage) []string {
+	var machines []string
+	if stage == nil {
+		return nil
+	}
+	for _, target := range stage.KeptPower {
+		if target.Power != operationstore.PoweredOff {
+			machines = append(machines, target.Machine)
+		}
+	}
+	return machines
 }

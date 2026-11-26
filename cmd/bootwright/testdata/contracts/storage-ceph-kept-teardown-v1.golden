@@ -1,0 +1,340 @@
+implementation: storage-ceph-kept-teardown-v1
+content-digest: ce752da4a82920f588a3c23c41c293eaa6341961744dd63719969f64aa1df728
+request-version: ceph-core-v1
+automation-formats: ceph-kept-host-removal-v1
+mark-formats: none
+proof-ids: marker:.json, marker:kept-host-removal-attempt.json, marker:kept-host-removal-complete.json, marker:kept-unused.json, marker:native-removal-config.json
+fixed-places: none
+effect-pins:
+  managers-stopped-before-fsid-removal
+  fsid-tagged-named-volume-zap
+  positive-absence-per-host
+  fsid-records-removed-last
+  auth-and-pools-unused-before-manager-stop
+  one-device-zap-per-call
+request-identity:
+  cluster
+  fsid
+  owner
+  clusterSSHUser
+  cephadm.path
+  hosts[].name
+  hosts[].machine
+  hosts[].devices[].path
+  hosts[].devices[].serial
+  hosts[].devices[].sizeBytes
+  hosts[].devices[].wwn
+request-schema:
+  action string
+  ansiblePackageVersion string
+  auxiliary []struct ceph.AuxiliaryReference omitempty
+  auxiliary[].image string
+  auxiliary[].name string
+  bootstrap string
+  callHome string
+  callHomeProxy string omitempty
+  cephadm struct ceph.Tool
+  cephadm.packageVersion string
+  cephadm.path string
+  client *struct ceph.Client omitempty
+  client.access string
+  client.caps map[string]string
+  client.dataPools []string
+  client.filesystem string
+  client.group string
+  client.name string
+  client.pool string
+  client.subvolume string
+  client.subvolumePath string omitempty
+  cluster string
+  clusterKeyRef string
+  clusterNetworks []string
+  clusterSSHTransport string
+  clusterSSHUser string
+  config map[string]map[string]string omitempty
+  controller string
+  delegated []struct ceph.DelegatedService omitempty
+  delegated[].hosts []string
+  delegated[].name string
+  filesystem *struct ceph.Filesystem omitempty
+  filesystem.activeCount int
+  filesystem.dataPools []string
+  filesystem.defaultDataPool string
+  filesystem.groups []struct ceph.FilesystemGroup
+  filesystem.groups[].gid int
+  filesystem.groups[].mode string
+  filesystem.groups[].name string
+  filesystem.groups[].pool string
+  filesystem.groups[].sizeBytes int64
+  filesystem.groups[].uid int
+  filesystem.mdsService string
+  filesystem.metadataPool string
+  filesystem.name string
+  filesystem.standbyCountWanted int
+  filesystem.standbyReplay bool
+  fsid string omitempty
+  gateway *struct ceph.Gateway omitempty
+  gateway.authentication *struct ceph.GatewayAuthentication omitempty
+  gateway.authentication.ldap *struct ceph.GatewayLDAP omitempty
+  gateway.authentication.ldap.bindSecretRef string
+  gateway.authentication.ldap.server string
+  gateway.authentication.ldap.trustSecretRef string omitempty
+  gateway.authentication.sts *struct ceph.GatewaySTS omitempty
+  gateway.authentication.sts.keySecretRef string
+  gateway.authentication.sts.providers []struct ceph.GatewayOIDCProvider omitempty
+  gateway.authentication.sts.providers[].issuerURL string
+  gateway.authentication.sts.providers[].name string
+  gateway.bindings []struct ceph.GatewayBinding
+  gateway.bindings[].path string
+  gateway.bindings[].secretRef string
+  gateway.bindings[].serviceRef string
+  gateway.dataExtraPool string
+  gateway.dataPool string
+  gateway.documents []opaque
+  gateway.endpoint string
+  gateway.indexPool string
+  gateway.name string
+  gateway.realm string
+  gateway.zone string
+  gateway.zoneGroup string
+  gateway.zonePools []string
+  hosts []struct ceph.Host
+  hosts[].address string
+  hosts[].devices []struct ceph.Device
+  hosts[].devices[].path string
+  hosts[].devices[].rotational bool omitempty
+  hosts[].devices[].serial string
+  hosts[].devices[].sizeBytes int64
+  hosts[].devices[].wwn string omitempty
+  hosts[].hardware *struct ceph.PhysicalIdentity omitempty
+  hosts[].hardware.macs []string
+  hosts[].hardware.uuid string
+  hosts[].hostKeyRef string omitempty
+  hosts[].knownHosts string omitempty
+  hosts[].knownHostsRef string omitempty
+  hosts[].labels []string
+  hosts[].location map[string]string
+  hosts[].machine string
+  hosts[].name string
+  hosts[].physical bool omitempty
+  hosts[].port int
+  hosts[].provided bool omitempty
+  hosts[].retainRoot bool omitempty
+  hosts[].rootSerial string omitempty
+  hosts[].rootWWN string omitempty
+  hosts[].sshKeyRef string
+  hosts[].user string
+  image string
+  monIP string
+  nfsExport *struct ceph.NFSExport omitempty
+  nfsExport.filesystem string
+  nfsExport.group string
+  nfsExport.name string
+  nfsExport.native struct ceph.NFSExportNative
+  nfsExport.native.access_type string
+  nfsExport.native.clients []struct ceph.NFSExportClient
+  nfsExport.native.clients[].access_type string
+  nfsExport.native.clients[].addresses []string
+  nfsExport.native.clients[].squash string
+  nfsExport.native.fsal struct ceph.NFSExportFSAL
+  nfsExport.native.fsal.cmount_path string omitempty
+  nfsExport.native.fsal.fs_name string omitempty
+  nfsExport.native.fsal.name string
+  nfsExport.native.fsal.user_id string omitempty
+  nfsExport.native.path string omitempty
+  nfsExport.native.protocols []int
+  nfsExport.native.pseudo string
+  nfsExport.native.sectype []string omitempty
+  nfsExport.native.security_label bool
+  nfsExport.native.squash string
+  nfsExport.native.transports []string
+  nfsExport.objectUser *struct ceph.NFSExportObjectUser omitempty
+  nfsExport.objectUser.gateway string
+  nfsExport.objectUser.name string
+  nfsExport.objectUser.realm string
+  nfsExport.objectUser.zone string
+  nfsExport.objectUser.zoneGroup string
+  nfsExport.service string
+  nfsExport.subvolume string
+  nfsExport.subvolumePath string omitempty
+  nfsGaneshaPackageVersion string omitempty
+  objectBucket *struct ceph.ObjectBucket omitempty
+  objectBucket.backend string
+  objectBucket.certificateRef string
+  objectBucket.endpoint string
+  objectBucket.gateway string
+  objectBucket.name string
+  objectBucket.owner string
+  objectBucket.policy string
+  objectBucket.port int64
+  objectBucket.realm string
+  objectBucket.zone string
+  objectBucket.zoneGroup string
+  objectUser *struct ceph.ObjectUser omitempty
+  objectUser.displayName string
+  objectUser.gateway string
+  objectUser.name string
+  objectUser.realm string
+  objectUser.zone string
+  objectUser.zoneGroup string
+  nvmeof *struct ceph.NVMeOFSubsystem omitempty
+  nvmeof.budgets struct ceph.NVMeOFBudgets
+  nvmeof.budgets.apply int
+  nvmeof.budgets.nvmeof int
+  nvmeof.budgets.nvmeofObserve int
+  nvmeof.budgets.observation int
+  nvmeof.gateways []struct ceph.NVMeOFEndpoint
+  nvmeof.gateways[].address string
+  nvmeof.gateways[].host string
+  nvmeof.gateways[].port int64
+  nvmeof.group string
+  nvmeof.hosts []string
+  nvmeof.listeners []struct ceph.NVMeOFEndpoint
+  nvmeof.listeners[].address string
+  nvmeof.listeners[].host string
+  nvmeof.listeners[].port int64
+  nvmeof.mtls string
+  nvmeof.name string
+  nvmeof.namespaces []struct ceph.NVMeOFNamespace
+  nvmeof.namespaces[].id int64
+  nvmeof.namespaces[].image struct ceph.RBDImage
+  nvmeof.namespaces[].image.dataPool string
+  nvmeof.namespaces[].image.features []string
+  nvmeof.namespaces[].image.name string
+  nvmeof.namespaces[].image.pool string
+  nvmeof.namespaces[].image.sizeBytes int64
+  nvmeof.nqn string
+  nvmeof.pool string
+  nvmeof.service string
+  owner string omitempty
+  packageRepository string
+  packageRepositoryKey string
+  packages *struct ceph.PackageRequest omitempty
+  packages.licenseAccepted bool
+  packages.packageRepositoryTrustBundleRef string omitempty
+  packages.repositoryProxy string
+  packages.sources []struct ceph.PackageSource
+  packages.sources[].certificateRef string
+  packages.sources[].host string
+  packages.sources[].media string omitempty
+  packages.sources[].mediaSHA256 string omitempty
+  packages.sources[].mediaSize int64 omitempty
+  packages.sources[].profile string
+  packages.sources[].publicationPath string omitempty
+  packages.sources[].subscription *struct ceph.SubscriptionSource omitempty
+  packages.sources[].subscription.contentBaseURL string
+  packages.sources[].subscription.hostname string
+  packages.sources[].url string omitempty
+  packages.version string
+  policy *struct ceph.Policy omitempty
+  policy.deviceClass string
+  policy.failureDomain string
+  policy.name string
+  policy.root string
+  policy.rule string
+  policy.size int
+  pool *struct ceph.Pool omitempty
+  pool.application string
+  pool.autoscale struct ceph.PoolAutoscale
+  pool.autoscale.bulk bool
+  pool.autoscale.maxPGs int
+  pool.autoscale.minPGs int
+  pool.autoscale.mode string
+  pool.autoscale.targetBytes int64
+  pool.autoscale.targetRatio string
+  pool.compression struct ceph.PoolCompression
+  pool.compression.algorithm string
+  pool.compression.maxBlob int64
+  pool.compression.minBlob int64
+  pool.compression.mode string
+  pool.compression.requiredRatio string
+  pool.crushRule string
+  pool.erasure *struct ceph.PoolErasure omitempty
+  pool.erasure.codingChunks int
+  pool.erasure.dataChunks int
+  pool.erasure.deviceClass string
+  pool.erasure.failureDomain string
+  pool.erasure.plugin string
+  pool.erasure.profile string
+  pool.erasure.profileDefaults map[string]string
+  pool.erasure.root string
+  pool.erasure.stripeUnit int
+  pool.erasure.technique string
+  pool.filesystem string
+  pool.minSize int
+  pool.name string
+  pool.object string omitempty
+  pool.overwrites bool
+  pool.pgNum int
+  pool.quota struct ceph.PoolQuota
+  pool.quota.maxBytes int64
+  pool.quota.maxObjects int64
+  pool.role string
+  pool.size int
+  pool.type string
+  publicNetworks []string
+  rbd *struct ceph.RBDImage omitempty
+  rbd.dataPool string
+  rbd.features []string
+  rbd.name string
+  rbd.pool string
+  rbd.sizeBytes int64
+  registry string
+  registryProxy string omitempty
+  registryRef string
+  registryTrustBundleRef string omitempty
+  release string
+  security *struct ceph.Security omitempty
+  security.cephxKeyType string omitempty
+  security.fips bool
+  service *struct ceph.ServiceUnit omitempty
+  service.bindings []struct ceph.ServiceBinding omitempty
+  service.bindings[].path string
+  service.bindings[].secretRef string
+  service.bindings[].serviceRef string
+  service.config map[string]map[string]string omitempty
+  service.documents []opaque
+  service.endpoint string omitempty
+  service.id string
+  service.ingressPorts []int omitempty
+  service.monitoring []string omitempty
+  service.observeBudget int omitempty
+  service.scrapeIngress map[string]string omitempty
+  service.signOn *struct ceph.SignOnTarget omitempty
+  service.signOn.certificateSHA256 string
+  service.signOn.count int64
+  service.signOn.endpoint string omitempty
+  service.signOn.grafana bool omitempty
+  service.signOn.hosts []string
+  service.signOn.port int64
+  service.signOn.virtualIP string omitempty
+  service.type string
+  services []opaque
+  settings *struct ceph.Settings omitempty
+  settings.modules []string
+  singleHostDefaults bool omitempty
+  stretch *struct ceph.Stretch omitempty
+  stretch.dataSites []string
+  stretch.failureDomain string
+  stretch.rule string
+  stretch.tiebreaker string
+  stretch.tiebreakerSite string
+  subvolume *struct ceph.Subvolume omitempty
+  subvolume.filesystem string
+  subvolume.gid int
+  subvolume.group string
+  subvolume.mode string
+  subvolume.name string
+  subvolume.pool string
+  subvolume.sizeBytes int64
+  subvolume.uid int
+  version string
+evidence-schema:
+  fsid string
+  hosts []struct ceph.KeptTeardownHost
+  hosts[].attempted bool
+  hosts[].host string
+  hosts[].removed bool
+  owner string
+  request string
+  version string

@@ -1626,7 +1626,7 @@ keeps it all continue a live operation, and an automation-only fix needs no
 setup.
 
 Every operation records a bounded `contracts` map: exactly the implementations
-its saved plan uses, plus a removal's root disk resets (`blanks`), each
+its saved plan uses, plus a staged removal's kept-host contracts, each
 identified by a SHA-256 fingerprint of its reviewed contract manifest. The
 manifest includes the content digest, request and evidence schemas,
 persisted-format and ownership identifiers, fixed places, request identity
@@ -2243,11 +2243,19 @@ set, its own scope with what every staged destroy it `replaces` took back.
   `blanks` with an impact each and `data-loss`. A physical Machine is always kept, since its own step
   only releases a claim. Every frozen leaves-with names a scoped step.
 - **Kept power targets.** The record freezes in `stage.keptPower` each Machine
-  a `keptHosts` names, by its managed Machine step, with the state `off`.
-  Every invocation, fresh, replacing or continuing, proves each off through
-  its holder's records before any effect, or refuses `destroy.in-use` with its
-  stop command, so a step taken back there may derive its quiescence from
-  them (`TestAKeptNodeThatIsOnRefusesEveryInvocationOfTheStagedDestroy`).
+  a `keptHosts` names, by its managed Machine step, with the state its steps
+  need: `off`, or `on` when a step's removal runs there while it runs
+  (`lifecycle.OnlineKeptHosts`); a Machine needed both ways refuses
+  `destroy.stage-keeps-host`, and one needed on with no managed power step, a
+  provided one, is frozen `reachable` and proved by the removal reaching it.
+  Every invocation, fresh, replacing or continuing, proves each target in its
+  state through its holder's records before any effect, `on` only by a
+  positive running answer: an `off` one that runs refuses `destroy.in-use`
+  with its stop command, an `on` one off or unreadable
+  `destroy.kept-host-stopped`, naming `machine start` and any running `off` one, so a step taken back
+  there may derive its quiescence from them
+  (`TestAKeptNodeThatIsOnRefusesEveryInvocationOfTheStagedDestroy`,
+  `TestAKeptHostThatMustRunRefusesWhileItIsOff`).
   Every later decision reads the records again and refuses
   `destroy.inverse-moved` once they no longer admit a frozen `keptHosts`.
 - **Root reset.** A step with `blanks` then resets each root disk in its
@@ -2322,6 +2330,20 @@ stands alone, and only a removal plan carries the member
 block states none of these refuses `destroy.inverse-unstated` before
 registration (`TestARemovalStepThatStatesNoInverseRefusesBeforeRegistration`,
 `TestEveryExampleRemovalStepStatesItsInverse`).
+
+A step whose removal runs an effect on kept Machines that its block contract
+does not cover names that effect's contract: a teardown on hosts that stay
+running (`lifecycle.KeptHostsContract`), or the root disk reset of each Machine
+it blanks (`lifecycle.RootDiskReset`). A destroy freezing such a step records
+each fingerprint in `contracts` beside the plan's. The composed store admits
+an extra contract only when it names it (`Store.KeptContracts`), a teardown's
+only beside `keptHosts` and a reset's only beside `blanks`, which must carry
+one, and never an empty fingerprint; continuation, every attempt and every
+resolution prove each against the current executable, refusing
+`engine.other-build` once it moved
+(`TestAStagedDestroyRecordsItsKeptHostContractAndRefusesItMoved`,
+`TestAnAttemptOnKeptHostsProvesItsKeptHostContract`,
+`TestARemovalThatBlanksRecordsItsResetContract`).
 
 The engine alone decides `leavesWith`, once, as it freezes the removal plan,
 by the retirement rule of [quiescence before removal](#quiescence-before-removal):
@@ -2977,9 +2999,10 @@ Machine is a [kept power target](#staged-destroy), and a restore refuses a step
 new to the lineage (`apply.restore-adds-new`,
 `TestARestoreRefusesAStepNoStagedDestroyTookBack`), so only a step the restore
 re-creates acts on a kept one, and the restore proves that Machine off first
-(D288, `TestAStagedDestroyTakesBackAnInstallationNoNodeBootedOnItsKeptNodes`);
-after a boot a step is taken back on a kept virtual Machine only where its
-removal blanks that Machine's root disk (`blanks`). A destroy derives its
+(D288, `TestAStagedDestroyTakesBackAnInstallationNoNodeBootedOnItsKeptNodes`),
+unless the staged destroy froze it `on` or `reachable`; after a boot a step is
+taken back on a kept virtual Machine only where its removal blanks that
+Machine's root disk (`blanks`). A destroy derives its
 targets from the frozen work it takes back. Destroy over an incomplete apply
 starts a new flow. Continuing the same registered flow, including replacing
 a failed destroy over its remaining work, proceeds from the durable records
@@ -3003,6 +3026,13 @@ pre-stop inverses, the online cleanup and the retirement of hosts.
 removal while hosts survive it, retirement with virtual hosts, physical
 retirement of bare-metal hosts, and the consumer-quiescence and cleanup
 proofs.
+
+A step a [staged destroy](#staged-destroy) takes back on kept Machines that
+stay running derives its quiescence from its frozen `keptHosts` admission,
+which every invocation proves again from the records, never from a stop
+proof: its removal then runs online on those Machines, proved `on`, as
+[a never-used Ceph cluster on kept hosts](ceph.md#a-never-used-cluster-on-kept-hosts)
+does.
 
 A storage effect whose every host Machine is a Bootwright-owned virtual
 Machine destroyed by the same removal is retired with them, provided no

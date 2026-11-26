@@ -323,6 +323,14 @@ type RootReset struct {
 	Step    string
 }
 
+type OnlineKeptHosts interface {
+	OnlineKeptHosts(reconciliation.Block) ([]string, error)
+}
+
+type KeptHostsContract interface {
+	KeptHostsContract() (implementation, contentDigest string)
+}
+
 type RemovalUnregisterer interface {
 	Unregistered(context.Context, reconciliation.Block) (Removal, bool, error)
 }
@@ -635,7 +643,7 @@ type decisionProofs interface {
 	proveExecution(context.Context, View, operationstore.Operation, reconciliation.Plan, map[string]reconciliation.BlockState) executionProof
 	verifyRemovalHost(context.Context, View) error
 	verifyContinuation(context.Context, View, operationstore.Operation, executionProof, *approved) error
-	proveResetContracts(context.Context, recordReader, reconciliation.Plan, operationstore.Operation) error
+	proveKeptContracts(context.Context, recordReader, reconciliation.Plan, operationstore.Operation) error
 	custodyProved(context.Context, View, lineage, reconciliation.Plan) error
 	restoreProved(context.Context, View, lineage, reconciliation.Plan, reconciliation.Plan) error
 }

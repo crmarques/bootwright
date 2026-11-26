@@ -431,7 +431,11 @@ type KeptPower struct {
 	Power   string `json:"power"`
 }
 
-const PoweredOff = "off"
+const (
+	PoweredOff = "off"
+	PoweredOn  = "on"
+	Reachable  = "reachable"
+)
 
 func validateStage(verb reconciliation.Verb, stage *Stage) error {
 	if stage == nil {
@@ -453,7 +457,7 @@ func validateStage(verb reconciliation.Verb, stage *Stage) error {
 		return recordError("a staged destroy's kept power targets must form a bounded ordered set")
 	}
 	for index, target := range stage.KeptPower {
-		if !reconciliation.ValidSegment(target.Block) || !reconciliation.ValidSegment(target.Machine) || target.Power != PoweredOff ||
+		if !reconciliation.ValidSegment(target.Block) || !reconciliation.ValidSegment(target.Machine) || !slices.Contains([]string{PoweredOff, PoweredOn, Reachable}, target.Power) ||
 			index != 0 && stage.KeptPower[index-1].Block == target.Block {
 			return recordError("a staged destroy's kept power target is invalid")
 		}

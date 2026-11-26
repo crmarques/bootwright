@@ -430,7 +430,9 @@ func TestAStagedDestroyProvesEveryKeptHostByAPowerTarget(t *testing.T) {
 		"proved off":           {stage: &Stage{KeptPower: []KeptPower{target("machine-node-01", PoweredOff)}}, admits: true},
 		"no target":            {stage: &Stage{}},
 		"another host":         {stage: &Stage{KeptPower: []KeptPower{target("machine-node-02", PoweredOff)}}},
-		"another power state":  {stage: &Stage{KeptPower: []KeptPower{target("machine-node-01", "on")}}},
+		"proved on":            {stage: &Stage{KeptPower: []KeptPower{target("machine-node-01", PoweredOn)}}, admits: true},
+		"reachable":            {stage: &Stage{KeptPower: []KeptPower{target("machine-node-01", Reachable)}}, admits: true},
+		"another power state":  {stage: &Stage{KeptPower: []KeptPower{target("machine-node-01", "standby")}}},
 		"targets out of order": {stage: &Stage{KeptPower: []KeptPower{target("machine-node-02", PoweredOff), target("machine-node-01", PoweredOff)}}},
 		"no stage":             {},
 	} {

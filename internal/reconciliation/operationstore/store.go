@@ -31,6 +31,7 @@ type Store struct {
 	running  *Executable
 	mutex    sync.Mutex
 	expected map[string][]byte
+	kept     map[string]KeptNeed
 	states   map[string]reconciliation.BlockState
 	// outputs guards what the attempts' retained output may still add to the
 	// log area beneath MaxContextLogBytes, which is measured once, at the
@@ -46,6 +47,27 @@ type Store struct {
 
 func New(records, logs Area, clock func() time.Time) *Store {
 	return &Store{area: records, logs: logs, clock: clock, expected: map[string][]byte{}}
+}
+
+type KeptNeed int
+
+const (
+	KeepsHosts KeptNeed = iota + 1
+	BlanksRoots
+)
+
+func (s *Store) KeptContracts(need KeptNeed, implementations ...string) *Store {
+	if s.kept == nil {
+		s.kept = map[string]KeptNeed{}
+	}
+	for _, implementation := range implementations {
+		s.kept[implementation] = need
+	}
+	return s
+}
+
+func (s *Store) AdmitsKeptContract(implementation string) KeptNeed {
+	return s.kept[implementation]
 }
 
 // Running names the unmodified executable that reads the store.
@@ -122,7 +144,7 @@ func (s *Store) Register(ctx context.Context, operation Operation, plan reconcil
 	if plan.Verb != operation.Verb {
 		return defectError("lifecycle plan and operation disagree about the verb")
 	}
-	if err := checkContracts(operation, plan); err != nil {
+	if err := checkContracts(operation, plan, s.kept); err != nil {
 		return err
 	}
 	if err := checkPredecessor(operation, plan); err != nil {
@@ -754,7 +776,7 @@ func (s *Store) ReadPlan(ctx context.Context, id string) (reconciliation.Plan, e
 	if operation.PlanDigest != stored || operation.Verb != plan.Verb {
 		return reconciliation.Plan{}, operationsPlanMismatch.Fail("the frozen plan is not the plan its operation recorded", "")
 	}
-	if err := checkContracts(operation, plan); err != nil {
+	if err := checkContracts(operation, plan, s.kept); err != nil {
 		return reconciliation.Plan{}, err
 	}
 	if err := checkPredecessor(operation, plan); err != nil {
@@ -1362,24 +1384,36 @@ func (s *Store) LastAttempt(ctx context.Context, id, block string) (int, error) 
 	return record.Attempts, nil
 }
 
-func checkContracts(operation Operation, plan reconciliation.Plan) error {
-	used, blanks := map[string]bool{}, false
+func checkContracts(operation Operation, plan reconciliation.Plan, admitted map[string]KeptNeed) error {
+	mismatch := recordError("lifecycle operation execution contracts do not match its plan")
+	used, needs := map[string]bool{}, map[KeptNeed]bool{}
 	for _, block := range plan.Blocks {
 		used[block.Implementation] = true
-		blanks = blanks || block.Inverse != nil && len(block.Inverse.Blanks) != 0
-	}
-	resets := len(operation.Contracts) - len(used)
-	if resets < 0 || (resets != 0) != (blanks && operation.Verb == reconciliation.Destroy) {
-		return recordError("lifecycle operation execution contracts do not match its plan")
-	}
-	for _, fingerprint := range operation.Contracts {
-		if fingerprint == "" {
-			return recordError("lifecycle operation execution contracts do not match its plan")
+		if operation.Verb == reconciliation.Destroy && block.Inverse != nil {
+			needs[KeepsHosts] = needs[KeepsHosts] || len(block.Inverse.KeptHosts) != 0
+			needs[BlanksRoots] = needs[BlanksRoots] || len(block.Inverse.Blanks) != 0
 		}
+	}
+	recorded := map[KeptNeed]bool{}
+	for implementation, fingerprint := range operation.Contracts {
+		if fingerprint == "" {
+			return mismatch
+		}
+		if used[implementation] {
+			continue
+		}
+		need := admitted[implementation]
+		if need == 0 || !needs[need] {
+			return mismatch
+		}
+		recorded[need] = true
+	}
+	if needs[BlanksRoots] && !recorded[BlanksRoots] {
+		return mismatch
 	}
 	for implementation := range used {
 		if operation.Contracts[implementation] == "" {
-			return recordError("lifecycle operation execution contracts do not match its plan")
+			return mismatch
 		}
 	}
 	return nil

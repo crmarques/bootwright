@@ -492,6 +492,9 @@ func (c Capability) Apply(ctx context.Context, e lifecycle.Execution) (lifecycle
 	return c.mutate(ctx, e, "apply")
 }
 func (c Capability) Destroy(ctx context.Context, e lifecycle.Execution) (lifecycle.Result, error) {
+	if keptBlock(e.Block) {
+		return c.destroyKept(ctx, e)
+	}
 	if e.RetiredWithHosts {
 		return c.retire(ctx, e)
 	}
@@ -538,6 +541,9 @@ func (c Capability) Observe(ctx context.Context, e lifecycle.Execution) (lifecyc
 	return c.observe(ctx, e, false)
 }
 func (c Capability) ObserveRemoval(ctx context.Context, e lifecycle.Execution) (lifecycle.Observation, error) {
+	if keptBlock(e.Block) {
+		return c.observeKept(ctx, e)
+	}
 	if e.RetiredWithHosts {
 		return c.observeRetirement(ctx, e)
 	}
@@ -579,6 +585,9 @@ func (c Capability) observe(ctx context.Context, e lifecycle.Execution, removal 
 func (Capability) Quiescent(ctx context.Context, probe lifecycle.Probe) (lifecycle.Quiescence, error) {
 	if err := ctx.Err(); err != nil {
 		return lifecycle.Quiescence{State: lifecycle.Unproved}, err
+	}
+	if keptBlock(probe.Block) {
+		return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: keptReason}, nil
 	}
 	if probe.RetiredWithHosts {
 		if r, err := DecodeRequest(probe.Block.Request); err == nil && len(installedMachines(r)) != 0 {

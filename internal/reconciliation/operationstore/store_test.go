@@ -160,15 +160,18 @@ func TestARemovalThatBlanksRecordsItsResetContract(t *testing.T) {
 		contracts map[string]string
 		admitted  bool
 	}{
-		"its reset's":             {blanking, reset, true},
-		"no reset's":              {blanking, map[string]string{"artifact-server-nginx-v1": step}, false},
-		"one blanking nothing":    {keeping, reset, false},
-		"an empty reset contract": {blanking, map[string]string{"artifact-server-nginx-v1": step, "machine-reset-v1": ""}, false},
+		"its reset's":                     {blanking, reset, true},
+		"no reset's":                      {blanking, map[string]string{"artifact-server-nginx-v1": step}, false},
+		"one blanking nothing":            {keeping, reset, false},
+		"an empty reset contract":         {blanking, map[string]string{"artifact-server-nginx-v1": step, "machine-reset-v1": ""}, false},
+		"its reset's and a kept-host one": {blanking, map[string]string{"artifact-server-nginx-v1": step, "machine-reset-v1": step, "storage-kept-v1": step}, true},
+		"a kept-host one for its reset's": {blanking, map[string]string{"artifact-server-nginx-v1": step, "storage-kept-v1": step}, false},
+		"an unadmitted reset contract":    {blanking, map[string]string{"artifact-server-nginx-v1": step, "machine-other-reset-v1": step}, false},
 	} {
 		t.Run(name, func(t *testing.T) {
 			operation := testOperation(t, test.plan)
 			operation.Contracts = test.contracts
-			if err := checkContracts(operation, test.plan); (err == nil) != test.admitted {
+			if err := checkContracts(operation, test.plan, map[string]KeptNeed{"machine-reset-v1": BlanksRoots, "storage-kept-v1": KeepsHosts}); (err == nil) != test.admitted {
 				t.Fatalf("the removal's contracts %v read %v", test.contracts, err)
 			}
 		})

@@ -3005,9 +3005,13 @@ through the erase-backed
 [physical retirement](#devices-and-destructive-ownership). Retirement is
 recorded as durable evidence, so continuation never contacts the stopped hosts.
 
+A cluster no data client was handed access to is
+[taken back on kept hosts](#a-never-used-cluster-on-kept-hosts).
+
 Not yet met: the online removal that the opening paragraphs of this section
-state, while hosts survive, including storage-native consumer quiescence and
-complete owned cleanup; tracked as [B491](milestones/m2.md#b491).
+state for a cluster a data client may use, while hosts survive, including
+storage-native consumer quiescence and complete owned cleanup; tracked as
+[B491](milestones/m2.md#b491).
 
 Not yet met: a provided tiebreaker's `rm-cluster` footprint is unverified on
 the selected build; tracked as [B488](milestones/m2.md#b488).
@@ -3195,6 +3199,62 @@ there, since the tiebreaker [runs a MON alone](#stretch-topology).
 Not yet met: a tiebreaker the operator has decommissioned or reinstalled
 refuses this removal with no exit; tracked as
 [B938](milestones/m2.md#b938).
+
+### A never-used cluster on kept hosts
+
+A [staged destroy](state-reconciliation.md#staged-destroy) that keeps a
+cluster's host Machines takes the cluster back while they run only when no
+step of it that hands out access ever completed or may have: the cluster (its
+dashboard login), a client, an object user or bucket, an NFS export, an NVMe-oF
+subsystem, an object gateway or a service unit. Each core and host step answers
+`lifecycle.KeptHostRemoval` from its holder's records, and
+`lifecycle.OnlineKeptHosts` with every host Machine, provided ones included, or
+a host step with its own. Such a step is admitted only `failed` or `pending`:
+one done refuses `destroy.stage-keeps-host` naming what it handed out and
+B491, one `unknown` or `running` naming `bootwright apply`, which resolves it;
+a physical host refuses ([B1885](milestones/m2.md#b1885)), and so does an
+SMB, consumer, replication or sign-on step there, naming the whole destroy. Data-loss is
+consumed; the preview names, per host, what goes and what stays.
+
+- **Never used.** Before any manager stops, `ceph auth ls` on the bootstrap
+  host may hold only `mon.`, `client.admin`, bootstrap keys and daemon keys
+  of mgr, osd, crash, ceph-exporter and a placed mds, and `ceph df` no data
+  outside `.mgr`; else it refuses `kept-foreign-client`, `kept-user-data` or
+  `kept-unread`, naming the whole destroy; keys are read each attempt a
+  monitor answers, `kept-unused.json` replaces `ceph df`.
+- **Effect.** The cluster step's removal runs on every host: it stops and
+  disables each manager of the FSID, reads them stopped in a second round,
+  then each host proves its footprint its own as a
+  [tiebreaker's removal](#a-provided-tiebreakers-removal) does, any daemon type
+  admitted, writes an attempt record, removes the recorded key line and sshd
+  drop-in with its reload, stops the FSID's target and zaps (`ceph-volume lvm
+  zap --destroy`, one device per call) each named device whose volumes all
+  carry this FSID or still holds a recorded PV, after a record of its PVs; drops the devices-file entries
+  of recorded PVs that are gone; removes the registry credential and engine
+  drop-in; runs `rm-cluster --force`; and renames
+  `/var/lib/bootwright/ceph/<fsid>` to `.discard-<fsid>`, then removes it. A volume of this
+  FSID on an unnamed device or beside another's, or a volume group reaching
+  another device, refuses `tiebreaker-foreign` before any effect. Every other core step records that it goes with the cluster. Each
+  host step then removes `/var/lib/bootwright/ceph-host/<fsid>` once its scope
+  record proves it this cluster's. Packages, the image and firewall openings
+  stay and the inverse says so in `retains`.
+- **Absence.** A host is removed only with no daemon, unit, data, log,
+  configuration, key line, drop-in, credential, tagged volume, owed
+  devices-file entry and record of the FSID; the observation is complete when
+  every host is, partial once one holds an attempt record or a residue, and
+  unknown when one does not answer.
+- **Recovery.** Each part repeats while it remains.
+- **Restore.** The restoring apply bootstraps under its own identity, a new
+  FSID, and a fresh claim finds no foreign cluster, OSD volume, drop-in, key
+  line or record (`test_a_fresh_bootstrap_after_the_teardown_finds_nothing_foreign`).
+
+The teardown is its own contract, `storage-ceph-kept-teardown-v1`, beside
+`storage-ceph-host-kept-release-v1` (`lifecycle.KeptHostsContract`). `test_ceph_kept_removal.py` and
+`TestTheClusterBlockTearsTheClusterDownFromItsKeptHosts` hold these rules.
+
+Not yet met: the teardown's native footprint, the zap after the target stop
+and the worker ceilings are unverified on a live host; tracked as
+[B1885](milestones/m2.md#b1885).
 
 ### Claims and throttle
 
