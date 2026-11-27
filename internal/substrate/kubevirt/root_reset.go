@@ -62,6 +62,8 @@ func (MachineCapability) RootResetRefusal(block reconciliation.Block) string {
 	switch {
 	case err != nil:
 		return "has a machine request this build cannot read"
+	case request.TemplateSnapshot != nil:
+		return "has a template-backed root disk that cannot be reset to blank; use a destroy that removes the Machine"
 	case request.HostCluster != "":
 		return "is hosted on OpenShiftCluster/" + request.HostCluster + ", whose access no root disk reset is lent yet (B1890)"
 	}

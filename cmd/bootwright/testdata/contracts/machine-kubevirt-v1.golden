@@ -1,5 +1,5 @@
 implementation: machine-kubevirt-v1
-content-digest: 51ddb3590eb7ac455201230a9d7cc259fa7373e1ee5b647b9e8b3af828b40b92
+content-digest: 3c67617052aa9ff2c5562085975074197e9c4681288ef7a7127321618375ff65
 request-version: machine-kubevirt-v1
 automation-formats: none
 mark-formats: bootwright.io/context, bootwright.io/lend, bootwright.io/machine, bootwright.io/owner, bootwright.substrate.kubevirt.owner-v1
@@ -16,6 +16,7 @@ effect-pins:
   substrate-access-kubevirt-evidence-v1
   spread-preferred-anti-affinity
   lend-bound-secret
+  pinned-snapshot-root
 request-identity:
   identity.context
   identity.object
@@ -26,6 +27,7 @@ request-identity:
   rootVolume
   mediaVolume
   interfaces[].macAddress
+  templateSnapshot
 request-schema:
   cpu int
   diskGiB int
@@ -57,6 +59,10 @@ request-schema:
   serviceAccount string omitempty
   spread string omitempty
   storageClass string omitempty
+  templateSnapshot *struct kubevirt.SnapshotRef omitempty
+  templateSnapshot.name string
+  templateSnapshot.namespace string
+  templateSnapshot.uid string
   tpm *struct kubevirt.TPM omitempty
   tpm.persistent bool
   version string
@@ -75,6 +81,18 @@ evidence-schema:
   receipts[].uid string
   request string
   server string
+  templateSnapshot *struct kubevirt.SnapshotEvidence omitempty
+  templateSnapshot.clusterUID string
+  templateSnapshot.driver string
+  templateSnapshot.namespace string
+  templateSnapshot.restoreBytes uint64
+  templateSnapshot.snapshotContentUID string
+  templateSnapshot.snapshotName string
+  templateSnapshot.snapshotUID string
+  templateSnapshot.volumeSnapshot string
+  templateSnapshot.volumeSnapshotContent string
+  templateSnapshot.volumeSnapshotContentUID string
+  templateSnapshot.volumeSnapshotUID string
   virtualMachine string
   volumes []struct kubevirt.VolumeEvidence
   volumes[].kind string

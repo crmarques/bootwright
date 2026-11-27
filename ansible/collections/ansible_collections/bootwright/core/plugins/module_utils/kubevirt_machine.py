@@ -452,6 +452,17 @@ def storage_class(request, context):
     return request.get("storageClass") or context["pinned"]["storageClass"]
 
 
+def root_source(request, context):
+    source = request.get("templateSnapshot")
+    if source is None:
+        return {"blank": {}}
+    check = context["pinned"].get("templateSnapshot") or {}
+    if (check.get("namespace") != source["namespace"] or check.get("snapshotName") != source["name"]
+            or check.get("snapshotUID") != source["uid"] or not check.get("volumeSnapshot")):
+        raise Refused("the provider did not prove the frozen template snapshot")
+    return {"snapshot": {"namespace": check["namespace"], "name": check["volumeSnapshot"]}}
+
+
 def vm_body(request, context):
     """The one VirtualMachine this block creates, with its root DataVolume template."""
     vm, namespace = request["name"], request["namespace"]
@@ -485,7 +496,7 @@ def vm_body(request, context):
             "dataVolumeTemplates": [{
                 "metadata": {"name": request["rootVolume"], "labels": held,
                              "annotations": {OWNER: owner("DataVolume", request["rootVolume"]), BIND: "true"}},
-                "spec": {"source": {"blank": {}},
+                "spec": {"source": root_source(request, context),
                          "storage": {"resources": {"requests": {"storage": "%dGi" % request["diskGiB"]}},
                                      "storageClassName": storage_class(request, context)}},
             }],
@@ -672,7 +683,54 @@ def observe_power(host, request):
 
 
 def observe(host, request, context):
-    return settled(read_machine(host, request, context, [dict(r) for r in context["pinned"]["receipts"]], prove_shape=True), request)
+    evidence = settled(read_machine(host, request, context, [dict(r) for r in context["pinned"]["receipts"]], prove_shape=True), request)
+    if request.get("templateSnapshot") and evidence["owned"] and evidence["postcondition"]:
+        prove_clone_root(host, request, context, evidence)
+        if not context["pinned"].get("templateCloneCompleted"):
+            if running(evidence["instance"]):
+                raise Refused("the template clone must remain stopped during creation")
+            prove_clone_source(host, request, context)
+        evidence["templateSnapshot"] = context["pinned"]["templateSnapshot"]
+    return evidence
+
+
+def prove_clone_source(host, request, context):
+    from ansible_collections.bootwright.core.plugins.module_utils.kubevirt_template import read_template_source
+
+    check = context["pinned"].get("templateSnapshot")
+    if not check:
+        raise Refused("the provider has no backing proof for the template snapshot")
+    newest = read_template_source(host.client, context["pinned"]["kubeSystemUID"], request["templateSnapshot"])
+    if newest != check:
+        raise Refused("the backing of the template snapshot changed after the provider proved it")
+
+
+def prove_clone_storage(host, request, context):
+    check = context["pinned"].get("templateSnapshot") or {}
+    if check.get("restoreBytes", 0) <= 0 or check["restoreBytes"] > request["diskGiB"] * GIB:
+        raise Refused("the requested root disk is smaller than the proved template restore size")
+    target = storage_class(request, context)
+    storage = host.client.get(path("storage.k8s.io", "v1", "storageclasses", name=target))
+    if storage is None or storage.get("provisioner") != check.get("driver"):
+        raise Refused("the target storage class does not use the proved snapshot CSI driver")
+
+
+def prove_clone_root(host, request, context, evidence):
+    volume = request["rootVolume"]
+    recorded = receipt_for(evidence["receipts"], "DataVolume", volume)
+    held = host.client.get(host.dv(volume))
+    if (recorded is None or not held or uid(held) != recorded["uid"]
+            or (held.get("spec") or {}).get("source") != root_source(request, context)
+            or (held.get("status") or {}).get("phase") != "Succeeded"):
+        raise Refused("the owned root DataVolume does not prove the completed template clone")
+    claim = host.client.get(host.pvc(volume))
+    if not claim or not uid(claim) or not controlled_by(claim, recorded["uid"]) or (claim.get("status") or {}).get("phase") != "Bound":
+        raise Refused("the template clone has no bound root claim owned by its DataVolume")
+    earlier = receipt_for(context["pinned"]["receipts"], "PersistentVolumeClaim", volume)
+    if earlier is not None and earlier["uid"] != uid(claim):
+        raise Refused("the bound clone root claim was replaced")
+    keep(evidence["receipts"], "PersistentVolumeClaim", volume, claim, "owner-referenced")
+    evidence["receipts"].sort(key=lambda entry: (entry["kind"], entry["name"]))
 
 
 def apply(host, request, context):
@@ -684,6 +742,15 @@ def apply(host, request, context):
     state = ownership("VirtualMachine", live, receipts, context)
     if state == "foreign":
         raise Refused("VirtualMachine %s/%s exists and is not this context's" % (request["namespace"], vm))
+    if request.get("templateSnapshot"):
+        prove_clone_source(host, request, context)
+        prove_clone_storage(host, request, context)
+        if live is not None and running(instance_phase(host, vm)):
+            raise Refused("the template clone must remain stopped during creation")
+        if state == "absent" and any(host.client.get(resource) is not None for resource in (
+            host.vmi(vm), host.dv(request["rootVolume"]), host.pvc(request["rootVolume"]),
+        )):
+            raise Refused("a target instance, DataVolume or root claim exists before creating this template clone")
     if state == "absent":
         try:
             status, created = host.client.request("POST", host.vm(), vm_body(request, context))
@@ -707,6 +774,12 @@ def apply(host, request, context):
     host.wait(lambda: host.client.get(host.dv(request["rootVolume"])),
               lambda held: held is not None and ((held.get("status") or {}).get("phase") == "Succeeded"), VOLUME_SECONDS)
     evidence = settled(read_machine(host, request, dict(context, pinned=dict(context["pinned"], receipts=receipts)), receipts, prove_shape=True), request)
+    if request.get("templateSnapshot") and evidence["postcondition"]:
+        if running(evidence["instance"]):
+            raise Refused("the template clone did not remain stopped during creation")
+        prove_clone_root(host, request, context, evidence)
+        prove_clone_source(host, request, context)
+        evidence["templateSnapshot"] = context["pinned"]["templateSnapshot"]
     return changed, evidence
 
 

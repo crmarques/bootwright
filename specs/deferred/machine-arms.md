@@ -107,7 +107,14 @@ CSI VolumeSnapshot. The source read checks the generated VM snapshot content
 name against the published UID, the captured VM against the source UID, and the
 CSI snapshot controller owner against that content. It checks the CSI binding by
 name, namespace, and UID and returns the backing identities, driver and restore
-size. A subsequent clone freezes those facts before creating a VM. The source
+size. The provider proof records those facts against its frozen request.
+The Machine block takes the backing from that proof and reads it again
+before submitting the clone and after the root DataVolume succeeds.
+It verifies the target storage class uses the snapshot's CSI driver.
+It refuses an undersized root or an existing root claim before creation.
+A successful disk realization proves the VM remained stopped and its owned
+root DataVolume populated an owned, bound claim. Removal uses the clone's
+ownership record after publication is withdrawn. The source
 and destination can occupy different namespaces. The operator grants the
 provider's identity the snapshot reads and CDI source authorization in the
 source namespace. The read of the bound CSI VolumeSnapshotContent uses a

@@ -16,21 +16,44 @@ const (
 // kubeconfig reached, the root class, upload proxy and nodes the Machines use,
 // and each check that failed or could not be read.
 type HostEvidence struct {
-	Absent           bool              `json:"absent"`
-	Failures         []string          `json:"failures"`
-	KubeSystemUID    string            `json:"kubeSystemUID"`
-	MACPool          string            `json:"macPool"`
-	Networks         []NetworkEvidence `json:"networks"`
-	Postcondition    bool              `json:"postcondition"`
-	ReadWriteMany    bool              `json:"readWriteMany"`
-	Request          string            `json:"request"`
-	RootAccessModes  []string          `json:"rootAccessModes"`
-	RootVolumeMode   string            `json:"rootVolumeMode"`
-	SchedulableNodes int               `json:"schedulableNodes"`
-	Server           string            `json:"server"`
-	StorageClass     string            `json:"storageClass"`
-	UploadProxy      string            `json:"uploadProxy"`
-	Version          string            `json:"version"`
+	Absent            bool               `json:"absent"`
+	Failures          []string           `json:"failures"`
+	KubeSystemUID     string             `json:"kubeSystemUID"`
+	MACPool           string             `json:"macPool"`
+	Networks          []NetworkEvidence  `json:"networks"`
+	Postcondition     bool               `json:"postcondition"`
+	ReadWriteMany     bool               `json:"readWriteMany"`
+	Request           string             `json:"request"`
+	RootAccessModes   []string           `json:"rootAccessModes"`
+	RootVolumeMode    string             `json:"rootVolumeMode"`
+	SchedulableNodes  int                `json:"schedulableNodes"`
+	Server            string             `json:"server"`
+	StorageClass      string             `json:"storageClass"`
+	TemplateSnapshots []SnapshotEvidence `json:"templateSnapshots,omitempty"`
+	UploadProxy       string             `json:"uploadProxy"`
+	Version           string             `json:"version"`
+}
+
+// SnapshotEvidence records the backing identifiers a snapshot read checked.
+type SnapshotEvidence struct {
+	ClusterUID               string `json:"clusterUID"`
+	Driver                   string `json:"driver"`
+	Namespace                string `json:"namespace"`
+	RestoreBytes             uint64 `json:"restoreBytes"`
+	SnapshotContentUID       string `json:"snapshotContentUID"`
+	SnapshotName             string `json:"snapshotName"`
+	SnapshotUID              string `json:"snapshotUID"`
+	VolumeSnapshot           string `json:"volumeSnapshot"`
+	VolumeSnapshotContent    string `json:"volumeSnapshotContent"`
+	VolumeSnapshotContentUID string `json:"volumeSnapshotContentUID"`
+	VolumeSnapshotUID        string `json:"volumeSnapshotUID"`
+}
+
+func (s SnapshotEvidence) proves(ref SnapshotRef, cluster string) bool {
+	return s.ClusterUID == cluster && s.Namespace == ref.Namespace && s.SnapshotName == ref.Name &&
+		s.SnapshotUID == ref.UID && s.SnapshotContentUID != "" && s.VolumeSnapshot != "" &&
+		s.VolumeSnapshotUID != "" && s.VolumeSnapshotContent != "" && s.VolumeSnapshotContentUID != "" &&
+		s.Driver != "" && s.RestoreBytes > 0
 }
 
 type NetworkEvidence struct {
@@ -65,18 +88,19 @@ type VolumeEvidence struct {
 // present VirtualMachine this block's receipt or mark proves its own; Foreign
 // a same-named one that is not.
 type MachineEvidence struct {
-	Absent         bool             `json:"absent"`
-	Answered       bool             `json:"answered"`
-	Foreign        bool             `json:"foreign"`
-	Instance       string           `json:"instance"`
-	KubeSystemUID  string           `json:"kubeSystemUID"`
-	Owned          bool             `json:"owned"`
-	Postcondition  bool             `json:"postcondition"`
-	Receipts       []Receipt        `json:"receipts"`
-	Request        string           `json:"request"`
-	Server         string           `json:"server"`
-	VirtualMachine string           `json:"virtualMachine"`
-	Volumes        []VolumeEvidence `json:"volumes"`
+	Absent           bool              `json:"absent"`
+	Answered         bool              `json:"answered"`
+	Foreign          bool              `json:"foreign"`
+	Instance         string            `json:"instance"`
+	KubeSystemUID    string            `json:"kubeSystemUID"`
+	Owned            bool              `json:"owned"`
+	Postcondition    bool              `json:"postcondition"`
+	Receipts         []Receipt         `json:"receipts"`
+	Request          string            `json:"request"`
+	Server           string            `json:"server"`
+	TemplateSnapshot *SnapshotEvidence `json:"templateSnapshot,omitempty"`
+	VirtualMachine   string            `json:"virtualMachine"`
+	Volumes          []VolumeEvidence  `json:"volumes"`
 }
 
 // ValidateHostPresence accepts a proof only when every check held: the host
@@ -106,6 +130,13 @@ func ValidateHostPresence(data []byte, request HostRequest, digest string) error
 		return kubevirtHostUnproved.Fail("the KubeVirt provider proof names no upload proxy", "")
 	case len(evidence.Networks) != len(request.Networks):
 		return kubevirtHostUnproved.Fail("the KubeVirt provider proof does not cover every network", "")
+	case len(evidence.TemplateSnapshots) != len(request.TemplateSnapshots):
+		return kubevirtHostUnproved.Fail("the KubeVirt provider proof does not cover every template snapshot", "")
+	}
+	for index, ref := range request.TemplateSnapshots {
+		if !evidence.TemplateSnapshots[index].proves(ref, evidence.KubeSystemUID) {
+			return kubevirtHostUnproved.Fail("the KubeVirt provider proof does not prove template snapshot "+ref.Namespace+"/"+ref.Name, "")
+		}
 	}
 	for index, network := range request.Networks {
 		if held := evidence.Networks[index]; held.Attachment != network.Attachment || !held.Present || !attachmentKind(network, held) {
@@ -158,6 +189,11 @@ func ValidateMachinePresence(data []byte, request MachineRequest, digest string)
 		return kubevirtMachineUnproved.Fail("the KubeVirt machine evidence records no receipt for its VirtualMachine", "")
 	case !volumePresent(evidence, "DataVolume", request.RootVolume):
 		return kubevirtMachineUnproved.Fail("the VirtualMachine's root DataVolume is missing", "")
+	case request.TemplateSnapshot != nil && (evidence.TemplateSnapshot == nil || !evidence.TemplateSnapshot.proves(*request.TemplateSnapshot, evidence.KubeSystemUID)):
+		return kubevirtMachineUnproved.Fail("the VirtualMachine's root does not prove the frozen template snapshot", "")
+	case request.TemplateSnapshot != nil && (receipt(evidence, "PersistentVolumeClaim", request.RootVolume) == nil ||
+		!volumePresent(evidence, "PersistentVolumeClaim", request.RootVolume)):
+		return kubevirtMachineUnproved.Fail("the template clone has no recorded root claim", "")
 	}
 	return nil
 }

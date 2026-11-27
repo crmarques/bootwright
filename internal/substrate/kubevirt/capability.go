@@ -282,9 +282,11 @@ func (c HostCapability) prove(ctx context.Context, execution lifecycle.Execution
 	if err != nil {
 		return lifecycle.RunResult{}, err
 	}
+	deadline := hostDeadline
 	var materials []lifecycle.MaterialFile
 	if operation != "destroy" {
-		lent, release, err := lentAccess(ctx, c.lender, &execution, request.HostCluster, request.KubeconfigRef, request.Namespace, request.Placement, hostDeadline)
+		deadline += time.Duration(len(request.TemplateSnapshots)) * (hostDeadline + 2*time.Minute)
+		lent, release, err := lentAccess(ctx, c.lender, &execution, request.HostCluster, request.KubeconfigRef, request.Namespace, request.Placement, deadline)
 		if err != nil {
 			return lifecycle.RunResult{}, err
 		}
@@ -293,7 +295,7 @@ func (c HostCapability) prove(ctx context.Context, execution lifecycle.Execution
 	}
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
 		Implementation: HostImplementation, Operation: operation, Variable: hostVariable,
-		Canonical: canonical, Placement: request.Placement, Materials: materials, Deadline: hostDeadline,
+		Canonical: canonical, Placement: request.Placement, Materials: materials, Deadline: deadline,
 	}))
 }
 
@@ -452,23 +454,27 @@ func (c MachineCapability) mutation(operation string) lifecycle.Mutation[Machine
 		}, Reading: machineReading,
 		Unusable: kubevirtOutcomeUnusable.Fail("the KubeVirt machine adapter reported no usable outcome", ""),
 		Proved: func(execution lifecycle.Execution, request MachineRequest, result lifecycle.RunResult) error {
-			return samePin(result.Evidence, execution.Block.RequestDigest, execution.ApplyProved, request.Provider)
+			return samePin(result.Evidence, execution.Block.RequestDigest, execution.ApplyProved, request)
 		},
 	}
 }
 
 // samePin holds a mutation's evidence to the cluster its provider's proof recorded.
-func samePin(data []byte, digest string, records []lifecycle.BlockEvidence, provider string) error {
+func samePin(data []byte, digest string, records []lifecycle.BlockEvidence, request MachineRequest) error {
 	evidence, err := decodeMachineEvidence(data, digest)
 	if err != nil {
 		return err
 	}
-	pinned, err := provedHost(records, provider)
+	pinned, err := provedHost(records, request.Provider)
 	if err != nil {
 		return err
 	}
 	if evidence.KubeSystemUID != pinned.KubeSystemUID {
 		return kubevirtEvidenceMismatch.Fail("the KubeVirt machine evidence names another cluster than its provider's proof", "")
+	}
+	if request.TemplateSnapshot != nil && evidence.Postcondition && !evidence.Absent &&
+		(evidence.TemplateSnapshot == nil || !slices.Contains(pinned.snapshots, *evidence.TemplateSnapshot)) {
+		return kubevirtEvidenceMismatch.Fail("the KubeVirt machine evidence names another snapshot backing than its provider's proof", "")
 	}
 	return nil
 }
@@ -518,10 +524,13 @@ func (c MachineCapability) prepare(ctx context.Context, execution lifecycle.Exec
 // server and cluster identity it pins, the root class and the receipts of
 // this block's earlier evidence.
 type proof struct {
-	KubeSystemUID string    `json:"kubeSystemUID"`
-	Receipts      []Receipt `json:"receipts"`
-	Server        string    `json:"server"`
-	StorageClass  string    `json:"storageClass"`
+	KubeSystemUID          string            `json:"kubeSystemUID"`
+	Receipts               []Receipt         `json:"receipts"`
+	Server                 string            `json:"server"`
+	StorageClass           string            `json:"storageClass"`
+	TemplateSnapshot       *SnapshotEvidence `json:"templateSnapshot,omitempty"`
+	TemplateCloneCompleted bool              `json:"templateCloneCompleted,omitempty"`
+	snapshots              []SnapshotEvidence
 }
 
 func (c MachineCapability) run(ctx context.Context, execution lifecycle.Execution, operation string, request MachineRequest) (lifecycle.RunResult, error) {
@@ -536,6 +545,15 @@ func (c MachineCapability) run(ctx context.Context, execution lifecycle.Executio
 	if err != nil {
 		return lifecycle.RunResult{}, err
 	}
+	if request.TemplateSnapshot != nil {
+		index := slices.IndexFunc(pinned.snapshots, func(evidence SnapshotEvidence) bool {
+			return evidence.proves(*request.TemplateSnapshot, pinned.KubeSystemUID)
+		})
+		if index < 0 {
+			return lifecycle.RunResult{}, kubevirtProofUnrecorded.Fail("the provider proof does not record the Machine's template snapshot", "")
+		}
+		pinned.TemplateSnapshot = &pinned.snapshots[index]
+	}
 	pinned.Receipts = []Receipt{}
 	if previous, err := decodeMachineEvidence(execution.PreviousEvidence, execution.Block.RequestDigest); err == nil {
 		if previous.KubeSystemUID != "" && previous.KubeSystemUID != pinned.KubeSystemUID {
@@ -543,19 +561,26 @@ func (c MachineCapability) run(ctx context.Context, execution lifecycle.Executio
 				hostRemedy(request))
 		}
 		pinned.Receipts = previous.Receipts
+		pinned.TemplateCloneCompleted = pinned.TemplateSnapshot != nil && previous.TemplateSnapshot != nil &&
+			*previous.TemplateSnapshot == *pinned.TemplateSnapshot &&
+			ValidateMachinePresence(execution.PreviousEvidence, request, execution.Block.RequestDigest) == nil
 	}
 	encoded, err := json.Marshal(pinned)
 	if err != nil {
 		return lifecycle.RunResult{}, kubevirtEvidenceUnencodable.Fail("the KubeVirt machine's pinned host cannot be encoded", "")
 	}
-	materials, release, err := lentAccess(ctx, c.lender, &execution, request.HostCluster, request.KubeconfigRef, request.Namespace, request.Placement, machineDeadline)
+	deadline := machineDeadline
+	if request.TemplateSnapshot != nil && operation != "destroy" {
+		deadline += 2 * hostDeadline
+	}
+	materials, release, err := lentAccess(ctx, c.lender, &execution, request.HostCluster, request.KubeconfigRef, request.Namespace, request.Placement, deadline)
 	if err != nil {
 		return lifecycle.RunResult{}, err
 	}
 	defer release()
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
 		Implementation: MachineImplementation, Operation: operation, Variable: machineVariable,
-		Canonical: canonical, Placement: request.Placement, Materials: materials, Deadline: machineDeadline,
+		Canonical: canonical, Placement: request.Placement, Materials: materials, Deadline: deadline,
 		Values: map[string]string{"operation": execution.ApplyOperation, "block": execution.Block.ID,
 			"registered": execution.ApplyRegistered, "pinned": string(encoded)},
 	}))
@@ -583,7 +608,8 @@ func provedHost(records []lifecycle.BlockEvidence, provider string) (proof, erro
 			return proof{}, err
 		}
 		evidence, _ := decodeHostEvidence(record.Evidence, record.Block.RequestDigest)
-		return proof{KubeSystemUID: evidence.KubeSystemUID, Server: evidence.Server, StorageClass: evidence.StorageClass}, nil
+		return proof{KubeSystemUID: evidence.KubeSystemUID, Server: evidence.Server, StorageClass: evidence.StorageClass,
+			snapshots: evidence.TemplateSnapshots}, nil
 	}
 	return proof{}, kubevirtProofUnrecorded.Fail("the proof of the host cluster of InfraProvider/"+provider+" is not recorded for this operation",
 		"run the apply again so the provider's proof precedes its Machines")

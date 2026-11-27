@@ -52,6 +52,10 @@ request-schema:
   serviceAccount string omitempty
   spread string omitempty
   storageClass string omitempty
+  templateSnapshot *struct kubevirt.SnapshotRef omitempty
+  templateSnapshot.name string
+  templateSnapshot.namespace string
+  templateSnapshot.uid string
   tpm *struct kubevirt.TPM omitempty
   tpm.persistent bool
   version string

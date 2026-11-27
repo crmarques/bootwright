@@ -118,7 +118,7 @@ def read_published_snapshot(client, cluster_uid, reference):
     backing_name = volume["status"].get("boundVolumeSnapshotContentName")
     backing = read_object(client, CSI_SNAPSHOT, "VolumeSnapshotContent", "volumesnapshotcontents", backing_name)
     driver, size = prove_backing(volume, content, backing, claim_name)
-    return {"clusterUID": cluster_uid, "namespace": namespace, "snapshotUID": reference["uid"],
+    return {"clusterUID": cluster_uid, "namespace": namespace, "snapshotName": reference["name"], "snapshotUID": reference["uid"],
             "snapshotContentUID": content["metadata"]["uid"],
             "volumeSnapshot": volume_name, "volumeSnapshotUID": volume["metadata"]["uid"],
             "volumeSnapshotContent": backing_name, "volumeSnapshotContentUID": backing["metadata"]["uid"],

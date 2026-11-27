@@ -36,7 +36,10 @@ def block(operation, client, arguments, clock=time.time, sleep=time.sleep):
     request = arguments["request"]
     host = arm.Host(client, request["namespace"], clock() + int(arguments.get("seconds", 600)), clock, sleep)
     if operation == "proof":
-        return False, arm.proof(client, request, clock, sleep)
+        evidence = arm.proof(client, request, clock, sleep)
+        if evidence["postcondition"] and request.get("templateSnapshots"):
+            prove_template_snapshots(client, request, evidence)
+        return False, evidence
     if operation == "observe" and arguments.get("power_only"):
         return False, arm.observe_power(host, request)
     context = {"operation": arguments["apply_operation"], "block": arguments["block"], "registered": arguments["registered"],
@@ -48,9 +51,33 @@ def block(operation, client, arguments, clock=time.time, sleep=time.sleep):
     return arm.destroy(host, request, context)
 
 
+def prove_template_snapshots(client, request, evidence):
+    snapshots = []
+    grants = set()
+    for reference in request["templateSnapshots"]:
+        namespace = reference["namespace"]
+        if namespace != request["namespace"] and namespace not in grants:
+            arm.allowed(client, arm.Host(client, namespace, 0), {
+                "group": "cdi.kubevirt.io", "resource": "datavolumes", "subresource": "source", "verb": "create",
+            }, evidence["failures"])
+            if evidence["failures"]:
+                evidence["postcondition"] = False
+                break
+            grants.add(namespace)
+        try:
+            snapshots.append(kubevirt_template.read_template_source(client, evidence["kubeSystemUID"], reference))
+        except (Refused, Answered, Unanswered) as error:
+            evidence["failures"].append("template snapshot %s/%s: %s" % (reference["namespace"], reference["name"], failed(error)["msg"]))
+            evidence["postcondition"] = False
+            break
+    evidence["templateSnapshots"] = snapshots
+
+
 def root(operation, client, arguments, clock=time.time, sleep=time.sleep):
     """A kept machine's root disk reset, or its reading: whether it changed anything and its evidence."""
     request = arguments["request"]
+    if request.get("templateSnapshot"):
+        raise Refused("a template-backed root cannot be reset to a blank disk")
     host = arm.Host(client, request["namespace"], clock() + int(arguments.get("seconds", 600)), clock, sleep)
     context = {"operation": "", "block": "", "registered": "", "pinned": arguments["pinned"]}
     mark = kubevirt_root_reset.mark_of(arguments["removal"], arguments["step"])

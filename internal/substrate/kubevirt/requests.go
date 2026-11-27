@@ -30,22 +30,28 @@ type Network struct {
 	Namespace  string `json:"namespace"`
 }
 
-// HostRequest is the complete frozen intent of one provider proof: the host's
-// namespace, the root class the operator chose, if any, the permissions and
-// networks to prove and the MACs to compare with KubeMacPool's range. It
-// names the kubeconfig declaration, never its material.
+// SnapshotRef identifies a published VM snapshot in the provider's cluster.
+type SnapshotRef struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+	UID       string `json:"uid"`
+}
+
+// HostRequest freezes the provider proof's namespace, storage, permissions,
+// networks, MACs, and template sources. It names the kubeconfig by reference.
 type HostRequest struct {
-	Access         []Access             `json:"access"`
-	HostCluster    string               `json:"hostCluster,omitempty"`
-	Identity       Identity             `json:"identity"`
-	KubeconfigRef  string               `json:"kubeconfigRef,omitempty"`
-	MACAddresses   []string             `json:"macAddresses"`
-	Namespace      string               `json:"namespace"`
-	Networks       []Network            `json:"networks"`
-	Placement      machineref.Placement `json:"placement"`
-	ServiceAccount string               `json:"serviceAccount,omitempty"`
-	StorageClass   string               `json:"storageClass,omitempty"`
-	Version        string               `json:"version"`
+	Access            []Access             `json:"access"`
+	HostCluster       string               `json:"hostCluster,omitempty"`
+	Identity          Identity             `json:"identity"`
+	KubeconfigRef     string               `json:"kubeconfigRef,omitempty"`
+	MACAddresses      []string             `json:"macAddresses"`
+	Namespace         string               `json:"namespace"`
+	Networks          []Network            `json:"networks"`
+	Placement         machineref.Placement `json:"placement"`
+	ServiceAccount    string               `json:"serviceAccount,omitempty"`
+	StorageClass      string               `json:"storageClass,omitempty"`
+	TemplateSnapshots []SnapshotRef        `json:"templateSnapshots,omitempty"`
+	Version           string               `json:"version"`
 }
 
 // Interface is one VirtualMachine interface on the bridge binding, with the
@@ -66,24 +72,25 @@ type TPM struct {
 // root DataVolume. The root class is the one the provider proof reads when the
 // provider names none.
 type MachineRequest struct {
-	CPU            int                  `json:"cpu"`
-	DiskGiB        int                  `json:"diskGiB"`
-	HostCluster    string               `json:"hostCluster,omitempty"`
-	Identity       Identity             `json:"identity"`
-	Interfaces     []Interface          `json:"interfaces"`
-	KubeconfigRef  string               `json:"kubeconfigRef,omitempty"`
-	MediaVolume    string               `json:"mediaVolume"`
-	MemoryMiB      int                  `json:"memoryMiB"`
-	Name           string               `json:"name"`
-	Namespace      string               `json:"namespace"`
-	Placement      machineref.Placement `json:"placement"`
-	Provider       string               `json:"provider"`
-	RootVolume     string               `json:"rootVolume"`
-	ServiceAccount string               `json:"serviceAccount,omitempty"`
-	Spread         string               `json:"spread,omitempty"`
-	StorageClass   string               `json:"storageClass,omitempty"`
-	TPM            *TPM                 `json:"tpm,omitempty"`
-	Version        string               `json:"version"`
+	CPU              int                  `json:"cpu"`
+	DiskGiB          int                  `json:"diskGiB"`
+	HostCluster      string               `json:"hostCluster,omitempty"`
+	Identity         Identity             `json:"identity"`
+	Interfaces       []Interface          `json:"interfaces"`
+	KubeconfigRef    string               `json:"kubeconfigRef,omitempty"`
+	MediaVolume      string               `json:"mediaVolume"`
+	MemoryMiB        int                  `json:"memoryMiB"`
+	Name             string               `json:"name"`
+	Namespace        string               `json:"namespace"`
+	Placement        machineref.Placement `json:"placement"`
+	Provider         string               `json:"provider"`
+	RootVolume       string               `json:"rootVolume"`
+	ServiceAccount   string               `json:"serviceAccount,omitempty"`
+	Spread           string               `json:"spread,omitempty"`
+	StorageClass     string               `json:"storageClass,omitempty"`
+	TemplateSnapshot *SnapshotRef         `json:"templateSnapshot,omitempty"`
+	TPM              *TPM                 `json:"tpm,omitempty"`
+	Version          string               `json:"version"`
 }
 
 func (r HostRequest) Canonical() ([]byte, error) {

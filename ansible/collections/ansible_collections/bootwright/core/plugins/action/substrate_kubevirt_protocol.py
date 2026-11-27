@@ -53,8 +53,19 @@ def network(value):
     return published
 
 
-def host(observation, digest):
+def snapshot(value):
     return {
+        "clusterUID": text(value["clusterUID"], 63), "driver": text(value["driver"], 253),
+        "namespace": text(value["namespace"], 63), "restoreBytes": count(value["restoreBytes"], (1 << 63) - 1),
+        "snapshotContentUID": text(value["snapshotContentUID"], 63), "snapshotName": text(value["snapshotName"], 253),
+        "snapshotUID": text(value["snapshotUID"], 63), "volumeSnapshot": text(value["volumeSnapshot"], 253),
+        "volumeSnapshotContent": text(value["volumeSnapshotContent"], 253),
+        "volumeSnapshotContentUID": text(value["volumeSnapshotContentUID"], 63), "volumeSnapshotUID": text(value["volumeSnapshotUID"], 63),
+    }
+
+
+def host(observation, digest):
+    evidence = {
         "absent": bool(observation.get("absent")),
         "failures": items(observation.get("failures") or [], lambda value: text(value, 512)),
         "kubeSystemUID": text(observation.get("kubeSystemUID")),
@@ -71,10 +82,13 @@ def host(observation, digest):
         "uploadProxy": text(observation.get("uploadProxy")),
         "version": text(observation.get("version"), 64),
     }
+    if observation.get("templateSnapshots"):
+        evidence["templateSnapshots"] = items(observation["templateSnapshots"], snapshot)
+    return evidence
 
 
 def machine(observation, digest):
-    return {
+    evidence = {
         "absent": bool(observation.get("absent")),
         "answered": bool(observation.get("answered")),
         "foreign": bool(observation.get("foreign")),
@@ -91,6 +105,9 @@ def machine(observation, digest):
         "volumes": items(observation.get("volumes") or [], lambda value: {
             "kind": text(value["kind"], 63), "name": text(value["name"], 253), "present": bool(value["present"])}),
     }
+    if observation.get("templateSnapshot"):
+        evidence["templateSnapshot"] = snapshot(observation["templateSnapshot"])
+    return evidence
 
 
 def lend(observation, digest):

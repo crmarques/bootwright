@@ -64,11 +64,11 @@ func MachineBlockID(machine string) string { return reconciliation.BlockIdentity
 func HostContentDigest() string {
 	return reconciliation.ContentDigestOf("bootwright.substrate.kubevirt.host-v1", HostImplementation, hostRequestVersion, hostEvidenceVersion,
 		"access-reviews", "root-class-rwx", "kube-system-uid", "ingress-ca", lendVersion, lendEvidence, lendBound,
-		"root-class-first-set", "schedulable-kvm-node", "attachment-kind", "cdi-and-kube-system-present", "one-default-class")
+		"root-class-first-set", "schedulable-kvm-node", "attachment-kind", "cdi-and-kube-system-present", "one-default-class", "published-template-snapshot-binding")
 }
 
 func MachineContentDigest() string {
 	return reconciliation.ContentDigestOf("bootwright.substrate.kubevirt.machine-v1", MachineImplementation, machineRequestVersion, machineEvidence,
 		"run-strategy-manual", "efi-no-secure-boot", "evict-live-migrate", "bridge-binding", "root-template-blank", "owner-annotation-mark",
-		lendVersion, lendEvidence, "spread-preferred-anti-affinity", lendBound)
+		lendVersion, lendEvidence, "spread-preferred-anti-affinity", lendBound, "pinned-snapshot-root")
 }

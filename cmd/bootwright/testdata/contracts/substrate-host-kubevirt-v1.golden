@@ -1,5 +1,5 @@
 implementation: substrate-host-kubevirt-v1
-content-digest: 712073aec40ccf2e0e5022b4cda1155858296525dab94bfb77736ff9b8e1c6b9
+content-digest: 955661297223c45dd890e46953f5bc4cf4a872150e2f65e839b0cdfc4f5c4ee9
 request-version: substrate-host-kubevirt-v1
 automation-formats: none
 mark-formats: bootwright.io/lend
@@ -18,6 +18,7 @@ effect-pins:
   attachment-kind
   cdi-and-kube-system-present
   one-default-class
+  published-template-snapshot-binding
 request-identity:
   identity.context
   identity.object
@@ -25,6 +26,7 @@ request-identity:
   namespace
   kubeconfigRef
   hostCluster
+  templateSnapshots
 request-schema:
   access []struct kubevirt.Access
   access[].group string omitempty
@@ -55,6 +57,10 @@ request-schema:
   placement.user string omitempty
   serviceAccount string omitempty
   storageClass string omitempty
+  templateSnapshots []struct kubevirt.SnapshotRef omitempty
+  templateSnapshots[].name string
+  templateSnapshots[].namespace string
+  templateSnapshots[].uid string
   version string
 evidence-schema:
   absent bool
@@ -76,5 +82,17 @@ evidence-schema:
   schedulableNodes int
   server string
   storageClass string
+  templateSnapshots []struct kubevirt.SnapshotEvidence omitempty
+  templateSnapshots[].clusterUID string
+  templateSnapshots[].driver string
+  templateSnapshots[].namespace string
+  templateSnapshots[].restoreBytes uint64
+  templateSnapshots[].snapshotContentUID string
+  templateSnapshots[].snapshotName string
+  templateSnapshots[].snapshotUID string
+  templateSnapshots[].volumeSnapshot string
+  templateSnapshots[].volumeSnapshotContent string
+  templateSnapshots[].volumeSnapshotContentUID string
+  templateSnapshots[].volumeSnapshotUID string
   uploadProxy string
   version string

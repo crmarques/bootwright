@@ -141,6 +141,10 @@ func HostRequests(catalog api.Catalog, controllerMachine, contextName string) ([
 			}
 		}
 		for _, machine := range substrate.HostedMachines(catalog, provider.Name()) {
+			_, profile, _ := substrate.SelectedProfile(catalog, machine)
+			if source := templateSnapshot(profile); source != nil {
+				request.TemplateSnapshots = append(request.TemplateSnapshots, *source)
+			}
 			target, err := substrate.TargetFor(catalog, machine, contextName, controllerMachine)
 			if err != nil {
 				return nil, err
@@ -165,9 +169,29 @@ func HostRequests(catalog api.Catalog, controllerMachine, contextName string) ([
 		}
 		slices.Sort(request.MACAddresses)
 		request.MACAddresses = slices.Compact(request.MACAddresses)
+		slices.SortFunc(request.TemplateSnapshots, compareSnapshot)
+		request.TemplateSnapshots = slices.Compact(request.TemplateSnapshots)
 		requests = append(requests, request)
 	}
 	return requests, nil
+}
+
+func templateSnapshot(profile api.Value) *SnapshotRef {
+	value := profile.Get("templateSnapshotRef")
+	if !value.Present() {
+		return nil
+	}
+	return &SnapshotRef{Name: value.Get("name").Text(), Namespace: value.Get("namespace").Text(), UID: value.Get("uid").Text()}
+}
+
+func compareSnapshot(a, b SnapshotRef) int {
+	if order := strings.Compare(a.Namespace, b.Namespace); order != 0 {
+		return order
+	}
+	if order := strings.Compare(a.Name, b.Name); order != 0 {
+		return order
+	}
+	return strings.Compare(a.UID, b.UID)
 }
 
 // MachineRequests derives one frozen request per Machine a KubeVirt provider
@@ -208,9 +232,6 @@ func machineRequestFor(catalog api.Catalog, provider, machine api.Object, contro
 		return MachineRequest{}, refusal("api.reference", "the Machine's KubeVirt profile does not resolve to a sized profile",
 			"correct "+substrate.MachineProfilePath(machine)+" on "+machine.Identity())
 	}
-	if profile.Has("templateSnapshotRef") {
-		return MachineRequest{}, refusal("api.invariant", templateCloneRefusal, templateCloneRemedy)
-	}
 	arm := provider.Spec().Get("kubevirt")
 	vm := substrate.KubeVirtName(contextName, name)
 	cpu, _ := profile.Get("cpu").Int64()
@@ -218,18 +239,19 @@ func machineRequestFor(catalog api.Catalog, provider, machine api.Object, contro
 	disk, _ := profile.Get("diskGiB").Int64()
 	request := MachineRequest{
 		CPU: int(cpu), DiskGiB: int(disk), MemoryMiB: int(memory),
-		HostCluster:   substrate.HostCluster(provider),
-		Identity:      Identity{Block: MachineBlockID(name), Context: contextName, Object: name},
-		KubeconfigRef: arm.Get("kubeconfigRef").Text(),
-		MediaVolume:   substrate.KubeVirtMediaVolume(vm),
-		Name:          vm,
-		Namespace:     arm.Get("namespace").Text(),
-		Placement:     placement,
-		Provider:      provider.Name(),
-		RootVolume:    vm + "-root",
-		Spread:        spreadOf(catalog, contextName, name),
-		StorageClass:  arm.Get("storageClassRef").Text(),
-		Version:       machineRequestVersion,
+		HostCluster:      substrate.HostCluster(provider),
+		Identity:         Identity{Block: MachineBlockID(name), Context: contextName, Object: name},
+		KubeconfigRef:    arm.Get("kubeconfigRef").Text(),
+		MediaVolume:      substrate.KubeVirtMediaVolume(vm),
+		Name:             vm,
+		Namespace:        arm.Get("namespace").Text(),
+		Placement:        placement,
+		Provider:         provider.Name(),
+		RootVolume:       vm + "-root",
+		Spread:           spreadOf(catalog, contextName, name),
+		StorageClass:     arm.Get("storageClassRef").Text(),
+		TemplateSnapshot: templateSnapshot(profile),
+		Version:          machineRequestVersion,
 	}
 	if request.HostCluster != "" {
 		request.ServiceAccount = substrate.HostAccount

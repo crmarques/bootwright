@@ -445,3 +445,62 @@ func TestStartPowerRequiresClusterAndVMIdentityAndNeverLendsHostedAccess(t *test
 		t.Fatalf("hosted access was lent before registration: %+v, %v", state, err)
 	}
 }
+
+func TestTemplateCloneRequiresTheExactRecordedBacking(t *testing.T) {
+	ref := SnapshotRef{Namespace: "golden-images", Name: "rhel-9-v3", UID: "snapshot-uid"}
+	source := SnapshotEvidence{
+		Namespace: ref.Namespace, SnapshotName: ref.Name, SnapshotUID: ref.UID, ClusterUID: "cluster-1",
+		SnapshotContentUID: "content-uid", VolumeSnapshot: "snapshot-root", VolumeSnapshotUID: "root-uid",
+		VolumeSnapshotContent: "backing", VolumeSnapshotContentUID: "backing-uid",
+		Driver: "csi.example.test", RestoreBytes: 40 << 30,
+	}
+	providerBlock := hostBlock(t)
+	hostRequest := hostRequest(t)
+	hostRequest.TemplateSnapshots = []SnapshotRef{ref}
+	proved := provedHostEvidence(t, providerBlock, source.ClusterUID)
+	proved.Block.Request = encoded(t, hostRequest)
+	missing := proved
+	hostEvidence, err := decodeHostEvidence(proved.Evidence, proved.Block.RequestDigest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hostEvidence.TemplateSnapshots = []SnapshotEvidence{source}
+	proved.Evidence = encoded(t, hostEvidence)
+	block := machineBlock(t)
+	machineRequest := machineRequest(t)
+	machineRequest.TemplateSnapshot = &ref
+	block.Request = encoded(t, machineRequest)
+	completed := func(e *MachineEvidence) {
+		e.TemplateSnapshot = &source
+		e.Receipts = append(e.Receipts, Receipt{Kind: "PersistentVolumeClaim", Name: machineRequest.RootVolume, UID: "pvc-uid", Basis: "owner-referenced"})
+		e.Volumes = append(e.Volumes, VolumeEvidence{Kind: "PersistentVolumeClaim", Name: machineRequest.RootVolume, Present: true})
+	}
+	result := machineFixture(t, block.RequestDigest, completed)
+	execution := lifecycle.Execution{Block: block, ApplyOperation: "op-1", ApplyRegistered: "2026-11-01T10:00:00Z",
+		ApplyProved: []lifecycle.BlockEvidence{missing}}
+	unproved := &runner{}
+	if _, err := NewMachine(unproved).Apply(context.Background(), execution); err == nil || len(unproved.requests) != 0 {
+		t.Fatalf("the machine ran without snapshot proof: %v", err)
+	}
+
+	execution.ApplyProved = []lifecycle.BlockEvidence{proved}
+	run := &runner{result: lifecycle.RunResult{Outcome: "changed", Evidence: result}}
+	if _, err := NewMachine(run).Apply(context.Background(), execution); err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	var sent proof
+	if err := json.Unmarshal([]byte(run.requests[0].MaterialValues["pinned"]), &sent); err != nil ||
+		sent.TemplateSnapshot == nil || *sent.TemplateSnapshot != source || sent.TemplateCloneCompleted {
+		t.Fatalf("incorrect backing proof: %+v, %v", sent, err)
+	}
+
+	other := source
+	other.VolumeSnapshotContentUID = "replaced"
+	run.result.Evidence = machineFixture(t, block.RequestDigest, func(e *MachineEvidence) {
+		completed(e)
+		e.TemplateSnapshot = &other
+	})
+	if _, err := NewMachine(run).Apply(context.Background(), execution); err == nil {
+		t.Fatal("completed evidence for a replacement backing was accepted")
+	}
+}

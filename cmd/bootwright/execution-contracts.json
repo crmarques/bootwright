@@ -45,11 +45,11 @@
   },
   "machine-kubevirt-root-reset-v1": {
     "contentDigest": "c10e9fa6592515169e16fb2185cfc0d7d27d0a48f96e4680975b81765f3320b4",
-    "fingerprint": "36b510d2c55b15d98d7d60dc99c0467df44301918d7a370ed99da566da8acff9"
+    "fingerprint": "10e48233d6f5a264a26e8fdf7fc0941707af1268e8cc2bbcd1e0ad7a91f22c84"
   },
   "machine-kubevirt-v1": {
-    "contentDigest": "51ddb3590eb7ac455201230a9d7cc259fa7373e1ee5b647b9e8b3af828b40b92",
-    "fingerprint": "c37608341fd76d0cee2e9d78cdb65239e7be1c752a01f5cf1e66aa458b9fffe0"
+    "contentDigest": "3c67617052aa9ff2c5562085975074197e9c4681288ef7a7127321618375ff65",
+    "fingerprint": "27cce63226066635ce3385099a26bf6efeb9ba49cdba4586a997d68b3c37340b"
   },
   "machine-libvirt-root-reset-v1": {
     "contentDigest": "901612fa75032213210790390df85fd44ccd9316d5cda86e61853a684101a908",
@@ -156,8 +156,8 @@
     "fingerprint": "9cfe1a06efec589581457a1dae3659dbe21da1db5ba5bb8a4b917c838270517a"
   },
   "substrate-host-kubevirt-v1": {
-    "contentDigest": "712073aec40ccf2e0e5022b4cda1155858296525dab94bfb77736ff9b8e1c6b9",
-    "fingerprint": "d61317b5aa6978ab645dc7c529f2dccf720ecab8d28f0f79752b44a80d8d0145"
+    "contentDigest": "955661297223c45dd890e46953f5bc4cf4a872150e2f65e839b0cdfc4f5c4ee9",
+    "fingerprint": "5b7dba04cd446df7ba1469f8b80d89bff66539c59e77f6dc812c708ddf8a9c97"
   },
   "substrate-host-libvirt-v1": {
     "contentDigest": "8e372972481cf79cb1f5756fb88b4f3940138d6125b616721b64efc8041c2f94",

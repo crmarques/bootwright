@@ -252,8 +252,13 @@ spec:
 	}) {
 		t.Fatalf("provisioning failed to refuse the unrealized source before registration: %+v", refusals)
 	}
-	if requests, err := kubevirt.MachineRequests(state.Effective(), "controller", "template-test"); err == nil || requests != nil {
-		t.Fatalf("template source yielded a blank disk request: %+v, %v", requests, err)
+	machines, err := kubevirt.MachineRequests(state.Effective(), "controller", "template-test")
+	if err != nil || len(machines) != 1 || machines[0].TemplateSnapshot == nil {
+		t.Fatalf("request generation lost the snapshot intent: %+v, %v", machines, err)
+	}
+	providers, err := kubevirt.HostRequests(state.Effective(), "controller", "template-test")
+	if err != nil || len(providers) != 1 || !slices.Equal(providers[0].TemplateSnapshots, []kubevirt.SnapshotRef{*machines[0].TemplateSnapshot}) {
+		t.Fatalf("provider did not freeze the source selected by its machine: %+v, %v", providers, err)
 	}
 	incomplete := patchedSources(t, complete, providerFile, "          uid: 1cf3091a-6642-4687-bd20-086ef84d37b6\n", "", nil)
 	trustFailure(t, incomplete, "api.required", snapshotField+".uid")

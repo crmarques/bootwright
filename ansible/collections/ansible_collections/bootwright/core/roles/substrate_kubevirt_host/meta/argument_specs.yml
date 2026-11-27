@@ -39,6 +39,20 @@ argument_specs:
           storageClass:
             type: str
             required: false
+          templateSnapshots:
+            type: list
+            elements: dict
+            required: false
+            options:
+              name:
+                type: str
+                required: true
+              namespace:
+                type: str
+                required: true
+              uid:
+                type: str
+                required: true
           version:
             type: str
             required: true
