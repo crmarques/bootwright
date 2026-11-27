@@ -2,7 +2,7 @@
   "go": {
     "ansible": 93.2,
     "api/v1alpha1": 81.7,
-    "cmd/bootwright": 83.0,
+    "cmd/bootwright": 83.3,
     "internal/acquisition": 61.7,
     "internal/acquisition/listing": 12.6,
     "internal/adapterprotocol": 94.7,
@@ -25,7 +25,7 @@
     "internal/controller": 89.9,
     "internal/controller/ansiblelocal": 87.6,
     "internal/controller/bundlelocal": 74.3,
-    "internal/controller/clients": 82.4,
+    "internal/controller/clients": 82.6,
     "internal/controller/evidence": 74.5,
     "internal/controller/firewall": 55.7,
     "internal/controller/firewalllocal": 77.6,

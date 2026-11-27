@@ -2641,6 +2641,9 @@ Infrastructure services wait for that block. The installed-host block runs
 in the machines stage after OS installation and before consumers. Provided-host blocks run in infrastructure-services. The controller stage
 requires the controller Machine's own daemon preparation and its grants for
 already-existing interfaces, so a controller-only selection includes them.
+With a managed artifact mirror that splits the controller stage, these
+firewall blocks wait for the host package block and precede the mirrored
+clients. An artifact server on the controller waits for its firewall grant.
 Another provided host's blocks wait for the controller stage unless a
 controller-stage block consumes a service placed on that host, such as an
 artifact mirror; otherwise a controller-only selection never contacts that

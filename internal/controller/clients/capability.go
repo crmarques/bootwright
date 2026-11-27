@@ -35,16 +35,14 @@ func New(tools ToolCatalog, packages HostPackages, setup SetupLock, installer In
 	return Capability{tools: tools, packages: packages, setup: setup, installer: installer}
 }
 
-// WithHostPrerequisites binds host preparation which must precede this stage.
+// WithHostPrerequisites binds host preparation which must precede client acquisition.
 func (c Capability) WithHostPrerequisites(requirements func(api.Catalog) ([]string, error)) Capability {
 	c.hostPrerequisites = requirements
 	return c
 }
 
-// Plan contributes one block when the selected graph adds a controller
-// prerequisite, and nothing at all when it adds none. Planning is pure: it
-// reads no host, contacts no publisher and resolves no release, so it presents
-// the host package names the selected closures require, not which are missing.
+// Plan builds the controller blocks without reading the host or publisher.
+// It reports the required host packages without checking which are missing.
 func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecycle.CapabilityPlan, error) {
 	if err := ctx.Err(); err != nil {
 		return lifecycle.CapabilityPlan{}, err
@@ -90,13 +88,12 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	if err != nil {
 		return empty, err
 	}
-	first.Dependencies = prerequisites
 	second, err := stageBlock(input.Verb, selection.EnvironmentName(), MirroredClientsBlockID, clients,
 		[]reconciliation.ObjectRef{{Kind: string(api.ArtifactServer), Object: mirror.Server.Name()}})
 	if err != nil {
 		return empty, err
 	}
-	second.Dependencies = []string{BlockID}
+	second.Dependencies = append([]string{BlockID}, prerequisites...)
 	return lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{first, second}}, nil
 }
 

@@ -13,6 +13,7 @@ import (
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/mirrorfill"
 	"github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/managedos/hostfirewall"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
@@ -146,6 +147,32 @@ func TestAManagedArtifactMirrorOnTheControllerSitsBetweenTheStagesBlocks(t *test
 			if err != nil || !slices.Contains(request.Packages, "podman") {
 				t.Fatalf("the stage's host packages are %v (%v)", request.Packages, err)
 			}
+		}
+	}
+}
+
+func TestTheControllerFirewallPrecedesItsManagedArtifactMirror(t *testing.T) {
+	t.Parallel()
+	const contextName = "lab-sno-mirror-host"
+	sources := controllerPlacedMirror(t)
+	for index, file := range sources.Files {
+		if strings.HasSuffix(file.Path(), "/infra/machines/controller.yaml") {
+			document := strings.Replace(string(file.Bytes()), "\nspec:\n", "\nspec:\n  firewall:\n    management: managed\n\n", 1)
+			sources.Files[index] = desiredstate.NewSourceFile(file.Path(), []byte(document))
+		}
+	}
+	order, waits := mirrorOrder(t, contextName, sources)
+	want := []string{
+		clients.BlockID, hostfirewall.FirewallPreparationBlockID("controller"),
+		hostfirewall.FirewallBlockID("controller"), "artifact-server-mirror-artifacts",
+		"mirror-files-lab-sno-mirror-host", clients.MirroredClientsBlockID,
+	}
+	if len(order) < len(want) || !slices.Equal(order[:len(want)], want) {
+		t.Fatalf("controller-stage order = %v, want prefix %v", order, want)
+	}
+	for index := 1; index < len(want); index++ {
+		if !slices.Contains(waits[want[index]], want[index-1]) {
+			t.Fatalf("%s waits for %v, want it to include %s", want[index], waits[want[index]], want[index-1])
 		}
 	}
 }
