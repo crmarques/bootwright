@@ -26,22 +26,11 @@
   no_log: true
 
 - name: Prove the artifact server's hosted directories before any effect
-  bootwright.core.hosted_area:
-    context: '{{ bootwright_mirror_files_request.identity.context }}'
-    path: '{{ infrastructureservices_mirror_fill_area }}'
-    state: proved
+  ansible.builtin.import_tasks: prove_server.yml
 
-- name: Read the artifact server's served root
-  ansible.builtin.stat:
-    path: '{{ infrastructureservices_mirror_fill_served_root }}'
-    follow: false
-  register: infrastructureservices_mirror_fill_served
-
-- name: Refuse a served root the artifact server did not create
+- name: Require the served root before creating mirror directories
   ansible.builtin.assert:
-    that:
-      - infrastructureservices_mirror_fill_served.stat.isdir | default(false)
-      - not (infrastructureservices_mirror_fill_served.stat.islnk | default(true))
+    that: infrastructureservices_mirror_fill_served.stat.exists
     quiet: true
 
 - name: Create each mirror directory beneath the served root

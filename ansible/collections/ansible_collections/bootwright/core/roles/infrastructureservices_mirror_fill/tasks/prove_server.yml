@@ -1,0 +1,44 @@
+---
+- name: Prove the artifact server's private hosted ancestors
+  bootwright.core.hosted_area:
+    context: '{{ bootwright_mirror_files_request.identity.context }}'
+    path: '{{ infrastructureservices_mirror_fill_area }}'
+    state: proved
+
+- name: Read the artifact server's content root without following links
+  ansible.builtin.stat:
+    path: '{{ infrastructureservices_mirror_fill_served_root | dirname }}'
+    follow: false
+    get_checksum: false
+  register: infrastructureservices_mirror_fill_content
+
+- name: Refuse an unsafe artifact server content root
+  ansible.builtin.assert:
+    that: >-
+      not infrastructureservices_mirror_fill_entry.exists or
+      (infrastructureservices_mirror_fill_entry.isdir
+      and not infrastructureservices_mirror_fill_entry.islnk
+      and infrastructureservices_mirror_fill_entry.uid == 0
+      and infrastructureservices_mirror_fill_entry.mode == '0755')
+    quiet: true
+  vars:
+    infrastructureservices_mirror_fill_entry: '{{ infrastructureservices_mirror_fill_content.stat }}'
+
+- name: Read the artifact server's served root without following links
+  ansible.builtin.stat:
+    path: '{{ infrastructureservices_mirror_fill_served_root }}'
+    follow: false
+    get_checksum: false
+  register: infrastructureservices_mirror_fill_served
+
+- name: Refuse an unsafe artifact server served root
+  ansible.builtin.assert:
+    that: >-
+      not infrastructureservices_mirror_fill_entry.exists or
+      (infrastructureservices_mirror_fill_entry.isdir
+      and not infrastructureservices_mirror_fill_entry.islnk
+      and infrastructureservices_mirror_fill_entry.uid == 0
+      and infrastructureservices_mirror_fill_entry.mode == '0755')
+    quiet: true
+  vars:
+    infrastructureservices_mirror_fill_entry: '{{ infrastructureservices_mirror_fill_served.stat }}'

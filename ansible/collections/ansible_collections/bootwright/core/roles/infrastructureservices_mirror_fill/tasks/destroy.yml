@@ -26,10 +26,7 @@
   no_log: true
 
 - name: Prove the artifact server's hosted directories before any effect
-  bootwright.core.hosted_area:
-    context: '{{ bootwright_mirror_files_request.identity.context }}'
-    path: '{{ infrastructureservices_mirror_fill_area }}'
-    state: proved
+  ansible.builtin.import_tasks: prove_server.yml
 
 - name: Remove this Environment's mirror files
   ansible.builtin.file:
