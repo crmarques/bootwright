@@ -4,7 +4,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -36,6 +38,10 @@ func TestPhysicalCephMatrixPreservesCanonicalPlans(t *testing.T) {
 		name := profile.dir
 		t.Run(profile.id, func(t *testing.T) {
 			original, _ := compileAcceptance(t, exampleDirectory(t, name))
+			virtualPlan, err := reconciliation.NewPlan(reconciliation.Apply, productionDefinitions(t, original, name))
+			if err != nil {
+				t.Fatal(err)
+			}
 			physical := physicalMatrixState(t, name, original)
 			if refused := productionUnsupported(t, physical); len(refused) != 0 {
 				t.Fatalf("physical profile refused: %+v", refused)
@@ -59,6 +65,7 @@ func TestPhysicalCephMatrixPreservesCanonicalPlans(t *testing.T) {
 				if err != nil || len(request.Hosts) != len(cluster.Spec().Get("topology", "nodes").Items()) {
 					t.Fatalf("physical host projection: %+v %v", request, err)
 				}
+				checkCephMatrixWorkload(t, virtualPlan, cluster.Name(), request)
 				for _, host := range request.Hosts {
 					physicalHosts[host.Machine] = true
 					if !host.Physical || host.Hardware != nil || host.HostKeyRef == "" {
@@ -105,6 +112,44 @@ func TestPhysicalCephMatrixPreservesCanonicalPlans(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// Both arms must freeze the same Ceph policy above the device boundary.
+func checkCephMatrixWorkload(t *testing.T, plan reconciliation.Plan, cluster string, physical ceph.Request) {
+	t.Helper()
+	block, ok := plan.Block(ceph.ClusterBlockID(cluster))
+	if !ok {
+		t.Fatal("missing emulated cluster", cluster)
+	}
+	virtual, err := ceph.DecodeRequest(block.Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if virtual.FSID != physical.FSID || virtual.Release != physical.Release || virtual.Image != physical.Image {
+		t.Fatal("substrate changed Ceph cluster identity or release", cluster)
+	}
+	if !slices.Equal(virtual.ClusterNetworks, physical.ClusterNetworks) || !slices.Equal(virtual.PublicNetworks, physical.PublicNetworks) ||
+		!reflect.DeepEqual(virtual.Config, physical.Config) || !reflect.DeepEqual(virtual.Security, physical.Security) {
+		t.Fatal("substrate changed Ceph guest network or cluster settings", cluster)
+	}
+	nonOSD := func(request ceph.Request) []string {
+		var services []string
+		for _, raw := range request.Services {
+			var selector struct {
+				Type string `json:"service_type"`
+			}
+			if err := json.Unmarshal(raw, &selector); err != nil {
+				t.Fatal(err)
+			}
+			if selector.Type != "osd" {
+				services = append(services, string(raw))
+			}
+		}
+		return services
+	}
+	if !slices.Equal(nonOSD(virtual), nonOSD(physical)) {
+		t.Fatal("substrate changed native Ceph workload services", cluster)
 	}
 }
 
@@ -185,15 +230,23 @@ func physicalMatrixState(t *testing.T, name string, original *compilation.State)
 						if !service.Has("spec", member) {
 							continue
 						}
-						selected := []string{}
-						for _, path := range service.Get("spec", member, "paths").Strings() {
+						selected := []api.Value{}
+						for _, value := range service.Get("spec", member, "paths").Items() {
+							path := value.Text()
+							if value.Type() == api.Mapping {
+								path = value.Get("path").Text()
+							}
 							physical, ok := paths[host][path]
 							if !ok {
 								t.Fatalf("%s selects undeclared path %s", host, path)
 							}
-							selected = append(selected, physical)
+							candidate := api.StringValue(physical)
+							if value.Type() == api.Mapping {
+								candidate = value.With("path", candidate)
+							}
+							selected = append(selected, candidate)
 						}
-						converted = converted.WithPath(api.StringList(selected...), "spec", member, "paths")
+						converted = converted.WithPath(api.ListValue(selected...), "spec", member, "paths")
 					}
 					services = append(services, converted)
 				}

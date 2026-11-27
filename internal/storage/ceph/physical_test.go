@@ -67,6 +67,35 @@ func TestPhysicalCephPlansOnlyExplicitWWNIntent(t *testing.T) {
 	}
 }
 
+func TestPhysicalCephPreservesPerDeviceCRUSHClass(t *testing.T) {
+	catalog, cluster := physicalCatalog()
+	services := cluster.Spec().Get("services").Items()
+	path := services[2].Get("spec", "data_devices", "paths").Items()[0].Text()
+	services[2] = services[2].WithPath(api.ListValue(requestMap("path", path, "crush_device_class", "fast")), "spec", "data_devices", "paths")
+	cluster = cluster.WithSpec(cluster.Spec().WithPath(api.ListValue(services...), "services"))
+	request, err := baseRequest(catalog, cluster, "synthetic")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(request.Hosts[0].Devices) != 1 || request.Hosts[0].Devices[0].Path != path {
+		t.Fatalf("physical device projection lost %q: %+v", path, request.Hosts[0].Devices)
+	}
+	for _, raw := range request.Services {
+		service, err := reconciliation.DecodeEvidence[nativeService](raw, 60*1024, "Ceph native service")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if service.ServiceType == "osd" && service.Spec != nil && service.Spec.DataDevices != nil {
+			for _, device := range service.Spec.DataDevices.Paths {
+				if device.Path == path && device.Class == "fast" {
+					return
+				}
+			}
+		}
+	}
+	t.Fatal("native OSD request lost the per-device class")
+}
+
 type physicalProofs struct {
 	dependencyProofs
 	identity PhysicalIdentity

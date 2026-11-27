@@ -41,17 +41,18 @@ func physicalDevices(c api.Catalog, cluster, m api.Object, node string) ([]Devic
 			continue
 		}
 		for _, member := range []string{"data_devices", "db_devices", "wal_devices"} {
-			for _, path := range service.Get("spec", member, "paths").Items() {
-				serial, size, reason, remedy := cephcluster.SerialSelection(c, m, path.Text())
+			for _, device := range nativePaths(service.Get("spec", member, "paths")) {
+				path := device.Path
+				serial, size, reason, remedy := cephcluster.SerialSelection(c, m, path)
 				switch {
 				case reason != "":
 					return nil, failure("api.invariant", reason, remedy)
 				case serial != "":
-					sizes[path.Text()] = size
-				case !physicalWWN.MatchString(path.Text()):
+					sizes[path] = size
+				case !physicalWWN.MatchString(path):
 					return nil, cephUnsupportedDisk.Fail("physical OSD devices require explicit canonical WWN by-id paths or /dev/disk/by-serial/ paths", "use /dev/disk/by-id/wwn-0x followed by 16 or 32 lowercase hexadecimal digits, or /dev/disk/by-serial/ followed by the serial number of a disk the Machine declares in hardware.dataDisks with a non-retain onRemoval and no wwn; partitions and dynamic selectors are refused")
 				}
-				paths = append(paths, path.Text())
+				paths = append(paths, path)
 			}
 		}
 	}
