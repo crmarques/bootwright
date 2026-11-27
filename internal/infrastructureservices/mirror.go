@@ -154,7 +154,7 @@ func artifactMirrorPlacement(c api.Catalog, environment api.Object, artifacts Ar
 	server := artifacts.Server.Identity()
 	mirror := managedMirror(c, artifacts.Server, "$.spec.mirror.artifacts.serverRef")
 	switch {
-	case api.ValidLexical(api.LexicalArtifactMirrorURL, artifacts.URL):
+	case api.ValidArtifactMirrorEndpoint(artifacts.URL):
 	case strings.HasPrefix(artifacts.URL, "https://"):
 		mirror.Unlocated = &MirrorRefusal{
 			Reason:      "the artifact mirror's URL " + artifacts.URL + " exceeds the bound a client path fits beneath",

@@ -24,8 +24,8 @@
     "fingerprint": "b0b33e7784aec184c9709f2ee4dc725be0bdddc4c7f6a8fe0e63b368a0e7450b"
   },
   "controller-prerequisites": {
-    "contentDigest": "83a06f61907914bc84f5e220bc80bdba04d44b636af0780c2ae6626ca2c0e341",
-    "fingerprint": "5d11d9a9efc0e5daaa195ed73b4e1039d205fbe6c79785d51d9b16072c6980db"
+    "contentDigest": "6ba02e6d64155c174112c1d32a49dcc7d5e3f1930d6670ac1f44c38a257cf973",
+    "fingerprint": "eb419120c46632a43ea4b9edf51df1b2550a37e42ba0a8faab876273c759f4cc"
   },
   "dns-server-dnsmasq-v1": {
     "contentDigest": "544a52237167283339c48158b98dc4639c72040c96fb129f3ba84675bde743df",

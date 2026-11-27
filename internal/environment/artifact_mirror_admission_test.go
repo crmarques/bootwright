@@ -37,10 +37,10 @@ func mirroredEnvironment(artifacts api.Value, protocol, port string, issuer bool
 	})
 }
 
-// A managed artifact mirror is admitted only on an HTTPS endpoint at the
-// default port, whose certificate an authority every consumer can trust
+// A managed artifact mirror is admitted on an HTTPS endpoint at the
+// configured port, whose certificate an authority every consumer can trust
 // issues, and an endpointRef never stands beside an operator's url.
-func TestAdmissionHoldsAManagedArtifactMirrorToHTTPSOnPort443AndAnIssuer(t *testing.T) {
+func TestAdmissionHoldsAManagedArtifactMirrorToHTTPSAndAnIssuer(t *testing.T) {
 	managed := value("serverRef", "mirror", "endpointRef", "ip")
 	for name, test := range map[string]struct {
 		artifacts      api.Value
@@ -51,7 +51,7 @@ func TestAdmissionHoldsAManagedArtifactMirrorToHTTPSOnPort443AndAnIssuer(t *test
 		"admitted":         {managed, "https", "443", true, "", ""},
 		"authored anchor":  {value("serverRef", "mirror", "endpointRef", "ip", "trustBundleRef", "mirror-ca"), "https", "443", false, "", ""},
 		"plain HTTP":       {managed, "http", "80", true, "$.spec.mirror.artifacts.endpointRef", "serves HTTP"},
-		"another port":     {managed, "https", "8443", true, "$.spec.mirror.artifacts.endpointRef", "default port 443"},
+		"shared ISO port":  {managed, "https", "8443", true, "", ""},
 		"no issuer":        {managed, "https", "443", false, "$.spec.mirror.artifacts.serverRef", "names no generated caBundle issuer"},
 		"no endpoint":      {value("serverRef", "mirror"), "https", "443", true, "$.spec.mirror.artifacts.endpointRef", ""},
 		"endpoint and url": {value("url", "https://mirror.example.test/tools", "endpointRef", "ip"), "https", "443", true, "$.spec.mirror.artifacts.endpointRef", "names the operator's url"},

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/clients"
 	"github.com/crmarques/bootwright/internal/controller/tooltable"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -28,8 +30,32 @@ func TestCatalogHelmSelectionReachesTheProductionMirrorPlan(t *testing.T) {
 			after := "      toolSources:\n        helm:\n          catalogArtifact: " + archive + "\n\n" + before
 			sources.Files[index] = desiredstate.NewSourceFile(file.Path(), []byte(strings.Replace(string(file.Bytes()), before, after, 1)))
 		}
+		if filepath.Base(file.Path()) == "mirror-artifacts.yaml" {
+			sources.Files[index] = desiredstate.NewSourceFile(file.Path(), []byte(strings.Replace(string(file.Bytes()), "port: 443", "port: 8443", 1)))
+		}
 	}
 	state, _ := compileAcceptance(t, sources)
+	var helmMirror string
+	tools, err := controller.SelectTools(state.Effective())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range tools {
+		if tool.Kind == "helm" {
+			helmMirror = tool.Mirror
+		}
+	}
+	if !strings.Contains(helmMirror, ":8443/mirror/") {
+		t.Fatalf("Helm did not use the configured port: %s", helmMirror)
+	}
+	selected, err := controller.Select(state.Effective())
+	if err != nil {
+		t.Fatal(err)
+	}
+	trust := clients.NewRequest(selected, tools).WithMirrorTrust(state.Effective()).MirrorTrust
+	if trust == nil || !strings.HasSuffix(trust.Host, ":8443") {
+		t.Fatalf("Helm did not scope its trust anchor to the configured port: %+v", trust)
+	}
 	capability := mirrorfill.NewFiles(nil, acquisitionTools().MirrorFiles)
 	args := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: example}, Controller: "controller", State: state}
 	if _, err := capability.Plan(t.Context(), args); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != "artifact.catalog" {

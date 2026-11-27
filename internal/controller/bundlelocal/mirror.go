@@ -43,7 +43,7 @@ func ProbeMirror(ctx context.Context, files []MirrorFile, egress prerequisites.S
 	}
 	for _, file := range files {
 		parsed, err := url.Parse(file.URL)
-		if !safeToolURL(file.URL) || err != nil || parsed.Hostname() != origin.Hostname() || file.Bytes <= 0 || file.Bytes > maxToolSourceBytes {
+		if !stagedMirror(file.URL) || err != nil || !sameOrigin(origin)(parsed) || file.Bytes <= 0 || file.Bytes > maxToolSourceBytes {
 			return nil, bundleFailure("the artifact mirror probe is outside its bounds")
 		}
 	}

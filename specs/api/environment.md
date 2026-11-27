@@ -383,11 +383,11 @@ names each file the mirror must hold.
 [Secret](secrets.md), a [trust anchor](../secrets.md#immutable-binding-and-contexts) whose certificates verify the mirror beside the system
 trust store, as the image mirror Registry's `trustBundleRef` adds to it, so a
 mirror whose certificate an enterprise authority issued needs no change to
-the controller's trust store. The anchor verifies only the mirror's own host:
-a proxy and any other host keep the system trust store alone. Only the
-Secret's name is frozen into the controller stage's request; its certificate
-is lent to the attempt that downloads, as a private file the run removes
-after it, and to the preflight probe, and no record or evidence holds it.
+the controller's trust store. The anchor verifies only the mirror's own host
+and port. A proxy and any other HTTPS endpoint use only the system trust
+store. Only the Secret's name is frozen into the controller stage's request.
+Its certificate is lent to the download attempt as a private file the run
+removes afterward, and to the preflight probe. No record or evidence holds it.
 Without it the mirror verifies against the system trust store alone.
 
 Mirror artifact `tlsVerification` is an optional sibling of `trustBundleRef`,
@@ -399,27 +399,29 @@ size of each file the stage would read from the mirror, with no body: an
 HTTPS `HEAD`, or a one-byte ranged `GET` where the server refuses `HEAD`,
 through the controller Machine's [proxy choice](machines.md#machine-proxy)
 and the same trust, following a redirect only to HTTPS on the mirror's own
-host, within two minutes for all of them. The stage's download keeps to a
-like rule: a redirect leaves a source's host only from one publisher download
-host to another, so the artifact mirror cannot redirect the stage to a
-publisher. It fails a file the mirror lacks or serves at a size other than the one the build pins, naming the file's URL and
-the publisher file to copy there, and reports one it could not read, or whose
-size the mirror did not name, as unknown. Without the declaration preflight
-probes nothing.
+host and port, within two minutes for all of them. Downloads from a managed
+mirror likewise stay on its own HTTPS host and port. Publisher downloads may
+redirect between approved publisher hosts. Preflight fails a file the mirror
+lacks or serves at a size other than the one the build pins, naming the file's
+URL and the publisher file to copy there. It reports a file it could not read,
+or whose size the mirror did not name, as unknown. Without the declaration
+preflight probes nothing. When a mirror uses its own trust anchor, preflight
+refuses an HTTPS proxy at the mirror's exact host and port unless the
+controller is configured to bypass it for the mirror.
 
 In place of `url`, `spec.mirror.artifacts.serverRef` names a managed
 [ArtifactServer](infrastructure-services.md) that Bootwright fills on its
 [mirror host](../infrastructure-services.md#mirror-host), with a required
 `endpointRef` naming one of its endpoints; `url` and `serverRef` exclude each
 other, and `endpointRef` beside `url` refuses. The mirror's URL is then
-`https://<endpoint address>/mirror/<environment>`, under the same layout, so
-the endpoint's listener serves HTTPS on port 443, where the controller stage
-reads a mirror, and admission refuses another protocol or port at
-`$.spec.mirror.artifacts.endpointRef`. Without `trustBundleRef` the anchor is
-the generated `caBundle` that issues the server's serving certificate, and
-admission refuses at `$.spec.mirror.artifacts.serverRef` a certificate with
-no issuer. `apply --dry-run` reports a file such a mirror answers 404 or 410 for as
-pending, since the apply fills it before the controller stage reads it; a file
+`https://<endpoint address>[:<port>]/mirror/<environment>`, with the same
+layout. The controller uses the listener's configured port for the probe and
+download and omits it from the URL only for 443. Admission refuses a protocol
+other than HTTPS at `$.spec.mirror.artifacts.endpointRef`. Without
+`trustBundleRef` the anchor is the generated `caBundle` that issues the
+server's serving certificate. Admission refuses a certificate with no issuer
+at `$.spec.mirror.artifacts.serverRef`. `apply --dry-run` reports a file
+such a mirror answers 404 or 410 for as pending, since the apply fills it before the controller stage reads it; a file
 served at another size still fails, and a transport or TLS failure stays
 unknown. The server may be placed on the controller Machine, around which the
 [controller stage](../controller.md#the-controller-stage) splits, or on a

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/pem"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -124,13 +125,24 @@ func TestTheMirrorProbeVerifiesTheMirrorAgainstItsAnchors(t *testing.T) {
 	}
 }
 
+func TestTheMirrorProbeReadsItsSelectedHTTPSPort(t *testing.T) {
+	var requests []string
+	server := mirrorServer(t, &requests)
+	cert := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw})
+	readings, err := ProbeMirror(t.Context(), []MirrorFile{{URL: server.URL + "/tools/present", Bytes: 1024}},
+		prerequisites.SetupEgress{NoProxy: []string{}}, cert)
+	if err != nil || len(readings) != 1 || readings[0].Status != http.StatusOK || readings[0].Served != 1024 {
+		t.Fatalf("readings = %+v, error = %v", readings, err)
+	}
+}
+
 func TestTheMirrorProbeRefusesFilesOutsideOneMirrorBeforeAnyRequest(t *testing.T) {
 	for name, files := range map[string][]MirrorFile{
-		"two hosts":    {{URL: "https://mirror.example.test/tools/helm", Bytes: 1}, {URL: "https://other.example.test/tools/govc", Bytes: 1}},
-		"plain HTTP":   {{URL: "http://mirror.example.test/tools/helm", Bytes: 1}},
-		"no size":      {{URL: "https://mirror.example.test/tools/helm"}},
-		"a userinfo":   {{URL: "https://user@mirror.example.test/tools/helm", Bytes: 1}},
-		"another port": {{URL: "https://mirror.example.test:8443/tools/helm", Bytes: 1}},
+		"two hosts":  {{URL: "https://mirror.example.test/tools/helm", Bytes: 1}, {URL: "https://other.example.test/tools/govc", Bytes: 1}},
+		"plain HTTP": {{URL: "http://mirror.example.test/tools/helm", Bytes: 1}},
+		"no size":    {{URL: "https://mirror.example.test/tools/helm"}},
+		"a userinfo": {{URL: "https://user@mirror.example.test/tools/helm", Bytes: 1}},
+		"two ports":  {{URL: "https://mirror.example.test:8443/tools/helm", Bytes: 1}, {URL: "https://mirror.example.test:443/tools/govc", Bytes: 1}},
 	} {
 		if _, err := ProbeMirror(context.Background(), files, prerequisites.SetupEgress{NoProxy: []string{}}, nil); err == nil {
 			t.Errorf("%s: the probe was admitted", name)
@@ -205,5 +217,16 @@ func TestMirrorTLSAcceptsPublicServerAnchorsAndRetainsFullVerification(t *testin
 				t.Fatalf("%s: full TLS proof failed: %+v, HTTP count %d", name, reading, reached.Load())
 			}
 		})
+	}
+}
+
+func TestAnchoredMirrorProbeRefusesAnOverlappingHTTPSProxy(t *testing.T) {
+	var requests []string
+	server := mirrorServer(t, &requests)
+	file := MirrorFile{URL: server.URL + "/tools/present", Bytes: 11}
+	anchor := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw})
+	findings, err := ProbeMirror(t.Context(), []MirrorFile{file}, prerequisites.SetupEgress{HTTPSProxy: server.URL}, anchor)
+	if err != nil || len(findings) != 1 || !strings.Contains(findings[0].Failure, "the HTTPS proxy and artifact mirror use the same endpoint") || len(requests) != 0 {
+		t.Fatalf("overlapping proxy reached transport: findings=%v, requests=%v, err=%v", findings, requests, err)
 	}
 }

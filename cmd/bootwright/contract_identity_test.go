@@ -120,7 +120,7 @@ func contractRecipes() map[string]digestRecipe {
 			partPin(clusterobjects.OperatorManagedRule), partPin(clusterobjects.DependentExactRule)),
 		networking.Implementation: digestOf(partImplementation(networking.Implementation), partRequest("cluster-network-request-v1"), partVersion("cluster-network-evidence-v1"),
 			partVersion(clusterobjects.Version)),
-		clients.Implementation: digestOf(partDomain("bootwright.controller.client-stage-v1"), partImplementation(clients.Implementation), partRequest(clients.Version), partPin("installer-media-qualified-ssh-source-tools-v1")),
+		clients.Implementation: digestOf(partDomain("bootwright.controller.client-stage-v1"), partImplementation(clients.Implementation), partRequest(clients.Version), partPin("installer-media-qualified-ssh-source-tools-v1"), partPin("managed-mirror-https-authority")),
 		libvirt.HostImplementation: digestOf(partDomain("bootwright.substrate.libvirt.host-v1"), partImplementation(libvirt.HostImplementation), partRequest("substrate-host-libvirt-v1"),
 			partPin(strings.Join(libvirt.HypervisorPackages(), ",")), partPin(substrate.ImagePrefix), partPin(substrate.Prefix), partPin(strings.Join(libvirt.ServiceUnits(), ",")), partPin("bridge-use-claim"), partPin("vlan-refusal-v1"), partPin("nm-trunk-legs-v1"), partPin("routing-table-v1"), partPin("nm-unfrozen-connections-v1"), partPin("routing-ruleset-file-v1"), partPin("nm-carrier-policy-v1"), partPin("/etc/NetworkManager/conf.d")),
 		libvirt.MachineImplementation: digestOf(partDomain("bootwright.substrate.libvirt.machine-v1"), partImplementation(libvirt.MachineImplementation), partRequest("machine-libvirt-v1"),

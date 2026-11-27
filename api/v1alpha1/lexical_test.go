@@ -264,10 +264,17 @@ func TestImageAndRegistryPathsFollowTheOCIGrammar(t *testing.T) {
 // release path to, so nothing after the path and no escape in it survives.
 func TestMirrorURLsAreHTTPSBaseURLs(t *testing.T) {
 	lexicalRows(t, "mirror-url",
-		[]string{"https://mirror.example.test/helm", "https://mirror.example.test:443/helm", "https://mirror.example.test", "https://192.0.2.1/tools/", "https://[2001:db8::1]/tools"},
-		[]string{"http://mirror.example.test/helm", "https://mirror.example.test:8443/helm", "https://mirror.example.test/helm?q", "https://mirror.example.test/helm?",
+		[]string{"https://mirror.example.test/helm", "https://mirror.example.test:443/helm", "https://mirror.example.test", "https://192.0.2.1/tools/", "https://[2001:db8::1]/tools", "https://mirror.example.test:8443/helm", "https://[2001:db8::1]:8443/tools"},
+		[]string{"http://mirror.example.test/helm", "https://mirror.example.test:65536/helm", "https://mirror.example.test/helm?q", "https://mirror.example.test/helm?",
 			"https://mirror.example.test/helm#f", "https://mirror.example.test/helm#", "https://user@mirror.example.test/helm", "https://mirror.example.test/a%2Fb",
 			"https://mirror.example.test/" + strings.Repeat("a", 4096), "https://Mirror.example.test/helm", "https://mirror.example.test/rhel 9", ""})
+}
+
+func TestExternalArtifactMirrorURLStillUsesTheDefaultHTTPSPort(t *testing.T) {
+	const managed = "https://mirror.example.test:8443/tools"
+	if !ValidArtifactMirrorEndpoint(managed) || ValidLexical(LexicalArtifactMirrorURL, managed) {
+		t.Fatal("an external mirror URL admitted a non-default port or a managed endpoint refused it")
+	}
 }
 
 func TestCanonicalImageLowercasesOnlyTheDigest(t *testing.T) {

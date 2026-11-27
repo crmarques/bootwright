@@ -153,10 +153,6 @@ func validateArtifactMirror(environment api.Object, catalog api.Catalog) []api.I
 		return []api.Issue{{Code: "api.invariant", Field: field + ".endpointRef", Message: "the artifact mirror serves HTTPS alone, and endpoint " + artifacts.Get("endpointRef").Text() + " of " + server.Identity() + " serves HTTP",
 			Remediation: "select an endpoint of " + server.Identity() + " whose listener uses protocol https"}}
 	}
-	if location := infrastructureservices.EndpointURL(catalog, server, artifacts.Get("endpointRef").Text()); strings.HasPrefix(location, "https://") && !strings.HasSuffix(location, ":443") {
-		return []api.Issue{{Code: "api.invariant", Field: field + ".endpointRef", Message: "the controller stage reads an artifact mirror on HTTPS's default port 443 alone, and endpoint " + artifacts.Get("endpointRef").Text() + " of " + server.Identity() + " serves another",
-			Remediation: "set the port of the https listener endpoint " + artifacts.Get("endpointRef").Text() + " selects on " + server.Identity() + " to 443"}}
-	}
 	certificate := server.Spec().Get("tls", "secretRef").Text()
 	if !artifacts.Has("trustBundleRef") && infrastructureservices.IssuingAuthority(catalog, certificate) == "" {
 		return []api.Issue{{Code: "api.invariant", Field: field + ".serverRef", Message: "every consumer of the managed artifact mirror trusts the authority that issues its certificate, and Secret/" + certificate + " of " + server.Identity() + " names no generated caBundle issuer",

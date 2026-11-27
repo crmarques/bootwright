@@ -132,7 +132,7 @@ var lexicalRules = map[LexicalRule]func(string) bool{
 	},
 	LexicalMirrorURL: validMirrorURL,
 	LexicalArtifactMirrorURL: func(value string) bool {
-		return len(value) <= maxMirrorURLBytes-maxArtifactMirrorSuffix && validMirrorURL(value)
+		return ValidArtifactMirrorEndpoint(value) && defaultHTTPSPort(value)
 	},
 	LexicalProxyEndpoint: validProxyEndpoint,
 	LexicalProxyBypass:   validProxyBypass,
@@ -272,16 +272,23 @@ const maxArtifactMirrorSuffix = len("/helm/v") + 95
 
 const packageRepositoryBase = 2048 - len("/repodata/") - 240
 
-// validMirrorURL is the one grammar of a download mirror, shared by admission
-// and the controller stage that fetches beneath it: an HTTPS base URL on the
-// default port with an unescaped path, no query and no fragment, because the
-// stage appends a release path to it.
+// ValidArtifactMirrorEndpoint leaves room for the longest client release path.
+func ValidArtifactMirrorEndpoint(value string) bool {
+	return len(value) <= maxMirrorURLBytes-maxArtifactMirrorSuffix && validMirrorURL(value)
+}
+
+func defaultHTTPSPort(value string) bool {
+	u, err := neturl.Parse(value)
+	return err == nil && (u.Port() == "" || u.Port() == "443")
+}
+
+// validMirrorURL admits an HTTPS URL with an unescaped path and no query or fragment.
 func validMirrorURL(value string) bool {
 	if len(value) > maxMirrorURLBytes || strings.ContainsAny(value, "?#") || !validHTTPURL(value, true) {
 		return false
 	}
 	u, err := neturl.Parse(value)
-	return err == nil && u.RawPath == "" && (u.Port() == "" || u.Port() == "443")
+	return err == nil && u.RawPath == ""
 }
 
 // maxProxyEndpointBytes bounds a proxy endpoint, which a setup receipt and a

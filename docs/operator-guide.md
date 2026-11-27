@@ -1219,9 +1219,10 @@ row. To record a run:
 ## Supply the Helm archive with the artifact catalog
 
 Use the [managed artifact mirror](../specs/api/environment.md#artifact-mirror)
-when the controller fetches Helm from a separate machine. Select that
-server's HTTPS endpoint on port 443. Register the exact archive whose
-SHA-256 and size the build pins. Read the expected pin with
+when the controller fetches Helm from a Bootwright-managed ArtifactServer.
+Select its HTTPS endpoint, which may be the existing virtual-media listener.
+Register the exact archive whose SHA-256 and size the build pins. Read the
+expected pin with
 `bootwright render acquisitions` after declaring the managed mirror.
 
 Import a file for disconnected use:

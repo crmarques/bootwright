@@ -259,7 +259,8 @@ def prepare_tools(location, tools, egress, deadlines, inspect_only=False, trust=
     return whether any changed and one evidence entry per tool in input order.
     A refusal is a ToolRefused naming the source of the tool it refused."""
     trust = trust or {"host": "", "file": ""}
-    lent_anchor(trust)
+    anchor = lent_anchor(trust)
+    mirror = anchor[0] if anchor else ""
     if (
         not isinstance(tools, list)
         or not 1 <= len(tools) <= MAX_TOOLS
@@ -268,7 +269,7 @@ def prepare_tools(location, tools, egress, deadlines, inspect_only=False, trust=
     ):
         raise Refused("request")
     for tool, deadline in zip(tools, deadlines):
-        attributed(tool, admit, tool, egress, deadline)
+        attributed(tool, admit, tool, egress, deadline, mirror)
     if len({source_of(tool) for tool in tools}) != len(tools):
         raise Refused("duplicate source")
     bundle = Bundle(location)

@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/json"
-	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -174,8 +173,7 @@ func anchored(tools []prerequisites.ToolDefinition, trust prerequisites.MirrorTr
 		return false
 	}
 	return slices.ContainsFunc(tools, func(tool prerequisites.ToolDefinition) bool {
-		parsed, err := url.Parse(tool.Source.URL)
-		return err == nil && parsed.Hostname() == trust.Host
+		return prerequisites.MirrorAuthority(tool.Source.URL) == trust.Host
 	})
 }
 

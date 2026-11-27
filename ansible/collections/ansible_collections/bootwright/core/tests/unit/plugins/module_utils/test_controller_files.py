@@ -12,6 +12,7 @@ import ssl
 import stat
 import tarfile
 import tempfile
+import time
 import tracemalloc
 import types
 import unittest
@@ -1008,6 +1009,41 @@ class TrustedRoots(unittest.TestCase):
                 routes.manager(None, "get.helm.sh")
                 routes.manager(None, "mirror.example.test")
         self.assertEqual([context.cert_store_stats()["x509_ca"] for context in observed], [2, 1])
+
+    def test_the_mirror_download_keeps_its_configured_https_port(self):
+        source = dict(tool(b"bytes")["source"], url="https://mirror.example.test:8443/tools/file")
+        mirror = "mirror.example.test:8443"
+        requested = []
+        responses = iter([
+            types.SimpleNamespace(status=302, headers={"Location": "/tools/next"}, close=lambda: None),
+            types.SimpleNamespace(status=200, headers={"Content-Length": "5"}, close=lambda: None),
+        ])
+
+        def request(method, url, **_kwargs):
+            requested.append((method, url))
+            return next(responses)
+
+        manager = types.SimpleNamespace(request=request)
+        routes = types.SimpleNamespace(manager=mock.Mock(return_value=manager))
+        status = files.respond(source, EGRESS, time.monotonic() + 10, lambda response: response.status, routes, mirror=mirror)
+        self.assertEqual(status, 200)
+        self.assertEqual(requested, [("GET", source["url"]), ("GET", "https://mirror.example.test:8443/tools/next")])
+        self.assertEqual(routes.manager.call_args_list, [mock.call(None, mirror)] * 2)
+
+    def test_the_mirror_cannot_send_its_anchor_to_another_port(self):
+        mirror = "mirror.example.test:8443"
+        source = dict(tool(b"bytes")["source"], url="https://" + mirror + "/tools/file")
+        response = types.SimpleNamespace(
+            status=302, headers={"Location": "https://mirror.example.test/tools/file"}, close=lambda: None,
+        )
+        manager = types.SimpleNamespace(request=mock.Mock(return_value=response))
+        routes = types.SimpleNamespace(manager=mock.Mock(return_value=manager))
+        with self.assertRaisesRegex(files.Refused, "redirect origin"):
+            files.respond(source, EGRESS, time.monotonic() + 10, lambda result: result.status, routes, mirror=mirror)
+        self.assertEqual(manager.request.call_count, 1)
+        with self.assertRaisesRegex(files.Refused, "HTTPS source"):
+            files.respond(source, EGRESS, time.monotonic() + 10, lambda result: result.status, routes, mirror="")
+        self.assertEqual(manager.request.call_count, 1)
 
     def test_no_lent_anchor_is_none_and_an_unsafe_one_refuses(self):
         self.assertIsNone(files.lent_anchor({"host": "", "file": ""}))

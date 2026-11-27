@@ -24,7 +24,7 @@
     "internal/containercluster/preflightlocal": 0.0,
     "internal/controller": 89.9,
     "internal/controller/ansiblelocal": 87.6,
-    "internal/controller/bundlelocal": 65.5,
+    "internal/controller/bundlelocal": 74.3,
     "internal/controller/clients": 82.4,
     "internal/controller/evidence": 74.5,
     "internal/controller/firewall": 55.7,

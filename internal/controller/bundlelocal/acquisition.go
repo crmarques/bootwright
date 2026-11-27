@@ -50,6 +50,7 @@ func routedClient(proxy func(*http.Request) (*url.URL, error), roots *x509.CertP
 	if anchor != nil {
 		transport.TLSClientConfig.RootCAs = anchor.pool
 		transport.DialTLSContext = acquisition.AnchoredDial(transport.DialContext, roots, anchor.authority, anchor.pool)
+		transport.Proxy = separateMirrorProxy(proxy, anchor.authority)
 	}
 	client := &http.Client{
 		Transport: guarded, Timeout: timeout,
@@ -61,6 +62,24 @@ func routedClient(proxy func(*http.Request) (*url.URL, error), roots *x509.CertP
 		},
 	}
 	return client, transport.CloseIdleConnections, nil
+}
+
+// A first-hop HTTPS proxy cannot share the TLS dial address scoped to a
+// private mirror anchor. A bypass still uses the mirror directly.
+func separateMirrorProxy(proxy func(*http.Request) (*url.URL, error), mirror string) func(*http.Request) (*url.URL, error) {
+	return func(request *http.Request) (*url.URL, error) {
+		if proxy == nil {
+			return nil, nil
+		}
+		route, err := proxy(request)
+		if err == nil && route != nil && route.Scheme == "https" && originAuthority(route) == mirror {
+			return nil, &prerequisites.ScopedFailure{
+				Message:    "the HTTPS proxy and artifact mirror use the same endpoint",
+				Correction: "Bypass the proxy for this mirror or select a separate HTTPS proxy endpoint",
+			}
+		}
+		return route, err
+	}
 }
 
 func transportFailure(subject, endpoint string, err error) error {

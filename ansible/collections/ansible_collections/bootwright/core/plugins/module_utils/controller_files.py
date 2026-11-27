@@ -171,7 +171,7 @@ def relative(value):
     return parts
 
 
-def endpoint(value, redirect=False, proxy=False):
+def endpoint(value, redirect=False, proxy=False, allow_port=False):
     if (
         not isinstance(value, str)
         or len(value) > 4096
@@ -194,7 +194,7 @@ def endpoint(value, redirect=False, proxy=False):
         raise Refused("HTTPS source")
     if (
         not proxy
-        and parsed.port not in (None, 443)
+        and (parsed.netloc.endswith(":") or not allow_port and parsed.port not in (None, 443) or parsed.port == 0)
         or proxy
         and parsed.path not in ("", "/")
     ):
@@ -202,7 +202,7 @@ def endpoint(value, redirect=False, proxy=False):
     return parsed
 
 
-def source_identity(source, local=False):
+def source_identity(source, local=False, allow_port=False):
     if not isinstance(source, dict) or set(source) != {"id", "url", "sha256", "bytes"}:
         raise Refused("source identity")
     if (
@@ -211,7 +211,7 @@ def source_identity(source, local=False):
     ):
         raise Refused("source identity")
     if not local or source["url"]:
-        endpoint(source["url"])
+        endpoint(source["url"], allow_port=allow_port)
     if (
         not isinstance(source["sha256"], str)
         or re.fullmatch(r"[a-f0-9]{64}", source["sha256"]) is None
@@ -404,7 +404,7 @@ class Routes:
     The system trust is read once, when the first route opens, and every
     manager is cleared on exit, so a staging loop or a tool opens one pool for
     each route its sources take rather than one for every hop. A lent anchor
-    joins the system trust only for its own host's connections."""
+    joins the system trust only for its own authority's connections."""
 
     def __init__(self, anchor=None):
         self.anchor = anchor
@@ -478,28 +478,48 @@ def _download(source, egress, descriptor, seconds, routes, redirects=True):
     respond(source, egress, deadline, store, routes, redirects=redirects)
 
 
-def respond(source, egress, deadline, consume, routes, redirects=True):
+def authority(parsed):
+    host = parsed.hostname
+    if parsed.port in (None, 443):
+        return host
+    if ":" in host:
+        host = "[" + host + "]"
+    return host + ":" + str(parsed.port)
+
+
+def tool_endpoint(value, mirror):
+    """A non-default port belongs only to the configured mirror authority."""
+    parsed = endpoint(value, allow_port=bool(mirror))
+    if parsed.port not in (None, 443) and authority(parsed) != mirror:
+        raise Refused("HTTPS source")
+    return parsed
+
+
+def redirect_allowed(original, candidate, mirror):
+    if authority(candidate) == authority(original):
+        return True
+    return (authority(original) != mirror
+            and original.hostname in REDIRECT_HOSTS
+            and candidate.hostname in REDIRECT_HOSTS
+            and candidate.port in (None, 443))
+
+
+def respond(source, egress, deadline, consume, routes, redirects=True, mirror=""):
     """Route one approved source and hand its checked response to consume.
 
     Every redirect, header, status and declared length is checked here, once,
     for a download and a streamed acquisition alike."""
-    source_identity(source)
+    source_identity(source, allow_port=bool(mirror))
     current = source["url"]
-    original = endpoint(current)
+    original = tool_endpoint(current, mirror)
     proxy_for(egress, original)
     for _redirect_index in range(6):
         if time.monotonic() > deadline:
             raise Refused("acquisition deadline")
-        parsed = endpoint(current, redirect=True)
-        if (
-            parsed.hostname != original.hostname
-            and not (
-                original.hostname in REDIRECT_HOSTS
-                and parsed.hostname in REDIRECT_HOSTS
-            )
-        ):
+        parsed = endpoint(current, redirect=True, allow_port=bool(mirror))
+        if not redirect_allowed(original, parsed, mirror):
             raise Refused("redirect origin")
-        manager = routes.manager(proxy_for(egress, parsed), parsed.hostname)
+        manager = routes.manager(proxy_for(egress, parsed), authority(parsed))
         response = None
         try:
             response = manager.request(
@@ -626,7 +646,9 @@ def acquire(bundle, source, egress, seconds, routes, reserved=False):
     and gains the class of what refused it. A source whose capacity the caller
     already reserved, with every other acquisition running beside it, skips
     the walk that a concurrent link would change under it."""
-    source_identity(source)
+    mirror = routes.anchor[0] if routes.anchor else ""
+    source_identity(source, allow_port=bool(mirror))
+    tool_endpoint(source["url"], mirror)
     name = "sources/" + source["id"]
     bundle.writable()
     if not reserved:
@@ -647,7 +669,7 @@ def acquire(bundle, source, egress, seconds, routes, reserved=False):
 
     try:
         with alarm(seconds):
-            respond(source, egress, deadline, store, routes)
+            respond(source, egress, deadline, store, routes, mirror=mirror)
     except Unreleased:
         raise
     except Exception as error:
@@ -1020,7 +1042,7 @@ def tool_files(tool):
         or re.fullmatch(r"[0-9v][A-Za-z0-9._+-]{0,95}", version) is None
     ):
         raise Refused("tool version")
-    source_identity(tool["source"])
+    source_identity(tool["source"], allow_port=True)
     if (
         re.fullmatch(
             "tool-" + re.escape(kind) + r"-[a-f0-9]{32}-" + re.escape(version),
@@ -1237,7 +1259,7 @@ def project(bundle, tool, inspect_only):
     return manifest, changed
 
 
-def admit(tool, egress, deadline):
+def admit(tool, egress, deadline, mirror=""):
     """Check one frozen tool's projection, deadline and route before any bundle
     is opened."""
     tool_files(tool)
@@ -1247,7 +1269,7 @@ def admit(tool, egress, deadline):
         or not 0 < deadline <= MAX_DEADLINE
     ):
         raise Refused("acquisition deadline")
-    proxy_for(egress, endpoint(tool["source"]["url"]))
+    proxy_for(egress, tool_endpoint(tool["source"]["url"], mirror))
 
 
 def missing(bundle, tool, inspect_only):
@@ -1285,7 +1307,7 @@ def prepare_tool(location, tool, egress, deadline, inspect_only=False, trust=Non
     system trust when that host is the anchor's; no downloaded tool is ever
     executed."""
     anchor = lent_anchor(trust or {"host": "", "file": ""})
-    admit(tool, egress, deadline)
+    admit(tool, egress, deadline, anchor[0] if anchor else "")
     bundle = Bundle(location)
     try:
         acquired = missing(bundle, tool, inspect_only)

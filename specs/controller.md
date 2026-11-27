@@ -986,9 +986,8 @@ controller stage and context preflight support direct access and qualified
 unauthenticated external proxies using the qualified system trust store, whose
 `tls-ca-bundle.pem` the adapter reads as its certificate blocks only, ignoring
 the `# <label>` lines `update-ca-trust` writes, which may hold UTF-8; only a
-connection to the artifact mirror's own host adds that mirror's declared
-anchor. That
-route follows the [Proxy endpoint](api/infrastructure-services.md#proxy-dns-ntp-and-registry-deployment)
+connection to the artifact mirror's own host and port adds that mirror's
+declared anchor. That route follows the [Proxy endpoint](api/infrastructure-services.md#proxy-dns-ntp-and-registry-deployment)
 and [proxy choice](api/infrastructure-services.md#proxy-choice) grammar:
 admission refuses an endpoint or bypass entry outside it, and controller
 selection proves it again, naming the Proxy or Machine field that breaks it
@@ -1002,7 +1001,7 @@ read Secret material to probe an unsupported route; an authenticated or
 privately trusted Proxy needs its own Secrets consumer and recovery
 definition. The one Secret the stage and preflight read is the
 [artifact mirror](api/environment.md#artifact-mirror)'s anchor, for the
-mirror's own host.
+mirror's own host and port.
 
 **No wheel origin.** Setup contacts no wheel origin: every wheel comes from
 the executable's [carried wheels](#the-runtime-lock), so pypi.org,

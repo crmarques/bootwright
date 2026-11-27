@@ -1,7 +1,6 @@
 package clients
 
 import (
-	"net/url"
 	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -72,11 +71,11 @@ type MirrorTrust struct {
 
 func (r Request) WithMirrorTrust(catalog api.Catalog) Request {
 	base, reference := tooltable.ArtifactMirror(catalog)
-	parsed, err := url.Parse(base)
-	if reference == "" || err != nil || !slices.ContainsFunc(r.Tools, func(tool ToolRequest) bool { return mirrorHost(tool.Mirror) == parsed.Hostname() }) {
+	authority := prerequisites.MirrorAuthority(base)
+	if reference == "" || authority == "" || !slices.ContainsFunc(r.Tools, func(tool ToolRequest) bool { return prerequisites.MirrorAuthority(tool.Mirror) == authority }) {
 		return r
 	}
-	r.MirrorTrust = &MirrorTrust{Host: parsed.Hostname(), TrustBundleRef: reference}
+	r.MirrorTrust = &MirrorTrust{Host: authority, TrustBundleRef: reference}
 	return r
 }
 
@@ -96,14 +95,6 @@ func (r Request) Split() (Request, Request) {
 
 func (t ToolRequest) catalogRequest() evidence.ToolRequest {
 	return evidence.ToolRequest{Kind: t.Kind, Version: t.Version, Compatibility: t.Compatibility, Mirror: t.Mirror, SHA256: t.SHA256, Bytes: t.Bytes}
-}
-
-func mirrorHost(mirror string) string {
-	parsed, err := url.Parse(mirror)
-	if mirror == "" || err != nil {
-		return ""
-	}
-	return parsed.Hostname()
 }
 
 func NewRequest(selection controller.Selection, requests []evidence.ToolRequest) Request {
@@ -180,7 +171,7 @@ func DecodeRequest(data []byte) (Request, error) {
 	if !wholePart(request) {
 		return Request{}, clientsRequestUnreadable.Fail("the frozen controller prerequisites request names a part of the stage it does not hold", "destroy it with the build that applied it")
 	}
-	if trust := request.MirrorTrust; trust != nil && (trust.Host == "" || !api.ValidLexical(api.LexicalName, trust.TrustBundleRef) || !slices.ContainsFunc(request.Tools, func(tool ToolRequest) bool { return mirrorHost(tool.Mirror) == trust.Host })) {
+	if trust := request.MirrorTrust; trust != nil && (trust.Host == "" || !api.ValidLexical(api.LexicalName, trust.TrustBundleRef) || !slices.ContainsFunc(request.Tools, func(tool ToolRequest) bool { return prerequisites.MirrorAuthority(tool.Mirror) == trust.Host })) {
 		return Request{}, clientsRequestUnreadable.Fail("the frozen controller prerequisites request names a mirror trust anchor no client it reads from that mirror uses", "destroy it with the build that applied it")
 	}
 	return request, nil
@@ -202,7 +193,7 @@ func wholePart(request Request) bool {
 // expansion is an effect outside the frozen request's boolean selection.
 func ContentDigest() string {
 	return reconciliation.ContentDigestOf(
-		"bootwright.controller.client-stage-v1", Implementation, Version, "installer-media-qualified-ssh-source-tools-v1",
+		"bootwright.controller.client-stage-v1", Implementation, Version, "installer-media-qualified-ssh-source-tools-v1", "managed-mirror-https-authority",
 	)
 }
 

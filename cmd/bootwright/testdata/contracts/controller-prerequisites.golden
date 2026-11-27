@@ -1,5 +1,5 @@
 implementation: controller-prerequisites
-content-digest: 83a06f61907914bc84f5e220bc80bdba04d44b636af0780c2ae6626ca2c0e341
+content-digest: 6ba02e6d64155c174112c1d32a49dcc7d5e3f1930d6670ac1f44c38a257cf973
 request-version: controller-clients-v1
 automation-formats: none
 mark-formats: none
@@ -7,6 +7,7 @@ proof-ids: none
 fixed-places: none
 effect-pins:
   installer-media-qualified-ssh-source-tools-v1
+  managed-mirror-https-authority
 request-identity:
   packages
   tools[].kind
