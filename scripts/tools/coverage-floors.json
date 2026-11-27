@@ -118,7 +118,7 @@
     "internal/trust": 93.4,
     "internal/trust/enrollment": 92.7,
     "internal/vulnerabilityexceptions": 99.5,
-    "internal/workspace/contextfs": 82.7,
+    "internal/workspace/contextfs": 83.2,
     "internal/workspace/contextfs/kernel": 0.0,
     "internal/workspace/contexts": 89.4,
     "internal/workspace/invokerfs": 84.6,

@@ -147,7 +147,7 @@ func (t *lifecycleTransaction) RetireToolAreas(ctx context.Context, current stri
 		if index < 0 || t.stored.bundles[index].Mode == retiringArea || t.stored.bundles[index].DirectoryInode == 0 {
 			return state("controller client area is not published")
 		}
-		if t.stored.bundles[index].Mode != "sealed" && t.openArea(current) == nil {
+		if t.stored.bundles[index].Mode != "sealed" && t.areas.writer(current) == nil {
 			if _, err := t.ClientArea(ctx, current); err != nil {
 				return err
 			}

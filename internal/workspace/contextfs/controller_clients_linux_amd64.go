@@ -16,22 +16,33 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
 
-// ClientArea opens the shared host area one exact client closure is published
-// into. The area is content-addressed by that closure, so every context
-// selecting the same clients proves the same files and a different closure
-// never disturbs them.
-//
-// Publication takes the lifecycle operation as its intent: the reservation is published before the directory exists, the
-// actual directory identity is recorded in a second publication, and a sealed
-// area is immutable and reopens read-only. An unattributed directory beside a
-// reservation this store published is its own interrupted attempt and may be
-// adopted only while empty; anything else refuses.
+// ClientArea opens a content-addressed tool closure for publication.
+// A durable reservation precedes directory creation and attribution. An
+// interrupted reservation may adopt only an empty directory. Sealed areas
+// reopen read-only.
 func (t *lifecycleTransaction) ClientArea(ctx context.Context, id string) (prerequisites.BundleArea, error) {
-	if area := t.areas.find(id); area != nil {
-		return area, nil
-	}
 	if err := t.base.available(ctx); err != nil {
 		return nil, err
+	}
+	if reader := t.areas.find(id); reader != nil {
+		switch t.clientAreaMode(reader.reservation) {
+		case "sealed":
+			return reader, nil
+		case retiringArea:
+			return nil, kernel.Busy("controller client area is being retired")
+		case "attributed":
+			if writer := t.areas.writer(id); writer != nil {
+				return writer, nil
+			}
+			writer, err := reader.openForPublication(ctx)
+			if err != nil {
+				return nil, err
+			}
+			t.trackClientArea(writer)
+			return writer, nil
+		default:
+			return nil, state("controller client area attribution changed")
+		}
 	}
 	if !validControllerDigest(id) {
 		return nil, state("controller client area identity is invalid")
@@ -54,22 +65,33 @@ func (t *lifecycleTransaction) ClientArea(ctx context.Context, id string) (prere
 			return nil, err
 		}
 	}
-	sealed := func() bool {
-		return slices.ContainsFunc(t.current.Load().bundles, func(item controllerBundleReservation) bool {
-			return item.ID == id && item.Mode == "sealed"
-		})
-	}
-	area, err := openControllerBundle(ctx, t.base.store, t.base.root, t.base.registry, t.stored, id, t.active, !sealed(), t.guard)
+	area, err := openControllerBundle(ctx, t.base.store, t.base.root, t.base.registry, t.stored, id, t.active, index < 0 || t.stored.bundles[index].Mode != "sealed", t.guard)
 	if err != nil || area == nil {
 		if err == nil {
 			err = state("controller client area is not reserved")
 		}
 		return nil, err
 	}
-	area.canWrite = func() bool { return !sealed() }
-	area.sealed = sealed
-	t.areas.keep(area)
+	t.trackClientArea(area)
 	return area, nil
+}
+
+func (t *lifecycleTransaction) trackClientArea(area *controllerBundleArea) {
+	area.canWrite = func() bool { return t.clientAreaMode(area.reservation) == "attributed" }
+	area.sealed = func() bool {
+		mode := t.clientAreaMode(area.reservation)
+		return mode == "sealed" || mode == retiringArea
+	}
+	t.areas.keep(area)
+}
+
+func (t *lifecycleTransaction) clientAreaMode(reservation controllerBundleReservation) string {
+	for _, current := range t.current.Load().bundles {
+		if current.ID == reservation.ID && current.DirectoryDevice == reservation.DirectoryDevice && current.DirectoryInode == reservation.DirectoryInode {
+			return current.Mode
+		}
+	}
+	return ""
 }
 
 // clientBoundFailure refuses a controller stage whose client closure finds the
@@ -155,9 +177,9 @@ func (t *lifecycleTransaction) SealClientArea(ctx context.Context, id string) er
 	}
 	next := slices.Clone(t.stored.bundles)
 	if next[index].Mode != "sealed" {
-		area := t.openArea(id)
+		area := t.areas.writer(id)
 		if area == nil {
-			return state("controller client area is not open in this operation")
+			return state("controller client area is not open for publication in this operation")
 		}
 		if err := area.sync(ctx); err != nil {
 			return err
@@ -175,7 +197,7 @@ func (t *lifecycleTransaction) SealClientArea(ctx context.Context, id string) er
 	if err := t.publishControllerState(ctx, value, next, applyRetry(t.identity.Name), checkpointBeforeClientAreaSealing); err != nil {
 		return err
 	}
-	if area := t.openArea(id); area != nil {
+	if area := t.areas.writer(id); area != nil {
 		return kernel.LockShared(area.dir)
 	}
 	return nil

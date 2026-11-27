@@ -279,7 +279,7 @@ func (l *leasedLifecycle) prepareControllerAccess() {
 			if err != nil || opened == nil {
 				return err
 			}
-			tx.areas.keep(opened)
+			tx.trackClientArea(opened)
 			area = opened
 			return nil
 		})

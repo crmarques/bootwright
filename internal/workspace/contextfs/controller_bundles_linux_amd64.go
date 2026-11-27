@@ -153,6 +153,24 @@ func openControllerBundle(ctx context.Context, store *Store, root *directory, re
 	return area, nil
 }
 
+// openForPublication takes the exclusive directory lease on the same open
+// description. A second descriptor would contend with this operation's own
+// shared lease. The borrowed writer never closes the reader's descriptors or
+// gives the previously issued read capability permission to publish.
+func (a *controllerBundleArea) openForPublication(ctx context.Context) (*controllerBundleArea, error) {
+	if err := a.available(ctx, false); err != nil {
+		return nil, err
+	}
+	if err := kernel.Lock(a.dir); err != nil {
+		// A failed flock conversion can drop the original shared lease.
+		return nil, errors.Join(err, kernel.LockShared(a.dir))
+	}
+	return &controllerBundleArea{
+		store: a.store, root: a.root, registry: a.registry, reservation: a.reservation, dir: a.dir,
+		active: a.active, guard: a.guard, writeAllowed: true,
+	}, nil
+}
+
 func (a *controllerBundleArea) available(ctx context.Context, write bool) error {
 	if err := ctx.Err(); err != nil {
 		return err

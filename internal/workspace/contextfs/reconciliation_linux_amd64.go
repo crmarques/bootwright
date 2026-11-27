@@ -131,10 +131,18 @@ func (o *openedBundles) closeAll() {
 // find answers with the open area of one reservation, so a caller that already
 // opened it works through the same handle rather than a second one.
 func (o *openedBundles) find(id string) *controllerBundleArea {
+	return o.findArea(id, false)
+}
+
+func (o *openedBundles) writer(id string) *controllerBundleArea {
+	return o.findArea(id, true)
+}
+
+func (o *openedBundles) findArea(id string, publication bool) *controllerBundleArea {
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
 	for _, area := range o.areas {
-		if area.reservation.ID == id && area.dir != nil {
+		if area.reservation.ID == id && area.dir != nil && (!publication || area.writeAllowed) {
 			return area
 		}
 	}
