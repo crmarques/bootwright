@@ -18309,7 +18309,7 @@ The [input flags](../cli.md#parsing-and-input-conventions) support
 The command tests exercise read-only admission, exact-byte import, updates
 and frozen replay without sibling discovery. The delivering commit records
 the verification results. The independent coverage run found pre-existing
-shortfalls tracked in [B1854](backlog.md#b1854).
+shortfalls tracked by B1854 and closed in [X774](#x774--restore-the-coverage-gate).
 
 ## X753 — Every destroy step states its inverse
 
@@ -18937,3 +18937,17 @@ and `TestAGrafanaUpdateRefusesWhileAStagedDestroyIsCurrent`.
 **Gates:** `make focus`; the delivering commit records the command and result.
 
 **Limits:** the proof is in-tree, over the engine's doubles, not a live run.
+
+## X774 — Restore the coverage gate
+
+**Items:** B1854 and B1900 (defects). **Owner:** Verification tooling with
+the tested contexts. **Authority:** explicit request to fix the integration
+gates, including pre-existing failures.
+
+The unchanged destination failed the Go floors for Infrastructure services
+and Ceph (B1854), OpenShift agent installation, Managed OS installation and
+provided configuration, Secret custody and the libvirt adapter (B1900).
+Exercise their claims, admission, frozen request validation, capacity
+projection and custody boundaries. Raise stale floors to the measured
+[coverage ratchet](../architecture.md#architecture-verification). No floor is
+lowered. The delivering commit holds the full gate results.
