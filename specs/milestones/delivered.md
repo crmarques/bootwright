@@ -18951,3 +18951,15 @@ Exercise their claims, admission, frozen request validation, capacity
 projection and custody boundaries. Raise stale floors to the measured
 [coverage ratchet](../architecture.md#architecture-verification). No floor is
 lowered. The delivering commit holds the full gate results.
+
+## X775 — Go tests resolve the pinned Ansible interpreter
+
+**Item:** B1901 (defect). **Owner:** Verification tooling. **Authority:**
+explicit request to repair the failed GitHub gate.
+
+The workload and runtime-lock tests resolve the interpreter through
+[the Ansible check launcher](../../scripts/tools/ansible-check.md) instead of
+guessing its cache path. A fresh cache reproduces the old failure even after
+the interpreter is prepared. The affected tests run with the lock-keyed
+environment and no legacy virtualenv. The delivering commit records the
+local checks and the GitHub run verifies the clean-runner case.

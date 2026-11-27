@@ -32,18 +32,20 @@ func e2eCacheDirectory(t *testing.T) string {
 	return strings.TrimSpace(string(output))
 }
 
-// pinnedPython is the CPython the Ansible check pins in the shared cache,
-// prepared by scripts/ansible-check the first time it is missing.
+// pinnedPython asks the Ansible check to prepare and resolve its locked
+// interpreter. Tests do not depend on the check's cache layout.
 func pinnedPython(t *testing.T) string {
 	t.Helper()
-	pinnedToolsLock.Lock()
-	defer pinnedToolsLock.Unlock()
-	interpreter := filepath.Join(e2eCacheDirectory(t), "ansible-check", "venv", "bin", "python")
-	if _, err := os.Stat(interpreter); err != nil {
-		output, _ := exec.Command(filepath.Join("..", "..", "scripts", "ansible-check"), "--help").CombinedOutput()
-		if _, err := os.Stat(interpreter); err != nil {
-			t.Fatalf("scripts/ansible-check left no pinned python: %v\n%s", err, output)
-		}
+	command := exec.CommandContext(t.Context(), filepath.Join("..", "..", "scripts", "ansible-check"), "--print-python")
+	var stderr bytes.Buffer
+	command.Stderr = &stderr
+	output, err := command.Output()
+	if err != nil {
+		t.Fatalf("resolving the pinned Python with scripts/ansible-check: %v\n%s", err, &stderr)
+	}
+	interpreter := strings.TrimSpace(string(output))
+	if interpreter == "" {
+		t.Fatal("scripts/ansible-check returned no pinned Python path")
 	}
 	return interpreter
 }
