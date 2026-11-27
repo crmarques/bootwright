@@ -336,6 +336,9 @@ func (s *Store) inspectRootForUninstall(ctx context.Context, parent, root *direc
 	if view.Media, err = uninstallMedia(ctx, s, root); err != nil {
 		return release, err
 	}
+	if view.Artifacts, err = uninstallArtifacts(root); err != nil {
+		return release, err
+	}
 	dir, err := openControllerEntry(root, installSubtree)
 	if errors.Is(err, syscall.ENOENT) {
 		return release, nil
@@ -610,6 +613,7 @@ func (t *uninstallTransaction) View() prerequisites.UninstallView {
 	view.Leftovers = slices.Clone(view.Leftovers)
 	view.Contexts = slices.Clone(view.Contexts)
 	view.Media = slices.Clone(view.Media)
+	view.Artifacts = slices.Clone(view.Artifacts)
 	view.GuestDisks = slices.Clone(view.GuestDisks)
 	return view
 }

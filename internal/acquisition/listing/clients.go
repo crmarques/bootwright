@@ -61,11 +61,16 @@ func (t Tools) mirrorFillAcquisitions(catalog api.Catalog) ([]Row, error) {
 	if err != nil {
 		return nil, err
 	}
+	applyCatalogSources(catalog, mirrored)
 	host := []string{mirror.Server.Spec().Get("machineRef").Text()}
 	var rows []Row
 	for _, client := range mirrored {
 		artifact, version, _ := strings.Cut(client.Tool, " ")
-		rows = append(rows, Row{Kind: "mirror file", Artifact: artifact, Version: version, Origin: client.Source, Class: originClass(client.Source),
+		origin, class := client.Source, originClass(client.Source)
+		if client.CatalogArtifact != "" {
+			origin, class = client.CatalogArtifact, "artifact catalog"
+		}
+		rows = append(rows, Row{Kind: "mirror file", Artifact: artifact, Version: version, Origin: origin, Class: class,
 			SHA256: client.SHA256, Bytes: client.Bytes, Machines: host, Consumer: mirror.Server.Identity()})
 	}
 	return rows, nil

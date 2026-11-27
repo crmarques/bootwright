@@ -612,6 +612,10 @@ func cliGoldens() []cliGolden {
 			"nothing repairs it, because Bootwright never changes the owner or mode of an existing state root")
 	}
 	return append([]cliGolden{
+		{golden: "cli-artifact-add", args: "catalog artifact add --name helm-archive --from-file helm.tar.gz"},
+		{golden: "cli-artifact-list", args: "catalog artifact list"},
+		{golden: "cli-artifact-show-json", args: "catalog artifact show --name helm-archive --output json"},
+		{golden: "cli-artifact-delete", args: "catalog artifact delete --name helm-archive --yes"},
 		{golden: "cli-add-ons-list", args: "catalog add-ons list", record: func(r *dispatchRecord) {
 			r.result.addOns, _ = addoncatalog.New(addonpackages.Builtin()).List(context.Background(), addoncatalog.ListRequest{})
 		}},

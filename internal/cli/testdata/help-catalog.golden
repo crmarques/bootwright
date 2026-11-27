@@ -5,10 +5,11 @@
     bootwright catalog <command> [flags]
 
   Commands
-  COMMAND   PURPOSE
-  add-ons   Inspect add-on packages supported by this build
-  media     Manage installer media shared by contexts on this controller
-  schema    Export the advisory schema of every desired-state kind
+  COMMAND    PURPOSE
+  add-ons    Inspect add-on packages supported by this build
+  artifact
+  media      Manage installer media shared by contexts on this controller
+  schema     Export the advisory schema of every desired-state kind
 
   Common flags
       --ascii       Use ASCII status markers

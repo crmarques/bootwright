@@ -1215,3 +1215,43 @@ row. To record a run:
    evidence archive. Its last cell is `observation, not acceptance` unless the
    human owner accepts it there for an item it matches; an agent records an
    acceptance only when the owner states it explicitly.
+
+## Supply the Helm archive with the artifact catalog
+
+Use the [managed artifact mirror](../specs/api/environment.md#artifact-mirror)
+when the controller fetches Helm from a separate machine. Select that
+server's HTTPS endpoint on port 443. Register the exact archive whose
+SHA-256 and size the build pins. Read the expected pin with
+`bootwright render acquisitions` after declaring the managed mirror.
+
+Import a file for disconnected use:
+
+```bash
+bootwright catalog artifact add --name helm-archive --from-file ./helm.tar.gz
+```
+
+To register a credential-free origin for the mirror host to fetch during
+apply, use `--origin-url <https-url> --sha256 <digest> --size <bytes>` in place
+of `--from-file`. The mirror host must trust that origin's HTTPS certificate
+and reach the URL directly or through its declared proxy. Use the final URL
+because catalog origins cannot redirect.
+
+Add the new selection under the Environment's existing managed mirror:
+
+```yaml
+spec:
+  mirror:
+    artifacts:
+      serverRef: bootstrap-files
+      endpointRef: https
+
+      toolSources:
+        helm:
+          catalogArtifact: helm-archive
+```
+
+Inspect the registration with
+`bootwright catalog artifact show --name helm-archive`. The catalog and a
+server's publication have separate lifecycles. `bootwright apply --dry-run`
+plans the publication and reports mirror readiness. On apply, the server
+publishes the verified archive before the controller installs Helm.

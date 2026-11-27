@@ -116,6 +116,7 @@ func TestCLIImportsOnlyServicePackagesAndSharedValues(t *testing.T) {
 		"github.com/crmarques/bootwright/internal/secrets":      true,
 		"github.com/crmarques/bootwright/internal/trust":        true,
 	}
+	allowed["github.com/crmarques/bootwright/internal/infrastructureservices/artifactcatalog"] = true
 	const module = "github.com/crmarques/bootwright/"
 	imports := map[string]bool{}
 	for _, source := range productionSources(t) {

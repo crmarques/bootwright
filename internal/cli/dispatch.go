@@ -61,6 +61,7 @@ type commandResult struct {
 
 	mediaMutation *media.MutationResult
 	mediaList     *media.ListResult
+	artifact      jsonResult
 
 	machines     *inventory.ListResult
 	session      *machine.SessionResult

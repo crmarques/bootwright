@@ -40,6 +40,16 @@ options:
     description: The absolute destination beneath the proved mirror directory.
     type: path
     required: true
+  staging_root:
+    description: The proved private directory outside the served root.
+    type: path
+  local_payload:
+    description: The invocation's private staged copy of a catalog file.
+    type: path
+  redirects:
+    description: Whether the publisher redirect policy applies.
+    type: bool
+    default: true
   seconds:
     description: The time budget for acquisition.
     type: int
@@ -93,16 +103,43 @@ def held(destination, source):
             return False
 
 
-def publish(source, egress, destination, seconds):
-    controller_files.source_identity(source)
+def copy_local(path, source, descriptor):
+    with os.fdopen(os.open(path, controller_files.FILE_FLAGS), "rb") as payload:
+        if not stat.S_ISREG(os.fstat(payload.fileno()).st_mode):
+            raise ValueError("the staged catalog payload is not a regular file")
+        try:
+            digest = controller_files.stream_copy(payload.read, source["bytes"], descriptor=descriptor)
+        except controller_files.Refused:
+            raise controller_files.AcquisitionRefused("the catalog payload size differs from its pin", reason="size") from None
+        if digest != source["sha256"]:
+            raise controller_files.AcquisitionRefused("the catalog payload checksum differs from its pin", reason="integrity")
+
+
+def download(source, egress, descriptor, seconds, redirects):
+    with controller_files.Routes() as routes:
+        if redirects:
+            controller_files.download(source, egress, descriptor, seconds, routes)
+        else:
+            controller_files.download(source, egress, descriptor, seconds, routes, redirects=False)
+
+
+def publish(source, egress, destination, seconds, staging_root=None, local_payload=None, redirects=True):
+    controller_files.source_identity(source, local=not source.get("url"))
+    if source["url"] and local_payload:
+        raise ValueError("the frozen source has two acquisition routes")
     if not os.path.isabs(destination) or os.path.normpath(destination) != destination:
         raise ValueError("the mirror destination is not an absolute normal path")
     if held(destination, source):
         return False
-    descriptor, stage = tempfile.mkstemp(prefix=".download-", dir=os.path.dirname(destination))
+    descriptor, stage = tempfile.mkstemp(prefix=".download-", dir=staging_root or os.path.dirname(destination))
     try:
-        with os.fdopen(descriptor, "wb") as target, controller_files.Routes() as routes:
-            controller_files.download(source, egress, target.fileno(), seconds, routes)
+        with os.fdopen(descriptor, "wb") as target:
+            if not source["url"]:
+                if not local_payload:
+                    raise ValueError("the catalog payload is unavailable")
+                copy_local(local_payload, source, target.fileno())
+            else:
+                download(source, egress, target.fileno(), seconds, redirects)
             os.fchown(target.fileno(), 0, 0)
             os.fchmod(target.fileno(), 0o644)
             os.fsync(target.fileno())
@@ -127,13 +164,17 @@ def main():
         "egress": {"type": "dict", "required": True, "options": EGRESS_OPTIONS},
         "dest": {"type": "path", "required": True},
         "seconds": {"type": "int", "required": True},
+        "staging_root": {"type": "path"},
+        "local_payload": {"type": "path"},
+        "redirects": {"type": "bool", "default": True},
     })
     params = module.params
     try:
-        changed = publish(params["source"], params["egress"], params["dest"], params["seconds"])
+        changed = publish(params["source"], params["egress"], params["dest"], params["seconds"],
+                          params["staging_root"], params["local_payload"], params["redirects"])
     except controller_files.AcquisitionRefused as error:
-        module.fail_json(msg="the publisher's checksum or size differs from its pin" if error.reason in ("integrity", "size")
-                         else "the publisher could not be read through the declared route")
+        module.fail_json(msg="the source checksum or size differs from its pin" if error.reason in ("integrity", "size")
+                         else "the source could not be read through the declared route")
     except (OSError, ValueError):
         module.fail_json(msg="the mirror file could not be proved or published")
     module.exit_json(changed=changed)

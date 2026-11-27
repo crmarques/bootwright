@@ -278,7 +278,7 @@ realize says so and may name its backlog item.
 `TestRefusalsNameNoVendorRelease` check the Go sources and the collection's
 plugins.
 A context-backed next action carries `--context <name>` for the context the
-invocation resolved. The context-free commands (`install`, `catalog media`, `version`, `catalog schema` and the
+invocation resolved. The context-free commands (`install`, `catalog media`, `catalog artifact`, `version`, `catalog schema` and the
 others [listed with the global flags](commands.md#global-flags)) take none and
 refuse `--context`. No diagnostic carries confidential material.
 
@@ -315,6 +315,8 @@ and their output goldens:
 | `apply`, `destroy`, `machine enroll` | optional `keepGoing`, optional `remaining`, optional `retiringWithHosts`, `context`, `verb`, `steps`, optional `blocks`, optional `settled`, optional `recovered`, optional `next`, optional `scope`, `receipt`, optional `checks`, optional `stages`, optional `clusters`, optional `machines`, optional `until`, optional `waves`, optional `widest`, optional `bound`, optional `startable`, optional `later`, optional `blocked`, optional `excluded`, optional `deferred`, optional `continuation`, optional `finalizes`, optional `addsTo`, optional `restores`, optional `takesBack`, optional `widens`, optional `anotherBuild`, optional `stops`, optional `stopsAfterOnline`, optional `authorizationSteps`, optional `authorizations` |
 | `catalog add-ons info` | `package` |
 | `catalog add-ons list` | `addOns` |
+| `catalog artifact add`, `catalog artifact delete` | `name`, `outcome`, `size`, `sha256` |
+| `catalog artifact list`, `catalog artifact show` | `artifacts` |
 | `catalog media add`, `catalog media delete` | `name`, `outcome`, `size`, optional `sha256` |
 | `catalog media list` | `media` |
 | `catalog schema` | `format`, `schema` |
@@ -1261,6 +1263,7 @@ the test can follow, or the test fails.
 | `secret.store.corrupt` | Stored secret state is invalid, incomplete or not attributable. |
 | `secret.store.crypto` | Secret encryption randomness or key material is unusable. |
 | `secret.store.limit` | A secret material, input, metadata or recovery bound was exceeded. |
+| `artifact.catalog` | An artifact registration, its source, its pin or a reservation prevents the requested action. |
 | `media.store` | Media identity, integrity, import, publication, or deletion failed. |
 | `preflight.failed` | One or more required readiness checks definitely failed. |
 | `preflight.unknown` | Readiness includes unknown or pending checks and no definite failure. |

@@ -202,7 +202,7 @@ def endpoint(value, redirect=False, proxy=False):
     return parsed
 
 
-def source_identity(source):
+def source_identity(source, local=False):
     if not isinstance(source, dict) or set(source) != {"id", "url", "sha256", "bytes"}:
         raise Refused("source identity")
     if (
@@ -210,7 +210,8 @@ def source_identity(source):
         or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+~:-]{0,255}", source["id"]) is None
     ):
         raise Refused("source identity")
-    endpoint(source["url"])
+    if not local or source["url"]:
+        endpoint(source["url"])
     if (
         not isinstance(source["sha256"], str)
         or re.fullmatch(r"[a-f0-9]{64}", source["sha256"]) is None
@@ -444,7 +445,7 @@ class Routes:
         return self.managers[(route, anchored)]
 
 
-def download(source, egress, descriptor, seconds, routes):
+def download(source, egress, descriptor, seconds, routes, redirects=True):
     """Stream only exact approved bytes into descriptor, each chunk written
     before the next is read, using explicit routing and system trust, under
     the acquisition deadline its request froze for it, in seconds.
@@ -454,14 +455,14 @@ def download(source, egress, descriptor, seconds, routes):
     try:
         seconds_bound(seconds)
         with alarm(seconds):
-            _download(source, egress, descriptor, seconds, routes)
+            _download(source, egress, descriptor, seconds, routes, redirects)
     except Exception as error:
         raise refused(
             error, "approved source acquisition was refused or incomplete"
         ) from None
 
 
-def _download(source, egress, descriptor, seconds, routes):
+def _download(source, egress, descriptor, seconds, routes, redirects=True):
     deadline = time.monotonic() + seconds
 
     def store(response):
@@ -474,10 +475,10 @@ def _download(source, egress, descriptor, seconds, routes):
         if digest != source["sha256"]:
             raise Refused("source integrity")
 
-    respond(source, egress, deadline, store, routes)
+    respond(source, egress, deadline, store, routes, redirects=redirects)
 
 
-def respond(source, egress, deadline, consume, routes):
+def respond(source, egress, deadline, consume, routes, redirects=True):
     """Route one approved source and hand its checked response to consume.
 
     Every redirect, header, status and declared length is checked here, once,
@@ -520,6 +521,8 @@ def respond(source, egress, deadline, consume, routes):
             ):
                 raise Refused("response headers")
             if response.status in (301, 302, 303, 307, 308):
+                if not redirects:
+                    raise Refused("redirect origin")
                 current = urllib.parse.urljoin(
                     current, response.headers.get("Location", "")
                 )

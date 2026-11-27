@@ -91,7 +91,7 @@ func TestGeneratedIntegrations(t *testing.T) {
 						{"commands", []string{"c"}, []string{"catalog", "cluster", "completion", "context"}},
 						{"check flag", []string{"context", "init", "--ch"}, []string{"--check"}},
 						{"lifecycle preview flag", []string{"apply", "--dry"}, []string{"--dry-run"}},
-						{"catalog commands", []string{"catalog", ""}, []string{"add-ons", "media", "schema"}},
+						{"catalog commands", []string{"catalog", ""}, []string{"add-ons", "artifact", "media", "schema"}},
 						{"nested commands", []string{"cluster", "k"}, []string{"keyring", "kubeconfig", "kubectl"}},
 						{"flags", []string{"validate", "--o"}, []string{"--output"}},
 						{"enum", []string{"validate", "--output", ""}, []string{"json", "text", "yaml"}},

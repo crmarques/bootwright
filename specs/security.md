@@ -1013,6 +1013,12 @@ follows its mirror route even when `acquisition.OriginClass` does not list its
 host; an unlisted one is classed `declared` and never mirrored; tracked as
 [B1774](milestones/m1.md#b1774).
 
+An explicitly selected [artifact catalog](infrastructure-services.md#artifact-catalog)
+origin is a declared acquisition by the mirror host. The artifact registration
+authorizes that endpoint and the consuming capability still pins the bytes.
+A controller-owned catalog payload travels as a public file input to the
+placement connection, outside the adapter's bound Secret material.
+
 A mirror route changes where the bytes come from. Where the request froze a
 digest, the consumer verifies it and the mirror is trusted for nothing
 ([remote principals](#remote-principals)). A storage cluster image authored

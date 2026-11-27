@@ -144,11 +144,19 @@ func variables(request lifecycle.RunRequest, paths map[string]string) (map[strin
 	for name, value := range request.MaterialValues {
 		material[name] = value
 	}
-	return map[string]any{
+	result := map[string]any{
 		request.Variable + "_request":  decoded,
 		request.Variable + "_digest":   request.Digest,
 		request.Variable + "_material": material,
-	}, nil
+	}
+	if len(request.PublicFiles) != 0 {
+		public := make(map[string]any, len(request.PublicFiles))
+		for name, path := range request.PublicFiles {
+			public[name] = path
+		}
+		result[request.Variable+"_public_files"] = public
+	}
+	return result, nil
 }
 
 func checkHostKey(request lifecycle.RunRequest) (string, error) {

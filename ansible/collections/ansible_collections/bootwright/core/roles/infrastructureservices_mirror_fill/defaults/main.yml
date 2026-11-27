@@ -26,6 +26,9 @@ infrastructureservices_mirror_fill_valid_paths: >-
 infrastructureservices_mirror_fill_valid_digests: >-
   {{ bootwright_mirror_files_request.files | map(attribute='sha256') | select('match', '^[0-9a-f]{64}$(?!\n)') | list }}
 infrastructureservices_mirror_fill_valid_sources: >-
-  {{ bootwright_mirror_files_request.files | map(attribute='source') | select('match', '^https://') | list }}
+  {{ bootwright_mirror_files_request.files | map(attribute='source') | select('match', '^(https://|$(?!\n))') | list }}
 infrastructureservices_mirror_fill_valid_sizes: >-
   {{ bootwright_mirror_files_request.files | map(attribute='bytes') | select('integer') | select('gt', 0) | list }}
+infrastructureservices_mirror_fill_local: >-
+  {{ bootwright_mirror_files_request.files | selectattr('source', 'equalto', '') | list }}
+infrastructureservices_mirror_fill_upload: '{{ bootwright_run_scratch }}/mirror-files'

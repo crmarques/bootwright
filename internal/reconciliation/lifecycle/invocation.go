@@ -82,6 +82,7 @@ type RunRequest struct {
 	// MaterialValues are non-secret values the adapter needs beside the
 	// material paths, such as a certificate fingerprint a probe compares.
 	MaterialValues map[string]string
+	PublicFiles    map[string]string
 	Outputs        []OutputFile
 	Launch         prerequisites.PythonLaunch
 	Material       map[string]secrets.Material
@@ -162,6 +163,7 @@ type Invocation struct {
 	Parallelism    int
 	Materials      []MaterialFile
 	Values         map[string]string
+	PublicFiles    map[string]string
 	Outputs        []OutputFile
 	// Refusals are the adapter refusals the capability remedies by name, each
 	// with the diagnostic it reports in place of the adapter's failure.
@@ -214,6 +216,7 @@ func RunFor(execution Execution, invocation Invocation) RunRequest {
 		NodeCount:      invocation.NodeCount, Parallelism: invocation.Parallelism,
 		Materials:         materials,
 		MaterialValues:    invocation.Values,
+		PublicFiles:       maps.Clone(invocation.PublicFiles),
 		Outputs:           slices.Clone(invocation.Outputs),
 		Launch:            execution.Launch,
 		Material:          lend(execution.Material, materials),

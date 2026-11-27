@@ -39,6 +39,7 @@ func TestCommandModesComeFromTheCatalog(t *testing.T) {
 		"secret list": true, "secret info": true, "secret show": true, "secret delete": true,
 		"secret encryption init": true, "secret encryption status": true,
 		"secret encryption rotate": true, "validate": true, "render effective": true, "render acquisitions": true,
+		"catalog artifact add": true, "catalog artifact list": true, "catalog artifact show": true, "catalog artifact delete": true,
 		"catalog media add": true, "catalog media list": true, "catalog media delete": true,
 		"install": true, "rebind-host": true, "uninstall": true,
 		"status": true, "logs": true, "diff": true, "apply": true, "destroy": true,

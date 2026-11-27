@@ -590,13 +590,13 @@ it; `--input-dir` conflicts with `--context`. It registers nothing, contacts
 nothing and reads no host. Each row names its kind, the artifact, its
 version, its origin and that origin's
 [class](security.md#acquisition-origins) (`vendor`, `vendor delivery`,
-`public`, `declared`, `host repositories` or `media store`), the SHA-256 and size the build or the
+`public`, `declared`, `host repositories`, `media store` or `artifact catalog`), the SHA-256 and size the build or the
 desired state pins, the Machines that read it and the object that selects it.
 The rows, sorted by kind, artifact and selecting object, cover:
 
 - the controller stage's host packages and clients, each client from its
   publisher or its declared download mirror, and for a release the build does
-  not pin, each publisher host its metadata is read from; and the redirect
+  not pin, each publisher host its metadata is read from; and the catalog name (for a catalog-backed mirror fill), and the redirect
   hosts a `github.com` or `dl.k8s.io` download follows
   ([the controller stage](controller.md#the-controller-stage));
 - each managed service's image as it selects it, and the emulated BMC's image

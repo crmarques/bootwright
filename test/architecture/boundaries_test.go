@@ -113,6 +113,7 @@ func packageRoles() map[string]packageRole {
 		// tests.
 		"internal/reconciliation/operationstore/areadouble": applicationRole,
 	}
+	roles["internal/infrastructureservices/artifactcatalog"] = domainRole
 	for _, capability := range []string{
 		"addons/catalog",
 		"infrastructureservices/artifactserver", "infrastructureservices/managedservice", "infrastructureservices/mirrorfill",

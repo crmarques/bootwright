@@ -35,7 +35,7 @@ def templar(request):
 
 def download():
     block = next(task for task in tasks("apply") if "block" in task)
-    return block, block["block"][0]
+    return block, next(task for task in block["block"] if "bootwright.core.infrastructureservices_mirror_file" in task)
 
 
 def test_the_request_names_its_root_beneath_the_servers_served_root_and_every_parent_directory():
@@ -76,7 +76,7 @@ def test_the_rescue_names_only_the_refusals_the_protocol_admits():
         assert values.template(named) == reason
         assert reason in protocol.REFUSALS
     assert block["rescue"][-1].get("ansible.builtin.fail"), "a refused file must still fail the run"
-    label = block["always"][0]["ansible.builtin.command"]["argv"]
+    label = block["always"][-1]["ansible.builtin.command"]["argv"]
     assert label[:3] == ["/usr/bin/chcon", "--recursive", "--reference"], "a partial fill's published files must be labeled to be served"
 
 

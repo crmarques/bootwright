@@ -59,6 +59,7 @@ var defaultRemediations = map[string]string{
 	"secret.store.crypto":          "repeat the command; if it fails again the host's randomness or key material is unusable",
 	"secret.store.limit":           "reduce the Secret material, input or metadata to within the bound the message names",
 
+	"artifact.catalog":  "run bootwright catalog artifact list to see registered files and their pins",
 	"media.store":       "run bootwright catalog media list to see the stored media",
 	"preflight.failed":  "resolve the failed checks and repeat the preflight",
 	"preflight.unknown": "resolve the unknown and pending checks and repeat the preflight",

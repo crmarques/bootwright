@@ -256,6 +256,14 @@ func checkMaterials(request lifecycle.RunRequest) error {
 			return runnerRequestInvalid.Fail("material value "+name+" carries bound secret material, whole or within it, which reaches an adapter only as a lent file", "")
 		}
 	}
+	if len(request.PublicFiles) > 128 || len(request.PublicFiles) != 0 && request.ReadOnly {
+		return runnerRequestInvalid.Fail("a read-only or oversized adapter invocation cannot carry public file inputs", "")
+	}
+	for name, path := range request.PublicFiles {
+		if !materialName(name) || !filepath.IsAbs(path) || filepath.Clean(path) != path || confidentialValue(request.Material, path) {
+			return runnerRequestInvalid.Fail("the adapter names an invalid public file input", "")
+		}
+	}
 	return nil
 }
 

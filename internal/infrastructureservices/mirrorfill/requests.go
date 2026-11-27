@@ -7,6 +7,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactcatalog"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -21,10 +22,11 @@ const (
 )
 
 type Artifact struct {
-	Bytes    int64
-	Location string
-	SHA256   string
-	Source   string
+	Bytes           int64
+	Location        string
+	SHA256          string
+	Source          string
+	CatalogArtifact string
 }
 
 type Artifacts func(api.Catalog) ([]Artifact, error)
@@ -36,10 +38,12 @@ type Identity struct {
 }
 
 type File struct {
-	Bytes  int64  `json:"bytes"`
-	Path   string `json:"path"`
-	SHA256 string `json:"sha256"`
-	Source string `json:"source"`
+	Bytes           int64  `json:"bytes"`
+	CatalogArtifact string `json:"catalogArtifact,omitempty"`
+	CatalogIdentity string `json:"catalogIdentity,omitempty"`
+	Path            string `json:"path"`
+	SHA256          string `json:"sha256"`
+	Source          string `json:"source"`
 }
 
 type FilesRequest struct {
@@ -77,12 +81,20 @@ func (r FilesRequest) validate() error {
 	}
 	seen := map[string]bool{}
 	for _, file := range r.Files {
-		if seen[file.Path] || !safePath(file.Path) || !digestPattern.MatchString(file.SHA256) || file.Bytes < 1 || !strings.HasPrefix(file.Source, "https://") {
+		if seen[file.Path] || !safePath(file.Path) || !digestPattern.MatchString(file.SHA256) || file.Bytes < 1 || !file.validSource() {
 			return invalid
 		}
 		seen[file.Path] = true
 	}
 	return nil
+}
+
+func (f File) validSource() bool {
+	if f.CatalogArtifact == "" {
+		return f.CatalogIdentity == "" && strings.HasPrefix(f.Source, "https://")
+	}
+	entry := artifactcatalog.Entry{Name: f.CatalogArtifact, OriginURL: f.Source, SHA256: f.SHA256, Size: f.Bytes}
+	return entry.Valid() && f.CatalogIdentity == entry.Identity()
 }
 
 func safePath(path string) bool {
@@ -98,7 +110,7 @@ func safePath(path string) bool {
 func (r FilesRequest) SecretReferences() []string { return r.Placement.SecretReferences() }
 
 func FilesContentDigest() string {
-	return reconciliation.ContentDigestOf("bootwright.infrastructureservices.mirror-fill-v1", FilesImplementation, FilesEvidenceVersion, "explicit-https-route-for-each-publisher-hop")
+	return reconciliation.ContentDigestOf("bootwright.infrastructureservices.mirror-fill-v1", FilesImplementation, FilesEvidenceVersion, "explicit-https-route-for-each-publisher-hop", "pinned-catalog-sources")
 }
 
 func FilesBlockID(environment string) string {

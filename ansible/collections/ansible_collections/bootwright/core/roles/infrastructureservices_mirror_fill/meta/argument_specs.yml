@@ -30,6 +30,12 @@ argument_specs:
             required: true
             choices:
               - mirror-files-v1
+      bootwright_mirror_files_public_files:
+        type: dict
+        required: false
+      bootwright_run_scratch:
+        type: path
+        required: true
       bootwright_mirror_files_digest:
         type: str
         required: true

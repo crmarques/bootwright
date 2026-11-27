@@ -1,0 +1,17 @@
+  bootwright / catalog artifact list
+      List registered artifacts
+
+  Usage
+    bootwright catalog artifact list [flags]
+
+  Common flags
+      --ascii       Use ASCII status markers
+      --color       Select terminal colors (values: auto, always, never) · default auto
+      --detail      Select human detail (values: compact, full) · default compact
+      -h, --help    Show help for this command
+      -o, --output  Select output mode (values: text, json, yaml) · default text
+      --progress    Select progress animation (values: auto, always, never) · default auto
+      --width       Set presentation width (0: automatic) · default 0
+
+  Examples
+    bootwright catalog artifact list

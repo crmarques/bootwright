@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/acquisition"
 )
 
@@ -93,5 +94,26 @@ func TestSharedCDNRowsKeepVendorDeliverySeparateFromPublicPulls(t *testing.T) {
 	}
 	if vendor != len(quayDeliveryHosts) || public != len(quayDeliveryHosts) {
 		t.Fatalf("got %d vendor and %d public delivery rows, want %d of each", vendor, public, len(quayDeliveryHosts))
+	}
+}
+
+func TestCatalogSelectionReplacesOnlyTheHelmFillOrigin(t *testing.T) {
+	field := func(name string, content api.Value) api.FieldValue { return api.FieldValue{Name: name, Value: content} }
+	helm := api.MapValue(field("catalogArtifact", api.StringValue("approved-helm")))
+	artifacts := api.MapValue(field("toolSources", api.MapValue(field("helm", helm))))
+	spec := api.MapValue(field("mirror", api.MapValue(field("artifacts", artifacts))))
+	catalog := api.NewCatalog([]api.Object{api.NewObject(api.Environment, "lab", api.Value{}, spec)})
+	clients := []MirroredClient{
+		{Tool: "helm 4.3.1", Location: "https://mirror.example.test/helm", Source: "https://publisher.example.test/helm", SHA256: "helm-pin"},
+		{Tool: "govc 1.0.0", Source: "https://publisher.example.test/govc"},
+	}
+	other := clients[1]
+	applyCatalogSources(catalog, clients)
+	if client := clients[0]; client.CatalogArtifact != "approved-helm" || client.Source != "" ||
+		client.Location != "https://mirror.example.test/helm" || client.SHA256 != "helm-pin" {
+		t.Fatalf("catalog selection produced %+v", client)
+	}
+	if clients[1] != other {
+		t.Fatalf("catalog selection changed another tool: %+v", clients[1])
 	}
 }

@@ -862,6 +862,18 @@ exclusive holder writes. At most 16 stages exist at once, live, retained or
 abandoned; a claim beyond them refuses until another `catalog media add` finishes or
 `catalog media delete` removes a retained stage.
 
+## Artifact catalog storage
+
+The host-wide [artifact catalog](infrastructure-services.md#artifact-catalog)
+holds private immutable entry directories beneath `artifacts/` in the state
+root. Read operations inspect records under a shared root lock. A
+mutation reserves a private stage under the exclusive root lock and holds its
+own lock while copying a local file outside the root lock. It re-proves the
+stage and publishes it by rename under the exclusive root lock. It synchronizes the entry and its parent
+before reporting success. Deletion rechecks the confirmed record and its
+reservations under the exclusive lock and withdraws the entry by rename
+before cleaning the withdrawn directory.
+
 ## Recorded directory identity
 
 A directory the registry, its Controller descriptor or the controller record's

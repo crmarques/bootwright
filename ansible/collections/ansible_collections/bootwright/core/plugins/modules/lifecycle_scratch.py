@@ -27,6 +27,7 @@ options:
       - libvirt-machine
       - managedos-firewall
       - managedos-install
+      - mirror-files
       - mirror-release
   remove_root:
     description: Remove the empty root on a remote execution host; the local runner owns its root.
@@ -63,7 +64,7 @@ import stat
 
 from ansible.module_utils.basic import AnsibleModule
 
-SCOPES = frozenset(("libvirt-host", "libvirt-machine", "managedos-firewall", "managedos-install", "mirror-release"))
+SCOPES = frozenset(("libvirt-host", "libvirt-machine", "managedos-firewall", "managedos-install", "mirror-files", "mirror-release"))
 PARENT = "/var/lib/bootwright-staging/runs"
 FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 

@@ -182,6 +182,7 @@ func buildCommandCatalog() []commandSpec {
 	catalog = append(catalog, addOnCatalogCommands()...)
 	catalog = append(catalog, secretCommands()...)
 	catalog = append(catalog, mediaCommands()...)
+	catalog = append(catalog, artifactCommands()...)
 	catalog = append(catalog, validationCommand())
 	catalog = append(catalog, lifecycleInspectionCommands()...)
 	catalog = append(catalog, effectiveStateCommand())

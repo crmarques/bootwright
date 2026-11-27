@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "catalog artifact show",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "artifacts": [
+      {
+        "name": "helm-archive",
+        "source": "local file",
+        "size": 5,
+        "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "reservedBy": []
+      }
+    ]
+  },
+  "diagnostics": [],
+  "logs": []
+}

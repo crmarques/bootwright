@@ -940,6 +940,7 @@ var askRuleMarkers = []struct{ phrase, flag string }{
 	{phrase: "local logical deletion"},
 	{phrase: "local key rotation"},
 	{phrase: "local media deletion"},
+	{phrase: "local artifact deletion"},
 	{phrase: "replace the context authorization policy"},
 	{phrase: "local policy deletion"},
 	{phrase: "confidential material", flag: "--secrets"},
@@ -963,7 +964,9 @@ var askRuleNoAsk = map[string]string{
 	"secret info":            "read confidential-store metadata only",
 	"secret encryption init": "idempotent initialization", "secret encryption status": "read confidential metadata",
 	"catalog media list": "read local media", "validate": "no write",
-	"status": "read local state", "logs": "read local state",
+	"catalog artifact list": "read local state", "catalog artifact show": "read local state",
+	"catalog artifact add": "local registration",
+	"status":               "read local state", "logs": "read local state",
 	"diff": "read local state", "render storage": "never execution",
 	"machine list": "read local state", "machine info": "read local inventory",
 	"machine check": "read named bmc", "machine inventory": "read local state", "machine media status": "bounded read of the virtual-media state",
@@ -986,7 +989,7 @@ var askRuleInvocations = []string{
 // askRuleGroupFlagCommands are the grouped commands whose ask pattern must
 // also match global flags written between the group and the subcommand, as in
 // "render --context c effective"; B1219 extends this to every grouped command.
-var askRuleGroupFlagCommands = []string{"render effective", "render installer", "context delete", "secret delete", "secret encryption rotate", "catalog media delete"}
+var askRuleGroupFlagCommands = []string{"render effective", "render installer", "context delete", "secret delete", "secret encryption rotate", "catalog media delete", "catalog artifact delete"}
 
 // catalogCommand is one command row of the catalog: its local flags and its
 // Effects cell with a "same" cell replaced by the cell it repeats.

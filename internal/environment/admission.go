@@ -132,6 +132,10 @@ func validateArtifactMirror(environment api.Object, catalog api.Catalog) []api.I
 	const field = "$.spec.mirror.artifacts"
 	artifacts := environment.Spec().Get("mirror", "artifacts")
 	if !artifacts.Has("serverRef") {
+		if artifacts.Has("toolSources") {
+			return []api.Issue{{Code: "api.invariant", Field: field + ".toolSources", Message: "catalog tool sources require a managed artifact mirror",
+				Remediation: "select a managed ArtifactServer with serverRef and endpointRef on " + environment.Identity()}}
+		}
 		if artifacts.Has("endpointRef") {
 			return []api.Issue{{Code: "api.invariant", Field: field + ".endpointRef", Message: "endpointRef selects an endpoint of a managed artifact mirror's serverRef, and spec.mirror.artifacts names the operator's url",
 				Remediation: "remove spec.mirror.artifacts.endpointRef from " + environment.Identity()}}

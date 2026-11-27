@@ -49,7 +49,7 @@ def test_module_passes_the_frozen_file_and_route_to_publication(monkeypatch, run
 
     monkeypatch.setattr(mirror_file, "publish", publish)
     assert run_module(mirror_file, params)["changed"] is True
-    assert calls == [(params["source"], params["egress"], params["dest"], params["seconds"])]
+    assert calls == [(params["source"], params["egress"], params["dest"], params["seconds"], None, None, True)]
 
 
 @pytest.mark.parametrize(("egress", "route"), [
@@ -66,7 +66,7 @@ def test_the_route_go_freezes_without_its_empty_endpoints_reaches_route_selectio
     }
     selected = []
 
-    def publish(source, frozen, _destination, _seconds):
+    def publish(source, frozen, _destination, _seconds, _staging_root, _local_payload, _redirects):
         files = mirror_file.controller_files
         selected.append(files.proxy_for(frozen, files.endpoint(source["url"])))
         return True
@@ -74,3 +74,33 @@ def test_the_route_go_freezes_without_its_empty_endpoints_reaches_route_selectio
     monkeypatch.setattr(mirror_file, "publish", publish)
     assert run_module(mirror_file, params)["changed"] is True
     assert selected == [route]
+
+
+def test_catalog_bytes_are_verified_before_publication(tmp_path, monkeypatch):
+    payload, stage, public = tmp_path / "source", tmp_path / "stage", tmp_path / "public"
+    stage.mkdir()
+    public.mkdir()
+    destination = public / "file"
+    source = {"id": "file", "url": "", "sha256": hashlib.sha256(b"wanted").hexdigest(), "bytes": 6}
+    monkeypatch.setattr(mirror_file.os, "fchown", lambda *_args: None)
+    monkeypatch.setattr(mirror_file, "held", lambda *_args: False)
+    payload.write_bytes(b"broken")
+    with pytest.raises(mirror_file.controller_files.AcquisitionRefused, match="checksum"):
+        mirror_file.publish(source, {"noProxy": []}, str(destination), 120, str(stage), str(payload))
+    assert not destination.exists() and not list(stage.iterdir())
+    payload.write_bytes(b"wanted")
+    assert mirror_file.publish(source, {"noProxy": []}, str(destination), 120, str(stage), str(payload))
+    assert destination.read_bytes() == b"wanted" and not list(stage.iterdir())
+
+
+def test_catalog_https_disables_redirects(tmp_path, monkeypatch):
+    source = {"id": "file", "url": "https://publisher.example.test/file",
+              "sha256": hashlib.sha256(b"wanted").hexdigest(), "bytes": 6}
+    monkeypatch.setattr(mirror_file.os, "fchown", lambda *_args: None)
+
+    def download(selected, route, descriptor, seconds, _routes, redirects):
+        assert (selected, route, seconds, redirects) == (source, {"noProxy": []}, 120, False)
+        os.write(descriptor, b"wanted")
+
+    monkeypatch.setattr(mirror_file.controller_files, "download", download)
+    assert mirror_file.publish(source, {"noProxy": []}, str(tmp_path / "file"), 120, redirects=False)

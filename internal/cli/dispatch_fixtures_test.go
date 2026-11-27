@@ -14,6 +14,7 @@ import (
 	environmentaccess "github.com/crmarques/bootwright/internal/environment/access"
 	"github.com/crmarques/bootwright/internal/environment/inspection"
 	environmentpreflight "github.com/crmarques/bootwright/internal/environment/preflight"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactcatalog"
 	"github.com/crmarques/bootwright/internal/machine"
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 	"github.com/crmarques/bootwright/internal/machine/inventory"
@@ -356,6 +357,7 @@ func dispatchSpies(record *dispatchRecord) Services {
 		Secrets:               secretsSpy{record},
 		Encryption:            encryptionSpy{record},
 		Media:                 mediaSpy{record},
+		ArtifactCatalog:       artifactCatalogSpy{},
 		DesiredState:          desiredStateSpy{record},
 		Controller:            controllerSpy{record},
 		EnvironmentPreflight:  environmentSpy{record},
@@ -512,4 +514,22 @@ func (s lifecycleSpy) Prepare(ctx context.Context, request lifecycle.PrepareRequ
 
 func (s lifecycleSpy) PlanPreparation(ctx context.Context, request lifecycle.PrepareRequest) (*lifecycle.PlanResult, error) {
 	return s.record.result.lifecyclePlan, s.record.called(ctx, "machine enroll", request)
+}
+
+type artifactCatalogSpy struct{}
+
+func artifactFixture() artifactcatalog.Entry {
+	return artifactcatalog.Entry{Name: "helm-archive", Size: 5, SHA256: "1111111111111111111111111111111111111111111111111111111111111111"}
+}
+
+func (artifactCatalogSpy) Add(context.Context, artifactcatalog.Entry, string) (artifactcatalog.Entry, bool, error) {
+	return artifactFixture(), true, nil
+}
+
+func (artifactCatalogSpy) List(context.Context, string) ([]artifactcatalog.Row, error) {
+	return []artifactcatalog.Row{{Entry: artifactFixture(), Source: "local file", Holders: []string{}}}, nil
+}
+
+func (artifactCatalogSpy) Delete(context.Context, string, bool) (artifactcatalog.Entry, error) {
+	return artifactFixture(), nil
 }

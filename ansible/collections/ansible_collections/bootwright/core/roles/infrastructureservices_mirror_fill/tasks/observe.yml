@@ -14,6 +14,7 @@
       - infrastructureservices_mirror_fill_valid_paths | length == infrastructureservices_mirror_fill_count | int
       - infrastructureservices_mirror_fill_valid_digests | length == infrastructureservices_mirror_fill_count | int
       - infrastructureservices_mirror_fill_valid_sources | length == infrastructureservices_mirror_fill_count | int
+      - infrastructureservices_mirror_fill_local | rejectattr('catalogArtifact', 'defined') | list | length == 0
       - infrastructureservices_mirror_fill_valid_sizes | length == infrastructureservices_mirror_fill_count | int
       - bootwright_mirror_files_digest is match('^[0-9a-f]{64}$(?!\n)')
     quiet: true

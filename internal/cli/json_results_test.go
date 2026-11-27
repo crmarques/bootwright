@@ -31,6 +31,8 @@ var cliResults = []reflect.Type{
 	reflect.TypeFor[contextAdmissionPresentation](),
 	reflect.TypeFor[contextDeletionPresentation](),
 	reflect.TypeFor[secretMutationPresentation](),
+	reflect.TypeFor[artifactMutation](),
+	reflect.TypeFor[artifactList](),
 	reflect.TypeFor[mediaMutationPresentation](),
 	reflect.TypeFor[encryptionMutationPresentation](),
 	reflect.TypeFor[exportResult](),

@@ -100,6 +100,7 @@ type serviceDependencies struct {
 	Controller         controllerDependencies
 	Lifecycle          lifecycleDependencies
 	Media              mediaDependencies
+	Artifacts          artifactStore
 	Comparison         comparisonDependencies
 	Reporter           power.Reporter
 	// AmbientRoute is the acquisition route the invoking environment selected
@@ -143,6 +144,7 @@ func localServiceDependencies(process processDependencies) (serviceDependencies,
 		Controller:         controllerPorts,
 		AmbientRoute:       process.AmbientRoute,
 		Comparison:         comparisonDependencies{Account: account.comparison, Terminal: os.Getenv("TERM"), Language: os.Getenv("LANG")},
+		Artifacts:          repository,
 		Media:              localMediaDependencies(repository, process.Confirmer, process.LifecycleProgress, process.MediaPresenter, process.AmbientRoute, files),
 		Lifecycle: lifecycleDependencies{
 			Workspace: repository,
@@ -168,6 +170,10 @@ func assembleServices(deps serviceDependencies) cli.Services {
 	controllerSetup := wireController(deps.Controller, compiler, deps.Confirmer, deps.AmbientRoute)
 	services.Controller = controllerSetup
 	services.Media = wireMedia(deps.Media)
+	if deps.Artifacts != nil {
+		services.ArtifactCatalog = artifactCommands{store: deps.Artifacts, files: deps.Files, confirmer: deps.Confirmer}
+	}
+	deps.Lifecycle.Artifacts = deps.Artifacts
 	if deps.Lifecycle.Capacity == nil {
 		deps.Lifecycle.Capacity = remoteCapacity(services.DesiredState, &reconciler, deps)
 	}

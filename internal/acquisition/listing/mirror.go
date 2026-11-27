@@ -12,6 +12,7 @@ import (
 
 type MirroredClient struct {
 	Tool, Location, Source, SHA256 string
+	CatalogArtifact                string
 	Bytes                          int64
 }
 
@@ -45,9 +46,27 @@ func (t Tools) MirrorFiles(catalog api.Catalog) ([]mirrorfill.Artifact, error) {
 	if err != nil {
 		return nil, err
 	}
+	applyCatalogSources(catalog, mirrored)
 	artifacts := make([]mirrorfill.Artifact, 0, len(mirrored))
 	for _, client := range mirrored {
-		artifacts = append(artifacts, mirrorfill.Artifact{Bytes: client.Bytes, Location: client.Location, SHA256: client.SHA256, Source: client.Source})
+		artifacts = append(artifacts, mirrorfill.Artifact{Bytes: client.Bytes, Location: client.Location, SHA256: client.SHA256, Source: client.Source, CatalogArtifact: client.CatalogArtifact})
 	}
 	return artifacts, nil
+}
+
+func applyCatalogSources(catalog api.Catalog, clients []MirroredClient) {
+	environments := catalog.OfKind(api.Environment)
+	if len(environments) != 1 {
+		return
+	}
+	name := environments[0].Spec().Get("mirror", "artifacts", "toolSources", "helm", "catalogArtifact").Text()
+	if name == "" {
+		return
+	}
+	for index, client := range clients {
+		if strings.HasPrefix(client.Tool, "helm ") {
+			clients[index].CatalogArtifact = name
+			clients[index].Source = ""
+		}
+	}
 }

@@ -75,6 +75,7 @@ type lifecycleDependencies struct {
 	Capabilities lifecycle.CapabilityResolver
 	// Media is the host media store a plan freezes installation media from.
 	Media      media.Store
+	Artifacts  artifactStore
 	Capacity   capacity.CapacityChecker
 	Enrollment account.Remote
 	Paths      lifecycle.ContextPaths
@@ -433,7 +434,13 @@ func wireLifecycle(deps lifecycleDependencies, controller controllerDependencies
 	}
 	clock := systemClock{}
 	runner := ansiblerunner.New(operationPlaybook(), controller.Stager).AdmitReadOnly(readOnlyOperations()...)
-	var capabilities lifecycle.CapabilityResolver = buildCapabilitiesWith(clock, controller, runner, lifecycleMedia(deps), deps.Enrollment)
+	bindings := buildCapabilitiesWith(clock, controller, runner, lifecycleMedia(deps), deps.Enrollment)
+	for index, binding := range bindings {
+		if binding.implementation == mirrorfill.FilesImplementation {
+			bindings[index].capability = mirrorfill.NewFiles(runner, acquisitionTools().MirrorFiles, deps.Artifacts).WithInstalledHostKeys(installation.ProvedHostKey)
+		}
+	}
+	var capabilities lifecycle.CapabilityResolver = bindings
 	if deps.Capabilities != nil {
 		capabilities = deps.Capabilities
 	}

@@ -56,6 +56,12 @@ prefix_rule(
 )
 
 prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "catalog", "artifact", "delete"],
+    decision = "prompt",
+    justification = "bootwright catalog artifact delete acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+)
+
+prefix_rule(
     pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "machine", "start"],
     decision = "prompt",
     justification = "bootwright machine start acts beyond a read of local state; the owner asks for it (AGENTS.md)",

@@ -425,6 +425,16 @@ unknown. The server may be placed on the controller Machine, around which the
 [controller stage](../controller.md#the-controller-stage) splits, or on a
 Machine Bootwright installs ([placement](infrastructure-services.md#management-and-placement)).
 
+A managed artifact mirror accepts an optional
+`spec.mirror.artifacts.toolSources.helm.catalogArtifact` containing the exact
+name of a [catalog entry](../infrastructure-services.md#artifact-catalog).
+The field selects the source for Helm when the graph selects Helm. The
+controller's existing tool pin still determines the required archive.
+Admission refuses `toolSources` with an external mirror `url`. Planning
+refuses a required catalog entry that is missing or whose size or SHA-256
+differs from the selected pin. Validation and acquisition rendering read no
+host catalog.
+
 ## Image mirror
 
 `spec.mirror.registry.registryRef` selects one

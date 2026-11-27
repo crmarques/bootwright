@@ -1177,6 +1177,32 @@ against the issuer of the Registry's serving certificate unless the Registry's
 `trustBundleRef` names another; admission refuses a serving certificate with
 no issuer when none is named, and Bootwright creates no Secret for it.
 
+### Artifact catalog
+
+The host catalog holds up to 256 named files available to any context. An
+entry contains the name, SHA-256, positive size up to 512 MiB and one source.
+A local import copies a regular file through the invoking account's open
+descriptor and records the bytes it read. A deferred origin is a
+credential-free HTTPS URL on port 443 with a supplied size and SHA-256. The
+catalog records such a URL without connecting to it. An identical registration
+is unchanged. A different registration using the same name refuses.
+
+The mirror fill freezes the source identity and the consumer's file pin. At
+registration the host store rechecks the identity under the lifecycle
+reservation lock. Contexts share reservations until the last operation in
+each context that needs the entry releases it. Delete refuses while reserved,
+and removes only the local registration and any bytes it holds. Destroy
+withdraws the publication through the mirror fill's existing inverse.
+
+The fill uses the placement's authenticated transfer for local files and
+the mirror host's declared egress for deferred origins. A deferred origin
+cannot redirect. A matching file already on the server is reused. The
+server receives only files selected by the plan and suitable for all readers
+of the listener. The fill verifies the size and digest in private staging
+before publishing the file by rename. It serves the file at the existing
+tool path and preserves the controller client's download and extraction
+checks. If a URL-only file must be republished, the origin must be reachable.
+
 ## Adapter boundary
 
 Every managed-service effect crosses the

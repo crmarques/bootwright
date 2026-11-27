@@ -1,5 +1,5 @@
 implementation: mirror-files-v1
-content-digest: ce33d640a520fceeb13e5f0fb6a694a7ad2778a1317c8d888d386d3e7569ed3f
+content-digest: 3dac3ac33068752fddf0d022458fa7ec0a0c3eb1e62f5f288985d68d8538efe4
 request-version: mirror-files-v1
 automation-formats: none
 mark-formats: none
@@ -7,12 +7,14 @@ proof-ids: none
 fixed-places: none
 effect-pins:
   explicit-https-route-for-each-publisher-hop
+  pinned-catalog-sources
 request-identity:
   identity.context
   identity.environment
   identity.server
   root
   files[].path
+  files[].catalogIdentity
   placement.machine
 request-schema:
   egress struct managedservice.Egress
@@ -21,6 +23,8 @@ request-schema:
   egress.noProxy []string
   files []struct mirrorfill.File
   files[].bytes int64
+  files[].catalogArtifact string omitempty
+  files[].catalogIdentity string omitempty
   files[].path string
   files[].sha256 string
   files[].source string

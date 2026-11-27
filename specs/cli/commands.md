@@ -62,7 +62,7 @@ prompting, path inspection, tilde expansion, and operating-system account lookup
 are deferred until an available use case needs them. An unavailable invocation
 performs none of those operations.
 
-## Command and flag catalog
+## Command effects and permissions
 
 The tables list each command's own flags; inherited global flags and `-h`/`--help` are not
 repeated. A cell that names the
@@ -74,15 +74,10 @@ An *asked* command is one whose applicable Effects clause names a planned
 mutation or removal, host packages, a download, SSH, a power operation or a host
 identity rewrite, reveals a secret, or deletes or rotates local state
 irreversibly (`context delete`, `secret delete`, `secret encryption rotate`,
-`catalog media delete`, `policy delete`); an agent runs it only when the owner asks, and
+`catalog media delete`, `catalog artifact delete`, `policy delete`); an agent runs it only when the owner asks, and
 `TestDocsAskRulesCoverEveryEffectfulCommand` keeps the tracked
 `.claude/settings.json` and `.codex/rules/bootwright.rules` complete against
 these cells.
-
-Not yet met: a grouped ask pattern other than `render`, `context delete`,
-`secret delete`, `secret encryption rotate` and `catalog media delete` does not
-match a global flag written between the group and its command; tracked as
-[B1219](../milestones/backlog.md#b1219).
 
 The Effects column is the only owner of what a command may do. Another page
 describes a command's effects only by projecting its cell and defines no other
@@ -98,6 +93,13 @@ selects instances of the command's own noun, a plural `--<noun>s <list>` filters
 by a related noun, and `--short` is the one flag that prints names only.
 
 `TestCatalogFlagSpellingsFollowTheSelectorRules` holds the catalog to these rules.
+
+## Command and flag catalog
+
+Not yet met: a grouped ask pattern other than `render`, `context delete`,
+`secret delete`, `secret encryption rotate` and `catalog media delete` does not
+match a global flag written between the group and its command; tracked as
+[B1219](../milestones/backlog.md#b1219).
 
 ### Setup commands
 
@@ -125,6 +127,10 @@ by a related noun, and `--short` is the one flag that prints names only.
 | `bootwright secret encryption init` | none | configured implementation and active key | idempotent initialization using Context configuration |
 | `bootwright secret encryption status` | none | keyring and encrypted-store status | read confidential metadata |
 | `bootwright secret encryption rotate` | `--yes` false | new active key, retired keys and re-encrypted version and part counts | atomic local key rotation and re-encryption |
+| `bootwright catalog artifact add` | required `--name <name>`; exactly one of `--from-file <path>` or `--origin-url <https-url>`; `--sha256 <digest>` and `--size <bytes>` required for a URL | registered or unchanged artifact identity | local registration of copied bytes or a deferred HTTPS origin |
+| `bootwright catalog artifact list` | none | artifact identities, sources and reserving contexts | read local state |
+| `bootwright catalog artifact show` | required `--name <name>` | the named artifact and its reserving contexts | read local state |
+| `bootwright catalog artifact delete` | required `--name <name>`; `--yes` false | deleted artifact identity | local artifact deletion when unreserved |
 | `bootwright catalog media add` | required `--name <filename.iso>` and exactly one of `--from-file <path>`, `--from-url <https-url>` or `--from-url-file <path\|->`; `--sha256 <digest>`; `--yes` false | stored media identity, size, and verified digest | local copy or bounded download over the [context-free route](../controller.md#the-context-free-acquisition-route) and atomic publication |
 | `bootwright catalog media list` | `--checksums` false | media names, sizes, recorded digests and reserving contexts, and with `--checksums` each computed digest and its verification | read local media; `--checksums` reads each image in full |
 | `bootwright catalog media delete` | required `--name <filename.iso>`; `--yes` false | deleted media identity | local media deletion when not frozen by an operation |

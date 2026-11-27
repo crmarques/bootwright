@@ -9,6 +9,7 @@ type Services struct {
 	Secrets               SecretService
 	Encryption            EncryptionService
 	Media                 MediaService
+	ArtifactCatalog       ArtifactCatalogService
 	DesiredState          DesiredStateService
 	Controller            ControllerService
 	EnvironmentPreflight  EnvironmentPreflightService

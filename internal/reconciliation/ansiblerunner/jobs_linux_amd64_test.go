@@ -823,3 +823,31 @@ func TestNoMaterialValueEqualsBoundMaterialBytes(t *testing.T) {
 		}
 	}
 }
+
+func TestPublicFileInputsStayOutsideTheSecretVariableMap(t *testing.T) {
+	request := lifecycle.RunRequest{
+		Variable: "bootwright_example", Canonical: []byte("{}"),
+		PublicFiles: map[string]string{"archive": "/private/catalog/payload"},
+	}
+	if err := checkMaterials(request); err != nil {
+		t.Fatal(err)
+	}
+	adapterVariables, err := variables(request, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	public := adapterVariables["bootwright_example_public_files"].(map[string]any)
+	material := adapterVariables["bootwright_example_material"].(map[string]any)
+	if public["archive"] != "/private/catalog/payload" || len(material) != 0 {
+		t.Fatalf("public inputs were projected into the wrong variable map: %v", adapterVariables)
+	}
+	request.ReadOnly = true
+	if err := checkMaterials(request); err == nil {
+		t.Fatal("a read-only invocation could carry a public file input")
+	}
+	request.ReadOnly = false
+	request.PublicFiles["archive"] = "/private/../catalog"
+	if err := checkMaterials(request); err == nil {
+		t.Fatal("a public file input accepted an unclean path")
+	}
+}

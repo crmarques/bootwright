@@ -619,6 +619,9 @@ func (t *lifecycleTransaction) publishReservations(ctx context.Context, next []i
 		}
 		return controllerFailure("controller.identity", "locally hosted services require a completed controller setup on this host", completeSetup)
 	}
+	if err := t.proveArtifactClaims(ctx, next); err != nil {
+		return err
+	}
 	retained := []infrastructureservices.HostReservation{}
 	for _, reservation := range t.stored.value.Reservations {
 		if reservation.Context != t.identity.Name {

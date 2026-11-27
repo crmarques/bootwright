@@ -53,6 +53,7 @@ type fill[R, E any] struct {
 	classes     func(R) secrets.Classes
 	deadline    func(R) time.Duration
 	materials   func(R) []lifecycle.MaterialFile
+	publicFiles func(context.Context, R) (map[string]string, error)
 	refusals    func(contextName string, request R) map[string]error
 	lend        func(execution lifecycle.Execution, request R) (lifecycle.Execution, []lifecycle.MaterialFile, func(), error)
 	decodeProof func(data []byte, digest string) (E, error)
@@ -130,11 +131,18 @@ func (c fill[R, E]) run(ctx context.Context, execution lifecycle.Execution, oper
 	}
 	var refusals map[string]error
 	var materials []lifecycle.MaterialFile
+	var publicFiles map[string]string
 	if operation != "destroy" && c.materials != nil {
 		materials = c.materials(request)
 	}
 	if operation == "apply" {
 		refusals = c.refusals(execution.Context, request)
+		if c.publicFiles != nil {
+			publicFiles, err = c.publicFiles(ctx, request)
+			if err != nil {
+				return lifecycle.RunResult{}, request, err
+			}
+		}
 		if c.lend != nil {
 			lent, extra, release, err := c.lend(execution, request)
 			if err != nil {
@@ -150,7 +158,7 @@ func (c fill[R, E]) run(ctx context.Context, execution lifecycle.Execution, oper
 	}
 	result, err := c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{Implementation: c.implementation,
 		Operation: operation, Variable: c.variable, Canonical: canonical, Placement: placement,
-		Materials: materials, Refusals: refusals, Deadline: c.deadline(request),
+		Materials: materials, PublicFiles: publicFiles, Refusals: refusals, Deadline: c.deadline(request),
 	}))
 	return result, request, err
 }

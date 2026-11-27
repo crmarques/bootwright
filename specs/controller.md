@@ -503,6 +503,8 @@ remedy named, unless it names another code:
   stage refuses naming each image, with the remedy
   `bootwright catalog media delete --name <image>` for each, because uninstall
   of a store this build reads never deletes media the operator supplied;
+- a host artifact catalog holding any registration refuses naming each entry,
+  with the remedy `bootwright catalog artifact delete --name <name>` for each;
 - a staging extraction another process holds refuses `context.busy` with a
   retry remedy;
 - each root that exists must be a directory `root:root` owns, writable by no

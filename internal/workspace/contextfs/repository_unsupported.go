@@ -4,6 +4,9 @@ package contextfs
 
 import (
 	"context"
+	"io"
+
+	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactcatalog"
 
 	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
@@ -133,4 +136,20 @@ func (*Store) RemoveSessionPolicy(ctx context.Context, _ contexts.Record, _ []by
 
 func (*Store) HoldSessionAdmission(ctx context.Context) (func(), error) {
 	return nil, unsupported(ctx)
+}
+
+func (*Store) AddArtifact(ctx context.Context, _ artifactcatalog.Entry, _ io.Reader) (artifactcatalog.Entry, bool, error) {
+	return artifactcatalog.Entry{}, false, unsupported(ctx)
+}
+
+func (*Store) ListArtifacts(ctx context.Context) ([]artifactcatalog.Row, error) {
+	return nil, unsupported(ctx)
+}
+
+func (*Store) DeleteArtifact(ctx context.Context, _ artifactcatalog.Entry) error {
+	return unsupported(ctx)
+}
+
+func (*Store) ResolveArtifact(ctx context.Context, _ string) (artifactcatalog.Entry, string, error) {
+	return artifactcatalog.Entry{}, "", unsupported(ctx)
 }

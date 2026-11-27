@@ -62,6 +62,7 @@ type UninstallView struct {
 	Leftovers   []string
 	Contexts    []string
 	Media       []string
+	Artifacts   []string
 	Setup       SetupView
 }
 
@@ -184,6 +185,10 @@ func (s Service) inspectUninstall(ctx context.Context, view UninstallView, reque
 		}
 		return inspection, failure(uninstallCode, "the media store holds installer media the operator supplied: "+strings.Join(view.Media, ", "),
 			"run "+strings.Join(remedies, "; run ")+"; then run "+uninstallInvocation+" again")
+	}
+	if len(view.Artifacts) != 0 {
+		return inspection, failure(uninstallCode, "the artifact catalog still holds operator registrations: "+strings.Join(view.Artifacts, ", "),
+			"run bootwright catalog artifact delete --name <name> for each registration, then run "+uninstallInvocation+" again")
 	}
 	keep := request.KeepPackages || request.DiscardUnreadable
 	added, before, err := receiptNames(view.Setup, keep)

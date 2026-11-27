@@ -341,7 +341,7 @@ func verifyRootEntries(ctx context.Context, root *directory, registry contexts.R
 			} else if err != nil {
 				return err
 			}
-		case mediaContainer:
+		case mediaContainer, artifactContainer:
 			dir, err := kernel.OpenDirectory(root, name)
 			if err != nil {
 				return err
