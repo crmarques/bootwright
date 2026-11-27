@@ -29,6 +29,7 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets/encryption"
 	storagerendering "github.com/crmarques/bootwright/internal/storage/rendering"
 	"github.com/crmarques/bootwright/internal/trust/enrollment"
+	"github.com/crmarques/bootwright/internal/workspace/catalogpurge"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 	"github.com/spf13/pflag"
 )
@@ -45,6 +46,7 @@ type dispatchRecord struct {
 	// mediaChange is the stored image a media spy shows on out before it
 	// answers, as the service does before its confirmation.
 	mediaChange *media.Change
+	purgeResult catalogpurge.Result
 	out         io.Writer
 	// followed is what a logs spy streams into the follow's sink.
 	followed []followedLine
@@ -165,6 +167,12 @@ func (s mediaSpy) Delete(ctx context.Context, request media.DeleteMediaRequest) 
 		return nil, err
 	}
 	return s.record.result.mediaMutation, s.record.called(ctx, "catalog media delete", request)
+}
+
+type catalogPurgeSpy struct{ record *dispatchRecord }
+
+func (s catalogPurgeSpy) Purge(ctx context.Context, request catalogpurge.Request) (catalogpurge.Result, error) {
+	return s.record.purgeResult, s.record.called(ctx, "catalog "+string(request.Kind)+" purge", request)
 }
 
 type desiredStateSpy struct{ record *dispatchRecord }
@@ -358,6 +366,7 @@ func dispatchSpies(record *dispatchRecord) Services {
 		Encryption:            encryptionSpy{record},
 		Media:                 mediaSpy{record},
 		ArtifactCatalog:       artifactCatalogSpy{},
+		CatalogPurge:          catalogPurgeSpy{record},
 		DesiredState:          desiredStateSpy{record},
 		Controller:            controllerSpy{record},
 		EnvironmentPreflight:  environmentSpy{record},

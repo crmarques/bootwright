@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "catalog media purge",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "catalog": "media",
+    "force": true,
+    "dryRun": false,
+    "entries": [
+      {
+        "name": "installer.iso",
+        "action": "deleted",
+        "referencedBy": [],
+        "reservedBy": [
+          "lab"
+        ]
+      }
+    ]
+  },
+  "diagnostics": [],
+  "logs": []
+}

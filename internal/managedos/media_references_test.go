@@ -21,3 +21,15 @@ func TestMediaReferencesNameEachStoreImageTheInputBootsOrServes(t *testing.T) {
 		t.Fatalf("an empty catalog named %v, want an empty list", got)
 	}
 }
+
+func TestDefaultMediaReferencesNameOnlyTheCatalogMediaFields(t *testing.T) {
+	defaults := m("MachineImage", m("bootMedia", "local-media:unused-boot.iso"),
+		"MachineInstallProfile", m("installer", m("anaconda", m("packageSource", m("hostedTree", m("fromMedia", "local-media:unused-dvd.iso"))))))
+	catalog := api.NewCatalog([]api.Object{
+		obj(api.Environment, "lab", m("defaults", defaults)),
+		obj(api.Environment, "other", m()),
+	})
+	if got := DefaultMediaReferences(catalog); !slices.Equal(got, []string{"unused-boot.iso", "unused-dvd.iso"}) {
+		t.Fatalf("references = %v", got)
+	}
+}

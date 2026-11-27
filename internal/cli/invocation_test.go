@@ -134,6 +134,8 @@ func TestOnlyContextFreeAcquisitionConsumesTheInvokingEnvironment(t *testing.T) 
 		{"catalog media list", nil, ignoresRoute},
 		{"catalog media list", []string{"--checksums"}, ignoresRoute},
 		{"catalog media delete", []string{"--name", "image.iso"}, ignoresRoute},
+		{"catalog artifact purge", []string{"--dry-run"}, ignoresRoute},
+		{"catalog media purge", []string{"--force", "--yes"}, ignoresRoute},
 		{"rebind-host", nil, ignoresRoute},
 		{"uninstall", nil, readsRoute},
 		{"uninstall", []string{"--keep-packages"}, ignoresRoute},

@@ -62,6 +62,18 @@ prefix_rule(
 )
 
 prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "catalog", "artifact", "purge"],
+    decision = "prompt",
+    justification = "bootwright catalog artifact purge can delete local data; the owner asks for it (AGENTS.md)",
+)
+
+prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "catalog", "media", "purge"],
+    decision = "prompt",
+    justification = "bootwright catalog media purge can delete local data; the owner asks for it (AGENTS.md)",
+)
+
+prefix_rule(
     pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "machine", "start"],
     decision = "prompt",
     justification = "bootwright machine start acts beyond a read of local state; the owner asks for it (AGENTS.md)",

@@ -121,6 +121,12 @@ func confirmationOf(action, name string) confirmation {
 	case "discard unreadable store":
 		return confirmation{code: "controller.uninstall", label: "uninstall", review: "the plan",
 			prompt: "Confirm the discard on " + shown + ", abandoning every context the unreadable store holds, whose objects and custodied access nothing names afterwards? [y/N] "}
+	case "purge catalog artifact":
+		return confirmation{code: "artifact.catalog", label: "artifact purge", review: "the purge plan",
+			prompt: "Confirm purge of " + shown + " from the artifact catalog? [y/N] "}
+	case "purge catalog media":
+		return confirmation{code: "media.store", label: "media purge", review: "the purge plan",
+			prompt: "Confirm purge of " + shown + " from the media catalog? [y/N] "}
 	case "media replace", "media delete":
 		verb := strings.TrimPrefix(action, "media ")
 		return confirmation{code: "media.store", label: "media", review: "it",

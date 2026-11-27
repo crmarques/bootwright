@@ -36,6 +36,7 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets/encryption"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 	"github.com/crmarques/bootwright/internal/trust/enrollment"
+	"github.com/crmarques/bootwright/internal/workspace/catalogpurge"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -616,6 +617,17 @@ func cliGoldens() []cliGolden {
 		{golden: "cli-artifact-list", args: "catalog artifact list"},
 		{golden: "cli-artifact-show-json", args: "catalog artifact show --name helm-archive --output json"},
 		{golden: "cli-artifact-delete", args: "catalog artifact delete --name helm-archive --yes"},
+		{golden: "cli-artifact-purge", args: "catalog artifact purge --dry-run", record: func(r *dispatchRecord) {
+			r.purgeResult = catalogpurge.Result{Plan: catalogpurge.Plan{Kind: catalogpurge.Artifact, Entries: []catalogpurge.Entry{
+				{Name: "helm-archive", ReferencedBy: []string{"lab"}},
+				{Name: "spare-archive"},
+			}}, DryRun: true}
+		}},
+		{golden: "cli-media-purge-json", args: "catalog media purge --force --yes --output json", record: func(r *dispatchRecord) {
+			r.purgeResult = catalogpurge.Result{Plan: catalogpurge.Plan{Kind: catalogpurge.Media, Force: true, Entries: []catalogpurge.Entry{
+				{Name: "installer.iso", ReservedBy: []string{"lab"}},
+			}}}
+		}},
 		{golden: "cli-add-ons-list", args: "catalog add-ons list", record: func(r *dispatchRecord) {
 			r.result.addOns, _ = addoncatalog.New(addonpackages.Builtin()).List(context.Background(), addoncatalog.ListRequest{})
 		}},

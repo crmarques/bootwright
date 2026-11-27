@@ -85,6 +85,19 @@ func (s *State) Origin(identity string) (diagnostics.SourceLocation, bool) {
 // immutable model. No phase mutates what an earlier one produced, and a phase
 // that cannot continue ends the compilation with the diagnostics it collected.
 func (c Compiler) Compile(ctx context.Context, sources desiredstate.Sources) (*State, *Report, error) {
+	return c.compile(ctx, sources, nil)
+}
+
+func (c Compiler) CompileInputs(ctx context.Context, sources desiredstate.Sources) (*State, api.Catalog, error) {
+	var inputs api.Catalog
+	state, _, err := c.compile(ctx, sources, &inputs)
+	if err != nil {
+		inputs = api.Catalog{}
+	}
+	return state, inputs, err
+}
+
+func (c Compiler) compile(ctx context.Context, sources desiredstate.Sources, inputs *api.Catalog) (*State, *Report, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, nil, err
 	}
@@ -121,6 +134,13 @@ func (c Compiler) Compile(ctx context.Context, sources desiredstate.Sources) (*S
 		if !phase() {
 			return compilationFailure(ctx, ds)
 		}
+	}
+	if inputs != nil {
+		authored := make([]api.Object, 0, len(r.records))
+		for _, record := range r.records {
+			authored = append(authored, record.authored)
+		}
+		*inputs = api.NewCatalog(authored)
 	}
 	r.closeGraph()
 	if !r.normalize() {

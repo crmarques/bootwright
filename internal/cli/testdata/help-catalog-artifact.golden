@@ -8,6 +8,7 @@
   add       Register an immutable file or deferred HTTPS origin
   delete    Delete an unreserved artifact
   list      List registered artifacts
+  purge     Purge unused artifact catalog entries
   show      Show one registered artifact
 
   Common flags

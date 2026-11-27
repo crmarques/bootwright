@@ -125,7 +125,7 @@ func packageRoles() map[string]packageRole {
 		"machine/access", "machine/sessionpolicy", "machine/account", "machine/hardware", "machine/inventory", "machine/power", "managedos/media", "managedos/installation", "managedos/hostfirewall", "managedos/physicalerase", "managedos/diskdiscovery", "managedos/providedupdate", "managedos/providedhostname", "managedos/providedregistration", "managedos/providedtime",
 		"nativeartifacts/rendering", "reconciliation/lifecycle",
 		"secrets/custody", "secrets/encryption", "storage/preflight", "storage/rendering", "storage/ceph",
-		"substrate/baremetal", "substrate/kubevirt", "substrate/libvirt", "trust/enrollment", "workspace/contexts",
+		"substrate/baremetal", "substrate/kubevirt", "substrate/libvirt", "trust/enrollment", "workspace/catalogpurge", "workspace/contexts",
 	} {
 		roles["internal/"+capability] = applicationRole
 	}

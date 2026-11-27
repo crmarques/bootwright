@@ -16,6 +16,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/reconciliation/logview"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
+	"github.com/crmarques/bootwright/internal/workspace/catalogpurge"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -152,4 +153,12 @@ func (*Store) DeleteArtifact(ctx context.Context, _ artifactcatalog.Entry) error
 
 func (*Store) ResolveArtifact(ctx context.Context, _ string) (artifactcatalog.Entry, string, error) {
 	return artifactcatalog.Entry{}, "", unsupported(ctx)
+}
+
+func (*Store) PlanCatalogPurge(ctx context.Context, _ catalogpurge.Kind, _ bool, _ catalogpurge.References) (catalogpurge.Plan, error) {
+	return catalogpurge.Plan{}, unsupported(ctx)
+}
+
+func (*Store) CommitCatalogPurge(ctx context.Context, _ catalogpurge.Plan, _ catalogpurge.References) (int, error) {
+	return 0, unsupported(ctx)
 }

@@ -413,25 +413,29 @@ func (s *Store) DeleteArtifact(ctx context.Context, expected artifactcatalog.Ent
 		if holders := artifactHolders(stored, entry.Name); len(holders) != 0 {
 			return artifactcatalog.Failure("catalog artifact "+entry.Name+" is reserved by "+strings.Join(holders, ", "), "complete destroy in the reserving contexts")
 		}
-		stage := ".stage-" + entry.Name
-		idle, err := cleanUnheldArtifactStage(ctx, dir, stage)
-		if err != nil {
-			return err
-		}
-		if !idle {
-			return artifactcatalog.Failure("another command is staging artifact "+entry.Name, "wait for the import to finish and retry")
-		}
-		if err := renameNoReplaceAt(dir, entry.Name, stage); err != nil {
-			return err
-		}
-		if err := s.syncDirectory(ctx, dir); err != nil {
-			return err
-		}
-		if err := cleanArtifactStage(ctx, dir, stage); err != nil {
-			return err
-		}
-		return s.syncDirectory(ctx, dir)
+		return s.removeArtifact(ctx, dir, entry.Name)
 	})
+}
+
+func (s *Store) removeArtifact(ctx context.Context, dir *directory, name string) error {
+	stage := ".stage-" + name
+	idle, err := cleanUnheldArtifactStage(ctx, dir, stage)
+	if err != nil {
+		return err
+	}
+	if !idle {
+		return artifactcatalog.Failure("another command is staging artifact "+name, "wait for the import to finish and retry")
+	}
+	if err := renameNoReplaceAt(dir, name, stage); err != nil {
+		return err
+	}
+	if err := s.syncDirectory(ctx, dir); err != nil {
+		return err
+	}
+	if err := cleanArtifactStage(ctx, dir, stage); err != nil {
+		return err
+	}
+	return s.syncDirectory(ctx, dir)
 }
 
 func (t *lifecycleTransaction) proveArtifactClaims(ctx context.Context, claims []infrastructureservices.HostReservation) error {

@@ -7,6 +7,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/tooltable"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactcatalog"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/mirrorfill"
 )
 
@@ -59,7 +60,7 @@ func applyCatalogSources(catalog api.Catalog, clients []MirroredClient) {
 	if len(environments) != 1 {
 		return
 	}
-	name := environments[0].Spec().Get("mirror", "artifacts", "toolSources", "helm", "catalogArtifact").Text()
+	name := artifactcatalog.HelmReference(environments[0])
 	if name == "" {
 		return
 	}

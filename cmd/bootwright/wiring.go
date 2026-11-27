@@ -26,6 +26,7 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets/material"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 	"github.com/crmarques/bootwright/internal/substrate"
+	"github.com/crmarques/bootwright/internal/workspace/catalogpurge"
 	"github.com/crmarques/bootwright/internal/workspace/contextfs"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
@@ -48,6 +49,7 @@ type processDependencies struct {
 	LifecycleProgress  lifecycle.ProgressReporter
 	LifecyclePresenter lifecycle.PlanPresenter
 	MediaPresenter     media.Presenter
+	PurgePresenter     func(context.Context, catalogpurge.Plan) error
 	Executable         lifecycle.Executable
 	// AmbientRoute is the acquisition route the invoking environment selected
 	// for a context-free command. Its zero value selects nothing, so every
@@ -101,6 +103,8 @@ type serviceDependencies struct {
 	Lifecycle          lifecycleDependencies
 	Media              mediaDependencies
 	Artifacts          artifactStore
+	PurgeStore         catalogpurge.Store
+	PurgePresenter     func(context.Context, catalogpurge.Plan) error
 	Comparison         comparisonDependencies
 	Reporter           power.Reporter
 	// AmbientRoute is the acquisition route the invoking environment selected
@@ -145,6 +149,8 @@ func localServiceDependencies(process processDependencies) (serviceDependencies,
 		AmbientRoute:       process.AmbientRoute,
 		Comparison:         comparisonDependencies{Account: account.comparison, Terminal: os.Getenv("TERM"), Language: os.Getenv("LANG")},
 		Artifacts:          repository,
+		PurgeStore:         repository,
+		PurgePresenter:     process.PurgePresenter,
 		Media:              localMediaDependencies(repository, process.Confirmer, process.LifecycleProgress, process.MediaPresenter, process.AmbientRoute, files),
 		Lifecycle: lifecycleDependencies{
 			Workspace: repository,
@@ -170,6 +176,7 @@ func assembleServices(deps serviceDependencies) cli.Services {
 	controllerSetup := wireController(deps.Controller, compiler, deps.Confirmer, deps.AmbientRoute)
 	services.Controller = controllerSetup
 	services.Media = wireMedia(deps.Media)
+	services.CatalogPurge = catalogpurge.Service{Store: deps.PurgeStore, References: catalogPurgeReferences(compiler), Confirmer: deps.Confirmer, Present: deps.PurgePresenter}
 	if deps.Artifacts != nil {
 		services.ArtifactCatalog = artifactCommands{store: deps.Artifacts, files: deps.Files, confirmer: deps.Confirmer}
 	}

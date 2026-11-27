@@ -139,3 +139,29 @@ func TestASkippedSecretsDirectoryWarnsAndTheSecretRemedyNamesIt(t *testing.T) {
 		t.Fatalf("the unresolved Secret remedies name the directory %d times, want 2: %+v", named, diagnostics.Of(err))
 	}
 }
+
+func TestCompileInputsPreservesObjectsOutsideTheSelectedGraph(t *testing.T) {
+	c := compilation.NewCompiler(yamlstream.Parser{}, func(catalog api.Catalog) compilation.Selection {
+		var selected []api.Object
+		for _, object := range catalog.Objects() {
+			if object.Name() != "spare" {
+				selected = append(selected, object)
+			}
+		}
+		return compilation.Selection{Catalog: api.NewCatalog(selected)}
+	})
+	input := sources(environmentYAML + strings.Replace(controllerYAML, "name: controller", "name: spare", 1))
+	state, authored, err := c.CompileInputs(t.Context(), input)
+	if err != nil || state == nil {
+		t.Fatalf("compile failed: %+v", diagnostics.Of(err))
+	}
+	if _, present := authored.Find(api.Machine, "spare"); !present {
+		t.Fatal("saved input lost the machine excluded from its effective graph")
+	}
+	if _, present := state.Effective().Find(api.Machine, "spare"); present {
+		t.Fatal("reading all input changed effective graph selection")
+	}
+	if _, authored, err := c.CompileInputs(t.Context(), sources("malformed: [")); err == nil || len(authored.Objects()) != 0 {
+		t.Fatal("failed compilation returned an authored catalog")
+	}
+}

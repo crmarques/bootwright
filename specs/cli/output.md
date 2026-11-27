@@ -317,6 +317,7 @@ and their output goldens:
 | `catalog add-ons list` | `addOns` |
 | `catalog artifact add`, `catalog artifact delete` | `name`, `outcome`, `size`, `sha256` |
 | `catalog artifact list`, `catalog artifact show` | `artifacts` |
+| `catalog artifact purge`, `catalog media purge` | `catalog`, `force`, `dryRun`, `entries` |
 | `catalog media add`, `catalog media delete` | `name`, `outcome`, `size`, optional `sha256` |
 | `catalog media list` | `media` |
 | `catalog schema` | `format`, `schema` |
@@ -1638,3 +1639,12 @@ review.
 Help and diagnostic wording may be clarified only when syntax, code, safe
 location, object, field, meaning, and next action remain unchanged. Authored and
 effective-state compatibility is governed by [the API contract](../api.md).
+
+## Catalog purge
+
+The purge report lists names in sorted order. Each entry has `name`, `action`,
+`referencedBy` and `reservedBy`. The last two fields list the context names
+in sorted order. Action is `would delete` for a selected dry-run entry,
+`deleted` for a selected entry after success, or `retained` when its references
+protect it. An empty catalog has an empty `entries` array. Text output warns
+when `--force` includes entries that contexts may need again.

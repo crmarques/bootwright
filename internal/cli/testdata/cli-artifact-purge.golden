@@ -1,0 +1,9 @@
+  Catalog purge plan
+    Catalog  artifact
+
+  helm-archive
+    Action         retained
+    Referenced by  lab
+
+  spare-archive
+    Action  would delete

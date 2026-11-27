@@ -1,8 +1,11 @@
 package artifactcatalog
 
 import (
+	"slices"
 	"strings"
 	"testing"
+
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
 
 func TestRegistrationPinsAndCredentialFreeOrigins(t *testing.T) {
@@ -30,5 +33,18 @@ func TestRegistrationPinsAndCredentialFreeOrigins(t *testing.T) {
 	}
 	if ValidName("../archive") || ValidDigest(valid.SHA256[:63]) {
 		t.Fatal("accepted an unsafe name or incomplete digest")
+	}
+}
+
+func TestReferencesIncludeTheSavedHelmDefaultEvenWhenOverridden(t *testing.T) {
+	toolSource := []string{"mirror", "artifacts", "toolSources", "helm", "catalogArtifact"}
+	spec := api.MapValue().WithPath(api.StringValue("selected-archive"), toolSource...).
+		WithPath(api.StringValue("default-archive"), append([]string{"defaults", "Environment"}, toolSource...)...)
+	env := api.NewObject(api.Environment, "lab", api.Value{}, spec)
+	without := api.NewObject(api.Environment, "another", api.Value{}, api.MapValue())
+	got := References(api.NewCatalog([]api.Object{env, without}))
+	slices.Sort(got)
+	if !slices.Equal(got, []string{"default-archive", "selected-archive"}) {
+		t.Fatalf("references = %v", got)
 	}
 }

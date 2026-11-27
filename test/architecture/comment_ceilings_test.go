@@ -47,7 +47,8 @@ func commentLineCeilings() map[string]int {
 		"internal/secrets/secretstore/areacontract": 10, "internal/storage": 0, "internal/storage/cephcluster": 4, "internal/storage/ceph": 17, "internal/storage/preflight": 0,
 		"internal/storage/preflightlocal": 3, "internal/storage/rendering": 0, "internal/substrate": 278, "internal/substrate/baremetal": 103, "internal/substrate/kubevirt": 139,
 		"internal/substrate/libvirt": 319, "internal/trust": 62, "internal/trust/enrollment": 57,
-		"internal/workspace/contextfs": 824, "internal/workspace/contextfs/kernel": 24, "internal/workspace/contexts": 131,
+		"internal/workspace/catalogpurge": 0,
+		"internal/workspace/contextfs":    824, "internal/workspace/contextfs/kernel": 24, "internal/workspace/contexts": 131,
 		"internal/workspace/invokerfs": 48, "internal/workspace/selectionfs": 28,
 	}
 }

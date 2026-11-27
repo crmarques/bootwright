@@ -59,6 +59,8 @@
       "Bash(*bootwright *secret *encryption *rotate*)",
       "Bash(*bootwright *catalog *media *delete*)",
       "Bash(*bootwright *catalog *artifact *delete*)",
+      "Bash(*bootwright *catalog *artifact *purge*)",
+      "Bash(*bootwright *catalog *media *purge*)",
       "Bash(*bootwright *cluster update-admin-creds*)",
       "Bash(*bootwright *cluster sign-on suspend*)",
       "Bash(*bootwright *cluster sign-on resume*)",

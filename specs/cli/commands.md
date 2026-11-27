@@ -74,7 +74,7 @@ An *asked* command is one whose applicable Effects clause names a planned
 mutation or removal, host packages, a download, SSH, a power operation or a host
 identity rewrite, reveals a secret, or deletes or rotates local state
 irreversibly (`context delete`, `secret delete`, `secret encryption rotate`,
-`catalog media delete`, `catalog artifact delete`, `policy delete`); an agent runs it only when the owner asks, and
+`catalog media delete`, `catalog artifact delete`, catalog purges, `policy delete`); an agent runs it only when the owner asks, and
 `TestDocsAskRulesCoverEveryEffectfulCommand` keeps the tracked
 `.claude/settings.json` and `.codex/rules/bootwright.rules` complete against
 these cells.
@@ -131,13 +131,15 @@ match a global flag written between the group and its command; tracked as
 | `bootwright catalog artifact list` | none | artifact identities, sources and reserving contexts | read local state |
 | `bootwright catalog artifact show` | required `--name <name>` | the named artifact and its reserving contexts | read local state |
 | `bootwright catalog artifact delete` | required `--name <name>`; `--yes` false | deleted artifact identity | local artifact deletion when unreserved |
+| `bootwright catalog artifact purge` | `--force` false; `--dry-run` false; `--yes` false | [catalog purge plan or result](output.md#catalog-purge) | local artifact deletion of unused registrations; `--force` also deletes referenced and reserved artifacts; `--dry-run` replaces deletion with a local state read |
 | `bootwright catalog media add` | required `--name <filename.iso>` and exactly one of `--from-file <path>`, `--from-url <https-url>` or `--from-url-file <path\|->`; `--sha256 <digest>`; `--yes` false | stored media identity, size, and verified digest | local copy or bounded download over the [context-free route](../controller.md#the-context-free-acquisition-route) and atomic publication |
 | `bootwright catalog media list` | `--checksums` false | media names, sizes, recorded digests and reserving contexts, and with `--checksums` each computed digest and its verification | read local media; `--checksums` reads each image in full |
 | `bootwright catalog media delete` | required `--name <filename.iso>`; `--yes` false | deleted media identity | local media deletion when not frozen by an operation |
+| `bootwright catalog media purge` | `--force` false; `--dry-run` false; `--yes` false | [catalog purge plan or result](output.md#catalog-purge) | local media deletion of unused registrations; `--force` also deletes referenced and reserved media; `--dry-run` replaces deletion with a local state read |
 
 The required controller declaration and context-free setup boundary follow
 [controller command applicability](../cli.md#controller-declaration-and-command-applicability).
-The three `catalog media` commands follow the host-wide
+The `catalog media` commands follow the host-wide
 [media store](../managed-os.md#media-store).
 
 ### Inspect and lifecycle commands
@@ -615,3 +617,26 @@ needs the existing version, unless that exact version remains durably
 available for continuation and destroy. A Secret
 [held as effect material](../secrets.md#effect-material-under-a-live-binding)
 refuses even then.
+
+## Catalog purge
+
+Purge considers registered entries in the selected controller catalog only.
+It keeps any entry named in a registered context's current saved input or
+held by a frozen operation's reservation, even if another context is active.
+References in unused saved defaults also protect entries.
+It does not scan external input directories or remove published copies,
+revision history or retained media imports. A failed context inspection refuses purge.
+
+`--force` selects referenced and reserved entries too. This can leave later
+apply, retry and destroy unable to read their original inputs until the same
+registration and bytes are restored. Force does not bypass store integrity,
+a live import, or active context operations. It does not release a context's
+reservation.
+
+`--dry-run` shows the plan without deleting anything. An actual purge with
+entries to delete presents the plan and asks for one ordinary confirmation
+unless `--yes` is given. JSON and YAML require `--dry-run` or `--yes`.
+The commit rechecks the entries and references under the exclusive store
+lock and refuses a changed plan before deletion. Deletion is durable per
+entry, not one atomic batch. After an interruption or partial failure, run a
+new dry run before retrying.

@@ -9,6 +9,7 @@
   add       Import and verify an installer image
   delete    Delete an unbound installer image
   list      List installer images
+  purge     Purge unused media catalog entries
 
   Common flags
       --ascii       Use ASCII status markers

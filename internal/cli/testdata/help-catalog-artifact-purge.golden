@@ -1,0 +1,26 @@
+  bootwright / catalog artifact purge
+      Purge entries from this controller's catalog. By default, entries named in any saved
+      context's input or reserved by an operation are kept. --force also deletes referenced and
+      reserved entries, which can prevent later apply, retry or destroy until the same data is
+      restored. It does not bypass active operations or store integrity checks. --dry-run only
+      shows what would be deleted. Otherwise confirm the plan or use --yes.
+
+  Usage
+    bootwright catalog artifact purge [flags]
+
+  Command flags
+      --dry-run  Show the purge plan without deleting anything
+      --force    Include referenced and reserved entries
+      --yes      Confirm the command's ordinary confirmation
+
+  Common flags
+      --ascii       Use ASCII status markers
+      --color       Select terminal colors (values: auto, always, never) · default auto
+      --detail      Select human detail (values: compact, full) · default compact
+      -h, --help    Show help for this command
+      -o, --output  Select output mode (values: text, json, yaml) · default text
+      --progress    Select progress animation (values: auto, always, never) · default auto
+      --width       Set presentation width (0: automatic) · default 0
+
+  Examples
+    bootwright catalog artifact purge --dry-run

@@ -253,6 +253,7 @@ func interactiveProcess(classification cli.InvocationClass, args []string, stdou
 		LifecycleProgress:  lifecycleProgress,
 		LifecyclePresenter: lifecyclePlan,
 		MediaPresenter:     cli.NewMediaChangePresenter(progressOutput),
+		PurgePresenter:     cli.NewCatalogPurgePresenter(progressOutput),
 		Executable:         lifecycle.Executable{Version: build.Version, Commit: build.Commit, Modified: strings.EqualFold(strings.TrimSpace(build.Source), "modified")},
 		AmbientRoute:       route,
 	}

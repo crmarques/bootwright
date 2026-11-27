@@ -67,3 +67,23 @@ func Failure(message, remedy string) error {
 func Supply(name string) string {
 	return "run bootwright catalog artifact add --name " + name + " --from-file <path>, or register an HTTPS origin"
 }
+
+func HelmReference(environment api.Object) string {
+	return helmReference(environment.Spec())
+}
+
+func helmReference(spec api.Value) string {
+	return spec.Get("mirror", "artifacts", "toolSources", "helm", "catalogArtifact").Text()
+}
+
+func References(catalog api.Catalog) []string {
+	var names []string
+	for _, environment := range catalog.OfKind(api.Environment) {
+		for _, name := range []string{HelmReference(environment), helmReference(environment.Spec().Get("defaults", string(api.Environment)))} {
+			if ValidName(name) {
+				names = append(names, name)
+			}
+		}
+	}
+	return names
+}
