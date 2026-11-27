@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from ansible_collections.bootwright.core.plugins.module_utils import machine_identity, redfish_control, redfish_storage
+from ansible_collections.bootwright.core.plugins.module_utils import (
+    machine_identity, redfish_control, redfish_root_volume, redfish_storage,
+)
 
 
 class InspectionClient(redfish_control.Client):
@@ -48,7 +50,7 @@ def inspect(client, expected):
         rows.extend(capabilities(client))
     else:
         rows.extend(row(name, "unknown", "An exact target identity is required to report this observation.")
-                    for name in ("power", "virtual-media", "firmware", "direct-disks"))
+                    for name in ("power", "virtual-media", "firmware", "direct-disks", "logical-volumes"))
     rows.append(row("active-rehearsal", "requires-exercise",
                     "Verify media fetch, boot, interruption recovery, and authorized cleanup on an isolated spare."))
     return rows
@@ -86,6 +88,31 @@ def capabilities(client):
     else:
         status = "observed" if identified == len(drives) and drives else "unknown"
         yield row("direct-disks", status, "%d of %d direct drives reported a durable identity and exact capacity." % (identified, len(drives)))
+
+    yield logical_volumes(client)
+
+
+def logical_volumes(client):
+    """Inspect only an advertised inventory and keep the install proof independent."""
+    system = client.system()
+    if "Storage" in system:
+        source = "Storage"
+    elif "Storages" in system:
+        source = "Storages"
+    else:
+        return row("logical-volumes", "unknown", "The ComputerSystem advertised neither a Storage nor a Storages link.")
+    try:
+        count, candidates = redfish_root_volume.inspect(client, source)
+    except redfish_control.ControllerError:
+        return row("logical-volumes", "unknown", "The complete inventory from the advertised %s link could not be read." % source)
+    if not count:
+        return row("logical-volumes", "unknown", "The readable %s inventory advertised no logical volumes." % source)
+    summary = "%d of %d logical volumes from %s report an exact byte capacity and an NAA not duplicated in the inventory." % (len(candidates), count, source)
+    if len(candidates) == 1:
+        summary += " Candidate: storageId={storageId} volumeId={volumeId} wwn={wwn} sizeBytes={sizeBytes}.".format(**candidates[0])
+    if source == "Storages":
+        summary += " This link is inspection only."
+    return row("logical-volumes", "observed" if candidates else "unknown", summary)
 
 
 def exact_drive(drive):

@@ -31,11 +31,11 @@ func (a *checkAdapter) Run(_ context.Context, request lifecycle.RunRequest) (lif
 		object = "other"
 	}
 	result := checkEvidence{Request: request.Digest, Machine: object}
-	for _, id := range []string{"management-tls", "identity", "power", "virtual-media", "firmware", "direct-disks", "active-rehearsal"} {
+	for _, id := range []string{"management-tls", "identity", "power", "virtual-media", "firmware", "direct-disks", "logical-volumes", "active-rehearsal"} {
 		result.Checks = append(result.Checks, HardwareCheck{ID: id, Status: "unknown", Summary: "Unanswered"})
 	}
 	if a.drop {
-		result.Checks = result.Checks[:6]
+		result.Checks = result.Checks[:7]
 	}
 	if a.status != "" {
 		result.Checks[0].Status = a.status
@@ -51,7 +51,7 @@ func TestHardwareCheckReadsOnlyTheNamedPhysicalMachine(t *testing.T) {
 	runtime, runner, confirmer := &boundary{}, &checkAdapter{}, &answer{}
 	checker := service(runtime, runner, confirmer)
 	result, err := checker.Check(context.Background(), CheckRequest{ContextName: "lab", Name: "metal"})
-	if err != nil || result == nil || result.Machine != "metal" || len(result.Checks) != 7 {
+	if err != nil || result == nil || result.Machine != "metal" || len(result.Checks) != 8 {
 		t.Fatalf("hardware check: %+v (%v)", result, err)
 	}
 	run := runner.run

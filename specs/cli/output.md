@@ -663,7 +663,12 @@ A `machine check` result identifies the context and Machine. Its ordered
 `checks` array holds `id`, `status` and `summary`. An observation can report
 `observed`, `mismatch`, `unknown` or `requires-exercise`. Exit zero means the
 check returned its observations. Inspect the row statuses before making a
-qualification decision.
+qualification decision. After direct drives, the logical-volume observation
+reads the ComputerSystem's advertised `Storage` link, or `Storages` when only
+that link is advertised. It reports counts and, for one candidate with a
+reported NAA not duplicated in the inventory and an exact byte capacity, the
+controller and volume IDs, WWN and byte capacity. It never selects a disk, and the `Storages` inspection cannot
+satisfy an installation proof.
 
 `machine media status` reports `context` and `machines`. Each row holds
 `machine`, its name, and `media`, one of `present`, `none` or `unknown`.

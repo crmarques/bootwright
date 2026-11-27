@@ -7,7 +7,7 @@ from urllib.parse import urlsplit
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import redfish_control, redfish_root_volume
+from ansible_collections.bootwright.core.plugins.module_utils import redfish_control, redfish_hardware_check, redfish_root_volume
 
 
 SYSTEM = "/redfish/v1/Systems/1"
@@ -137,3 +137,53 @@ def test_selector_modes_are_closed_and_require_exact_types(selector):
     with pytest.raises(redfish_root_volume.Refused):
         redfish_root_volume.discover(client, selector)
     assert client.reads == []
+
+
+@pytest.mark.parametrize("source", ["Storage", "Storages"])
+def test_hardware_check_reports_a_correlatable_volume_without_selecting_it(source):
+    client = Inventory()
+    if source == "Storages":
+        client.body["Storages"] = client.body.pop("Storage")
+    result = redfish_hardware_check.logical_volumes(client)
+    assert result["id"] == "logical-volumes"
+    assert result["status"] == "observed"
+    assert source in result["summary"]
+    for field in ("storageId=RAID", "volumeId=OS", "wwn=0x" + WWN, "sizeBytes=8192"):
+        assert field in result["summary"]
+    if source == "Storages":
+        with pytest.raises(redfish_root_volume.Refused):
+            redfish_root_volume.discover(client, REF)
+
+
+@pytest.mark.parametrize("scenario", ("uuid", "duplicate", "paged", "standard-present", "unadvertised", "foreign-link"))
+def test_hardware_check_does_not_report_an_unproved_volume(scenario):
+    client = Inventory()
+    if scenario == "uuid":
+        client.resources[VOLUME]["Identifiers"][0]["DurableNameFormat"] = "UUID"
+    elif scenario == "duplicate":
+        second = VOLUME + "-other"
+        client.resources[second] = dict(client.resources[VOLUME], Id="OTHER")
+        client.resources[VOLUMES]["Members"].append({"@odata.id": second})
+    elif scenario == "paged":
+        client.resources[VOLUMES]["Members@odata.nextLink"] = VOLUMES + "?page=2"
+    elif scenario == "standard-present":
+        client.body["Storages"] = client.body["Storage"]
+        client.body["Storage"] = {}
+    elif scenario == "foreign-link":
+        del client.body["Storage"]
+        client.body["Storages"] = {"@odata.id": "https://other.example.test" + STORAGE}
+    else:
+        del client.body["Storage"]
+    result = redfish_hardware_check.logical_volumes(client)
+    assert result["status"] == "unknown"
+    assert "wwn=" not in result["summary"]
+    if scenario in ("standard-present", "unadvertised", "foreign-link"):
+        assert not client.reads
+
+
+def test_hardware_check_reports_no_logical_volumes_in_a_complete_empty_list():
+    client = Inventory()
+    client.resources[VOLUMES]["Members"] = []
+    result = redfish_hardware_check.logical_volumes(client)
+    assert result["status"] == "unknown"
+    assert "no logical volumes" in result["summary"]

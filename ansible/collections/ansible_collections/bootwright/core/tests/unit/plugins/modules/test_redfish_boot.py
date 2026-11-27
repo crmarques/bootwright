@@ -2528,6 +2528,22 @@ def test_inspection_does_not_read_a_different_system(monkeypatch):
     assert not writes(firmware)
 
 
+def test_hardware_check_does_not_follow_storages_to_a_different_system(monkeypatch):
+    from ansible_collections.bootwright.core.plugins.module_utils import redfish_hardware_check
+
+    firmware = emulator()
+    monkeypatch.setattr(redfish_control, "_opener", firmware.opener)
+    client = redfish_hardware_check.InspectionClient(firmware.endpoint, "operator", PASSWORD)
+    original = firmware.resources[firmware.system]
+    firmware.resources[firmware.system] = lambda f: dict(
+        original(f), Storages={"@odata.id": "/redfish/v1/Systems/other/Storages"})
+    rows = {row["id"]: row for row in redfish_hardware_check.inspect(client, {"expected": ["52:54:00:aa:bb:01"]})}
+    assert rows["identity"]["status"] == "observed"
+    assert rows["logical-volumes"]["status"] == "unknown"
+    assert not any("/Systems/other" in call[1] for call in firmware.calls)
+    assert not writes(firmware)
+
+
 def test_guarded_reset_refuses_an_action_for_another_system(monkeypatch):
     firmware = emulator()
     original = firmware.resources[firmware.system]

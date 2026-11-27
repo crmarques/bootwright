@@ -142,7 +142,7 @@ func (s Service) checkHardware(ctx context.Context, name string, survey ReadSurv
 }
 
 func validHardwareChecks(checks []HardwareCheck) bool {
-	ids := []string{"management-tls", "identity", "power", "virtual-media", "firmware", "direct-disks", "active-rehearsal"}
+	ids := []string{"management-tls", "identity", "power", "virtual-media", "firmware", "direct-disks", "logical-volumes", "active-rehearsal"}
 	if len(checks) != len(ids) {
 		return false
 	}

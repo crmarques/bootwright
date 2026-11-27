@@ -26,17 +26,17 @@ def _read(client, reference, kind):
     return body
 
 
-def _inventory(client):
+def _inventory(client, storage_property="Storage"):
     try:
-        return _read_inventory(client)
+        return _read_inventory(client, storage_property)
     except redfish_storage.Unqualified:
         raise Refused(REFUSAL) from None
 
 
-def _read_inventory(client):
+def _read_inventory(client, storage_property):
     seen, drives, volumes = set(), [], []
     doing = "reading the root volume inventory"
-    for reference in redfish_storage.collection(client, redfish_storage.link(client.system().get("Storage")), redfish_storage.MAX_STORAGE, doing):
+    for reference in redfish_storage.collection(client, redfish_storage.link(client.system().get(storage_property)), redfish_storage.MAX_STORAGE, doing):
         storage = _read(client, reference, "Storage")
         storage_id = storage.get("Id")
         if not isinstance(storage_id, str) or ID.fullmatch(storage_id) is None or storage_id in seen:
@@ -73,11 +73,27 @@ def discover(client, reference):
     matches = [item for item in volumes if item[:2] == (reference["storageId"], reference["volumeId"])]
     if len(matches) != 1:
         raise Refused(REFUSAL)
-    storage, volume, wwn, size, _link = matches[0]
+    return _proof(matches[0], volumes, drives)
+
+
+def _proof(candidate, volumes, drives):
+    storage, volume, wwn, size, _link = candidate
     if (not wwn or sum(item[2] == wwn for item in volumes) != 1 or wwn in drives
             or type(size) is not int or not 4096 <= size <= redfish_storage.MAX_SIZE or size % 4096):
         raise Refused(REFUSAL)
     return {"storageId": storage, "volumeId": volume, "wwn": wwn, "sizeBytes": size}
+
+
+def inspect(client, storage_property):
+    """Report candidates for an operator, never a selection for installation."""
+    volumes, drives = _inventory(client, storage_property)
+    candidates = []
+    for volume in volumes:
+        try:
+            candidates.append(_proof(volume, volumes, drives))
+        except Refused:
+            continue
+    return len(volumes), candidates
 
 
 def _boot_reference(client, volumes):
