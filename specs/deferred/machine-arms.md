@@ -103,13 +103,18 @@ For KubeVirt, the provider verifies the cluster identity and reads the
 declared `VirtualMachineSnapshot` by namespace and name. It requires the
 authored UID, a ready snapshot, and one ready content object bound to it.
 It resolves the sole persistent boot volume in the captured VM to one ready
-CSI VolumeSnapshot, checks its bound content and restore size, and freezes
-those identities before creating a VM. The source and destination can occupy
-different namespaces. The operator grants the provider's identity the reads
-and CDI source authorization in the source namespace, and the VM and
-DataVolume privileges in the destination. The VM submits the resolved CSI
-VolumeSnapshot to CDI and receives an independent writable root. The
-implementation must prove that CDI used the pinned backing across the
+CSI VolumeSnapshot. The source read checks the generated VM snapshot content
+name against the published UID, the captured VM against the source UID, and the
+CSI snapshot controller owner against that content. It checks the CSI binding by
+name, namespace, and UID and returns the backing identities, driver and restore
+size. A subsequent clone freezes those facts before creating a VM. The source
+and destination can occupy different namespaces. The operator grants the
+provider's identity the snapshot reads and CDI source authorization in the
+source namespace. The read of the bound CSI VolumeSnapshotContent uses a
+cluster-scoped grant limited to the published backing's name. VM and
+DataVolume privileges belong to the destination namespace. The VM submits
+the resolved CSI VolumeSnapshot to CDI and receives an independent writable
+root. The implementation must prove that CDI used the pinned backing across the
 asynchronous population window before the first boot. If either source
 identity changes during that window, it leaves the target stopped and
 reports the changed source. It derives the VM hardware and networks from
@@ -117,6 +122,8 @@ the destination profile and Machine.
 [Red Hat snapshot clone procedure](https://docs.redhat.com/en/documentation/openshift_container_platform/4.20/html/virtualization/advanced-vm-creation)
 and [cross-namespace CDI authorization](https://docs.redhat.com/en/documentation/openshift_container_platform/4.20/html/virtualization/storage)
 document the native mechanisms.
+The [upstream snapshot controller](https://github.com/kubevirt/kubevirt/blob/v1.5.1/pkg/storage/snapshot/snapshot.go)
+defines the generated content name and CSI owner reference.
 
 For vSphere, the provider resolves one published inventory template by
 absolute path through verified vCenter TLS. A qualified backing identity

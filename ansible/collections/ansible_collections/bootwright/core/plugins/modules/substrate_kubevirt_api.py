@@ -28,6 +28,7 @@ options:
     required: true
     choices:
       - proof
+      - template_source_read
       - apply
       - observe
       - destroy
@@ -48,6 +49,12 @@ options:
     description: The run's private scratch directory.
     type: path
     required: true
+  cluster_uid:
+    description: The proved host cluster UID for a template source read.
+    type: str
+  snapshot_ref:
+    description: The published VM snapshot's namespace, name, and UID for a template source read.
+    type: dict
   request:
     description: The frozen request of a block operation.
     type: dict
