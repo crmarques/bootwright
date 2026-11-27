@@ -81,7 +81,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			return empty, err
 		}
 		definition.Dependencies = prerequisites
-		return lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{definition}}, nil
+		return lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{definition}, Secrets: request.secretReferences()}, nil
 	}
 	packages, clients := request.Split()
 	first, err := stageBlock(input.Verb, selection.EnvironmentName(), BlockID, packages, nil)
@@ -94,7 +94,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		return empty, err
 	}
 	second.Dependencies = append([]string{BlockID}, prerequisites...)
-	return lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{first, second}}, nil
+	return lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{first, second}, Secrets: clients.secretReferences()}, nil
 }
 
 func stageBlock(verb reconciliation.Verb, environment, id string, request Request, requires []reconciliation.ObjectRef) (reconciliation.BlockDefinition, error) {
@@ -555,7 +555,17 @@ func lentTrust(execution lifecycle.Execution, request Request) (prerequisites.Mi
 	if request.MirrorTrust == nil {
 		return prerequisites.MirrorTrust{}, nil
 	}
-	anchor, err := MirrorAnchor(execution.Material, request.MirrorTrust.TrustBundleRef)
+	reference := request.MirrorTrust.TrustBundleRef
+	if _, bound := execution.Material[reference]; !bound {
+		preview := "bootwright destroy --dry-run"
+		if execution.Context != "" {
+			preview += " --context " + execution.Context
+		}
+		return prerequisites.MirrorTrust{}, refuse("secret.part",
+			"this apply did not bind the artifact mirror's trust anchor, Secret "+reference,
+			"review the take-back plan with "+preview+", then take back the failed apply before starting a fresh apply that binds the CA")
+	}
+	anchor, err := MirrorAnchor(execution.Material, reference)
 	if err != nil {
 		return prerequisites.MirrorTrust{}, err
 	}

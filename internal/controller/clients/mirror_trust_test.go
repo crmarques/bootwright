@@ -48,6 +48,44 @@ func TestTheRequestFreezesTheMirrorAnchorByNameAlone(t *testing.T) {
 	}
 }
 
+// The engine uses the contribution to bind Secrets and the block reference to
+// scope their use. A trust reference in the frozen request alone lends nothing.
+func TestTheControllerPlanBindsEachMirrorAnchorItUses(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		objects []api.Object
+		refs    []string
+		blocks  int
+		reader  string
+	}{
+		{"managed mirror", controllerMirrorState(), []string{"mirror-ca"}, 2, MirroredClientsBlockID},
+		{"operator mirror", []api.Object{environment(trustedMirror(text("trustBundleRef", "mirror-ca"))), machine(), cluster()}, []string{"mirror-ca"}, 1, BlockID},
+		{"mirror without an anchor", []api.Object{environment(trustedMirror()), machine(), cluster()}, nil, 1, ""},
+		{"no mirror", []api.Object{environment(), machine(), cluster()}, nil, 1, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			capability := unwired()
+			plan, err := capability.Plan(context.Background(), planInput(stateOf(tc.objects...), reconciliation.Apply))
+			if err != nil || len(plan.Definitions) != tc.blocks {
+				t.Fatalf("planned %d blocks (%v), want %d", len(plan.Definitions), err, tc.blocks)
+			}
+			if !slices.Equal(plan.Secrets, tc.refs) {
+				t.Fatalf("bound Secrets = %v, want %v", plan.Secrets, tc.refs)
+			}
+			for _, definition := range plan.Definitions {
+				refs, err := capability.SecretReferences(reconciliation.Block{BlockDefinition: definition})
+				var want []string
+				if definition.ID == tc.reader {
+					want = tc.refs
+				}
+				if err != nil || !slices.Equal(refs, want) {
+					t.Fatalf("block %s references %v (%v), want %v", definition.ID, refs, err, want)
+				}
+			}
+		})
+	}
+}
+
 // The attempt hands the run the lent certificate for the mirror's host alone,
 // and refuses before any effect when it was lent none.
 func TestTheStageLendsTheMirrorAnchorToTheRunThatDownloads(t *testing.T) {
@@ -69,9 +107,14 @@ func TestTheStageLendsTheMirrorAnchorToTheRunThatDownloads(t *testing.T) {
 	installer = &fakeInstaller{}
 	capability = stage(&fakeTools{resolved: resolved, present: true}, newDnf(), &fakeSetup{}, installer)
 	recorder = newRecorder(&fakeArea{})
-	result, err := capability.Apply(context.Background(), recorder.execution(t, block, hostState()))
+	execution = recorder.execution(t, block, hostState())
+	execution.Context = "lab"
+	result, err := capability.Apply(context.Background(), execution)
 	if firstCode(err) != "secret.part" || result.Outcome != reconciliation.OutcomeFailed || installer.installs != 0 || !strings.Contains(diagnostics.Of(err)[0].Message, "Secret mirror-ca") {
 		t.Fatalf("an attempt lent no anchor = %+v (%v) after %d runs", result, err, installer.installs)
+	}
+	if remedy := diagnostics.Of(err)[0].Remediation; !strings.Contains(remedy, "bootwright destroy --dry-run --context lab") || strings.Contains(remedy, "secret set") {
+		t.Fatalf("a frozen apply missing its anchor directs recovery to %q", remedy)
 	}
 }
 
