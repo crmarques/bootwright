@@ -28,7 +28,7 @@ func TestMachineRefusalsNameTheirStep(t *testing.T) {
 				return alone(object(api.Machine, "probe", m("os", m("clusterInstalled", m()))))
 			}},
 		{"a host key outside a libvirt or bare-metal installation", "api.invariant", "$.spec.os.install.hostKeyRef",
-			"remove spec.os.install.hostKeyRef; only a libvirt or bare-metal Bootwright-installed Machine delivers its own host key",
+			"remove spec.os.install.hostKeyRef or select an installation method that delivers the key",
 			func() (api.Object, api.Catalog) {
 				provider := object(api.InfraProvider, "kv", m("kubevirt", m("kubeconfigRef", "host", "namespace", "guests")))
 				machine := object(api.Machine, "probe", m(

@@ -148,6 +148,21 @@ network and authorized SSH client public key. The guest receives its
 unique SSH host key through an authenticated private delivery channel
 qualified for the provider. The adapter proves first boot over pinned SSH
 and verifies the requested OS and network facts before reporting ready.
+
+The KubeVirt adapter renders a NoCloud seed for one statically addressed
+IPv4 interface matched by MAC. The seed mounts by reference to an immutable
+Secret on the stopped VM with its recorded VM and root disk UIDs. The seed
+holds a private HTTPS fetch URL and its trust anchor. The VM configuration
+holds only the Secret reference. The guest checks the fetched host key
+against its expected public half before installing it. First-boot
+verification checks the same VM instance before and after pinned SSH and
+reads the clone marker, a valid machine ID, the exact RHEL release,
+architecture, hostname and address. Withdrawing the seed detaches its mount
+from the stopped VM and deletes the exact Secret UID. A seedless restart
+must prove a distinct VM instance with the same guest identity. The
+lifecycle must record readiness and withdraw the publication and seed before
+handing off the clone.
+
 Destroy proves only recorded clone resources absent, using the existing
 ownership and data-loss gates, and reaches that result after a publisher
 retires the source. A staged destroy that would blank a retained clone's

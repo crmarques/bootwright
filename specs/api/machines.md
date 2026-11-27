@@ -343,7 +343,7 @@ own refusal.
 | `spec.os.provided` | object | union | — | The OS-ready arm. Use `provided: {}` or opt into [provided OS updates](#provided-os-updates), a [provided registration](#provided-registration) and [provided time synchronization](#provided-time-synchronization). |
 | `spec.os.install.profileRef` | string | with `install` | — | Global `MachineInstallProfile`; the Bootwright-installed arm. |
 | `spec.os.install.ntp` | array of selections | no | install-profile selections | NTPServer selections for a Bootwright-installed Machine; `[]` clears profile selections. |
-| `spec.os.install.hostKeyRef` | string | conditional | — | `sshKeyPair` `Secret` delivered as the installed SSH host key; required on bare metal, optional on libvirt ([completion channel](../managed-os.md#delivered-identity-off-the-hypervisor)), forbidden otherwise. Unique per Machine and no other credential. Effect material. |
+| `spec.os.install.hostKeyRef` | string | conditional | — | `sshKeyPair` `Secret` delivered as the installed SSH host key; required on bare metal and on a Machine that selects a [template snapshot](#template-snapshot-reference), optional on libvirt ([completion channel](../managed-os.md#delivered-identity-off-the-hypervisor)), forbidden on other installation paths. Unique per Machine and no other credential. Effect material. |
 | `spec.os.clusterInstalled` | empty object | union | — | The installer-provisioned arm, `clusterInstalled: {}`. |
 | `spec.proxy` | choice object | no | profile choice or direct access | Lifecycle-dependent atomic Machine-owned selection below; emits immediately after `os`. |
 | `spec.network` | object | no | contacts normalized below | Network selection, named contacts/static assignments and interface matches below. |

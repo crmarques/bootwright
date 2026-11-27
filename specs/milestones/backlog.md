@@ -10115,7 +10115,7 @@ same number above:
 
 **owner** (2026-11-27, VM template provisioning): “proceed with plan
 implementation”. B1166 moves to M1g and starts with the declaration and
-source contract in X779. X132 retains the vSphere implementation in B99.
+source contract in X788. X132 retains the vSphere implementation in B99.
 The source can belong to another team. The KubeVirt implementation includes
 an external source namespace on the same host cluster. B905 retains the
 Anaconda path chosen in D235. Real-system acceptance follows each provider's

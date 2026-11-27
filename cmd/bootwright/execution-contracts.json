@@ -49,7 +49,7 @@
   },
   "machine-kubevirt-v1": {
     "contentDigest": "3c67617052aa9ff2c5562085975074197e9c4681288ef7a7127321618375ff65",
-    "fingerprint": "27cce63226066635ce3385099a26bf6efeb9ba49cdba4586a997d68b3c37340b"
+    "fingerprint": "a192cd9f4b21d5119b371b90bcc1cada9d8f0bfc7c539820c61ec66c443a3858"
   },
   "machine-libvirt-root-reset-v1": {
     "contentDigest": "901612fa75032213210790390df85fd44ccd9316d5cda86e61853a684101a908",

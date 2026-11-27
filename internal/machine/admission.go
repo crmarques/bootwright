@@ -628,13 +628,18 @@ func defaultGateway(native api.Value, ipv4 bool, iface string) (netip.Addr, bool
 // so two Machines sharing one would each satisfy the other's completion proof.
 func validateHostKey(o api.Object, c api.Catalog) []api.Issue {
 	reference := o.Spec().Get("os", "install", "hostKeyRef")
+	clone := substrate.UsesTemplateSnapshot(c, o)
 	if !reference.Present() {
+		if clone {
+			return []api.Issue{invariant("$.spec.os.install.hostKeyRef", "a Machine cloned from a template snapshot needs its own SSH host key",
+				"set spec.os.install.hostKeyRef to a dedicated sshKeyPair Secret")}
+		}
 		return nil
 	}
 	provider, found := Provider(o, c)
-	if !installed(o) || found && !substrate.SupportsDeliveredHostKey(provider) {
+	if !installed(o) || found && !clone && !substrate.SupportsDeliveredHostKey(provider) {
 		return []api.Issue{invariant("$.spec.os.install.hostKeyRef",
-			"only a libvirt or bare-metal Bootwright-installed Machine delivers its own SSH host key", "remove spec.os.install.hostKeyRef; only a libvirt or bare-metal Bootwright-installed Machine delivers its own host key")}
+			"this Machine's installation does not deliver an SSH host key", "remove spec.os.install.hostKeyRef or select an installation method that delivers the key")}
 	}
 	for _, other := range c.OfKind(api.Machine) {
 		if other.Identity() != o.Identity() && other.Spec().Get("os", "install", "hostKeyRef").Equal(reference) {

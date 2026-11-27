@@ -3,8 +3,8 @@ content-digest: 3c67617052aa9ff2c5562085975074197e9c4681288ef7a7127321618375ff65
 request-version: machine-kubevirt-v1
 automation-formats: none
 mark-formats: bootwright.io/context, bootwright.io/lend, bootwright.io/machine, bootwright.io/owner, bootwright.substrate.kubevirt.owner-v1
-proof-ids: bootwright.io/media-identity
-fixed-places: bootwright.io/spread, bootwright.substrate.kubevirt.name-v1
+proof-ids: /var/lib/bootwright/template-bootstrap, bootwright.io/media-identity
+fixed-places: /var/lib/bootwright, bootwright.io/spread, bootwright.substrate.kubevirt.name-v1
 effect-pins:
   run-strategy-manual
   efi-no-secure-boot

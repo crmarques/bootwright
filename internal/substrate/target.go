@@ -298,6 +298,9 @@ func kubevirtTarget(catalog api.Catalog, provider, machine api.Object, contextNa
 		MediaVolume: KubeVirtMediaVolume(KubeVirtName(contextName, machine.Name())),
 	}
 	target.Identity = Identity{Channel: ChannelNone}
+	if UsesTemplateSnapshot(catalog, machine) {
+		target.Identity = Identity{Channel: ChannelDeliveredKey, HostKeyRef: machine.Spec().Get("os", "install", "hostKeyRef").Text()}
+	}
 	interfaces, err := VirtualInterfaces(contextName, machine)
 	if err != nil {
 		return Target{}, err

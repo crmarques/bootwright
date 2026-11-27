@@ -239,6 +239,11 @@ spec:
 		"    clusterInstalled: {}", "    install: {profileRef: rhel-clone}", map[string]string{"infra/profiles/rhel-clone.yaml": installProfile})
 	trustFailure(t, sources, "api.invariant", "$.spec.installer.templateClone")
 	complete := patchedSources(t, sources, providerFile, "        diskGiB: 120\n", "        diskGiB: 120\n"+source, nil)
+	trustFailure(t, complete, "api.invariant", "$.spec.os.install.hostKeyRef")
+	complete = patchedSources(t, complete, "infra/machines/kubevirt-01.yaml", "install: {profileRef: rhel-clone}",
+		"install: {profileRef: rhel-clone, hostKeyRef: clone-host-key}", map[string]string{
+			"secret-descriptors/clone-host-key.yaml": "apiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata: {name: clone-host-key}\nspec: {type: sshKeyPair}\n",
+		})
 	state, _ := compileAcceptance(t, complete)
 	arm := requireObject(t, state.Effective(), api.InfraProvider, "lab-kubevirt").Spec().Get("kubevirt")
 	snapshot := arm.Get("machineProfiles").Items()[0].Get("templateSnapshotRef")

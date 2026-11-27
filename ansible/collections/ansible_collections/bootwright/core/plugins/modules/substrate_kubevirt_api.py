@@ -29,6 +29,13 @@ options:
     choices:
       - proof
       - template_source_read
+      - seed_attach
+      - seed_start
+      - seed_stop
+      - seed_withdraw
+      - bootstrap_verify
+      - seedless_start
+      - seedless_verify
       - apply
       - observe
       - destroy
@@ -55,6 +62,45 @@ options:
   snapshot_ref:
     description: The published VM snapshot's namespace, name, and UID for a template source read.
     type: dict
+  bootstrap:
+    description: The frozen hostname, network, guest identity marker, release and growth intent for a template guest.
+    type: dict
+  fleet_public_key:
+    description: The public fleet key the seed authorizes.
+    type: str
+  host_public_key:
+    description: The bound public host key for seed rendering and first boot verification.
+    type: str
+  bootstrap_certificate:
+    description: A private file holding the public certificate used for the host key fetch.
+    type: path
+  bootstrap_url:
+    description: A private file holding the one-time verified HTTPS URL for the host key fetch.
+    type: path
+  seed_uid:
+    description: The recorded seed Secret UID required when operating on the seeded VM.
+    type: str
+  first_instance_uid:
+    description: The exact VM instance UID verified on the initial seeded boot.
+    type: str
+  first_guest_identity:
+    description: The request-specific guest identity commitment verified on the initial seeded boot.
+    type: str
+  bootstrap_fleet_key:
+    description: The lent fleet identity file for first-boot verification.
+    type: path
+  pinned_uuid_base64:
+    description: The proved cluster UID for the seed mutation.
+    type: str
+  pinned_serial_base64:
+    description: The proved VM UID for the seed mutation.
+    type: str
+  root_volume_uid:
+    description: The substrate block's recorded root DataVolume UID for a template clone.
+    type: str
+  root_claim_uid:
+    description: The substrate block's recorded root PersistentVolumeClaim UID for a template clone.
+    type: str
   request:
     description: The frozen request of a block operation.
     type: dict

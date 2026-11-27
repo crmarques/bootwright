@@ -12,17 +12,19 @@ from __future__ import annotations
 
 import base64
 import os
+import re
 import tempfile
 import time
 
 from ansible.module_utils.common.yaml import yaml_load
 from ansible.plugins.action import ActionBase
 from ansible_collections.bootwright.core.plugins.module_utils import kubevirt_machine as arm
-from ansible_collections.bootwright.core.plugins.module_utils import kubevirt_root_reset, kubevirt_template
+from ansible_collections.bootwright.core.plugins.module_utils import kubevirt_bootstrap, kubevirt_root_reset, kubevirt_seed, kubevirt_template
 from ansible_collections.bootwright.core.plugins.module_utils.kubevirt_api import Answered, Client, Refused, Unanswered, load
 
 BLOCKS = ("proof", "apply", "observe", "destroy")
 ROOT = ("root_reset", "root_read")
+SEED = ("seed_attach", "seed_start", "seed_stop", "seed_withdraw", "seedless_start")
 PORTS = ("pre_boot", "state_read", "power", "boot_media", "boot_disk", "media_insert", "media_eject")
 UPLOAD_SECONDS = 1200
 
@@ -128,6 +130,60 @@ def pinned(arguments):
     return decoded
 
 
+def bootstrap_pin(arguments):
+    return dict(pinned(arguments), rootVolume=arguments["root_volume_uid"], rootClaim=arguments["root_claim_uid"])
+
+
+def bootstrap_seed(operation, client, arguments):
+    namespace, vm = arm.endpoint(arguments["endpoint"])
+    host = arm.Host(client, namespace, time.time() + 600, pin=bootstrap_pin(arguments))
+    identity = arguments["apply_operation"], arguments["block"]
+    if operation == "seed_withdraw":
+        return kubevirt_seed.withdraw(host, vm, *identity)
+    if operation == "seed_start":
+        return kubevirt_seed.start(host, vm, *identity, arguments["seed_uid"])
+    if operation == "seed_stop":
+        return kubevirt_seed.stop(host, vm, *identity, arguments["seed_uid"], arguments["first_instance_uid"])
+    if operation == "seedless_start":
+        return kubevirt_seed.start_seedless(host, vm, *identity, arguments["first_instance_uid"])
+    data = kubevirt_bootstrap.material_seed(
+        arguments["bootstrap"], arguments["fleet_public_key"], arguments["host_public_key"],
+        arguments["bootstrap_certificate"], arguments["bootstrap_url"],
+    )
+    return kubevirt_seed.attach(host, vm, *identity, data, arguments["bootstrap"]["mac"])
+
+
+def running_clone(host, vm, arguments, seeded):
+    live = kubevirt_seed.clone(host, vm)
+    kubevirt_seed.prove_mac(live, arguments["bootstrap"]["mac"])
+    identity = arguments["apply_operation"], arguments["block"]
+    if seeded:
+        kubevirt_seed.prove_mounted(host, vm, live, *identity, arguments["seed_uid"])
+    else:
+        kubevirt_seed.prove_seedless(host, vm, live, *identity)
+    instance = kubevirt_seed.owned_instance(host, vm, live)
+    if arm.phase_of(instance) != "Running":
+        raise Refused("the pinned template VM has no owned running instance")
+    return arm.uid(instance)
+
+
+def bootstrap_verify(client, arguments, *, seeded=True):
+    namespace, vm = arm.endpoint(arguments["endpoint"])
+    host = arm.Host(client, namespace, time.time() + 600, pin=bootstrap_pin(arguments))
+    instance = running_clone(host, vm, arguments, seeded)
+    if not seeded:
+        previous, identity = arguments["first_instance_uid"], arguments["first_guest_identity"]
+        if not isinstance(previous, str) or not previous or previous == instance or not re.fullmatch(r"[0-9a-f]{64}", identity):
+            raise Refused("the seedless verification requires a different instance and a recorded guest identity")
+    source = kubevirt_bootstrap.verify_guest(arguments["bootstrap"], arguments["scratch"], arguments["bootstrap_fleet_key"],
+                                             arguments["host_public_key"], seeded=seeded)
+    if running_clone(host, vm, arguments, seeded) != instance:
+        raise Refused("the template VM instance changed during first-boot verification")
+    if not seeded and source["guestIdentity"] != identity:
+        raise Refused("the seedless VM did not prove the same guest identity")
+    return dict(source, instanceUID=instance, seedWithdrawn=not seeded)
+
+
 def failed(error):
     if isinstance(error, arm.PortRefused):
         return {"failed": True, "msg": str(error), "refusal": error.code}
@@ -147,7 +203,18 @@ class ActionModule(ActionBase):
         arguments = dict(self._task.args)
         operation = arguments.get("operation")
         try:
-            if operation == "template_source_read":
+            if operation in SEED and self._task.check_mode:
+                result = {"failed": True, "msg": "a template seed mutation does not run in check mode"}
+            elif operation in SEED:
+                try:
+                    result = bootstrap_seed(operation, connect(arguments["kubeconfig"], arguments["scratch"]), arguments)
+                except Answered as error:
+                    raise Refused("the template seed API refused the request (HTTP %d)" % error.status) from None
+            elif operation in ("bootstrap_verify", "seedless_verify"):
+                source = bootstrap_verify(connect(arguments["kubeconfig"], arguments["scratch"]), arguments,
+                                          seeded=operation == "bootstrap_verify")
+                result = {"changed": False, "observation": source}
+            elif operation == "template_source_read":
                 client = connect(arguments["kubeconfig"], arguments["scratch"])
                 source = kubevirt_template.read_template_source(client, arguments["cluster_uid"], arguments["snapshot_ref"])
                 result = {"changed": False, "observation": source}

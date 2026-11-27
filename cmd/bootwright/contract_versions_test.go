@@ -418,6 +418,16 @@ func automationIdentities() map[string]automationFormat {
 		"bootwright-network-apply.service":           fixedBy(kindPlace, "the installed machine's network convergence unit", anaconda),
 		"bootwright.erase=1":                         fixedBy(kindProof, "the kernel argument that proves the booted environment is the erase environment", erase),
 
+		"/run/bootwright-bootstrap":              transient("the clone guest's first-boot scratch directory"),
+		"/run/bootwright-bootstrap/ca.pem":       transient("the public trust anchor of the first-boot private fetch"),
+		"/run/bootwright-bootstrap/expected.pub": transient("the public host key the first-boot fetch must match"),
+		"/run/bootwright-bootstrap/fetch.conf":   transient("the owner-only fetch configuration discarded after the fetch"),
+		"/run/bootwright-bootstrap/host.key":     transient("the staged private host key discarded after installation"),
+		"/run/bootwright-bootstrap/marker":       transient("the first-boot marker before it reaches its durable guest path"),
+		"bootwright-bootstrap":                   transient("the static name of the guest's first-boot shell invocation"),
+		"/var/lib/bootwright":                    fixedBy(kindPlace, "the clone guest's marker directory", kubevirt.MachineImplementation),
+		"/var/lib/bootwright/template-bootstrap": fixedBy(kindProof, "the guest marker compared over pinned SSH after first boot", kubevirt.MachineImplementation),
+
 		"/var/lib/bootwright-hosted/":                validated("the hosted root every service content root, package tree, publication and cluster work root a request names must lie beneath"),
 		"bootwright-hosted":                          validated("the hosted root's name a service content root's normal form requires"),
 		"/var/lib/bootwright-staging/runs":           validated("the private parent every runner-issued run scratch must lie directly beneath"),

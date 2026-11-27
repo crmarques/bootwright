@@ -33,6 +33,12 @@ var armFacts = map[Arm]facts{
 // TemplateSourceField names an arm's authoring field for a native template source.
 func TemplateSourceField(arm Arm) string { return armFacts[arm].templateField }
 
+func UsesTemplateSnapshot(catalog api.Catalog, machine api.Object) bool {
+	_, profile, found := SelectedProfile(catalog, machine)
+	install, available := catalog.Find(api.MachineInstallProfile, api.MachineInstallProfileRef(machine))
+	return found && profile.Has("templateSnapshotRef") && available && install.Spec().Has("installer", "templateClone")
+}
+
 func SupportsDeliveredHostKey(provider api.Object) bool {
 	return armFacts[Variant(provider)].deliveredHostKey
 }
