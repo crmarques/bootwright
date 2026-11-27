@@ -51,3 +51,14 @@ func VirtualInterfaces(contextName string, machine api.Object) ([]Interface, err
 	}
 	return interfaces, nil
 }
+
+func InstallVLANConflict(catalog api.Catalog, machine api.Object, nic string, vlan int) (string, ManagedNetwork, bool) {
+	provider, found := catalog.Find(api.InfraProvider, MachineProviderRef(machine))
+	if !found || !BridgedGuests(Variant(provider)) {
+		return "", ManagedNetwork{}, false
+	}
+	reference := NICSegment(catalog, provider, machine, InterfaceNIC(machine, nic))
+	segment, attached := Segments(catalog, provider).Named("name", reference)
+	network, managed := ManagedSegmentNetwork(segment)
+	return reference, network, attached && managed && network.VLAN != vlan
+}

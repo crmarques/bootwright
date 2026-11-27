@@ -519,3 +519,42 @@ func TestAnotherBuildDestroysAnApplyFrozenWithOtherClaims(t *testing.T) {
 		t.Fatalf("destroyed %v", h.capability.destroys)
 	}
 }
+
+func TestAnIncompatibleCandidateLeavesTheDeployedBuildAbleToRemoveItsEffects(t *testing.T) {
+	t.Parallel()
+	for _, interrupted := range []bool{false, true} {
+		name := "completed"
+		if interrupted {
+			name = "interrupted"
+		}
+		t.Run(name, func(t *testing.T) {
+			h := newHarness(t, "artifact-server-lab")
+			if interrupted {
+				failedApply(t, h)
+			} else if _, err := apply(h); err != nil {
+				t.Fatal(diagnostics.Of(err))
+			}
+			before, _ := durableOperation(t, h)
+			deployed := h.service
+			digest := h.capability.definitions[0].ContentDigest
+			h.capability.definitions[0].ContentDigest = strings.Repeat("8", 64)
+			h.service.options.Executable = Executable{Version: "devel", Commit: "1234567"}
+			request := DestroyRequest{ContextName: testContextName, SkipConfirmation: true}
+			_, err := h.service.Destroy(context.Background(), request)
+			reported := diagnostics.Of(err)
+			if len(reported) != 1 || reported[0].Code != "engine.other-build" || len(h.capability.destroys) != 0 {
+				t.Fatalf("incompatible destroy reached effects or missed its refusal: %v, %v", reported, h.capability.destroys)
+			}
+			after, _ := durableOperation(t, h)
+			if before.ID != after.ID || before.State != after.State || before.Executable != after.Executable {
+				t.Fatalf("the candidate changed the deployed operation: %+v", after)
+			}
+			h.capability.definitions[0].ContentDigest = digest
+			h.capability.outcomes = nil
+			result, err := deployed.Destroy(context.Background(), request)
+			if err != nil || result.Receipt.State != string(reconciliation.OperationDone) || len(h.capability.destroys) != 1 {
+				t.Fatalf("deployed build could not finish removal: %+v (%v)", result, diagnostics.Of(err))
+			}
+		})
+	}
+}

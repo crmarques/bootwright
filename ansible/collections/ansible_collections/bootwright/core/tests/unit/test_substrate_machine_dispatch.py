@@ -27,6 +27,8 @@ ROLES = COLLECTION / "roles"
 DISPATCHER = ROLES / "substrate_machine"
 
 ARM_ROLE = re.compile(r"\bsubstrate_[a-z0-9]+_machine\b")
+DIRECT_BACKEND = re.compile(r"\bbootwright\.core\.(?:redfish|libvirt)_\w+\b|(?<![\w.-])(?:virsh|qemu-img)(?![\w.-])")
+WORKLOAD_PREFIXES = ("managedos_", "containercluster_", "storage_")
 PORT = ("pre_boot", "boot_media", "boot_disk", "identity_read", "state_read", "media_insert", "media_eject", "power")
 INCLUDE = "ansible.builtin.include_role"
 FAIL = "ansible.builtin.fail"
@@ -69,6 +71,22 @@ def test_no_role_outside_the_substrate_names_an_arms_machine_role():
 def test_the_rule_sees_a_seeded_arm_role():
     assert ARM_ROLE.findall("name: bootwright.core.substrate_libvirt_machine") == ["substrate_libvirt_machine"]
     assert not ARM_ROLE.findall("name: bootwright.core.substrate_machine")
+
+
+def test_workload_roles_cannot_call_the_redfish_or_libvirt_backend_directly():
+    found = []
+    for path in sorted(ROLES.glob("*/**/*")):
+        role = path.relative_to(ROLES).parts[0]
+        if path.suffix not in (".yml", ".j2") or not role.startswith(WORKLOAD_PREFIXES):
+            continue
+        found.extend("%s names %s" % (path.relative_to(ROLES), name) for name in DIRECT_BACKEND.findall(path.read_text()))
+    assert not found, "\n".join(found)
+
+
+def test_direct_backend_rule_sees_an_action_and_a_native_executable():
+    assert DIRECT_BACKEND.findall("bootwright.core.redfish_boot: {}") == ["bootwright.core.redfish_boot"]
+    assert DIRECT_BACKEND.findall("argv: [/usr/bin/virsh, domstate, fixture]") == ["virsh"]
+    assert not DIRECT_BACKEND.findall("name: bootwright.core.substrate_machine")
 
 
 def test_the_table_binds_each_arm_to_its_own_machine_role_and_every_port_entry_point():

@@ -829,3 +829,32 @@ func TestPlanningRefusalsNameClusterAndSelectedField(t *testing.T) {
 		}
 	}
 }
+
+func TestChangingMachineSubstratePreservesTheAgentClusterSettings(t *testing.T) {
+	virtual := compactCatalog()
+	emulated, _, _ := onlyRequests(t, virtual)
+	objects := virtual.Objects()
+	for index, object := range objects {
+		if object.Kind() != api.Machine || !strings.HasPrefix(object.Name(), "ocp-") {
+			continue
+		}
+		interfaces, err := substrate.VirtualInterfaces(testContext, object)
+		if err != nil || len(interfaces) != 1 {
+			t.Fatalf("fixture interfaces: %+v (%v)", interfaces, err)
+		}
+		physical := server(object.Name(), "", interfaces[0].MACAddress)
+		objects[index] = object.WithSpec(object.Spec().With("hardware", physical.Spec().Get("hardware")))
+	}
+	physical, install, _ := onlyRequests(t, api.NewCatalog(append(objects, metalProvider())))
+	if !install.Physical() || !reflect.DeepEqual(emulated.InstallConfig, physical.InstallConfig) {
+		t.Fatalf("physical selection changed cluster intent: %s vs %s", encoded(t, emulated.InstallConfig), encoded(t, physical.InstallConfig))
+	}
+	for _, config := range []map[string]any{physical.AgentConfig, emulated.AgentConfig} {
+		for _, host := range config["hosts"].([]any) {
+			delete(host.(map[string]any), "rootDeviceHints")
+		}
+	}
+	if !reflect.DeepEqual(emulated.AgentConfig, physical.AgentConfig) {
+		t.Fatalf("physical selection changed agent networking or roles: %s vs %s", encoded(t, emulated.AgentConfig), encoded(t, physical.AgentConfig))
+	}
+}

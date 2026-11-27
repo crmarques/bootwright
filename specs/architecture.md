@@ -1359,6 +1359,35 @@ Package discovery never replaces the allowlisted registry or introduces
 executable authority at runtime. A new built-in package follows the
 [recipe](../.agents/skills/extend-implementation/SKILL.md#adding-a-built-in-add-on-package).
 
+### Substrate-independent workload behavior
+
+Managed OS, Container cluster and Storage consume substrate capabilities and
+realized target facts. The Substrate context translates provider-specific
+transport, network reachability, device presentation and target proof. Keep
+those translations in the owning Substrate package or adapter, not in a
+workload renderer, scheduler or installer. Pass a different typed capability
+fact when hardware changes what the workload can safely do. Refuse an
+unsupported or unproved effect instead of defaulting to an emulated behavior.
+
+Equivalent intent and equivalent capability facts produce the same guest or
+cluster configuration and workload ordering. Compare those outputs in paired
+tests. Assert the expected differences in target identity, media delivery,
+access, or disk selectors separately. Byte equality of the outer requests
+does not establish this rule: requests deliberately freeze the actual target
+and implementation. An adapter change that preserves this contract does not
+require a workload change. A contract change follows
+[the saved-operation guard](state-reconciliation.md#dependency-safety-during-recovery)
+and does not acquire replay compatibility by preserving a Go type signature.
+
+`TestNoProductionCodeBranchesOnAnArmOrImplementationOutsideItsOwner` holds
+the Go boundary. The collection's [dispatcher checks](#roles) forbid workload
+roles from invoking Redfish or libvirt backends directly. The paired
+fixtures are `TestTheSameManagedOSProfileKeepsItsGuestSettingsOnBothSubstrates`,
+`TestChangingMachineSubstratePreservesTheAgentClusterSettings` and
+`TestPhysicalCephMatrixPreservesCanonicalPlans`. See
+[qualification](substrates.md#candidate-qualification) for the separate live
+evidence.
+
 ## Data, state, and effects
 
 Parsing preserves file, document, line, and column provenance outside public

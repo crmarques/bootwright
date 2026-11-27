@@ -32,3 +32,24 @@ func TestHDDDataDiskHasKnownRotationalPresentation(t *testing.T) {
 		t.Fatalf("HDD presentation = %+v, valid %v", got, valid)
 	}
 }
+
+func TestGuestDataDisksProjectTheAssignedKernelPathAndSerial(t *testing.T) {
+	guest := obj(api.Machine, "node", m("hardware", m("providerRef", "pool", "profileRef", "small")))
+	data := m("name", "data", "sizeGiB", api.IntegerValue("30"))
+	hdd := m("name", "rotating", "sizeGiB", api.IntegerValue("60"), "media", "hdd")
+	provider := func(disks ...api.Value) api.Catalog {
+		pool := obj(api.InfraProvider, "pool", m("libvirt", m("machineProfiles", list(m("name", "small", "dataDisks", list(disks...))))))
+		return api.NewCatalog([]api.Object{guest, pool})
+	}
+	got, valid := GuestDataDisks(provider(data, hdd), guest, "lab")
+	want := []GuestDataDisk{
+		{Path: "/dev/vdb", Serial: DataDiskSerial("lab", "node", "data"), SizeBytes: 30 << 30},
+		{Path: "/dev/sda", Serial: DataDiskSerial("lab", "node", "rotating"), SizeBytes: 60 << 30, Rotational: true},
+	}
+	if !valid || !reflect.DeepEqual(got, want) || VirtioDiskAlias(got[0].Serial) != "/dev/disk/by-id/virtio-"+want[0].Serial {
+		t.Fatalf("guest disk projection = %v (%t), want %v", got, valid, want)
+	}
+	if _, valid := GuestDataDisks(provider(data.With("name", api.StringValue("root"))), guest, "lab"); valid {
+		t.Fatal("an invalid data disk profile still projects guest devices")
+	}
+}

@@ -610,7 +610,7 @@ func selectDevices(r *Request) {
 	for i := range r.Hosts {
 		devices := []Device{}
 		for _, d := range r.Hosts[i].Devices {
-			if selected[r.Hosts[i].Name][d.Path] || selected[r.Hosts[i].Name]["/dev/disk/by-id/virtio-"+d.Serial] {
+			if selected[r.Hosts[i].Name][d.Path] || !r.Hosts[i].Physical && selected[r.Hosts[i].Name][substrate.VirtioDiskAlias(d.Serial)] {
 				devices = append(devices, d)
 			}
 		}
@@ -759,16 +759,13 @@ func securityPolicy(c api.Catalog, spec api.Value, keyRef string) (*Security, er
 }
 
 func virtualDevices(c api.Catalog, m api.Object, contextName string) ([]Device, error) {
-	devices := []Device{}
-	_, profile, _ := substrate.SelectedProfile(c, m)
-	dataDisks := profile.Get("dataDisks").Items()
-	presentations, valid := substrate.DataDiskPresentations(dataDisks)
+	disks, valid := substrate.GuestDataDisks(c, m, contextName)
 	if !valid {
-		return nil, cephUnsupportedDisk.Fail("unsupported virtual data disk media or targets", "use the supported libvirt profile disk bound and media")
+		return nil, cephUnsupportedDisk.Fail("unsupported virtual data disk media or targets", "use supported profile disks and media")
 	}
-	for i, disk := range dataDisks {
-		size, _ := disk.Get("sizeGiB").Int64()
-		devices = append(devices, Device{Path: "/dev/" + presentations[i].Target, Serial: substrate.DataDiskSerial(contextName, m.Name(), disk.Get("name").Text()), SizeBytes: size << 30, Rotational: presentations[i].Media == "hdd"})
+	devices := make([]Device, 0, len(disks))
+	for _, disk := range disks {
+		devices = append(devices, Device{Path: disk.Path, Serial: disk.Serial, SizeBytes: disk.SizeBytes, Rotational: disk.Rotational})
 	}
 	return devices, nil
 }

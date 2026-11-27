@@ -146,3 +146,20 @@ func TestADualFamilyManagedNetworkRealizesOnlyItsHostAddressFamily(t *testing.T)
 		})
 	}
 }
+
+func TestInstallVLANConflictComparesTheManagedSegment(t *testing.T) {
+	provider := obj(api.InfraProvider, "pool", m("libvirt", m("machineRef", "host")))
+	guest := obj(api.Machine, "node", m("hardware", m("providerRef", "pool", "nics", list(m("name", "eno1")))))
+	network := armNetwork("lab", m("cidr", "192.0.2.0/24", "gateway", "192.0.2.1"), m("providerRef", "pool", "bridge", "br-lab", "hostAddress", "192.0.2.1"))
+	catalog := api.NewCatalog([]api.Object{provider, guest, network})
+	segment, details, conflict := InstallVLANConflict(catalog, guest, "eno1", 42)
+	if !conflict || segment != "lab" || details.Bridge != "br-lab" {
+		t.Fatalf("managed VLAN conflict = %s %+v %t", segment, details, conflict)
+	}
+	if _, _, conflict := InstallVLANConflict(catalog, guest, "eno1", 0); conflict {
+		t.Fatal("untagged install refused on an untagged managed network")
+	}
+	if _, _, conflict := InstallVLANConflict(api.NewCatalog(nil), guest, "eno1", 42); conflict {
+		t.Fatal("a missing provider reported a managed VLAN conflict")
+	}
+}

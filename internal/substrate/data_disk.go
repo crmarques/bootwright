@@ -35,3 +35,30 @@ func DataDiskPresentations(disks []api.Value) ([]DataDiskPresentation, bool) {
 	}
 	return result, true
 }
+
+type GuestDataDisk struct {
+	Path, Serial string
+	SizeBytes    int64
+	Rotational   bool
+}
+
+func GuestDataDisks(catalog api.Catalog, machine api.Object, contextName string) ([]GuestDataDisk, bool) {
+	_, profile, _ := SelectedProfile(catalog, machine)
+	disks := profile.Get("dataDisks").Items()
+	presentations, valid := DataDiskPresentations(disks)
+	if !valid {
+		return nil, false
+	}
+	result := make([]GuestDataDisk, 0, len(disks))
+	for index, disk := range disks {
+		size, _ := disk.Get("sizeGiB").Int64()
+		result = append(result, GuestDataDisk{
+			Path:      "/dev/" + presentations[index].Target,
+			Serial:    DataDiskSerial(contextName, machine.Name(), disk.Get("name").Text()),
+			SizeBytes: size << 30, Rotational: presentations[index].Media == "hdd",
+		})
+	}
+	return result, true
+}
+
+func VirtioDiskAlias(serial string) string { return "/dev/disk/by-id/virtio-" + serial }

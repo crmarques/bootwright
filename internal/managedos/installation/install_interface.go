@@ -10,7 +10,6 @@ import (
 	"unicode"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -223,20 +222,14 @@ func vlanRefusal(catalog api.Catalog, machine api.Object, template, declared api
 	if !host.Known || !host.Bridged {
 		return "", ""
 	}
-	provider, found := machineref.Provider(machine, catalog)
-	if !found {
-		return "", ""
-	}
 	leaves := []string{base.Text()}
 	if bond, ok := availableNamed(template, base.Text(), "bond"); ok {
 		leaves = bond.Get("link-aggregation", "port").Strings()
 	}
 	for _, leaf := range leaves {
-		reference := substrate.NICSegment(catalog, provider, machine, substrate.InterfaceNIC(machine, leaf))
-		segment, attached := substrate.Segments(catalog, provider).Named("name", reference)
-		network, managed := substrate.ManagedSegmentNetwork(segment)
+		reference, network, conflict := substrate.InstallVLANConflict(catalog, machine, leaf, int(id))
 		switch {
-		case !attached || !managed || network.VLAN == int(id):
+		case !conflict:
 		case network.Tagged():
 			return "tagged managed Network/" + reference + " gives its host an address only on VLAN " + strconv.Itoa(network.VLAN) + " of trunk " + network.Bridge +
 					", so the controller cannot reach the VLAN " + strconv.FormatInt(id, 10) + " install address of " + identity,

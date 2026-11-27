@@ -112,3 +112,17 @@ func TestPhysicalHostVariantsRequestGolden(t *testing.T) {
 	matchesGolden(t, "request-physical-host-variants", canonical, false)
 	passesTheTemplateGuard(t, canonical)
 }
+
+func TestTheSameManagedOSProfileKeepsItsGuestSettingsOnBothSubstrates(t *testing.T) {
+	profile := localizedProfile("pt_BR.UTF-8")
+	guest := pinnedRequest(t, labCatalog(profile))
+	metal := pinnedRequest(t, physicalVariantCatalog(profile, "ecdsaP256"))
+	if guest.BootMedia != metal.BootMedia || guest.Target.Physical || !metal.Target.Physical {
+		t.Fatal("matching releases must use the same boot media through their respective target proofs")
+	}
+	for _, line := range []string{"lang en_US.UTF-8", "LC_TIME=pt_BR.UTF-8", "timezone Etc/UTC", "glibc-langpack-pt"} {
+		if !strings.Contains(guest.Kickstart, line) || !strings.Contains(metal.Kickstart, line) {
+			t.Fatalf("the shared profile must render %q for both hosts", line)
+		}
+	}
+}
