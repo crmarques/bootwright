@@ -44,6 +44,9 @@ func TestSubstrateRefusalTableMatchesUnsupported(t *testing.T) {
 	))
 	defaults := provider().Spec().Get("libvirt", "bmcEmulation").With("bindAddress", api.StringValue("0.0.0.0"))
 	wildcard := provider(field("libvirt", provider().Spec().Get("libvirt").With("bmcEmulation", defaults)))
+	clone := api.NewObject(api.MachineInstallProfile, "rhel-9-8", api.Value{}, api.MapValue(
+		field("installer", api.MapValue(field("templateClone", api.MapValue()))),
+	))
 	cases := map[string]refusalCase{
 		"A provider on an unrealized substrate": {catalogOf(controller(), vsphere), "InfraProvider/vc",
 			map[string]string{"<provider>": "InfraProvider/vc"}},
@@ -59,6 +62,8 @@ func TestSubstrateRefusalTableMatchesUnsupported(t *testing.T) {
 			map[string]string{"<provider>": "InfraProvider/kv", "<cluster>": "OpenShiftCluster/host", "<addon>": "ClusterAddon/widgets"}},
 		"A hosted KubeVirt provider's segment on no host secondary network": {catalogOf(controller(), api.NewObject(api.OpenShiftCluster, "host", api.Value{}, api.MapValue()), kubevirtProvider("hostClusterRef", "")),
 			"InfraProvider/kv", map[string]string{"<provider>": "InfraProvider/kv", "<cluster>": "OpenShiftCluster/host", "<segment>": "lab-guests"}},
+		"A template-backed Machine on KubeVirt": {catalogOf(controller(), networkConfig(), kubevirtProvider("kubeconfigRef", ""), clone,
+			kubevirtGuest(field("install", api.MapValue(text("profileRef", clone.Name()))))), "Machine/node-01", nil},
 		"A Bootwright-installed Machine on KubeVirt": {catalogOf(controller(), networkConfig(), kubevirtProvider("kubeconfigRef", ""),
 			kubevirtGuest(field("install", api.MapValue(text("profileRef", "rhel-9-8"))))), "Machine/node-01", map[string]string{"<machine>": "Machine/node-01"}},
 		"A KubeVirt profile without a size": {catalogOf(controller(), networkConfig(), kubevirtProvider("kubeconfigRef", "", number("cpu", "0")), kubevirtGuest()),

@@ -196,6 +196,27 @@ A KubeVirt interface carries a pinned `macAddress` that the provider derives
 from the context, Machine and NIC names, as libvirt's does, and that is never
 authored: a KubeVirt Machine's NIC has no MAC field.
 
+### Template snapshot reference
+
+A KubeVirt machine profile can admit an external source through
+`templateSnapshotRef`. The reference identifies a published
+`VirtualMachineSnapshot` in the provider's cluster. Each field is required.
+
+| Field | Rule |
+| --- | --- |
+| `templateSnapshotRef.namespace` | Kubernetes DNS label. It identifies the source namespace and can differ from `spec.kubevirt.namespace`, which is the destination. |
+| `templateSnapshotRef.name` | Kubernetes DNS subdomain. The template publisher assigns a name to each published revision. |
+| `templateSnapshotRef.uid` | The published snapshot's `metadata.uid`, in the Kubernetes-generated lowercase DNS-label form. A same-name replacement needs an explicitly updated reference. |
+
+A profile with a template snapshot requires `spec.kubevirt.kubeconfigRef`.
+The profile forbids `tpm`. Each consuming Machine selects an install profile
+with `installer.templateClone`. A Machine selecting that installer requires a
+native source on its chosen machine profile.
+
+Not yet met: Bootwright refuses to provision Machines from a KubeVirt
+template snapshot before operation registration; tracked as
+[B1166](../milestones/m1.md#b1166).
+
 ### Refused arms
 
 The `vsphere` provider arm and its segment arm, and the
@@ -224,6 +245,7 @@ shape; the vSphere-only `template` and `failureDomainRef` fields belong to the
 | `dataDisks` | array | no | `[]` | Libvirt/vSphere only; set keyed by a required `name`, a DNS label, with `sizeGiB` `1..65536`. A libvirt profile declares at most 7 data disks and none named `root`, which names the root disk. |
 | `dataDisks[].media` | string | no | omitted | Libvirt only: admitted values are `ssd` and `hdd`. Explicit media disks use virtio-SCSI and successive `sda` through `sdg` targets; SSD uses nonrotational `rotation_rate=1`, HDD uses `rotation_rate=7200`. Omission preserves virtio-blk, with successive `vdb` through `vdh` targets among unmarked disks. Empty, null and other values refuse. The root remains `vda`. |
 | `tpm` | object | no | — | Libvirt/KubeVirt only; its presence requests TPM 2.0. |
+| `templateSnapshotRef` | object | no | — | KubeVirt only. See [Template snapshot reference](#template-snapshot-reference). |
 | `tpm.persistent` | boolean | KubeVirt only | `true` | Forbidden for libvirt, whose emulated TPM state is already persistent. |
 
 A libvirt or vSphere profile therefore sets all three sizes: an omitted one

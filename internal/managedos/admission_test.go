@@ -10,6 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/desiredstate/yamlstream"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 func osOf(provided bool, profile string) api.Value {
@@ -100,9 +101,34 @@ func TestCloneRestrictionsAndProviderBinding(t *testing.T) {
 			}
 		})
 	}
-	provider = provider.WithSpec(m("libvirt", m("machineProfiles", list(m("name", "template")))))
-	if issues := Validate(profile, api.NewCatalog([]api.Object{provider, machine})); len(issues) == 0 {
-		t.Fatal("non-vSphere clone admitted")
+	nativeSource := m("namespace", "golden-images", "name", "rhel-9-8-v3", "uid", "1cf3091a-6642-4687-bd20-086ef84d37b6")
+	provider = provider.WithSpec(m("kubevirt", m("namespace", "guests", "kubeconfigRef", "host-kubeconfig", "machineProfiles", list(m("name", "template", "templateSnapshotRef", nativeSource)))))
+	c = api.NewCatalog([]api.Object{provider, machine, profile})
+	if issues := Validate(profile, c); len(issues) != 0 {
+		t.Fatalf("shared snapshot reference refused: %v", issues)
+	}
+	if issues := substrate.Validate(provider, c); len(issues) != 0 {
+		t.Fatalf("shared snapshot profile refused: %v", issues)
+	}
+	for _, arm := range []string{"kubevirt", "libvirt"} {
+		incomplete := provider.WithSpec(m(arm, m("machineProfiles", list(m("name", "template")))))
+		if issues := Validate(profile, api.NewCatalog([]api.Object{incomplete, machine})); len(issues) == 0 {
+			t.Fatalf("%s without a template source admitted", arm)
+		}
+	}
+	kubevirt := provider.Spec().Get("kubevirt")
+	hosted := provider.WithSpec(m("kubevirt", kubevirt.Without("kubeconfigRef").With("hostClusterRef", api.StringValue("host"))))
+	if issues := substrate.Validate(hosted, c); len(issues) == 0 {
+		t.Fatal("shared template admitted through the hosted provider")
+	}
+	pinnedTPM := kubevirt.Get("machineProfiles").Items()[0].With("tpm", m())
+	withTPM := provider.WithSpec(m("kubevirt", kubevirt.With("machineProfiles", list(pinnedTPM))))
+	if issues := substrate.Validate(withTPM, c); len(issues) == 0 {
+		t.Fatal("template profile with TPM admitted")
+	}
+	clusterNode := machine.WithSpec(machine.Spec().With("os", m("clusterInstalled", m())))
+	if issues := substrate.Validate(provider, api.NewCatalog([]api.Object{provider, clusterNode})); len(issues) == 0 {
+		t.Fatal("cluster-installed Machine admitted with a template snapshot")
 	}
 }
 func TestCustomizationContradictions(t *testing.T) {

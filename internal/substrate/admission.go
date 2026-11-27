@@ -26,6 +26,7 @@ var armValidators = map[Arm]func(o api.Object, c api.Catalog) []api.Issue{
 	ArmBaremetal: validateBaremetal,
 	ArmLibvirt:   validateLibvirt,
 	ArmVSphere:   validateVSphere,
+	ArmKubeVirt:  validateKubeVirt,
 }
 
 var segmentValidators = map[Arm]func(path string, segment, arm api.Value) []api.Issue{

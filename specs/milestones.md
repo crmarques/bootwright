@@ -1,8 +1,7 @@
 # Milestones
 
-Milestones own delivery status; specs claim no availability.
-The [command catalog](../internal/cli/catalog.go) marks availability; other
-listed commands return the [unavailable result](cli.md#recognized-but-unavailable-commands).
+Milestones own delivery. The [command catalog](../internal/cli/catalog.go) marks
+availability. Other commands return the [unavailable result](cli.md#recognized-but-unavailable-commands).
 
 - [M1](milestones/m1.md) to [M7](milestones/m7.md): one page per milestone.
 - [Delivered](milestones/delivered.md): completed work and its evidence.
@@ -34,6 +33,7 @@ Slices with an item `in progress`.
 | X123 | M3d | D174, D181 | in progress |
 | X143 | M4c | D180 | in progress |
 | X303 | M4d | D232 | in progress |
+| X788 | M1g | D289 | in progress |
 
 ## Scope rules
 

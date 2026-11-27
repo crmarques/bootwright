@@ -14,6 +14,7 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/substrate/kubevirt"
 )
 
 const (
@@ -205,4 +206,55 @@ func TestPlanningClaimsEveryManagedNetworkThroughItsProviderHost(t *testing.T) {
 	if managed != 3 {
 		t.Fatalf("lab-networks declares %d effect-bearing Networks, want its 3 managed ones", managed)
 	}
+}
+
+func TestKubeVirtTemplateSnapshotCompilesWithoutACloneEffect(t *testing.T) {
+	t.Parallel()
+	const providerFile = "infra/providers/lab-kubevirt.yaml"
+	const snapshotField = "$.spec.kubevirt.machineProfiles[0].templateSnapshotRef"
+	const source = `        templateSnapshotRef:
+          namespace: golden-images
+          name: rhel-9.8-v3
+          uid: 1cf3091a-6642-4687-bd20-086ef84d37b6
+`
+	const installProfile = `apiVersion: bootwright.io/v1alpha1
+kind: MachineInstallProfile
+metadata: {name: rhel-clone}
+spec:
+  os: {family: rhel, version: "9.8", architecture: x86_64}
+  installer:
+    templateClone:
+      seed: {cloudInit: {}}
+  updates: {policy: none}
+`
+	sources := patchedSources(t, exampleDirectory(t, "lab-kubevirt-external"), "environment.yaml",
+		"    machineRef: controller\n", "    machineRef: controller\n\n  remoteMachinesAccessKey:\n    keyRef: kubevirt-cluster-admin-ssh-key\n", nil)
+	sources.Files = slices.DeleteFunc(sources.Files, func(file desiredstate.SourceFile) bool {
+		path := file.Path()
+		return strings.HasSuffix(path, "clusters/kubevirt/cluster.yaml") ||
+			strings.HasSuffix(path, "infra/machines/kubevirt-02.yaml") ||
+			strings.HasSuffix(path, "infra/machines/kubevirt-03.yaml")
+	})
+	sources = patchedSources(t, sources, "infra/machines/kubevirt-01.yaml",
+		"    clusterInstalled: {}", "    install: {profileRef: rhel-clone}", map[string]string{"infra/profiles/rhel-clone.yaml": installProfile})
+	trustFailure(t, sources, "api.invariant", "$.spec.installer.templateClone")
+	complete := patchedSources(t, sources, providerFile, "        diskGiB: 120\n", "        diskGiB: 120\n"+source, nil)
+	state, _ := compileAcceptance(t, complete)
+	arm := requireObject(t, state.Effective(), api.InfraProvider, "lab-kubevirt").Spec().Get("kubevirt")
+	snapshot := arm.Get("machineProfiles").Items()[0].Get("templateSnapshotRef")
+	if arm.Get("namespace").Text() != "bootwright-guests" || snapshot.Get("namespace").Text() != "golden-images" || snapshot.Get("uid").Text() != "1cf3091a-6642-4687-bd20-086ef84d37b6" {
+		t.Fatal("source namespace or revision was lost during compilation", arm)
+	}
+	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
+	refusals := lifecycle.Unsupported(resolver, state, effectBearing)
+	if !slices.ContainsFunc(refusals, func(item lifecycle.Refusal) bool {
+		return item.Kind == "Machine" && item.Name == "kubevirt-01" && strings.Contains(item.Remediation, "B1166")
+	}) {
+		t.Fatalf("provisioning failed to refuse the unrealized source before registration: %+v", refusals)
+	}
+	if requests, err := kubevirt.MachineRequests(state.Effective(), "controller", "template-test"); err == nil || requests != nil {
+		t.Fatalf("template source yielded a blank disk request: %+v, %v", requests, err)
+	}
+	incomplete := patchedSources(t, complete, providerFile, "          uid: 1cf3091a-6642-4687-bd20-086ef84d37b6\n", "", nil)
+	trustFailure(t, incomplete, "api.required", snapshotField+".uid")
 }

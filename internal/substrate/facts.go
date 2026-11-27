@@ -18,6 +18,7 @@ type facts struct {
 	portPinned       bool
 	emulatedBMC      bool
 	hypervisorClient bool
+	templateField    string
 }
 
 var account = [2]secrets.Part{secrets.UsernamePart, secrets.PasswordPart}
@@ -25,9 +26,12 @@ var account = [2]secrets.Part{secrets.UsernamePart, secrets.PasswordPart}
 var armFacts = map[Arm]facts{
 	ArmBaremetal: {deliveredHostKey: true, delivery: DeliveryFetch, accessCredential: true, credential: account},
 	ArmLibvirt:   {deliveredHostKey: true, delivery: DeliveryFetch, bridgedGuests: true, credential: account, emulatedBMC: true, hypervisorClient: true},
-	ArmVSphere:   {delivery: DeliveryFetch, tools: []string{"govc"}, credential: account},
-	ArmKubeVirt:  {delivery: DeliveryPush, accessCredential: true, tools: []string{"virtctl"}, credential: [2]secrets.Part{secrets.ValuePart}, portPinned: true},
+	ArmVSphere:   {delivery: DeliveryFetch, tools: []string{"govc"}, credential: account, templateField: "template"},
+	ArmKubeVirt:  {delivery: DeliveryPush, accessCredential: true, tools: []string{"virtctl"}, credential: [2]secrets.Part{secrets.ValuePart}, portPinned: true, templateField: "templateSnapshotRef"},
 }
+
+// TemplateSourceField names an arm's authoring field for a native template source.
+func TemplateSourceField(arm Arm) string { return armFacts[arm].templateField }
 
 func SupportsDeliveredHostKey(provider api.Object) bool {
 	return armFacts[Variant(provider)].deliveredHostKey

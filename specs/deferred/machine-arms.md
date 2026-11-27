@@ -79,9 +79,62 @@ derived in that range from the context, Machine and NIC names
 The `templateClone` arm has required `seed`, and `seed` has exactly one arm:
 `cloudInit`. `cloudInit.growRootFilesystem` is optional and defaults `true`.
 Template clone consumes no `MachineImage` or Anaconda package source. A
-consuming machine uses a vSphere provider profile whose `template` is present.
+consuming Machine selects a provider profile that names an externally
+published source. For vSphere the profile names the inventory `template`.
+For KubeVirt the profile selects a
+[template snapshot](../api/machines.md#template-snapshot-reference).
 
 Template clone permits hostname, SSH password-authentication policy,
 repositories, services, and subscription intent. It rejects the Anaconda-only
 localization, initial-password, storage, package, SELinux, firewall, FIPS, and
 disk-encryption customizations.
+
+### Source ownership and clone completion
+
+The publisher generalizes and stops a single-root RHEL VM before publication.
+The image must support the selected cloud-init datasource on first boot.
+The publisher removes machine and subscription identity, SSH host keys,
+credentials and network state before publication. It keeps a published
+revision immutable and readable until the clone completes. Bootwright reads
+and clones the source through the provider credential. It never updates the
+source or includes the source in a removal plan.
+
+For KubeVirt, the provider verifies the cluster identity and reads the
+declared `VirtualMachineSnapshot` by namespace and name. It requires the
+authored UID, a ready snapshot, and one ready content object bound to it.
+It resolves the sole persistent boot volume in the captured VM to one ready
+CSI VolumeSnapshot, checks its bound content and restore size, and freezes
+those identities before creating a VM. The source and destination can occupy
+different namespaces. The operator grants the provider's identity the reads
+and CDI source authorization in the source namespace, and the VM and
+DataVolume privileges in the destination. The VM submits the resolved CSI
+VolumeSnapshot to CDI and receives an independent writable root. The
+implementation must prove that CDI used the pinned backing across the
+asynchronous population window before the first boot. If either source
+identity changes during that window, it leaves the target stopped and
+reports the changed source. It derives the VM hardware and networks from
+the destination profile and Machine.
+[Red Hat snapshot clone procedure](https://docs.redhat.com/en/documentation/openshift_container_platform/4.20/html/virtualization/advanced-vm-creation)
+and [cross-namespace CDI authorization](https://docs.redhat.com/en/documentation/openshift_container_platform/4.20/html/virtualization/storage)
+document the native mechanisms.
+
+For vSphere, the provider resolves one published inventory template by
+absolute path through verified vCenter TLS. A qualified backing identity
+must prove the expected root disk revision. The VM configuration revision
+alone does not prove disk contents. The clone task includes the operation
+ownership mark, explicit destination and independent disk placement, and
+creates a stopped VM. A lost reply leaves the operation unresolved until
+the provider proves the original task and target ownership.
+[Clone specification](https://developer.broadcom.com/xapis/vsphere-web-services-api/latest/vim.vm.CloneSpec.html)
+and [disk backing identity](https://developer.broadcom.com/xapis/vsphere-web-services-api/latest/vim.vm.device.VirtualDisk.FlatVer2BackingInfo.html)
+describe the native mechanisms.
+
+A clone first boots with its own cloud-init instance identity, bootstrap
+network and authorized SSH client public key. The guest receives its
+unique SSH host key through an authenticated private delivery channel
+qualified for the provider. The adapter proves first boot over pinned SSH
+and verifies the requested OS and network facts before reporting ready.
+Destroy proves only recorded clone resources absent, using the existing
+ownership and data-loss gates, and reaches that result after a publisher
+retires the source. A staged destroy that would blank a retained clone's
+root refuses until it has a qualified inverse.

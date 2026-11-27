@@ -272,7 +272,6 @@ Alias cell.
 | [B1098](#b1098) | new, 2026-11-04 (X294's pre-run review) | product | Substrate and Security | One emulated BMC's credential cannot change another domain's virtual media on the same host | Upstream sushy-tools behavior; every domain on a lab host is the operator's own |
 | [B1099](#b1099) | new, 2026-11-04 (B1093) | enabling | Substrate | A remote libvirt host proves an existing allocation's reuse credit, and tolerates an absent runtime directory | Admission runs only while a Machine block starts, so the credit decides only a retried machine block |
 | [B1165](#b1165) | new, 2026-11-05 (D234) | product | State reconciliation, with Substrate | An additive apply that adds KubeVirt providers, Machines and clusters to a completed apply | Q144; it needs per-namespace access blocks and a proof request without the MAC set |
-| [B1166](#b1166) | new, 2026-11-05 (D234) | product | Substrate and Managed OS | A KubeVirt Machine whose root is cloned from an image and seeded by cloud-init | An alternative to B905 the owner has not chosen (Q148) |
 | [B1168](#b1168) | new, 2026-11-05 (D234) | product | Add-ons | Typed `HyperConverged` fields: boot-image import, live-migration limits and network, workload placement | No profile needs them yet; locations follow the observed CRD, never a CSV (D163) |
 | [B1170](#b1170) | new, 2026-11-05 (D234) | safety | Secrets and State reconciliation | A rebind of the host installation's administrator kubeconfig after rotation | Nothing rotates it today |
 | [B1171](#b1171) | new, 2026-11-05 (D234) | product | Substrate | Data disks on KubeVirt Machines with virtio serials and a mandatory root identity | Q149 |
@@ -2960,10 +2959,6 @@ Owning text: [capacity admission](../substrates.md#capacity-admission).
 ### B1165
 
 **Owner:** State reconciliation, with Substrate. **Kind:** product. **Requires:** [B732](m3.md#b732). **Definition:** Needs definition: [Q144](m3.md#m3a-open-decisions) option (c). The apply that adds hosted members to a completed apply needs per-namespace access blocks and a proof request without the MAC set. **Outcome:** A completed apply gains KubeVirt providers, Machines and clusters without a destroy. **Exit evidence:** Planning and replay tests over a completed apply, and an owner-run additive apply.
-
-### B1166
-
-**Owner:** Substrate and Managed OS. **Kind:** product. **Requires:** [B87](m1.md#b87). **Definition:** Needs definition: [Q148](m3.md#m3a-open-decisions) option (d), the image-based alternative to [B905](m1.md#b905); the owner has not chosen between them. **Outcome:** A KubeVirt Machine whose root is cloned from an image and seeded by cloud-init. **Exit evidence:** Request goldens, refusal tests and an owner-run installation.
 
 ### B1168
 
@@ -10115,3 +10110,13 @@ same number above:
 8. Physical OpenShift nodes after a boot are refused unless the step that
    blanks their disks, a declared physical erase, is in the scope; nothing is
    recorded as removed while it is still there.
+
+### D289
+
+**owner** (2026-11-27, VM template provisioning): “proceed with plan
+implementation”. B1166 moves to M1g and starts with the declaration and
+source contract in X779. X132 retains the vSphere implementation in B99.
+The source can belong to another team. The KubeVirt implementation includes
+an external source namespace on the same host cluster. B905 retains the
+Anaconda path chosen in D235. Real-system acceptance follows each provider's
+implementation.

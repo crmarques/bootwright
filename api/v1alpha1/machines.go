@@ -129,7 +129,8 @@ func machineProfileSchema(variant string) *Shape {
 	if variant == "libvirt" {
 		fields = append(fields, field("tpm", record()))
 	} else if variant == "kubevirt" {
-		fields = append(fields, field("tpm", record(defaulted("persistent", boolean(), BoolValue(true)))))
+		snapshot := atomic(external(record(required("namespace", name()), required("name", dns()), required("uid", name()))))
+		fields = append(fields, field("tpm", record(defaulted("persistent", boolean(), BoolValue(true)))), field("templateSnapshotRef", snapshot))
 	}
 	return named(record(fields...))
 }

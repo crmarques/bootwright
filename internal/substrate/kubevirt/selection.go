@@ -13,8 +13,10 @@ import (
 )
 
 const (
-	cudnGroup, cudnKind = "k8s.ovn.org", "ClusterUserDefinedNetwork"
-	nadGroup, nadKind   = "k8s.cni.cncf.io", "NetworkAttachmentDefinition"
+	cudnGroup, cudnKind  = "k8s.ovn.org", "ClusterUserDefinedNetwork"
+	nadGroup, nadKind    = "k8s.cni.cncf.io", "NetworkAttachmentDefinition"
+	templateCloneRefusal = "this executable cannot yet provision a KubeVirt Machine from a template snapshot"
+	templateCloneRemedy  = "use a build that realizes KubeVirt template cloning (B1166)"
 )
 
 // Refusals refuses every selected KubeVirt object this arm cannot realize,
@@ -35,7 +37,9 @@ func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 			}
 		}
 		for _, machine := range substrate.HostedMachines(catalog, provider.Name()) {
-			if api.MachineInstallProfileRef(machine) != "" {
+			if profile, ok := catalog.Find(api.MachineInstallProfile, api.MachineInstallProfileRef(machine)); ok && profile.Spec().Has("installer", "templateClone") {
+				found = append(found, lifecycle.RefusalOf(machine, templateCloneRefusal, templateCloneRemedy))
+			} else if api.MachineInstallProfileRef(machine) != "" {
 				found = append(found, lifecycle.RefusalOf(machine,
 					"a KubeVirt Machine is realized for an installer that supplies its operating system, and this one names an install profile",
 					"declare spec.os.clusterInstalled on "+machine.Identity()+" instead of spec.os.install, or host it on a baremetal or libvirt provider"))
@@ -203,6 +207,9 @@ func machineRequestFor(catalog api.Catalog, provider, machine api.Object, contro
 	if !found || !sized(profile) {
 		return MachineRequest{}, refusal("api.reference", "the Machine's KubeVirt profile does not resolve to a sized profile",
 			"correct "+substrate.MachineProfilePath(machine)+" on "+machine.Identity())
+	}
+	if profile.Has("templateSnapshotRef") {
+		return MachineRequest{}, refusal("api.invariant", templateCloneRefusal, templateCloneRemedy)
 	}
 	arm := provider.Spec().Get("kubevirt")
 	vm := substrate.KubeVirtName(contextName, name)

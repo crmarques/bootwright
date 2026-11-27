@@ -444,10 +444,16 @@ func validateConsumers(o api.Object, c api.Catalog) []api.Issue {
 		}
 		variant := substrate.Variant(provider)
 		profileName := substrate.MachineProfileRef(machine)
-		profile, profileOK := localProfile(provider.Spec().Get(string(variant), "machineProfiles"), profileName)
-		if s.Has("installer", "templateClone") && (variant != substrate.ArmVSphere || profileOK && !profile.Has("template")) {
-			issues = api.AppendIssues(issues, issue("$.spec.installer.templateClone", "template clone consumers require a vSphere profile with a template",
-				"select spec.installer.anaconda, or place each consumer on a vSphere provider profile with a template"))
+		profile, profileOK := provider.Spec().Get(string(variant), "machineProfiles").Named("name", profileName)
+		if s.Has("installer", "templateClone") {
+			sourceField := substrate.TemplateSourceField(variant)
+			if sourceField == "" {
+				issues = api.AppendIssues(issues, issue("$.spec.installer.templateClone", machine.Identity()+" uses a provider with no template source",
+					"select a provider profile with a template source, or select spec.installer.anaconda on "+o.Identity()))
+			} else if profileOK && !profile.Has(sourceField) {
+				issues = api.AppendIssues(issues, issue("$.spec.installer.templateClone", machine.Identity()+" selects machine profile "+profileName+" of "+provider.Identity()+" without "+sourceField,
+					"set "+sourceField+" on machine profile "+profileName+" of "+provider.Identity()))
+			}
 		}
 		if custom.Has("security", "diskEncryption") && variant != substrate.ArmBaremetal && profileOK && !profile.Has("tpm") {
 			issues = api.AppendIssues(issues, issue("$.spec.customizations.security.diskEncryption", "virtual disk encryption requires TPM support in every consuming provider profile",
@@ -614,17 +620,6 @@ func consumers(o api.Object, c api.Catalog) []api.Object {
 		}
 	}
 	return out
-}
-func localProfile(values api.Value, name string) (api.Value, bool) {
-	var found api.Value
-	n := 0
-	for _, value := range values.Items() {
-		if value.Get("name").Text() == name {
-			found = value
-			n++
-		}
-	}
-	return found, n == 1
 }
 func subscriptionRepositoryID(s string) bool {
 	return api.ValidLexical(subscriptionRepositoryRule, s) && !strings.Contains(s, "/")
