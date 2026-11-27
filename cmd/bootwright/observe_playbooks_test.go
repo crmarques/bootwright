@@ -244,7 +244,11 @@ func addObserveReads(add func(string, string, string, string, func(map[string]an
 		return params["state"] == "proved"
 	})
 	add("infrastructureservices_mirror_fill", "observe.yml", "ansible.builtin.stat", "reads the mirror root and each file's type, size and SHA-256 without following links", read)
-	add("infrastructureservices_mirror_fill", "observe.yml", observeCollection+"hosted_area", "proves the artifact server's hosted directories without creating one", func(params, _ map[string]any) bool {
+	add("infrastructureservices_mirror_fill", "prove_server.yml", "ansible.builtin.assert", "refuses an unsafe server directory without changing it", read)
+	add("infrastructureservices_mirror_fill", "prove_server.yml", "ansible.builtin.stat", "reads only server directory metadata and does not follow links", func(params, _ map[string]any) bool {
+		return params["follow"] == false && params["get_checksum"] == false
+	})
+	add("infrastructureservices_mirror_fill", "prove_server.yml", observeCollection+"hosted_area", "proves the artifact server's hosted directories without creating one", func(params, _ map[string]any) bool {
 		return params["state"] == "proved"
 	})
 	add("managedos_host_firewall", "observe.yml", "ansible.builtin.fail", "refuses an unproved observation without touching the guest", read)

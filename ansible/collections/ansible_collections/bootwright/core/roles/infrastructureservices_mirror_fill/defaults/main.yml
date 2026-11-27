@@ -1,6 +1,8 @@
 ---
 # The server instance and its public root are served directories, not private ancestors.
-infrastructureservices_mirror_fill_area: [services, artifact-server]
+infrastructureservices_mirror_fill_area:
+  - services
+  - artifact-server
 infrastructureservices_mirror_fill_served_root: >-
   {{ '/var/lib/bootwright-hosted/' ~ bootwright_mirror_files_request.identity.context
      ~ '/services/artifact-server/' ~ bootwright_mirror_files_request.identity.server ~ '/public' }}
