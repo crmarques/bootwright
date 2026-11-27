@@ -72,7 +72,7 @@ func (s Service) Check(ctx context.Context, request CheckRequest) (*Report, erro
 		if request.Quiet {
 			phase = ""
 		}
-		current, err := s.inspect(ctx, view, stored, phase, true)
+		current, err := s.inspect(ctx, view, stored, phase, !request.installation, request.installation)
 		if err != nil {
 			if len(current.report.Checks) != 0 {
 				current.report.Outcome = "not-ready"
@@ -118,6 +118,29 @@ func (s Service) Check(ctx context.Context, request CheckRequest) (*Report, erro
 	return result, err
 }
 
+// CheckInstallation checks the baseline alone or includes the explicitly
+// selected context's locally installed dependencies.
+func (s Service) CheckInstallation(ctx context.Context, name string) (*Report, error) {
+	if name == "" {
+		return s.CheckHost(ctx)
+	}
+	report, err := s.Check(ctx, CheckRequest{ContextName: name, SkipListeners: true, Quiet: true, installation: true})
+	if report == nil || ctx.Err() != nil {
+		return report, err
+	}
+	report.Route = ""
+	if rootErr := s.stateRoot(ctx, report); rootErr != nil {
+		report.Outcome = "not-ready"
+		report.Next = remedyInvocation(rootErr)
+		return report, rootErr
+	}
+	if report.Next != setupInvocation && PendingScope(*report) == HostScope && (err == nil || report.Next != "") {
+		report.Outcome, report.Next = "not-ready", setupInvocation
+		return report, failure("preflight.failed", "required host prerequisites are not ready", "run "+setupInvocation)
+	}
+	return report, err
+}
+
 // CheckHost verifies the installed baseline without selecting a context or
 // collecting wheel requirements for a setup plan.
 func (s Service) CheckHost(ctx context.Context) (*Report, error) {
@@ -128,7 +151,7 @@ func (s Service) CheckHost(ctx context.Context) (*Report, error) {
 	if err != nil {
 		return nil, err
 	}
-	current, err := s.inspect(ctx, view, StorageView{}, "", false)
+	current, err := s.inspect(ctx, view, StorageView{}, "", false, false)
 	current.report.Route = ""
 	if err == nil {
 		err = s.stateRoot(ctx, &current.report)
@@ -175,7 +198,7 @@ func (s Service) setup(ctx context.Context, request SetupRequest) (*Report, erro
 		return nil, err
 	}
 	if request.DryRun {
-		current, err := s.inspect(ctx, view, StorageView{}, "", true)
+		current, err := s.inspect(ctx, view, StorageView{}, "", true, false)
 		current.report.DryRun = true
 		current.report.Route = ""
 		current.report.Table = nil
@@ -197,7 +220,7 @@ func (s Service) setup(ctx context.Context, request SetupRequest) (*Report, erro
 		}
 		return &current.report, err
 	}
-	current, err := s.inspect(ctx, view, StorageView{}, InspectionPhase, true)
+	current, err := s.inspect(ctx, view, StorageView{}, InspectionPhase, true, false)
 	if err != nil {
 		return nil, err
 	}
@@ -272,6 +295,10 @@ func (s Service) report(ctx context.Context, report *Report, event ProgressEvent
 
 func cloneReport(report Report) Report {
 	report.Checks = slices.Clone(report.Checks)
+	report.Tools = slices.Clone(report.Tools)
+	for index := range report.Tools {
+		report.Tools[index].SelectedBy = slices.Clone(report.Tools[index].SelectedBy)
+	}
 	report.Actions = slices.Clone(report.Actions)
 	report.Dependencies = slices.Clone(report.Dependencies)
 	report.Warnings = slices.Clone(report.Warnings)

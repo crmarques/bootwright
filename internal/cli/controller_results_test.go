@@ -24,20 +24,23 @@ func controllerReport(outcome string, dryRun bool) *prerequisites.Report {
 		Checks: []prerequisites.Check{{ID: "python-runtime", Required: "qualified Python and Ansible", Observed: observed, Status: status}}, Actions: []string{"Prepare the qualified controller runtime"}, Dependencies: []string{"qualified-source.tar.gz"}}
 }
 
-// Neither install nor controller check consumes a context: they
-// prepare and inspect what every context shares, so each refuses an explicit
-// --context.
+// Setup and its preview refuse a context. The check passes an explicit
+// selection through to the readiness service.
 func TestControllerReportsAndExplicitContextDispatch(t *testing.T) {
 	for _, command := range [][]string{{"install"}, {"install", "--dry-run"}, {"install", "--check"}} {
+		dryRun := len(command) == 2 && command[1] == "--dry-run"
+		check := len(command) == 2 && command[1] == "--check"
 		for _, flag := range []string{"--context=", "--context=example"} {
 			args := append(append([]string{}, command...), flag)
 			_, out, errOut, record := runRecorded(args)
-			if record.calls != 0 || out != "" || !strings.Contains(errOut, "flag is not accepted by this command") {
+			if check {
+				if record.calls != 1 || record.path != "install --check" || record.request != strings.TrimPrefix(flag, "--context=") {
+					t.Fatal(args, out, errOut, record)
+				}
+			} else if record.calls != 0 || out != "" || !strings.Contains(errOut, "--context requires --check") {
 				t.Fatal(args, out, errOut)
 			}
 		}
-		dryRun := len(command) == 2 && command[1] == "--dry-run"
-		check := len(command) == 2 && command[1] == "--check"
 		outcome := "unchanged"
 		if dryRun {
 			outcome = "planned"
@@ -57,8 +60,8 @@ func TestControllerReportsAndExplicitContextDispatch(t *testing.T) {
 			if check || request.DryRun != dryRun {
 				t.Fatal(request)
 			}
-		case nil:
-			if !check || record.path != "install --check" {
+		case string:
+			if !check || record.path != "install --check" || request != "" {
 				t.Fatal("unexpected dispatch", record)
 			}
 		default:
@@ -127,13 +130,13 @@ func TestControllerConfirmationUsesSetupScope(t *testing.T) {
 }
 
 func TestControllerInvocationPrivilegeAndHelp(t *testing.T) {
-	for _, args := range [][]string{{"install"}, {"install", "--dry-run"}, {"apply", "--dry-run"}, {"apply", "--dry-run", "--stage", "controller"}} {
+	for _, args := range [][]string{{"install"}, {"install", "--dry-run"}, {"install", "--check", "--context", "demo"}, {"apply", "--dry-run"}, {"apply", "--dry-run", "--stage", "controller"}} {
 		if !ClassifyInvocation(args).RequiresRoot {
 			t.Fatal("effectful invocation omitted privilege", args)
 		}
 	}
 	var out bytes.Buffer
-	if code := New(Config{Out: &out}).Run(context.Background(), []string{"install", "--dry-run", "--help"}); code != 0 || strings.Contains(out.String(), "--context") {
+	if code := New(Config{Out: &out}).Run(context.Background(), []string{"install", "--dry-run", "--help"}); code != 0 || !strings.Contains(out.String(), "requires --check, default: host baseline") {
 		t.Fatal(code, out.String())
 	}
 }

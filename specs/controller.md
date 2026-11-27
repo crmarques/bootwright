@@ -387,21 +387,25 @@ no dnf call. The Ceph node's own package path is unchanged.
 
 ## The setup flow
 
-`install` selects no context. It ignores the invoking user's current selection,
-resolves no desired state, and refuses an explicit `--context` as a flag it does not accept. This
-allows preparation before context creation or Environment import, and makes one
-prepared host serve every context created on it. No current directory or user
-profile selects inputs. Its acquisition route is the
-[invoking environment's](#the-context-free-acquisition-route), and direct
-access when that environment names none.
+`install`, `install --dry-run` and `install --check` without an explicit context
+select no context. They ignore the invoking user's current selection and
+resolve no desired state. This allows preparation before context creation or
+Environment import and makes one prepared host serve every context on it.
+Setup uses the [invoking environment's acquisition route](#the-context-free-acquisition-route).
 
-The install preview and readiness check cover the host baseline alone.
-A context's controller readiness is the
-[controller stage of `apply --dry-run`](cli/output.md#preflight), which reads the
-selected context, the current one unless `--context` names another; that
-context must be ready and have an admitted input revision, and an empty one
-returns `context.input` with the import command. Every check carries the scope that owns it, so a negative
-report names the one command that settles it: `install` for a host prerequisite,
+A contextual installation check requires an explicit `--context <name>` with
+`--check`. An empty `--context=` selects the baseline. The check reads the
+named context's admitted effective input. An empty context returns
+`context.input` with the import command. It uses the controller stage's
+tool selection and checks local presence in the exact managed tool area.
+It reads the baseline and context-selected host package requirements through
+RPM. It contacts no publisher, mirror, package repository or managed host
+and executes no managed tool. It writes no setup or lifecycle record.
+
+The controller stage of [`apply --dry-run`](cli/output.md#preflight) previews work
+its plan can prepare. A contextual installation check exits 1 for a prerequisite
+that remains missing or unverified, even when a preview marks it pending.
+Each check carries its scope, so a negative report names the one command that settles it: `install` for a host prerequisite,
 and that context's own `apply --stage controller --context <name>` for anything
 its graph selects. A context whose graph selects no target client and no stage
 closure of the [host package](#host-packages) table has no controller stage,
@@ -415,6 +419,7 @@ SSH flags remain unconsumed by these checks.
 | --- | --- |
 | `bootwright install --dry-run` | Inspect the host and its private setup state to plan missing work. Report the ordered actions, RPM requirements by name, and the locked wheel inventory in structured output. A feasible plan exits 0 even when prerequisites are missing or setup was interrupted. Admission refusals exit 1 and retain any plan already computed. |
 | `bootwright install --check` | Verify supported host and tool admission, installed-host identity, the locked interpreter and published runtime, baseline RPM presence, a [complete receipt](contexts/controller-record.md#the-setup-subtree) for the current runtime, and state-root admission. Report each observed finding and any remedy. Exit 0 when ready and 1 when a prerequisite is missing, unverified or refused. |
+| `bootwright install --check --context <name>` | Report the baseline and context-scoped checks, including one finding per managed executable. Verify the state root and context host binding. Exit 0 when ready and 1 when any requirement is missing, unverified or refused. |
 | `bootwright install` | Elevate, then inspect read-only: admission, the installed host, FIPS mode, the untested release and loader preload (informational), the setup state, the interpreter and its runtime and the baseline package presence. A ready host prints the receipt table and `Nothing to do.`, with no network request, confirmation or write. Otherwise run the preview and present the plan, confirm, take `controller/install/lock`, inspect again and refuse a host that moved, record the pending intent, install with dnf, copy the carried wheels, build, verify and publish the runtime, and write the receipt, which clears the pending intent. Publish no binding and touch no controller record. |
 | `bootwright apply --dry-run --stage controller --context <name>` | Additionally report that context's own target tools and the stage closures of the [host package](#host-packages) table it selects by `rpm` presence, and its host binding, as context-scoped checks. Contact no publisher and read no repository metadata for them. |
 
@@ -471,7 +476,7 @@ a package present before Bootwright, a package a
 what a context realized on an SSH placement host, which no uninstall reaches.
 Over a store this build reads it removes no data the operator supplied; a
 `--discard-unreadable` of a store this build cannot read removes that store's
-[media store](managed-os.md#media-store) with it. Like install it selects no context, refuses
+[media store](managed-os.md#media-store) with it. Uninstall selects no context, refuses
 `--context`, and elevates as install does.
 
 | Invocation | Required behavior |
@@ -1279,6 +1284,16 @@ confirmation, one `Progress` step per action. The host checks are `host`,
 and `host-packages`; the context checks are `target-tools`, `container-runtime`,
 `libvirt-client`, `hypervisor`, `installer-media`, `image-mirror`, `nmstate`, `iputils`, `controller-binding`
 and one `listener-firewall` row per declared controller socket.
+
+The contextual installation check includes the selected context and controller
+Machine in text, JSON and YAML. Its structured result includes `context` and
+`machine`, and includes a `tools` list when the context selects executables.
+Each tool finding names `executable`, `version`, optional `compatibility`,
+`selectedBy` (sorted effective object identities), `status` and `observed`.
+Findings follow the controller's canonical tool-request order and member
+order. `TestContextInstallCheckVerifiesEverySelectedManagedExecutable` and
+`TestCommandOutputMatchesItsGoldens` hold the report to the
+selected closure and output contract.
 
 Context preflight and public `apply --dry-run` inspect the controller's managed DNS
 (TCP and UDP), NTP (UDP), proxy (TCP), artifact listeners (TCP), and locally

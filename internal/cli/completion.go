@@ -143,7 +143,7 @@ func completionResolve(root *cobra.Command, words []string, descriptions bool, c
 		for _, flag := range completionFlags(flagCommand) {
 			for _, name := range []string{"--" + flag.Name, "-" + flag.Shorthand} {
 				if name != "-" && strings.HasPrefix(name, incompleteWord) {
-					candidates = append(candidates, completionDescription(name, flag.Usage, descriptions))
+					candidates = append(candidates, completionDescription(name, flagHelp(flagCommand, flag), descriptions))
 				}
 			}
 		}

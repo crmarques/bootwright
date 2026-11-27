@@ -50,7 +50,7 @@ func writeHelp(w io.Writer, command *cobra.Command) error {
 			if flag.Shorthand != "" {
 				label = "-" + flag.Shorthand + ", " + label
 			}
-			usage := flag.Usage
+			usage := flagHelp(command, flag)
 			if flag.DefValue != "" && flag.DefValue != "false" && flag.DefValue != "[]" {
 				usage += " · default " + flag.DefValue
 			}

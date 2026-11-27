@@ -5,16 +5,15 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"path"
 	"slices"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/controller/evidence"
 )
 
-// ToolsDigest names the shared host area that holds one exact target tool
-// closure. It is content-addressed by the resolved tools alone, so every
-// context selecting the same tools proves the same files and a different
-// closure never disturbs them.
+// ToolsDigest names a host tool area by its exact closure, so contexts with
+// the same resolved tools share one area and other closures use separate areas.
 func ToolsDigest(tools []ToolDefinition) string {
 	ordered := slices.Clone(tools)
 	slices.SortFunc(ordered, func(a, b ToolDefinition) int { return strings.Compare(a.Source.ID, b.Source.ID) })
@@ -42,6 +41,58 @@ type ToolFile struct {
 	Path   string `json:"path"`
 }
 
+// ToolFiles defines the exact managed executables one target release publishes.
+func ToolFiles(request evidence.ToolRequest) []ToolFile {
+	prefix := path.Join("tools", request.Kind, request.Compatibility, request.Version)
+	members := []string{request.Kind}
+	switch request.Kind {
+	case "helm":
+		members = []string{"linux-amd64/helm"}
+	case "openshift-clients":
+		members = []string{"oc", "kubectl"}
+	}
+	files := make([]ToolFile, 0, len(members))
+	for _, member := range members {
+		files = append(files, ToolFile{Member: member, Path: path.Join(prefix, path.Base(member))})
+	}
+	return files
+}
+
+// ToolFilePresence attributes each member to its retained archive and checks
+// the whole area in one walk. It neither opens nor executes the member.
+func ToolFilePresence(ctx context.Context, area BundleArea, tools []ToolDefinition) (map[string]string, error) {
+	result := make(map[string]string)
+	entries := map[string]BundleEntry{}
+	if area != nil && len(tools) != 0 {
+		listed, err := area.Entries(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, entry := range listed {
+			entries[entry.Path] = entry
+		}
+	}
+	for _, tool := range tools {
+		source, retained := entries[path.Join("sources", tool.Source.ID)]
+		for _, file := range tool.Files {
+			entry, present := entries[file.Path]
+			switch {
+			case !retained:
+				result[file.Path] = "managed source missing"
+			case source.Directory || source.Size != tool.Source.Bytes:
+				result[file.Path] = "managed source does not match its retained identity"
+			case !present:
+				result[file.Path] = "managed executable missing"
+			case entry.Directory:
+				result[file.Path] = "managed executable is a directory"
+			default:
+				result[file.Path] = ""
+			}
+		}
+	}
+	return result, nil
+}
+
 // UnreleasedClient refuses an OpenShift client whose oc does not name its
 // frozen release, as proved by the adapter before publication. Published
 // clients are checked for presence only. The same release reuses the retained
@@ -51,11 +102,8 @@ func UnreleasedClient(tool ToolDefinition) error {
 		"declare a release.version whose oc passes the release-stamp check; the same release reuses the retained source and refuses again")
 }
 
-// LocateInstalledTool answers the absolute path of one executable the exact
-// closure tools names published on this host. A search path is never
-// authority: the caller recovers the closure its own context's controller
-// stage selects, so a consumer runs the exact file that stage installed for
-// the release its own graph selected, and never one another closure holds.
+// LocateInstalledTool returns an absolute executable path in the caller's
+// exact controller-stage closure. It does not consult the search path.
 func LocateInstalledTool(ctx context.Context, view StorageView, tools []ToolDefinition, tool evidence.InstalledTool) (string, error) {
 	unavailable, missing := "run bootwright install, then apply --stage controller", "run bootwright apply --stage controller"
 	if view.Context.Name != "" {
@@ -94,9 +142,7 @@ func LocateInstalledTool(ctx context.Context, view StorageView, tools []ToolDefi
 	return location.Path + "/" + member, nil
 }
 
-// publishedMember is the file one retained closure publishes for exactly this
-// client kind, compatibility and version. A closure publishes several
-// executables, so the member is named.
+// publishedMember selects one named executable by kind, compatibility and release.
 func publishedMember(tools []ToolDefinition, tool evidence.InstalledTool) (string, bool) {
 	for _, definition := range tools {
 		if definition.Kind != tool.Kind || definition.Compatibility != tool.Compatibility || definition.Version != tool.Version {

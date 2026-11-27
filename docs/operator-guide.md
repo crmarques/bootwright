@@ -114,6 +114,14 @@ host checks and exits 1 when any required prerequisite is missing or could
 not be verified. On a ready host, `bootwright install` prints the receipt
 table and `Nothing to do.` without a network request, confirmation or write.
 See [controller setup results](../specs/controller.md#results-and-qualification).
+
+After importing a context, run `bootwright install --check --context lab` to
+verify the baseline and the tools and host packages that context selects. The
+report includes exact managed client releases and the objects that require
+them. If the context's tools are missing, prepare them with
+`bootwright apply --stage controller --context lab`, then repeat the check.
+Omitting `--context` always checks the baseline.
+
 A new Bootwright build with the same lock and an operating-system upgrade
 that keeps the interpreter need no setup. A build whose lock changed needs
 one setup, which copies from the executable only the wheels its cache lacks.

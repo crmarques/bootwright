@@ -1,11 +1,12 @@
   bootwright / install
       Prepare this host's baseline packages and controller Python runtime from the locked
-      wheels carried by this build. This command selects no context. Use --dry-run to show the
-      planned changes, with the locked wheel inventory in JSON or YAML. Use --check to verify
-      host readiness, including the packages, runtime, setup receipt and state root. Both flags
-      use local reads only. A ready host needs no setup. When installation is needed, install
-      shows dnf's own preview before confirmation. --yes skips ordinary confirmation during
-      execution.
+      wheels carried by this build. Use --dry-run to show the planned changes, with the locked
+      wheel inventory in JSON or YAML. Use --check to verify the packages, runtime, setup
+      receipt and state root. Add --context to --check to verify the selected context’s managed
+      tools and host packages as well. Without an explicit context, the check covers the
+      baseline. Both modes use local reads only. A ready host needs no setup. When installation
+      is needed, install shows dnf's own preview before confirmation. --yes skips ordinary
+      confirmation during execution.
 
   Usage
     bootwright install [flags]
@@ -18,6 +19,7 @@
   Common flags
       --ascii       Use ASCII status markers
       --color       Select terminal colors (values: auto, always, never) · default auto
+      --context     Check the named context (requires --check, default: host baseline)
       --detail      Select human detail (values: compact, full) · default compact
       -h, --help    Show help for this command
       -o, --output  Select output mode (values: text, json, yaml) · default text
@@ -25,4 +27,4 @@
       --width       Set presentation width (0: automatic) · default 0
 
   Examples
-    bootwright install --dry-run
+    bootwright install --check --context lab

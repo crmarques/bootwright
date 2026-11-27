@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -33,12 +34,14 @@ type inspection struct {
 	wheels       []RuntimeWheel
 	missing      []string
 
-	toolRequests []evidence.ToolRequest
-	tools        []ToolDefinition
-	toolsPresent bool
-	native       StageNative
-	closures     int
-	bound        bool
+	toolRequests     []evidence.ToolRequest
+	toolSelectionErr error
+	toolsComplete    bool
+	tools            []ToolDefinition
+	toolsPresent     bool
+	native           StageNative
+	closures         int
+	bound            bool
 
 	report Report
 }
@@ -51,10 +54,10 @@ const (
 // inspect verifies the host read-only. A non-empty phase streams the scope and
 // each check as it settles; the inspection repeated under the setup lock
 // passes none, so every check is shown once.
-func (s Service) inspect(ctx context.Context, view SetupView, stored StorageView, phase string, planWheels bool) (inspection, error) {
+func (s Service) inspect(ctx context.Context, view SetupView, stored StorageView, phase string, planWheels, installation bool) (inspection, error) {
 	current := inspection{view: view, stored: stored, ansibleCore: s.ports.Lock.AnsibleCore,
 		selection: controller.Baseline().WithAmbientRoute(s.options.AmbientRoute)}
-	if err := s.selectContext(ctx, &current); err != nil {
+	if err := s.selectContext(ctx, &current, installation); err != nil {
 		return current, err
 	}
 	release, err := s.host.(ReleaseInspector).Release(ctx)
@@ -64,7 +67,7 @@ func (s Service) inspect(ctx context.Context, view SetupView, stored StorageView
 	current.release = release
 	current.platform = Platform{OS: release.ID, Release: release.VersionID, Architecture: release.Architecture}
 	current.report = Report{ContextName: stored.Context.Name, Machine: current.selection.MachineName(), Platform: current.platform,
-		Outcome: "planned", Route: current.routeSummary(), Checks: []Check{}, Actions: []string{}}
+		Outcome: "planned", Route: current.routeSummary(), Checks: []Check{}, Actions: []string{}, Tools: current.report.Tools}
 	stream := phase != ""
 	if stream && s.options.Presenter != nil {
 		if err := s.options.Presenter.PresentControllerScope(ctx, phase, cloneReport(current.report)); err != nil {
@@ -101,7 +104,8 @@ func (s Service) inspect(ctx context.Context, view SetupView, stored StorageView
 	}
 	current.settleSetupState(s.ports.Lock, settle)
 	current.report.Table = current.table(s.ports.Lock)
-	return current, s.settleContext(ctx, &current, settle, start)
+	err = s.settleContext(ctx, &current, settle, start)
+	return current, err
 }
 
 func (i *inspection) declare(host HostInspector, lock RuntimeLock) {
@@ -151,7 +155,7 @@ func runtimeRequirement(lock RuntimeLock) string {
 	return "Python " + strings.Join(lock.ABIs, ", ") + " with ansible-core " + lock.AnsibleCore
 }
 
-func (s Service) selectContext(ctx context.Context, current *inspection) error {
+func (s Service) selectContext(ctx context.Context, current *inspection, installation bool) error {
 	if current.stored.Context.Name == "" {
 		current.native = StageNativeOf(current.selection)
 		return nil
@@ -168,15 +172,33 @@ func (s Service) selectContext(ctx context.Context, current *inspection) error {
 		return err
 	}
 	current.native = StageNativeOf(current.selection)
-	current.toolRequests, err = controller.SelectTools(state.Effective())
+	var consumers map[evidence.ToolRequest][]string
+	if installation {
+		current.toolRequests, consumers, err = controller.SelectToolsWithConsumers(current.catalog)
+	} else {
+		current.toolRequests, err = controller.SelectTools(current.catalog)
+	}
 	if err != nil || len(current.toolRequests) == 0 {
 		return err
 	}
 	if s.options.Tools == nil {
 		return failure("controller.unsupported", "target tool selection is not configured", "use a compatible executable")
 	}
-	current.tools, _, err = SelectContextTools(ctx, s.options.Tools, current.stored, current.toolRequests)
-	return InStage(err, current.stored.Context.Name)
+	current.tools, current.toolsComplete, err = SelectContextTools(ctx, s.options.Tools, current.stored, current.toolRequests)
+	err = InStage(err, current.stored.Context.Name)
+	if installation {
+		current.toolSelectionErr = err
+		for _, request := range current.toolRequests {
+			for _, file := range ToolFiles(request) {
+				current.report.Tools = append(current.report.Tools, ToolCheck{
+					Executable: path.Base(file.Path), Version: request.Version, Compatibility: request.Compatibility,
+					SelectedBy: consumers[request], Status: "unverified", Observed: "unverified",
+				})
+			}
+		}
+		return nil
+	}
+	return err
 }
 
 // admit is fail-closed and runs before any effect: the Fedora or RHEL family
@@ -527,16 +549,10 @@ func (s Service) settleContext(ctx context.Context, current *inspection, settle 
 	}
 	if len(current.toolRequests) != 0 {
 		start("target-tools", "verifying the retained target tools")
-		ready := false
-		if len(current.tools) != 0 && current.stored.OpenBundle != nil {
-			area, err := current.stored.OpenBundle(ctx, ToolsDigest(current.tools))
-			if err == nil && area != nil {
-				ready, err = s.options.Tools.Present(ctx, area, current.tools)
-			}
-			if err != nil {
-				settle(unverified("target-tools", current.toolSummary(), ContextScope))
-				return err
-			}
+		ready, err := s.inspectTargetTools(ctx, current)
+		if err != nil {
+			settle(unverified("target-tools", current.toolSummary(), ContextScope))
+			return err
 		}
 		settle(readiness("target-tools", current.toolSummary(), ready, ContextScope))
 		current.toolsPresent = ready
@@ -613,4 +629,49 @@ func (i inspection) samePlan(other inspection) bool {
 		i.interpreter.Path == other.interpreter.Path && i.runtime.Digest == other.runtime.Digest && i.runtimeReady == other.runtimeReady &&
 		slices.Equal(i.missing, other.missing) && (len(i.candidates) == 0) == (len(other.candidates) == 0) &&
 		i.view.Foreign == other.view.Foreign && pending(i.view) == pending(other.view) && (i.view.State.Receipt == nil) == (other.view.State.Receipt == nil)
+}
+
+func (s Service) inspectTargetTools(ctx context.Context, current *inspection) (bool, error) {
+	if current.toolSelectionErr != nil {
+		return false, current.toolSelectionErr
+	}
+	detailed := len(current.report.Tools) != 0
+	var area BundleArea
+	if len(current.tools) != 0 && current.stored.OpenBundle != nil && (!detailed || current.toolsComplete) {
+		var err error
+		area, err = current.stored.OpenBundle(ctx, ToolsDigest(current.tools))
+		if err != nil {
+			return false, err
+		}
+	}
+	if !detailed {
+		if area == nil {
+			return false, nil
+		}
+		return s.options.Tools.Present(ctx, area, current.tools)
+	}
+	files, err := ToolFilePresence(ctx, area, current.tools)
+	if err != nil {
+		return false, err
+	}
+	ready, index := true, 0
+	for _, request := range current.toolRequests {
+		for _, file := range ToolFiles(request) {
+			row := &current.report.Tools[index]
+			index++
+			observed, known := files[file.Path]
+			switch {
+			case !known:
+				row.Status, row.Observed = "not-ready", "managed source identity missing"
+			case !current.toolsComplete:
+				row.Status, row.Observed = "not-ready", "managed tool area for the selected releases is unavailable"
+			case observed == "":
+				row.Status, row.Observed = "ready", "present in the managed tool area"
+			default:
+				row.Status, row.Observed = "not-ready", observed
+			}
+			ready = ready && row.Status == "ready"
+		}
+	}
+	return ready, nil
 }

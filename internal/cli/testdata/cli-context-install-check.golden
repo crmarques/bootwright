@@ -1,0 +1,17 @@
+  Controller readiness
+
+    Scope       context lab
+    Controller  controller
+    Platform    fedora 43/amd64
+
+  Checks
+  [OK]   Controller runtime   qualified
+
+  Managed tools
+  [OK]     helm v4.2.3              present in the managed tool area. Selected by
+                                    OpenShiftCluster/cluster
+  [FAIL]   oc 4.21.15 (openshift)   managed executable missing. Selected by
+                                    OpenShiftCluster/cluster
+
+    Outcome  not-ready
+    Next     bootwright apply --stage controller --context lab

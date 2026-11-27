@@ -16,9 +16,10 @@ list each command's accepted flags.
 | `machine rsh`, `machine exec`, `cluster rsh`, `cluster exec` | yes | yes | yes | yes | no | no |
 | `machine cp` | yes | yes | yes | no | no | no |
 | `machine enroll` | yes | yes | no | no | no | no |
-| `install`, `uninstall`, `rebind-host`, `catalog` and `context` (all subcommands), `help`, `completion`, `version`, `sbom`, `explain` | no | no | no | no | no | no |
+| `uninstall`, `rebind-host`, `catalog` and `context` (all subcommands), `help`, `completion`, `version`, `sbom`, `explain` | no | no | no | no | no | no |
 | every other command | yes | no | no | no | no | no |
 
+`install` accepts `--context` only with `--check`.
 A command resolves a taken global value only when its use case consumes it. An
 unused value grants no authority, performs no discovery or prompt, and changes
 no result; its syntax and context-independent safety checks still apply.

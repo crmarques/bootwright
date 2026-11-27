@@ -196,7 +196,7 @@ func (r *Runner) writeSelectedHelp(command *cobra.Command) error {
 	command.Flags().AddFlagSet(command.InheritedFlags())
 	command.Flags().VisitAll(func(flag *pflag.Flag) {
 		if !flag.Hidden && acceptsFlag(command.Annotations, flag.Name) {
-			description := flag.Usage
+			description := flagHelp(command, flag)
 			shown.Flags = append(shown.Flags, helpFlagPresentation{Name: flag.Name, Shorthand: flag.Shorthand, Type: flag.Value.Type(), Default: escapeDisplayLine(flag.DefValue), Description: escapeDisplayLine(description)})
 		}
 	})

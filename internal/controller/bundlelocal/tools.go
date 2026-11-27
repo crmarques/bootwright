@@ -8,7 +8,6 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
-	"path"
 	"slices"
 	"strings"
 	"time"
@@ -80,32 +79,16 @@ func (c *ToolCatalog) Select(requests []evidence.ToolRequest, retained []prerequ
 // and each published member by existence. It opens no file and runs no tool,
 // so proving a prepared host costs one directory walk.
 func (c *ToolCatalog) Present(ctx context.Context, area prerequisites.BundleArea, tools []prerequisites.ToolDefinition) (bool, error) {
-	if len(tools) == 0 {
-		return true, nil
+	if len(tools) == 0 || area == nil {
+		return len(tools) == 0, nil
 	}
-	if area == nil {
-		return false, nil
-	}
-	listed, err := area.Entries(ctx)
+	files, err := prerequisites.ToolFilePresence(ctx, area, tools)
 	if err != nil {
 		return false, err
 	}
-	entries := make(map[string]prerequisites.BundleEntry, len(listed))
-	for _, entry := range listed {
-		entries[entry.Path] = entry
-	}
-	present := func(name string, size int64) bool {
-		entry, found := entries[name]
-		return found && !entry.Directory && (size < 0 || entry.Size == size)
-	}
-	for _, tool := range tools {
-		if !present(sourcePath(tool.Source), tool.Source.Bytes) {
+	for _, observed := range files {
+		if observed != "" {
 			return false, nil
-		}
-		for _, file := range tool.Files {
-			if !present(file.Path, -1) {
-				return false, nil
-			}
 		}
 	}
 	return true, nil
@@ -266,19 +249,9 @@ func toolDefinition(request evidence.ToolRequest, version string, source prerequ
 	if source.ID != toolSourcePrefix(request)+version || !approvedURL || decodeErr != nil || len(digest) != sha256.Size || hex.EncodeToString(digest) != source.SHA256 || source.Bytes <= 0 || source.Bytes > maxToolSourceBytes {
 		return prerequisites.ToolDefinition{}, bundleFailure("tool source does not match its frozen publisher identity and bounds")
 	}
-	definition := prerequisites.ToolDefinition{Kind: request.Kind, Version: version, Compatibility: request.Compatibility, Source: source, Archive: "tar.gz", Files: []prerequisites.ToolFile{}}
-	prefix := path.Join("tools", request.Kind, request.Compatibility, version)
-	members := []string{request.Kind}
-	switch request.Kind {
-	case "helm":
-		members = []string{"linux-amd64/helm"}
-	case "openshift-clients":
-		members = []string{"oc", "kubectl"}
-	case "virtctl", "kubectl":
+	definition := prerequisites.ToolDefinition{Kind: request.Kind, Version: version, Compatibility: request.Compatibility, Source: source, Archive: "tar.gz", Files: prerequisites.ToolFiles(request)}
+	if request.Kind == "virtctl" || request.Kind == "kubectl" {
 		definition.Archive = "binary"
-	}
-	for _, member := range members {
-		definition.Files = append(definition.Files, prerequisites.ToolFile{Member: member, Path: path.Join(prefix, path.Base(member))})
 	}
 	return definition, nil
 }
@@ -445,8 +418,6 @@ func toolChecksum(data []byte, filename string) (string, error) {
 	}
 	return result, nil
 }
-
-func sourcePath(source prerequisites.DependencySource) string { return path.Join("sources", source.ID) }
 
 func PublisherURL(pin tooltable.Pin) (string, error) {
 	request := evidence.ToolRequest{Kind: pin.Kind, Version: withV(pin.Default.Version)}

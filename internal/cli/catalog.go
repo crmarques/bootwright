@@ -27,6 +27,7 @@ type commandSpec struct {
 	session          bool
 	example          string
 	contextFree      bool
+	contextHelp      string
 	sshFlags         []string
 	presentation     bool
 	helpCommand      bool

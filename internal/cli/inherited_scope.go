@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 const (
@@ -37,4 +38,13 @@ func acceptsFlag(commandAnnotations map[string]string, name string) bool {
 		return !scoped || slices.Contains(strings.Split(flags, ","), name)
 	}
 	return true
+}
+
+func flagHelp(command *cobra.Command, flag *pflag.Flag) string {
+	if flag.Name == "context" {
+		if usage := specFor(command.Annotations["bootwright.command"]).contextHelp; usage != "" {
+			return usage
+		}
+	}
+	return flag.Usage
 }

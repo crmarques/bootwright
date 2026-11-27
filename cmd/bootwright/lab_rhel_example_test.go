@@ -558,6 +558,24 @@ func TestLabRHELExampleContextAndControllerPreparationJourney(t *testing.T) {
 	if !strings.Contains(diagnostics, "context") {
 		t.Fatal("unknown explicit context was not refused", diagnostics)
 	}
+	check, diagnostics := contextRun(t, services, 1, "install", "--check", "--context", "lab-rhel", "--output", "json")
+	var readiness struct {
+		Result struct {
+			Context string
+			Machine string
+			Next    string
+			Outcome string
+		}
+	}
+	if err := json.Unmarshal([]byte(check), &readiness); err != nil || diagnostics != "" || readiness.Result.Context != "lab-rhel" ||
+		readiness.Result.Machine == "" || readiness.Result.Next != "bootwright install" || readiness.Result.Outcome != "not-ready" {
+		t.Fatalf("context installation check = %s (%s), decode error: %v", check, diagnostics, err)
+	}
+	contextRun(t, services, 0, "context", "init", "--name", "empty")
+	_, diagnostics = contextRun(t, services, 1, "install", "--check", "--context", "empty")
+	if !strings.Contains(diagnostics, "context.input") || !strings.Contains(diagnostics, "bootwright context update --name empty") {
+		t.Fatalf("empty context installation check = %s", diagnostics)
+	}
 	if ports.effects != 0 {
 		t.Fatalf("dry-run and preflight performed %d setup effects", ports.effects)
 	}

@@ -1,0 +1,36 @@
+schemaVersion: "v1alpha1"
+command: "install"
+ok: false
+exitCode: 1
+result:
+  context: "lab"
+  machine: "controller"
+  tools:
+    - executable: "helm"
+      version: "v4.2.3"
+      selectedBy:
+        - "OpenShiftCluster/cluster"
+      status: "ready"
+      observed: "present in the managed tool area"
+    - executable: "oc"
+      version: "4.21.15"
+      compatibility: "openshift"
+      selectedBy:
+        - "OpenShiftCluster/cluster"
+      status: "not-ready"
+      observed: "managed executable missing"
+  outcome: "not-ready"
+  platform: "fedora 43/amd64"
+  checks:
+    - id: "python-runtime"
+      required: "qualified Python and Ansible"
+      observed: "qualified"
+      status: "ready"
+      scope: ""
+  next: "bootwright apply --stage controller --context lab"
+diagnostics:
+  - severity: "error"
+    code: "preflight.failed"
+    message: "required controller prerequisites are not ready"
+    remediation: "run bootwright apply --stage controller --context lab"
+logs: []

@@ -25,9 +25,8 @@ func TestAReadyControllerCheckNamesContextInit(t *testing.T) {
 	}
 }
 
-// The controller check is context-free: it accepts no --context, so the
-// readiness of a context is asked of preflight --stage controller instead.
-func TestControllerCheckRefusesContext(t *testing.T) {
+// The setup preview covers the shared host installation.
+func TestControllerSetupPreviewRefusesContext(t *testing.T) {
 	record := &dispatchRecord{}
 	var out, errOut bytes.Buffer
 	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"install", "--dry-run", "--context", "lab"})

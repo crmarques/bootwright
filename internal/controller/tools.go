@@ -19,6 +19,18 @@ func SelectTools(catalog api.Catalog) ([]evidence.ToolRequest, error) {
 }
 
 func SelectToolsWithRegistry(catalog api.Catalog, registry addons.Registry) ([]evidence.ToolRequest, error) {
+	return selectTools(catalog, registry, nil)
+}
+
+// SelectToolsWithConsumers also names the effective objects that require each
+// exact tool request, in canonical order.
+func SelectToolsWithConsumers(catalog api.Catalog) ([]evidence.ToolRequest, map[evidence.ToolRequest][]string, error) {
+	consumers := map[evidence.ToolRequest][]string{}
+	requests, err := selectTools(catalog, addonpackages.Builtin(), consumers)
+	return requests, consumers, err
+}
+
+func selectTools(catalog api.Catalog, registry addons.Registry, consumers map[evidence.ToolRequest][]string) ([]evidence.ToolRequest, error) {
 	environments := catalog.OfKind(api.Environment)
 	if len(environments) != 1 {
 		return nil, selectionFailure(api.Object{}, "api.invariant", "", "tool selection requires exactly one effective Environment")
@@ -29,6 +41,13 @@ func SelectToolsWithRegistry(catalog api.Catalog, registry addons.Registry) ([]e
 	}
 	virtctl := tooltable.VirtctlRequest(versions)
 	result := []evidence.ToolRequest{}
+	selectedBy := map[evidence.ToolRequest][]string{}
+	require := func(request evidence.ToolRequest, consumer string) {
+		result = append(result, request)
+		if consumers != nil {
+			selectedBy[request] = append(selectedBy[request], consumer)
+		}
+	}
 	for _, cluster := range catalog.OfCategory(api.ContainerClusterCategory) {
 		facts, _ := containercluster.FactsOf(cluster.Kind())
 		tools, refused := facts.ControllerTools(cluster)
@@ -40,7 +59,7 @@ func SelectToolsWithRegistry(catalog api.Catalog, registry addons.Registry) ([]e
 			if version == "" {
 				version = versions[tool.Kind]
 			}
-			result = append(result, evidence.ToolRequest{Kind: tool.Kind, Version: version, Compatibility: tool.Compatibility})
+			require(evidence.ToolRequest{Kind: tool.Kind, Version: version, Compatibility: tool.Compatibility}, string(cluster.Kind())+"/"+cluster.Name())
 		}
 	}
 	for _, binding := range catalog.OfKind(api.ClusterAddonBinding) {
@@ -52,7 +71,7 @@ func SelectToolsWithRegistry(catalog api.Catalog, registry addons.Registry) ([]e
 			if !addons.Provides(addon, "kubevirt") {
 				continue
 			}
-			result = append(result, virtctl)
+			require(virtctl, "ClusterAddonBinding/"+binding.Name())
 		}
 	}
 	instances, issues := addons.Instances(catalog, registry)
@@ -61,7 +80,7 @@ func SelectToolsWithRegistry(catalog api.Catalog, registry addons.Registry) ([]e
 	}
 	for _, instance := range instances {
 		if slices.Contains(instance.Package.Provides, "kubevirt") {
-			result = append(result, virtctl)
+			require(virtctl, "ClusterAddonBinding/"+instance.Instance.Binding)
 		}
 	}
 	providers := map[string]bool{}
@@ -76,17 +95,25 @@ func SelectToolsWithRegistry(catalog api.Catalog, registry addons.Registry) ([]e
 		}
 		for _, tool := range substrate.ProviderTools(provider) {
 			if tool == virtctl.Kind {
-				result = append(result, virtctl)
+				require(virtctl, "InfraProvider/"+provider.Name())
 			} else {
-				result = append(result, evidence.ToolRequest{Kind: tool, Version: versions[tool]})
+				require(evidence.ToolRequest{Kind: tool, Version: versions[tool]}, "InfraProvider/"+provider.Name())
 			}
 		}
 	}
-	for index := range result {
-		result[index] = tooltable.Mirrored(catalog, result[index])
+	for index, request := range result {
+		result[index] = tooltable.Mirrored(catalog, request)
 		if result[index], err = tooltable.Pinned(result[index]); err != nil {
 			return nil, selectionFailure(environments[0], "controller.state", "", err.Error())
 		}
+		if consumers != nil {
+			consumers[result[index]] = append(consumers[result[index]], selectedBy[request]...)
+			delete(selectedBy, request)
+		}
+	}
+	for request, names := range consumers {
+		slices.Sort(names)
+		consumers[request] = slices.Compact(names)
 	}
 	slices.SortFunc(result, evidence.CompareToolRequests)
 	result = slices.Compact(result)

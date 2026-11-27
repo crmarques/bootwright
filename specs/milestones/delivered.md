@@ -18963,3 +18963,12 @@ guessing its cache path. A fresh cache reproduces the old failure even after
 the interpreter is prepared. The affected tests run with the lock-keyed
 environment and no legacy virtualenv. The delivering commit records the
 local checks and the GitHub run verifies the clean-runner case.
+
+## X777 — Context installation readiness
+
+**Item:** B1903 (product). **Owner:** Controller and CLI.
+**Authority:** the owner's request to implement the contextual installation
+check.
+
+The [setup flow](../controller.md#the-setup-flow) owns the check. The
+delivering commit records the in-tree gates and their results.

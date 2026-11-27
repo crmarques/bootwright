@@ -6,6 +6,7 @@ type CheckRequest struct {
 	ContextName   string
 	SkipListeners bool
 	Quiet         bool
+	installation  bool
 }
 
 // SetupRequest carries no context. Setup prepares the prerequisites every
@@ -52,6 +53,16 @@ func (c Check) Summary() string {
 	return "required " + c.Required + "; observed " + c.Observed
 }
 
+// ToolCheck is a local finding for one exact managed executable.
+type ToolCheck struct {
+	Executable    string
+	Version       string
+	Compatibility string
+	SelectedBy    []string
+	Status        string
+	Observed      string
+}
+
 type Report struct {
 	ContextName string
 	Machine     string
@@ -62,6 +73,7 @@ type Report struct {
 	DryRun   bool
 	Outcome  string
 	Checks   []Check
+	Tools    []ToolCheck
 	Actions  []string
 	// Dependencies names the host package requirements the plan installs.
 	Dependencies []string

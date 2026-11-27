@@ -27,6 +27,9 @@ type controllerPresentation struct {
 func (controllerPresentation) documentedResult() {}
 
 type installCheckResult struct {
+	Context  string                        `json:"context,omitempty"`
+	Machine  string                        `json:"machine,omitempty"`
+	Tools    []toolCheckPresentation       `json:"tools,omitempty"`
 	Outcome  string                        `json:"outcome"`
 	Platform string                        `json:"platform"`
 	Checks   []controllerCheckPresentation `json:"checks"`
@@ -34,6 +37,15 @@ type installCheckResult struct {
 }
 
 func (installCheckResult) documentedResult() {}
+
+type toolCheckPresentation struct {
+	Executable    string   `json:"executable"`
+	Version       string   `json:"version"`
+	Compatibility string   `json:"compatibility,omitempty"`
+	SelectedBy    []string `json:"selectedBy"`
+	Status        string   `json:"status"`
+	Observed      string   `json:"observed"`
+}
 
 type controllerCheckPresentation struct {
 	ID       string `json:"id"`
@@ -88,7 +100,15 @@ func writeStructuredController(out io.Writer, path string, report *prerequisites
 	var result jsonResult
 	switch {
 	case check:
-		result = installCheckResult{Outcome: escapeDisplayLine(report.Outcome), Platform: controllerPlatform(report), Checks: displayControllerChecks(report), Next: escapeDisplayLine(report.Next)}
+		checkResult := installCheckResult{Context: escapeDisplayLine(report.ContextName), Machine: escapeDisplayLine(report.Machine), Outcome: escapeDisplayLine(report.Outcome), Platform: controllerPlatform(report), Checks: displayControllerChecks(report), Next: escapeDisplayLine(report.Next)}
+		for _, tool := range report.Tools {
+			checkResult.Tools = append(checkResult.Tools, toolCheckPresentation{
+				Executable: escapeDisplayLine(tool.Executable), Version: escapeDisplayLine(tool.Version),
+				Compatibility: escapeDisplayLine(tool.Compatibility), SelectedBy: displayLines(tool.SelectedBy),
+				Status: escapeDisplayLine(tool.Status), Observed: escapeDisplayLine(tool.Observed),
+			})
+		}
+		result = checkResult
 	case report.DryRun:
 		result = displaySetupPlan(report)
 	default:

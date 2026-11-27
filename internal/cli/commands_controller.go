@@ -11,21 +11,25 @@ func controllerSetupCommand() commandSpec {
 	return available(commandSpec{
 		path: "install", results: []jsonResult{controllerPresentation{}, setupPlanResult{}, installCheckResult{}},
 		render: renderController(), controllerReport: true, validate: validateInstall, classify: classifyRules{ambient: installAmbient},
-		example: "--dry-run", contextFree: true, invoke: Services.invokeControllerInstall,
+		example: "--check --context lab", contextHelp: "Check the named context (requires --check, default: host baseline)", invoke: Services.invokeControllerInstall,
 		short: "Install context-independent controller prerequisites",
 		flags: []flagSpec{
 			boolFlag("dry-run", "Show what install would change without running dnf"),
 			boolFlag("check", "Verify the existing installation and exit 1 if it is not ready"),
 			confirmationFlag(),
 		},
-		long: "Prepare this host's baseline packages and controller Python runtime from the locked wheels carried by this build. This command selects no context. Use --dry-run to show the planned changes, with the locked wheel inventory in JSON or YAML. Use --check to verify host readiness, including the packages, runtime, setup receipt and state root. Both flags use local reads only. A ready host needs no setup. When installation is needed, install shows dnf's own preview before confirmation. --yes skips ordinary confirmation during execution.",
+		long: "Prepare this host's baseline packages and controller Python runtime from the locked wheels carried by this build. Use --dry-run to show the planned changes, with the locked wheel inventory in JSON or YAML. Use --check to verify the packages, runtime, setup receipt and state root. Add --context to --check to verify the selected context’s managed tools and host packages as well. Without an explicit context, the check covers the baseline. Both modes use local reads only. A ready host needs no setup. When installation is needed, install shows dnf's own preview before confirmation. --yes skips ordinary confirmation during execution.",
 	})
 }
 
 func validateInstall(command *cobra.Command) string {
 	flags := command.Flags()
-	if dryRunSelected(flags) && boolValue(flags, "check") {
+	check := boolValue(flags, "check")
+	if dryRunSelected(flags) && check {
 		return "--dry-run conflicts with --check"
+	}
+	if flags.Changed("context") && !check {
+		return "--context requires --check"
 	}
 	return ""
 }
@@ -50,7 +54,7 @@ func controllerUninstallCommand() commandSpec {
 }
 
 type ControllerService interface {
-	CheckHost(context.Context) (*prerequisites.Report, error)
+	CheckInstallation(context.Context, string) (*prerequisites.Report, error)
 	Setup(context.Context, prerequisites.SetupRequest) (*prerequisites.Report, error)
 	Rebind(context.Context, prerequisites.RebindRequest) (*prerequisites.RebindResult, error)
 	Uninstall(context.Context, prerequisites.UninstallRequest) (*prerequisites.UninstallResult, error)
@@ -61,7 +65,7 @@ func (s Services) invokeControllerInstall(ctx context.Context, values *requestVa
 		return commandResult{}, errMissingService
 	}
 	if values.boolean("check") {
-		result, err := s.Controller.CheckHost(ctx)
+		result, err := s.Controller.CheckInstallation(ctx, values.text("context"))
 		return commandResult{controller: result}, err
 	}
 	result, err := invokeResult(ctx, values, prerequisites.SetupRequest{

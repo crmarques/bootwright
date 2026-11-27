@@ -489,9 +489,10 @@ never verifies the invoking host.
 
 `install` and its dry run follow the
 [Controller journeys](controller.md#the-setup-flow), including
-preparation before context creation or Environment import; neither selects a
-context. `apply --dry-run --stage controller` checks what a context's controller
-stage adds. Which invocations read the invoking environment's proxy route is
+preparation before context creation or Environment import. The setup flow also
+owns the explicit context selection of `install --check`.
+`apply --dry-run --stage controller` previews the controller stage’s work.
+Which invocations read the invoking environment's proxy route is
 owned by the [context-free acquisition route](controller.md#the-context-free-acquisition-route).
 Controller selection alone does not cause setup, install a container runtime or
 start services.

@@ -141,7 +141,7 @@ func (i inspection) planDigest(lock RuntimeLock) string {
 func (s Service) execute(ctx context.Context, approved inspection) (*Report, error) {
 	current := approved
 	err := s.ports.Setup.MutateSetup(ctx, func(tx SetupTransaction) error {
-		fresh, err := s.inspect(ctx, tx.View(), StorageView{}, "", true)
+		fresh, err := s.inspect(ctx, tx.View(), StorageView{}, "", true, false)
 		if err != nil {
 			return err
 		}

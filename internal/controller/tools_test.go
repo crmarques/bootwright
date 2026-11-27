@@ -71,6 +71,41 @@ func TestTargetToolsFollowExactSelectedReleaseAndTheBuildsDefault(t *testing.T) 
 	}
 }
 
+func TestToolConsumersPreserveTheExactClosureAcrossReleases(t *testing.T) {
+	objects := selectionObjects()
+	for _, name := range []string{"zeta", "alpha", "later"} {
+		version := "4.21.15"
+		if name == "later" {
+			version = "4.21.16"
+		}
+		spec := api.MapValue().
+			WithPath(api.StringValue("openshift"), "distribution", "type").
+			WithPath(api.StringValue(version), "distribution", "release", "version")
+		objects = append(objects, api.NewObject(api.OpenShiftCluster, name, api.Value{}, spec))
+	}
+	catalog := api.NewCatalog(objects)
+	want, err := controller.SelectTools(catalog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tools, consumers, err := controller.SelectToolsWithConsumers(catalog)
+	if err != nil || !slices.Equal(tools, want) || len(consumers) != len(want) {
+		t.Fatalf("provenance changed the closure: %v, %v, %v", tools, consumers, err)
+	}
+	for _, tool := range tools {
+		want := []string{"OpenShiftCluster/alpha", "OpenShiftCluster/zeta"}
+		switch {
+		case tool.Kind == "helm":
+			want = []string{"OpenShiftCluster/alpha", "OpenShiftCluster/later", "OpenShiftCluster/zeta"}
+		case tool.Version == "4.21.16":
+			want = []string{"OpenShiftCluster/later"}
+		}
+		if got := consumers[tool]; !slices.Equal(got, want) {
+			t.Fatalf("%s %s selected by %v, want %v", tool.Kind, tool.Version, got, want)
+		}
+	}
+}
+
 func TestTargetToolsRefuseImageVersionAssumptions(t *testing.T) {
 	objects := selectionObjects()
 	cluster := api.NewObject(api.OpenShiftCluster, "cluster", api.Value{}, api.MapValue().WithPath(api.StringValue("openshift"), "distribution", "type").WithPath(api.StringValue("quay.io/example/release@sha256:abc"), "distribution", "release", "image"))

@@ -660,6 +660,10 @@ func cliGoldens() []cliGolden {
 			}
 			r.err = diagnostics.NewFailureWithRemediation("preflight.failed", "required host prerequisites are not ready", "", "run bootwright install")
 		}},
+		{golden: "cli-context-install-check", args: "install --check --context lab", code: 1, record: contextInstallCheckGolden,
+			stderr: "  error  preflight.failed\n    required controller prerequisites are not ready\n    Next: run bootwright apply --stage controller --context lab\n"},
+		{golden: "cli-context-install-check-json", args: "install --check --context lab --output json", code: 1, record: contextInstallCheckGolden},
+		{golden: "cli-context-install-check-yaml", args: "install --check --context lab --output yaml", code: 1, record: contextInstallCheckGolden},
 		{golden: "cli-setup-changed", args: "install --yes", record: func(r *dispatchRecord) {
 			r.result.controller = &prerequisites.Report{
 				Platform: platform, Route: "direct", Outcome: "changed", PlanPresented: true,

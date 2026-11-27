@@ -470,6 +470,19 @@ func writeInstallCheck(out, errOut io.Writer, report *prerequisites.Report) erro
 	text.headline("", "Controller readiness")
 	controllerScopeText(&text, report)
 	controllerChecksText(&text, report, false)
+	if len(report.Tools) != 0 {
+		rows := make([][]string, 0, len(report.Tools))
+		for _, tool := range report.Tools {
+			requirement := tool.Executable + " " + tool.Version
+			if tool.Compatibility != "" {
+				requirement += " (" + tool.Compatibility + ")"
+			}
+			detail := tool.Observed + ". Selected by " + strings.Join(tool.SelectedBy, ", ")
+			rows = append(rows, []string{checkToken(tool.Status), requirement, detail})
+		}
+		text.section("Managed tools")
+		text.stateRows(rows, 0)
+	}
 	text.section("")
 	text.fields(controllerOutcomeFields("install", report)...)
 	return text.writeTo(out)
@@ -519,6 +532,9 @@ func displaySetupPlan(report *prerequisites.Report) setupPlanResult {
 func controllerChecksText(text *display, report *prerequisites.Report, table bool) {
 	rows := make([][]string, 0, len(report.Checks))
 	for _, check := range report.Checks {
+		if check.ID == "target-tools" && len(report.Tools) != 0 {
+			continue
+		}
 		if !table || check.Scope == prerequisites.ContextScope || check.Status != "ready" {
 			rows = append(rows, []string{checkToken(check.Status), controllerActionLabel(check.ID), check.Summary()})
 		}

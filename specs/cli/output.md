@@ -331,7 +331,7 @@ and their output goldens:
 | `diff` | `context`, `operation`, `input`, optional `adds`, `plan`, `observed`, `blocks`, `objects`, `files`, `summary`, optional `outdatedClients` |
 | `explain` | `stops` |
 | `help` | `command`, `usage`, `description`, `commands`, `flags` |
-| `install` | optional `context`, optional `machine`, optional `route`, optional `dryRun`, `outcome`, `platform`, optional `checks`, optional `actions`, optional `requirements`, optional `files`, optional `preview`, optional `progress`, optional `receipt`, optional `next` |
+| `install` | optional `context`, optional `machine`, optional `route`, optional `dryRun`, `outcome`, `platform`, optional `checks`, optional `actions`, optional `requirements`, optional `files`, optional `preview`, optional `progress`, optional `receipt`, optional `next`, optional `tools` |
 | `logs` | optional `context`, optional `operation`, optional `verb`, optional `state`, optional `events`, optional `source`, optional `path`, optional `bytes`, optional `truncated`, optional `output` |
 | `machine check` | `context`, `machine`, `checks` |
 | `machine cp` | `context`, `source`, `machines` |
@@ -1456,7 +1456,7 @@ mechanics.
 
 ### Setup run output
 
-Local `install` registers no lifecycle operation and selects no context, so the
+An executing `install` registers no lifecycle operation and selects no context, so the
 dnf it runs has neither an attempt log nor a context's run area to sit beside.
 A confirmed setup first creates an output of its own in the log root's `controller/`
 directory and keeps exactly one file there:
