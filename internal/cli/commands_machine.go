@@ -16,6 +16,12 @@ func machineCommands() []commandSpec {
 	discoveryStage.help = "Select controller and infrastructure prerequisites for discovery"
 	return []commandSpec{
 		machineEnrollCommand(),
+		available(commandSpec{
+			path: "machine check", short: "Check one physical machine through its BMC", example: "--context lab --name node",
+			flags: []flagSpec{nameFlag()}, invoke: Services.invokeMachineCheck, validate: validateMachineCheck,
+			render: renderMachineCheck(), results: []jsonResult{machineCheckPresentation{}},
+			long: "Read the selected physical machine through verified Redfish. Report identity, power, virtual media, firmware and direct disk inventory. Results describe observations. Active boot and cleanup require an isolated rehearsal.",
+		}),
 		available(commandSpec{path: "machine discover", lifecycleLabel: "Discovery", results: []jsonResult{planPresentation{}, machineDiscoveryPresentation{}}, render: renderMachineDiscovery(), operation: true, validate: validateMachineNames, example: "--context lab --name node --stage controller --dry-run", invoke: Services.invokeMachineDiscovery, short: "Inventory physical root disks through a temporary RAM boot", long: "Record the disk identities of the selected powered-off physical machines: from the BMC drive inventory when it is complete, otherwise by booting inventory-only RHEL media and powering off. --name takes a comma-separated list. --dry-run previews without effects. --stage controller also includes controller and infrastructure setup, then collects inventory. Use the same names and --stage controller to finish a paused automatic discovery without installing. Read the saved facts with machine inventory. Discovery never installs an OS or creates RAID volumes.", flags: []flagSpec{machineNamesFlag(), boolFlag("dry-run", "Preview the discovery plan without booting a machine"), discoveryStage, confirmationFlag()}}),
 		available(commandSpec{
 			path: "machine inventory", results: []jsonResult{diskInventoriesPresentation{}}, render: renderDiskInventory(),
@@ -104,6 +110,7 @@ type MachineAccessService interface {
 }
 
 type MachinePowerService interface {
+	Check(context.Context, power.CheckRequest) (*power.CheckResult, error)
 	Start(context.Context, power.PowerRequest) (*power.Results, error)
 	Stop(context.Context, power.PowerRequest) (*power.Results, error)
 	Restart(context.Context, power.PowerRequest) (*power.Results, error)
@@ -208,4 +215,13 @@ func (s Services) invokeMachineMediaStatus(ctx context.Context, values *requestV
 	request := power.MediaStatusRequest{ContextName: values.text("context"), Names: values.names("name")}
 	result, err := invokeResult(ctx, values, request, s.MachinePower.MediaStatus)
 	return commandResult{mediaStatus: result}, err
+}
+
+func (s Services) invokeMachineCheck(ctx context.Context, values *requestValues, _ []string) (commandResult, error) {
+	if s.MachinePower == nil {
+		return commandResult{}, errMissingService
+	}
+	request := power.CheckRequest{ContextName: values.text("context"), Name: values.text("name")}
+	result, err := invokeResult(ctx, values, request, s.MachinePower.Check)
+	return commandResult{machineCheck: result}, err
 }

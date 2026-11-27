@@ -671,7 +671,7 @@ def test_partial_virtual_media_collection_does_not_prove_absence(monkeypatch):
         redfish_system_read.read(connect(monkeypatch, firmware), True)
 
 
-@pytest.mark.parametrize("operation", ["eject", "boot"])
+@pytest.mark.parametrize("operation", ["insert", "eject", "boot", "power-on"])
 def test_changed_physical_pin_refuses_late_mutations(monkeypatch, operation):
     firmware = manager_scoped()
     module = Module({"endpoint": firmware.endpoint, "user": "operator", "password": PASSWORD,
@@ -2483,3 +2483,82 @@ def test_import_with_setup_disabled_requires_verification_before_any_write(monke
         run(monkeypatch, firmware, "insert", image=IMAGE, trust="importCertificate",
             certificate=SERVER, private_delivery=private, enable_verification=False)
     assert writes(firmware) == []
+
+
+@pytest.mark.parametrize("matching", [True, False])
+def test_hardware_check_reads_only_and_stops_after_a_target_mismatch(monkeypatch, matching):
+    from ansible_collections.bootwright.core.plugins.module_utils import redfish_hardware_check
+
+    firmware = emulator()
+    macs = ["52:54:00:aa:bb:01"] if matching else ["02:00:00:00:00:ff"]
+    rows = redfish_hardware_check.inspect(connect(monkeypatch, firmware), {"expected": macs})
+    assert rows[0]["status"] == "observed"
+    assert rows[1]["status"] == ("observed" if matching else "mismatch")
+    assert rows[3]["status"] == ("observed" if matching else "unknown")
+    assert rows[-1]["status"] == "requires-exercise"
+    assert not writes(firmware)
+    if not matching:
+        assert not any("/VirtualMedia" in call[1] or "/Storage" in call[1] for call in firmware.calls)
+
+
+def test_physical_attach_reproves_power_after_the_initial_read(monkeypatch):
+    firmware = emulator()
+    client = connect(monkeypatch, firmware)
+    client.write_proof = (["52:54:00:aa:bb:01"], "", "", True)
+    firmware.power = "Off"
+    client.prove_write(*client.write_proof)
+    firmware.power = "On"
+    with pytest.raises(ControllerError, match="did not report powered off"):
+        client.insert(IMAGE)
+    assert not writes(firmware)
+
+
+def test_inspection_does_not_read_a_different_system(monkeypatch):
+    from ansible_collections.bootwright.core.plugins.module_utils import redfish_hardware_check
+
+    firmware = emulator()
+    monkeypatch.setattr(redfish_control, "_opener", firmware.opener)
+    client = redfish_hardware_check.InspectionClient(firmware.endpoint, "operator", PASSWORD)
+    original = firmware.resources[firmware.system]
+    firmware.resources[firmware.system] = lambda f: dict(
+        original(f), EthernetInterfaces={"@odata.id": "/redfish/v1/Systems/other/EthernetInterfaces"})
+    rows = redfish_hardware_check.inspect(client, {"expected": ["52:54:00:aa:bb:01"]})
+    assert rows[1]["status"] == "unknown"
+    assert not any("/Systems/other" in call[1] for call in firmware.calls)
+    assert not writes(firmware)
+
+
+def test_guarded_reset_refuses_an_action_for_another_system(monkeypatch):
+    firmware = emulator()
+    original = firmware.resources[firmware.system]
+
+    def other_reset(current):
+        system = original(current)
+        system["Actions"]["#ComputerSystem.Reset"]["target"] = "/redfish/v1/Systems/other/Actions/ComputerSystem.Reset"
+        return system
+
+    firmware.resources[firmware.system] = other_reset
+    client = connect(monkeypatch, firmware)
+    client.write_proof = (["52:54:00:aa:bb:01"], "", "", True)
+    firmware.power = "Off"
+    with pytest.raises(ControllerError, match="another ComputerSystem"):
+        client.power("On", "On")
+    assert not writes(firmware)
+
+
+def test_unpinned_physical_boot_reads_power_after_interface_inventory(monkeypatch):
+    firmware = emulator()
+    nic = firmware.system + "/EthernetInterfaces/52:54:00:aa:bb:01"
+    original = firmware.resources[nic]
+
+    def power_changes(current):
+        current.power = "On"
+        return original
+
+    firmware.resources[nic] = power_changes
+    firmware.power = "Off"
+    client = connect(monkeypatch, firmware)
+    client.write_proof = (["52:54:00:aa:bb:01"], "", "", True)
+    with pytest.raises(ControllerError, match="did not report powered off"):
+        client.boot_once("Hdd")
+    assert not writes(firmware)

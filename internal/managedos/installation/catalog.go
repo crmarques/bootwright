@@ -154,7 +154,7 @@ func ContentDigest() string {
 		"bootwright.managedos.install-anaconda-v1",
 		Implementation, requestVersion, kickstartVersion,
 		consumerPrefix, privatePrefix, servedRoot, MarkerPath, HostKeyPath,
-		NetworkDocumentPath, NetworkMarkerPath, strconv.Itoa(networkCheckpointSeconds), provedDiskBoot, substrate.RedfishMediaPolicy,
+		NetworkDocumentPath, NetworkMarkerPath, strconv.Itoa(networkCheckpointSeconds), provedDiskBoot, substrate.RedfishMediaPolicy, substrate.PhysicalBootProof,
 		"anaconda-home-partition-policy", "subscription-package-source", "explicit-repository-proxy-policy",
 		"power-cycled-guest-removal",
 	)

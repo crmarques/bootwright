@@ -117,6 +117,12 @@ def completion(arguments):
     publishes only the state it asked for, observed or not, because a request
     is not evidence.
     """
+    if "hardware_checks" in arguments:
+        return {
+            "request": adapter_protocol.request_digest(arguments.get("digest")),
+            "machine": arguments.get("machine"),
+            "checks": arguments["hardware_checks"],
+        }, None
     if "readings" in arguments:
         return reading_evidence_for(arguments), None
     evidence = evidence_for(arguments)

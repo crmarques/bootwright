@@ -31,6 +31,9 @@ options:
     description: The operation's material, by variable name.
     type: dict
     required: true
+  hardware:
+    description: Frozen physical hardware carrying declared interfaces for target proof.
+    type: dict
 author:
   - Bootwright contributors (@crmarques)
 """
@@ -55,7 +58,7 @@ def _named(material, port, key):
     return material[name]
 
 
-def machine_port_access(port, material):
+def machine_port_access(port, material, hardware=None):
     if not isinstance(port, dict) or not isinstance(material, dict) or not port.get("userVariable"):
         raise AnsibleFilterError("the machine port names no material to reach its controller with")
     access = {
@@ -67,6 +70,8 @@ def machine_port_access(port, material):
         "pinned_uuid_base64": material.get(port.get("pinnedUUIDVariable") or "", ""),
         "pinned_serial_base64": material.get(port.get("pinnedSerialVariable") or "", ""),
     }
+    if hardware is not None:
+        access["prove_macs"] = [interface["macAddress"] for interface in hardware.get("interfaces", [])]
     if port.get("verification"):
         access["verification"] = port["verification"]
     if port.get("mediaVolume"):

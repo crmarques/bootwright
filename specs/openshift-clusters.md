@@ -216,8 +216,8 @@ work runs at a fan-out frozen per provider kind, four nodes at a time behind
 emulated BMCs and on KubeVirt Machines and sixteen behind physical ones, and a
 cluster takes the smallest fan-out among its nodes. Each round adds its arm's
 boot allowance to the boot budget and its round margin to the deadline: 600
-seconds and 11 minutes behind emulated BMCs, the physical arm's 30-minute
-allowance and its margin, and the KubeVirt arm's 2,400 seconds and 1,020
+seconds and 11 minutes behind emulated BMCs, the physical arm's published
+allowance and margin including write proofs, and the KubeVirt arm's 2,400 seconds and 1,020
 seconds. Each round that boots a node whose Machine declares `enforce`
 [firmware](substrates.md#physical-firmware) adds that arm's firmware bound to
 the boot budget, at most one per round. The runner holds the installation's

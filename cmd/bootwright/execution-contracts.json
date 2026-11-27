@@ -12,8 +12,8 @@
     "fingerprint": "594d12ee3dccd32471dc42909e74742bb2b3f491fe09c25c15cdede4e7dbd5b7"
   },
   "cluster-install-agent-v1": {
-    "contentDigest": "1b2d37b085b4269bf833072a5894f9358149fe8453e0d899f1d405ed1700dad8",
-    "fingerprint": "da5c256aaaa985aa6ca8480f8e59f1601fb68b2749265c0b0b1af13369a1f15a"
+    "contentDigest": "b382e1bc83ba4115037c7ff8c87677d3ab185e7cfe3faf99a16c37c146460020",
+    "fingerprint": "462068ea834d50b058b3184c83c024f7e483066de367555e47745ac216a0c08a"
   },
   "cluster-media-agent-v1": {
     "contentDigest": "059f49047ff8c53d12c11055fe66a6680fdc48a9941288e565e92cd278ab8c06",
@@ -84,8 +84,8 @@
     "fingerprint": "d1b0da961109bdb92c338ebf588965da768cc47ffb5c572e441d5c97c850e75b"
   },
   "os-install-anaconda-v1": {
-    "contentDigest": "aa6502872414cbb6385203565bca0b74aca545f8aa1b6b88053e5fd2fe6e610b",
-    "fingerprint": "69a66b35c229c71fc81e182163f7f895a89ea96c633c2c89adb4fdff51576b99"
+    "contentDigest": "b512d16f8c750fb6e2613338798ef3faf360575060eece9e97e0c5afa44b0a99",
+    "fingerprint": "1f0a452e2be30608254d5982599e9a109b974f7fe0eac435ba0727868fa42abb"
   },
   "os-package-tree-v1": {
     "contentDigest": "62218223d7cca3604594c231a1265d351e6c12e0e9d6d8b31f2f51086a839445",

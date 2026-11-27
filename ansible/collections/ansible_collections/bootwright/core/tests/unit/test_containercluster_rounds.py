@@ -107,7 +107,7 @@ def test_each_install_port_request_matches_the_selected_arm_entrypoint():
             if operation == 'media_insert':
                 assert request['private'] is True
                 assert request['enable_verification'] is (arm == 'baremetal')
-            if arm == 'baremetal' and operation in ('state_read', 'media_eject'):
+            if arm == 'baremetal':
                 assert request['prove_macs'] == ['02:00:00:00:00:01']
             else:
                 assert 'prove_macs' not in request

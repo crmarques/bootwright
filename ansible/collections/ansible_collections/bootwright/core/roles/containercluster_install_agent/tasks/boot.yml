@@ -225,7 +225,9 @@
           vars:
             bootwright_machine_arm: '{{ containercluster_install_agent_node.substrate }}'
             bootwright_machine_port: >-
-              {{ containercluster_install_agent_node.machinePort | bootwright.core.machine_port_access(bootwright_cluster_install_material)
+              {{ containercluster_install_agent_node.machinePort
+                 | bootwright.core.machine_port_access(bootwright_cluster_install_material,
+                     containercluster_install_agent_node.hardware if containercluster_install_agent_node.physical else none)
                  | combine({'installer_powers_off': false}) }}
 
       # A step the timeout stopped fails with ansible-core's own message, so the

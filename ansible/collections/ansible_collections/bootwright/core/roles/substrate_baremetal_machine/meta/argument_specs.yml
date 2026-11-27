@@ -84,6 +84,9 @@ argument_specs:
       bootwright_machine_port:
         type: dict
         options:
+          prove_macs:
+            type: list
+            elements: str
           endpoint:
             type: str
             required: true
@@ -163,6 +166,10 @@ argument_specs:
       bootwright_machine_port:
         type: dict
         options:
+          prove_macs:
+            type: list
+            elements: str
+            required: true
           pinned_uuid_base64:
             type: str
             required: false
@@ -238,6 +245,7 @@ argument_specs:
           prove_macs:
             type: list
             elements: str
+            required: true
           verify:
             type: bool
             required: true
@@ -349,6 +357,10 @@ argument_specs:
         type: dict
         required: true
         options:
+          prove_macs:
+            type: list
+            elements: str
+            required: true
           pinned_uuid_base64:
             type: str
             required: false
@@ -446,6 +458,9 @@ argument_specs:
         type: dict
         required: true
         options:
+          prove_macs:
+            type: list
+            elements: str
           endpoint:
             type: str
             required: true

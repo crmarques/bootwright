@@ -59,6 +59,7 @@ var cliResults = []reflect.Type{
 	reflect.TypeFor[machineListPresentation](),
 	reflect.TypeFor[machinePowerPresentation](),
 	reflect.TypeFor[machineMediaStatusPresentation](),
+	reflect.TypeFor[machineCheckPresentation](),
 	reflect.TypeFor[machineCopyPresentation](),
 	reflect.TypeFor[policySet](),
 	reflect.TypeFor[policyShown](),

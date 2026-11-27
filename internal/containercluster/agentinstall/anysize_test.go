@@ -122,15 +122,15 @@ func TestAnySizeProjectionGolden(t *testing.T) {
 
 func TestPhysicalRoundBudgetsAndMixedKinds(t *testing.T) {
 	// Four managers and eight candidate media devices bound the physical discovery.
-	// Two reads, eject with certificate restoration, and disk selection cost 42 minutes per round.
-	for _, test := range []struct{ nodes, boot, deadline int }{{16, 1800, 16920}, {32, 3600, 21240}, {33, 5400, 25560}} {
+	// The round accounts for reads, eject, disk selection, and physical write proofs.
+	for _, test := range []struct{ nodes, boot, deadline int }{{16, 2490, 18000}, {32, 4980, 23400}, {33, 7470, 28800}} {
 		budgets := installBudgets(test.nodes, nil, substrate.ArmBaremetal)
-		if budgets.FanOut != 16 || budgets.RoundMarginSeconds != 2520 || budgets.BootSeconds != test.boot || int(installDeadline(budgets, test.nodes).Seconds()) != test.deadline {
+		if budgets.FanOut != 16 || budgets.RoundMarginSeconds != 2910 || budgets.BootSeconds != test.boot || int(installDeadline(budgets, test.nodes).Seconds()) != test.deadline {
 			t.Fatalf("%d physical nodes: %+v, %s", test.nodes, budgets, installDeadline(budgets, test.nodes))
 		}
 	}
 	mixed := installBudgets(5, nil, substrate.ArmLibvirt, substrate.ArmBaremetal)
-	if mixed.FanOut != 4 || mixed.BootSeconds != 3600 || mixed.RoundMarginSeconds != 2520 {
+	if mixed.FanOut != 4 || mixed.BootSeconds != 4980 || mixed.RoundMarginSeconds != 2910 {
 		t.Fatalf("mixed kinds: %+v", mixed)
 	}
 	emulated := installBudgets(29, nil, substrate.ArmLibvirt)

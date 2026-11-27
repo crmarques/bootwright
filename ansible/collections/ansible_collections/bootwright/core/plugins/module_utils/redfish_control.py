@@ -31,11 +31,12 @@ from __future__ import annotations
 import base64
 import http.client
 import json
+import posixpath
 import ssl
 import time
 import urllib.error
 import urllib.request
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 from ansible_collections.bootwright.core.plugins.module_utils import machine_identity, redfish_discovery, redfish_remote_ca, transport_faults, tls_trust
 from ansible_collections.bootwright.core.plugins.module_utils import redfish_media_verification
@@ -236,6 +237,14 @@ class Client:
         self.lost = self.unsent = False
         self._system = self._media = self._member = None
         self._managers = []
+        self.write_proof = None
+        self._proof_deadline = None
+
+    def require_system_reference(self, url):
+        path = posixpath.normpath(unquote(urlsplit(url).path))
+        system = posixpath.normpath(unquote(urlsplit(self.endpoint).path))
+        if path.lower().startswith("/redfish/v1/systems/") and path != system and not path.startswith(system + "/"):
+            raise ControllerError("the controller referred the operation to another ComputerSystem")
 
     def fetch(self, reference="", method="GET", payload=None, headers=None, timeout=REQUEST_TIMEOUT, doing=""):
         """One bounded call, returning status, body and headers.
@@ -258,7 +267,14 @@ class Client:
         self.lost = self.unsent = False
         url = self._own(reference or self.endpoint, doing)
         if method != "GET":
+            if self.write_proof is not None:
+                self.require_system_reference(url)
+                self.prove_write(*self.write_proof, complete=doing == "attaching")
             self._system = self._member = None
+        elif self._proof_deadline is not None:
+            timeout = min(timeout, self._proof_deadline - self.clock())
+            if timeout <= 0:
+                raise ControllerError("the physical target proof exceeded its request budget")
         try:
             with (_opener(self.verify, self.ca_data, self.verification) if self.verification else _opener(self.verify, self.ca_data)).open(
                     self._request(url, method, payload, headers), timeout=timeout) as answer:
@@ -370,6 +386,27 @@ class Client:
             matched = machine_identity.verdict(hardware_observation(self), expected=expected)["declared"]
         if not matched:
             raise ControllerError("the management controller did not prove the declared machine and its recorded identity")
+
+    def prove_write(self, expected, uuid_pin, serial_pin, require_off, *, complete=False):
+        """Re-read the selected system immediately before issuing a write."""
+        self._proof_deadline = self.clock() + REQUEST_TIMEOUT
+        try:
+            self._system = None
+            if complete or not (uuid_pin or serial_pin):
+                observation = hardware_observation(self)
+                verdict = machine_identity.verdict(observation, expected=expected,
+                                                   pinned_uuid_base64=uuid_pin, pinned_serial_base64=serial_pin)
+                if not verdict["declared"] or not verdict["pinned"]:
+                    raise ControllerError("the management controller did not prove the declared machine and its recorded identity")
+                self._system = None
+                # Re-read system and power after the potentially long inventory walk.
+                uuid_pin = base64.b64encode(observation["uuid"].strip().encode()).decode()
+                serial_pin = base64.b64encode(observation["serial"].strip().encode()).decode()
+            self.require_identity(expected, uuid_pin, serial_pin)
+            if require_off and self.power_state() != "Off":
+                raise ControllerError("the target did not report powered off")
+        finally:
+            self._proof_deadline = None
 
     def power_state(self):
         """The power state of the kept system read, or the empty string."""

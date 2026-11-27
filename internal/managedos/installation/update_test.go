@@ -143,7 +143,7 @@ func TestAPhysicalUpdateAddsItsBoundAndThePhysicalDiskBoot(t *testing.T) {
 	}
 	// The registering, updating physical shape states more than six hours,
 	// which the runner honors rather than cutting at a ceiling (B878).
-	if want := 7*time.Hour + 5*time.Minute + 50*time.Second; request.Deadline() != want || want <= lifecycle.MaxDeadline {
+	if want := 7*time.Hour + 38*time.Minute + 50*time.Second; request.Deadline() != want || want <= lifecycle.MaxDeadline {
 		t.Fatalf("a registering physical update installs under %s, want %s past %s", request.Deadline(), want, lifecycle.MaxDeadline)
 	}
 }

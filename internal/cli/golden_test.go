@@ -1130,6 +1130,8 @@ func cliGoldens() []cliGolden {
 		// JSON invocation silences: TestAJSONInvocationWritesNoProgress in
 		// cmd/bootwright proves that wiring, and these goldens hold what the
 		// Runner writes.
+		{golden: "cli-machine-check", args: "machine check --name node", record: hardwareCheck},
+		{golden: "cli-machine-check-json", args: "machine check --name node --output json", record: hardwareCheck},
 		{golden: "cli-machine-info", args: "machine info", record: machineInfo},
 		{golden: "cli-machine-info-json", args: "machine info --output json", record: machineInfo},
 		{golden: "cli-machine-list", args: "machine list --power-status", record: func(r *dispatchRecord) { r.result.machines = machines(true) }},
@@ -1523,5 +1525,15 @@ func goldenAcquisitions(api.Catalog) ([]Acquisition, error) {
 func handoffGolden(executable string) func(*dispatchRecord) {
 	return func(r *dispatchRecord) {
 		r.result.handoff = &containeraccess.Handoff{Context: "lab", Cluster: "example", Client: containeraccess.Client{Executable: "/installed/" + executable, Version: "4.19.3", Distribution: "openshift"}, Arguments: []string{"get", "nodes"}, KubeconfigCommand: []string{"bootwright", "cluster", "kubeconfig", "--context", "lab", "--name", "example"}}
+	}
+}
+
+func hardwareCheck(r *dispatchRecord) {
+	r.result.machineCheck = &power.CheckResult{
+		Context: "lab", Machine: "node",
+		Checks: []power.HardwareCheck{
+			{ID: "identity", Status: "observed", Summary: "The full MAC set and any recorded system pins matched."},
+			{ID: "active-rehearsal", Status: "requires-exercise", Summary: "Rehearse boot and cleanup on a spare."},
+		},
 	}
 }

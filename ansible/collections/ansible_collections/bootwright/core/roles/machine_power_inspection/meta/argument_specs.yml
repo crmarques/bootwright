@@ -1,0 +1,33 @@
+argument_specs:
+  read:
+    short_description: Observe one physical Machine through its Redfish controller.
+    options:
+      bootwright_machine_power_read_request:
+        type: dict
+        required: true
+        options:
+          expectedMACs:
+            type: list
+            elements: str
+            required: true
+          context:
+            type: str
+            required: true
+          placement:
+            type: dict
+            required: true
+          targets:
+            type: list
+            elements: dict
+            required: true
+          version:
+            type: str
+            required: true
+            choices:
+              - machine-power-read-v1
+      bootwright_machine_power_read_digest:
+        type: str
+        required: true
+      bootwright_machine_power_read_material:
+        type: dict
+        required: true

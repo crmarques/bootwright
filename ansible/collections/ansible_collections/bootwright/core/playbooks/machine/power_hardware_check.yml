@@ -1,0 +1,13 @@
+---
+- name: Inspect a physical machine through its management controller
+  hosts: bootwright_target
+  gather_facts: false
+  any_errors_fatal: true
+  serial: 1
+  strategy: ansible.builtin.linear
+
+  tasks:
+    - name: Read physical machine hardware
+      ansible.builtin.import_role:
+        name: bootwright.core.machine_power_inspection
+        tasks_from: read

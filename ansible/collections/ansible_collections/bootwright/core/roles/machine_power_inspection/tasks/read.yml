@@ -1,0 +1,55 @@
+---
+- name: Validate the single physical machine request
+  ansible.builtin.assert:
+    that:
+      - bootwright_machine_power_read_request.version == 'machine-power-read-v1'
+      - bootwright_machine_power_read_request.targets | length == 1
+      - bootwright_machine_power_read_request.targets[0].arm == 'baremetal'
+      - bootwright_machine_power_read_digest is match('^[0-9a-f]{64}$(?!\n)')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.machine_power_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Inspect the named machine with bounded Redfish reads
+  bootwright.core.redfish_system_inspect:
+    endpoint: '{{ machine_power_inspection_access.endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", machine_power_inspection_access.user, rstrip=false) }}'
+    password: '{{ lookup("ansible.builtin.file", machine_power_inspection_access.password, rstrip=false) }}'
+    verify: '{{ machine_power_inspection_access.verify }}'
+    verification: '{{ machine_power_inspection_access.verification | default(omit, true) }}'
+    ca_data: >-
+      {{ lookup('ansible.builtin.file', machine_power_inspection_access.ca, rstrip=false)
+         if machine_power_inspection_access.ca | length > 0 else '' }}
+    hardware_check:
+      expected: '{{ bootwright_machine_power_read_request.expectedMACs }}'
+      uuid_pin: '{{ machine_power_inspection_access.pinned_uuid_base64 }}'
+      serial_pin: '{{ machine_power_inspection_access.pinned_serial_base64 }}'
+  vars:
+    machine_power_inspection_access: >-
+      {{ bootwright_machine_power_read_request.targets[0].machinePort
+         | bootwright.core.machine_port_access(bootwright_machine_power_read_material) }}
+  register: machine_power_inspection_observation
+  failed_when: false
+  no_log: true
+
+- name: Refuse an inspection that produced no bounded observations
+  ansible.builtin.assert:
+    that:
+      - machine_power_inspection_observation.msg is not defined
+    fail_msg: >-
+      The hardware inspector could not complete:
+      {{ (machine_power_inspection_observation.msg | default('') | string | bootwright.core.printable)[:512] }}
+    quiet: true
+
+- name: Publish sanitized observations for the selected machine
+  bootwright.core.machine_power_protocol:
+    phase: completed
+    outcome: unchanged
+    digest: '{{ bootwright_machine_power_read_digest }}'
+    machine: '{{ bootwright_machine_power_read_request.targets[0].object }}'
+    hardware_checks: '{{ machine_power_inspection_observation.checks }}'
+  no_log: true

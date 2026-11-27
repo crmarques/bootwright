@@ -40,8 +40,10 @@ func (r Runner) checkReadOnly(request lifecycle.RunRequest) error {
 		return runnerRequestInvalid.Fail("power admission requires an unrecorded observation with no outputs or preparation", "")
 	}
 	lend := request.Operation == lifecycle.LendOperation
-	revoke := (request.Operation == lifecycle.RevokeOperation || request.Operation == "prepare_credentials") && r.readOnly[request.Implementation+"/"+request.Operation]
-	if request.ReadOnly && request.Operation != lifecycle.ObserveOperation && !lend && !revoke {
+	allowed := (request.Operation == lifecycle.RevokeOperation || request.Operation == "prepare_credentials" ||
+		request.Operation == "hardware_check" && request.Unrecorded && request.Prepare == nil) &&
+		r.readOnly[request.Implementation+"/"+request.Operation]
+	if request.ReadOnly && request.Operation != lifecycle.ObserveOperation && !lend && !allowed {
 		return runnerRequestInvalid.Fail("a read-only invocation may run only its capability's observation", "")
 	}
 	if request.Unrecorded && len(request.Outputs) != 0 && !lend {

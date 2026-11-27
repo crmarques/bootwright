@@ -44,7 +44,7 @@ ENTRY_FILES = {"target_proof": "pre_boot", "firmware": "pre_boot"}
 # The roles that reach a controller a bundle can anchor, and how many Redfish
 # module tasks each holds. Finding another number means the walk or a role
 # changed, and either must be looked at.
-BUNDLED = {"substrate_baremetal_machine": 6, "substrate_libvirt_machine": 6, "substrate_machine": 8}
+BUNDLED = {"machine_power_inspection": 1, "substrate_baremetal_machine": 6, "substrate_libvirt_machine": 6, "substrate_machine": 8}
 # The roles that make Redfish calls without a bundle, and why.
 UNBUNDLED = {
     "containercluster_media_agent": "it makes no Redfish call",
@@ -96,7 +96,7 @@ def test_every_redfish_call_passes_the_controller_bundle(role):
     missing = ["%s: %s" % (name, task.get("name")) for name, _module, arguments, task in found if "ca_data" not in arguments]
     assert not missing, "tasks reaching a controller without its bundle:\n" + "\n".join(missing)
     assert len(found) == BUNDLED[role]
-    if role in ("substrate_baremetal_machine", "substrate_machine"):
+    if role in ("machine_power_inspection", "substrate_baremetal_machine", "substrate_machine"):
         assert all("verification" in arguments for _name, _module, arguments, _task in found)
 
 

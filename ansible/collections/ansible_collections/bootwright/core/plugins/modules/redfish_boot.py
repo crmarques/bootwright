@@ -162,6 +162,10 @@ options:
         the deciding setting false and weakens boot-media provenance.
     type: bool
     default: false
+  require_off:
+    description: Require the identified system to report Off before issuing the operation.
+    type: bool
+    default: false
   expected_macs:
     description: Declared hardware addresses to prove before using this physical system.
     type: list
@@ -223,6 +227,7 @@ TRUSTS = (redfish_control.TRUST_ESTABLISHED, redfish_control.TRUST_IMPORT, redfi
 def main():
     module = AnsibleModule(
         argument_spec={
+            "require_off": {"type": "bool", "default": False},
             "expected_macs": {"type": "list", "elements": "str"},
             "pinned_uuid_base64": {"type": "str", "default": ""},
             "pinned_serial_base64": {"type": "str", "default": ""},
@@ -253,7 +258,11 @@ def main():
         client = redfish_control.Client(params["endpoint"], params["user"], params["password"],
                                         verify=bool(params["verify"]), ca_data=params["ca_data"] or "", verification=params.get("verification") or "")
         if params.get("expected_macs") is not None:
-            client.require_identity(params["expected_macs"], params.get("pinned_uuid_base64", ""), params.get("pinned_serial_base64", ""))
+            client.write_proof = (params["expected_macs"], params.get("pinned_uuid_base64", ""),
+                                  params.get("pinned_serial_base64", ""), bool(params.get("require_off")))
+            client.prove_write(*client.write_proof)
+        elif params.get("require_off"):
+            raise redfish_control.ControllerError("a powered-off write requires a physical target proof")
         changed, power, media = drive(
             client, operation, attempts, params["image"] or "", params["target"], trust=params["trust"],
             certificate=params["certificate"] or "", restore_verification=bool(params["restore_verification"]),

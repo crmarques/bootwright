@@ -1,5 +1,5 @@
 implementation: cluster-install-agent-v1
-content-digest: 1b2d37b085b4269bf833072a5894f9358149fe8453e0d899f1d405ed1700dad8
+content-digest: b382e1bc83ba4115037c7ff8c87677d3ab185e7cfe3faf99a16c37c146460020
 request-version: cluster-install-agent-v1
 automation-formats: none
 mark-formats: bootwright.io/lend
@@ -17,6 +17,7 @@ effect-pins:
   booted-never-no-effect
   insert-recorded-before-media
   verified-media-default
+  prove-physical-target-before-boot-and-media-writes
   physical-root-and-release-proof
 request-identity:
   identity.context

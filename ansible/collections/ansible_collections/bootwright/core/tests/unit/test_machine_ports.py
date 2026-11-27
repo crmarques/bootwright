@@ -40,6 +40,8 @@ def test_media_insert_admits_and_forwards_verification_setup(arm, enable):
     spec = yaml.safe_load((role / "meta/argument_specs.yml").read_text())["argument_specs"]["media_insert"]["options"]
     port = {"endpoint": "https://bmc.example.test/redfish/v1/Systems/1", "user": "/run/user", "password": "/run/password",
             "verify": True, "private": True, "image_url_file": "/run/image-url", "trust": "established", "enable_verification": enable}
+    if arm == "baremetal" and entry_needs_proof(spec):
+        port["prove_macs"] = ["02:00:00:00:00:01"]
     assert not ArgumentSpecValidator(spec).validate({"bootwright_machine_port": port}).error_messages
     translated = yaml.safe_load((ROOT / "roles/substrate_machine/tasks/redfish_media_insert.yml").read_text())
     native = next(task["bootwright.core.redfish_boot"] for task in translated if "bootwright.core.redfish_boot" in task)
@@ -122,6 +124,8 @@ def test_generic_boot_port_validates_native_aliases_before_effects(arm, entry, e
     spec = yaml.safe_load((role / "meta/argument_specs.yml").read_text())["argument_specs"][entry]["options"]
     request = {"endpoint": "https://bmc.example.test/redfish/v1/Systems/1", "user": "/run/user", "password": "/run/password",
                "ca": "", "verify": True, **extra}
+    if arm == "baremetal" and entry_needs_proof(spec):
+        request["prove_macs"] = ["02:00:00:00:00:01"]
     scope = Templar(loader=loader, variables={**defaults, "bootwright_machine_port": request})
     supplied = {"bootwright_machine_port": request}
     supplied.update({name: scope.template(defaults[name]) for name in spec if name in defaults})
@@ -158,3 +162,7 @@ def test_no_role_or_playbook_builds_a_machine_port_access_dictionary():
             assert any(resolved in assigned for resolved in RESOLVED), (where, assigned)
             assert not any(key in assigned for key in ACCESS_KEYS), (where, assigned)
     assert seen >= 20
+
+
+def entry_needs_proof(spec):
+    return spec["bootwright_machine_port"].get("options", {}).get("prove_macs", {}).get("required", False)

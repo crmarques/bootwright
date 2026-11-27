@@ -1,4 +1,11 @@
 ---
+- name: Require a physical target identity before changing the machine
+  ansible.builtin.assert:
+    that:
+      - bootwright_machine_port.prove_macs | length > 0
+    quiet: true
+    fail_msg: The frozen request carries no physical MAC inventory. No controller write was attempted.
+
 - name: Drive virtual media through the shared Redfish adapter
   ansible.builtin.include_role:
     name: bootwright.core.substrate_machine

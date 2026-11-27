@@ -103,7 +103,7 @@ func MediaContentDigest() string {
 
 func InstallContentDigest() string {
 	return reconciliation.ContentDigestOf("bootwright.containercluster.install-agent-v1",
-		InstallImplementation, installRequestVersion, consumerPrefix, ImageFile, HostedRoot, clustersArea, installerTool, clientTool, hostAccessLend, hostAccessBound, bootRecord, insertRecord, substrate.RedfishMediaPolicy, "physical-root-and-release-proof")
+		InstallImplementation, installRequestVersion, consumerPrefix, ImageFile, HostedRoot, clustersArea, installerTool, clientTool, hostAccessLend, hostAccessBound, bootRecord, insertRecord, substrate.RedfishMediaPolicy, substrate.PhysicalBootProof, "physical-root-and-release-proof")
 }
 
 const (

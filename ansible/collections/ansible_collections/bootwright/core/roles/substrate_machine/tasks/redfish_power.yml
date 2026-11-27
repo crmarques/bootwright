@@ -14,6 +14,9 @@
     ca_data: >-
       {{ lookup('ansible.builtin.file', bootwright_machine_port.ca, rstrip=false)
          if bootwright_machine_port.ca | default('') | length > 0 else '' }}
+    expected_macs: '{{ bootwright_machine_port.prove_macs | default(omit) }}'
+    pinned_uuid_base64: '{{ bootwright_machine_port.pinned_uuid_base64 | default("") }}'
+    pinned_serial_base64: '{{ bootwright_machine_port.pinned_serial_base64 | default("") }}'
     operation: >-
       {{ 'power-off' if bootwright_machine_port.force | default(true) else 'shutdown' }}
     attempts: '{{ bootwright_machine_port.attempts | default(60) }}'
@@ -37,6 +40,9 @@
     ca_data: >-
       {{ lookup('ansible.builtin.file', bootwright_machine_port.ca, rstrip=false)
          if bootwright_machine_port.ca | default('') | length > 0 else '' }}
+    expected_macs: '{{ bootwright_machine_port.prove_macs | default(omit) }}'
+    pinned_uuid_base64: '{{ bootwright_machine_port.pinned_uuid_base64 | default("") }}'
+    pinned_serial_base64: '{{ bootwright_machine_port.pinned_serial_base64 | default("") }}'
     operation: >-
       {{ 'power-on' if bootwright_machine_port.power in ['on', 'restart'] else
          ('power-off' if bootwright_machine_port.force | default(true) else 'shutdown') }}

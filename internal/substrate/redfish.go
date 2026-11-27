@@ -6,6 +6,8 @@ import "time"
 // content identity, independently of management endpoint and substrate.
 const RedfishMediaPolicy = "verified-media-default"
 
+const PhysicalBootProof = "prove-physical-target-before-boot-and-media-writes"
+
 // The fixed bounds of the collection's one Redfish client, which every
 // management-controller call goes through (plugins/module_utils/redfish_control.py),
 // and the poll count a power operation takes by default

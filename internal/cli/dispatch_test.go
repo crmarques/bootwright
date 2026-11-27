@@ -17,6 +17,7 @@ import (
 	"github.com/crmarques/bootwright/internal/machine"
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 	"github.com/crmarques/bootwright/internal/machine/inventory"
+	"github.com/crmarques/bootwright/internal/machine/power"
 	"github.com/crmarques/bootwright/internal/managedos/media"
 	artifactrendering "github.com/crmarques/bootwright/internal/nativeartifacts/rendering"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -74,6 +75,7 @@ func TestDispatchEveryApplicationCommand(t *testing.T) {
 		{"render effective", artifactrendering.RenderRequest{ContextName: "example", InputPath: "inputs", OutputDirectory: "artifacts", Sensitive: true}},
 		{"render installer", installation.RenderInstallerRequest{ContextName: "example", Clusters: []string{"first", "second"}, Sensitive: true}},
 		{"render storage", storagerendering.RenderArtifactsRequest{ContextName: "example", Clusters: []string{"first", "second"}}},
+		{"machine check", power.CheckRequest{ContextName: "example", Name: "demo"}},
 		{"machine list", inventory.ListRequest{ContextName: "example", Clusters: []string{"first", "second"}, Power: true}},
 		{"machine rsh", machineaccess.RshRequest{ContextName: "example", Name: "demo", SSH: account}},
 		{"machine exec", machineaccess.ExecRequest{ContextName: "example", Names: []string{"demo"}, SSH: account, Command: []string{"get", "--help", ""}}},

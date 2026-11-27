@@ -1,10 +1,10 @@
 {
   "budgets": {
-    "bootSeconds": 6270,
+    "bootSeconds": 6960,
     "bootstrapSeconds": 5400,
     "fanOut": 16,
     "installSeconds": 5400,
-    "roundMarginSeconds": 2520
+    "roundMarginSeconds": 2910
   },
   "deliveryKind": "fetch",
   "endpoints": [

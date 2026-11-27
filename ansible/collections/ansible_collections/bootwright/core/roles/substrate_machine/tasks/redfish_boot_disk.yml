@@ -13,6 +13,7 @@
     pinned_uuid_base64: '{{ bootwright_machine_port.pinned_uuid_base64 | default("") }}'
     pinned_serial_base64: '{{ bootwright_machine_port.pinned_serial_base64 | default("") }}'
     allow_continuous: true
+    require_off: '{{ bootwright_machine_port.prove_macs is defined and bootwright_machine_port.power_on }}'
     operation: boot
     target: Hdd
   register: substrate_machine_redfish_disk_selected
@@ -45,6 +46,7 @@
     expected_macs: '{{ bootwright_machine_port.prove_macs | default(omit) }}'
     pinned_uuid_base64: '{{ bootwright_machine_port.pinned_uuid_base64 | default("") }}'
     pinned_serial_base64: '{{ bootwright_machine_port.pinned_serial_base64 | default("") }}'
+    require_off: '{{ bootwright_machine_port.prove_macs is defined and bootwright_machine_port.power_on }}'
     operation: power-on
   register: substrate_machine_redfish_disk_started
   failed_when: false

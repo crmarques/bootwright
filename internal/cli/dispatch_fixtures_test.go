@@ -284,6 +284,10 @@ func (s machineAccessSpy) Copy(ctx context.Context, request machineaccess.CopyRe
 	return s.record.result.copy, s.record.called(ctx, "machine cp", request)
 }
 
+func (s machinePowerSpy) Check(ctx context.Context, request power.CheckRequest) (*power.CheckResult, error) {
+	return s.record.result.machineCheck, s.record.called(ctx, "machine check", request)
+}
+
 func (s machinePowerSpy) MediaStatus(ctx context.Context, request power.MediaStatusRequest) (*power.MediaStatusResult, error) {
 	return s.record.result.mediaStatus, s.record.called(ctx, "machine media status", request)
 }

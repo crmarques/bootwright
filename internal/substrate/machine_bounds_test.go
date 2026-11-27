@@ -23,7 +23,7 @@ func TestMachinePortsPublishBoundsForEveryRealizedArm(t *testing.T) {
 	if LibvirtNodeMargin != 11*time.Minute {
 		t.Fatalf("emulated margin = %s", LibvirtNodeMargin)
 	}
-	if BaremetalNodeMargin != 2*BaremetalStateReadBound+BaremetalMediaEjectBound+ControllerBootSelectionBound {
+	if BaremetalNodeMargin != 2*BaremetalStateReadBound+BaremetalMediaEjectBound+ControllerBootSelectionBound+physicalBootSelectionProofBound {
 		t.Fatal("physical round omits a port call")
 	}
 }

@@ -149,11 +149,11 @@ func TestPlaybookNamePatternRefusesAnOffPatternBinding(t *testing.T) {
 	}
 }
 
-// Composition admits only the credential preparation reads and access revoke.
+// Composition names each read-only entrypoint explicitly.
 func TestReadOnlyEntrypointsAreExplicit(t *testing.T) {
 	t.Parallel()
 	admitted := readOnlyOperations()
-	want := []string{"cluster-install-agent-v1/prepare_credentials", "storage-ceph-core-v1/prepare_credentials", "substrate-host-kubevirt-v1/revoke"}
+	want := []string{"machine-power-read-v1/hardware_check", "cluster-install-agent-v1/prepare_credentials", "storage-ceph-core-v1/prepare_credentials", "substrate-host-kubevirt-v1/revoke"}
 	if !slices.Equal(admitted, want) {
 		t.Fatalf("read-only operations %v", admitted)
 	}

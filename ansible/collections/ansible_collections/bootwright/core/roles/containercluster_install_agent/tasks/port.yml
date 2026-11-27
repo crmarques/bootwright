@@ -17,11 +17,10 @@
   vars:
     bootwright_machine_arm: '{{ containercluster_install_agent_node.substrate }}'
     bootwright_machine_port: >-
-      {{ containercluster_install_agent_node.machinePort | bootwright.core.machine_port_access(bootwright_cluster_install_material)
-         | combine(containercluster_install_agent_port_arguments[containercluster_install_agent_port_operation])
-         | combine({'prove_macs': containercluster_install_agent_node.hardware.interfaces | map(attribute='macAddress') | list}
-                   if containercluster_install_agent_node.physical
-                      and containercluster_install_agent_port_operation in ['state_read', 'media_eject'] else {}) }}
+      {{ containercluster_install_agent_node.machinePort
+         | bootwright.core.machine_port_access(bootwright_cluster_install_material,
+             containercluster_install_agent_node.hardware if containercluster_install_agent_node.physical else none)
+         | combine(containercluster_install_agent_port_arguments[containercluster_install_agent_port_operation]) }}
     containercluster_install_agent_port_arguments:
       state_read: >-
         {{ {'media': true, 'media_identity': bootwright_cluster_install_request.imageIdentity}

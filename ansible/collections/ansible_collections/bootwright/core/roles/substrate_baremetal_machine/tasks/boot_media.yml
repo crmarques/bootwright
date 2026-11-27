@@ -10,6 +10,13 @@
 #
 # The inputs are this entry point's argument spec, passed explicitly by the
 # consuming role and never inherited from a shared fact.
+- name: Require a physical target identity before changing the machine
+  ansible.builtin.assert:
+    that:
+      - bootwright_machine_port.prove_macs | length > 0
+    quiet: true
+    fail_msg: The frozen request carries no physical MAC inventory. No controller write was attempted.
+
 - name: Select a one-time boot from the inserted media
   bootwright.core.redfish_boot:
     endpoint: '{{ substrate_baremetal_machine_boot_endpoint }}'
@@ -20,6 +27,10 @@
     ca_data: >-
       {{ lookup('ansible.builtin.file', substrate_baremetal_machine_boot_ca, rstrip=false)
          if substrate_baremetal_machine_boot_ca | length > 0 else '' }}
+    expected_macs: '{{ bootwright_machine_port.prove_macs | default(omit) }}'
+    pinned_uuid_base64: '{{ bootwright_machine_port.pinned_uuid_base64 | default("") }}'
+    pinned_serial_base64: '{{ bootwright_machine_port.pinned_serial_base64 | default("") }}'
+    require_off: true
     operation: boot
     target: Cd
   register: substrate_baremetal_machine_boot_selected
@@ -49,6 +60,10 @@
     ca_data: >-
       {{ lookup('ansible.builtin.file', substrate_baremetal_machine_boot_ca, rstrip=false)
          if substrate_baremetal_machine_boot_ca | length > 0 else '' }}
+    expected_macs: '{{ bootwright_machine_port.prove_macs | default(omit) }}'
+    pinned_uuid_base64: '{{ bootwright_machine_port.pinned_uuid_base64 | default("") }}'
+    pinned_serial_base64: '{{ bootwright_machine_port.pinned_serial_base64 | default("") }}'
+    require_off: true
     operation: power-on
   register: substrate_baremetal_machine_boot_started
   failed_when: false

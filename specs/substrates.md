@@ -144,6 +144,37 @@ and has no row.
 | `baremetal` | physical Redfish BMC | [B70](milestones/m1.md#b70), [B73](milestones/m1.md#b73), [B78](milestones/m1.md#b78), [B305](milestones/m1.md#b305), [B319](milestones/m1.md#b319) | `unrun` |
 | `kubevirt` | the host cluster's Kubernetes API (OpenShift Virtualization) | [B731](milestones/m3.md#b731), [B732](milestones/m3.md#b732), [B883](milestones/m4.md#b883), [B88](milestones/m3.md#b88) | `unrun` |
 
+### Candidate qualification
+
+Qualify a candidate against the changed boundary. A workload-only change uses
+paired intent fixtures and an emulated lifecycle rehearsal. A change to a
+physical arm, ownership proof, management transport, disk identity or retry
+behavior also exercises that path on a spare with the production hardware
+model, BMC firmware and relevant storage and network capabilities. Record the
+build and the observed limit of each result in the
+[acceptance ledger](../docs/acceptance.md#physical-qualification-row).
+Emulated controller responses qualify shared contracts, not physical firmware
+behavior.
+
+Use a separate non-production context and scoped credentials for the spare.
+Start with the [read-only Machine check](cli/commands.md#command-and-flag-catalog).
+An incomplete observation does not authorize an effect. A successful check
+does not prove virtual-media boot, installer disk selection, reboot or removal.
+Exercise the affected effects only after reviewing the spare plan and its
+data-loss authorizations. The
+[spare rehearsal](../examples/machines/lab-baremetal/README.md#candidate-hardware-rehearsal)
+owns the operator sequence.
+
+If the candidate will take over a context created with a deployed build,
+rehearse from completed and interrupted operations made by that build, not
+only from a fresh candidate operation. Keep the originating executable and
+matching runtime available. A candidate that cannot prove the saved contract
+refuses before effects. Demonstrate continuation or cleanup with the
+originating build under the
+[saved-operation guard](state-reconciliation.md#dependency-safety-during-recovery).
+`TestAnIncompatibleCandidateLeavesTheDeployedBuildAbleToRemoveItsEffects`
+holds that refusal and recovery in-tree.
+
 ## Provider host realization
 
 The block `substrate-host-<provider>` realizes the host's virtualization
@@ -2102,7 +2133,7 @@ connection failed before the request was handed over), because a reset that
 may have arrived must not be repeated, and a boot selection whatever the loss,
 because it sets the same values again. An answer, a certificate failure and a
 failure that is not transport loss send nothing more. The resends fall within
-the poll's own window, so they leave the bounds below unchanged. A read that
+the poll's own window. Physical write proofs have their own allowance. A read that
 cannot reach a resource the BMC reports, or that receives a body which
 is not a Redfish resource, fails rather than answering empty, and the target
 proof reports what it could not read as unobserved, which proves nothing; a
@@ -2133,9 +2164,10 @@ three PATCH task polls stops at; then the power-on, the `ForceOff` and the
 final proof's four reads, the 2 minutes 30 seconds each of the `On` and `Off`
 polls stops at, and the 11 minutes the settings poll stops at. An
 installation's media margin and a cluster node's boot share add it for such a
-Machine. The separate 30-minute boot phase budget
-can still expire on slow responses, leaving the attempt unknown; these bounds
-are execution ceilings, not a promise that a native BMC completes.
+Machine. The physical boot and cleanup budgets also reserve time for
+a fresh target proof before each Redfish write. Each such proof has a
+30-second read budget. A missing or slow proof refuses the write. The overall
+boot phase budget can still expire, leaving the attempt unknown.
 
 Each call's worst case follows from the Redfish client's fixed bounds, and a
 consumer's run [deadline](architecture.md#the-adapter-result-protocol) allows
@@ -2415,6 +2447,17 @@ The pre-boot port takes an optional `root_disk` proof with `serialNumber` and
 exact `sizeBytes` for an [agent-installed physical root](openshift-clusters.md#selection).
 The physical arm proves one matching whole Drive through the complete system
 Storage inventory before media insertion; virtual arms refuse a nonempty proof.
+
+The physical installation port requires the declared MAC set on
+`media_insert`, `boot_media` and `boot_disk`. Each physical Redfish write follows only references within the selected
+system or its shared controller resources. The write proves the current system against its stored identity pin when present or
+against the complete declared MAC inventory when unpinned. Each media attach
+attempt proves both the complete MAC inventory and the recorded identity when
+present. Media insertion, optical boot and disk boot that powers on also
+require a fresh Off observation.
+The shutdown-to-disk continuation uses these same guards before checking
+its saved guest installation marker. Online disk selection after an agent
+installation requires identity proof and leaves power unchanged.
 
 The result channel belongs to the consumer, so `pre_boot` leaves the refusal
 its failed check makes in a fact of its own role, cleared before the proof and

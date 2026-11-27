@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "machine check",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": "lab",
+    "machine": "node",
+    "checks": [
+      {
+        "id": "identity",
+        "status": "observed",
+        "summary": "The full MAC set and any recorded system pins matched."
+      },
+      {
+        "id": "active-rehearsal",
+        "status": "requires-exercise",
+        "summary": "Rehearse boot and cleanup on a spare."
+      }
+    ]
+  },
+  "diagnostics": [],
+  "logs": []
+}

@@ -1,0 +1,3 @@
+  CHECK              STATUS              OBSERVATION
+  identity           observed            The full MAC set and any recorded system pins matched.
+  active-rehearsal   requires-exercise   Rehearse boot and cleanup on a spare.

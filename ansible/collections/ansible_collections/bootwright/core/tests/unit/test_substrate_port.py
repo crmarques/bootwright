@@ -346,6 +346,8 @@ def test_what_each_include_renders_passes_its_entry_points_validation(consumer):
         assert rendering.template(task["vars"][ARM]) == arm, "%s: the %s include does not hand over its arm" % (name, arm)
         values = {option: rendering.template(value) for option, value in task["vars"].items() if option != ARM}
         options = specs(arm)[entry]["options"]
+        if arm == "baremetal" and entry in {"boot_disk", "boot_media"}:
+            assert values["bootwright_machine_port"].get("prove_macs") == [nic["macAddress"] for nic in INTERFACES]
         role_defaults = defaults(SUBSTRATES[arm])
         aliases = Templar(loader=LOADER, variables={**role_defaults, **values})
         values.update({key: aliases.template(role_defaults[key]) for key in options if key in role_defaults})

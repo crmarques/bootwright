@@ -5,6 +5,9 @@
     bootwright machine <command> [flags]
 
   Commands
+  ○ Command | check
+      PURPOSE  Check one physical machine through its BMC
+
   ○ Command | cp
       PURPOSE  Copy files or directories to or from machines
 

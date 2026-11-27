@@ -65,6 +65,11 @@ options:
     description: Positive storageId and volumeId of an existing logical root volume to discover.
     type: dict
     default: {}
+  hardware_check:
+    description:
+      - Report bounded read-only observations for one target.
+      - Carries the expected MAC set and optional base64-encoded system pins.
+    type: dict
   root_disk:
     description:
       - Optional dictionary with a WWN, an exact serial and size, or both for the one whole root drive to prove before agent boot.
@@ -96,7 +101,7 @@ observation:
 """
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.bootwright.core.plugins.module_utils import redfish_control, redfish_root_disk, redfish_root_volume
+from ansible_collections.bootwright.core.plugins.module_utils import redfish_control, redfish_hardware_check, redfish_root_disk, redfish_root_volume
 
 
 def main():
@@ -109,16 +114,24 @@ def main():
             "ca_data": {"type": "str", "default": ""},
             "verification": {"type": "str", "choices": ["full", "certificate", "none"]},
             "require_tpm": {"type": "bool", "default": False},
+            "hardware_check": {"type": "dict"},
             "root_disk": {"type": "dict", "default": {}},
             "volume_ref": {"type": "dict", "default": {}},
         },
         supports_check_mode=True,
     )
     try:
-        client = redfish_control.Client(
+        check = module.params.get("hardware_check")
+        client_type = redfish_hardware_check.InspectionClient if check is not None else redfish_control.Client
+        client = client_type(
             module.params["endpoint"], module.params["user"], module.params["password"],
             verify=bool(module.params["verify"]), ca_data=module.params["ca_data"] or "", verification=module.params.get("verification") or "",
         )
+        if check is not None:
+            if not module.params["verify"] or module.params.get("verification") == "none" or not module.params["endpoint"].startswith("https://"):
+                raise redfish_control.ControllerError("hardware check requires verified HTTPS")
+            module.exit_json(changed=False, checks=redfish_hardware_check.inspect(client, check))
+            return
         observation = observe(client)
         if module.params.get("volume_ref"):
             if not module.params["verify"] or not module.params["endpoint"].startswith("https://"):

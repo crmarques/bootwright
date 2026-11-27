@@ -239,6 +239,14 @@ func validateMachineNames(command *cobra.Command) string {
 	return ""
 }
 
+func validateMachineCheck(command *cobra.Command) string {
+	name := stringValue(command.Flags(), "name")
+	if command.Flags().Changed("name") && !api.ValidLexical(api.LexicalName, name) {
+		return "--name must name exactly one physical machine"
+	}
+	return ""
+}
+
 func validateMachineName(command *cobra.Command) string {
 	if strings.Contains(stringValue(command.Flags(), "name"), ",") {
 		return "machine rsh opens one interactive session; name one machine"

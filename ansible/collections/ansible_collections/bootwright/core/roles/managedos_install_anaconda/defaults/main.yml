@@ -282,6 +282,7 @@ managedos_install_anaconda_network_recovery: >-
   else 'run bootwright destroy, which erases the Machines this context installed' }}
 
 managedos_install_anaconda_port_access: >-
-  {{ bootwright_os_install_request.target.machinePort | bootwright.core.machine_port_access(bootwright_os_install_material) }}
+  {{ bootwright_os_install_request.target.machinePort | bootwright.core.machine_port_access(bootwright_os_install_material,
+     bootwright_os_install_request.target.hardware | default(none)) }}
 managedos_install_anaconda_reboot_poweroff_attempts: '{{ bootwright_os_install_request.budgets.reboot.attempts }}'
 managedos_install_anaconda_reboot_return_attempts: '{{ bootwright_os_install_request.budgets.reboot.attempts }}'

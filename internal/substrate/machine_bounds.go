@@ -27,18 +27,22 @@ const (
 
 // Discovery bounds system, views, managers and candidates; state also reads power and image.
 const (
-	BaremetalMediaManagers      = 4
-	BaremetalHardwareInterfaces = 64
-	BaremetalPreBootBound       = (BaremetalHardwareInterfaces + 2) * controllerRequestTimeout
-	BaremetalFirmwareBound      = BaremetalPreBootBound + controllerFirmwareWritesBudget + controllerFirmwareCycleRequests*controllerRequestTimeout + 2*controllerPowerOnBudget + controllerFirmwarePollBudget
-	BaremetalMediaCandidates    = 8
-	BaremetalDiscoveryReads     = 2 + 2*BaremetalMediaManagers + BaremetalMediaCandidates
-	BaremetalStateReadBound     = (BaremetalDiscoveryReads + 2) * controllerRequestTimeout
-	BaremetalMediaEjectBound    = ControllerEjectBound + (BaremetalDiscoveryReads-2)*controllerRequestTimeout + controllerCertificateBound
-	BaremetalMediaInsertBound   = ControllerInsertBound + (BaremetalDiscoveryReads-2)*controllerRequestTimeout + BaremetalMediaManagers*controllerRequestTimeout
-	BaremetalNodeMargin         = 2*BaremetalStateReadBound + BaremetalMediaEjectBound + ControllerBootSelectionBound
-	BaremetalBootAllowance      = 30 * time.Minute
-	BaremetalFanout             = 16
+	physicalBootSelectionProofBound = 5 * controllerRequestTimeout
+	physicalPowerWriteProofBound    = 4 * controllerRequestTimeout
+	physicalEjectProofBound         = 8 * controllerRequestTimeout
+	physicalInsertProofBound        = 14 * controllerRequestTimeout
+	BaremetalMediaManagers          = 4
+	BaremetalHardwareInterfaces     = 64
+	BaremetalPreBootBound           = (BaremetalHardwareInterfaces + 2) * controllerRequestTimeout
+	BaremetalFirmwareBound          = BaremetalPreBootBound + controllerFirmwareWritesBudget + controllerFirmwareCycleRequests*controllerRequestTimeout + 2*controllerPowerOnBudget + controllerFirmwarePollBudget
+	BaremetalMediaCandidates        = 8
+	BaremetalDiscoveryReads         = 2 + 2*BaremetalMediaManagers + BaremetalMediaCandidates
+	BaremetalStateReadBound         = (BaremetalDiscoveryReads + 2) * controllerRequestTimeout
+	BaremetalMediaEjectBound        = ControllerEjectBound + (BaremetalDiscoveryReads-2)*controllerRequestTimeout + controllerCertificateBound + physicalEjectProofBound
+	BaremetalMediaInsertBound       = ControllerInsertBound + (BaremetalDiscoveryReads-2)*controllerRequestTimeout + BaremetalMediaManagers*controllerRequestTimeout + physicalInsertProofBound
+	BaremetalNodeMargin             = 2*BaremetalStateReadBound + BaremetalMediaEjectBound + ControllerBootSelectionBound + physicalBootSelectionProofBound
+	BaremetalBootAllowance          = 30*time.Minute + physicalInsertProofBound + physicalBootSelectionProofBound + physicalPowerWriteProofBound
+	BaremetalFanout                 = 16
 )
 
 const (
@@ -89,7 +93,9 @@ func MachineBoundsFor(arm Arm) (MachineBounds, bool) {
 		bounds.NodeMargin = BaremetalNodeMargin
 		bounds.PreBoot = BaremetalPreBootBound
 		bounds.Firmware = BaremetalFirmwareBound
-		bounds.BootMedia = ControllerBootSelectionBound + ControllerPowerBound
+		bounds.BootMedia = ControllerBootSelectionBound + ControllerPowerBound + physicalBootSelectionProofBound + physicalPowerWriteProofBound
+		bounds.BootDisk = bounds.BootMedia
+		bounds.Power += 2 * physicalPowerWriteProofBound
 	}
 	return bounds, true
 }

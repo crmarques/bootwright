@@ -150,7 +150,7 @@ func (r capabilityResolver) Resolve(kind, implementation string) (lifecycle.Capa
 // owns the binding, so a capability names no automation of its own and desired
 // state never names a playbook.
 func readOnlyOperations() []string {
-	return []string{agentinstall.InstallImplementation + "/prepare_credentials", ceph.Implementation + "/prepare_credentials", kubevirt.HostImplementation + "/" + lifecycle.RevokeOperation}
+	return []string{power.ReadImplementation + "/" + power.CheckOperation, agentinstall.InstallImplementation + "/prepare_credentials", ceph.Implementation + "/prepare_credentials", kubevirt.HostImplementation + "/" + lifecycle.RevokeOperation}
 }
 
 func operationPlaybook() map[string]string {
@@ -180,6 +180,7 @@ func operationPlaybook() map[string]string {
 		kubevirt.MachineImplementation + "/" + kubevirt.RootResetOperation: "substrate/kubevirt_machine_root_reset.yml",
 		power.Implementation + "/power":                                    "machine/power.yml",
 		power.ReadImplementation + "/read":                                 "machine/power_read.yml",
+		power.ReadImplementation + "/" + power.CheckOperation:              "machine/power_hardware_check.yml",
 		agentinstall.InstallImplementation + "/prepare_credentials":        "containercluster/admin_prepare_credentials.yml",
 		agentinstall.InstallImplementation + "/update_credentials":         "containercluster/admin_update_credentials.yml",
 		agentinstall.InstallImplementation + "/apply":                      "containercluster/install_apply.yml",
