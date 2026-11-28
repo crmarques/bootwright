@@ -317,7 +317,7 @@ func TestRequestRefusalsNameTheFieldThatDeclaresIt(t *testing.T) {
 // The content digest binds a plan to this build's behavior, so any change to
 // what it hashes is deliberate.
 func TestTheContentDigestIsPinned(t *testing.T) {
-	if digest := ContentDigest(); digest != "b512d16f8c750fb6e2613338798ef3faf360575060eece9e97e0c5afa44b0a99" {
+	if digest := ContentDigest(); digest != "eb40e21353c3d953befb86855defe4b3654979f1c27bf0d51e12f01db24e3384" {
 		t.Fatalf("content digest = %s", digest)
 	}
 }

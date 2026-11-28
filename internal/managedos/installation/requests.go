@@ -3,6 +3,7 @@ package installation
 import (
 	"encoding/json"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
@@ -341,6 +342,9 @@ func DecodeRequest(data []byte) (Request, error) {
 	}
 	if r.Requires != r.requirements() || r.Budgets.Sessions != r.sessions() {
 		return Request{}, installRequestInvalid.Fail("the frozen request's required proofs or session budgets are not those its own fields derive", "")
+	}
+	if strings.Contains(r.Kickstart, installerUUIDToken) != r.linuxDiscoveredWWN() {
+		return Request{}, installRequestInvalid.Fail("the frozen Kickstart does not agree with the source of the root disk proof", "")
 	}
 	if p := r.DiscoveryProof; p != nil {
 		h := r.Target.Hardware

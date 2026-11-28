@@ -94,6 +94,7 @@ EXECUTABLES = frozenset({
     "/usr/bin/qemu-img",
     "/usr/bin/rmdir",
     "/usr/bin/skopeo",
+    "/usr/bin/sync",
     "/usr/bin/systemctl",
     "/usr/bin/timeout",
     "/usr/bin/virsh",

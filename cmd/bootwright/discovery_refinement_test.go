@@ -82,6 +82,12 @@ func TestDiscoveryRefinesRenderedDiskPoliciesBeforeInstallation(t *testing.T) {
 		if !slices.Contains(definition.Consumes, "data-loss") {
 			t.Fatal("installation lost first-write authorization")
 		}
+		request, err := installation.DecodeRequest(definition.Request)
+		if err != nil || request.DiscoveryProof == nil || !strings.Contains(definition.Description, "rechecked by Anaconda") ||
+			!strings.Contains(definition.Description, request.DiscoveryProof.Selected.WWN) ||
+			!strings.Contains(request.Kickstart, "bootwright_reprove_root") || !strings.Contains(request.Kickstart, "%include /run/bootwright-install-storage/root.ks") {
+			t.Fatalf("saved Linux inventory did not reach the review and in-boot guard: %v", err)
+		}
 		definition.Requires = nil
 		definition.Dependencies = []string{diskdiscovery.DiscoveryBlockID(definition.Object)}
 		freshDefs = append(freshDefs, definition)

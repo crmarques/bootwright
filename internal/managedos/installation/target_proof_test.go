@@ -26,8 +26,9 @@ type installerHost struct {
 	mocks   string
 	env     []string
 	// include receives the storage include the %pre wrote, empty when none.
-	include *string
-	wwn     *string
+	include       *string
+	installerUUID string
+	wwn           *string
 }
 
 // runTargetProof runs the rendered target-proof %pre against a synthetic
@@ -92,9 +93,17 @@ func runTargetProof(t *testing.T, input Installation, host installerHost) (strin
 		host.prepare(t, blocks, proc)
 	}
 	include := filepath.Join(sysfs, "..", "bootwright-disk.ks")
+	guardedDirectory := filepath.Join(sysfs, "..", "install-storage")
+	if input.LinuxDiscoveredWWN {
+		include = filepath.Join(guardedDirectory, "root.ks")
+	}
 	stage := filepath.Join(sysfs, "..", "bootwright-root-wwn")
 	script := strings.NewReplacer("/sys/class/net", sysfs, "/sys/class/block", blocks, "/sys/fs/btrfs", filepath.Join(sysfs, "..", "btrfs"), "/proc/", proc+"/",
-		diskInclude, include, rootWWNStage, stage).Replace(strings.Join(lines[start+1:end], "\n"))
+		diskInclude, include, guardedDiskDirectory, guardedDirectory, rootWWNStage, stage, "/sys/class/dmi/id/product_uuid", filepath.Join(sysfs, "..", "product_uuid"),
+		installerUUIDToken, host.installerUUID, "/usr/bin/python3 -I - \"${bootwright_root}\"", "bootwright_test_open_disk \"${bootwright_root}\"",
+		" /dev/tpmrm0 ", " \"${test_tpm:?}\" ", "/tmp/bootwright-storage.ks", filepath.Join(sysfs, "..", "encrypted.ks"),
+		"/tmp/bootwright-artifact-ca.pem", filepath.Join(sysfs, "..", "test-artifact-ca.pem"),
+		bootstrapConnections, filepath.Join(sysfs, "..", "connections")).Replace(strings.Join(lines[start+1:end], "\n"))
 	mocks := `
 readlink() { case "${@: -1}" in /dev/*) ;; *) command readlink "$@"; return;; esac; if builtin [ -z "$resolved" ]; then return 1; fi; printf '%s\n' "$resolved"; }
 [() { if builtin [ "$1 $2" = "! -b" ]; then case "$3" in /dev/sda|/dev/sda1) return 1;; *) return 0;; esac; fi; builtin [ "$@"; }

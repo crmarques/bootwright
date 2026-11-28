@@ -298,3 +298,33 @@ def test_the_hardware_refusal_names_none_when_nothing_is_missing(tmp_path, consu
     message = Templar(loader=LOADER, variables=variables).template(declared()[ASSERT]["fail_msg"])
     assert message.endswith("declared addresses not reported: none; reported addresses not declared: 0; "
                             "inventory failures: none")
+
+
+def test_guarded_installer_records_handoff_after_proof_and_before_insert():
+    tasks = loaded(MANAGED_OS / "tasks" / "boot.yml")
+    proof_task = tasks.index(include(MANAGED_OS))
+    receipt = next(index for index, task in enumerate(tasks)
+                   if "bootwright.core.private_file" in task and "boot_handoff" in str(task))
+    insert = next(index for index, task in enumerate(tasks)
+                  if task.get(INCLUDE, {}).get("tasks_from") == "media_insert")
+    flushed = next(index for index, task in enumerate(tasks)
+                   if "/usr/bin/sync" in task.get("ansible.builtin.command", {}).get("argv", []))
+    assert proof_task < receipt < flushed < insert
+
+    apply = role_tasks.flatten(loaded(MANAGED_OS / "tasks" / "apply.yml"))
+    recover = next(index for index, task in enumerate(apply)
+                   if task.get("ansible.builtin.include_tasks") == "guard_handoff.yml")
+    clear = next(index for index, task in enumerate(apply)
+                 if task["name"] == "Clear the work area an interrupted attempt left")
+    assert recover < clear
+
+
+@pytest.mark.parametrize("exists,proved,expected", [(False, False, True), (True, False, False), (True, True, True)])
+def test_guarded_installation_requires_positive_recovery_after_handoff(exists, proved, expected):
+    assertion = next(task for task in loaded(MANAGED_OS / "tasks" / "guard_handoff.yml") if ASSERT in task)
+    variables = {
+        "managedos_install_anaconda_handoff": {"stat": {"exists": exists}},
+        "bootwright_os_install_material": {"installationProved": proved},
+    }
+    rendering = Templar(loader=LOADER, variables=variables)
+    assert all(rendering.evaluate_conditional(item) for item in assertion[ASSERT]["that"]) == expected

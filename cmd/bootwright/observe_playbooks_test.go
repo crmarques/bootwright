@@ -218,6 +218,9 @@ func addObserveReads(add func(string, string, string, string, func(map[string]an
 			return params["mode"] == "read"
 		})
 	add("infrastructureservices_mirror_release", "observe.yml", "ansible.builtin.fail", "refuses an observation that could not read the mirror without touching it", read)
+	add("managedos_install_anaconda", "observe.yml", "ansible.builtin.stat", "reads the guarded handoff file metadata", func(params, _ map[string]any) bool {
+		return params["path"] == "{{ managedos_install_anaconda_boot_handoff }}" && params["follow"] == false
+	})
 	add("managedos_install_anaconda", "observe.yml", observeCollection+"managedos_install_inspect", "reads the published installation content", read)
 	add("managedos_install_anaconda", "observe.yml", "ansible.builtin.set_fact", "names, in memory, a removal's read of a machine holding nothing of this installation", read)
 	add("managedos_install_anaconda", "observe.yml", observeCollection+"hosted_area", "proves the work area's hosted ancestors without creating one", func(params, _ map[string]any) bool {

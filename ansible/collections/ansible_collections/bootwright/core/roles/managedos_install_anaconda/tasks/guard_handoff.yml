@@ -1,0 +1,45 @@
+---
+- name: Read whether this guarded installation may have started
+  ansible.builtin.stat:
+    path: '{{ managedos_install_anaconda_boot_handoff }}'
+    follow: false
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  register: managedos_install_anaconda_handoff
+
+- name: Recover a guarded installation already answering on its pinned key
+  when:
+    - managedos_install_anaconda_handoff.stat.exists
+    - not (bootwright_os_install_material.installationProved | default(false) | bool)
+  block:
+    - name: Read the installed marker before touching the old work area
+      ansible.builtin.include_tasks: identity.yml
+
+    - name: Keep a positive marker from the guarded installation
+      ansible.builtin.set_fact:
+        managedos_install_anaconda_recovered_handoff: >-
+          {{ (managedos_install_anaconda_answered | bool)
+             and managedos_install_anaconda_marker == bootwright_os_install_material.marker }}
+      changed_when: false
+      no_log: true
+
+- name: Stop when a guarded installer may have touched storage
+  ansible.builtin.assert:
+    that:
+      - >-
+        not managedos_install_anaconda_handoff.stat.exists
+        or (managedos_install_anaconda_recovered_handoff | default(false) | bool)
+        or (bootwright_os_install_material.installationProved | default(false) | bool)
+    fail_msg: >-
+      A prior attempt handed installer media to Machine {{ bootwright_os_install_request.identity.object }}.
+      Its disk may already have changed. Inspect its console and recover the owned installation
+      before authorizing another install.
+    quiet: true
+
+- name: Make the recovered installed marker durable before clearing the handoff
+  bootwright.core.managedos_install_protocol:
+    phase: prepared
+    marker: '{{ bootwright_os_install_material.marker }}'
+  when: managedos_install_anaconda_recovered_handoff | default(false) | bool
+  no_log: true

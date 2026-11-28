@@ -290,6 +290,7 @@ func DeriveRequest(catalog api.Catalog, machine api.Object, controllerMachine, c
 	if proof != nil {
 		request.DiscoveryProof = proof
 		install.InventoriedSerials = slices.Clone(proof.Inventoried)
+		install.LinuxDiscoveredWWN = request.linuxDiscoveredWWN()
 	}
 	return finishInstallationRequest(request, needs, install)
 }

@@ -162,16 +162,21 @@ def test_apply_publishes_the_marker_proof_before_registering():
     registered = only(applied, included("register.yml"), "register the machine")
     assert prepared < fips < proved and proved + 1 == registered
     assert applied[prepared][PROTOCOL] == {"phase": "prepared", "marker": "{{ bootwright_os_install_material.marker }}"}
-    assert applied[prepared]["when"] == [] and applied[prepared]["no_log"] is True
+    assert applied[prepared]["when"] == ["not (managedos_install_anaconda_recovered_handoff | default(false) | bool)"]
+    assert applied[prepared]["no_log"] is True
     assert applied[proved]["no_log"] is True
     assert holds(applied[proved]["ansible.builtin.assert"]["that"],
                  managedos_install_anaconda_marker="m", bootwright_os_install_material={"marker": "m"})
     assert not holds(applied[proved]["ansible.builtin.assert"]["that"],
                      managedos_install_anaconda_marker="other", bootwright_os_install_material={"marker": "m"})
-    # The proof is recorded once per attempt, where the marker is first proved
-    # (Q66), so neither the restart nor the registration records it again.
+    # Recovery records the marker before removing the previous attempt's work.
+    # The normal apply records it only when that recovery path did not.
     assert [name for name in task_files() for task in flattened(name)
-            if (task.get(PROTOCOL) or {}).get("phase") == "prepared"] == ["apply.yml"]
+            if (task.get(PROTOCOL) or {}).get("phase") == "prepared"] == ["apply.yml", "guard_handoff.yml"]
+    recovery = next(task for task in flattened("guard_handoff.yml")
+                    if (task.get(PROTOCOL) or {}).get("phase") == "prepared")
+    assert recovery["when"] == ["managedos_install_anaconda_recovered_handoff | default(false) | bool"]
+    assert recovery[PROTOCOL] == applied[prepared][PROTOCOL]
 
 
 def test_apply_records_the_marker_proof_before_network_convergence():

@@ -42,10 +42,11 @@ const (
 // so it is never frozen in the plan, and the certificate is the public half of
 // the artifact server's own, which the installer verifies the fetch against.
 const (
-	VolumeWWNToken   = "@@BOOTWRIGHT_VOLUME_WWN@@"
-	VolumeSizeToken  = "@@BOOTWRIGHT_VOLUME_SIZE@@"
-	PrivateURLToken  = "@@BOOTWRIGHT_PRIVATE_URL@@"
-	CertificateToken = "@@BOOTWRIGHT_ARTIFACT_CERTIFICATE@@"
+	VolumeWWNToken     = "@@BOOTWRIGHT_VOLUME_WWN@@"
+	VolumeSizeToken    = "@@BOOTWRIGHT_VOLUME_SIZE@@"
+	installerUUIDToken = "@@BOOTWRIGHT_INSTALLER_UUID@@"
+	PrivateURLToken    = "@@BOOTWRIGHT_PRIVATE_URL@@"
+	CertificateToken   = "@@BOOTWRIGHT_ARTIFACT_CERTIFICATE@@"
 )
 
 // MarkerToken and AuthorizedKeyToken are the two values the adapter substitutes
@@ -121,6 +122,7 @@ type Installation struct {
 	RootSizeBytes      int64
 	RootWWN            string
 	InventoriedSerials []string
+	LinuxDiscoveredWWN bool
 	SELinux            string
 	Subscription       *KickstartSubscription
 	Timezone           string
@@ -146,28 +148,8 @@ func RenderKickstart(input Installation) (string, error) {
 	if err := subscriptionSourceRefusal(input); err != nil {
 		return "", err
 	}
-	// Only a disk its substrate created may be left for the installer to
-	// choose; a physical one is named by its by-id WWN path, serial and size, or volume.
-	if input.Physical && !durableRootDevice(input.RootDevice) && !serialRootInstallation(input) && !input.RootVolume {
-		return "", installRequestInvalid.Fail("a physical installation names no root disk by its /dev/disk/by-id/wwn-0x path, its serial number and size or a logical volume to erase",
-			rootSelectorRemedy(""))
-	}
-	if (input.RootWWN != "" || input.RootSerial != "" || input.RootSizeBytes != 0) && !input.Physical ||
-		input.RootSizeBytes != 0 && !diskselection.ValidSize(input.RootSizeBytes) ||
-		input.RootWWN != "" && "/dev/disk/by-id/wwn-"+input.RootWWN != input.RootDevice ||
-		input.RootSerial != "" && !diskselection.ValidSerial(input.RootSerial) {
-		return "", installRequestInvalid.Fail("the root disk WWN, serial number or size this installation freezes is not one its %pre can compare with the disk its deviceName names",
-			"plan the installation again with this release")
-	}
-	if len(input.InventoriedSerials) != 0 && (!serialRootInstallation(input) || !slices.Contains(input.InventoriedSerials, input.RootSerial) ||
-		slices.ContainsFunc(input.InventoriedSerials, func(s string) bool { return !diskselection.ValidSerial(s) })) {
-		return "", installRequestInvalid.Fail("the BMC inventory serial set this installation freezes does not bound its serial-number root", "plan the installation again with this release")
-	}
-	if input.RootVolume && (!input.Physical || input.RootDevice != "" || input.RootSerial != "" || input.RootWWN != "" || input.RootSizeBytes != 0) {
-		return "", installRequestInvalid.Fail("a logical-volume root selects the physical installation target alone", "plan the installation again")
-	}
-	if reason := refusedClearTargets(input); reason != "" {
-		return "", installRequestInvalid.Fail(reason, "plan the installation again with this release")
+	if err := validateRootTarget(input); err != nil {
+		return "", err
 	}
 	if _, known := deliveredHostKeys[input.HostKeyType]; input.Channel == substrate.ChannelDeliveredKey && !known {
 		return "", installRequestInvalid.Fail("the delivered SSH host key type "+input.HostKeyType+" has no installed path",
@@ -206,10 +188,13 @@ func RenderKickstart(input Installation) (string, error) {
 		`sshkey --username=`+input.User+` "`+AuthorizedKeyToken+`"`,
 		"",
 	)
-	lines = append(lines, targetProofLines(input)...)
-	lines = append(lines, packageTrustLines(input)...)
-	lines = append(lines, encryptionPreLines(input)...)
-	lines = append(lines, subscriptionPreLines(input)...)
+	preparation := [][]string{packageTrustLines(input), encryptionPreLines(input), subscriptionPreLines(input)}
+	lines = append(lines, targetProofLines(input, preparation)...)
+	if !input.LinuxDiscoveredWWN {
+		for _, section := range preparation {
+			lines = append(lines, section...)
+		}
+	}
 	lines = append(lines, storageLines(input)...)
 	lines = append(lines, "")
 	lines = append(lines, securityLines(input)...)
@@ -221,6 +206,35 @@ func RenderKickstart(input Installation) (string, error) {
 	lines = append(lines, rootWWNPostLines(input)...)
 	lines = append(lines, subscriptionPostLines(input)...)
 	return strings.Join(compact(lines), "\n") + "\n", nil
+}
+
+func validateRootTarget(input Installation) error {
+	if input.Physical && !durableRootDevice(input.RootDevice) && !serialRootInstallation(input) && !input.RootVolume {
+		return installRequestInvalid.Fail("a physical installation names no root disk by its /dev/disk/by-id/wwn-0x path, its serial number and size or a logical volume to erase",
+			rootSelectorRemedy(""))
+	}
+	if (input.RootWWN != "" || input.RootSerial != "" || input.RootSizeBytes != 0) && !input.Physical ||
+		input.RootSizeBytes != 0 && !diskselection.ValidSize(input.RootSizeBytes) ||
+		input.RootWWN != "" && "/dev/disk/by-id/wwn-"+input.RootWWN != input.RootDevice ||
+		input.RootSerial != "" && !diskselection.ValidSerial(input.RootSerial) {
+		return installRequestInvalid.Fail("the root disk WWN, serial number or size this installation freezes is not one its %pre can compare with the disk its deviceName names",
+			"plan the installation again with this release")
+	}
+	if len(input.InventoriedSerials) != 0 && (!serialRootInstallation(input) || !slices.Contains(input.InventoriedSerials, input.RootSerial) ||
+		slices.ContainsFunc(input.InventoriedSerials, func(s string) bool { return !diskselection.ValidSerial(s) })) {
+		return installRequestInvalid.Fail("the BMC inventory serial set this installation freezes does not bound its serial-number root", "plan the installation again with this release")
+	}
+	if input.LinuxDiscoveredWWN && (!input.Physical || input.RootVolume || len(input.InventoriedSerials) != 0 ||
+		!diskselection.ValidSize(input.RootSizeBytes) || !diskselection.ValidWWN(input.RootWWN)) {
+		return installRequestInvalid.Fail("a Linux-discovered root requires an exact physical disk identity and capacity", "")
+	}
+	if input.RootVolume && (!input.Physical || input.RootDevice != "" || input.RootSerial != "" || input.RootWWN != "" || input.RootSizeBytes != 0) {
+		return installRequestInvalid.Fail("a logical-volume root selects the physical installation target alone", "plan the installation again")
+	}
+	if reason := refusedClearTargets(input); reason != "" {
+		return installRequestInvalid.Fail(reason, "plan the installation again with this release")
+	}
+	return nil
 }
 
 // kickstartShape is how a value is interpolated: as one token, as one element
@@ -502,6 +516,9 @@ func storageLines(input Installation) []string {
 	if input.DiskEncryption != nil {
 		autopart = "%include " + storageInclude
 	}
+	if input.LinuxDiscoveredWWN {
+		return []string{"%include " + guardedDiskInclude, autopart}
+	}
 	if input.Physical && input.RootDevice == "" {
 		return []string{"%include " + diskInclude, autopart}
 	}
@@ -740,51 +757,16 @@ func deliveredKeyLines(input Installation) []string {
 	}
 }
 
-// targetProofLines repeat the controller-side target proof on the machine that
-// is actually running the installer: exactly the declared MAC set over the
-// device-backed ports, a USB CDC or RNDIS management host interface excepted,
-// and a whole root disk. It is the last point at which the wrong server can
-// still be stopped, runs before any storage is touched and fails closed; no
-// authorization relaxes it, because `data-loss` acknowledges a loss rather
-// than selecting what to lose.
-func targetProofLines(input Installation) []string {
+// The %pre proves the complete host and root disk before enabling storage.
+func targetProofLines(input Installation, preparation [][]string) []string {
 	if !input.Physical {
 		return nil
 	}
 	lines := []string{
 		"%pre --erroronfail --interpreter=/bin/bash",
 		"set -euo pipefail",
-		`bootwright_observed=$(for bootwright_nic in /sys/class/net/*; do`,
-		`if [ ! -e "${bootwright_nic}/device" ]; then continue; fi`,
-		`case "$(basename -- "$(readlink -f -- "${bootwright_nic}/device/driver")")" in cdc_ether|cdc_eem|cdc_ncm|rndis_host) continue;; esac`,
-		`bootwright_mac="${bootwright_nic}/address"`,
-		`if [ -r "${bootwright_nic}/bonding_slave/perm_hwaddr" ]; then bootwright_mac="${bootwright_nic}/bonding_slave/perm_hwaddr"; fi`,
-		`tr 'A-Z' 'a-z' < "${bootwright_mac}" || exit 1`,
-		`done | sort -u)`,
 	}
-	if len(input.ExpectedMACs) == 0 {
-		lines = append(lines,
-			`echo 'Bootwright: this machine declares no hardware address to prove it by; refusing before any disk is touched.' >&2`,
-			"exit 1")
-	}
-	excluded := []string{}
-	for _, address := range input.ExpectedMACs {
-		excluded = append(excluded, "-e '"+address+"'")
-		lines = append(lines,
-			`if ! printf '%s\n' "${bootwright_observed}" | grep -Fx '`+address+`' >/dev/null; then`,
-			`echo 'Bootwright: this machine does not report `+address+
-				`, which its declaration requires; refusing before any disk is touched.' >&2`,
-			"exit 1",
-			"fi")
-	}
-	if len(excluded) != 0 {
-		lines = append(lines,
-			`bootwright_undeclared=$(printf '%s\n' "${bootwright_observed}" | grep -Fvx `+strings.Join(excluded, " ")+` | grep -c . || true)`,
-			`if [ "${bootwright_undeclared}" != 0 ]; then`,
-			`echo "Bootwright: this machine reports ${bootwright_undeclared} hardware address(es) its declaration does not name; refusing before any disk is touched." >&2`,
-			"exit 1",
-			"fi")
-	}
+	lines = append(lines, targetMACLines(input)...)
 	bySerial := serialRootInstallation(input)
 	identity, resolver := false, false
 	subject := "the declared root device " + input.RootDevice
@@ -832,11 +814,78 @@ func targetProofLines(input Installation) []string {
 	if !resolver && slices.ContainsFunc(input.ClearTargets, func(target ClearTarget) bool { return target.DeviceName == "" }) {
 		lines = append(lines, serialResolverLines()...)
 	}
+	if input.LinuxDiscoveredWWN {
+		lines = append(lines, linuxDiscoveryProofLines(input)...)
+		prepared := false
+		for _, section := range preparation {
+			if len(section) == 0 {
+				continue
+			}
+			lines = append(lines, "(")
+			lines = append(lines, section[1:slices.Index(section, "%end")]...)
+			lines = append(lines, ")")
+			prepared = true
+		}
+		if prepared {
+			lines = append(lines, `bootwright_reprove_root`)
+		}
+	}
 	lines = append(lines, clearLines(input)...)
-	if bySerial {
+	if input.LinuxDiscoveredWWN {
+		if len(input.ClearTargets) != 0 {
+			lines = append(lines, `bootwright_reprove_root`)
+		}
+		lines = append(lines, linuxStorageIncludeLines(strings.TrimPrefix(input.RootDevice, "/dev/"))...)
+	} else if bySerial {
 		lines = append(lines, `printf '%s\n' "ignoredisk --only-use=${bootwright_root_name}" "clearpart --all --initlabel --drives=${bootwright_root_name}" > `+diskInclude)
 	}
 	return append(lines, "%end", "")
+}
+
+func targetMACLines(input Installation) []string {
+	var lines []string
+	if input.LinuxDiscoveredWWN {
+		lines = append(lines, "bootwright_prove_macs() {")
+	}
+	lines = append(lines,
+		`bootwright_observed=$(for bootwright_nic in /sys/class/net/*; do`,
+		`if [ ! -e "${bootwright_nic}/device" ]; then continue; fi`,
+		`case "$(basename -- "$(readlink -f -- "${bootwright_nic}/device/driver")")" in cdc_ether|cdc_eem|cdc_ncm|rndis_host) continue;; esac`,
+		`bootwright_mac="${bootwright_nic}/address"`,
+		`if [ -r "${bootwright_nic}/bonding_slave/perm_hwaddr" ]; then bootwright_mac="${bootwright_nic}/bonding_slave/perm_hwaddr"; fi`,
+		`tr 'A-Z' 'a-z' < "${bootwright_mac}" || exit 1`,
+		`done | sort -u)`)
+	if input.LinuxDiscoveredWWN {
+		lines[len(lines)-1] += " || return 1"
+	}
+	if len(input.ExpectedMACs) == 0 {
+		lines = append(lines,
+			`echo 'Bootwright: this machine declares no hardware address to prove it by; refusing before any disk is touched.' >&2`,
+			"exit 1")
+	}
+	excluded := []string{}
+	for _, address := range input.ExpectedMACs {
+		excluded = append(excluded, "-e '"+address+"'")
+		lines = append(lines,
+			`if ! printf '%s\n' "${bootwright_observed}" | grep -Fx '`+address+`' >/dev/null; then`,
+			`echo 'Bootwright: this machine does not report `+address+
+				`, which its declaration requires; refusing before any disk is touched.' >&2`,
+			"exit 1",
+			"fi")
+	}
+	if len(excluded) != 0 {
+		lines = append(lines,
+			`bootwright_undeclared=$(printf '%s\n' "${bootwright_observed}" | grep -Fvx `+strings.Join(excluded, " ")+` | grep -c . || true)`,
+			`if [ "${bootwright_undeclared}" != 0 ]; then`,
+			`echo "Bootwright: this machine reports ${bootwright_undeclared} hardware address(es) its declaration does not name; refusing before any disk is touched." >&2`,
+			"exit 1",
+			"fi")
+	}
+	if input.LinuxDiscoveredWWN {
+		lines = append(lines, "}", "bootwright_prove_macs")
+		lines = append(lines, linuxDiscoveryHostLines()...)
+	}
+	return lines
 }
 
 func inventoriedLines(serials []string) []string {

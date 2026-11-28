@@ -50,6 +50,22 @@
   no_log: true
   diff: false
 
+- name: Record that the guarded installer may be handed to the machine
+  bootwright.core.private_file:
+    path: '{{ managedos_install_anaconda_boot_handoff }}'
+    content: '{{ bootwright_os_install_digest }}'
+  diff: false
+  when: bootwright_os_install_material.guardedRoot | default(false) | bool
+
+- name: Flush the guarded handoff and its directory entries before insertion
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/sync
+      - -f
+      - '{{ managedos_install_anaconda_work }}'
+  changed_when: false
+  when: bootwright_os_install_material.guardedRoot | default(false) | bool
+
 - name: Insert the published installer image as virtual media
   ansible.builtin.include_role:
     name: bootwright.core.substrate_machine

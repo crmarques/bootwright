@@ -3,6 +3,7 @@ package installation
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"maps"
 	"slices"
 	"strconv"
@@ -220,7 +221,16 @@ func description(verb reconciliation.Verb, request Request) string {
 	if verb == reconciliation.Destroy {
 		return "remove the installer media of " + request.Identity.Object
 	}
-	return "install the operating system of " + request.Identity.Object
+	description := "install the operating system of " + request.Identity.Object
+	if request.linuxDiscoveredWWN() {
+		disk := request.DiscoveryProof.Selected
+		identity := disk.WWN
+		if disk.SerialNumber != "" {
+			identity += " serial:" + disk.SerialNumber
+		}
+		description += fmt.Sprintf(" on Linux-discovered disk %s (%d bytes, rechecked by Anaconda)", identity, disk.SizeBytes)
+	}
+	return description
 }
 
 func impacts(verb reconciliation.Verb, request Request) []string {
@@ -598,6 +608,9 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 		return lifecycle.RunResult{}, err
 	}
 	values := map[string]string{"marker": string(marker)}
+	if err := guardedRootValues(execution, request, operation, observes, marker, values); err != nil {
+		return lifecycle.RunResult{}, err
+	}
 	if observes != "" {
 		values["observes"] = observes
 	}
@@ -671,7 +684,6 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 	}
 	materials = append(materials, recoveryMaterial(operation, request)...)
 	materials = append(materials, registrationMaterial(operation, request)...)
-	// The deadline follows the budgets this request froze, not this build's.
 	if operation == "apply" {
 		maps.Copy(refusals, keyPolicyRefusals(request, values))
 	}
@@ -763,6 +775,9 @@ func (c Capability) pinValues(execution lifecycle.Execution, request Request) (m
 	if err != nil {
 		return nil, err
 	}
+	if request.linuxDiscoveredWWN() && (!pinned || !validInstallerUUID(strings.ToLower(strings.TrimSpace(pin.UUID)))) {
+		return nil, installRecordsMissing.Fail("the Linux-discovered disk has no durable Machine UUID to check in the installer", "restore the original Machine proof before continuing installation")
+	}
 	if !pinned && (request.Target.Hardware == nil || request.Target.Hardware.RootVolumeRef == nil) {
 		return nil, nil
 	}
@@ -777,6 +792,9 @@ func (c Capability) pinValues(execution lifecycle.Execution, request Request) (m
 		}
 	}
 	values := pin.PinValues("")
+	if request.linuxDiscoveredWWN() {
+		values["installerUUID"] = strings.ToLower(strings.TrimSpace(pin.UUID))
+	}
 	if pin.RootVolume.Valid() {
 		values["rootVolumeWWN"] = canonicalWWN(pin.RootVolume.WWN)
 		values["rootVolumeSize"] = strconv.FormatInt(pin.RootVolume.SizeBytes, 10)

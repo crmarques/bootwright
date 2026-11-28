@@ -47,12 +47,13 @@ def test_the_intent_is_recorded_where_the_marker_is_proved_before_any_withdrawal
         "Update the installed machine within its release after its registration")]
     assert prove + 1 == recorded and all(recorded < index for index in later)
     assert tasks[recorded][PROTOCOL] == {"phase": "prepared", "marker": "{{ bootwright_os_install_material.marker }}"}
-    assert "when" not in tasks[recorded] and tasks[recorded]["no_log"] is True
+    assert tasks[recorded]["when"] == "not (managedos_install_anaconda_recovered_handoff | default(false) | bool)"
+    assert tasks[recorded]["no_log"] is True
     for name in ("network.yml", "update.yml"):
         assert sum(task.get("ansible.builtin.include_tasks") == "reboot.yml" for task in role_tasks.flatten(loaded(name))) == 1, name
     for name in sorted(path.name for path in TASKS.glob("*.yml")):
         records = [task for task in role_tasks.flatten(loaded(name)) if (task.get(PROTOCOL) or {}).get("phase") == "prepared"]
-        assert len(records) == (1 if name == "apply.yml" else 0), name
+        assert len(records) == (1 if name in ("apply.yml", "guard_handoff.yml") else 0), name
 
 
 def test_a_proved_installation_boots_its_disk_and_never_the_installer():

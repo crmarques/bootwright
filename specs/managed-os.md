@@ -1436,6 +1436,9 @@ narrows, but does not close, the interval between the controller's last proof
 and the installer's first write; what remains is recorded as a residual race
 rather than described as eliminated.
 
+A [Linux-discovered WWN](#linux-discovered-wwn) adds a complete
+inventory and opened-device check in this installer.
+
 **A serial-declared root's WWN is recorded.** The `%pre` writes the WWN the
 proved serial-declared root reports, read as above, empty when blank or absent;
 a `--nochroot` `%post` installs it at `/etc/bootwright/root-wwn`, which the
@@ -1491,6 +1494,38 @@ Physical FIPS and TPM2 root encryption use this private delivered-key path
 and its pinned identity and completion proofs. Managed registration uses the
 [pinned registration session](#registration). [Physical host qualification](#physical-host-qualification) records
 their real-hardware evidence; in-tree delivery does not qualify a physical host.
+
+#### Linux-discovered WWN
+
+The controller can rehearse the selection with `machine discover` using the
+same pinned Anaconda boot source in RAM-only inventory mode, including when Redfish
+reports only the physical members of a RAID logical disk. A plan for a
+Linux-discovered WWN shows the expected root identity and exact byte capacity.
+The installation request binds them to the completed discovery report and the
+existing `data-loss` authorization. The usual verified management connection,
+Machine and MAC pins, powered-off and media custody proofs apply before boot.
+
+Inside the installation boot, `%pre` compares the SMBIOS UUID to the
+original Machine pin and the MAC set to the frozen declaration. It requires
+one eligible whole disk with the expected WWN and, when frozen, one matching
+serial on that same disk. Two matching identifiers, incomplete inventory,
+unsupported whole devices, changes between scans, or an unreadable identity
+refuse. The verifier opens the resolved root read-only and ties its device
+number, disk sequence and byte capacity to the live sysfs scan. It verifies
+the same proof again after installer preparation and after any authorized
+data-disk clear. Only then does `%pre` write the storage include selecting
+the proved WWN's by-id path.
+Anaconda reopens that path through its native storage code, so the qualified
+hardware must keep the presentation stable across that interval. The guard
+works before either plain or encrypted partitioning. Each installer boot must
+pass the guard. The controller durably records the media handoff before it
+attempts insertion. An interrupted handoff with no positive evidence of the
+installation stops recovery before work or media is replaced, even if power
+is off. Recovery can observe a completed installation or boot a previously
+proved installed system under the
+[attempt rules](state-reconciliation.md#attempts-and-unknown-outcomes).
+`TestLinuxDiscoveredWWNOnlyPublishesStorageAfterFreshProof` exercises the
+guard and its handoff.
 
 ### Physical data-disk clear
 

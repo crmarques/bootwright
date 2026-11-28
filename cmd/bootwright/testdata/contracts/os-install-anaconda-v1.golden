@@ -1,8 +1,8 @@
 implementation: os-install-anaconda-v1
-content-digest: b512d16f8c750fb6e2613338798ef3faf360575060eece9e97e0c5afa44b0a99
+content-digest: eb40e21353c3d953befb86855defe4b3654979f1c27bf0d51e12f01db24e3384
 request-version: os-install-anaconda-v1
 automation-formats: none
-mark-formats: none
+mark-formats: /.bootwright-boot-handoff
 proof-ids: .bootwright-tree-identity, /etc/bootwright/registration.json, /etc/bootwright/root-wwn, /etc/bootwright/update.json
 fixed-places: .bootwright-satellite.pem.tmp, /etc/bootwright, /etc/rhsm/ca/bootwright-satellite.pem, /run/bootwright, /var/lib/bootwright-hosted, bootwright-network-apply.service
 effect-pins:
@@ -21,6 +21,8 @@ effect-pins:
   subscription-package-source
   explicit-repository-proxy-policy
   power-cycled-guest-removal
+  linux-discovered-root-installer-guard
+  @@BOOTWRIGHT_INSTALLER_UUID@@
 request-identity:
   identity.context
   identity.object

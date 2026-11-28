@@ -150,6 +150,10 @@
         work: '{{ managedos_install_anaconda_work }}'
       register: managedos_install_anaconda_before
 
+    - name: Refuse to rebuild or replace media after an unproved guarded install handoff
+      ansible.builtin.include_tasks: guard_handoff.yml
+      when: bootwright_os_install_material.guardedRoot | default(false) | bool
+
     # An attempt killed part way leaves its work area, and mkksiso refuses to write
     # an image over one already there, so this attempt starts from none.
     - name: Clear the work area an interrupted attempt left
@@ -229,6 +233,7 @@
              | replace('@@BOOTWRIGHT_ARTIFACT_CERTIFICATE@@', managedos_install_anaconda_certificate)
              | replace('@@BOOTWRIGHT_PACKAGE_TREE_CERTIFICATE@@', managedos_install_anaconda_tree_certificate)
              | replace('@@BOOTWRIGHT_VOLUME_WWN@@', bootwright_os_install_material.rootVolumeWWN | default(''))
+             | replace('@@BOOTWRIGHT_INSTALLER_UUID@@', bootwright_os_install_material.installerUUID | default(''))
              | replace('@@BOOTWRIGHT_VOLUME_SIZE@@', bootwright_os_install_material.rootVolumeSize | default('')) }}
         path: '{{ managedos_install_anaconda_work }}/ks.cfg'
       changed_when: true
@@ -397,7 +402,9 @@
     - name: Boot the installed disk of a machine this apply already proved
       ansible.builtin.include_tasks: proved_boot.yml
       when:
-        - bootwright_os_install_material.installationProved | default('false') | bool
+        - >-
+          (bootwright_os_install_material.installationProved | default(false) | bool)
+          or (managedos_install_anaconda_recovered_handoff | default(false) | bool)
         - not (managedos_install_anaconda_was_installed | bool)
 
     # The substrate's pre-boot proof leaves the refusal it made in its own fact,
@@ -481,6 +488,7 @@
       bootwright.core.managedos_install_protocol:
         phase: prepared
         marker: '{{ bootwright_os_install_material.marker }}'
+      when: not (managedos_install_anaconda_recovered_handoff | default(false) | bool)
       no_log: true
 
     - name: Report that the installed machine answered

@@ -349,6 +349,7 @@ func automationIdentities() map[string]automationFormat {
 	eraseRuntime := transient("the erase environment's RAM-only runtime, which exists only while that boot runs")
 	scriptName := transient("the $0 word of a fixed shell probe")
 	identities := map[string]automationFormat{
+		"/.bootwright-boot-handoff":                  fixedBy(kindMark, "the guarded installation's durable pre-insert marker", anaconda),
 		"/bootwright-discovery/drivers.sh":           transient("fixed RAM-only bounded driver bootstrap"),
 		"bootwright-discovery/drivers.sh":            transient("initramfs driver bootstrap archive member"),
 		"/etc/.bootwright-discovery-resolv":          transient("atomic RAM-only resolver configuration stage"),
@@ -514,6 +515,7 @@ func automationCapitalized() map[string]automationFormat {
 		"_BOOTWRIGHT_SOURCE":                                transient("the attribute that carries a helper's source into the worker process within one call"),
 		"BOOTWRIGHT_STOP_RECORD":                            transient("the environment marker the lifecycle runner sets for one adapter run's stopped record"),
 		"._BOOTWRIGHT_SOURCE":                               transient("the attribute that carries a helper's source into the worker process within one call"),
+		"@@BOOTWRIGHT_INSTALLER_UUID@@":                     kickstart,
 		"@@BOOTWRIGHT_VOLUME_WWN@@":                         kickstart,
 		"@@BOOTWRIGHT_VOLUME_SIZE@@":                        kickstart,
 		"@@BOOTWRIGHT_MARKER@@":                             kickstart,

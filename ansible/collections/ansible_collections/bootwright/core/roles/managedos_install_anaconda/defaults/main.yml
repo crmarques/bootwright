@@ -6,6 +6,7 @@ managedos_install_anaconda_work_parent: /var/lib/bootwright-hosted
 managedos_install_anaconda_area: "{{ ['machines', bootwright_os_install_request.identity.object, 'install'] }}"
 managedos_install_anaconda_work: >-
   {{ managedos_install_anaconda_work_parent }}/{{ bootwright_os_install_request.identity.context }}/{{ managedos_install_anaconda_area | join('/') }}
+managedos_install_anaconda_boot_handoff: '{{ managedos_install_anaconda_work }}/.bootwright-boot-handoff'
 managedos_install_anaconda_scratch: '{{ bootwright_run_scratch }}/managedos-install'
 managedos_install_anaconda_media: /var/lib/bootwright/media
 # Seconds one pinned guest connection may take. ssh itself gives up a peer that
