@@ -17,6 +17,7 @@ import (
 
 	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/machine/diskselection"
 	"github.com/crmarques/bootwright/internal/machine/hardware"
 	"github.com/crmarques/bootwright/internal/machine/power"
 	"github.com/crmarques/bootwright/internal/managedos/diskdiscovery"
@@ -315,11 +316,21 @@ func TestThePowerRolesAdmitTheRequestsThisBuildSends(t *testing.T) {
 // Check its actual Go encoding against every bound role entry point too.
 func TestTheDiscoveryRolesAdmitTheRequestsThisBuildSends(t *testing.T) {
 	t.Parallel()
-	for _, port := range []int{22, 2222} {
+	for _, variant := range []struct {
+		name, inventory string
+		agent           *diskdiscovery.AgentPreflight
+		port            int
+	}{
+		{name: "automatic", inventory: diskdiscovery.InventoryAutomatic, port: 22},
+		{name: "boot", inventory: diskdiscovery.InventoryBoot, port: 2222},
+		{name: "agent", inventory: diskdiscovery.InventoryBoot, port: 22, agent: &diskdiscovery.AgentPreflight{
+			Cluster: "example", Root: diskselection.DiskIdentity{WWN: "0x5000000000000001", SerialNumber: "EXAMPLE-OS", SizeBytes: 128849018880},
+		}},
+	} {
 		request := diskdiscovery.DiscoveryRequest{
-			Version: diskdiscovery.DiscoveryImplementation, Inventory: diskdiscovery.InventoryAutomatic,
+			Version: diskdiscovery.DiscoveryImplementation, Inventory: variant.inventory, Agent: variant.agent,
 			Interfaces: []installation.Interface{}, DeadlineSeconds: 1800,
-			SSH: diskdiscovery.DiscoverySSH{Port: port},
+			SSH: diskdiscovery.DiscoverySSH{Port: variant.port},
 		}
 		wire, err := request.Canonical()
 		if err != nil {
@@ -329,7 +340,7 @@ func TestTheDiscoveryRolesAdmitTheRequestsThisBuildSends(t *testing.T) {
 			run := lifecycle.RunRequest{Implementation: diskdiscovery.DiscoveryImplementation,
 				Operation: operation, Variable: "bootwright_disk_discovery", Canonical: wire}
 			for _, problem := range roleRefusals(run) {
-				t.Errorf("%s, port %d: %s", operation, port, problem)
+				t.Errorf("%s, %s: %s", operation, variant.name, problem)
 			}
 		}
 	}

@@ -18972,3 +18972,14 @@ check.
 
 The [setup flow](../controller.md#the-setup-flow) owns the check. The
 delivering commit records the in-tree gates and their results.
+
+## X789 — Disk discovery admits the frozen Agent preflight request
+
+**Item:** B1918 (defect). **Owner:** Managed OS.
+**Authority:** explicit request to fix the discovery argument validation failure.
+
+The discovery role omitted the optional Agent record from its shared argument
+specification, blocking apply, observation and removal before their first
+task. The [Linux root preflight](../openshift-clusters.md#linux-root-preflight)
+keeps its frozen request and proof unchanged. The delivering commit records
+the in-tree gates. [B1913](m3.md#b1913) still requires hardware acceptance.

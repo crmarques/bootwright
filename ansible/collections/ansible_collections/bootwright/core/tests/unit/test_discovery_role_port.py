@@ -1,4 +1,4 @@
-"""Discovery's production role entry points admit its frozen SSH connection."""
+"""Discovery's production role entry points admit its frozen request variants."""
 
 import pytest
 from ansible.module_utils.common.arg_spec import ArgumentSpecValidator
@@ -42,3 +42,19 @@ def test_ansible_refuses_incomplete_or_undeclared_ssh_fields(entry, change):
         values["bootwright_disk_discovery_request"]["ssh"] = {} if change == "missing-port" else {"port": 22, "other": True}
     result = ArgumentSpecValidator(options(entry)).validate(values, validate_role_argument_spec=True)
     assert result.error_messages
+
+
+@pytest.mark.parametrize("entry", ("apply", "observe", "destroy"))
+@pytest.mark.parametrize("missing", (None, "cluster", "root", "wwn", "serialNumber", "sizeBytes"))
+def test_ansible_validates_the_optional_frozen_agent_preflight(entry, missing):
+    values = request({"port": 22})
+    discovery = values["bootwright_disk_discovery_request"]
+    discovery["inventory"] = "boot"
+    root = {"wwn": "0x5000000000000001", "serialNumber": "EXAMPLE-OS", "sizeBytes": 128849018880}
+    agent = {"cluster": "example", "root": root}
+    discovery["agent"] = agent
+    if missing is not None:
+        del (agent if missing in agent else root)[missing]
+
+    result = ArgumentSpecValidator(options(entry)).validate(values, validate_role_argument_spec=True)
+    assert bool(result.error_messages) == (missing is not None), result.error_messages

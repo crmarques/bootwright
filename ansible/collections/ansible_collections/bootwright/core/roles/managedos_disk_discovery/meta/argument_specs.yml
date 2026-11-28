@@ -12,6 +12,25 @@ argument_specs:
             required: true
             choices:
               - os-disk-discovery-v1
+          agent:
+            type: dict
+            options:
+              cluster:
+                type: str
+                required: true
+              root:
+                type: dict
+                required: true
+                options:
+                  wwn:
+                    type: str
+                    required: true
+                  serialNumber:
+                    type: str
+                    required: true
+                  sizeBytes:
+                    type: int
+                    required: true
           identity:
             type: dict
             required: true
