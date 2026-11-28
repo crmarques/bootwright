@@ -107,7 +107,7 @@ func (s Selection) Targeted() bool { return len(s.Clusters) != 0 || len(s.Machin
 func (s Selection) Empty() bool { return len(s.Stages) == 0 && s.Until == "" && !s.Targeted() }
 
 func ClusterOwners(plan Plan, block Block) []string {
-	if plan.Preparation == nil && block.Kind == string(api.Machine) {
+	if plan.Preparation == nil && block.Kind == string(api.Machine) && block.Stage != StageClusters {
 		return nil
 	}
 	if api.IsClusterKind(api.Kind(block.Kind)) && len(block.ClusterOwners) == 0 {

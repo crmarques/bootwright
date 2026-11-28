@@ -353,7 +353,7 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 		capability: agentinstall.NewMedia(runner, material.AuthorizedKey).WithIdentities(provedIdentities{}),
 	}, {
 		kind: agentinstall.Kind, implementation: agentinstall.InstallImplementation, family: "cluster-install",
-		capability: agentinstall.NewInstall(runner).WithPasswordHash(material.BcryptPassword).WithIdentities(provedIdentities{}).WithHostAccess(kubevirt.NewLender(runner)),
+		capability: agentinstall.NewInstall(runner).WithPasswordHash(material.BcryptPassword).WithIdentities(provedIdentities{}).WithHostAccess(kubevirt.NewLender(runner)).WithLinuxPreflight(diskdiscovery.ProveAgentRoot),
 	}}
 	for _, kind := range []api.Kind{api.CephCluster, api.CephPlacementPolicy, api.CephPool, api.CephRBDImage, api.CephFilesystem, api.CephSubvolume, api.CephClient, api.CephObjectGateway, api.CephObjectUser, api.CephObjectBucket, api.CephNFSExport, api.CephNVMeoFSubsystem} {
 		resolver = append(resolver, boundCapability{kind: string(kind), implementation: ceph.Implementation, family: "storage-core", capability: ceph.New(kind, runner).WithProofs(cephDependencyProofs{})})

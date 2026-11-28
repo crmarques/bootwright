@@ -1,9 +1,9 @@
 implementation: cluster-install-agent-v1
-content-digest: b382e1bc83ba4115037c7ff8c87677d3ab185e7cfe3faf99a16c37c146460020
+content-digest: cb8158bce6a5ab1ad9dc1293900bd42d3b4799d7979cd6a550b8d2efaed447fd
 request-version: cluster-install-agent-v1
 automation-formats: none
 mark-formats: bootwright.io/lend
-proof-ids: .bootwright-booted, .bootwright-inserted-, /.bootwright-booted, /.bootwright-inserted-, bootwright/containercluster/identity/v1
+proof-ids: .bootwright-booted, .bootwright-inserted-, /.bootwright-agent-handoff-, /.bootwright-booted, /.bootwright-inserted-, bootwright/containercluster/identity/v1
 fixed-places: .bootwright-kubeconfig, /.bootwright-kubeconfig, bootwright-, bootwright-cluster-install
 effect-pins:
   clusters
@@ -19,6 +19,7 @@ effect-pins:
   verified-media-default
   prove-physical-target-before-boot-and-media-writes
   physical-root-and-release-proof
+  linux-single-disk-preflight
 request-identity:
   identity.context
   identity.cluster

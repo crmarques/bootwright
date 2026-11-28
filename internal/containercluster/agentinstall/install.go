@@ -11,6 +11,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
+	"github.com/crmarques/bootwright/internal/machine/diskselection"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -26,6 +27,7 @@ type InstallCapability struct {
 	identities   Identities
 	access       HostAccess
 	hashPassword func([]byte) ([]byte, error)
+	preflight    agentRootProof
 }
 
 func NewInstall(runner Runner) InstallCapability { return InstallCapability{runner: runner} }
@@ -39,6 +41,13 @@ func (c InstallCapability) WithIdentities(identities Identities) InstallCapabili
 
 func (c InstallCapability) WithHostAccess(access HostAccess) InstallCapability {
 	c.access = access
+	return c
+}
+
+type agentRootProof func(lifecycle.Execution, string, string, string, []string, diskselection.DiskIdentity, time.Time) (int64, error)
+
+func (c InstallCapability) WithLinuxPreflight(prove agentRootProof) InstallCapability {
+	c.preflight = prove
 	return c
 }
 
@@ -137,6 +146,9 @@ func installImpacts(verb reconciliation.Verb, request InstallRequest) []string {
 			continue
 		}
 		impacts = append(impacts, "install-cluster "+node.Machine, "power-on "+node.Machine)
+		if node.Hardware != nil && node.Hardware.RootSelector == linuxPreflightRoot {
+			impacts = append(impacts, "install-after-linux-preflight "+node.Machine+" (native installer reopens disk after reboot)")
+		}
 		if node.Controller.VirtualMedia.EnableVerification {
 			impacts = append(impacts, "enable-bmc-media-verification "+node.Machine+" (BMC-wide; retained)")
 		}
@@ -617,6 +629,7 @@ func nodeRefusal(reason string, index int) string { return reason + "-node-" + s
 // block proved, using the original apply proof during removal.
 func (c InstallCapability) pinValues(execution lifecycle.Execution, operation string, request InstallRequest) (map[string]string, error) {
 	values := map[string]string{}
+	now := time.Now()
 	for index, node := range request.Nodes {
 		pinnedPort := node.PortPinned
 		if !pinnedPort && !node.Physical {
@@ -635,6 +648,24 @@ func (c InstallCapability) pinValues(execution lifecycle.Execution, operation st
 		}
 		if operation == "apply" && node.Hardware != nil && node.Hardware.RootVolumeRef != nil && (!pinned || !node.Hardware.RootVolumeRef.Matches(pin.RootVolume)) {
 			return nil, openshiftMachineProofMissing.Fail("the existing root volume has no matching durable Machine proof", "apply the Machine stage before building and installing")
+		}
+		if operation == "apply" && node.Hardware != nil && node.Hardware.RootSelector == linuxPreflightRoot {
+			if c.preflight == nil || !pinned || pin.UUID == "" {
+				return nil, openshiftMachineProofMissing.Fail("Machine/"+node.Machine+" has no pinned UUID or Linux root preflight reader", "")
+			}
+			var macs []string
+			for _, nic := range node.Hardware.Interfaces {
+				macs = append(macs, strings.ToLower(nic.MACAddress))
+			}
+			deadline, err := c.preflight(execution, request.Identity.Cluster, node.Machine, pin.UUID, macs, diskselection.DiskIdentity(*node.Hardware.RootDisk), now)
+			if err != nil {
+				return nil, err
+			}
+			if deadline <= now.Unix() && !slices.ContainsFunc(execution.ApplyPreparations, func(data json.RawMessage) bool { return validBootPreparation(data) == nil }) {
+				return nil, openshiftMachineProofMissing.Fail("the Linux root preflight expired for Machine/"+node.Machine+" before Agent handoff",
+					"review bootwright destroy --dry-run --stage clusters --clusters "+request.Identity.Cluster+" --context "+execution.Context+" before a fresh apply")
+			}
+			values["linuxPreflightUntil"+nodeVariable(index)] = strconv.FormatInt(deadline, 10)
 		}
 		if pinned {
 			maps.Copy(values, pin.PinValues(nodeVariable(index)))

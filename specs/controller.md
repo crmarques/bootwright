@@ -270,7 +270,7 @@ other statement of a closure names its row and links here.
 | Stage | container runtime: a managed service placed on the controller Machine, or a libvirt provider hosted on it, whose emulated BMC runs as a container | `podman` |
 | Stage | libvirt client: a libvirt provider hosted on the controller Machine, or any Machine a libvirt provider hosts, derived from placements with no Machine role declared | `libvirt-client` |
 | Stage | hypervisor: a libvirt provider hosted on the controller Machine | `libvirt-daemon`, `libvirt-daemon-driver-network`, `libvirt-daemon-driver-qemu`, `libvirt-daemon-driver-storage-core`, `qemu-img`, `qemu-kvm-core`, `swtpm`, `swtpm-tools` |
-| Stage | installer media: an Anaconda installation published through an artifact server on the controller Machine | `lorax`, `xorriso`, `squashfs-tools`, `e2fsprogs`, `binutils` |
+| Stage | installer media: an Anaconda installation or Agent Linux root preflight publishes through an artifact server on the controller Machine | `lorax`, `xorriso`, `squashfs-tools`, `e2fsprogs`, `binutils` |
 | Stage | image mirror: the managed image mirror's `Registry` placed on the controller Machine | `skopeo` |
 | Stage | `nmstate`: an agent-installed OpenShiftCluster with a node that references a declared Machine | `nmstate` |
 | Stage | `iputils`: an agent-installed OpenShiftCluster with at least two nodes on the `baremetal` platform and an OpenShift-sourced IPv4 virtual IP in a managed libvirt Network of a provider hosted on the controller Machine | `iputils` |

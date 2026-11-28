@@ -120,6 +120,30 @@ func InstallationFor(catalog api.Catalog, machine, profile api.Object, request R
 	return installation, nil
 }
 
+// InventoryNetworkFor derives the existing RAM worker's single static
+// address and link topology without requiring an installed OS or OS profile.
+func InventoryNetworkFor(catalog api.Catalog, machine api.Object, target substrate.Target, needs *Requirements) (Installation, error) {
+	template, err := substrate.NetworkTemplate(catalog, machine)
+	if err != nil {
+		return Installation{}, err
+	}
+	address, prefix, iface, err := installAddress(catalog, machine)
+	if err != nil {
+		return Installation{}, err
+	}
+	if reason, remediation := installInterfaceRefusal(catalog, machine, template, iface, hostOfTarget(target, true)); reason != "" {
+		return Installation{}, installUnsupported.Fail(reason, remediation)
+	}
+	resolvers, err := resolverAddresses(catalog, machine, needs)
+	if err != nil {
+		return Installation{}, err
+	}
+	topology := readInstallTopology(template, iface)
+	_, gateway := installGatewayRoute(template, iface)
+	return Installation{Address: address, Prefix: prefix, Interface: iface, Gateway: gateway, Nameservers: resolvers,
+		InterfaceType: topology.Type, VLANBase: topology.VLANBase, VLANID: topology.VLANID, BondPorts: topology.Ports, BondOptions: topology.Options}, nil
+}
+
 // identityPackages are what the machine needs installed for its own identity
 // channel to answer afterwards.
 func identityPackages(target Target) []string {

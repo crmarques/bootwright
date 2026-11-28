@@ -160,9 +160,8 @@ func requiresHypervisor(catalog api.Catalog, controllerMachine api.Object) bool 
 	return false
 }
 
-// requiresInstallerMedia reports whether an Anaconda installation builds its
-// image on this Machine. The tooling runs where the selected artifact server is
-// placed, because that is where the installation publishes what it builds.
+// requiresInstallerMedia selects the Anaconda and Linux preflight image
+// tooling where the artifact server publishes the image.
 func requiresInstallerMedia(catalog api.Catalog, controllerMachine api.Object) bool {
 	return slices.Contains(managedos.InstallerMediaHosts(catalog), controllerMachine.Name())
 }

@@ -98,12 +98,12 @@ func WorkRoot(contextName, cluster string) string {
 // layout invalidates a frozen plan.
 func MediaContentDigest() string {
 	return reconciliation.ContentDigestOf("bootwright.containercluster.media-agent-v1",
-		MediaImplementation, mediaRequestVersion, consumerPrefix, ImageFile, HostedRoot, clustersArea, installerTool, rebuildRule, "native-proxy-endpoint-and-bypass")
+		MediaImplementation, mediaRequestVersion, consumerPrefix, ImageFile, HostedRoot, clustersArea, installerTool, rebuildRule, "native-proxy-endpoint-and-bypass", "linux-preflight-native-wwn")
 }
 
 func InstallContentDigest() string {
 	return reconciliation.ContentDigestOf("bootwright.containercluster.install-agent-v1",
-		InstallImplementation, installRequestVersion, consumerPrefix, ImageFile, HostedRoot, clustersArea, installerTool, clientTool, hostAccessLend, hostAccessBound, bootRecord, insertRecord, substrate.RedfishMediaPolicy, substrate.PhysicalBootProof, "physical-root-and-release-proof")
+		InstallImplementation, installRequestVersion, consumerPrefix, ImageFile, HostedRoot, clustersArea, installerTool, clientTool, hostAccessLend, hostAccessBound, bootRecord, insertRecord, substrate.RedfishMediaPolicy, substrate.PhysicalBootProof, "physical-root-and-release-proof", "linux-single-disk-preflight")
 }
 
 const (

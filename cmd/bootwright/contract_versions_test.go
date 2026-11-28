@@ -400,6 +400,7 @@ func automationIdentities() map[string]automationFormat {
 		"/.bootwright-booted":                        fixedBy(kindProof, "the marker the install leaves once its nodes booted the media", install),
 		".bootwright-inserted-":                      fixedBy(kindProof, "the prefix of the record the install writes before a node's insert", install),
 		"/.bootwright-inserted-":                     fixedBy(kindProof, "the prefix of the record the install writes before a node's insert", install),
+		"/.bootwright-agent-handoff-":                fixedBy(kindProof, "the prefix of the durable marker before a Linux-preflight node may power on into Agent media", install),
 		"bootwright/containercluster/identity/v1":    fixedBy(kindProof, "the domain the installed cluster's identity is derived under", install),
 		".bootwright-kubeconfig":                     fixedBy(kindPlace, "the kept copy of the installer's kubeconfig in the work root", install),
 		"/.bootwright-kubeconfig":                    fixedBy(kindPlace, "the kept copy of the installer's kubeconfig in the work root", media, install),

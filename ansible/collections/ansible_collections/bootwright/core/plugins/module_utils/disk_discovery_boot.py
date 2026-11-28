@@ -143,7 +143,7 @@ def overlay(payload):
     return newc(files)
 
 
-def payload(binding, network, interfaces, ssh, deadline, host_key, authorized_key):
+def payload(binding, network, interfaces, ssh, deadline, host_key, authorized_key, single_disk=False):
     """One exact source bundle is used by execution and offline qualification.
 
     The controller pins this operation's host key. Its client private key never
@@ -151,9 +151,10 @@ def payload(binding, network, interfaces, ssh, deadline, host_key, authorized_ke
     """
     modules = (absolute_deadline, bounded_process, canonical_json, disk_inventory, physical_machine_identity, disk_discovery_worker, disk_discovery_sshd)
     files = {module.__name__.rsplit(".", 1)[-1] + ".py": inspect.getsource(module).encode("utf-8") for module in modules}
-    files["request.json"] = canonical_json.canonical({
-        "binding": binding, "interfaces": interfaces, "network": network, "ssh": ssh, "deadlineSeconds": deadline,
-    })
+    request = {"binding": binding, "interfaces": interfaces, "network": network, "ssh": ssh, "deadlineSeconds": deadline}
+    if single_disk:
+        request["singleDisk"] = True
+    files["request.json"] = canonical_json.canonical(request)
     files["host-key"] = host_key
     files["authorized_keys"] = b"restrict " + authorized_key.strip() + b"\n"
     return files

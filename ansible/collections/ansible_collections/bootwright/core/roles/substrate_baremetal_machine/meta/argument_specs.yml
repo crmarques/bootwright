@@ -197,6 +197,9 @@ argument_specs:
           installer_powers_off:
             type: bool
             required: true
+          boot_deadline_epoch:
+            type: int
+            required: false
       substrate_baremetal_machine_boot_endpoint:
         type: str
         required: true

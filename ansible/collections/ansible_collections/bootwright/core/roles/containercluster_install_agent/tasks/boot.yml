@@ -92,7 +92,8 @@
               {{ containercluster_install_agent_node.machinePort | bootwright.core.machine_port_access(bootwright_cluster_install_material)
                  | combine({'require_tpm': containercluster_install_agent_node.requireTPM | default(false),
                             'firmware': containercluster_install_agent_node.firmware | default({}),
-                            'root_disk': containercluster_install_agent_node.hardware.rootDisk | default({}),
+                            'root_disk': ({} if containercluster_install_agent_node.hardware.rootSelector | default('') == 'linuxPreflight'
+                                else containercluster_install_agent_node.hardware.rootDisk | default({})),
                             'root_volume': ({'ref': containercluster_install_agent_node.hardware.rootVolumeRef,
                                 'proof': bootwright_cluster_install_material['pinnedRootVolumeBase64Node' ~ containercluster_install_agent_index]
                                 | b64decode | from_json} if containercluster_install_agent_node.hardware.rootVolumeRef is defined else {}),
@@ -179,6 +180,17 @@
                 mode: '0600'
               no_log: true
 
+        - name: Recheck the Linux preflight deadline before media insertion
+          ansible.builtin.assert:
+            that: >-
+              (bootwright_cluster_install_material['linuxPreflightUntilNode' ~ containercluster_install_agent_index] | default(0) | int)
+              > ((now(utc=true) - ('1970-01-01 00:00:00' | to_datetime)).total_seconds() | int)
+            fail_msg: >-
+              Linux root preflight expired for Machine/{{ containercluster_install_agent_node.machine }} before Agent handoff.
+              Clear the interrupted cluster installation through scoped recovery before starting a fresh apply.
+            quiet: true
+          when: containercluster_install_agent_node.hardware.rootSelector | default('') == 'linuxPreflight'
+
         # The ordering invariant of the Unknown resolution: this record is on
         # disk, file and directory synced, before the insert and so before any
         # power request, so an attempt stopped anywhere after the proof
@@ -218,6 +230,23 @@
               {{ (containercluster_install_agent_insertion.msg | default('') | string | bootwright.core.printable)[:512] }}
             quiet: true
 
+        - name: Recheck the Linux preflight deadline before selecting the Agent boot
+          ansible.builtin.assert:
+            that: >-
+              (bootwright_cluster_install_material['linuxPreflightUntilNode' ~ containercluster_install_agent_index] | default(0) | int)
+              > ((now(utc=true) - ('1970-01-01 00:00:00' | to_datetime)).total_seconds() | int)
+            fail_msg: >-
+              Linux root preflight expired for Machine/{{ containercluster_install_agent_node.machine }} before Agent handoff.
+              Clear the interrupted cluster installation through scoped recovery before starting a fresh apply.
+            quiet: true
+          when: containercluster_install_agent_node.hardware.rootSelector | default('') == 'linuxPreflight'
+
+        - name: Record that native Agent boot can now start
+          bootwright.core.private_file:
+            path: '{{ containercluster_install_agent_work }}/.bootwright-agent-handoff-{{ containercluster_install_agent_index }}'
+            content: "{{ containercluster_install_agent_node.machine }}\n"
+          when: containercluster_install_agent_node.hardware.rootSelector | default('') == 'linuxPreflight'
+
         - name: Boot the node through its selected substrate
           ansible.builtin.include_role:
             name: bootwright.core.substrate_machine
@@ -228,7 +257,9 @@
               {{ containercluster_install_agent_node.machinePort
                  | bootwright.core.machine_port_access(bootwright_cluster_install_material,
                      containercluster_install_agent_node.hardware if containercluster_install_agent_node.physical else none)
-                 | combine({'installer_powers_off': false}) }}
+                 | combine({'installer_powers_off': false})
+                 | combine({'boot_deadline_epoch': bootwright_cluster_install_material['linuxPreflightUntilNode' ~ containercluster_install_agent_index]}
+                    if containercluster_install_agent_node.hardware.rootSelector | default('') == 'linuxPreflight' else {}) }}
 
       # A step the timeout stopped fails with ansible-core's own message, so the
       # budget is named here; any other failure stays a failure, and its own

@@ -25,7 +25,7 @@ type DiscoverRequest struct {
 }
 
 func (c Capability) AutomaticPreparation(ctx context.Context, input lifecycle.PlanInput, selection reconciliation.Selection) ([]string, error) {
-	requests, _, err := c.requests(ctx, input)
+	requests, _, err := c.requests(ctx, input, false)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +80,7 @@ func (c Capability) ValidatePreparation(ctx context.Context, input lifecycle.Pla
 	if scope.PreparePrerequisites {
 		return nil
 	}
-	requests, requirements, err := c.requests(ctx, input)
+	requests, requirements, err := c.requests(ctx, input, false)
 	if err != nil {
 		return err
 	}

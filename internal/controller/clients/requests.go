@@ -48,7 +48,7 @@ type Request struct {
 	Egress           prerequisites.SetupEgress `json:"egress"`
 	// Hypervisor and InstallerMedia are the closures this Machine's own role in
 	// the graph selects: the runtime a libvirt provider hosted here needs, and
-	// the tooling an Anaconda installation published here builds with.
+	// the tooling that builds Anaconda or Linux preflight media here.
 	Hypervisor     bool          `json:"hypervisor"`
 	ImageMirror    bool          `json:"imageMirror,omitempty"`
 	InstallerMedia bool          `json:"installerMedia"`

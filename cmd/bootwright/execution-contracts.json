@@ -12,12 +12,12 @@
     "fingerprint": "594d12ee3dccd32471dc42909e74742bb2b3f491fe09c25c15cdede4e7dbd5b7"
   },
   "cluster-install-agent-v1": {
-    "contentDigest": "b382e1bc83ba4115037c7ff8c87677d3ab185e7cfe3faf99a16c37c146460020",
-    "fingerprint": "462068ea834d50b058b3184c83c024f7e483066de367555e47745ac216a0c08a"
+    "contentDigest": "cb8158bce6a5ab1ad9dc1293900bd42d3b4799d7979cd6a550b8d2efaed447fd",
+    "fingerprint": "65aada8b973c7d2e7848728a0b2a011a50f6dd502112fe92589ffa69a2cc68d1"
   },
   "cluster-media-agent-v1": {
-    "contentDigest": "059f49047ff8c53d12c11055fe66a6680fdc48a9941288e565e92cd278ab8c06",
-    "fingerprint": "8530ac27dce765a2f135272e3c613e540ea3f63b35fb0416347612c119d8a1af"
+    "contentDigest": "eaca7e25914f986932273c5b678200f2349cd8692ecedbe3081e74dd02775244",
+    "fingerprint": "8e49014d56ef5fbce5ae1bb0ad11f4243b61290199330a925d774e700899b14a"
   },
   "cluster-network-v1": {
     "contentDigest": "afe1ceb61b97e6e1db46f9f8cdbd258e943fc721257cb7753b63aab63457e366",
@@ -76,8 +76,8 @@
     "fingerprint": "1b802386ede89af4b4c1e8d9e027c632501ed46433452c8e1a20a483b3dfe6f4"
   },
   "os-disk-discovery-v1": {
-    "contentDigest": "3b221fbf4c47753b9c26ee7ef35529319dc69b2e834eede019e150c94cf3c53c",
-    "fingerprint": "a243c24e27c1efa1e231f4fe42b25836cc14c3ffd41a36828822e6fbe18da469"
+    "contentDigest": "5b3ef4e1f7d38d93c1022429faae0d6ec13ec3e5400eeac1efb29cda80a14a3c",
+    "fingerprint": "b0a91b0c6b9f52a57e17ca0cd918d00fbb427921b5edf8a50179ab7c56425007"
   },
   "os-host-firewall-v1": {
     "contentDigest": "8550f82a2e2370513d4e35e0e14d2f2cc4965d910599abd0243df00126361efd",

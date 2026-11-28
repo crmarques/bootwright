@@ -419,6 +419,9 @@ func installerRootDeviceHints(catalog api.Catalog, bound api.Object, hints subst
 	if substrate.VirtualArm(substrate.MachineArm(catalog, bound)) {
 		return map[string]any{"deviceName": substrate.RootDevicePath(catalog, bound)}, "", ""
 	}
+	if substrate.MachineLinuxPreflight(bound).Present() {
+		return map[string]any{"wwn": hints.WWN}, "", ""
+	}
 	if hints.VolumeRef != nil {
 		return nil, "", ""
 	}
@@ -525,7 +528,7 @@ func frozenNodes(nodes []nodeProjection) []Node {
 					Trust:               node.target.Controller.VirtualMedia.Trust,
 				},
 			},
-			Hardware: frozenHardware(node.target), RequireTPM: node.requireTPM,
+			Hardware: frozenHardware(node.target, substrate.MachineLinuxPreflight(node.machine).Present()), RequireTPM: node.requireTPM,
 			Labels: node.labels, Machine: node.machine.Name(), MachinePort: node.target.MachinePort(nodeVariable(index)), Name: node.name, Taints: node.taints,
 			StateReadSeconds: stateReadSeconds(node.target.Substrate), Physical: node.target.Physical, Substrate: node.target.Substrate,
 			PortPinned: substrate.PortPinned(node.target.Substrate),
@@ -580,7 +583,7 @@ func nodeFirmware(declared *substrate.Firmware) *Firmware {
 // frozenHardware is the hardware a physical node is proved against: the NICs
 // its Machine declares, in declared order. A node its substrate created is
 // proved by its own controller answering, so it freezes none.
-func frozenHardware(target substrate.Target) *Hardware {
+func frozenHardware(target substrate.Target, linuxPreflight bool) *Hardware {
 	if !target.Physical {
 		return nil
 	}
@@ -594,6 +597,9 @@ func frozenHardware(target substrate.Target) *Hardware {
 		size, _ := strconv.ParseInt(hints.SizeBytes, 10, 64)
 		hardware.RootDisk = &RootDisk{SerialNumber: hints.SerialNumber, SizeBytes: size, WWN: hints.WWN}
 		hardware.RootSelector = "serialAndSize"
+	}
+	if linuxPreflight {
+		hardware.RootSelector = linuxPreflightRoot
 	}
 	if hardware.RootVolumeRef != nil {
 		hardware.RootSelector = "volume"

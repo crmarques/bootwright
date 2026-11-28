@@ -5,6 +5,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 func InstallerMediaHosts(catalog api.Catalog) []string {
@@ -18,6 +19,18 @@ func InstallerMediaHosts(catalog api.Catalog) []string {
 			continue
 		}
 		endpoint := profile.Spec().Get("installer", "anaconda", "redfishVirtualMedia", "artifactServerEndpoint")
+		if server, found := catalog.Find(api.ArtifactServer, endpoint.Get("serverRef").Text()); found {
+			hosts = append(hosts, infrastructureservices.Placement(server))
+		}
+	}
+	for _, cluster := range catalog.OfKind(api.OpenShiftCluster) {
+		if !api.ClusterInstallsByAgent(cluster) || !slices.ContainsFunc(api.ClusterNodeMachines(cluster), func(name string) bool {
+			node, found := catalog.Find(api.Machine, name)
+			return found && api.MachineClusterInstalled(node) && substrate.MachineLinuxPreflight(node).Present()
+		}) {
+			continue
+		}
+		endpoint := cluster.Spec().Get("install", "agent", "redfishVirtualMedia", "artifactServerEndpoint")
 		if server, found := catalog.Find(api.ArtifactServer, endpoint.Get("serverRef").Text()); found {
 			hosts = append(hosts, infrastructureservices.Placement(server))
 		}

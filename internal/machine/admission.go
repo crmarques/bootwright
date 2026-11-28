@@ -277,6 +277,10 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	provider, found := Provider(o, c)
 	variant := substrate.Variant(provider)
 	issues = api.AppendIssues(issues, validateProvision(o, variant)...)
+	if substrate.MachineLinuxPreflight(o).Present() && (variant != substrate.ArmBaremetal || !api.MachineClusterInstalled(o)) {
+		issues = api.AppendIssues(issues, invariant("$."+substrate.RootDiskPath+".linuxPreflight",
+			"Linux root preflight requires a physical Machine installed by the cluster installer", "remove linuxPreflight or use a bare-metal cluster-installed Machine"))
+	}
 	armIssues := validateArm(o, found, variant)
 	issues = api.AppendIssues(issues, armIssues...)
 	if found && variant != "" && len(armIssues) == 0 {
@@ -748,6 +752,26 @@ func AgentRootDeviceRefusal(c api.Catalog, o api.Object) (string, string) {
 		return reason, remedy
 	}
 	hints := substrate.MachineRootDeviceHints(o)
+	if substrate.MachineLinuxPreflight(o).Present() {
+		size, err := strconv.ParseInt(hints.SizeBytes, 10, 64)
+		if !api.MachineClusterInstalled(o) || !slices.Equal(hints.Names(), []string{"serialNumber", "sizeBytes", "wwn"}) ||
+			!diskselection.ValidWWN(hints.WWN) || !diskselection.ValidSerial(hints.SerialNumber) || err != nil || !diskselection.ValidSize(size) ||
+			len(o.Spec().Get("hardware", "dataDisks").Items()) != 0 {
+			return "Linux root preflight requires a physical Agent node with exact WWN, serial and byte capacity and no additional drive declarations or root hints",
+				"set rootDisk.wwn, serialNumber and sizeBytes to the recorded Linux identity and remove any other selectors and data disks"
+		}
+		bmc := substrate.MachineBMC(o)
+		if !substrate.BMCVerified(bmc) || bmc.Get("virtualMedia", "tls", "trust").Text() == substrate.TrustDisableVerification {
+			return "Linux root preflight requires verified HTTPS for BMC access and virtual media", "use a verified BMC connection with established or imported artifact-server trust"
+		}
+		if firmware := substrate.MachineFirmware(o); firmware != nil && firmware.Mode == substrate.FirmwareModeEnforce {
+			return "Linux root preflight requires stable firmware between inventory and installation", "apply and qualify the firmware outside this Agent installation, then remove firmware enforcement or use observe mode"
+		}
+		if action := substrate.MachineRootDisk(o).Get("onRemoval").Text(); action != "" && action != "retain" {
+			return "Linux root preflight is an Agent installation proof", "set rootDisk.onRemoval to retain or remove it"
+		}
+		return "", ""
+	}
 	if hints.Discovery {
 		return "automatic root discovery is supported only for a Bootwright RHEL installation", "declare an exact root selector for this agent installation"
 	}

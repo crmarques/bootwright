@@ -39,6 +39,7 @@ type DiscoveryNetwork struct {
 }
 
 type DiscoveryRequest struct {
+	Agent           *AgentPreflight          `json:"agent,omitempty"`
 	BootMedia       installation.Media       `json:"bootMedia"`
 	Controller      installation.Controller  `json:"controller"`
 	DeadlineSeconds int                      `json:"deadlineSeconds"`
@@ -61,7 +62,7 @@ func DiscoveryBlockID(name string) string {
 	return reconciliation.BlockIdentity("os-disk-discovery-", name)
 }
 func DiscoveryContentDigest() string {
-	h := sha256.Sum256([]byte(DiscoveryImplementation + ":" + discoveryVersion + ":bmc-drive-inventory-or-minimal-ram-boot-pinned-ssh-bmc-poweroff-v1" + ":" + substrate.RedfishMediaPolicy))
+	h := sha256.Sum256([]byte(DiscoveryImplementation + ":" + discoveryVersion + ":bmc-drive-inventory-or-minimal-ram-boot-pinned-ssh-bmc-poweroff-agent-root-v1" + ":" + substrate.RedfishMediaPolicy))
 	return hex.EncodeToString(h[:])
 }
 func (r DiscoveryRequest) Canonical() ([]byte, error) {

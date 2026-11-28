@@ -926,3 +926,37 @@ def test_compact_retry_boots_only_the_stopped_or_unbooted_nodes():
         if rendering.evaluate_conditional(skip()["when"]):
             booted.append(name)
     assert booted == ["master-1", "master-2"]
+
+
+@pytest.mark.parametrize("powered,own,marked,seconds,allowed", [
+    (False, False, False, 300, True),
+    (False, True, False, 300, True),
+    (False, False, False, -1, False),
+    (False, True, True, 300, False),
+    (True, True, True, -1, True),
+    (True, True, False, 300, False),
+    (True, False, True, 300, False),
+])
+def test_linux_preflight_reentry_requires_freshness_or_running_custody(powered, own, marked, seconds, allowed):
+    guard = found(INSTALL, "prepare_boot.yml", lambda task: "positive running custody" in task.get("name", ""))
+    templar = scope(INSTALL, item={"machine": "metal-01"}, ansible_loop={"index0": 0}, prior_handoff=marked,
+                    bootwright_cluster_install_material={"linuxPreflightUntilNode0": str(now() + seconds)},
+                    containercluster_install_agent_state={"powered": ["metal-01"] if powered else [],
+                                                          "ownMedia": ["metal-01"] if own else []})
+    running_owned = templar.template(guard["vars"]["running_owned"])
+    templar.available_variables = dict(templar.available_variables, running_owned=running_owned)
+    assert all(templar.evaluate_conditional(condition) for condition in guard["ansible.builtin.assert"]["that"]) is allowed
+
+
+def test_linux_preflight_marker_and_deadline_bracket_handoff():
+    steps = bounded()["block"]
+    names = [task["name"] for task in steps]
+    assert names.index("Recheck the Linux preflight deadline before media insertion") < names.index("Insert through the selected substrate machine port")
+    insert = names.index("Insert through the selected substrate machine port")
+    select = names.index("Recheck the Linux preflight deadline before selecting the Agent boot")
+    assert insert < select
+    assert select < names.index("Record that native Agent boot can now start")
+    assert names.index("Record that native Agent boot can now start") < names.index("Boot the node through its selected substrate")
+    physical = trusted(ROLES / "substrate_baremetal_machine/tasks/boot_media.yml")
+    steps = [task["name"] for task in physical]
+    assert steps.index("Check the caller's boot deadline before sending power-on") < steps.index("Power the machine on and poll it to running")

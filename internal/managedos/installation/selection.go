@@ -413,6 +413,36 @@ func PinDiscoveryBootMedia(catalog api.Catalog, request Request, records map[str
 	return boot, nil
 }
 
+// PinInventoryImage binds the x86_64 RHEL media used by the shared RAM
+// inventory boot, independent of the operating system it precedes.
+func PinInventoryImage(catalog api.Catalog, reference, owner string, records map[string]MediaRecord) (Media, error) {
+	media, err := mediaFor(catalog, reference, owner)
+	if err != nil {
+		return Media{}, err
+	}
+	image, _ := catalog.Find(api.MachineImage, reference)
+	release := records[media.Name].Release
+	if media.declared == "" || !release.Present() || release.Arch != "x86_64" || (release.Family != "" && release.Family != "Red Hat Enterprise Linux") {
+		return Media{}, installMediaUnusable.Fail("Linux preflight requires a checksum-pinned x86_64 RHEL inventory image",
+			"import the qualified RHEL boot ISO and set spec.bootMedia and spec.checksum on "+image.Identity())
+	}
+	return pinned(media, records, image.Identity(), "spec.bootMedia", image.Identity())
+}
+
+// InventoryPublication resolves the private listener used by the RAM boot.
+func InventoryPublication(catalog api.Catalog, selection api.Value, controller, contextName, machine, owner string) (Publication, machineref.Placement, string, error) {
+	server, _, private, certificate, err := installerPublication(catalog, selection, true, contextName, machine, owner)
+	if err != nil {
+		return Publication{}, machineref.Placement{}, "", err
+	}
+	placement, err := artifactserver.PlacementFor(catalog, server, controller)
+	if err != nil {
+		return Publication{}, machineref.Placement{}, "", err
+	}
+	private.CertificateRef = certificate
+	return *private, placement, server.Name(), nil
+}
+
 func pinBootMedia(catalog api.Catalog, profile api.Object, media Media, records map[string]MediaRecord) (Media, error) {
 	image := imageIdentity(catalog, profile)
 	return pinned(media, records, image, "spec.bootMedia", image)

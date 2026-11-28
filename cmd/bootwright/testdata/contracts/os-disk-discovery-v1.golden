@@ -1,18 +1,28 @@
 implementation: os-disk-discovery-v1
-content-digest: 3b221fbf4c47753b9c26ee7ef35529319dc69b2e834eede019e150c94cf3c53c
+content-digest: 5b3ef4e1f7d38d93c1022429faae0d6ec13ec3e5400eeac1efb29cda80a14a3c
 request-version: os-disk-discovery-v1
 automation-formats: none
 mark-formats: none
 proof-ids: none
 fixed-places: none
 effect-pins:
-  bmc-drive-inventory-or-minimal-ram-boot-pinned-ssh-bmc-poweroff-v1
+  bmc-drive-inventory-or-minimal-ram-boot-pinned-ssh-bmc-poweroff-agent-root-v1
   verified-media-default
 request-identity:
   identity.context
   identity.object
   identity.block
+  agent.cluster
+  agent.root.wwn
+  agent.root.serialNumber
+  agent.root.sizeBytes
 request-schema:
+  agent *struct diskdiscovery.AgentPreflight omitempty
+  agent.cluster string
+  agent.root struct diskselection.DiskIdentity
+  agent.root.serialNumber string omitempty
+  agent.root.sizeBytes int64
+  agent.root.wwn string omitempty
   bootMedia struct installation.Media
   bootMedia.name string
   bootMedia.sha256 string
@@ -76,6 +86,7 @@ request-schema:
   ssh.port int
   version string
 evidence-schema:
+  bootStartedAt int64 omitempty
   cleaned bool
   completed bool
   report opaque omitempty

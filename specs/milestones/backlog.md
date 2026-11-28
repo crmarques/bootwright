@@ -17,7 +17,6 @@ Alias cell.
 
 | ID | Alias | Kind | Owner | Outcome | Why parked |
 | --- | --- | --- | --- | --- | --- |
-| [B1913](#b1913) | new, 2026-11-27 (guarded Linux disk installation) | safety | Container cluster and Managed OS | Install a physical cluster node to an OS-visible disk that its controller cannot identify | The stock Agent workflow needs a documented gate covering preparatory cleanup and imaging, or a separately supported installer implementation |
 | [B1846](#b1846) | new, 2026-11-25 (X746 dependency audit) | enabling | Verification tooling | Retire vulnerable Ansible test-only pip, Pylint and floor pytest pins | The qualified ansible-test owns the pip and Pylint pins, and fixed pytest releases require Python 3.10 or newer |
 | [B1848](#b1848) | new, 2026-11-25 (X746 image scan) | enabling | Infrastructure services and Substrate | Qualify updated managed-service and emulated-BMC images with fewer high and critical findings | Digest changes move execution contracts and need capability-specific validation |
 | [B1611](#b1611) | new, 2026-11-18 (proxy audit) | product | Managed OS, Container cluster and State reconciliation | Observe installed proxy drift and support an owned transition between direct and proxy | Changing a completed installation needs a separate rollout and recovery contract |
@@ -4181,18 +4180,6 @@ disable lists that converge on every apply, as an installation's
 
 **Exit evidence:** a provided host whose enabled repositories follow the
 declared lists across two applies.
-
-### B1913
-
-**Definition:** Needs definition.
-**Outcome:** A physical cluster installer uses the shared Linux disk identity
-policy for a controller-opaque disk and proves its complete write set before
-starting storage effects. Decide the supported writer boundary and recovery
-before promotion. The existing [Agent safeguards](../openshift-clusters.md#selection-and-refusal)
-apply to the stock workflow.
-**Exit evidence:** Exact target and alternate-disk refusal in the pinned
-installer, interrupted handoff recovery, and real-hardware acceptance for each
-admitted installation workflow.
 
 ### B1846
 

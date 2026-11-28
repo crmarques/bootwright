@@ -3279,10 +3279,11 @@ power-off state, context claim or `data-loss` authorization closes it, and none
 is described as closing it. The managed-OS installer narrows it with its
 in-installer check without eliminating it; the agent installer binds a host by
 declared MACs and root-device hints and offers no supported hook before disk
-erasure, so it admits no equivalent check. Every bare-metal apply therefore
-retains all controller-side proofs, fails closed on any mismatch or unknown
-probe, and passes explicit real-hardware qualification before it is called
-supported; firmware identity, hotplug and cache semantics are never inferred
+erasure. The physical Agent [Linux preflight](openshift-clusters.md#linux-root-preflight)
+uses an earlier read-only RAM boot as the disk proof for an explicit single-disk
+opt-in and retains the live controller, identity and power checks. Every
+physical install fails closed at its declared proof boundary and passes
+real-hardware qualification before it is called supported; firmware identity, hotplug and cache semantics are never inferred
 from passing unit tests.
 
 Omitting the opt-in physical erase policy retains the machine and its installed

@@ -38,11 +38,22 @@ OWNERSHIP_SECONDS = 60
 BOOT_GROUPS = ("prepare-ssh", "build-media", "publish-media", "verify-delivery", "insert-media", "select-boot", "power-on")
 
 
+def validate_agent(request):
+    agent = request["agent"]
+    if (not isinstance(agent, dict) or set(agent) != {"cluster", "root"}
+            or not isinstance(agent["root"], dict) or set(agent["root"]) != {"wwn", "serialNumber", "sizeBytes"}
+            or request.get("inventory") != "boot"
+            or request["controller"]["virtualMedia"]["trust"] == "disableVerification"):
+        raise ValueError("Agent preflight request shape")
+
+
 def validate(request, digest, binding):
     keys = {"version", "identity", "bootMedia", "controller", "interfaces", "inventory", "machinePort", "network", "private", "deadlineSeconds",
             "placement", "ssh"}
-    if set(request) != keys or request["version"] != VERSION or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+    if set(request) - {"agent"} != keys or request["version"] != VERSION or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
         raise ValueError("discovery request shape")
+    if "agent" in request:
+        validate_agent(request)
     port = request["machinePort"]
     if (not isinstance(port, dict)
             or not all(isinstance(port.get(key), str) and port[key] for key in ("userVariable", "passwordVariable"))
@@ -195,6 +206,8 @@ class Controller:
             report = self.report()
             if report is None or proof.get("report") != json.loads(report):
                 raise ValueError("discovery completion report")
+            if "agent" in self.request and proof.get("bootStartedAt") != self.boot_started_at():
+                raise ValueError("Agent preflight completion time")
         return proof
 
     def seal(self, proof):
@@ -217,8 +230,21 @@ class Controller:
 
     def mark_boot(self):
         if not self.booted():
-            records.write(self.root / "boot.json", canonical_json.canonical({"request": self.digest, "version": VERSION}))
+            marker = {"request": self.digest, "version": VERSION}
+            if "agent" in self.request:
+                # Bind freshness to the earliest possible inventory. A retry
+                # cannot give an old RAM report a new timestamp.
+                marker["startedAt"] = int(time.time())
+            records.write(self.root / "boot.json", canonical_json.canonical(marker))
             os.fsync(self.lock)
+
+    def boot_started_at(self):
+        marker = json.loads(records.read(self.root / "boot.json", 4096))
+        started = marker.get("startedAt")
+        if (marker.get("request") != self.digest or marker.get("version") != VERSION
+                or isinstance(started, bool) or not isinstance(started, int) or started <= 0):
+            raise ValueError("Agent preflight boot time")
+        return started
 
     def prepare_ssh(self):
         self.phase = "ssh"
@@ -233,6 +259,7 @@ class Controller:
             self.request["ssh"], self.request["deadlineSeconds"],
             records.read(self.root / "ssh/host-key"),
             records.read(self.root / "ssh/client-key.pub"),
+            single_disk="agent" in self.request,
         )
 
     def read_bmc(self):
@@ -464,6 +491,8 @@ class Controller:
         proof = {"version": VERSION, "request": self.digest, "completed": complete, "cleaned": True}
         if complete:
             proof["report"] = json.loads(self.report())
+            if "agent" in self.request:
+                proof["bootStartedAt"] = self.boot_started_at()
         # Cleanup never deletes the immutable raw receipt or its provenance.
         # Commit external cleanup before deleting transport material. A retry
         # can then finish local deletion without recreating a partial key pair.

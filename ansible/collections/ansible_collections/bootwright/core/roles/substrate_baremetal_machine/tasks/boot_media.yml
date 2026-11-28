@@ -50,6 +50,15 @@
       {{ (substrate_baremetal_machine_boot_selected.msg | default('') | string | bootwright.core.printable)[:512] }}
     quiet: true
 
+- name: Check the caller's boot deadline before sending power-on
+  ansible.builtin.assert:
+    that: >-
+      (bootwright_machine_port.boot_deadline_epoch | int)
+      > ((now(utc=true) - ('1970-01-01 00:00:00' | to_datetime)).total_seconds() | int)
+    fail_msg: The caller's boot deadline elapsed before power-on.
+    quiet: true
+  when: bootwright_machine_port.boot_deadline_epoch is defined
+
 - name: Power the machine on and poll it to running
   bootwright.core.redfish_boot:
     endpoint: '{{ substrate_baremetal_machine_boot_endpoint }}'

@@ -61,6 +61,7 @@ func machineHardwareSchema() *Shape {
 	hints := record(field("deviceName", lexical(LexicalDevicePath)), field("model", nonempty()), field("vendor", nonempty()), field("minSizeGigabytes", integer("0", "")), field("rotational", boolean()), field("hctl", nonempty()))
 	rootDisk := record(field("wwn", nonempty()), field("serialNumber", nonempty()), field("sizeBytes", diskSize()),
 		field("volumeRef", atomic(external(record(required("storageId", nonempty()), required("volumeId", nonempty()))))), field("bootVolume", record()), field("discover", machineDiskDiscoverySchema()),
+		field("linuxPreflight", record(required("imageRef", ref(MachineImage)), field("sshPort", port()))),
 		field("hints", hints), field("onRemoval", removalAction()))
 	dataDisks := &Shape{Type: Sequence, Atomic: true, NameKey: "serialNumber", Element: record(required("serialNumber", nonempty()), required("sizeBytes", diskSize()), field("wwn", nonempty()), field("onInstall", enumeration("retain", "metadataClear")), field("onRemoval", removalAction()))}
 	return record(field("providerRef", ref(InfraProvider)), field("profileRef", nestedIn(profile)), field("bmc", machineBMCSchema()), field("firmware", machineFirmwareSchema()), field("nics", nics), field("rootDisk", rootDisk), field("dataDisks", dataDisks))

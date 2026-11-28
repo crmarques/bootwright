@@ -1,7 +1,6 @@
 """The sysfs disk identity every reader yields, from the one corpus the Go and bash readers also read."""
 
 import json
-import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -66,14 +65,10 @@ class DiskIdentityCorpusTests(unittest.TestCase):
                 self.assertEqual(bool(entry["wwn"]) and inventory.canonical_wwn(observed) == entry["wwn"], entry["valid"])
 
     def test_discovery_bounds_the_capacity_as_the_corpus_does(self):
-        number = os.makedev(8, 0)
-        info = mock.Mock(st_mode=0o060600, st_dev=1, st_ino=2, st_rdev=number)
         for entry in CORPUS["grammar"]["sizes"]:
-            with self.subTest(entry["bytes"]), mock.patch.object(inventory.os, "open", return_value=3), \
-                    mock.patch.object(inventory.os, "fstat", return_value=info), mock.patch.object(inventory.os, "close"), \
-                    mock.patch.object(inventory, "size_ioctl", return_value=entry["bytes"]):
+            with self.subTest(entry["bytes"]), mock.patch.object(inventory, "number_ioctl", return_value=entry["bytes"]):
                 try:
-                    inventory.descriptor_size(Path("/dev/sda"))
+                    inventory.descriptor_size(3)
                     accepted = True
                 except inventory.Refused:
                     accepted = False

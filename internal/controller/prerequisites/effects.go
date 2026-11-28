@@ -26,8 +26,8 @@ type NativeRequirements struct {
 	// client LibvirtClient selects.
 	Hypervisor  bool `json:"hypervisor"`
 	ImageMirror bool `json:"imageMirror,omitempty"`
-	// InstallerMedia is the tooling an Anaconda installation published through
-	// an artifact server on this Machine builds its image with.
+	// InstallerMedia is the tooling for Anaconda and Linux preflight images
+	// published through an artifact server on this Machine.
 	InstallerMedia bool `json:"installerMedia"`
 	LibvirtClient  bool `json:"libvirtClient"`
 }

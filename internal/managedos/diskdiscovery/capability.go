@@ -54,18 +54,19 @@ func (c Capability) WithNonces(source func() (string, error)) Capability {
 }
 
 type DiscoveryEvidence struct {
-	Cleaned   bool            `json:"cleaned"`
-	Completed bool            `json:"completed"`
-	Report    json.RawMessage `json:"report,omitempty"`
-	Request   string          `json:"request"`
-	Version   string          `json:"version"`
+	BootStartedAt int64           `json:"bootStartedAt,omitempty"`
+	Cleaned       bool            `json:"cleaned"`
+	Completed     bool            `json:"completed"`
+	Report        json.RawMessage `json:"report,omitempty"`
+	Request       string          `json:"request"`
+	Version       string          `json:"version"`
 }
 
 func discoveryMachine(m api.Object) bool {
 	return substrate.MachineDiscoveryPolicy(m).Present()
 }
 
-func (c Capability) requests(ctx context.Context, input lifecycle.PlanInput) ([]DiscoveryRequest, []installation.Requirements, error) {
+func (c Capability) requests(ctx context.Context, input lifecycle.PlanInput, includeAgent bool) ([]DiscoveryRequest, []installation.Requirements, error) {
 	var requests []DiscoveryRequest
 	var requirements []installation.Requirements
 	var records map[string]installation.MediaRecord
@@ -73,11 +74,21 @@ func (c Capability) requests(ctx context.Context, input lifecycle.PlanInput) ([]
 	if input.State == nil {
 		return nil, nil, discoveryUnconfigured.Fail("disk discovery requires compiled state", "")
 	}
-	for _, m := range installation.InstalledMachines(input.State.Effective()) {
-		if !discoveryMachine(m) {
+	catalog := input.State.Effective()
+	machines := installation.InstalledMachines(catalog)
+	if includeAgent && input.Preparation == nil {
+		for _, m := range catalog.OfKind(api.Machine) {
+			if api.MachineClusterInstalled(m) && substrate.MachineLinuxPreflight(m).Present() {
+				machines = append(machines, m)
+			}
+		}
+	}
+	for _, m := range machines {
+		agent := substrate.MachineLinuxPreflight(m).Present()
+		if !discoveryMachine(m) && !agent {
 			continue
 		}
-		if input.Preparation != nil && !slices.Contains(input.Preparation.Targets, m.Name()) {
+		if input.Preparation != nil && (agent || !slices.Contains(input.Preparation.Targets, m.Name())) {
 			continue
 		}
 		if c.media == nil {
@@ -90,7 +101,15 @@ func (c Capability) requests(ctx context.Context, input lifecycle.PlanInput) ([]
 			}
 			records, read = found, true
 		}
-		r, needs, err := discoveryRequest(input.State.Effective(), m, input, records)
+		derive := discoveryRequest
+		if agent {
+			protected, err := c.protectedClaims(catalog, m)
+			if err != nil || len(protected) != 0 {
+				return nil, nil, discoveryUnsupported.Fail("Machine/"+m.Name()+" has declared storage that Linux Agent preflight cannot certify as safe to write", "use the normal Agent disk proof or a Machine with no protected storage")
+			}
+			derive = agentRequest
+		}
+		r, needs, err := derive(catalog, m, input, records)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -102,7 +121,7 @@ func (c Capability) requests(ctx context.Context, input lifecycle.PlanInput) ([]
 
 func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecycle.CapabilityPlan, error) {
 	plan := lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{}}
-	requests, requirements, err := c.requests(ctx, input)
+	requests, requirements, err := c.requests(ctx, input, true)
 	if err != nil {
 		return plan, err
 	}
@@ -119,7 +138,12 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		}
 		dependencies := installation.RequiredObjects(requirements[index])
 		dependencies[0].Family = substrate.MachineFamily
-		plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{ID: r.Identity.Block, Kind: installation.Kind, Object: r.Identity.Object, Family: installation.DiscoveryFamily, Implementation: DiscoveryImplementation, ContentDigest: DiscoveryContentDigest(), Stage: reconciliation.StageMachines, Request: wire,
+		stage := reconciliation.StageMachines
+		if r.Agent != nil {
+			stage = reconciliation.StageClusters
+			dependencies = append(dependencies, reconciliation.ObjectRef{Kind: string(api.OpenShiftCluster), Object: r.Agent.Cluster, Family: "cluster-media"})
+		}
+		plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{ID: r.Identity.Block, Kind: installation.Kind, Object: r.Identity.Object, Family: installation.DiscoveryFamily, Implementation: DiscoveryImplementation, ContentDigest: DiscoveryContentDigest(), Stage: stage, Request: wire,
 			Description: discoveryDescription(r),
 			Groups:      discoveryGroups(r.Identity.Object, input.Verb == reconciliation.Destroy),
 			Impacts:     discoveryImpacts(r),
@@ -145,10 +169,12 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			last.Description, last.Impacts = removal.Description, removal.Impacts
 		}
 		plan.Secrets = append(plan.Secrets, r.SecretReferences()...)
-		plan.Reservations = append(plan.Reservations, infrastructureservices.HostReservation{
-			Context: input.Context.Name, Kind: installation.DiscoveryFamily, Service: r.Identity.Object, ObjectKind: installation.Kind,
-			Keys: []string{infrastructureservices.ControllerMediaReservationKey(r.Controller.Endpoint).String()},
-		})
+		if r.Agent == nil {
+			plan.Reservations = append(plan.Reservations, infrastructureservices.HostReservation{
+				Context: input.Context.Name, Kind: installation.DiscoveryFamily, Service: r.Identity.Object, ObjectKind: installation.Kind,
+				Keys: []string{infrastructureservices.ControllerMediaReservationKey(r.Controller.Endpoint).String()},
+			})
+		}
 		media = append(media, r.BootMedia.Name)
 	}
 	if claim, ok := installation.MediaReservation(input.Context.Name, media); ok {
@@ -160,6 +186,9 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 }
 
 func discoveryDescription(r DiscoveryRequest) string {
+	if r.Agent != nil {
+		return "prove the single Linux-visible root of " + r.Identity.Object + " before installing " + r.Agent.Cluster + ", then power off"
+	}
 	if r.Inventory == InventoryAutomatic {
 		return "read the BMC drive inventory of " + r.Identity.Object + ", or inventory its Linux-visible disks in RAM when the BMC cannot answer, then power off"
 	}
@@ -198,7 +227,7 @@ func (Capability) SecretReferences(block reconciliation.Block) ([]string, error)
 
 // Roots validates historical proof without live probing or substituting reports.
 func (c Capability) Roots(ctx context.Context, input lifecycle.PlanInput) (map[string]diskselection.Proof, error) {
-	requests, _, err := c.requests(ctx, input)
+	requests, _, err := c.requests(ctx, input, false)
 	if err != nil {
 		return nil, err
 	}
@@ -410,7 +439,8 @@ func (c Capability) run(ctx context.Context, e lifecycle.Execution, operation st
 	if err != nil {
 		return result, err
 	}
-	if proof.Completed && (!proof.Cleaned || report.Validate() != nil || !reflect.DeepEqual(report.Binding, b)) {
+	if proof.Completed && (!proof.Cleaned || report.Validate() != nil || !reflect.DeepEqual(report.Binding, b) ||
+		(r.Agent != nil && (proof.BootStartedAt <= 0 || report.Source != diskselection.SourceLinux))) {
 		return result, discoveryIncomplete.Fail("disk discovery did not prove this attempt and its cleanup", "")
 	}
 	return result, nil

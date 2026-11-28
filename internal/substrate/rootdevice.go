@@ -24,6 +24,10 @@ func MachineDiscoveryPolicy(machine api.Object) api.Value {
 	return machine.Spec().Get("hardware", "rootDisk", "discover")
 }
 
+func MachineLinuxPreflight(machine api.Object) api.Value {
+	return MachineRootDisk(machine).Get("linuxPreflight")
+}
+
 func WithMachineDiscoveryPolicy(machine api.Object, policy api.Value) api.Object {
 	return machine.WithSpec(machine.Spec().WithPath(policy, "hardware", "rootDisk", "discover"))
 }

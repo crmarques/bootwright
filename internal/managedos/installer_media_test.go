@@ -39,6 +39,26 @@ func TestInstallerMediaHostsListTheServersOfInstalledAnacondaMachines(t *testing
 	}
 }
 
+func TestInstallerMediaHostsIncludeOnlyTheOptedInAgentClusters(t *testing.T) {
+	agent := func(name, node, server string) api.Object {
+		return obj(api.OpenShiftCluster, name, m(
+			"install", m("agent", m("redfishVirtualMedia", m("artifactServerEndpoint", m("serverRef", server)))),
+			"nodes", api.ListValue(m("machineRef", node)),
+		))
+	}
+	optedIn := obj(api.Machine, "metal", m("os", m("clusterInstalled", m()),
+		"hardware", m("rootDisk", m("linuxPreflight", m("imageRef", "rhel")))))
+	defaultProof := obj(api.Machine, "default", m("os", m("clusterInstalled", m())))
+	catalog := api.NewCatalog([]api.Object{
+		obj(api.ArtifactServer, "inventory", m("machineRef", "controller")),
+		obj(api.ArtifactServer, "other", m("machineRef", "other-host")),
+		optedIn, defaultProof, agent("opaque", "metal", "inventory"), agent("ordinary", "default", "other"),
+	})
+	if got, want := InstallerMediaHosts(catalog), []string{"controller"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("installer media hosts = %v, want %v", got, want)
+	}
+}
+
 func TestEffectBearingNamesAMachineWhoseOperatingSystemIsNotProvided(t *testing.T) {
 	for name, test := range map[string]struct {
 		object  api.Object

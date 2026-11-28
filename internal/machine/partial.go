@@ -59,6 +59,9 @@ func validateDefaultPerMachineHardware(o api.Object) []api.Issue {
 	if substrate.MachineFirmware(o) != nil {
 		issues = append(issues, perMachineIntent("$."+substrate.FirmwarePath, "firmware"))
 	}
+	if substrate.MachineLinuxPreflight(o).Present() {
+		issues = append(issues, perMachineIntent("$."+substrate.RootDiskPath+".linuxPreflight", "rootDisk.linuxPreflight"))
+	}
 	if substrate.MachineRootDisk(o).Has("onRemoval") {
 		issues = append(issues, perMachineIntent("$."+substrate.RootDiskPath+".onRemoval", "rootDisk.onRemoval"))
 	}

@@ -47,6 +47,50 @@
          and containercluster_install_agent_state.completed is sameas true }}
   changed_when: false
 
+# Check the whole cluster before any new native handoff. A possible prior
+# power request can be continued only while the node presents owned media
+# and is running, or when the cluster proves it completed.
+- name: Read each opted-in node's durable Agent boot marker
+  ansible.builtin.stat:
+    path: '{{ containercluster_install_agent_work }}/.bootwright-agent-handoff-{{ ansible_loop.index0 }}'
+    follow: false
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  register: containercluster_install_agent_prior_handoffs
+  loop: '{{ bootwright_cluster_install_request.nodes }}'
+  loop_control:
+    extended: true
+    label: '{{ item.machine }}'
+  when:
+    - not (containercluster_install_agent_settled | bool)
+    - item.hardware.rootSelector | default('') == 'linuxPreflight'
+
+- name: Require current Linux preflight or positive running custody for every opted-in node
+  ansible.builtin.assert:
+    that:
+      - item.machine not in containercluster_install_agent_state.powered or (running_owned | bool)
+      - (prior_handoff | bool) == (running_owned | bool)
+      - >-
+        (running_owned | bool) or
+        (bootwright_cluster_install_material['linuxPreflightUntilNode' ~ ansible_loop.index0] | default(0) | int)
+        > ((now(utc=true) - ('1970-01-01 00:00:00' | to_datetime)).total_seconds() | int)
+    fail_msg: >-
+      Machine/{{ item.machine }} has an expired Linux root preflight or an unresolved prior Agent boot.
+      Clear the interrupted cluster installation through the recorded recovery scope before starting a fresh apply.
+    quiet: true
+  vars:
+    running_owned: >-
+      {{ item.machine in (containercluster_install_agent_state.powered | intersect(containercluster_install_agent_state.ownMedia)) }}
+    prior_handoff: '{{ containercluster_install_agent_prior_handoffs.results[ansible_loop.index0].stat.exists }}'
+  loop: '{{ bootwright_cluster_install_request.nodes }}'
+  loop_control:
+    extended: true
+    label: '{{ item.machine }}'
+  when:
+    - not (containercluster_install_agent_settled | bool)
+    - item.hardware.rootSelector | default('') == 'linuxPreflight'
+
 - name: Report node boot
   bootwright.core.containercluster_install_protocol:
     phase: group

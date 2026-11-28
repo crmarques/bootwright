@@ -50,8 +50,8 @@ must be valid. A libvirt or KubeVirt node declares no root disk: its root is `/d
 derived; [vSphere machine realization](substrates.md#vsphere-machine-realization)
 owns the presentation of a vSphere node's disk.
 
-The installation freezes each authored WWN or serial-and-exact-size
-selector into its hardware proof. Immediately before media insertion, and
+For a physical node using the default proof, the installation freezes each
+authored WWN or serial-and-exact-size selector into its hardware proof. Immediately before media insertion, and
 again after a firmware change, it reads the ComputerSystem's complete Storage
 inventory over verified BMC TLS. A direct drive proof excludes absent bays,
 requires readable presence, and refuses a logical layout. The selected drive
@@ -73,6 +73,9 @@ and its retained media receipt to the proved volume. A replay or installation
 whose current proof differs from that receipt refuses before boot. The native
 agent has no exact-capacity predicate; the BMC comparison and the existing
 controller-to-installer race still require real-controller qualification.
+
+A physical node whose BMC cannot prove the OS-visible disk may opt in to
+[Linux root preflight](#linux-root-preflight).
 
 An emulated BMC's verified image fetch follows the
 [boot-media trust rule](#boot-media-trust). The placement, install-profile and physical-node refusals
@@ -302,6 +305,67 @@ before a fresh boot; tracked as [B927](milestones/backlog.md#b927).
 Not yet met: a node on a vSphere provider refuses as a node on an unrealized
 substrate, and a multi-node `vsphere` cluster refuses as several nodes on
 another platform; tracked as [B733](milestones/m3.md#b733).
+
+
+## Linux root preflight
+
+This per-Machine opt-in applies to physical Agent nodes whose storage is
+stable across a temporary Linux boot and the native installer boot. It uses
+the cluster's controller-local private HTTPS media listener and the Machine's
+verified HTTPS Redfish connection. The BMC verifies the HTTPS media listener
+using existing or imported trust.
+
+Import the qualified RHEL boot ISO with `bootwright catalog media add`, and
+declare its `local-media:` entry and publisher SHA-256 on a `MachineImage`.
+On each opted-in Machine, record the exact Linux-visible WWN, serial number
+and byte capacity and declare the preflight image.
+
+```yaml
+rootDisk:
+  wwn: "0x5000000000000001"
+  serialNumber: "EXAMPLE-OS"
+  sizeBytes: 128849018880
+  linuxPreflight:
+    imageRef: inventory-rhel
+```
+
+Saved inventory guides those declarations. `data-loss` authorizes the
+physical installation. The apply's own preflight supplies the fresh proof.
+After building the Agent ISO, Bootwright boots a read-only RAM worker through
+the BMC, verifies the original Machine UUID and full physical MAC set, and
+reads the local block devices. The report must show precisely one supported
+whole disk, fixed and writable, with the frozen WWN, serial and byte capacity.
+Additional whole disks, unsupported block devices and multipath refuse. The
+controller powers off only its owned inventory boot, ejects and retires the
+private media, and seals a receipt for the original apply. It waits for every
+opted-in node before Agent boot starts and verifies the live BMC host identity
+and off state before each new insert. Root Storage inventory from Redfish
+is unnecessary for this route.
+
+A new Agent handoff can start for one hour following the controller's durable
+RAM boot preparation. A candidate receipt from a different apply, an invalid
+receipt, or an expired receipt for a node still to boot prevents a new
+handoff. A retry may continue waiting for a node with a durable Agent boot mark
+that is still running from this installation's owned media. A marked node
+that stopped requires recovery because storage writes may have started. Existing scoped recovery enforces its custody
+rules. Review `bootwright destroy --dry-run --stage clusters --clusters
+<cluster> --context <context>` before taking back a pre-handoff failure.
+If media may already have been handed to a node, follow the recovery scope
+the refusal names. A new apply after recovery runs a fresh preflight for each
+affected node. Inspect and explicitly update the declared identity when a
+disk is replaced.
+
+The stock Agent ISO receives the WWN as a native hint. Its Linux kernel
+enumerates the devices again, and its installer opens its selected device
+and controls preparatory disk cleanup. The RAM proof covers the earlier
+inventory and the installer receives no locked descriptor. The operator
+must hold disk attachment, RAID configuration and firmware stable and
+qualify the exact inventory ISO, hardware and OpenShift release together
+before provisioning. Confirm in both boots that the same single disk is
+eligible, the Agent sees and honors the WWN, and a mismatch or extra disk
+refuses before handoff. Compare the Agent's `ID_WWN_WITH_EXTENSION` when
+udev provides that value. [Red Hat Agent root device
+hints](https://docs.redhat.com/en/documentation/openshift_container_platform/4.22/html-single/installing_an_on-premise_cluster_with_the_agent-based_installer/index#root-device-hints_preparing-to-install-with-agent-based-installer)
 
 ## Installer inputs
 

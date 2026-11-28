@@ -99,7 +99,10 @@ def test_agent_disk_proof_is_frozen_into_the_pre_media_substrate_proof():
     insert = next(index for index, task in enumerate(tasks)
                   if task.get("vars", {}).get("containercluster_install_agent_port_operation") == "media_insert")
     assert before < insert
-    assert "'root_disk': containercluster_install_agent_node.hardware.rootDisk | default({})" in tasks[before]["vars"]["bootwright_machine_port"]
+    port = tasks[before]["vars"]["bootwright_machine_port"]
+    assert "'root_disk': ({} if containercluster_install_agent_node.hardware.rootSelector | default('') == 'linuxPreflight'" in port
+    assert "else containercluster_install_agent_node.hardware.rootDisk | default({})" in port
+    assert "'require_tpm': containercluster_install_agent_node.requireTPM | default(false)" in port
     proof = load(ROLES / "substrate_baremetal_machine/tasks/target_proof.yml")
     read = next(task for task in proof if "bootwright.core.redfish_system_inspect" in task)
     assert read["bootwright.core.redfish_system_inspect"]["root_disk"] == "{{ substrate_baremetal_machine_target_root_disk | default({}) }}"

@@ -126,8 +126,10 @@ type Hardware struct {
 	RootVolumeRef *substrate.VolumeRef `json:"rootVolumeRef,omitempty"`
 }
 
-// RootDisk is the exact whole drive the controller must report uniquely before
-// inserting media. The native agent receives the declared WWN and serial hints.
+const linuxPreflightRoot = "linuxPreflight"
+
+// RootDisk identifies the selected whole disk before media insertion. The
+// root selector determines which trusted source must prove it.
 type RootDisk struct {
 	SerialNumber string `json:"serialNumber,omitempty"`
 	SizeBytes    int64  `json:"sizeBytes,omitempty"`
@@ -348,6 +350,9 @@ func DecodeInstallRequest(data []byte) (InstallRequest, error) {
 		if node.Physical && !validRootProof(node.Hardware) || !node.Physical && node.Hardware != nil || node.Physical != (node.ControllerKind == "physical") {
 			return InstallRequest{}, openshiftRequestInvalid.Fail("the frozen physical installation node has no complete root selector proof", "plan the installation again")
 		}
+		if node.Hardware != nil && node.Hardware.RootSelector == linuxPreflightRoot && (node.Firmware.enforced() || !node.Controller.TLSVerify || node.Controller.TLSVerification == "none" || node.Controller.VirtualMedia.Trust == substrate.TrustDisableVerification) {
+			return InstallRequest{}, openshiftRequestInvalid.Fail("the frozen Linux preflight requires stable firmware and verified BMC TLS", "plan the installation again")
+		}
 	}
 	return request, nil
 }
@@ -362,6 +367,8 @@ func validRootProof(hardware *Hardware) bool {
 		return hardware.RootVolumeRef == nil && disk != nil && diskselection.ValidWWN(disk.WWN) && disk.SerialNumber == "" && disk.SizeBytes == 0
 	case "volume":
 		return hardware.RootDisk == nil && hardware.RootVolumeRef != nil && hardware.RootVolumeRef.Valid()
+	case linuxPreflightRoot:
+		return hardware.RootVolumeRef == nil && disk != nil && diskselection.ValidWWN(disk.WWN) && diskselection.ValidSerial(disk.SerialNumber) && diskselection.ValidSize(disk.SizeBytes)
 	case "serialAndSize":
 		return hardware.RootVolumeRef == nil && disk != nil && (disk.WWN == "" || diskselection.ValidWWN(disk.WWN)) && diskselection.ValidSerial(disk.SerialNumber) && diskselection.ValidSize(disk.SizeBytes)
 	default:

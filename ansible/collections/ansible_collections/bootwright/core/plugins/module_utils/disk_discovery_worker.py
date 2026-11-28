@@ -168,8 +168,10 @@ def prepare_network():
     phase("checking RAM isolation and machine identity")
     ram_boundary()
     request = read_json(ROOT / "request.json", 32768)
-    if (set(request) != {"binding", "network", "interfaces", "ssh", "deadlineSeconds"}
-            or request["deadlineSeconds"] != 1800 or set(request["ssh"]) != {"port"}):
+    keys = {"binding", "network", "interfaces", "ssh", "deadlineSeconds"}
+    if request.get("singleDisk") is True:
+        keys.add("singleDisk")
+    if set(request) != keys or request["deadlineSeconds"] != 1800 or set(request["ssh"]) != {"port"}:
         raise ValueError("discovery worker request")
     sshd.configuration(request["network"]["address"], request["ssh"]["port"])
     binding = request["binding"]
@@ -192,7 +194,8 @@ def prepare_network():
 def collect(request):
     phase("reading Linux-visible disk identities")
     binding = request["binding"]
-    report = canonical_json.canonical({"version": "machine-disk-inventory-v1", "source": "linux", "binding": binding, "disks": disk_inventory.collect()})
+    disks = disk_inventory.collect(single_disk=request.get("singleDisk", False))
+    report = canonical_json.canonical({"version": "machine-disk-inventory-v1", "source": "linux", "binding": binding, "disks": disks})
     if len(report) > MAX_REPORT:
         raise ValueError("discovery inventory exceeds bound")
     write(ROOT / "report.json", report)

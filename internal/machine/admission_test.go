@@ -657,6 +657,14 @@ func TestAMachineKindDefaultCannotDeclareFirmware(t *testing.T) {
 	}
 }
 
+func TestAMachineKindDefaultCannotOptInToLinuxPreflight(t *testing.T) {
+	partial := object(api.Machine, "", m("hardware", m("rootDisk", m("linuxPreflight", m("imageRef", "inventory-rhel")))))
+	issues := ValidatePartial(partial, api.Catalog{})
+	if len(issues) != 1 || issues[0].Field != "$.spec.hardware.rootDisk.linuxPreflight" {
+		t.Fatalf("Linux preflight in a kind default was not refused: %+v", issues)
+	}
+}
+
 func TestAMachineKindDefaultCannotDeclareDiskRemovalOrDataDisks(t *testing.T) {
 	for _, tc := range []struct{ field, message, remediation string }{
 		{"$.spec.hardware.rootDisk.onRemoval", "rootDisk.onRemoval is per-Machine intent and never a kind default", "declare hardware.rootDisk.onRemoval on each Machine that needs it"},

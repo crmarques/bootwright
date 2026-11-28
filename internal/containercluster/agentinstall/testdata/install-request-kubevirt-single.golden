@@ -30,7 +30,7 @@
     "path": "/var/lib/bootwright-hosted/lab/clusters/kubevirt/agent.iso",
     "url": ""
   },
-  "imageIdentity": "b73a989fdca6d245f1fa9affa9d6a4fefcfb70b8702b64d63e2b7b51d1b27b63",
+  "imageIdentity": "f21bc0051324cbbbbce3b4f0e8f89f104c3d0afa086961dc6caa5b8c9e1bf2a4",
   "nodes": [
     {
       "address": "198.51.100.31",

@@ -1018,6 +1018,7 @@ it rather than restate it.
 | Serial number | no `wwn`; `rootDisk.serialNumber`, 1 to 256 ASCII letters, digits or `._:+/=-`, and exact `sizeBytes` | For a disk whose WWN cannot be learned before an OS boots or that has none, such as an NVMe disk. |
 | Logical volume | `rootDisk.volumeRef` or `bootVolume` alone, under a [verified BMC](../secrets.md#client-tls-trust) | One [existing logical volume](#existing-logical-root-volumes), proved by its NAA identifier and exact capacity. `bootVolume: {}` is the default on a Machine of a bare-metal provider that an installer writes and that declares no `rootDisk` field. |
 | Discovery | `rootDisk.discover` alone, on `os.install` only | The [automatic selector](#automatic-root-disk-discovery). |
+| Linux preflight | `rootDisk.linuxPreflight` with `wwn`, `serialNumber` and exact `sizeBytes`, on physical `os.clusterInstalled` only | Changes the proof source for a [single-disk Agent installation](../openshift-clusters.md#linux-root-preflight). |
 
 The installation erases that disk, and a kernel name such as `/dev/sda` moves
 with probe order, firmware and hot-added disks, so on such a Machine any
@@ -1057,6 +1058,19 @@ after firmware changes. Anaconda proves one fixed writable whole disk with
 that NAA and exact capacity before storage. The native agent selects its
 exact WWN; [physical agent proof](../openshift-clusters.md#selection-and-refusal)
 owns its remaining controller-to-installer race and capacity limitation.
+
+### Linux root preflight fields
+
+`rootDisk.linuxPreflight.imageRef` names a `MachineImage` with a
+checksum-pinned x86_64 RHEL boot ISO from the controller's local media store.
+`rootDisk.linuxPreflight.sshPort` defaults to 22 and controls the RAM worker's connection. Bootwright reaches it over the Machine's static IPv4
+installation address. Ethernet, bond and VLAN use the existing [RAM boot
+network contract](../managed-os.md#automatic-root-disk-discovery).
+
+Declare all three exact identity fields beside `linuxPreflight`. A
+`volumeRef`, `bootVolume`, `discover`, any other root hint, authored
+`dataDisks`, an active storage protection, or `firmware.mode: enforce`
+refuses. Root removal defaults to `retain`.
 
 ### Automatic root-disk discovery
 

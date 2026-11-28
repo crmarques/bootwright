@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 import ctypes
 import errno
 from itertools import islice
@@ -15,7 +16,10 @@ MAX_SIZE = 64 << 40
 MAX_TEXT = 256
 WHITESPACE = " \t\n\v\f\r"
 BLKGETSIZE64 = 0x80081272
+BLKGETDISKSEQ = 0x80081280
 NAME = re.compile(r"(?:sd[a-z]+|nvme[0-9]+n[0-9]+)\Z")
+RAM_DEVICE = re.compile(r"(?:loop|ram|zram)[0-9]+\Z")
+OPTICAL = re.compile(r"sr[0-9]+\Z")
 PCI = re.compile(r"[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-7]\Z")
 NAA = re.compile(r"(?:naa\.|0x)([0-9a-f]{16}(?:[0-9a-f]{16})?)\Z")
 SERIAL = re.compile(r"[A-Za-z0-9._:+/=-]{1,256}\Z")
@@ -82,34 +86,39 @@ def canonical_wwn(reported):
     return "0x" + match.group(1) if match and int(match.group(1), 16) else ""
 
 
-def size_ioctl(descriptor):
-    """The one read-only ioctl, through libc (RHEL initrd omits fcntl)."""
+def number_ioctl(descriptor, request):
+    """Read the block value through libc (the RHEL initrd omits fcntl)."""
     libc = ctypes.CDLL(None, use_errno=True)
     ioctl = libc.ioctl
     ioctl.argtypes = (ctypes.c_int, ctypes.c_ulong, ctypes.c_void_p)
     ioctl.restype = ctypes.c_int
     size = ctypes.c_uint64()
-    if ioctl(descriptor, BLKGETSIZE64, ctypes.byref(size)) != 0:
-        raise Refused("disk size ioctl was not answered")
+    if ioctl(descriptor, request, ctypes.byref(size)) != 0:
+        raise Refused("read-only disk ioctl was not answered")
     return size.value
 
 
-def descriptor_size(path):
-    """Only O_RDONLY descriptors and the read-only size ioctl reach data disks."""
+@contextmanager
+def block_descriptor(path):
+    """Keep the read-only descriptor tied to the device during the entire read."""
     fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
     try:
         before = os.fstat(fd)
         if not stat.S_ISBLK(before.st_mode):
             raise Refused("inventory path is not a block device")
-        capacity = size_ioctl(fd)
+        yield fd, before.st_rdev
         after = os.fstat(fd)
         if (before.st_dev, before.st_ino, before.st_rdev) != (after.st_dev, after.st_ino, after.st_rdev):
             raise Refused("disk descriptor changed")
-        if not 4096 <= capacity <= MAX_SIZE or capacity % 4096:
-            raise Refused("disk capacity is outside the qualified bound")
-        return capacity, before.st_rdev
     finally:
         os.close(fd)
+
+
+def descriptor_size(fd):
+    capacity = number_ioctl(fd, BLKGETSIZE64)
+    if not 4096 <= capacity <= MAX_SIZE or capacity % 4096:
+        raise Refused("disk capacity is outside the qualified bound")
+    return capacity
 
 
 def topology(device):
@@ -121,13 +130,23 @@ def topology(device):
     return controller, transport
 
 
-def read_disk(device, devroot):
+def read_disk(device, devroot, single_disk=False):
     major_minor = attribute(device / "dev")
     if re.fullmatch(r"[0-9]+:[0-9]+", major_minor) is None:
         raise Refused("disk device number is malformed")
-    capacity, number = descriptor_size(devroot / device.name)
-    if major_minor != "%d:%d" % (os.major(number), os.minor(number)):
-        raise Refused("sysfs and block descriptor disagree")
+    with block_descriptor(devroot / device.name) as (fd, number):
+        if major_minor != "%d:%d" % (os.major(number), os.minor(number)):
+            raise Refused("sysfs and block descriptor disagree")
+        sequence = 0
+        if single_disk:
+            sequence = number_ioctl(fd, BLKGETDISKSEQ)
+            if sequence == 0 or attribute(device / "diskseq") != str(sequence):
+                raise Refused("sysfs and block descriptor disk sequence disagree")
+        return read_identity(device, fd, major_minor, sequence)
+
+
+def read_identity(device, fd, major_minor, sequence):
+    capacity = descriptor_size(fd)
     removable, readonly = attribute(device / "removable"), attribute(device / "ro")
     if removable not in ("0", "1") or readonly not in ("0", "1"):
         raise Refused("disk eligibility attributes are unknown")
@@ -154,24 +173,34 @@ def read_disk(device, devroot):
         raise Refused("disk inventory changed during its read")
     if reported != wwid(device):
         raise Refused("disk WWN changed during its read")
+    if sequence and (
+            number_ioctl(fd, BLKGETDISKSEQ) != sequence or attribute(device / "diskseq") != str(sequence)
+            or descriptor_size(fd) != capacity or attribute(device / "removable") != removable or attribute(device / "ro") != readonly):
+        raise Refused("disk identity or eligibility changed during its read")
     return disk
 
 
-def collect(sysroot=Path("/sys/class/block"), devroot=Path("/dev")):
+def collect(sysroot=Path("/sys/class/block"), devroot=Path("/dev"), single_disk=False):
     before = sorted(path.name for path in islice(sysroot.iterdir(), 4 * MAX_DISKS + 1))
     if len(before) > 4 * MAX_DISKS:
         raise Refused("block inventory exceeds its bound")
     disks = []
     for name in before:
         device = sysroot / name
-        if NAME.fullmatch(name) is None or (device / "partition").exists():
+        if (device / "partition").exists():
+            continue
+        if NAME.fullmatch(name) is None:
+            if single_disk and not (RAM_DEVICE.fullmatch(name) or (OPTICAL.fullmatch(name) and attribute(device / "device/type") == "5")):
+                raise Refused("unexpected block device in single-disk preflight")
             continue
         hidden = attribute(device / "hidden", optional=True)
         if hidden not in ("", "0", "1"):
             raise Refused("NVMe path identity is unknown")
         if hidden == "1":
+            if single_disk:
+                raise Refused("multipath is outside single-disk preflight")
             continue
-        disks.append(read_disk(device, devroot))
+        disks.append(read_disk(device, devroot, single_disk))
         if len(disks) > MAX_DISKS:
             raise Refused("whole-disk inventory exceeds its bound")
     if sorted(path.name for path in islice(sysroot.iterdir(), 4 * MAX_DISKS + 1)) != before:
