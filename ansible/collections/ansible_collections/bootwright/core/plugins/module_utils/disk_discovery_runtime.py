@@ -141,7 +141,7 @@ PHASES = {
     "bmc-inventory": "management-controller drive inventory",
     "ssh": "private inventory SSH preparation",
     "media-delivery": "private HTTPS media delivery",
-    "media-insertion": "verified virtual-media trust and insertion",
+    "media-insertion": "virtual-media trust and insertion",
     "boot-selection": "one-time virtual-media boot selection",
     "power-on": "owned discovery power-on",
     "inventory": "waiting for and reading the RAM boot's authenticated inventory",
@@ -218,7 +218,9 @@ FAILURES = {
     "bmc-media-verification": (
         "media-fetch certificate verification is disabled or unproved; enable HttpsTransferCertVerification on every "
         "declaring manager, or device VerifyCertificate when no manager publishes that setting"),
-    "bmc-privilege": "the BMC account lacks the required privilege; certificate import requires security-configuration privilege",
+    "bmc-privilege": (
+        "the BMC account lacks the required privilege; certificate import and changes to media verification require "
+        "security-configuration privilege"),
     "bmc-media-verification-config": (
         "declared media verification setup was refused or not proved; check security-configuration privilege, writable "
         "boolean properties and resource ETags, then retry without deleting custody; partial changes remain recorded"),

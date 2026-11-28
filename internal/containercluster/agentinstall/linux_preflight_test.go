@@ -51,6 +51,69 @@ func preflightCatalog() (api.Catalog, preflightMedia) {
 	}
 }
 
+func TestPhysicalAgentPreflightUsesTheExplicitMediaExceptionWithoutRelaxingBMCTLS(t *testing.T) {
+	catalog, records := preflightCatalog()
+	objects := catalog.Objects()
+	for index, object := range objects {
+		if object.Kind() == api.Machine && object.Name() == "metal-01" {
+			objects[index] = object.WithSpec(object.Spec().WithPath(api.MapValue(
+				text("trust", substrate.TrustDisableVerification),
+				field("enableVerification", api.BoolValue(false)),
+				field("restoreVerificationAfterBoot", api.BoolValue(false)),
+			), "hardware", "bmc", "virtualMedia", "tls"))
+		}
+	}
+	catalog = api.NewCatalog(objects)
+	machineObject, _ := catalog.Find(api.Machine, "metal-01")
+	if reason, _ := machine.AgentRootDeviceRefusal(catalog, machineObject); reason != "" {
+		t.Fatal(reason)
+	}
+	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Controller: "controller", Context: lifecycle.ContextIdentity{Name: testContext}, State: compilation.NewState(catalog, catalog, nil)}
+	preflight, err := diskdiscovery.New(nil).WithMedia(records).Plan(t.Context(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	index := slices.IndexFunc(preflight.Definitions, func(block reconciliation.BlockDefinition) bool { return block.Object == "metal-01" })
+	if index < 0 {
+		t.Fatal("the opted-in node has no preflight block")
+	}
+	block := preflight.Definitions[index]
+	request, err := diskdiscovery.DecodeDiscoveryRequest(block.Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, install, _ := onlyRequests(t, catalog)
+	wire, err := install.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := DecodeInstallRequest(wire)
+	if err != nil {
+		t.Fatal(err)
+	}
+	discovery, agent := request.Controller, decoded.Nodes[0].Controller
+	if !discovery.TLSVerify || discovery.TLSVerification == "none" || !agent.TLSVerify || agent.TLSVerification == "none" {
+		t.Fatal("the media exception relaxed BMC management TLS")
+	}
+	wantMedia := installation.VirtualMedia{Trust: substrate.TrustDisableVerification}
+	if discovery.VirtualMedia != wantMedia || installation.VirtualMedia(agent.VirtualMedia) != wantMedia {
+		t.Fatalf("incorrect frozen media policies: discovery %+v, Agent %+v", discovery.VirtualMedia, agent.VirtualMedia)
+	}
+	impact := "fetch-private-media-without-certificate-verification metal-01"
+	if !strings.HasPrefix(request.Private.URL, "https://") ||
+		!slices.Contains(block.Impacts, impact) || !slices.Contains(installImpacts(reconciliation.Apply, decoded), impact) {
+		t.Fatal("the exception changed the media URL scheme or was omitted from the plan")
+	}
+	decoded.Nodes[0].Controller.TLSVerification = "none"
+	wire, err = decoded.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := DecodeInstallRequest(wire); err == nil {
+		t.Fatal("the media exception admitted unverified management TLS")
+	}
+}
+
 func TestPhysicalAgentPlanWaitsForEveryOptedInNodeAfterBuildingMedia(t *testing.T) {
 	catalog, records := preflightCatalog()
 	media, install, _ := onlyRequests(t, catalog)

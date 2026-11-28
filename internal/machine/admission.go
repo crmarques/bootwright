@@ -765,8 +765,8 @@ func AgentRootDeviceRefusal(c api.Catalog, o api.Object) (string, string) {
 				"set rootDisk.wwn, serialNumber and sizeBytes to the recorded Linux identity and remove any other selectors and data disks"
 		}
 		bmc := substrate.MachineBMC(o)
-		if !substrate.BMCVerified(bmc) || bmc.Get("virtualMedia", "tls", "trust").Text() == substrate.TrustDisableVerification {
-			return "Linux root preflight requires verified HTTPS for BMC access and virtual media", "use a verified BMC connection with established or imported artifact-server trust"
+		if !substrate.BMCVerified(bmc) {
+			return "Linux root preflight requires verified HTTPS for BMC management", "use full or certificate verification for the BMC connection"
 		}
 		if firmware := substrate.MachineFirmware(o); firmware != nil && firmware.Mode == substrate.FirmwareModeEnforce {
 			return "Linux root preflight requires stable firmware between inventory and installation", "apply and qualify the firmware outside this Agent installation, then remove firmware enforcement or use observe mode"

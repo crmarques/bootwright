@@ -3,6 +3,7 @@ package agentinstall
 import (
 	"cmp"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
@@ -350,7 +351,8 @@ func DecodeInstallRequest(data []byte) (InstallRequest, error) {
 		if node.Physical && !validRootProof(node.Hardware) || !node.Physical && node.Hardware != nil || node.Physical != (node.ControllerKind == "physical") {
 			return InstallRequest{}, openshiftRequestInvalid.Fail("the frozen physical installation node has no complete root selector proof", "plan the installation again")
 		}
-		if node.Hardware != nil && node.Hardware.RootSelector == linuxPreflightRoot && (node.Firmware.enforced() || !node.Controller.TLSVerify || node.Controller.TLSVerification == "none" || node.Controller.VirtualMedia.Trust == substrate.TrustDisableVerification) {
+		if node.Hardware != nil && node.Hardware.RootSelector == linuxPreflightRoot &&
+			(node.Firmware.enforced() || !node.Controller.TLSVerify || node.Controller.TLSVerification == "none" || !strings.HasPrefix(node.Controller.Endpoint, "https://")) {
 			return InstallRequest{}, openshiftRequestInvalid.Fail("the frozen Linux preflight requires stable firmware and verified BMC TLS", "plan the installation again")
 		}
 	}

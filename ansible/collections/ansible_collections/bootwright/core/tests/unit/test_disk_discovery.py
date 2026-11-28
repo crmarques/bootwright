@@ -668,3 +668,32 @@ def test_a_request_whose_machine_port_names_no_account_is_refused(port):
     request.update(version=controller.VERSION, machinePort=port)
     with pytest.raises(ValueError, match="discovery request shape"):
         controller.validate(request, "a" * 64, {})
+
+
+@pytest.mark.parametrize("verification", ["full", "certificate", "none"])
+def test_agent_discovery_media_exception_keeps_management_verification(verification):
+    digest = "a" * 64
+    binding = {
+        "context": "lab", "machine": "node", "operation": "op-" + "a" * 32, "attempt": "attempt-000001",
+        "nonce": digest, "requestDigest": digest, "mediaSHA256": digest, "toolDigest": digest,
+    }
+    request = {
+        "version": controller.VERSION, "identity": {"context": "lab", "object": "node"},
+        "bootMedia": {"sha256": digest}, "interfaces": [], "inventory": "boot", "network": {},
+        "agent": {"cluster": "lab", "root": {"wwn": "0x5000000000000001", "serialNumber": "EXAMPLE", "sizeBytes": 1073741824}},
+        "controller": {
+            "endpoint": "https://bmc.example.test/redfish/v1/Systems/1", "tlsVerification": verification, "tlsVerify": True,
+            "virtualMedia": {"trust": "disableVerification", "enableVerification": False, "restoreVerification": False},
+        },
+        "machinePort": {"userVariable": "bmcUser", "passwordVariable": "bmcPassword"},
+        "private": {
+            "url": "https://artifacts.example.test/private/os/node/discovery",
+            "path": "/var/lib/bootwright-hosted/lab/services/artifact-server/artifacts/public/private/os/node/discovery",
+        },
+        "placement": {"connection": "local"}, "deadlineSeconds": 1800, "ssh": {"port": 22},
+    }
+    if verification == "none":
+        with pytest.raises(ValueError, match="discovery controller TLS"):
+            controller.validate(request, digest, binding)
+    else:
+        controller.validate(request, digest, binding)

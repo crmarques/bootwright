@@ -48,8 +48,8 @@ func agentRequest(catalog api.Catalog, m api.Object, input lifecycle.PlanInput, 
 	}
 	controller := target.Controller
 	endpoint, err := url.Parse(controller.Endpoint)
-	if !target.Physical || !controller.TLSVerify || controller.TLSVerification == "none" || err != nil || endpoint.Scheme != "https" || controller.VirtualMedia.Trust == substrate.TrustDisableVerification {
-		return DiscoveryRequest{}, needs, discoveryUnsupported.Fail("Linux Agent preflight requires verified HTTPS BMC and virtual media", "use full or certificate BMC verification and established or imported artifact-server trust")
+	if !target.Physical || !controller.TLSVerify || controller.TLSVerification == "none" || err != nil || endpoint.Scheme != "https" {
+		return DiscoveryRequest{}, needs, discoveryUnsupported.Fail("Linux Agent preflight requires a physical Machine with verified HTTPS BMC management", "use full or certificate verification for the BMC connection")
 	}
 	policy := substrate.MachineLinuxPreflight(m)
 	boot, err := installation.PinInventoryImage(catalog, policy.Get("imageRef").Text(), m.Identity(), records)

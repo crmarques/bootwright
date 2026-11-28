@@ -1,5 +1,5 @@
 implementation: os-disk-discovery-v1
-content-digest: 5b3ef4e1f7d38d93c1022429faae0d6ec13ec3e5400eeac1efb29cda80a14a3c
+content-digest: c486dd025e43ee3fc0882d0dc706b6c0fa35cecc7ac8a9c5497b49c45f18be6e
 request-version: os-disk-discovery-v1
 automation-formats: none
 mark-formats: none
@@ -8,6 +8,7 @@ fixed-places: none
 effect-pins:
   bmc-drive-inventory-or-minimal-ram-boot-pinned-ssh-bmc-poweroff-agent-root-v1
   verified-media-default
+  agent-preflight-per-machine-media-trust
 request-identity:
   identity.context
   identity.object

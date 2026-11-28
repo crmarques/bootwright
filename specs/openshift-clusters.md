@@ -311,8 +311,12 @@ another platform; tracked as [B733](milestones/m9.md#b733).
 This per-Machine opt-in applies to physical Agent nodes whose storage is
 stable across a temporary Linux boot and the native installer boot. It uses
 the cluster's controller-local private HTTPS media listener and the Machine's
-verified HTTPS Redfish connection. The BMC verifies the HTTPS media listener
-using existing or imported trust.
+verified HTTPS Redfish connection. The controller always verifies the media
+listener. The BMC verifies the listener using existing or imported trust
+unless the Machine declares the [unverified media exception](api/machines.md#media-transport-trust).
+The exception applies to both the RAM inventory ISO and the Agent ISO.
+It weakens bootstrap provenance without changing the required disk and
+Machine proofs or the `data-loss` authorization.
 
 Import the qualified RHEL boot ISO with `bootwright catalog media add`, and
 declare its `local-media:` entry and publisher SHA-256 on a `MachineImage`.

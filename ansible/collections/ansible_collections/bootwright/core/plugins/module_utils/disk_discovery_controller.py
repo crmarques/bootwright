@@ -42,8 +42,7 @@ def validate_agent(request):
     agent = request["agent"]
     if (not isinstance(agent, dict) or set(agent) != {"cluster", "root"}
             or not isinstance(agent["root"], dict) or set(agent["root"]) != {"wwn", "serialNumber", "sizeBytes"}
-            or request.get("inventory") != "boot"
-            or request["controller"]["virtualMedia"]["trust"] == "disableVerification"):
+            or request.get("inventory") != "boot"):
         raise ValueError("Agent preflight request shape")
 
 

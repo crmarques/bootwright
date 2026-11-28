@@ -1,5 +1,5 @@
 implementation: cluster-install-agent-v1
-content-digest: cb8158bce6a5ab1ad9dc1293900bd42d3b4799d7979cd6a550b8d2efaed447fd
+content-digest: 6952f6fc28c33ebc47fc77884f4823b5b6602a7976d024067ffa20a42f6250dd
 request-version: cluster-install-agent-v1
 automation-formats: none
 mark-formats: bootwright.io/lend
@@ -20,6 +20,7 @@ effect-pins:
   prove-physical-target-before-boot-and-media-writes
   physical-root-and-release-proof
   linux-single-disk-preflight
+  agent-preflight-per-machine-media-trust
 request-identity:
   identity.context
   identity.cluster

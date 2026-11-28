@@ -12,8 +12,8 @@
     "fingerprint": "594d12ee3dccd32471dc42909e74742bb2b3f491fe09c25c15cdede4e7dbd5b7"
   },
   "cluster-install-agent-v1": {
-    "contentDigest": "cb8158bce6a5ab1ad9dc1293900bd42d3b4799d7979cd6a550b8d2efaed447fd",
-    "fingerprint": "65aada8b973c7d2e7848728a0b2a011a50f6dd502112fe92589ffa69a2cc68d1"
+    "contentDigest": "6952f6fc28c33ebc47fc77884f4823b5b6602a7976d024067ffa20a42f6250dd",
+    "fingerprint": "0a1d5e577c43b749a74f58b8263a0361ee3446b45b2731ac8843725ee4a0660d"
   },
   "cluster-media-agent-v1": {
     "contentDigest": "eaca7e25914f986932273c5b678200f2349cd8692ecedbe3081e74dd02775244",
@@ -80,8 +80,8 @@
     "fingerprint": "1b802386ede89af4b4c1e8d9e027c632501ed46433452c8e1a20a483b3dfe6f4"
   },
   "os-disk-discovery-v1": {
-    "contentDigest": "5b3ef4e1f7d38d93c1022429faae0d6ec13ec3e5400eeac1efb29cda80a14a3c",
-    "fingerprint": "b0a91b0c6b9f52a57e17ca0cd918d00fbb427921b5edf8a50179ab7c56425007"
+    "contentDigest": "c486dd025e43ee3fc0882d0dc706b6c0fa35cecc7ac8a9c5497b49c45f18be6e",
+    "fingerprint": "f1aed4f42d258df5292258381d4787bea68dbea718bfb44f79f367ab695cd0a4"
   },
   "os-host-firewall-v1": {
     "contentDigest": "8550f82a2e2370513d4e35e0e14d2f2cc4965d910599abd0243df00126361efd",
