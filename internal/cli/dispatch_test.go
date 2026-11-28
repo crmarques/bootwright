@@ -75,6 +75,7 @@ func TestDispatchEveryApplicationCommand(t *testing.T) {
 		{"render effective", artifactrendering.RenderRequest{ContextName: "example", InputPath: "inputs", OutputDirectory: "artifacts", Sensitive: true}},
 		{"render installer", installation.RenderInstallerRequest{ContextName: "example", Clusters: []string{"first", "second"}, Sensitive: true}},
 		{"render storage", storagerendering.RenderArtifactsRequest{ContextName: "example", Clusters: []string{"first", "second"}}},
+		{diskCheckPath, inventory.DiskCheckRequest{WWN: "0x5000000000000001", SizeBytes: 8192, SerialNumber: "EXAMPLE-DISK"}},
 		{"machine check", power.CheckRequest{ContextName: "example", Name: "demo"}},
 		{"machine list", inventory.ListRequest{ContextName: "example", Clusters: []string{"first", "second"}, Power: true}},
 		{"machine rsh", machineaccess.RshRequest{ContextName: "example", Name: "demo", SSH: account}},

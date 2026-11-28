@@ -339,6 +339,7 @@ and their output goldens:
 | `machine check` | `context`, `machine`, `checks` |
 | `machine cp` | `context`, `source`, `machines` |
 | `machine discover` | optional `keepGoing`, optional `checks`, optional `context`, optional `verb`, optional `steps`, optional `stages`, optional `clusters`, optional `machines`, optional `until`, optional `waves`, optional `widest`, optional `bound`, optional `startable`, optional `later`, optional `blocked`, optional `excluded`, optional `deferred`, optional `continuation`, optional `settled`, optional `finalizes`, optional `addsTo`, optional `restores`, optional `takesBack`, optional `scope`, optional `widens`, optional `anotherBuild`, optional `stops`, optional `stopsAfterOnline`, optional `authorizationSteps`, optional `authorizations`, optional `receipt`, optional `operation`, optional `inventories`, optional `next` |
+| `machine disk-check` | `status`, `expectedBytes`, `wwnMatches`, optional `serialMatches`, `exactMatches`, `disks` |
 | `machine info`, `machine list` | `context`, `machines`, `powerRead` |
 | `machine inventory` | `inventories` |
 | `machine media eject`, `machine restart`, `machine start`, `machine stop` | `context`, `verb`, `machines` |
@@ -659,6 +660,16 @@ not settle the headline is `!`, the table is still written to standard
 output and the diagnostics go to standard error. One Machine's human result is
 unchanged; one Machine's eject is headed `Machine presents no media`, with its
 media, the media before it and its power.
+
+A `machine disk-check` result reports the observations from the running Linux
+boot. The command needs no context. Each candidate's `device`, `bytes`,
+`wwn` and `serial` comparison states, `eligible` and `stable` mark what
+was read with redacted identifiers. A matching report requires
+one fixed, writable whole disk and exact byte capacity, plus unique matches
+for each requested identifier. A complete observation with a different
+result reports `mismatch`. Unavailable or unstable observations report
+`unknown`. Exit zero means the command produced observations. Installation
+authority is decided by the apply plan.
 
 A `machine check` result identifies the context and Machine. Its ordered
 `checks` array holds `id`, `status` and `summary`. An observation can report

@@ -67,6 +67,7 @@ func packageRoles() map[string]packageRole {
 		"internal/nativeartifacts/renderlocal":     adapterRole,
 		"internal/nativeartifacts/comparisonlocal": adapterRole,
 		"internal/machine/sshlocal":                adapterRole,
+		"internal/machine/disklocal":               adapterRole,
 		"internal/storage/preflightlocal":          adapterRole,
 		"internal/containercluster/preflightlocal": adapterRole,
 		"internal/secrets/secretstore":             applicationRole,
@@ -707,7 +708,8 @@ func effectGrants() map[string][]string {
 		// hands it the operator's streams and its material descriptors. An
 		// offered key arrives as a descriptor from the invoking account's
 		// opener, proved on that descriptor and copied, never opened here.
-		"internal/machine/sshlocal": {"io", "os", "syscall"},
+		"internal/machine/sshlocal":  {"io", "os", "syscall"},
+		"internal/machine/disklocal": {"io", "os", "golang.org/x/sys/unix"},
 		// Machine access names those streams to hand them on; it opens nothing.
 		"internal/machine/access": {"io"},
 		// A session policy decoder compares its second decode with io.EOF.

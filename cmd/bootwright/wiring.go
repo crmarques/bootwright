@@ -15,6 +15,8 @@ import (
 	"github.com/crmarques/bootwright/internal/environment/clusterpreflight"
 	environmentpreflight "github.com/crmarques/bootwright/internal/environment/preflight"
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
+	"github.com/crmarques/bootwright/internal/machine/disklocal"
+	"github.com/crmarques/bootwright/internal/machine/inventory"
 	"github.com/crmarques/bootwright/internal/machine/power"
 	"github.com/crmarques/bootwright/internal/machine/sessionpolicy"
 	"github.com/crmarques/bootwright/internal/managedos/diskdiscovery"
@@ -214,6 +216,9 @@ func assembleServices(deps serviceDependencies) cli.Services {
 	services.MachineCopy = machine.MachineCopy
 	services.MachineEnrollment = reconciler
 	services.MachineDiscovery = diskdiscovery.NewDiscoveryService(reconciler)
+	services.DiskCheck = func(ctx context.Context, request inventory.DiskCheckRequest) (*inventory.DiskCheckReport, error) {
+		return inventory.CheckDisk(ctx, request, disklocal.Survey)
+	}
 	services.EnvironmentAccess = machine.EnvironmentAccess
 	services.MachinePower, services.MachineTrust = machine.MachinePower, machine.MachineTrust
 	services.ClusterAccess = wireClusterAccess(services.DesiredState, secrets.binder, deps.Selection, reconciler)

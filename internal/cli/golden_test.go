@@ -1150,6 +1150,8 @@ func cliGoldens() []cliGolden {
 		// JSON invocation silences: TestAJSONInvocationWritesNoProgress in
 		// cmd/bootwright proves that wiring, and these goldens hold what the
 		// Runner writes.
+		{golden: "cli-machine-disk-check", args: "machine disk-check --wwn 0x5000000000000001 --size-bytes 8192", record: diskCheckSample},
+		{golden: "cli-machine-disk-check-json", args: "machine disk-check --wwn 0x5000000000000001 --size-bytes 8192 --output json", record: diskCheckSample},
 		{golden: "cli-machine-check", args: "machine check --name node", record: hardwareCheck},
 		{golden: "cli-machine-check-json", args: "machine check --name node --output json", record: hardwareCheck},
 		{golden: "cli-machine-info", args: "machine info", record: machineInfo},
@@ -1556,4 +1558,10 @@ func hardwareCheck(r *dispatchRecord) {
 			{ID: "active-rehearsal", Status: "requires-exercise", Summary: "Rehearse boot and cleanup on a spare."},
 		},
 	}
+}
+
+func diskCheckSample(record *dispatchRecord) {
+	record.result.diskCheck = &inventory.DiskCheckReport{Status: "matched", ExpectedBytes: 8192, WWNMatches: 1, ExactMatches: 1, Disks: []inventory.DiskCheckRow{
+		{Device: "sda", Bytes: 8192, WWN: "match", Serial: "unused", Eligible: true, Stable: true},
+	}}
 }

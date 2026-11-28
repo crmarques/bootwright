@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "machine disk-check",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "status": "matched",
+    "expectedBytes": 8192,
+    "wwnMatches": 1,
+    "exactMatches": 1,
+    "disks": [
+      {
+        "device": "sda",
+        "bytes": 8192,
+        "wwn": "match",
+        "serial": "unused",
+        "eligible": true,
+        "stable": true
+      }
+    ]
+  },
+  "diagnostics": [],
+  "logs": []
+}

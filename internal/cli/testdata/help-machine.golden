@@ -14,6 +14,9 @@
   ○ Command | discover
       PURPOSE  Inventory physical root disks through a temporary RAM boot
 
+  ○ Command | disk-check
+      PURPOSE  Check a disk identity in the running Linux boot
+
   ○ Command | enroll
       PURPOSE  Establish the declared lifecycle SSH account on one provided Machine
 

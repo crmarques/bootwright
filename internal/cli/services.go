@@ -1,6 +1,11 @@
 package cli
 
-import "io"
+import (
+	"context"
+	"io"
+
+	"github.com/crmarques/bootwright/internal/machine/inventory"
+)
 
 type Services struct {
 	Policy                PolicyService
@@ -25,6 +30,7 @@ type Services struct {
 	MachineInventory      MachineInventoryService
 	MachineAccess         MachineAccessService
 	MachineCopy           MachineCopyService
+	DiskCheck             func(context.Context, inventory.DiskCheckRequest) (*inventory.DiskCheckReport, error)
 	MachinePower          MachinePowerService
 	MachineDiscovery      MachineDiscoveryService
 	MachineEnrollment     MachineEnrollmentService

@@ -1,0 +1,3 @@
+Disk check matched · 1 exact matches · 8192 expected bytes
+  DEVICE   BYTES   WWN     SERIAL   ELIGIBLE   STABLE
+  sda      8192    match   unused   true       true

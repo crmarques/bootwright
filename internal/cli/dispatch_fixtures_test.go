@@ -381,18 +381,22 @@ func dispatchSpies(record *dispatchRecord) Services {
 		MachineInventory:      machineInventorySpy{record},
 		MachineAccess:         machineAccessSpy{record},
 		MachineCopy:           machineAccessSpy{record},
-		MachinePower:          machinePowerSpy{record},
-		MachineDiscovery:      machineDiscoverySpy{record},
-		MachineEnrollment:     lifecycleSpy{record},
-		MachineTrust:          machineTrustSpy{record},
-		ClusterAccess:         clusterAccessSpy{record},
-		Logs:                  logsSpy{record},
+		DiskCheck: func(ctx context.Context, request inventory.DiskCheckRequest) (*inventory.DiskCheckReport, error) {
+			return record.result.diskCheck, record.called(ctx, diskCheckPath, request)
+		},
+		MachinePower:      machinePowerSpy{record},
+		MachineDiscovery:  machineDiscoverySpy{record},
+		MachineEnrollment: lifecycleSpy{record},
+		MachineTrust:      machineTrustSpy{record},
+		ClusterAccess:     clusterAccessSpy{record},
+		Logs:              logsSpy{record},
 	}
 }
 
 func dispatchFlags() *pflag.FlagSet {
 	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
 	for name, value := range map[string]string{
+		"wwn": "0x5000000000000001", "size-bytes": "8192", "serial-number": "EXAMPLE-DISK",
 		"context": "example", "name": "demo", "client": "vm-disks", "ssh-id-file": "key.pem",
 		"ssh-user": "operator", "clusters": "first,second", "machines": "",
 		"replace": "node-b", "expect": "", "host-public-key-file": "", "object-user": "", "node": "node-a", "version": "", "part": "private-key",

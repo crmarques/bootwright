@@ -969,7 +969,7 @@ var askRuleNoAsk = map[string]string{
 	"status":               "read local state", "logs": "read local state",
 	"diff": "read local state", "render storage": "never execution",
 	"machine list": "read local state", "machine info": "read local inventory",
-	"machine check": "read named bmc", "machine inventory": "read local state", "machine media status": "bounded read of the virtual-media state",
+	"machine check": "read named bmc", "machine disk-check": "read local kernel", "machine inventory": "read local state", "machine media status": "bounded read of the virtual-media state",
 	"cluster list": "read local state", "cluster oc": "read context-owned access metadata",
 	"cluster kubectl": "read context-owned access metadata", "version": "none", "help": "none",
 	"catalog schema": "none", "sbom": "none", "explain": "none", "render acquisitions": "none", "completion bash": "none", "completion zsh": "none", "completion fish": "none",

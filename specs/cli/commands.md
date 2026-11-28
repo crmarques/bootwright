@@ -16,7 +16,7 @@ list each command's accepted flags.
 | `machine rsh`, `machine exec`, `cluster rsh`, `cluster exec` | yes | yes | yes | yes | no | no |
 | `machine cp` | yes | yes | yes | no | no | no |
 | `machine enroll` | yes | yes | no | no | no | no |
-| `uninstall`, `rebind-host`, `catalog` and `context` (all subcommands), `help`, `completion`, `version`, `sbom`, `explain` | no | no | no | no | no | no |
+| `machine disk-check`, `uninstall`, `rebind-host`, `catalog` and `context` (all subcommands), `help`, `completion`, `version`, `sbom`, `explain` | no | no | no | no | no | no |
 | every other command | yes | no | no | no | no | no |
 
 `install` accepts `--context` only with `--check`.
@@ -171,6 +171,7 @@ Every other command here is available.
 | Invocation | Command flags and defaults | Successful result | Effects |
 | --- | --- | --- | --- |
 | `bootwright machine list` | `--clusters <list>` default all; `--power-status` false; `--short` false | Machines with their declared contact and addresses and the evidence-backed lifecycle position each reached, their management-controller-reported power with `--power-status`, or sorted names with `--short` | read local state; with `--power-status`, read each machine's power through its management controller |
+| `bootwright machine disk-check` | required `--wwn <naa>` and `--size-bytes <bytes>`; optional `--serial-number <serial>` | [live disk observations](output.md#machine-results) | read local kernel disk attributes and block devices through read-only descriptors |
 | `bootwright machine check` | required `--name <machine>` | [hardware observations](output.md#machine-results) for one physical Machine | read named BMC over verified Redfish |
 | `bootwright machine info` | `--name <list>` default all; unknown names refuse | [machine details and access identities](output.md#machine-results) | read local inventory |
 | `bootwright machine rsh` | required `--name <machine>` | an interactive SSH session on the exact Machine as its resolved identity; the client's exit status is the result | read state, open the session's credential for its duration, read or record host trust, run one pinned SSH client |

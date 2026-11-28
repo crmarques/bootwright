@@ -16,6 +16,7 @@ func machineCommands() []commandSpec {
 	discoveryStage.help = "Select controller and infrastructure prerequisites for discovery"
 	return []commandSpec{
 		machineEnrollCommand(),
+		diskCheckCommand(),
 		available(commandSpec{
 			path: "machine check", short: "Check one physical machine through its BMC", example: "--context lab --name node",
 			flags: []flagSpec{nameFlag()}, invoke: Services.invokeMachineCheck, validate: validateMachineCheck,

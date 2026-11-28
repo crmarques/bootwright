@@ -70,6 +70,7 @@ type commandResult struct {
 	power        *power.Results
 	mediaStatus  *power.MediaStatusResult
 	machineCheck *power.CheckResult
+	diskCheck    *inventory.DiskCheckReport
 
 	secretMutation     *custody.MutationResult
 	secretCheck        *custody.CheckResult
