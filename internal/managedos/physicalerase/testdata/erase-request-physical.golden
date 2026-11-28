@@ -163,7 +163,7 @@
     "user": "bootwright",
     "version": "os-install-anaconda-v1"
   },
-  "installDigest": "05d83b3fae174149c10dde0f0ab59fcc5ce742b5f2b3bfedc0364fe7245c816b",
+  "installDigest": "dc31fb5074141d5cd9302bc78d421515c2537b27f73c640dad1c8d6af305240a",
   "network": "network --bootproto=static --device=enp1s0 --ip=198.51.100.41 --netmask=255.255.255.0 --hostname=metal-01.lab.example.test --onboot=on --activate --gateway=198.51.100.1 --nameserver=192.0.2.1\n",
   "targets": [
     {

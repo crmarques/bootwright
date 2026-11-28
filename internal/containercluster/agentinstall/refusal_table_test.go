@@ -45,8 +45,8 @@ func TestOpenShiftClusterRefusalTableMatchesUnsupported(t *testing.T) {
 	}
 	installed := guest("sno-01", "198.51.100.21")
 	installed = installed.WithSpec(installed.Spec().With("os", api.MapValue(field("install", api.MapValue(text("profileRef", "rhel-9-8"))))))
-	unrealized := guest("sno-01", "198.51.100.21")
-	unrealized = unrealized.WithSpec(unrealized.Spec().WithPath(api.StringValue("vc"), "hardware", "providerRef"))
+	standalone := guest("sno-01", "198.51.100.21")
+	standalone = standalone.WithSpec(standalone.Spec().WithPath(api.StringValue("vc"), "hardware", "providerRef"))
 	vsphere := api.NewObject(api.InfraProvider, "vc", api.Value{}, api.MapValue(field("vsphere", api.MapValue())))
 	multiNode := api.NewCatalog(append(base(),
 		guest("ocp-01", "198.51.100.31"), guest("ocp-02", "198.51.100.32"), guest("ocp-03", "198.51.100.33"),
@@ -128,9 +128,9 @@ func TestOpenShiftClusterRefusalTableMatchesUnsupported(t *testing.T) {
 		"An endpoint prefix length":                       endpointCase("api-int", "prefixLength", api.IntegerValue("24"), ""),
 		"Endpoint interface networks":                     endpointCase("api", "interfaceNetworks", api.StringList("198.51.100.0/24"), ""),
 
-		"Several nodes on another platform": {multiNode, "OpenShiftCluster/ocp", map[string]string{"<cluster>": "OpenShiftCluster/ocp"}},
-		"A node with an install profile":    {onSNO(installed), "OpenShiftCluster/sno", onNode},
-		"A node on an unrealized substrate": {onSNO(unrealized, vsphere), "OpenShiftCluster/sno", onSNOCluster},
+		"Several nodes on another platform":     {multiNode, "OpenShiftCluster/ocp", map[string]string{"<cluster>": "OpenShiftCluster/ocp"}},
+		"A node with an install profile":        {onSNO(installed), "OpenShiftCluster/sno", onNode},
+		"A node on a standalone-only substrate": {onSNO(standalone, vsphere), "OpenShiftCluster/sno", map[string]string{"<node>": "master-0", "<machine>": "Machine/sno-01", "<cluster>": "OpenShiftCluster/sno"}},
 		"A node whose emulated BMC port does not allocate": {
 			singleNodeOnProvider(portPastTheSpace, guest("sno-00", "198.51.100.20")), "OpenShiftCluster/sno", map[string]string{"<provider>": "InfraProvider/lab-libvirt", "<node>": "master-0", "<machine>": "Machine/sno-01"},
 		},

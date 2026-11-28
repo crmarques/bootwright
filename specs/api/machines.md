@@ -94,7 +94,7 @@ its 63-byte identity.
 | --- | --- | --- | --- |
 | `spec.baremetal` | object | union | The bare-metal arm below. |
 | `spec.libvirt` | object | union | The libvirt arm below. |
-| `spec.vsphere` | object | union | A [refused arm](#refused-arms). |
+| `spec.vsphere` | object | union | The [vSphere arm](#vsphere-arm). |
 | `spec.kubevirt` | object | union | The [KubeVirt arm](#kubevirt-arm) below. |
 | `spec.segments` | array | no | Set keyed by `name`; each entry has exactly the arm matching the selected substrate ([segments](#machine-profiles-and-segments)). |
 
@@ -217,24 +217,33 @@ Not yet met: Bootwright refuses to provision Machines from a KubeVirt
 template snapshot before operation registration; tracked as
 [B1166](../milestones/m1.md#b1166).
 
-### Refused arms
+### vSphere arm
 
-The `vsphere` provider arm and its segment arm, and the
-`templateClone` installer arm, are admitted by the closed schema and refused
-before registration by
-[substrate selection](../substrates.md#selection-and-refusal) and
-[managed-OS installation](../managed-os.md#installation). The field detail of
-the vSphere arm is recorded in
-[refused machine arms](../deferred/machine-arms.md), which
-[B99](../milestones/m1.md#b99) revives.
-A Machine NIC's segment is its `hardware.nics[].segmentRef`
-([hardware and substrate](#hardware-and-substrate)).
+`spec.vsphere.vcenters[]` selects an existing vCenter by its unique `server`
+and optional HTTPS `port` (default 443). Supply a `usernamePassword`
+`credentialsRef` and optionally a `trustBundleRef` of type `caBundle` or `trustBundle`. The client
+verifies the certificate and endpoint name on every session and upload.
+
+`placements[]` is a nonempty set keyed by `name`. Each entry names its
+`server` and the absolute inventory paths of its `datacenter`, `computeCluster`,
+`resourcePool`, `datastore` and VM `folder`. These are existing operator-owned
+objects. Network attachment is selected per NIC through its segment's
+`vsphere.portgroup` inventory path. A declared trunk must carry every requested
+VLAN and its declared MTU before the Machine can start.
+
+A Machine profile selects a named placement with `placementRef`; a sole
+placement can be inferred. Its optional `template` is the absolute inventory
+path of the powered-off RHEL VM template selected by the consuming install
+profile. `isoStaging.datastore` overrides the placement datastore for private
+media and `isoStaging.folder` overrides the default `bootwright-vmedia` folder.
+See [vSphere Machine realization](../substrates.md#vsphere-machine-realization)
+for the identity and removal proofs.
 
 ### Machine profiles and segments
 
 Every libvirt, vSphere, and KubeVirt `machineProfiles[]` entry has this exact
-shape; the vSphere-only `template` and `failureDomainRef` fields belong to the
-[refused arms](#refused-arms):
+shape; the vSphere-only `template` and `placementRef` fields are described under the
+[vSphere arm](#vsphere-arm):
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
@@ -242,9 +251,9 @@ shape; the vSphere-only `template` and `failureDomainRef` fields belong to the
 | `cpu` | integer | no | `0` | `0..1024`; greater than zero for libvirt and vSphere. |
 | `memoryMiB` | integer | no | `0` | `0..16777216` (16 TiB); greater than zero for libvirt and vSphere. |
 | `diskGiB` | integer | no | `0` | `0..65536` (64 TiB); greater than zero for libvirt and vSphere. |
-| `dataDisks` | array | no | `[]` | Libvirt/vSphere only; set keyed by a required `name`, a DNS label, with `sizeGiB` `1..65536`. A libvirt profile declares at most 7 data disks and none named `root`, which names the root disk. |
+| `dataDisks` | array | no | `[]` | Libvirt/vSphere only; set keyed by a required `name`, a DNS label, with `sizeGiB` `1..65536`. A libvirt profile declares at most 7 data disks. A vSphere profile declares at most 59 data disks. Both reserve the name `root`. |
 | `dataDisks[].media` | string | no | omitted | Libvirt only: admitted values are `ssd` and `hdd`. Explicit media disks use virtio-SCSI and successive `sda` through `sdg` targets; SSD uses nonrotational `rotation_rate=1`, HDD uses `rotation_rate=7200`. Omission preserves virtio-blk, with successive `vdb` through `vdh` targets among unmarked disks. Empty, null and other values refuse. The root remains `vda`. |
-| `tpm` | object | no | — | Libvirt/KubeVirt only; its presence requests TPM 2.0. |
+| `tpm` | object | no | — | Its presence requests TPM 2.0. On vSphere it requires an existing key provider and persistent per-VM state. |
 | `templateSnapshotRef` | object | no | — | KubeVirt only. See [Template snapshot reference](#template-snapshot-reference). |
 | `tpm.persistent` | boolean | KubeVirt only | `true` | Forbidden for libvirt, whose emulated TPM state is already persistent. |
 
@@ -260,13 +269,12 @@ changing media requires a new realization rather than modifying an owned disk.
 A segment is one provider network a Machine NIC is cabled to
 ([D240](../milestones/backlog.md#d240) (2), (4)). `segments[]` names are unique
 DNS labels; each entry has required `name`, the fields below and exactly one
-arm matching the provider's substrate. The `vsphere` arm is
-[refused](#refused-arms); the `kubevirt` arm's fields are in the table below.
+arm matching the provider's substrate. The [vSphere arm](#vsphere-arm) selects the backing portgroup; the `kubevirt` arm's fields are in the table below.
 
 | Field | Type | Default | Rule |
 | --- | --- | --- | --- |
 | `untaggedNetworkRef` | `Network` reference | none | The one network the segment carries untagged. Required on a `kubevirt` or `vsphere` segment (`api.required`). |
-| `taggedNetworkRefs` | set of `Network` references | none | The 802.1Q allow-list: each declares `vlan` and is not `untaggedNetworkRef`. Refused on a `kubevirt` or `vsphere` segment until [B1172](../milestones/backlog.md#b1172). |
+| `taggedNetworkRefs` | set of `Network` references | none | The 802.1Q allow-list: each declares `vlan` and is not `untaggedNetworkRef`. vSphere validates carriage on the existing portgroup. KubeVirt refuses tagged carriage ([B1172](../milestones/backlog.md#b1172)). |
 | `mtu` | integer 576 to 65536 | `1500`, materialized | The largest frame the segment carries, never derived into an interface MTU. A hosted KubeVirt segment naming a typed host `secondaryNetworks[]` entry takes that entry's `mtu`, 1500 when it has none, and an authored one refuses. |
 | `baremetal` | `{}` | | A physical network. |
 | `kubevirt` | object | | Required `networkRef`, whose `name` is required. `kind` defaults `ClusterUserDefinedNetwork`; known native kinds also include `UserDefinedNetwork`, which realization refuses under the [refusal table](../substrates.md#refusal-table), and `NetworkAttachmentDefinition`. `apiGroup` defaults to `k8s.ovn.org` for the first two and `k8s.cni.cncf.io` for the latter; another kind requires explicit `apiGroup`. |
@@ -334,16 +342,16 @@ own refusal.
 | `spec.hardware.profileRef` | string | conditional | — | Provider-local `machineProfiles[].name`, resolved in whichever arm a libvirt, KubeVirt or vSphere provider has; required there when the OS is not provided, refused on bare metal. |
 | `spec.hardware.bmc` | object | conditional | — | The management controller; [BMC](#bmc). |
 | `spec.hardware.firmware` | object | no | — | Declared firmware settings; [shape](#firmware-block). |
-| `spec.hardware.nics` | array | conditional | `[]` | The NIC list, in device order, set keyed by `name`; non-empty on a bare-metal install machine and on a non-provided libvirt or KubeVirt Machine, where each entry is one vNIC. |
+| `spec.hardware.nics` | array | conditional | `[]` | The NIC list, in device order, set keyed by `name`; non-empty on a bare-metal install machine and on a non-provided libvirt, KubeVirt or vSphere Machine, where each entry is one vNIC. |
 | `spec.hardware.nics[].name` | string | yes | — | Machine-local NIC name, on every substrate. |
-| `spec.hardware.nics[].macAddress` | string | conditional | — | EUI-48; required on every NIC of a non-provided bare-metal Machine, refused on libvirt and KubeVirt, where the provider derives it. |
+| `spec.hardware.nics[].macAddress` | string | conditional | — | EUI-48; required on every NIC of a non-provided bare-metal Machine, refused on libvirt and KubeVirt, where the provider derives it. Optional on vSphere, where omission derives a VMware manual MAC. |
 | `spec.hardware.nics[].segmentRef` | string | no | the provider's sole segment | A segment of the provider; refused without `providerRef`. |
 | `spec.hardware.rootDisk` | object | no | — | The root disk's identity, selector and hints, and its removal action; [root disk](#root-disk). |
 | `spec.hardware.dataDisks` | array | no | — | Data disks acted on at installation or removal; [data disks and disk actions](#data-disks-and-disk-actions). |
 | `spec.os.provided` | object | union | — | The OS-ready arm. Use `provided: {}` or opt into [provided OS updates](#provided-os-updates), a [provided registration](#provided-registration) and [provided time synchronization](#provided-time-synchronization). |
 | `spec.os.install.profileRef` | string | with `install` | — | Global `MachineInstallProfile`; the Bootwright-installed arm. |
 | `spec.os.install.ntp` | array of selections | no | install-profile selections | NTPServer selections for a Bootwright-installed Machine; `[]` clears profile selections. |
-| `spec.os.install.hostKeyRef` | string | conditional | — | `sshKeyPair` `Secret` delivered as the installed SSH host key; required on bare metal and on a Machine that selects a [template snapshot](#template-snapshot-reference), optional on libvirt ([completion channel](../managed-os.md#delivered-identity-off-the-hypervisor)), forbidden on other installation paths. Unique per Machine and no other credential. Effect material. |
+| `spec.os.install.hostKeyRef` | string | conditional | — | `sshKeyPair` `Secret` delivered as the installed SSH host key; required on bare metal, vSphere and any Machine that selects a [template snapshot](#template-snapshot-reference), optional on libvirt ([completion channel](../managed-os.md#delivered-identity-off-the-hypervisor)), forbidden on other installation paths. Unique per Machine and no other credential. Effect material. |
 | `spec.os.clusterInstalled` | empty object | union | — | The installer-provisioned arm, `clusterInstalled: {}`. |
 | `spec.proxy` | choice object | no | profile choice or direct access | Lifecycle-dependent atomic Machine-owned selection below; emits immediately after `os`. |
 | `spec.network` | object | no | contacts normalized below | Network selection, named contacts/static assignments and interface matches below. |
@@ -380,7 +388,7 @@ substrate admits.
 
 A bare-metal non-provided machine has at least one NIC; every NIC has a
 `macAddress`; `hardware.bmc` address and credentials are present. A
-non-provided libvirt or KubeVirt Machine has at least one NIC, else
+non-provided libvirt, KubeVirt or vSphere Machine has at least one NIC, else
 `api.invariant` at `hardware.nics`. Root selection follows the [cluster agent](../openshift-clusters.md#selection)
 or [managed OS](../managed-os.md#physical-installation). Its BMC address, like every
 authored one, selects one exact `/redfish/v1/Systems/<id>` ComputerSystem in
@@ -409,7 +417,7 @@ A NIC is one MAC-bearing port or function as Redfish EthernetInterfaces reports
 it, declared even when uncabled. Adapters, PCI slots, link speed, SR-IOV VFs (an
 add-on's concern) and a boot NIC are not modeled. A NIC name is Machine-local
 and need not be an OS interface name; `network.interfaceMatches` joins them when
-they differ. On a non-provided libvirt or KubeVirt Machine the name is an
+they differ. On a non-provided libvirt, KubeVirt or vSphere Machine the name is an
 interface name, as in the [subset](#nmstate-composition-subset), because the
 installer pins an unmatched vNIC under it; else `api.invariant` at
 `hardware.nics[].name`.
@@ -505,17 +513,16 @@ refuses `api.invariant` at its path, naming the provider and its arm; an
 | --- | --- | --- | --- |
 | `profileRef` | refused | required unless OS-ready | required unless OS-ready |
 | `bmc`, `firmware` | [BMC](#bmc), [firmware](#firmware-block) | refused | refused |
-| `nics[].macAddress` | required on every NIC of a non-provided Machine; EUI-48 | refused | optional, in the manual assignment range `00:50:56:00:00:00` through `00:50:56:3f:ff:ff` ([refused machine arms](../deferred/machine-arms.md#machine-fields)) |
-| `nics[].segmentRef` | a segment of the provider; refused without `providerRef` | a segment of the provider | admitted and not realized |
+| `nics[].macAddress` | required on every NIC of a non-provided Machine; EUI-48 | refused | optional, in the manual assignment range `00:50:56:00:00:00` through `00:50:56:3f:ff:ff` ([vSphere realization](../substrates.md#vsphere-machine-realization)) |
+| `nics[].segmentRef` | a segment of the provider; refused without `providerRef` | a segment of the provider | a segment of the provider |
 | `rootDisk` | [root disk](#root-disk) | refused: the provider creates it and the installer uses `/dev/vda`, derived | refused |
 | `dataDisks` | [data disks](#data-disks-and-disk-actions) | refused | refused |
 
 A NIC's `segmentRef` names a segment of the provider whose arm matches. Omitted,
 a NIC takes the provider's sole segment, whatever its name. With two or more
-segments, on libvirt and KubeVirt every NIC needs one, else `api.invariant` at
-`hardware.nics` names the NIC; on bare metal and vSphere a NIC an available
-ethernet interface matches needs one, else `api.invariant` at its entry names
-the candidates.
+segments, every libvirt, KubeVirt and vSphere NIC selects its segment. On bare
+metal, each NIC matched to an available ethernet interface selects a segment.
+An ambiguous choice reports `api.invariant` on the NIC.
 
 Machine roles are not declared: a Machine is an OpenShift node because an
 `OpenShiftCluster` names it in `spec.nodes[].machineRef`, a Ceph node or the
@@ -1284,7 +1291,7 @@ optional. Validation is lexical only.
 | `spec.os.architecture` | string | yes | `x86_64`. |
 | `spec.updates.policy` | string | no | `withinRelease` (default) or `none`. `withinRelease` updates every installed package at installation, after registration, to the newest its update sources offer within `spec.os.version`, then reboots when anything changed; `none` installs the media's packages alone ([update within release](../managed-os.md#update-within-release)). `spec.updates` is closed. |
 | `spec.installer.anaconda` | object | union | Anaconda arm below. |
-| `spec.installer.templateClone` | object | union | A [refused arm](#refused-arms). |
+| `spec.installer.templateClone` | object | union | Full clone from the selected native source. See the [vSphere arm](#vsphere-arm) and [KubeVirt template snapshot](#template-snapshot-reference). The required `seed.cloudInit` object has optional boolean `growRootFilesystem` (default true). |
 | `spec.subscription.entitlementRef` | string | no | Global `Entitlement` of type `redhatRhel`; a `managed` one registers the installed system and unregisters it on destroy, an `external` one registers nothing ([managed OS](../managed-os.md#registration)). |
 | `spec.proxy` | choice object | no | External Proxy choice; omission uses direct access. |
 | `spec.ntp` | array of selections | no | NTPServer selections; omission leaves the native OS default. |

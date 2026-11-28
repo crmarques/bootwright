@@ -9,7 +9,7 @@ import (
 // controller client: its media is built and published on the controller with
 // the stage's host packages and its completion is read through the hypervisor
 // or a pinned connection, so a mirror host it installs may precede the stage's
-// clients. An arm that runs one, such as govc or virtctl, waits for them.
+// clients. An arm that runs one, such as virtctl, waits for them.
 func (Capability) PrecedesController(definition reconciliation.BlockDefinition) bool {
 	request, err := DecodeRequest(definition.Request)
 	return err == nil && len(substrate.ClientsOf(request.Target.Substrate)) == 0

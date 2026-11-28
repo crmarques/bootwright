@@ -47,7 +47,8 @@ SUBSTRATES = {"libvirt": "substrate_libvirt_machine", "baremetal": "substrate_ba
 # installation refuses a KubeVirt Machine before registration, and the agent
 # installation's pushed, pinned composition of KubeVirt's port is rendered
 # against that arm's argument specs in test_containercluster_kubevirt_port.py.
-UNCOMPOSED = {"kubevirt": ("substrate_kubevirt_machine", "test_containercluster_kubevirt_port.py")}
+UNCOMPOSED = {"kubevirt": ("substrate_kubevirt_machine", "test_containercluster_kubevirt_port.py"),
+              "vsphere": ("substrate_vsphere_machine", "test_vsphere_port.py")}
 PORT = {"pre_boot", "boot_media", "boot_disk", "identity_read", "state_read", "media_insert", "media_eject", "power"}
 LIFECYCLE = {"apply", "observe", "destroy"}
 # The lifecycle entry points an arm adds for a staged destroy that keeps its machine.
@@ -216,6 +217,9 @@ def composed():
                     found.append((label(path), None, arguments.get("tasks_from"), task))
                 elif arguments.get("name") == DISPATCHER and arguments.get("tasks_from") in (
                         "pre_boot", "boot_media", "boot_disk", "identity_read"):
+                    # Template clones enter exclusively through the vSphere port, exercised in test_vsphere_port.py.
+                    if path.name.startswith("clone_") and path.parent.parent.name == MANAGED_OS:
+                        continue
                     for arm in sorted(bindings):
                         found.append((label(path), arm, arguments["tasks_from"], task))
     return found

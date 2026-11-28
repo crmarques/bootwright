@@ -1,0 +1,26 @@
+---
+- name: Clear the refusal an earlier entry point named
+  ansible.builtin.set_fact:
+    substrate_vsphere_machine_refusal: ''
+  no_log: true
+
+- name: Run state_read through vCenter
+  bootwright.core.substrate_vsphere_api:
+    operation: state_read
+    port: '{{ bootwright_machine_port }}'
+  retries: '{{ bootwright_machine_port.retries | default(1) }}'
+  delay: '{{ bootwright_machine_port.delay | default(0) }}'
+  until: >-
+    bootwright_machine_port.expected_power | default('') | length == 0
+    or (substrate_vsphere_machine_port_result.power | default('')) == bootwright_machine_port.expected_power
+  register: substrate_vsphere_machine_port_result
+  failed_when: false
+  no_log: true
+  diff: false
+
+- name: Normalize an unanswered read as unknown
+  ansible.builtin.set_fact:
+    substrate_vsphere_machine_port_result: >-
+      {{ substrate_vsphere_machine_port_result | combine({'power_state': 'unknown', 'media_state': 'unknown'})
+         if substrate_vsphere_machine_port_result.msg is defined else substrate_vsphere_machine_port_result }}
+  no_log: true

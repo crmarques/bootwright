@@ -1,0 +1,53 @@
+{
+  "computeCluster": "/dc/host/group",
+  "cpu": 2,
+  "credentialsRef": "login",
+  "dataDisks": [
+    {
+      "name": "data",
+      "sizeGiB": 45
+    }
+  ],
+  "datacenter": "/dc",
+  "datastore": "/dc/datastore/store",
+  "diskGiB": 30,
+  "folder": "/dc/vm/guests",
+  "identity": {
+    "block": "machine-node",
+    "context": "sample",
+    "object": "node"
+  },
+  "interfaces": [
+    {
+      "macAddress": "00:50:56:01:02:03",
+      "mtu": 9000,
+      "name": "eth0",
+      "portgroup": "/dc/network/trunk",
+      "taggedVLANs": [
+        93
+      ]
+    },
+    {
+      "macAddress": "00:50:56:0c:45:e7",
+      "mtu": 1500,
+      "name": "eth1",
+      "portgroup": "/dc/network/private"
+    }
+  ],
+  "memoryMiB": 8192,
+  "name": "bw-node-04d8b62eb8afb4f8",
+  "owner": "04d8b62eb8afb4f824687ad957995ffbf12ab2d8b11184ec7257c5cd32f4f262",
+  "placement": {
+    "connection": "local",
+    "machine": "control"
+  },
+  "provider": "virtual",
+  "resourcePool": "/dc/host/group/Resources",
+  "server": "https://vc.example.test:8443",
+  "stagingDatastore": "/dc/datastore/store",
+  "stagingFolder": "bootwright-vmedia",
+  "tlsVerify": true,
+  "tpm": true,
+  "trustBundleRef": "ca",
+  "version": "machine-vsphere-v1"
+}

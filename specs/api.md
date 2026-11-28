@@ -49,10 +49,8 @@ proves each row warned and refused at planning.
 
 | Kind | Declaration | Tracked by |
 | --- | --- | --- |
-| InfraProvider | `spec.vsphere` | [B99](milestones/m1.md#b99) |
-| MachineInstallProfile | `spec.installer.templateClone` | [B99](milestones/m1.md#b99) |
 | LoadBalancer | `spec.management: managed` | [B100](milestones/backlog.md#b100) |
-| OpenShiftCluster | `spec.distribution.type: okd` | [B748](milestones/backlog.md#b748) |
+| OpenShiftCluster | `spec.distribution.type: okd` | [B748](milestones/m8.md#b748) |
 | OpenShiftCluster | `spec.install.mode: disconnected` | [B69](milestones/m3.md#b69) |
 | OpenShiftCluster | `spec.install.servingCertificates` | [B723](milestones/m3.md#b723) |
 | ClusterAddon | `spec.manifestSet` | [B90](milestones/m4.md#b90) |

@@ -85,3 +85,33 @@ argument_specs:
       bootwright_machine_port:
         type: dict
         required: true
+
+  seed_read:
+    short_description: Read private guest seed ownership.
+    options:
+      bootwright_machine_arm:
+        type: str
+        required: true
+      bootwright_machine_port:
+        type: dict
+        required: true
+
+  seed_insert:
+    short_description: Set a private seed on an owned powered-off Machine.
+    options:
+      bootwright_machine_arm:
+        type: str
+        required: true
+      bootwright_machine_port:
+        type: dict
+        required: true
+
+  seed_eject:
+    short_description: Clear an owned private guest seed.
+    options:
+      bootwright_machine_arm:
+        type: str
+        required: true
+      bootwright_machine_port:
+        type: dict
+        required: true

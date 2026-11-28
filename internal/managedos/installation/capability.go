@@ -53,9 +53,7 @@ func (c Capability) WithRetirementPolicies(policies ...RetirementPolicy) Capabil
 
 const variablePrefix = "bootwright_os_install"
 
-// Plan derives one block per Bootwright-installed Machine. It reads the host
-// media store's records, to freeze each image at its record, and no other host,
-// endpoint or Secret material, and performs no effect.
+// Plan freezes installed Machines and pins the store images used by ISO installations.
 func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecycle.CapabilityPlan, error) {
 	if err := ctx.Err(); err != nil {
 		return lifecycle.CapabilityPlan{}, err
@@ -68,7 +66,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	if err != nil {
 		return lifecycle.CapabilityPlan{}, err
 	}
-	if len(requests) != 0 {
+	if slices.ContainsFunc(requests, func(r Request) bool { return r.CloudInit == nil }) {
 		if c.media == nil {
 			return lifecycle.CapabilityPlan{}, installUnconfigured.Fail("this executable has no media store reader, so it cannot pin installation media", "")
 		}
@@ -127,7 +125,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		plan.Definitions = append(plan.Definitions, definition)
 		plan.Secrets = append(plan.Secrets, request.SecretReferences()...)
 		media = append(media, request.MediaNames()...)
-		if !request.Placement.Local() {
+		if !request.Placement.Local() || len(request.ReservationKeys()) == 0 {
 			continue
 		}
 		plan.Reservations = append(plan.Reservations, infrastructureservices.HostReservation{
@@ -234,7 +232,10 @@ func description(verb reconciliation.Verb, request Request) string {
 }
 
 func impacts(verb reconciliation.Verb, request Request) []string {
-	published := []string{request.installerImage().Path}
+	var published []string
+	if request.CloudInit == nil {
+		published = []string{request.installerImage().Path}
+	}
 
 	var impacts []string
 	for _, path := range published {
@@ -294,6 +295,11 @@ func groups(verb reconciliation.Verb, request Request) []reconciliation.Group {
 		{"await-machine", "wait for the installed machine to boot and answer through its own channel"},
 		{"verify-installation", "prove the installed machine answers on the key it reported"},
 		{"converge-network", "apply the declared network, restart the machine and prove its network"},
+	}
+	if request.CloudInit != nil {
+		steps = [][2]string{{"await-machine", "seed the clone and verify cloud-init on its pinned SSH connection"},
+			{"verify-installation", "withdraw the seed and verify the installed machine"},
+			{"converge-network", "apply and verify the declared network after reboot"}}
 	}
 	if request.DiskEncryption != nil || slices.Contains(request.InstallerArguments, fipsArgument) {
 		steps = append(steps, [2]string{"verify-security", "verify the requested security settings"})
@@ -620,6 +626,13 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 			return lifecycle.RunResult{}, err
 		}
 	}
+	if operation != "apply" && substrate.PortPinned(request.Target.Substrate) {
+		pin, err := c.pinValues(execution, request)
+		if err != nil {
+			return lifecycle.RunResult{}, err
+		}
+		maps.Copy(values, pin)
+	}
 	if operation == "destroy" {
 		refusals = unregistrationRefusals(execution.Context, request)
 	}
@@ -630,26 +643,8 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 		}
 		values["unregister"] = map[bool]string{true: "guest", false: "skip"}[unregister]
 	}
-	// A machine proved by a delivered key is read over a connection pinned to
-	// exactly that key, so the public half reaches every operation, not only
-	// the one that installs it.
-	if request.Target.HostKeyRef != "" {
-		key, err := publicHalf(execution, request.Target.HostKeyRef, "SSH host key")
-		if err != nil {
-			return lifecycle.RunResult{}, err
-		}
-		values["hostKey"] = key
-		values["hostKeyType"] = strings.Fields(key)[0]
-		if operation == "apply" && request.Target.Channel == substrate.ChannelDeliveredKey {
-			if err := deliveredKeyMatches(request, key); err != nil {
-				return lifecycle.RunResult{}, err
-			}
-			if request.fips() {
-				if err := fipsKey(execution.Context, request, key, request.Target.HostKeyRef, "host key"); err != nil {
-					return lifecycle.RunResult{}, err
-				}
-			}
-		}
+	if err := boundHostKey(execution, request, operation, values); err != nil {
+		return lifecycle.RunResult{}, err
 	}
 	port := request.Target.MachinePort
 	if port.UserVariable == "" || port.PasswordVariable == "" {
@@ -696,6 +691,31 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 		Canonical: canonical, Placement: request.Placement, Materials: materials, Values: values,
 		Refusals: refusals, Deadline: request.Deadline(), Preparation: preparation,
 	}))
+}
+
+func boundHostKey(execution lifecycle.Execution, request Request, operation string, values map[string]string) error {
+	// A machine proved by a delivered key is read over a connection pinned to
+	// exactly that key, so the public half reaches every operation, not only
+	// the one that installs it.
+	if request.Target.HostKeyRef != "" {
+		key, err := publicHalf(execution, request.Target.HostKeyRef, "SSH host key")
+		if err != nil {
+			return err
+		}
+		values["hostKey"] = key
+		values["hostKeyType"] = strings.Fields(key)[0]
+		if operation == "apply" && request.Target.Channel == substrate.ChannelDeliveredKey {
+			if err := deliveredKeyMatches(request, key); err != nil {
+				return err
+			}
+			if request.fips() {
+				if err := fipsKey(execution.Context, request, key, request.Target.HostKeyRef, "host key"); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func (c Capability) applyRefusals(execution lifecycle.Execution, request Request, values map[string]string, marker []byte) (map[string]error, error) {
@@ -759,21 +779,28 @@ func publicationCertificates(request Request) []lifecycle.MaterialFile {
 	return materials
 }
 
-// pinValues carries the identity a physical target's own Machine block proved
-// earlier in this operation, so the pre-boot proof refuses a machine that
-// answers as another system. A target its substrate created, and a Machine
-// with no pin, carry nothing.
+// pinValues carries the durable Machine identity required by the frozen port.
 func (c Capability) pinValues(execution lifecycle.Execution, request Request) (map[string]string, error) {
-	if !request.Target.Physical {
+	if !request.Target.Physical && !substrate.PortPinned(request.Target.Substrate) {
 		return nil, nil
 	}
 	if c.identities == nil {
 		return nil, installUnconfigured.Fail(
 			"the reader of Machine/"+request.Identity.Object+"'s pinned identity is not configured", "")
 	}
-	pin, pinned, err := c.identities.PinnedIdentity(request.Identity.Object, execution.Proved)
+	proofs := execution.Proved
+	if substrate.PortPinned(request.Target.Substrate) {
+		proofs = execution.ApplyProved
+		if len(proofs) == 0 {
+			proofs = execution.Proved
+		}
+	}
+	pin, pinned, err := c.identities.PinnedIdentity(request.Identity.Object, proofs)
 	if err != nil {
 		return nil, err
+	}
+	if substrate.PortPinned(request.Target.Substrate) && (!pinned || pin.UUID == "" || pin.Serial == "") {
+		return nil, installRecordsMissing.Fail("the virtual Machine has no complete durable identity", "restore the original Machine proof before continuing installation")
 	}
 	if request.linuxDiscoveredWWN() && (!pinned || !validInstallerUUID(strings.ToLower(strings.TrimSpace(pin.UUID)))) {
 		return nil, installRecordsMissing.Fail("the Linux-discovered disk has no durable Machine UUID to check in the installer", "restore the original Machine proof before continuing installation")

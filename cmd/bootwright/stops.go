@@ -34,6 +34,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
 	"github.com/crmarques/bootwright/internal/substrate/kubevirt"
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
+	"github.com/crmarques/bootwright/internal/substrate/vsphere"
 	"github.com/crmarques/bootwright/internal/workspace/contextfs"
 	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -41,7 +42,7 @@ import (
 
 func stopCatalog() []diagnostics.Stop {
 	return slices.Concat(ansiblerunner.Stops(), lifecycle.Stops(), hostfirewall.Stops(), providedupdate.Stops(), providedhostname.Stops(), providedregistration.Stops(), providedtime.Stops(), power.Stops(),
-		diskdiscovery.Stops(), physicalerase.Stops(), mirrorfill.Stops(), baremetal.Stops(), kubevirt.Stops(), libvirt.Stops(),
+		diskdiscovery.Stops(), physicalerase.Stops(), mirrorfill.Stops(), baremetal.Stops(), vsphere.Stops(), kubevirt.Stops(), libvirt.Stops(),
 		agentinstall.Stops(), managedservice.Stops(), installation.Stops(), ceph.Stops(),
 		kernel.Stops(), media.Stops(),
 		artifactserver.Stops(), machine.Stops(), hardware.Stops(), clients.Stops(), reconciliation.Stops(), substrate.Stops(), driver.Stops(), instance.Stops(), cli.Stops(), contexts.Stops(), contextfs.Stops(), operationstore.Stops(), logview.Stops())

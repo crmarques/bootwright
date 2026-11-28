@@ -101,10 +101,9 @@ format `bootwright.controller.runtime-lock-v1`. It names one `ansible-core`
 release of the qualified minor the collection's `requires_ansible` admits, the
 Python ABIs it serves, newest first, the glibc floor, the tested releases, the
 pip wheel that installs it, and, for each ABI, the exact binary wheel files of
-what the controller imports of `ansible-core`'s declared closure and of urllib3
-for the one controller downloader, each with its URL on
+the controller's Ansible runtime, its downloader (urllib3) and the vSphere SDK (pyVmomi), each with its URL on
 `files.pythonhosted.org`, size and SHA-256. The closure is `ansible-core`,
-`jinja2`, `markupsafe`, `packaging`, `pyyaml` and `urllib3`. It leaves out
+`jinja2`, `markupsafe`, `packaging`, `pyvmomi`, `pyyaml` and `urllib3`. It leaves out
 `cryptography`, with the `cffi` and `pycparser` that come with it, and
 `resolvelib`: ansible-core imports them only behind an import guard, for
 vault, an in-memory SSH key, NTLM channel binding and `ansible-galaxy`, none of
@@ -186,7 +185,7 @@ interpreter path, NUL-separated. Setup builds it in a stage the
 4. `compileall` writes unchecked-hash bytecode, which `-B` launches still read;
 5. the stage must hold no `*.pth`, `sitecustomize.py` or `usercustomize.py`,
    its `pyvenv.cfg` must exclude the system site-packages, and an import probe
-   of `ansible`, `jinja2`, `yaml`, `urllib3` and the standard modules must
+   of `ansible`, `jinja2`, `yaml`, `urllib3`, `pyVmomi`, `pyVim.connect` and the standard modules must
    report the locked versions;
 6. a `bootwright-python` shim runs the venv's Python with `-I -B`, the one
    interpreter path Ansible uses for a local module;
@@ -678,14 +677,14 @@ already provides is left as it is.
 
 Target clients are selected by the admitted graph: OpenShift/OKD clients
 (`oc`, `kubectl`) and installer match the selected release; Kubernetes
-consumers select Helm; referenced vSphere providers select `govc`;
+consumers select Helm. A vSphere provider uses pyVmomi in the locked Python runtime;
 a referenced KubeVirt provider, and an add-on or package providing `kubevirt`
 on a bound cluster, select upstream `virtctl`. They resolve under the version
 intent the Environment's [`dependencyVersions`](api/environment.md#dependency-versions)
 declares. OpenShift/OKD installer and clients remain tied to the target
 release. A cluster pinned to a release image still selects its clients from
 the declared `release.version`; without that version the stage refuses rather
-than inferring a client release from the image. Helm, `govc` and `virtctl`
+than inferring a client release from the image. Helm and `virtctl`
 take the release the build's [tool table](#the-tool-table) names as their
 default unless the Environment declares one. No graph shape selects a
 standalone `kubectl`, and [dependency versions](api/environment.md#dependency-versions)

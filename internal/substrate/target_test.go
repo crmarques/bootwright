@@ -1,7 +1,9 @@
 package substrate
 
 import (
+	"encoding/json"
 	"slices"
+	"strings"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -272,11 +274,11 @@ func TestAControllerAddressMustNameOneExactSystem(t *testing.T) {
 // An arm no capability implements refuses before anything registers, and the
 // refusal is derived in one place so adding an arm narrows it exactly once.
 func TestAnUnrealizedSubstrateRefuses(t *testing.T) {
-	vsphere := obj(api.InfraProvider, "vc", m("vsphere", m("vcenters", list(m("server", "vcenter.example.test")))))
+	unknown := obj(api.InfraProvider, "vc", m("unspecified", m()))
 	machine := obj(api.Machine, "vm", m("hardware", m("providerRef", "vc"), "os", m("clusterInstalled", m())))
 	catalog := api.NewCatalog([]api.Object{
 		obj(api.Environment, "env", m("controller", m("machineRef", "controller"))),
-		obj(api.Machine, "controller", m("os", m("provided", m()))), vsphere, machine,
+		obj(api.Machine, "controller", m("os", m("provided", m()))), unknown, machine,
 	})
 	if _, err := TargetFor(catalog, machine, "lab", "controller"); err == nil {
 		t.Fatal("an unrealized substrate was accepted")
@@ -287,9 +289,9 @@ func TestAnUnrealizedSubstrateRefuses(t *testing.T) {
 	}
 	want := [][3]string{
 		{"InfraProvider/vc", "this executable realizes no provider on the substrate it declares",
-			"remove InfraProvider/vc and the Machines it hosts from the selected Environment, or declare them on a baremetal, kubevirt or libvirt provider"},
+			"remove InfraProvider/vc and the Machines it hosts from the selected Environment, or declare them on a baremetal, kubevirt, libvirt or vsphere provider"},
 		{"Machine/vm", "its provider InfraProvider/vc is on a substrate this executable does not realize",
-			"host Machine/vm on a baremetal, kubevirt or libvirt provider, declare its operating system provided, or remove it from the selected Environment"},
+			"host Machine/vm on a baremetal, kubevirt, libvirt or vsphere provider, declare its operating system provided, or remove it from the selected Environment"},
 	}
 	if !slices.Equal(unrealizable, want) {
 		t.Fatalf("unrealizable = %q, want %q", unrealizable, want)
@@ -350,5 +352,93 @@ func TestEmulatedMediaUsesAutomaticVerifiedTrust(t *testing.T) {
 	media := targetOf(t, "guest").Controller.VirtualMedia
 	if media != (VirtualMedia{Trust: TrustImportCertificate, EnableVerification: true, RemoveCertificate: true}) {
 		t.Fatalf("emulated media policy = %+v", media)
+	}
+}
+
+func vsphereTargetFixture() (provider, guest, controller api.Object) {
+	const server = "2001:db8::10"
+	placement := m("name", "guests", "server", server, "datacenter", "/dc", "computeCluster", "/dc/host/compute",
+		"resourcePool", "/dc/host/compute/Resources", "datastore", "/dc/datastore/guests", "folder", "/dc/vm/guests")
+	profile := m("name", "small", "tpm", m(), "placementRef", "guests", "cpu", api.IntegerValue("2"), "memoryMiB", api.IntegerValue("4096"), "diskGiB", api.IntegerValue("20"))
+	provider = obj(api.InfraProvider, "vc", m("vsphere", m("vcenters", list(m("server", server, "credentialsRef", "login", "trustBundleRef", "ca")),
+		"machineProfiles", list(profile), "placements", list(placement)), "segments", list(m("name", "guests", "vsphere", m("portgroup", "/dc/network/guests")))))
+	guest = obj(api.Machine, "guest", m("hardware", m("providerRef", "vc", "profileRef", "small", "nics", list(m("name", "lan", "macAddress", "00:50:56:3F:FE:AB"), m("name", "aux"))),
+		"os", m("install", m("profileRef", "linux", "hostKeyRef", "guest-key"))))
+	return provider, guest, obj(api.Machine, "controller", m("os", m("provided", m())))
+}
+
+func TestVSphereTargetPinsTheSelectedControllerIdentityAndMedia(t *testing.T) {
+	provider, guest, controller := vsphereTargetFixture()
+	catalog := api.NewCatalog([]api.Object{provider, guest, controller})
+	target, err := TargetFor(catalog, guest, "lab", controller.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if target.Substrate != ArmVSphere || target.Delivery != DeliveryPush || target.PlacementMachine.Identity() != controller.Identity() || target.Physical || !target.TPM2 {
+		t.Fatalf("unexpected target: %+v", target)
+	}
+	if target.Controller.Endpoint != "https://[2001:db8::10]:443" || !target.Controller.TLSVerify || target.Controller.CredentialsRef != "login" || target.Controller.TrustBundleRef != "ca" {
+		t.Fatalf("wrong vCenter session: %+v", target.Controller)
+	}
+	if target.Identity.Channel != ChannelDeliveredKey || target.Identity.HostKeyRef != "guest-key" {
+		t.Fatalf("guest identity: %+v", target.Identity)
+	}
+	if len(target.Interfaces) != 2 || target.Interfaces[0] != (Interface{Name: "lan", MACAddress: "00:50:56:3f:fe:ab"}) || target.Interfaces[1].Name != "aux" {
+		t.Fatalf("vNIC order or authored address changed: %+v", target.Interfaces)
+	}
+	addr := target.Interfaces[1].MACAddress
+	if addr < "00:50:56:00:00:00" || addr > "00:50:56:3f:ff:ff" || addr != NICAddress(ArmVSphere, "lab", guest, "aux") || addr == NICAddress(ArmVSphere, "other", guest, "aux") {
+		t.Fatalf("derived vSphere address %q", addr)
+	}
+	if got := NICAddress(ArmLibvirt, "lab", guest, "aux"); got != InterfaceMAC("lab", guest.Name(), "aux") {
+		t.Fatalf("vSphere derivation changed libvirt's NIC address to %s", got)
+	}
+	port := target.MachinePort("Test")
+	if !port.Verify || port.Endpoint != target.Controller.Endpoint || port.CAVariable != "controllerCATest" || port.PasswordVariable != "controllerPasswordTest" || port.PinnedUUIDVariable == "" || port.PinnedSerialVariable == "" {
+		t.Fatalf("loss of trust or identity during port projection: %+v", port)
+	}
+	var media VSphereMedia
+	if err := json.Unmarshal([]byte(port.MediaVolume), &media); err != nil {
+		t.Fatal(err)
+	}
+	if media.Datacenter != "/dc" || media.Datastore != "/dc/datastore/guests" || media.Folder != "bootwright-vmedia" || media.Owner == "" || !strings.HasPrefix(media.Name, "bw-guest-") {
+		t.Fatalf("media volume: %+v", media)
+	}
+	inventory, _, found := VSpherePlacement(provider, guest, catalog)
+	if !found || inventory.ComputeCluster != "/dc/host/compute" || inventory.ResourcePool != "/dc/host/compute/Resources" || inventory.Folder != "/dc/vm/guests" {
+		t.Fatalf("unresolved vSphere destination: %+v", inventory)
+	}
+	staged := provider.WithSpec(provider.Spec().WithPath(m("datastore", "/dc/datastore/private", "folder", "staging"), "vsphere", "isoStaging"))
+	overridden := VSphereMediaFor(staged, inventory, "lab", guest.Name())
+	if overridden.Folder != "staging" || overridden.Datastore != "/dc/datastore/private" || overridden.Name != media.Name || overridden.Owner != media.Owner {
+		t.Fatalf("staging override changed machine ownership: %+v", overridden)
+	}
+	if VSphereMediaFor(provider, inventory, "other", guest.Name()).Owner == media.Owner || VSphereMediaFor(provider, inventory, "lab", "peer").Name == media.Name {
+		t.Fatal("two different machines can retrieve the same media reservation")
+	}
+}
+
+func TestVSphereTargetRefusesIncompleteInventoryBeforeBinding(t *testing.T) {
+	provider, guest, controller := vsphereTargetFixture()
+	for _, tc := range []struct {
+		name, code      string
+		provider, guest api.Object
+		controller      string
+	}{
+		{"missing provider", "api.reference", provider, guest.WithSpec(guest.Spec().WithPath(api.StringValue("missing"), "hardware", "providerRef")), controller.Name()},
+		{"missing profile", "api.reference", provider, guest.WithSpec(guest.Spec().WithPath(api.StringValue("missing"), "hardware", "profileRef")), controller.Name()},
+		{"missing vCenter", "api.reference", provider.WithSpec(provider.Spec().WithPath(list(), "vsphere", "vcenters")), guest, controller.Name()},
+		{"missing placement", "api.reference", provider.WithSpec(provider.Spec().WithPath(list(), "vsphere", "placements")), guest, controller.Name()},
+		{"missing controller", "api.reference", provider, guest, "missing"},
+		{"missing vNIC", "api.required", provider, guest.WithSpec(guest.Spec().WithPath(list(), "hardware", "nics")), controller.Name()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			catalog := api.NewCatalog([]api.Object{tc.provider, tc.guest, controller})
+			target, err := TargetFor(catalog, tc.guest, "lab", tc.controller)
+			issues := diagnostics.Of(err)
+			if len(issues) != 1 || issues[0].Code != tc.code || target.Controller.Endpoint != "" {
+				t.Fatalf("target = %+v, issues = %+v", target, issues)
+			}
+		})
 	}
 }

@@ -426,8 +426,6 @@ func expandedRefusals() []diagnosticTuple {
 		diagnosticTuple{"api.invariant", "CephSMBResource", "acceptance-smb", "$.spec.clusterRef"},
 		diagnosticTuple{"api.deferred", "CustomPlaybook", "acceptance-playbook", laterServiceRefusal},
 		diagnosticTuple{"api.deferred", "Machine", "acceptance-clone-node", "$.spec.proxy"},
-		diagnosticTuple{"api.unrealized", "InfraProvider", "acceptance-vsphere", "$.spec.vsphere"},
-		diagnosticTuple{"api.unrealized", "MachineInstallProfile", "acceptance-clone", "$.spec.installer.templateClone"},
 		diagnosticTuple{"api.unrealized", "LoadBalancer", "acceptance-load-balancer", "$.spec.management"},
 		diagnosticTuple{"api.unrealized", "OpenShiftCluster", "acceptance-sno", "$.spec.distribution.type"},
 	)
@@ -516,7 +514,7 @@ func TestActualAdmissibleProjectionAdmitsEveryKindButTheRefusedFamilies(t *testi
 			t.Errorf("kind %s has no full-wiring positive admission coverage", kind)
 		}
 	}
-	if report.Counts != (compilation.Counts{FilesSeen: 94, ObjectsDecoded: 133}) {
+	if report.Counts != (compilation.Counts{FilesSeen: 94, ObjectsDecoded: 134}) {
 		t.Errorf("projection counts: %#v", report.Counts)
 	}
 	wantAdvisories := map[diagnosticTuple]bool{}
@@ -565,7 +563,7 @@ func TestActualAdmissibleProjectionNormalizesAndDefaultsItsExtras(t *testing.T) 
 		t.Fatal("the emulated BMC's authored listener address changed")
 	}
 	vsphere := requireObject(t, state.Effective(), api.InfraProvider, "acceptance-vsphere")
-	if vsphere.Spec().Get("vsphere", "machineProfiles").Items()[0].Get("failureDomainRef").Text() != "example-zone" {
+	if vsphere.Spec().Get("vsphere", "machineProfiles").Items()[0].Get("placementRef").Text() != "example-zone" {
 		t.Fatal("vSphere domain default missing")
 	}
 	clone := requireObject(t, state.Effective(), api.MachineInstallProfile, "acceptance-clone")

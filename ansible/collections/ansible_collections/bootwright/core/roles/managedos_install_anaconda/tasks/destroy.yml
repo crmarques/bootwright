@@ -7,8 +7,9 @@
       - bootwright_os_install_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$(?!\n)')
       - managedos_install_anaconda_work == '/var/lib/bootwright-hosted/'
         ~ bootwright_os_install_request.identity.context ~ '/machines/' ~ bootwright_os_install_request.identity.object ~ '/install'
-      - (bootwright_os_install_request.image is defined) != (bootwright_os_install_request.private is defined)
-      - (bootwright_os_install_request.image.path if bootwright_os_install_request.image is defined
+      - ((bootwright_os_install_request.image is defined) | int + (bootwright_os_install_request.private is defined) | int
+         + (bootwright_os_install_request.cloudInit is defined) | int) == 1
+      - bootwright_os_install_request.cloudInit is defined or (bootwright_os_install_request.image.path if bootwright_os_install_request.image is defined
          else bootwright_os_install_request.private.path).startswith(
            '/var/lib/bootwright-hosted/' ~ bootwright_os_install_request.identity.context ~ '/services/')
       - bootwright_os_install_digest is match('^[0-9a-f]{64}$(?!\n)')
@@ -200,6 +201,30 @@
 
 # An attempt killed part way leaves the area it built the image in, with the
 # rendered Kickstart and any image it wrote.
+- name: Remove the protected seed of this installation from its clone
+  ansible.builtin.include_tasks: clone_eject.yml
+  when: bootwright_os_install_request.cloudInit is defined
+
+- name: Eject and remove the private ISO staged by this installation
+  ansible.builtin.include_role:
+    name: bootwright.core.substrate_machine
+    tasks_from: media_eject
+  vars:
+    bootwright_machine_arm: '{{ bootwright_os_install_request.target.substrate }}'
+    bootwright_machine_port: >-
+      {{ managedos_install_anaconda_port_access | combine({'restore_verification': managedos_install_anaconda_media_trust.restoreVerification,
+         'remove_certificate': managedos_install_anaconda_media_trust.removeCertificate,
+         'certificate': bootwright_os_install_material.artifactCertificate | default('')}) }}
+  when: bootwright_os_install_request.target.machinePort.mediaVolume is defined
+
+- name: Require positive absence of the original staged installer media
+  ansible.builtin.assert:
+    that:
+      - substrate_machine_port_result.media_state | default('unknown') == 'none'
+      - substrate_machine_port_result.media == ''
+    quiet: true
+  when: bootwright_os_install_request.target.machinePort.mediaVolume is defined
+
 - name: Remove the work area an interrupted attempt left
   ansible.builtin.file:
     path: '{{ managedos_install_anaconda_work }}'

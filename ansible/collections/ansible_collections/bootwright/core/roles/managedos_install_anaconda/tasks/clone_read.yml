@@ -1,0 +1,20 @@
+---
+- name: Read clone seed ownership on the exact realized Machine
+  ansible.builtin.include_role:
+    name: bootwright.core.substrate_machine
+    tasks_from: seed_read
+  vars:
+    bootwright_machine_arm: '{{ bootwright_os_install_request.target.substrate }}'
+    bootwright_machine_port: "{{ managedos_install_anaconda_port_access | combine({'seed_identity': bootwright_os_install_digest}) }}"
+
+- name: Refuse unreadable or foreign clone seed state
+  ansible.builtin.assert:
+    that:
+      - substrate_machine_port_result.seed_state | default('') in ['own', 'none']
+      - substrate_machine_port_result.power | default('') in ['On', 'Off']
+    quiet: true
+
+- name: Retain the observed seed and power state
+  ansible.builtin.set_fact:
+    managedos_install_anaconda_seed_state: '{{ substrate_machine_port_result.seed_state }}'
+    managedos_install_anaconda_seed_power: '{{ substrate_machine_port_result.power }}'

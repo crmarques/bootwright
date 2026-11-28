@@ -1,0 +1,12 @@
+---
+- name: Read the installed machine through its delivered SSH host key
+  ansible.builtin.include_role:
+    name: bootwright.core.machine_ssh_identity
+    tasks_from: main
+
+- name: Publish the delivered-key channel answer
+  ansible.builtin.set_fact:
+    substrate_vsphere_machine_identity_answered: '{{ machine_ssh_identity_answered }}'
+    substrate_vsphere_machine_identity_marker: '{{ machine_ssh_identity_marker }}'
+    substrate_vsphere_machine_identity_host_key: '{{ machine_ssh_identity_host_key }}'
+  changed_when: false

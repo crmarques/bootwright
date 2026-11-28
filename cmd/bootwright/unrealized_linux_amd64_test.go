@@ -175,8 +175,19 @@ func TestUnrealizedTableMatchesUnsupported(t *testing.T) {
 // milestonePage is the milestone page whose item table names item.
 func milestonePage(t *testing.T, item string) string {
 	t.Helper()
-	for _, page := range []string{"m1.md", "m2.md", "m3.md", "m4.md", "m5.md", "backlog.md"} {
-		for _, line := range markdownLines(t, filepath.Join("..", "..", "specs", "milestones", page)) {
+	dir := filepath.Join("..", "..", "specs", "milestones")
+	pages := []string{"backlog.md"}
+	for _, row := range markdownLines(t, filepath.Join("..", "..", "specs", "milestones.md")) {
+		if !strings.HasPrefix(row, "| [M") {
+			continue
+		}
+		_, tail, linked := strings.Cut(row, "](milestones/")
+		if page, _, closed := strings.Cut(tail, ")"); linked && closed {
+			pages = append(pages, page)
+		}
+	}
+	for _, page := range pages {
+		for _, line := range markdownLines(t, filepath.Join(dir, page)) {
 			if line == "### "+item {
 				return page
 			}

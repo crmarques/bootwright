@@ -5110,6 +5110,32 @@
       ]
     }
   },
+  "lab-vsphere-standalone": {
+    "vsphereMachines": {
+      "rhel-clone": [
+        {
+          "macAddress": "00:50:56:17:b3:ec",
+          "mtu": 1500,
+          "name": "ens192",
+          "portgroup": "/Lab/network/Guests"
+        }
+      ],
+      "rhel-iso": [
+        {
+          "macAddress": "00:50:56:3b:68:c1",
+          "mtu": 1500,
+          "name": "ens192",
+          "portgroup": "/Lab/network/Guests"
+        }
+      ]
+    },
+    "installations": {
+      "rhel-clone": [],
+      "rhel-iso": [
+        "ifname=ens192:00:50:56:3b:68:c1"
+      ]
+    }
+  },
   "libvirt-2x4-nodes-ceph-multisite": {
     "libvirtMachines": {
       "client": [
@@ -5846,6 +5872,16 @@
     }
   },
   "multidc-platform": {
+    "vsphereMachines": {
+      "acceptance-clone-node": [
+        {
+          "macAddress": "00:50:56:34:1e:8b",
+          "mtu": 1500,
+          "name": "ens192",
+          "portgroup": "/example-dc/network/guests"
+        }
+      ]
+    },
     "kubevirtMachines": {
       "acceptance-sno-node": [
         {
@@ -6122,7 +6158,7 @@
     },
     "refusals": {
       "agent": "openshift.selection-unsupported: this executable installs no OKD cluster; ",
-      "installation": "api.reference: the profile's boot image is not in the selected graph; ",
+      "installation": "api.reference: the Machine's network configuration is not in the selected graph; ",
       "libvirt": "machine.placement-auth-unsupported: operator SSH identity is unsupported for lifecycle placement; "
     }
   },

@@ -1,0 +1,44 @@
+---
+- name: Check the clone's declared operating system
+  ansible.builtin.include_tasks: os_release.yml
+
+- name: Prove first boot on the realized instance through its delivered host key
+  ansible.builtin.include_tasks: guest.yml
+  vars:
+    managedos_install_anaconda_guest_command:
+      - /usr/bin/sudo
+      - -n
+      - /usr/bin/sh
+      - -c
+      - |-
+        set -eu
+        umask 077
+        test "$(uname -m)" = x86_64
+        machine_id=$(cat /etc/machine-id)
+        printf '%s\n' "$machine_id" | grep -Eq '^[0-9a-f]{32}$'
+        test "$machine_id" != 00000000000000000000000000000000
+        record=/etc/bootwright/cloud-init-instance
+        test "$(cat "$record")" = "$1 $2 $machine_id"
+        instance=/var/lib/cloud/instances/$1
+        test -f /etc/cloud/cloud-init.disabled
+        for name in user-data.txt user-data.txt.i cloud-config.txt obj.pkl combined-cloud-config.json instance-data-sensitive.json; do
+          test ! -e "$instance/$name"
+        done
+      - bootwright-cloud-init
+      - '{{ managedos_install_anaconda_instance_id }}'
+      - '{{ bootwright_os_install_digest }}'
+
+- name: Retain first-boot identity before the filesystem inspection
+  ansible.builtin.set_fact:
+    managedos_install_anaconda_clone_identity: '{{ managedos_install_anaconda_guest.rc | default(1) == 0 }}'
+
+- name: Verify that the selected root filesystem fills the declared clone disk
+  ansible.builtin.include_tasks: clone_root.yml
+  when: bootwright_os_install_request.cloudInit.growRootFilesystem | bool
+
+- name: Record the bounded clone first-boot proof
+  ansible.builtin.set_fact:
+    managedos_install_anaconda_clone_proved: >-
+      {{ managedos_install_anaconda_clone_identity and managedos_install_anaconda_os.id | default('') == 'rhel'
+         and managedos_install_anaconda_os.versionId | default('') == bootwright_os_install_request.cloudInit.release
+         and (not (bootwright_os_install_request.cloudInit.growRootFilesystem | bool) or managedos_install_anaconda_root_grown | default(false)) }}

@@ -17,12 +17,12 @@ func issueLines(issues []api.Issue) []string {
 
 func armDefects() map[Arm]api.Value {
 	domains := list(
-		m("name", "a", "server", "missing.example.test", "topology", m("datacenter", "dc")),
-		m("name", "b", "server", "vcenter.example.test", "topology", m("datacenter", "elsewhere")),
+		m("name", "a", "server", "missing.example.test", "datacenter", "/dc"),
+		m("name", "b", "server", "vcenter.example.test", "datacenter", "elsewhere"),
 	)
 	vsphere := m("vsphere", m(
 		"vcenters", list(m("server", "vcenter.example.test", "datacenters", api.StringList("dc"), "credentialsRef", "vcenter")),
-		"failureDomains", domains,
+		"placements", domains,
 		"machineProfiles", list(m("name", "small", "cpu", api.IntegerValue("0"), "memoryMiB", api.IntegerValue("4096"), "diskGiB", api.IntegerValue("20"))),
 	), "segments", list(m("name", "plain", "vsphere", m()), m("name", "wrong", "kubevirt", m())))
 	return map[Arm]api.Value{
@@ -72,15 +72,15 @@ func TestAProviderNormalizesOnlyItsOwnArm(t *testing.T) {
 	if tls := bmc.Spec().Get("baremetal", "defaults", "bmc", "virtualMedia", "tls"); tls.Get("trust").Text() != TrustImportCertificate || !tls.Get("enableVerification").Bool() {
 		t.Errorf("baremetal media tls = %v", tls)
 	}
-	two := normalized(m("vsphere", m("failureDomains", list(m("name", "a"), m("name", "b")), "machineProfiles", list(m("name", "small")), "isoStaging", m())))
-	if profile := two.Spec().Get("vsphere", "machineProfiles").Items()[0]; profile.Has("failureDomainRef") {
+	two := normalized(m("vsphere", m("placements", list(m("name", "a"), m("name", "b")), "machineProfiles", list(m("name", "small")), "isoStaging", m())))
+	if profile := two.Spec().Get("vsphere", "machineProfiles").Items()[0]; profile.Has("placementRef") {
 		t.Errorf("two failure domains defaulted a profile: %v", profile)
 	}
 	if staging := two.Spec().Get("vsphere", "isoStaging"); staging.Get("folder").Text() != "bootwright-vmedia" || staging.Has("datastore") {
 		t.Errorf("two-domain staging = %v", staging)
 	}
-	one := normalized(m("vsphere", m("failureDomains", list(m("name", "a", "topology", m("datastore", "store"))), "machineProfiles", list(m("name", "small")), "isoStaging", m())))
-	if profile := one.Spec().Get("vsphere", "machineProfiles").Items()[0]; profile.Get("failureDomainRef").Text() != "a" {
+	one := normalized(m("vsphere", m("placements", list(m("name", "a", "datastore", "store")), "machineProfiles", list(m("name", "small")), "isoStaging", m())))
+	if profile := one.Spec().Get("vsphere", "machineProfiles").Items()[0]; profile.Get("placementRef").Text() != "a" {
 		t.Errorf("sole failure domain not defaulted: %v", profile)
 	}
 	if staging := one.Spec().Get("vsphere", "isoStaging"); staging.Get("datastore").Text() != "store" || staging.Get("folder").Text() != "bootwright-vmedia" {
@@ -121,15 +121,11 @@ func armDefectIssues() map[Arm][]string {
 			"$.spec.segments[0]: segment arm must match its provider substrate",
 		},
 		"vsphere": {
-			"$.spec.vsphere.failureDomains[0].server: failure-domain server must name a declared vCenter",
-			"$.spec.vsphere.failureDomains[1].topology.datacenter: failure-domain datacenter must be declared on its vCenter",
 			"$.spec.vsphere.machineProfiles[0].cpu: vSphere machine profiles require a positive capacity",
-			"$.spec.vsphere.machineProfiles[0].failureDomainRef: multiple failure domains require an explicit profile selection",
-			"$.spec.segments[0].vsphere.distributedSwitch: multiple failure domains require an explicit distributed switch",
-			"$.spec.segments[0].untaggedNetworkRef: a vsphere segment delivers exactly one network to each NIC on it, and segment plain of InfraProvider/vsphere names none",
+			"$.spec.vsphere.placements[0].server: placement server must name a declared vCenter",
+			"$.spec.vsphere.placements[1].datacenter: select an absolute vCenter inventory path",
+			"$.spec.vsphere.machineProfiles[0].placementRef: multiple placements require an explicit profile selection",
 			"$.spec.segments[1]: segment arm must match its provider substrate",
-			"$.spec.segments[1].vsphere.distributedSwitch: multiple failure domains require an explicit distributed switch",
-			"$.spec.segments[1].untaggedNetworkRef: a vsphere segment delivers exactly one network to each NIC on it, and segment wrong of InfraProvider/vsphere names none",
 		},
 		"kubevirt": {
 			"$.spec.segments[0].kubevirt.networkRef.namespace: cluster-scoped networks forbid a namespace",
@@ -139,5 +135,28 @@ func armDefectIssues() map[Arm][]string {
 			"$.spec.segments[2]: segment arm must match its provider substrate",
 			"$.spec.segments[2].untaggedNetworkRef: a kubevirt segment delivers exactly one network to each NIC on it, and segment c of InfraProvider/kubevirt names none",
 		},
+	}
+}
+
+func TestVSphereRejectsUnsafeOrAmbiguousDiskAndNetworkLocations(t *testing.T) {
+	provider, _, _ := vsphereTargetFixture()
+	profile := provider.Spec().Get("vsphere", "machineProfiles").Items()[0]
+	for _, tc := range []struct {
+		name, field string
+		spec        api.Value
+	}{
+		{"relative template", "$.spec.vsphere.machineProfiles[0].template", provider.Spec().WithPath(list(profile.With("template", api.StringValue("Templates/base"))), "vsphere", "machineProfiles")},
+		{"root declared twice", "$.spec.vsphere.machineProfiles[0].dataDisks", provider.Spec().WithPath(list(profile.With("dataDisks", list(m("name", "root", "sizeGiB", api.IntegerValue("20"))))), "vsphere", "machineProfiles")},
+		{"datastore file syntax", "$.spec.vsphere.isoStaging.datastore", provider.Spec().WithPath(m("datastore", "[store] private"), "vsphere", "isoStaging")},
+		{"traversing staging folder", "$.spec.vsphere.isoStaging.folder", provider.Spec().WithPath(m("folder", "../private"), "vsphere", "isoStaging")},
+		{"portgroup with escaped separator", "$.spec.segments[0].vsphere.portgroup", provider.Spec().With("segments", list(m("name", "guests", "vsphere", m("portgroup", "/dc/network%2fother"))))},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			input := provider.WithSpec(tc.spec)
+			issues := Validate(input, api.NewCatalog([]api.Object{input}))
+			if len(issuesAt(issues, tc.field)) != 1 {
+				t.Fatalf("missing vSphere field refusal at %s: %+v", tc.field, issues)
+			}
+		})
 	}
 }

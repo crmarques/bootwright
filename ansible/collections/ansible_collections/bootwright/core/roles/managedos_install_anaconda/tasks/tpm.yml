@@ -1,0 +1,12 @@
+---
+- name: Inspect the guest TPM resource manager and major version
+  ansible.builtin.include_tasks: guest.yml
+  vars:
+    managedos_install_anaconda_guest_command:
+      - /usr/bin/sh
+      - -c
+      - test -c /dev/tpmrm0 && test "$(cat /sys/class/tpm/tpm0/tpm_version_major)" = 2
+
+- name: Retain the guest TPM 2.0 proof
+  ansible.builtin.set_fact:
+    managedos_install_anaconda_tpm2: '{{ managedos_install_anaconda_guest.rc | default(1) == 0 }}'

@@ -1,0 +1,27 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: rhel-clone
+
+spec:
+  hardware:
+    providerRef: vcenter
+    profileRef: clone
+
+    nics:
+      - name: ens192
+        segmentRef: guests
+
+  os:
+    install:
+      profileRef: rhel-clone
+      hostKeyRef: rhel-clone-host-key
+
+  network:
+    configRef: lab-guests
+    installAddressRef: ip
+
+    addresses:
+      - name: ip
+        address: 198.51.100.12
+        interface: ens192

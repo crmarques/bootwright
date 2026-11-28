@@ -350,6 +350,14 @@ lab-sno-release-mirror:
   proxy-lab-proxy
   registry-mirror-registry
   substrate-host-lab-libvirt
+lab-vsphere-standalone:
+  artifact-server-lab-artifacts
+  controller-prerequisites
+  machine-rhel-clone
+  machine-rhel-iso
+  os-install-rhel-clone
+  os-install-rhel-iso
+  os-package-tree-rhel-iso-profile
 libvirt-2x4-nodes-ceph-multisite:
   artifact-server-lab-artifacts
   ceph-cluster-primary

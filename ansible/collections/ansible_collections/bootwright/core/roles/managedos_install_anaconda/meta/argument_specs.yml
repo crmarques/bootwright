@@ -11,7 +11,10 @@ argument_specs:
             required: true
           bootMedia:
             type: dict
-            required: true
+            required: false
+          cloudInit:
+            type: dict
+            required: false
           # The waits an apply performs, which the run's deadline covers.
           budgets:
             type: dict
@@ -166,6 +169,10 @@ argument_specs:
               fips: &required
                 type: bool
                 required: true
+              cloudInit:
+                type: bool
+              tpm2:
+                type: bool
               registration: *required
               rootEncryption: *required
               rootWWN: *required

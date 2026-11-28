@@ -148,7 +148,7 @@ func (o roleOption) refusals(path string, value any) []string {
 			}
 		}
 		return found
-	case "str":
+	case "str", "path":
 		text, ok := value.(string)
 		if !ok {
 			return []string{fmt.Sprintf("%s is %T, not a string", path, value)}
@@ -269,7 +269,10 @@ func TestRoleRefusalsNameEachRequestAnEntryPointWouldRefuse(t *testing.T) {
 			t.Errorf("%s: refusals %q, want %q", canonical, found, want)
 		}
 	}
-	if found := (roleOption{Type: "path"}).refusals("example", "x"); len(found) != 1 {
+	if found := (roleOption{Type: "path"}).refusals("example", 42); len(found) != 1 {
+		t.Errorf("a non-string path passed: %v", found)
+	}
+	if found := (roleOption{Type: "unknown"}).refusals("example", "x"); len(found) != 1 {
 		t.Errorf("an option type the check does not know passed: %v", found)
 	}
 }

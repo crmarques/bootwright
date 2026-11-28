@@ -70,6 +70,8 @@
   ansible.builtin.assert:
     that:
       - managedos_install_anaconda_released.msg is not defined
+      - bootwright_os_install_request.target.machinePort.mediaVolume is not defined or
+        (managedos_install_anaconda_released.media_state | default('unknown') == 'none' and managedos_install_anaconda_released.media == '')
     fail_msg: >-
       ejecting the installer image from Machine {{ bootwright_os_install_request.identity.object }}
       failed:

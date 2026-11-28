@@ -23,23 +23,22 @@ on those pages gates its milestone ([scope rules](milestones.md#scope-rules)):
 - bare metal through BMCs ([M1e](milestones/m1.md#m1e), [M3d](milestones/m3.md#m3d)),
   libvirt with sushy-tools ([M1c](milestones/m1.md#m1c),
   [M3b](milestones/m3.md#m3b)), VMware vSphere ([M1f](milestones/m1.md#m1f),
-  [M3f](milestones/m3.md#m3f)) and KubeVirt, including OpenShift
+  [M9](milestones/m9.md)) and KubeVirt, including OpenShift
   Virtualization ([M1g](milestones/m1.md#m1g), [M3e](milestones/m3.md#m3e));
 - machine operating systems that Bootwright installs from installer media,
   with entitlement use, first RHEL through Anaconda
-  ([M1c](milestones/m1.md#m1c), [M1e](milestones/m1.md#m1e));
+  ([M1c](milestones/m1.md#m1c), [M1e](milestones/m1.md#m1e)), and RHEL full template clones on vSphere ([M1f](milestones/m1.md#m1f));
 - infrastructure services: artifact serving, proxying, DNS, time
   synchronization and registries ([M1d](milestones/m1.md#m1d));
 - OpenShift container clusters ([M3](milestones/m3.md));
-- IBM Ceph storage ([M2](milestones/m2.md)); and
+- IBM Ceph storage ([M2](milestones/m2.md)), upstream Ceph, OKD and upstream platform services ([M8](milestones/m8.md)); and
 - cluster-bound integrations through built-in add-ons, first MetalLB, IBM
   Fusion Data Foundation, Red Hat Advanced Cluster Management, Red Hat
   OpenShift GitOps (Argo CD), GitLab, the Kubernetes NMState Operator and Red Hat
   OpenShift Virtualization ([M4](milestones/m4.md)), then custom add-ons ([B90](milestones/m4.md#b90)).
 
 The **extension envelope** is what the design must not preclude and no
-milestone gates on: OKD clusters ([B748](milestones/backlog.md#b748)), the
-open-source and Red Hat Ceph distributions beyond IBM Ceph, machine operating
+milestone gates on: the Red Hat Ceph distribution, machine operating
 systems other than RHEL, a managed load balancer
 ([B100](milestones/backlog.md#b100)) and a cluster spanning substrate arms
 ([B747](milestones/backlog.md#b747)). Only the owner promotes an envelope entry

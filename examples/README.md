@@ -10,6 +10,7 @@ names the case that runs its scenario, if any.
 
 | Type | Example | Outcome |
 | --- | --- | --- |
+| `machines/` | [lab-vsphere-standalone](machines/lab-vsphere-standalone/README.md) | Provision two RHEL Machines on vSphere, one by ISO and one by full template clone. |
 | `machines/` | [lab-rhel](machines/lab-rhel/README.md) | Install RHEL on one libvirt guest through an emulated Redfish BMC. |
 | `machines/` | [lab-rhel-mirror-host](machines/lab-rhel-mirror-host/README.md) | Prepare one libvirt RHEL guest whose managed services and emulated BMC pull their images from a managed image mirror on an SSH Machine. |
 | `machines/` | [lab-rhel-external-services](machines/lab-rhel-external-services/README.md) | Install RHEL on one libvirt guest against an external proxy, DNS resolver and time source chosen through Environment kind defaults. |

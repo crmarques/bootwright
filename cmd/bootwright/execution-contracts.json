@@ -59,6 +59,10 @@
     "contentDigest": "27d017d249d6121f4e3dab49d246824d3c5a534fa867a2a923ce49ca5748381f",
     "fingerprint": "492574a8defa3bc4847b76e06b4d78a3155f194af4ca9818c64b747044dc552f"
   },
+  "machine-vsphere-v1": {
+    "contentDigest": "76b9bbce5229bfe1a439d8a2a70ec427e42126f273bbb7fbab4d8aa78dc300ca",
+    "fingerprint": "25df31ecf9b0174a6b95c2992e8565aebc9a531bc91cf69c25eeb321e8ca224f"
+  },
   "mirror-files-v1": {
     "contentDigest": "3dac3ac33068752fddf0d022458fa7ec0a0c3eb1e62f5f288985d68d8538efe4",
     "fingerprint": "89b01540916499c0d1e91ca2b44336824518e0f276510f3dc52a4ede5cdaabc9"
@@ -84,8 +88,8 @@
     "fingerprint": "d1b0da961109bdb92c338ebf588965da768cc47ffb5c572e441d5c97c850e75b"
   },
   "os-install-anaconda-v1": {
-    "contentDigest": "eb40e21353c3d953befb86855defe4b3654979f1c27bf0d51e12f01db24e3384",
-    "fingerprint": "b4f21d2d411a682c7a73dd9bdc578009dc8600f619801f42f417ae38d20bb1df"
+    "contentDigest": "dc7aefb84228e396864c4e4587ffbc9acc9eb3d89e4df1540630af031368f3c9",
+    "fingerprint": "247fddf6a9bc9b27bd6affa7b83e841cafd3ef9ac6ff513d384fff7d456f76f8"
   },
   "os-package-tree-v1": {
     "contentDigest": "62218223d7cca3604594c231a1265d351e6c12e0e9d6d8b31f2f51086a839445",
@@ -109,7 +113,7 @@
   },
   "physical-erase-v1": {
     "contentDigest": "6c1c49685138b533ada39706c004909f33a27c52b3694793cb4e121e09f6643e",
-    "fingerprint": "701dfc42cb63c44329df052377d07dabc5f0095e3edbb1a553861dd1753eb08c"
+    "fingerprint": "8126f44c9b407e716e896414bd9b2f4afcdf5a39271144514bcb7db6343bc854"
   },
   "proxy-squid-v1": {
     "contentDigest": "f6f3786ce9c60b6b307aa8169bc8e87ab296769ab62d47fcfc5e536479147c16",

@@ -29,7 +29,7 @@ const (
 )
 
 const venvProbe = `import importlib.metadata, json, sys
-import ansible.release, ansible.cli.playbook, jinja2, yaml, urllib3, ssl, ctypes, zlib, bz2
+import ansible.release, ansible.cli.playbook, jinja2, yaml, urllib3, pyVmomi, pyVim.connect, ssl, ctypes, zlib, bz2
 names = json.loads(sys.argv[1])
 json.dump({"python": "%d.%d.%d" % sys.version_info[:3], "venv": sys.prefix != sys.base_prefix,
  "ansible": ansible.release.__version__,

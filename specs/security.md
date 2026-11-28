@@ -606,9 +606,14 @@ reaches that lend and its revoke alone
 Its CDI upload proxy is verified against the
 ingress certificate authority read through that verified connection, never with
 `--insecure`. A vCenter is reached at its declared server and port over TLS
-verified against the system trust store; its `disableCertificateVerification`
-exception is endpoint-scoped and refuses wherever the transfer carries a
-cluster's private material. A pushed image leaves the controller only to those
+verified using the system trust store or its explicit bundle. VM guestinfo and
+the private staging datastore are within the trust boundary for installer and
+first-boot material. Access to VM advanced configuration and datastore contents
+must be restricted accordingly. vCenter task and event history and hypervisor
+backups can retain earlier guestinfo values, including the delivered SSH host
+private key. Restrict history, logs, snapshots, backup access and retention to
+the same trust boundary. Clearing the live seed cannot erase historical
+copies. [VM reconfiguration event](https://developer.broadcom.com/xapis/vsphere-web-services-api/latest/vim.event.VmReconfiguredEvent.html). A pushed image leaves the controller only to those
 verified endpoints, and its destination's access control is recorded as inside
 the trust boundary of what it embeds
 ([container clusters](openshift-clusters.md#boot-media)). On KubeVirt that boundary
@@ -622,9 +627,6 @@ removal proves it absent.
 
 Not yet met: a released node's image claim is ejected live where the host
 enables declarative hotplug; tracked as [B925](milestones/m3.md#b925).
-
-Not yet met: no vSphere connection exists; tracked as
-[B99](milestones/m1.md#b99).
 
 Managed probes and effects use the
 [Ansible boundary and locked runtime closure](architecture.md#go-and-ansible-responsibility-boundary),

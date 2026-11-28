@@ -1,9 +1,8 @@
 # Milestones
 
-Milestones own delivery. The [command catalog](../internal/cli/catalog.go) marks
-availability. Other commands return the [unavailable result](cli.md#recognized-but-unavailable-commands).
+Milestones own delivery status. See the [command catalog](../internal/cli/catalog.go) for commands.
 
-- [M1](milestones/m1.md) to [M7](milestones/m7.md): one page per milestone.
+- [M1](milestones/m1.md) to [M9](milestones/m9.md): one page per milestone.
 - [Delivered](milestones/delivered.md): completed work and its evidence.
 - [Backlog](milestones/backlog.md): parked work, retired IDs and decisions.
 
@@ -11,13 +10,15 @@ availability. Other commands return the [unavailable result](cli.md#recognized-b
 
 | ID | Milestone | Requires | Delivery | Next |
 | --- | --- | --- | --- | --- |
-| [M1](milestones/m1.md) | Foundations: substrates, infrastructure services and Machines | none | in progress | operator gates; X132's definition |
-| [M2](milestones/m2.md) | Full IBM Ceph 9.9.x: virtual, physical and stretch | D156; applicable M1c/M1d/M1e | in progress | M2c's X61 (B484); B483 blocked; operator gates |
-| [M3](milestones/m3.md) | Full OpenShift on libvirt+sushy, BMCs, KubeVirt, vSphere | M2; applicable M1c to M1g; B18/B23/B265; B83, B735, B750, B751 before B726; B84, B727, B758 before B729 | in progress | M3b operator gate |
+| [M1](milestones/m1.md) | Machines, substrates and services | none | in progress | X788; operator gates |
+| [M2](milestones/m2.md) | IBM Ceph 9.9.x | D156; M1c–e as applicable | in progress | X61; B483 blocked; operator gates |
+| [M3](milestones/m3.md) | OpenShift on libvirt, BMCs and KubeVirt | M2; [per-submilestone prerequisites](milestones/m3.md#submilestones) | in progress | M3b operator gate |
 | [M4](milestones/m4.md) | Cluster add-ons | M2; M3c; B64, B719, B726 where a package uses them | in progress | M4b–e in-tree; live gates |
 | [M5](milestones/m5.md) | Retired: moved to M3e (D172) | none | not started | nothing |
 | [M6](milestones/m6.md) | Retired: moved to M4 (D173) | none | not started | nothing |
-| [M7](milestones/m7.md) | Standalone native files and commands | M4 | in progress | after M4: B51 |
+| [M7](milestones/m7.md) | Standalone native artifacts | M4 | in progress | after M4: B51 |
+| [M8](milestones/m8.md) | OKD, upstream services and Ceph | M2–M4 as applicable | not started | qualify upstream artifacts |
+| [M9](milestones/m9.md) | OpenShift, OKD and Ceph on vSphere | M1f; M2, M3 or M8 per workload | not started | X133 |
 
 - **Next:** agents take an [active slice](#active-slices)'s open work or an
   explicit request; the operator takes operator gates and open session clauses.

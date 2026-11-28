@@ -10,6 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
 	"github.com/crmarques/bootwright/internal/substrate/kubevirt"
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
+	"github.com/crmarques/bootwright/internal/substrate/vsphere"
 )
 
 // registeredMachineRequest binds a power transition to the original realized
@@ -58,6 +59,22 @@ func registeredMachineRequest(proof lifecycle.BlockEvidence, verb power.Verb) (p
 		controller = substrate.Controller{Endpoint: frozen.Controller.Endpoint, CredentialsRef: frozen.Controller.CredentialsRef,
 			TrustBundleRef: frozen.Controller.CertificateRef, TLSVerify: true}
 		pin = machine.HardwareIdentity{UUID: frozen.UUID}
+	case vsphere.Implementation:
+		frozen, err := vsphere.DecodeRequest(block.Request)
+		if err != nil {
+			return request, pin, err
+		}
+		var found bool
+		pin, found, err = vsphere.PinnedIdentity(proof.Object, []lifecycle.BlockEvidence{proof})
+		if err != nil {
+			return request, pin, err
+		}
+		if !found {
+			return request, pin, invalid
+		}
+		request.Arm, request.Placement = substrate.ArmVSphere, frozen.Placement
+		startContext, object, blockID = frozen.Identity.Context, frozen.Identity.Object, frozen.Identity.Block
+		controller = frozen.Controller()
 	case kubevirt.MachineImplementation:
 		frozen, err := kubevirt.DecodeMachineRequest(block.Request)
 		if err != nil {

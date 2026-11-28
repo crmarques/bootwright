@@ -313,7 +313,7 @@ func installerArguments(catalog api.Catalog, machine api.Object, request Request
 	pinned := map[string]bool{}
 	for _, name := range names {
 		pinned[substrate.InterfaceNIC(machine, name)] = true
-		mac := substrate.InterfaceMAC(request.Identity.Context, machine.Name(), substrate.InterfaceNIC(machine, name))
+		mac := substrate.NICAddress(request.Target.Substrate, request.Identity.Context, machine, substrate.InterfaceNIC(machine, name))
 		if request.Target.Hardware != nil {
 			resolved, found := interfaceMAC(machine, request.Target.Hardware.Interfaces, name)
 			if !found {
@@ -335,7 +335,7 @@ func installerArguments(catalog api.Catalog, machine api.Object, request Request
 		if pinned[nic] {
 			continue
 		}
-		argument := "ifname=" + nic + ":" + substrate.InterfaceMAC(request.Identity.Context, machine.Name(), nic)
+		argument := "ifname=" + nic + ":" + substrate.NICAddress(request.Target.Substrate, request.Identity.Context, machine, nic)
 		if !installerArgument.MatchString(argument) {
 			return nil, installInputInvalid.Fail("the installer argument "+argument+" is not an interface name pinned to a hardware address",
 				"rename NIC "+nic+" in spec.hardware.nics of "+machine.Identity()+" to an interface name the guest may use")

@@ -1,9 +1,9 @@
 implementation: os-install-anaconda-v1
-content-digest: eb40e21353c3d953befb86855defe4b3654979f1c27bf0d51e12f01db24e3384
+content-digest: dc7aefb84228e396864c4e4587ffbc9acc9eb3d89e4df1540630af031368f3c9
 request-version: os-install-anaconda-v1
 automation-formats: none
-mark-formats: /.bootwright-boot-handoff
-proof-ids: .bootwright-tree-identity, /etc/bootwright/registration.json, /etc/bootwright/root-wwn, /etc/bootwright/update.json
+mark-formats: /.bootwright-boot-handoff, bootwright.bootISO, bootwright.owner
+proof-ids: .bootwright-tree-identity, /etc/bootwright/cloud-init-instance, /etc/bootwright/registration.json, /etc/bootwright/root-wwn, /etc/bootwright/update.json, bootwright.media, bootwright.seed
 fixed-places: .bootwright-satellite.pem.tmp, /etc/bootwright, /etc/rhsm/ca/bootwright-satellite.pem, /run/bootwright, /var/lib/bootwright-hosted, bootwright-network-apply.service
 effect-pins:
   os
@@ -17,6 +17,8 @@ effect-pins:
   proved-installation-disk-boot,replay-safe-unread-registration,bond-permanent-lower-links
   verified-media-default
   prove-physical-target-before-boot-and-media-writes
+  private-guestinfo-clone
+  pinned-pushed-iso
   anaconda-home-partition-policy
   subscription-package-source
   explicit-repository-proxy-policy
@@ -44,7 +46,7 @@ request-identity:
   placement.machine
 request-schema:
   address string
-  bootMedia struct installation.Media
+  bootMedia struct installation.Media omitzero
   bootMedia.name string
   bootMedia.sha256 string
   bootMedia.size int64
@@ -73,6 +75,13 @@ request-schema:
   budgets.sessions.unregistration int
   budgets.sessions.update int
   budgets.sessions.updateCompletion int
+  cloudInit *struct installation.CloudInit omitempty
+  cloudInit.growRootFilesystem bool
+  cloudInit.keyType string
+  cloudInit.network opaque
+  cloudInit.release string
+  cloudInit.rootDiskBytes int64
+  cloudInit.userData opaque
   discoveryProof *struct diskselection.Proof omitempty
   discoveryProof.inventoried []string omitempty
   discoveryProof.reportDigest string
@@ -132,10 +141,12 @@ request-schema:
   registration.satellite.lifecycleEnvironment string omitempty
   registration.satellite.trustBundleRef string
   requires struct installation.Requires
+  requires.cloudInit bool omitempty
   requires.fips bool
   requires.registration bool
   requires.rootEncryption bool
   requires.rootWWN bool
+  requires.tpm2 bool omitempty
   requires.update bool
   servedRoot string
   target struct installation.Target
@@ -194,7 +205,9 @@ request-schema:
   target.machinePort.verification string omitempty
   target.machinePort.verify bool
   target.physical bool
+  target.portMACs []string omitempty
   target.substrate string
+  target.tpm2 bool omitempty
   target.uri string omitempty
   tlsCertificateRef string omitempty
   tree *struct installation.Publication omitempty
@@ -213,6 +226,7 @@ request-schema:
 evidence-schema:
   absent bool
   address string
+  cloudInit bool omitempty
   fips bool
   hostKey string
   image bool
@@ -235,6 +249,7 @@ evidence-schema:
   request string
   rootEncryption bool
   rootWWN string
+  tpm2 bool omitempty
   tree bool
   treeContent bool
   treeIdentity string

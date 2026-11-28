@@ -254,6 +254,7 @@ def pip_report(wheel: Path, abi: str, requirement: str, area: Path) -> dict:
         "--report",
         str(report),
         requirement,
+        "pyvmomi==9.1.2.0",
         "urllib3",
     ]
     done = subprocess.run(
@@ -292,8 +293,8 @@ def report_files(report: dict, abi: str) -> list[dict]:
             }
         )
     names = {file["name"] for file in files}
-    if not {"ansible-core", "urllib3"} <= names:
-        raise ToolError(f"Python {abi}: the report lacks ansible-core or urllib3")
+    if not {"ansible-core", "pyvmomi", "urllib3"} <= names:
+        raise ToolError(f"Python {abi}: the report lacks ansible-core, pyvmomi or urllib3")
     return sorted(files, key=lambda file: file["name"])
 
 

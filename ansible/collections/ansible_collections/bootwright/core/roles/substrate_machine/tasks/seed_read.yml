@@ -1,0 +1,5 @@
+---
+- name: Dispatch seed_read to the machine's arm
+  ansible.builtin.include_tasks: seed_dispatch.yml
+  vars:
+    substrate_machine_entry: seed_read

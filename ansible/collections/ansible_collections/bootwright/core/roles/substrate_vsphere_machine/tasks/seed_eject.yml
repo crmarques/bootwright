@@ -1,0 +1,21 @@
+---
+- name: Clear the refusal an earlier entry point named
+  ansible.builtin.set_fact:
+    substrate_vsphere_machine_refusal: ''
+  no_log: true
+
+- name: Run seed_eject through vCenter
+  bootwright.core.substrate_vsphere_api:
+    operation: seed_eject
+    port: '{{ bootwright_machine_port }}'
+  register: substrate_vsphere_machine_port_result
+  failed_when: false
+  no_log: true
+  diff: false
+
+- name: Report the sanitized Machine port refusal
+  ansible.builtin.assert:
+    that:
+      - substrate_vsphere_machine_port_result.msg is not defined
+    fail_msg: '{{ substrate_vsphere_machine_port_result.msg | default("vCenter port operation failed") }}'
+    quiet: true

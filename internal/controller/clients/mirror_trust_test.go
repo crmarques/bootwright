@@ -18,6 +18,22 @@ func trustedMirror(extra ...api.FieldValue) api.FieldValue {
 	return field("mirror", api.MapValue(field("artifacts", api.MapValue(append([]api.FieldValue{text("url", "https://mirror.example.test/tools")}, extra...)...))))
 }
 
+func TestControllerClaimsAndMirrorTrustExcludeVSphereProvisioning(t *testing.T) {
+	vcenter := api.MapValue(text("server", "vc.example.test"), text("credentialsRef", "vc-login"), text("trustBundleRef", "vc-ca"))
+	provider := api.NewObject(api.InfraProvider, "virtual", api.Value{}, api.MapValue(
+		field("vsphere", api.MapValue(field("vcenters", api.ListValue(vcenter))))))
+	state := stateOf(environment(trustedMirror(text("trustBundleRef", "mirror-ca"))), machine(), cluster(), provider)
+	capability := unwired()
+	if claimed := capability.Claimed(state.Effective()); !slices.Equal(claimed, []string{"Environment/lab"}) {
+		t.Fatalf("controller claimed %v", claimed)
+	}
+	block := planBlock(t, capability, state, reconciliation.Apply)
+	classes, err := capability.SecretClasses(block)
+	if err != nil || len(classes) != 1 || classes.Of("mirror-ca") != secrets.TrustAnchor {
+		t.Fatalf("controller secret classes = %v (%v)", classes, err)
+	}
+}
+
 // Only the anchor Secret's name is frozen, and only when a client of the
 // request is read from the mirror; the block names it as the one Secret its
 // attempt is lent.

@@ -18,11 +18,11 @@ import (
 
 // refusedProfile says why a profile selects what this contract cannot
 // install, or nothing when it can.
-func refusedProfile(profile api.Object) (reason, remediation string) {
+func refusedProfile(catalog api.Catalog, machine, profile api.Object) (reason, remediation string) {
 	spec := profile.Spec()
-	if !spec.Has("installer", "anaconda") {
-		return "this executable installs an operating system only through the anaconda installer, which the install profile does not select",
-			"select spec.installer.anaconda on " + profile.Identity()
+	if !spec.Has("installer", "anaconda") && !clonePermitted(catalog, machine, profile) {
+		return "the template clone installer requires a Machine profile with a source template on a substrate that supports cloning",
+			"select spec.installer.anaconda on " + profile.Identity() + ", or select a machine profile with a source template"
 	}
 	return "", ""
 }
@@ -102,16 +102,13 @@ func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 		if !ok {
 			continue
 		}
-		// Only the anaconda installer has a Kickstart whose network line
-		// could drop what the Machine declares; any other installer is
-		// refused as the profile's own choice.
-		if profile.Spec().Has("installer", "anaconda") {
+		if profile.Spec().Has("installer", "anaconda") || clonePermitted(catalog, machine, profile) {
 			if reason, remediation := refusedNetwork(catalog, machine, hostOfTarget(derived, derivedOK)); reason != "" {
 				found = append(found, lifecycle.RefusalOf(machine, reason, remediation))
 				continue
 			}
 		}
-		if reason, remediation := refusedProfile(profile); reason != "" {
+		if reason, remediation := refusedProfile(catalog, machine, profile); reason != "" {
 			found = append(found, lifecycle.RefusalOf(machine, reason, remediation))
 			continue
 		}
@@ -129,6 +126,9 @@ func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 		}
 		if reason, remediation := refusedProxy(catalog, machine, profile); reason != "" {
 			found = append(found, lifecycle.RefusalOf(machine, reason, remediation))
+			continue
+		}
+		if profile.Spec().Has("installer", "templateClone") {
 			continue
 		}
 		if reason, remediation := refusedPublication(catalog, machine, profile, derived, derivedOK, controllerMachine); reason != "" {
@@ -195,8 +195,7 @@ func requestsFor(catalog api.Catalog, controllerMachine, contextName string, pro
 }
 
 func DeriveRequest(catalog api.Catalog, machine api.Object, controllerMachine, contextName string, proof *diskselection.Proof, complete bool) (Request, Requirements, error) {
-	name := machine.Name()
-	if !substrate.SafeSegment(name) {
+	if !substrate.SafeSegment(machine.Name()) {
 		return Request{}, Requirements{}, installInputInvalid.Fail("the Machine name is not a safe host identifier", "rename "+machine.Identity())
 	}
 	profile, ok := catalog.Find(api.MachineInstallProfile, api.MachineInstallProfileRef(machine))
@@ -206,6 +205,14 @@ func DeriveRequest(catalog api.Catalog, machine api.Object, controllerMachine, c
 	if !substrate.SafeSegment(profile.Name()) {
 		return Request{}, Requirements{}, installInputInvalid.Fail("the install profile name is not a safe host identifier", "rename "+profile.Identity())
 	}
+	if profile.Spec().Has("installer", "templateClone") {
+		return cloneRequest(catalog, machine, profile, controllerMachine, contextName)
+	}
+	return anacondaRequest(catalog, machine, profile, controllerMachine, contextName, proof, complete)
+}
+
+func anacondaRequest(catalog api.Catalog, machine, profile api.Object, controllerMachine, contextName string, proof *diskselection.Proof, complete bool) (Request, Requirements, error) {
+	name := machine.Name()
 	anaconda := profile.Spec().Get("installer", "anaconda")
 	boot, err := mediaFor(catalog, anaconda.Get("imageRef").Text(), profile.Identity())
 	if err != nil {
@@ -224,6 +231,10 @@ func DeriveRequest(catalog api.Catalog, machine api.Object, controllerMachine, c
 		anaconda.Get("redfishVirtualMedia", "artifactServerEndpoint"), privateInstallation(catalog, machine, target.Channel), contextName, name, profile.Identity())
 	if err != nil {
 		return Request{}, Requirements{}, err
+	}
+	if substrate.DeliveryOf(target.Substrate) == substrate.DeliveryPush && imageServer.Spec().Get("machineRef").Text() != controllerMachine {
+		return Request{}, Requirements{}, installUnsupported.Fail("pushed installer media must be built on the controller",
+			"select an installer artifactServerEndpoint on the controller Machine")
 	}
 	placement, err := artifactserver.PlacementFor(catalog, imageServer, controllerMachine)
 	if err != nil {
@@ -382,6 +393,9 @@ func storeMedia(reference, checksum, field, identity string) (Media, error) {
 // one the store does not hold, one whose bytes no longer have the recorded
 // size and one whose record differs from the digest its MachineImage declares.
 func PinMedia(catalog api.Catalog, request Request, records map[string]MediaRecord) (Request, error) {
+	if request.CloudInit != nil {
+		return request, nil
+	}
 	profile, _ := catalog.Find(api.MachineInstallProfile, request.Identity.Profile)
 	boot, err := pinBootMedia(catalog, profile, request.BootMedia, records)
 	if err != nil {
@@ -486,6 +500,9 @@ func pinned(media Media, records map[string]MediaRecord, owner, field, image str
 }
 
 func RefusedReleases(catalog api.Catalog, request Request, records map[string]MediaRecord) error {
+	if request.CloudInit != nil {
+		return nil
+	}
 	profile, _ := catalog.Find(api.MachineInstallProfile, request.Identity.Profile)
 	if request.TreeMedia == nil {
 		return refusedRelease(request.BootMedia.Name, records, profile, !subscriptionSourced(profile))
@@ -646,13 +663,15 @@ func targetFor(catalog api.Catalog, machine api.Object, contextName, controllerM
 		HostKeyRef:  derived.Identity.HostKeyRef,
 		MachinePort: derived.MachinePort(""),
 		Physical:    derived.Physical,
+		TPM2:        derived.TPM2,
 		Substrate:   derived.Substrate,
 		URI:         derived.Identity.URI,
 	}
-	// Only a physical machine proves itself by hardware address. A machine its
-	// substrate created is addressed by the interface name that realization
-	// fixed, so its derived interfaces are deliberately left out of what the
-	// installation freezes.
+	if substrate.DeliveryOf(derived.Substrate) == substrate.DeliveryPush {
+		for _, declared := range derived.Interfaces {
+			target.PortMACs = append(target.PortMACs, declared.MACAddress)
+		}
+	}
 	if derived.Physical {
 		hints := rootHints(derived)
 		hardware := Hardware{RootVolumeRef: hints.VolumeRef, ClearOnInstall: clearTargetsFor(machine), RootDevice: hints.DeviceName, SerialNumber: hints.SerialNumber}

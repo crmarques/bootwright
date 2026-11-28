@@ -28,6 +28,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
 	"github.com/crmarques/bootwright/internal/substrate/kubevirt"
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
+	"github.com/crmarques/bootwright/internal/substrate/vsphere"
 	"github.com/crmarques/bootwright/internal/trust"
 	"github.com/crmarques/bootwright/internal/trust/enrollment"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -224,7 +225,7 @@ func (o machineOwnership) Completed(ctx context.Context, contextName, kind, impl
 }
 
 func realizesMachine(implementation string) bool {
-	return implementation == libvirt.MachineImplementation || implementation == kubevirt.MachineImplementation
+	return implementation == libvirt.MachineImplementation || implementation == kubevirt.MachineImplementation || implementation == vsphere.Implementation
 }
 
 // machineHostKeys reads the host key one context's own installation proved.
@@ -289,7 +290,10 @@ func pinnedIdentity(name string, published []lifecycle.BlockEvidence) (machine.H
 	if pin, found, err := baremetal.PinnedIdentity(name, published); err != nil || found {
 		return pin, found, err
 	}
-	return kubevirt.PinnedIdentity(name, published)
+	if pin, found, err := kubevirt.PinnedIdentity(name, published); err != nil || found {
+		return pin, found, err
+	}
+	return vsphere.PinnedIdentity(name, published)
 }
 
 // provedIdentities reads the identity a physical Machine's own block proved

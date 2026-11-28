@@ -156,8 +156,8 @@ func TestAnotherInstallerIsRefusedBeforeItsNetwork(t *testing.T) {
 		field("seed", api.MapValue(field("cloudInit", api.MapValue()))),
 	)))))
 	want := []lifecycle.Refusal{{Kind: "Machine", Name: "rhel-01",
-		Reason:      "this executable installs an operating system only through the anaconda installer, which the install profile does not select",
-		Remediation: "select spec.installer.anaconda on MachineInstallProfile/rhel-9-8"}}
+		Reason:      "the template clone installer requires a Machine profile with a source template on a substrate that supports cloning",
+		Remediation: "select spec.installer.anaconda on MachineInstallProfile/rhel-9-8, or select a machine profile with a source template"}}
 	if refused := Refusals(labCatalog(dhcp, clone)); !slices.Equal(refused, want) {
 		t.Fatalf("refusals = %+v", refused)
 	}
@@ -317,7 +317,7 @@ func TestRequestRefusalsNameTheFieldThatDeclaresIt(t *testing.T) {
 // The content digest binds a plan to this build's behavior, so any change to
 // what it hashes is deliberate.
 func TestTheContentDigestIsPinned(t *testing.T) {
-	if digest := ContentDigest(); digest != "eb40e21353c3d953befb86855defe4b3654979f1c27bf0d51e12f01db24e3384" {
+	if digest := ContentDigest(); digest != "dc7aefb84228e396864c4e4587ffbc9acc9eb3d89e4df1540630af031368f3c9" {
 		t.Fatalf("content digest = %s", digest)
 	}
 }

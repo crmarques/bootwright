@@ -21,6 +21,7 @@
     bootwright_machine_port: >-
       {{ managedos_install_anaconda_port_access
          | combine({'expected': managedos_install_anaconda_expected,
+                    'require_tpm': bootwright_os_install_request.target.tpm2 | default(false),
                     'firmware': bootwright_os_install_request.target.firmware | default({}),
                     'root_volume': ({'ref': bootwright_os_install_request.target.hardware.rootVolumeRef,
                         'proof': bootwright_os_install_material.pinnedRootVolumeBase64 | b64decode | from_json}
@@ -77,7 +78,11 @@
          'private': bootwright_os_install_request.private is defined,
          'trust': managedos_install_anaconda_media_trust.trust,
          'enable_verification': managedos_install_anaconda_media_trust.enableVerification,
-         'certificate': bootwright_os_install_material.artifactCertificate | default('')}) }}
+         'certificate': bootwright_os_install_material.artifactCertificate | default('')})
+         | combine({'image_path': managedos_install_anaconda_image_path, 'media_identity': bootwright_os_install_digest}
+                   if bootwright_os_install_request.target.machinePort.mediaVolume is defined else {}) }}
+
+  no_log: true
 
 - name: Retain the machine port answer
   ansible.builtin.set_fact:

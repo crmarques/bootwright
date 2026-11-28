@@ -40,7 +40,7 @@ day-2 worker flow ([B739](milestones/backlog.md#b739)).
 | libvirt+sushy | libvirt guests, each behind its own emulated Redfish BMC on the provider host | fetched from the controller's artifact server, a private token per insert | `none` for one node; `baremetal` with installer VIPs; `none` behind an external load balancer | M3b, M3c, M3d |
 | Physical bare metal | physical servers through their BMCs | fetched over a verified BMC leg, private delivery | `baremetal` with installer VIPs; `none` behind an external load balancer | M3d |
 | OpenShift Virtualization | KubeVirt VirtualMachines on an existing host cluster named by `kubeconfigRef`, or one the context builds named by `hostClusterRef`, any node count, its installation deadline derived from the arm's published bounds ([cluster size](openshift-clusters.md#cluster-size)) | pushed through the host's CDI upload proxy | derived `none` behind an external load balancer; authored `baremetal` with installer VIPs; `none` for one node | M3e |
-| VMware vSphere | VMs Bootwright creates through vCenter | pushed to a staging datastore | `vsphere` with installer VIPs; `none` behind an operator load balancer; `none` for one node | M3f |
+| VMware vSphere | VMs Bootwright creates through vCenter | pushed to a staging datastore | `vsphere` with installer VIPs; `none` behind an operator load balancer; `none` for one node | M9 |
 
 A cluster mixing KubeVirt or vSphere nodes with nodes of another arm is parked
 ([B747](milestones/backlog.md#b747)), as [nodes on KubeVirt and
@@ -61,7 +61,7 @@ Bootwright's choice, not a claim about every release
 | Two control-plane nodes and an arbiter | `arbiter.replicas: 1` | [B717](milestones/m3.md#b717) | M3d |
 | Two nodes with fencing | `controlPlane.fencing` | [B737](milestones/backlog.md#b737), parked | none |
 | Dual stack | two address families | [B738](milestones/backlog.md#b738), parked | none |
-| OKD | another distribution | [B748](milestones/backlog.md#b748), parked | none |
+| OKD | another distribution | [B748](milestones/m8.md#b748), planned | none |
 
 A cluster's size is bounded by no deadline
 ([cluster size](openshift-clusters.md#cluster-size)): its installation's
@@ -126,11 +126,11 @@ Qualification names the tier and the run that proves the row.
 | Host cluster the context builds | a minted ServiceAccount token per run and nested edges | [substrates](substrates.md#kubevirt-machine-realization) | `spec.kubevirt.hostClusterRef` | [B732](milestones/m3.md#b732) | lending, edge and lifecycle journeys in-tree; lab-kubevirt-nested |
 | KubeVirt removal | VMI absent, delete with `preconditions.uid`, VM, DataVolumes and claims proved absent | [substrates](substrates.md#kubevirt-machine-realization) | none | [B87](milestones/m1.md#b87), [B88](milestones/m3.md#b88) | adapter suites; lab-kubevirt destroy |
 | vSphere node VM | created powered off, EFI, `disk.EnableUUID` `TRUE`, the manual MAC range | [substrates](substrates.md#vsphere-machine-realization) | `spec.vsphere`, profiles | [B99](milestones/m1.md#b99) | adapter suites; lab-vsphere |
-| vSphere image delivery | datastore upload, CD-ROM insert, forced power cycle | [substrates](substrates.md#vsphere-machine-realization), [boot media](openshift-clusters.md#boot-media) | `spec.vsphere.isoStaging` | [B99](milestones/m1.md#b99), [B733](milestones/m3.md#b733) | fake-port tests; lab-vsphere |
-| vSphere platform with VIPs | `platform.vsphere` `apiVIPs` and `ingressVIPs` | [installer inputs](openshift-clusters.md#installer-inputs) | `platform.vsphere` | [B733](milestones/m3.md#b733) | goldens; lab-vsphere |
-| vSphere in-cluster credentials | `vcenters` and `failureDomains` embedded in the image | [platform union](api/openshift-clusters.md#platform-union-and-derivation) | `platform.vsphere.vcenterCredentials` | [B733](milestones/m3.md#b733) | substitution and preflight tests; runs per Q22 |
-| vSphere behind an operator load balancer | `platform: none` | [container clusters](openshift-clusters.md#nodes-on-kubevirt-and-vsphere) | `platform.none` | [B733](milestones/m3.md#b733) | goldens; optional row |
-| vSphere removal | destroy by managed-object reference; CSI volumes retained | [substrates](substrates.md#vsphere-machine-realization) | none | [B99](milestones/m1.md#b99), [B733](milestones/m3.md#b733) | adapter suites; lab-vsphere destroy |
+| vSphere image delivery | datastore upload, CD-ROM insert, forced power cycle | [substrates](substrates.md#vsphere-machine-realization), [boot media](openshift-clusters.md#boot-media) | `spec.vsphere.isoStaging` | [B99](milestones/m1.md#b99), [B733](milestones/m9.md#b733) | fake-port tests; lab-vsphere |
+| vSphere platform with VIPs | `platform.vsphere` `apiVIPs` and `ingressVIPs` | [installer inputs](openshift-clusters.md#installer-inputs) | `platform.vsphere` | [B733](milestones/m9.md#b733) | goldens; lab-vsphere |
+| vSphere in-cluster credentials | `vcenters` and `failureDomains` embedded in the image | [platform union](api/openshift-clusters.md#platform-union-and-derivation) | `platform.vsphere.vcenterCredentials` | [B733](milestones/m9.md#b733) | substitution and preflight tests; runs per Q22 |
+| vSphere behind an operator load balancer | `platform: none` | [container clusters](openshift-clusters.md#nodes-on-kubevirt-and-vsphere) | `platform.none` | [B733](milestones/m9.md#b733) | goldens; optional row |
+| vSphere removal | destroy by managed-object reference; CSI volumes retained | [substrates](substrates.md#vsphere-machine-realization) | none | [B99](milestones/m1.md#b99), [B733](milestones/m9.md#b733) | adapter suites; lab-vsphere destroy |
 
 Every row covers create, observe, continuation of byte-identical input,
 failed and ambiguous effects, readiness, access custody and removal. A changed
@@ -157,7 +157,7 @@ controller or host budget an operator provides.
 | lab-kubevirt ([example](../examples/openshift-clusters/lab-kubevirt/README.md)) | M3e | 3 control-plane nodes and 2 workers, each 8 vCPU, 16384 MiB, 120 GiB root, no data disk, no TPM; one NIC per node on a `Localnet` CUDN (`ipam.mode: Disabled`) or a bridge NAD in the provider namespace, routed to the controller; authored `platform.baremetal` with installer VIPs (`installer` sources); five nodes, a deadline derived from the arm's published bounds | controller: one agent image (about 1.3 GiB) in the work area and five pushes through the CDI upload proxy; host: about 40 vCPU, about 82 GiB with virt-launcher overhead (0.002 x 16384 MiB + 218 MiB + 8 MiB x 8 per VM, plus 16 MiB per graphics device; approximate), 600 GiB of root claims plus five 4 GiB image claims (with CDI scratch); a root class whose StorageProfile offers `ReadWriteMany` in its first claim property set ([proof](substrates.md#kubevirt-machine-realization)) | [B731](milestones/m3.md#b731) |
 | lab-kubevirt-external ([example](../examples/openshift-clusters/lab-kubevirt-external/README.md)) | M3e | 3 control-plane nodes and no workers, each 6 vCPU, 16384 MiB, 120 GiB root, no data disk, no TPM; one NIC per node on a bridge NAD in the provider namespace, routed to the controller; derived `platform.none`, `external` endpoints on an operator load balancer, DNS records for `api`, `api-int`, `*.apps` and each node; three nodes, a deadline derived from the arm's published bounds | controller: one agent image (about 1.3 GiB) in the work area and three pushes through the CDI upload proxy; host: about 18 vCPU, about 49 GiB with virt-launcher overhead (same formula), 360 GiB of root claims plus three 4 GiB image claims (with CDI scratch); the operator's layer-4 load balancer; a root class whose StorageProfile offers `ReadWriteMany` in its first claim property set ([proof](substrates.md#kubevirt-machine-realization)) | none: goldens and validation only (Q19 (a)) |
 | lab-kubevirt-nested ([example](../examples/openshift-clusters/lab-kubevirt-nested/README.md)) | M3e | a compact host cluster of 3 control-plane nodes of 12 vCPU, 40960 MiB, 200 GiB the context builds on libvirt, with the `nmstate` and `kubevirt` packages and one localnet secondary network on an addressless second NIC, hosting a child cluster of 3 control-plane nodes of 4 vCPU, 16384 MiB, 120 GiB on authored `platform.baremetal` with installer VIPs on that network | libvirt host: 40 logical CPUs, 128 GiB available memory and 640 GiB pool disk with the reserve, nested virtualization; on the host cluster an operator storage class offering `ReadWriteMany` for 360 GiB of root claims and three 4 GiB image claims | [B732](milestones/m3.md#b732) |
-| lab-vsphere | M3f | 3 control-plane nodes and 2 workers, each 8 vCPU, 16384 MiB, 120 GiB thin root, EFI, no TPM; one vCenter, one datacenter, one failure domain, one portgroup; `platform.vsphere` with installer VIPs; in-cluster credentials as Q22 decides. Variant lab-vsphere-external: authored `platform.none`, `external` endpoints on an operator load balancer | controller: one agent image and five datastore uploads (about 6.5 GiB on the staging datastore until release); vCenter: 40 vCPU, 80 GiB, 600 GiB on the failure domain's datastore, and the provisioning role of [B99](milestones/m1.md#b99); the variant adds the operator's load balancer and DNS | [B734](milestones/m3.md#b734) |
+| lab-vsphere | M9 | 3 control-plane nodes and 2 workers, each 8 vCPU, 16384 MiB, 120 GiB thin root, EFI, no TPM; one vCenter, one datacenter, one placement, one portgroup; `platform.vsphere` with installer VIPs; qualify both in-cluster credential modes. Variant lab-vsphere-external: authored `platform.none`, `external` endpoints on an operator load balancer | controller: one agent image and five datastore uploads (about 6.5 GiB on the staging datastore until release); vCenter: 40 vCPU, 80 GiB, 600 GiB on the failure domain's datastore, and the provisioning role of [B99](milestones/m1.md#b99); the variant adds the operator's load balancer and DNS | [B734](milestones/m9.md#b734) |
 
 ## Qualification rules
 
@@ -165,7 +165,7 @@ controller or host budget an operator provides.
   run a native installer. M3b and M3c exit on emulated rehearsals on
   libvirt+sushy, M3d on emulated rehearsals and a real-hardware run through
   BMCs, M3e on a run on an existing OpenShift Virtualization host cluster and
-  M3f on a run on a vSphere environment.
+  M9 on a run on a vSphere environment.
 - **Rows.** Each operator gate is an owner-accepted [ledger](../docs/acceptance.md)
   row that [matches its item](../docs/acceptance.md#row-format), recording the release
   installed, each phase's duration, its interruption drills, a settled apply
@@ -204,4 +204,4 @@ that would revive it: a Bootwright-owned controller resolver route
 ([B745](milestones/backlog.md#b745)), one staged image per cluster
 ([B746](milestones/backlog.md#b746)), mixed-arm clusters
 ([B747](milestones/backlog.md#b747)) and OKD
-([B748](milestones/backlog.md#b748)).
+([B748](milestones/m8.md#b748)).

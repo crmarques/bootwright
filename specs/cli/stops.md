@@ -332,6 +332,12 @@ The mirror fill capability's stops (`internal/infrastructureservices/mirrorfill`
 | `mirror.origin-unreachable` | adapter-run | unproved | environment | `unreachable` | fix-then-repeat | the mirror host could not read content from its origin | give the mirror host a route to the origins, then repeat the apply |
 | `mirror.unreadable` | adapter-run | unproved | target | - | fix-then-repeat | the mirror host could not read the image mirror with its credential and trust anchor | verify the Registry is ready and answers its credential, then repeat the apply |
 
+## vSphere substrate stops
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `vsphere.machine-unproved` | block | possible | target | - | repeat | vCenter could not prove the requested Machine identity, devices or state | restore access to the original vCenter and Machine and repeat the operation |
+
 ## KubeVirt substrate stops
 
 The KubeVirt substrate's stops (`internal/substrate/kubevirt`).

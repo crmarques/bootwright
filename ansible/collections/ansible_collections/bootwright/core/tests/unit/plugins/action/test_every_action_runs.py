@@ -36,6 +36,7 @@ PROTOCOLS = {
     "managedos_tree_protocol", "managedos_disk_discovery_protocol",
     "substrate_host_protocol", "substrate_libvirt_machine_protocol", "substrate_physical_protocol", "physical_erase_protocol",
     "substrate_kubevirt_protocol",
+    "substrate_vsphere_protocol",
 }
 
 # The plugins that act on the controller, each with the helper that would act,
@@ -46,6 +47,7 @@ EFFECTS = {
     "cluster_objects_read": "Engine",
     "cluster_objects_write": "Engine",
     "substrate_kubevirt_api": "connect",
+    "substrate_vsphere_api": "connect",
     "substrate_kubevirt_access": "Client",
     "physical_erase_await": "wait",
 }

@@ -2,10 +2,9 @@
 
 The apply's resolution reads the machine as an apply proves it: its identity
 channel, its fleet account and the power and media its controller reports. A
-removal's resolution reads the published content the removal takes back and,
-for a registering request alone, the guest's registration through its identity
-channel, so the capability scopes that observation with the material value
-`observes: removal` and none of the apply's machine reads runs for it. Either way the
+removal's resolution reads the published and staged media it must withdraw.
+A registering removal also reads the guest's registration through its identity
+channel. The capability selects those reads with `observes: removal`. Either way the
 observation publishes the presence form, which carries the power the
 controller reported: the absence form reports none, and without it an apply
 stopped before it published anything could never prove it had no effect.
@@ -65,6 +64,7 @@ def scope(observes, unregister="guest", **registered):
         "bootwright_os_install_request": {"address": "198.51.100.11", "installerArguments": [], "requires": need()},
         "managedos_install_anaconda_observes_removal": defaults()["managedos_install_anaconda_observes_removal"],
         "managedos_install_anaconda_unregisters": defaults()["managedos_install_anaconda_unregisters"],
+        "managedos_install_anaconda_reads_controller": defaults()["managedos_install_anaconda_reads_controller"],
     }
     variables.update(registered)
     return variables
@@ -79,9 +79,8 @@ def runs(task, variables):
 
 
 APPLY = "not (managedos_install_anaconda_observes_removal | bool)"
-# The controller's power reading also serves an unregistering removal, which
-# starts the guest only when the controller reports it off.
-CONTROLLER = APPLY + " or managedos_install_anaconda_unregisters | bool"
+# Removal reads the controller when it must check staged media or unregister a guest.
+CONTROLLER = "managedos_install_anaconda_reads_controller | bool"
 
 
 def machine_reads(scoped=APPLY):
@@ -277,3 +276,16 @@ def test_removal_observation_reads_the_guest_only_when_told_to_unregister(unregi
     assert required is (unregister == "guest")
     if unregister == "skip":
         assert published(variables, monkeypatch)["registration"] == {"consumer": "", "state": ""}
+
+
+@pytest.mark.parametrize("state,media,published_private", [("none", "", False), ("own", "staged", True)])
+def test_removal_reads_pushed_media_even_without_guest_registration(state, media, published_private, monkeypatch):
+    port = {"media_state": state, "media": media, "power": "Off"}
+    variables = scope("removal", "skip", managedos_install_anaconda_controller=port,
+                      managedos_install_anaconda_observed={"observation": NOTHING})
+    variables["bootwright_os_install_request"]["target"] = {"machinePort": {"mediaVolume": "staging"}}
+    reads = machine_reads()
+    assert [runs(task, variables) for task in reads] == [CONTROLLER in task["when"] for task in reads]
+    evidence = published(variables, monkeypatch)
+    assert evidence["private"] is published_private
+    assert evidence["media"] == media

@@ -1,0 +1,78 @@
+---
+- name: Inspect the clone before handing it private guest information
+  ansible.builtin.include_tasks: clone_read.yml
+
+- name: Refuse an already running clone without this installation's seed
+  ansible.builtin.assert:
+    that: managedos_install_anaconda_seed_power == 'Off' or managedos_install_anaconda_seed_state == 'own'
+    quiet: true
+
+- name: Install this Machine's seed while the clone is still powered off
+  when: managedos_install_anaconda_seed_power == 'Off'
+  no_log: true
+  block:
+    - name: Prove the Machine's disks, interfaces and requested TPM before the private seed
+      ansible.builtin.include_role:
+        name: bootwright.core.substrate_machine
+        tasks_from: pre_boot
+      vars:
+        bootwright_machine_arm: '{{ bootwright_os_install_request.target.substrate }}'
+        bootwright_machine_port: >-
+          {{ managedos_install_anaconda_port_access | combine({'expected': managedos_install_anaconda_expected,
+             'require_tpm': bootwright_os_install_request.target.tpm2 | default(false)}) }}
+
+    - name: Write cloud-init metadata into private invocation scratch
+      bootwright.core.private_file:
+        path: '{{ managedos_install_anaconda_scratch }}/metadata'
+        content: >-
+          {{ {'instance-id': managedos_install_anaconda_instance_id, 'local-hostname': bootwright_os_install_request.hostname,
+              'network': bootwright_os_install_request.cloudInit.network} | to_json }}
+      no_log: true
+      diff: false
+
+    - name: Write private cloud-config with the bound host key and fleet public key
+      bootwright.core.private_file:
+        path: '{{ managedos_install_anaconda_scratch }}/userdata'
+        content: |-
+          #cloud-config
+          {{ bootwright_os_install_request.cloudInit.userData | combine(managedos_install_anaconda_cloud_keys) | to_json }}
+      vars:
+        managedos_install_anaconda_cloud_key: '{{ bootwright_os_install_request.cloudInit.keyType }}'
+        managedos_install_anaconda_cloud_keys: >-
+          {{ {'ssh_keys': {managedos_install_anaconda_cloud_key ~ '_private':
+                           lookup('ansible.builtin.file', bootwright_os_install_material.hostIdentity, rstrip=false),
+                           managedos_install_anaconda_cloud_key ~ '_public': bootwright_os_install_material.hostKey},
+              'users': [{'name': bootwright_os_install_request.user, 'lock_passwd': true, 'sudo': 'ALL=(ALL) NOPASSWD:ALL',
+                         'ssh_authorized_keys': [bootwright_os_install_material.authorizedKey]}],
+              'write_files': bootwright_os_install_request.cloudInit.userData.write_files
+                       + [{'path': bootwright_os_install_request.markerPath, 'permissions': '0644', 'content': bootwright_os_install_material.marker},
+                          {'path': bootwright_os_install_request.hostKeyPath, 'permissions': '0644', 'content': bootwright_os_install_material.hostKey}]} }}
+      no_log: true
+      diff: false
+
+    - name: Place both seed documents on the owned powered-off VM
+      ansible.builtin.include_role:
+        name: bootwright.core.substrate_machine
+        tasks_from: seed_insert
+      vars:
+        bootwright_machine_arm: '{{ bootwright_os_install_request.target.substrate }}'
+        bootwright_machine_port: >-
+          {{ managedos_install_anaconda_port_access | combine({'metadata_path': managedos_install_anaconda_scratch ~ '/metadata',
+             'userdata_path': managedos_install_anaconda_scratch ~ '/userdata', 'seed_identity': bootwright_os_install_digest}) }}
+
+    - name: Read back the placed seed before first power-on
+      ansible.builtin.include_tasks: clone_read.yml
+
+    - name: Require this exact installation's seed
+      ansible.builtin.assert:
+        that: managedos_install_anaconda_seed_state == 'own' and managedos_install_anaconda_seed_power == 'Off'
+        quiet: true
+
+- name: Boot the seeded clone from its own disk
+  ansible.builtin.include_role:
+    name: bootwright.core.substrate_machine
+    tasks_from: boot_disk
+  vars:
+    bootwright_machine_arm: '{{ bootwright_os_install_request.target.substrate }}'
+    bootwright_machine_port: "{{ managedos_install_anaconda_port_access | combine({'power_on': true}) }}"
+  when: managedos_install_anaconda_seed_power == 'Off'

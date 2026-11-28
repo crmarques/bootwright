@@ -26,6 +26,7 @@ argument_specs:
                 choices:
                   - baremetal
                   - kubevirt
+                  - vsphere
                   - libvirt
               controller:
                 type: dict

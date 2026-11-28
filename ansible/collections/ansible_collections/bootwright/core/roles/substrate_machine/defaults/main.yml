@@ -6,3 +6,7 @@ substrate_machine_arms:
   baremetal: bootwright.core.substrate_baremetal_machine
   kubevirt: bootwright.core.substrate_kubevirt_machine
   libvirt: bootwright.core.substrate_libvirt_machine
+  vsphere: bootwright.core.substrate_vsphere_machine
+
+substrate_machine_seed_arms:
+  vsphere: bootwright.core.substrate_vsphere_machine

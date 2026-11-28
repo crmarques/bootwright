@@ -74,8 +74,12 @@ func eachPreBootRefusal(t *testing.T, continuation string) {
 					"take this context back with bootwright destroy --context lab-b, correct spec.hardware.firmware on Machine/metal-01 "+
 					"and import that input with bootwright context update --name lab-b --input-dir <directory>, then run bootwright apply --context lab-b"),
 		},
-		ArmVSphere: nil,
-		"":         nil,
+		ArmVSphere: {
+			RefusalMachineRunning:   running,
+			RefusalIdentityMismatch: refusal(prebootIdentityMismatch, "vCenter could not prove the registered VM identity for Machine/metal-01", "restore the registered vCenter and VM, then run "+next),
+			RefusalTPMAbsent:        refusal(prebootTPMAbsent, "Machine/metal-01 presents no vTPM 2.0", "enable a vTPM on the selected profile, then recreate the Machine"),
+		},
+		"": nil,
 	} {
 		t.Run(string(arm), func(t *testing.T) {
 			found := PreBootRefusals(arm, "lab-b", continuation, "metal-01", preBootEndpoint)

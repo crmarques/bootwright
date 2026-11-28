@@ -43,6 +43,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
 	"github.com/crmarques/bootwright/internal/substrate/kubevirt"
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
+	"github.com/crmarques/bootwright/internal/substrate/vsphere"
 )
 
 // contractVersion is one implementation's contract: its content digest and
@@ -61,6 +62,7 @@ func contractVersions() []contractVersion {
 		{clients.Implementation, clients.ContentDigest(), reflect.TypeFor[clients.Request](), reflect.TypeFor[clients.Evidence]()},
 		{libvirt.HostImplementation, libvirt.HostContentDigest(), reflect.TypeFor[libvirt.HostRequest](), reflect.TypeFor[libvirt.HostEvidence]()},
 		{libvirt.MachineImplementation, libvirt.MachineContentDigest(), reflect.TypeFor[libvirt.MachineRequest](), reflect.TypeFor[libvirt.MachineEvidence]()},
+		{vsphere.Implementation, vsphere.ContentDigest(), reflect.TypeFor[vsphere.Request](), reflect.TypeFor[vsphere.Evidence]()},
 		{baremetal.Implementation, baremetal.ContentDigest(), reflect.TypeFor[baremetal.Request](), reflect.TypeFor[baremetal.Evidence]()},
 		{kubevirt.HostImplementation, kubevirt.HostContentDigest(), reflect.TypeFor[kubevirt.HostRequest](), reflect.TypeFor[kubevirt.HostEvidence]()},
 		{kubevirt.MachineImplementation, kubevirt.MachineContentDigest(), reflect.TypeFor[kubevirt.MachineRequest](), reflect.TypeFor[kubevirt.MachineEvidence]()},
@@ -189,6 +191,7 @@ func validated(reason string) automationFormat {
 func automationFormats() map[string]automationFormat {
 	host, core := persistedBy(ceph.HostImplementation), persistedBy(ceph.Implementation)
 	formats := map[string]automationFormat{
+		"machine-vsphere-v1":                 {class: formatMirrored},
 		"addon-instance-request-v1":          {class: formatMirrored},
 		"ceph-export-request-v1":             {class: formatMirrored},
 		"ceph-export-evidence-v1":            {class: formatMirrored},
@@ -349,6 +352,16 @@ func automationIdentities() map[string]automationFormat {
 	eraseRuntime := transient("the erase environment's RAM-only runtime, which exists only while that boot runs")
 	scriptName := transient("the $0 word of a fixed shell probe")
 	identities := map[string]automationFormat{
+		"bootwright.":                                validated("the reserved vSphere option prefix rejected on source templates"),
+		"bootwright.bootISO":                         fixedBy(kindMark, "the Machine boot order is temporarily set to its published installer", vsphere.Implementation, installation.Implementation),
+		"bootwright.cloneRoot":                       fixedBy(kindProof, "the independent clone root before target customization", vsphere.Implementation),
+		"bootwright.removed":                         fixedBy(kindProof, "the original disk retirement receipt", vsphere.Implementation),
+		"bootwright.templateRoot":                    fixedBy(kindProof, "the source identity and content revision carried in the clone request", vsphere.Implementation),
+		"bootwright.disks":                           fixedBy(kindProof, "the VM option holding the original disk receipts", vsphere.Implementation),
+		"bootwright.media":                           fixedBy(kindProof, "the VM option holding the staged private media receipt", vsphere.Implementation, installation.Implementation),
+		"bootwright.operation":                       fixedBy(kindMark, "the VM creation block identity option", vsphere.Implementation),
+		"bootwright.owner":                           fixedBy(kindMark, "the VM context, Machine and operation owner option", vsphere.Implementation, installation.Implementation),
+		"bootwright.seed":                            fixedBy(kindProof, "the VM option holding the clone seed identity", vsphere.Implementation, installation.Implementation),
 		"/.bootwright-boot-handoff":                  fixedBy(kindMark, "the guarded installation's durable pre-insert marker", anaconda),
 		"/bootwright-discovery/drivers.sh":           transient("fixed RAM-only bounded driver bootstrap"),
 		"bootwright-discovery/drivers.sh":            transient("initramfs driver bootstrap archive member"),
@@ -404,6 +417,9 @@ func automationIdentities() map[string]automationFormat {
 		"bootwright/containercluster/identity/v1":    fixedBy(kindProof, "the domain the installed cluster's identity is derived under", install),
 		".bootwright-kubeconfig":                     fixedBy(kindPlace, "the kept copy of the installer's kubeconfig in the work root", install),
 		"/.bootwright-kubeconfig":                    fixedBy(kindPlace, "the kept copy of the installer's kubeconfig in the work root", media, install),
+		"/etc/bootwright/cloud-init-instance":        fixedBy(kindProof, "the per-clone first-boot receipt bound to the instance, request and guest machine ID", anaconda),
+		"bootwright-cloud-init":                      scriptName,
+		"bootwright-clone-root":                      scriptName,
 		"/etc/bootwright":                            fixedBy(kindPlace, "the guest directory of the registration and update records", anaconda),
 		"/etc/bootwright/registration.json":          fixedBy(kindProof, "the registration record the unregistration reads", anaconda),
 		"/etc/bootwright/provided-registration.json": fixedBy(kindProof, "the rollback record a provided registration apply restores from and an observation reads", providedregistration.Implementation),

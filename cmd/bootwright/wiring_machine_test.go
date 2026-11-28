@@ -25,6 +25,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
 	"github.com/crmarques/bootwright/internal/substrate/kubevirt"
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
+	"github.com/crmarques/bootwright/internal/substrate/vsphere"
 	"github.com/crmarques/bootwright/internal/trust/enrollment"
 )
 
@@ -368,6 +369,11 @@ func TestRegisteredMachineRequestBindsTheFrozenPlacementCredentialAndPin(t *test
 				got.Controller.TrustBundleRef != tc.ca || !got.Controller.TLSVerify || got.Controller.Endpoint != got.MachinePort.Endpoint {
 				t.Fatalf("registered request = %+v, pin = %+v, %v", got, pin, err)
 			}
+			unreadable := proof
+			unreadable.Block.Request = []byte(`{}`)
+			if request, identity, err := registeredMachineRequest(unreadable, power.Start); err == nil || identity.Present() || request.Controller.Endpoint != "" {
+				t.Fatal("unreadable realized Machine supplied a management endpoint or pin")
+			}
 			proof.State = reconciliation.BlockPending
 			if _, _, err := registeredMachineRequest(proof, power.Start); err == nil {
 				t.Fatal("pending machine supplied a power request")
@@ -375,6 +381,66 @@ func TestRegisteredMachineRequestBindsTheFrozenPlacementCredentialAndPin(t *test
 			proof.State, proof.Block.RequestDigest = reconciliation.BlockDone, "different"
 			if _, _, err := registeredMachineRequest(proof, power.Start); err == nil {
 				t.Fatal("evidence from a different request supplied a power request")
+			}
+		})
+	}
+}
+
+func TestRegisteredVSpherePowerAndInstallerUseTheSameOperationBoundVM(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "internal", "substrate", "vsphere", "testdata", "anaconda.golden"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var compact bytes.Buffer
+	if err := json.Compact(&compact, data); err != nil {
+		t.Fatal(err)
+	}
+	data = compact.Bytes()
+	request, err := vsphere.DecodeRequest(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const operation = "op-1"
+	digest := strings.Repeat("a", 64)
+	evidence := vsphere.Evidence{
+		Answered: true, Owned: true, Postcondition: true, Request: digest, Owner: request.Owner + ":" + operation,
+		VCenterUUID: "11111111-1111-1111-1111-111111111111", InstanceUUID: "22222222-2222-2222-2222-222222222222",
+		MoRef: "vm-12", Power: "poweredOff", VMHome: "[store] guest/config.vmx", StagingDatastoreRef: "datastore-1",
+		Disks: []vsphere.Disk{
+			{Name: "root", Key: 10, UUID: strings.Repeat("1", 32), Datastore: "datastore-1", Backing: "[store] guest/root.vmdk"},
+			{Name: "data", Key: 11, UUID: strings.Repeat("2", 32), Datastore: "datastore-1", Backing: "[store] guest/data.vmdk"},
+		},
+	}
+	raw, err := json.Marshal(evidence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proof := lifecycle.BlockEvidence{Operation: operation, Kind: "Machine", Object: request.Identity.Object, Implementation: vsphere.Implementation,
+		Verb: reconciliation.Apply, State: reconciliation.BlockDone, Evidence: raw,
+		Block: reconciliation.Block{RequestDigest: digest, BlockDefinition: reconciliation.BlockDefinition{
+			ID: request.Identity.Block, Kind: "Machine", Object: request.Identity.Object, Implementation: vsphere.Implementation, Request: data}}}
+	pin, found, err := pinnedIdentity(proof.Object, []lifecycle.BlockEvidence{proof})
+	if err != nil || !found || pin.UUID != evidence.VCenterUUID || !strings.Contains(pin.Serial, evidence.MoRef) || !strings.Contains(pin.Serial, evidence.InstanceUUID) {
+		t.Fatalf("unexpected realized VM pin: %+v, %v", pin, err)
+	}
+	for _, verb := range []power.Verb{power.Start, power.Stop} {
+		got, actual, err := registeredMachineRequest(proof, verb)
+		if err != nil || actual != pin || got.Controller.Endpoint != request.Server || got.Controller.CredentialsRef != request.CredentialsRef ||
+			got.Controller.TrustBundleRef != request.TrustBundleRef || !got.Controller.TLSVerify || got.Placement != request.Placement {
+			t.Fatalf("%s power request = %+v, pin = %+v, %v", verb, got, actual, err)
+		}
+	}
+	for name, change := range map[string]func(*lifecycle.BlockEvidence){
+		"another operation":                   func(p *lifecycle.BlockEvidence) { p.Operation = "other-operation" },
+		"unreadable VM request":               func(p *lifecycle.BlockEvidence) { p.Block.Request = []byte(`{}`) },
+		"unrecognized machine implementation": func(p *lifecycle.BlockEvidence) { p.Implementation, p.Block.Implementation = "unknown", "unknown" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			invalid := proof
+			change(&invalid)
+			req, pin, err := registeredMachineRequest(invalid, power.Start)
+			if err == nil || pin.Present() || req.Controller.Endpoint != "" {
+				t.Fatalf("unproved Machine yielded a power request: %+v, %+v, %v", req, pin, err)
 			}
 		})
 	}

@@ -52,6 +52,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate/capacity"
 	"github.com/crmarques/bootwright/internal/substrate/kubevirt"
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
+	"github.com/crmarques/bootwright/internal/substrate/vsphere"
 	"github.com/crmarques/bootwright/internal/trust"
 	"github.com/crmarques/bootwright/internal/workspace/contextfs"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -236,13 +237,7 @@ func operationPlaybook() map[string]string {
 		ceph.SignOnImplementation + "/suspend":                             "storage/signon_suspend.yml",
 		ceph.SignOnImplementation + "/resume":                              "storage/signon_resume.yml",
 	}
-	for _, operation := range []string{"apply", "observe", "destroy"} {
-		bindings[mirrorfill.FilesImplementation+"/"+operation] = "infrastructureservices/mirror_files_" + operation + ".yml"
-		bindings[hardware.Implementation+"/"+operation] = "machine/hardware_" + operation + ".yml"
-		bindings[kubevirt.MachineImplementation+"/"+operation] = "substrate/kubevirt_machine_" + operation + ".yml"
-		bindings[mirrorfill.ImagesImplementation+"/"+operation] = "infrastructureservices/mirror_images_" + operation + ".yml"
-		bindings[mirrorfill.ReleaseImplementation+"/"+operation] = "infrastructureservices/mirror_release_" + operation + ".yml"
-	}
+	bindMachineAndMirrorPlaybooks(bindings)
 	bindings[ceph.ConsumerImplementation+"/apply"] = "storage/export_apply.yml"
 	bindings[ceph.ConsumerImplementation+"/observe"] = "storage/export_observe.yml"
 	for prefix, definition := range map[string]managedservice.Definition{
@@ -253,6 +248,17 @@ func operationPlaybook() map[string]string {
 		}
 	}
 	return bindings
+}
+
+func bindMachineAndMirrorPlaybooks(bindings map[string]string) {
+	for _, operation := range []string{"apply", "observe", "destroy"} {
+		bindings[mirrorfill.FilesImplementation+"/"+operation] = "infrastructureservices/mirror_files_" + operation + ".yml"
+		bindings[hardware.Implementation+"/"+operation] = "machine/hardware_" + operation + ".yml"
+		bindings[vsphere.Implementation+"/"+operation] = "substrate/vsphere_machine_" + operation + ".yml"
+		bindings[kubevirt.MachineImplementation+"/"+operation] = "substrate/kubevirt_machine_" + operation + ".yml"
+		bindings[mirrorfill.ImagesImplementation+"/"+operation] = "infrastructureservices/mirror_images_" + operation + ".yml"
+		bindings[mirrorfill.ReleaseImplementation+"/"+operation] = "infrastructureservices/mirror_release_" + operation + ".yml"
+	}
 }
 
 func kubevirtHostRequirements(registry addons.Registry) kubevirt.HostRequirements {
@@ -314,6 +320,8 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 	}, {
 		kind: libvirt.MachineKind, implementation: libvirt.MachineImplementation, family: substrate.MachineFamily,
 		capability: libvirt.NewMachine(runner),
+	}, {
+		kind: vsphere.Kind, implementation: vsphere.Implementation, family: substrate.MachineFamily, capability: vsphere.NewMachine(runner),
 	}, {
 		kind: baremetal.Kind, implementation: baremetal.Implementation, family: substrate.MachineFamily,
 		capability: baremetal.NewMachine(runner),

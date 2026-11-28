@@ -113,8 +113,6 @@ func CapacityField(c api.Catalog, provider api.Object, name string) string {
 	return "spec.mtu of Network/" + name
 }
 
-func TaggedCarriage(arm Arm) bool { return arm != ArmKubeVirt && arm != ArmVSphere }
-
 func CarriageField(c api.Catalog, provider api.Object, name string, tagged bool) string {
 	for index, segment := range provider.Spec().Get("segments").Items() {
 		if segment.Get("name").Text() != name {

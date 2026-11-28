@@ -55,10 +55,11 @@ var osReleaseToken = regexp.MustCompile(`^[A-Za-z0-9._-]{0,64}$`)
 // records what a later consumer needs — the marker digest, the guest's host key
 // and the address it answered on — and nothing secret.
 type Evidence struct {
-	Absent  bool   `json:"absent"`
-	Address string `json:"address"`
-	FIPS    bool   `json:"fips"`
-	HostKey string `json:"hostKey"`
+	Absent    bool   `json:"absent"`
+	Address   string `json:"address"`
+	CloudInit bool   `json:"cloudInit,omitempty"`
+	FIPS      bool   `json:"fips"`
+	HostKey   string `json:"hostKey"`
 	// Image is the installer image still published, publicly or beneath the
 	// private subtree. A completed private installation has withdrawn it.
 	Image              bool       `json:"image"`
@@ -84,6 +85,7 @@ type Evidence struct {
 	// RootEncryption is the root filesystem on a LUKS device bound to the TPM.
 	RootEncryption bool   `json:"rootEncryption"`
 	RootWWN        string `json:"rootWWN"`
+	TPM2           bool   `json:"tpm2,omitempty"`
 	// Tree fields observe the immutable profile dependency, never owned effects.
 	Tree        bool `json:"tree"`
 	TreeContent bool `json:"treeContent"`
@@ -136,6 +138,9 @@ func ValidatePresence(data []byte, request Request, digest, marker string) error
 	if !evidence.Network || !evidence.NetworkReboot || len(evidence.NetworkDifferences) != 0 {
 		return installPostconditionUnmet.Fail("the installed machine's network does not match its declaration after a reboot", "")
 	}
+	if request.Target.TPM2 && !evidence.TPM2 {
+		return installPostconditionUnmet.Fail("the installed Machine did not report its declared TPM 2.0 device", "")
+	}
 	if request.Requires.FIPS && !evidence.FIPS {
 		return installGuestPolicyUnmet.Fail("the installed machine does not report the FIPS mode its installation enabled", "")
 	}
@@ -159,13 +164,16 @@ func ValidatePresence(data []byte, request Request, digest, marker string) error
 	}
 	// A private installer image names the private URL in its Kickstart, so a
 	// completed private installation has withdrawn it with the key.
-	if request.Private != nil && evidence.Image {
+	if (request.Private != nil || request.CloudInit != nil) && evidence.Image {
 		return installPostconditionUnmet.Fail("the installation left its private installer image published", "")
 	}
 	if evidence.Power != "On" {
 		return installPostconditionUnmet.Fail("the installed machine is not running", "")
 	}
-	if (request.Private == nil && !evidence.Image) || (request.Tree != nil && !evidence.Tree) {
+	if request.CloudInit != nil && (!evidence.CloudInit || evidence.OS.ID != "rhel" || evidence.OS.VersionID != request.CloudInit.Release) {
+		return installPostconditionUnmet.Fail("the clone has no completed cloud-init proof on its declared RHEL release", "")
+	}
+	if (request.Image != nil && !evidence.Image) || (request.Tree != nil && !evidence.Tree) {
 		return installPostconditionUnmet.Fail("the installation did not publish everything its boot needs", "")
 	}
 	if request.TreeMedia != nil && evidence.TreeIdentity != request.TreeMedia.SHA256 {

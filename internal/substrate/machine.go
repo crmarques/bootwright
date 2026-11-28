@@ -131,8 +131,8 @@ func ClearTargets(machine api.Object) []DiskTarget {
 func RootEraseSelected(machine api.Object) bool { return Erases(MachineRootDisk(machine)) }
 
 func RootDevicePath(catalog api.Catalog, machine api.Object) string {
-	if VirtualArm(MachineArm(catalog, machine)) {
-		return VirtualRootDev
+	if arm := MachineArm(catalog, machine); VirtualArm(arm) {
+		return VirtualRootDevice(arm)
 	}
 	return DeclaredRootDevicePath(machine)
 }
@@ -143,4 +143,11 @@ func DataDiskPath(index int, field string) string {
 		path += "." + field
 	}
 	return path
+}
+
+func VirtualRootDevice(arm Arm) string {
+	if arm == ArmVSphere {
+		return "/dev/sda"
+	}
+	return VirtualRootDev
 }

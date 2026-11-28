@@ -199,7 +199,8 @@ def test_a_first_install_reports_changed_and_a_replay_unchanged():
     for name in ("Boot the machine from its own installer image", "Wait for the installer to write the disk and boot what it installed"):
         guarded = index_of(tasks, lambda task, name=name: task.get("name") == name, name)
         assert frozen < guarded
-        assert tasks[guarded]["when"] == "not (managedos_install_anaconda_was_installed | bool)"
+        assert tasks[guarded]["when"] == ["not (managedos_install_anaconda_was_installed | bool)",
+                                          "bootwright_os_install_request.cloudInit is not defined"]
 
     def outcome(first_answer, network_changed=False):
         material = {"marker": MARKER}

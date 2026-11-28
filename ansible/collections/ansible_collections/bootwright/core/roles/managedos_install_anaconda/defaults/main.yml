@@ -87,7 +87,8 @@ managedos_install_anaconda_ca_data: >-
 # installer from, exactly as the request froze it.
 managedos_install_anaconda_media_trust: '{{ bootwright_os_install_request.target.controller.virtualMedia }}'
 managedos_install_anaconda_expected: >-
-  {{ bootwright_os_install_request.target.hardware.interfaces | default([]) | map(attribute='macAddress') | list }}
+  {{ bootwright_os_install_request.target.portMACs |
+     default(bootwright_os_install_request.target.hardware.interfaces | default([]) | map(attribute='macAddress') | list) }}
 # The subtree this block owns for material only the installing machine may read,
 # and the unguessable directory beneath it this attempt mints. The token is
 # generated here rather than frozen in the plan, so it appears in no request, no
@@ -284,6 +285,12 @@ managedos_install_anaconda_network_recovery: >-
 
 managedos_install_anaconda_port_access: >-
   {{ bootwright_os_install_request.target.machinePort | bootwright.core.machine_port_access(bootwright_os_install_material,
-     bootwright_os_install_request.target.hardware | default(none)) }}
+     bootwright_os_install_request.target.hardware | default(none))
+     | combine({'media_identity': bootwright_os_install_digest} if bootwright_os_install_request.target.machinePort.mediaVolume is defined else {}) }}
 managedos_install_anaconda_reboot_poweroff_attempts: '{{ bootwright_os_install_request.budgets.reboot.attempts }}'
 managedos_install_anaconda_reboot_return_attempts: '{{ bootwright_os_install_request.budgets.reboot.attempts }}'
+managedos_install_anaconda_instance_id: >-
+  {{ (managedos_install_anaconda_port_access.pinned_serial_base64 | b64decode | from_json).instanceUUID }}
+managedos_install_anaconda_reads_controller: >-
+  {{ not (managedos_install_anaconda_observes_removal | bool) or managedos_install_anaconda_unregisters | bool
+     or bootwright_os_install_request.target.machinePort.mediaVolume is defined }}

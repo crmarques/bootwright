@@ -1,0 +1,11 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: lab-guests
+
+spec:
+  provided: true
+
+  ipv4:
+    cidr: 198.51.100.0/24
+    gateway: 198.51.100.1

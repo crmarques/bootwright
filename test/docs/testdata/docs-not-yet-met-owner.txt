@@ -12,10 +12,8 @@ specs/cli/commands.md B55
 specs/infrastructure-services.md B323
 specs/infrastructure-services.md B568
 specs/managed-os.md B878
-specs/openshift-clusters.md B733
 specs/openshift-clusters.md B927
 specs/security.md B334
-specs/security.md B99
 specs/state-reconciliation.md B568
 specs/substrates.md B568
 specs/substrates.md B909

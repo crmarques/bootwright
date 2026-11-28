@@ -30,11 +30,11 @@ func obj(kind api.Kind, name string, spec api.Value) api.Object {
 func list(v ...api.Value) api.Value { return api.ListValue(v...) }
 func TestProviderVariantsAndNormalization(t *testing.T) {
 	bmc := m("enabled", true, "port", api.IntegerValue("8000"), "bindAddress", "192.0.2.1", "auth", m("credentialsRef", "bmc"))
-	domain := m("name", "zone-a", "server", "vcenter.example.test", "region", "region", "zone", "zone", "topology", m("datacenter", "dc", "computeCluster", "cluster", "datastore", "store", "networks", api.StringList("network")))
+	domain := m("name", "zone-a", "server", "vcenter.example.test", "datacenter", "/dc", "computeCluster", "/dc/host/cluster", "datastore", "/dc/datastore/store", "resourcePool", "/dc/host/cluster/Resources", "folder", "/dc/vm/guests")
 	providers := map[string]api.Value{
 		"baremetal": m("baremetal", m("defaults", m("bmc", m("credentialsRef", "bmc")))),
 		"libvirt":   m("libvirt", m("machineRef", "host", "uri", "qemu:///system", "bmcEmulation", bmc), "segments", list(m("name", "net", "libvirt", m("bridge", "virbr-lab")))),
-		"vsphere":   m("vsphere", m("vcenters", list(m("server", "vcenter.example.test", "datacenters", api.StringList("dc"), "credentialsRef", "vcenter")), "failureDomains", list(domain), "isoStaging", m("folder", "media"), "machineProfiles", list(m("name", "small", "cpu", api.IntegerValue("2"), "memoryMiB", api.IntegerValue("4096"), "diskGiB", api.IntegerValue("20"))))),
+		"vsphere":   m("vsphere", m("vcenters", list(m("server", "vcenter.example.test", "datacenters", api.StringList("dc"), "credentialsRef", "vcenter")), "placements", list(domain), "isoStaging", m("folder", "media"), "machineProfiles", list(m("name", "small", "cpu", api.IntegerValue("2"), "memoryMiB", api.IntegerValue("4096"), "diskGiB", api.IntegerValue("20"))))),
 		"kubevirt":  m("kubevirt", m("kubeconfigRef", "host-access", "namespace", "workloads"), "segments", list(m("name", "net", "untaggedNetworkRef", "net", "kubevirt", m("networkRef", m("kind", "UserDefinedNetwork", "name", "net"))))),
 	}
 	host := obj(api.Machine, "host", m())
@@ -58,7 +58,7 @@ func TestProviderVariantsAndNormalization(t *testing.T) {
 					t.Fatal("media verification not enabled under verified BMC TLS")
 				}
 			case "vsphere":
-				if o.Spec().Get(variant, "machineProfiles").Items()[0].Get("failureDomainRef").Text() != "zone-a" {
+				if o.Spec().Get(variant, "machineProfiles").Items()[0].Get("placementRef").Text() != "zone-a" {
 					t.Fatal("sole failure domain")
 				}
 			case "kubevirt":

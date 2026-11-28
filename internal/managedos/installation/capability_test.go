@@ -649,8 +649,8 @@ func TestUnsupportedReadsTheCompiledStateOrNothing(t *testing.T) {
 	unsupported := New(nil).Unsupported(compilation.NewState(catalog, catalog, nil))
 	want := []lifecycle.Refusal{{
 		Kind: "Machine", Name: "rhel-01",
-		Reason:      "this executable installs an operating system only through the anaconda installer, which the install profile does not select",
-		Remediation: "select spec.installer.anaconda on MachineInstallProfile/rhel-9-8",
+		Reason:      "the template clone installer requires a Machine profile with a source template on a substrate that supports cloning",
+		Remediation: "select spec.installer.anaconda on MachineInstallProfile/rhel-9-8, or select a machine profile with a source template",
 	}}
 	if !slices.Equal(unsupported, want) {
 		t.Fatalf("unsupported = %+v, want %+v", unsupported, want)

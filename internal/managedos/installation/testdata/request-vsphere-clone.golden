@@ -1,0 +1,213 @@
+{
+  "address": "198.51.100.11",
+  "budgets": {
+    "identity": {
+      "attempts": 120,
+      "delaySeconds": 30
+    },
+    "installer": {
+      "attempts": 180,
+      "delaySeconds": 20
+    },
+    "networkApply": {
+      "attempts": 24,
+      "delaySeconds": 5
+    },
+    "networkReconnect": {
+      "attempts": 12,
+      "delaySeconds": 5
+    },
+    "reachability": {
+      "attempts": 30,
+      "delaySeconds": 10
+    },
+    "reboot": {
+      "attempts": 60,
+      "delaySeconds": 10
+    },
+    "sessions": {
+      "registration": 0,
+      "unregistration": 0,
+      "update": 0,
+      "updateCompletion": 0
+    }
+  },
+  "cloudInit": {
+    "growRootFilesystem": true,
+    "keyType": "ed25519",
+    "network": {
+      "config": [
+        {
+          "mac_address": "00:50:56:37:b0:60",
+          "name": "enp1s0",
+          "subnets": [
+            {
+              "address": "198.51.100.11/24",
+              "gateway": "198.51.100.1",
+              "type": "static"
+            }
+          ],
+          "type": "physical"
+        },
+        {
+          "address": [
+            "192.0.2.1"
+          ],
+          "type": "nameserver"
+        }
+      ],
+      "version": 1
+    },
+    "release": "9.8",
+    "rootDiskBytes": 64424509440,
+    "userData": {
+      "disable_root": true,
+      "fqdn": "rhel-01.lab.example.test",
+      "growpart": {
+        "devices": [
+          "/"
+        ],
+        "mode": "auto"
+      },
+      "no_ssh_fingerprints": true,
+      "ntp": {
+        "enabled": true,
+        "ntp_client": "chrony",
+        "servers": [
+          "192.0.2.1"
+        ]
+      },
+      "preserve_hostname": false,
+      "resize_rootfs": true,
+      "runcmd": [
+        "set -eu",
+        [
+          "/usr/bin/systemctl",
+          "enable",
+          "--now",
+          "--",
+          "sshd"
+        ],
+        [
+          "/usr/bin/systemctl",
+          "reload",
+          "sshd"
+        ]
+      ],
+      "ssh": {
+        "emit_keys_to_console": false
+      },
+      "ssh_deletekeys": true,
+      "ssh_genkeytypes": [],
+      "ssh_pwauth": false,
+      "write_files": [
+        {
+          "content": "HostKey /etc/ssh/ssh_host_ed25519_key\n",
+          "path": "/etc/ssh/sshd_config.d/00-bootwright-host-key.conf",
+          "permissions": "0644"
+        }
+      ]
+    }
+  },
+  "fleetKeyRef": "bootwright-machine-key",
+  "hostKeyPath": "/etc/bootwright/host-key.pub",
+  "hostname": "rhel-01.lab.example.test",
+  "identity": {
+    "block": "os-install-rhel-01",
+    "context": "lab",
+    "object": "rhel-01",
+    "profile": "rhel-9-8"
+  },
+  "installerArguments": [],
+  "kickstart": "",
+  "markerPath": "/etc/bootwright/install-marker.json",
+  "network": {
+    "checkpointSeconds": 300,
+    "document": {
+      "dns-resolver": {
+        "config": {
+          "server": [
+            "192.0.2.1"
+          ]
+        }
+      },
+      "interfaces": [
+        {
+          "ipv4": {
+            "address": [
+              {
+                "ip": "198.51.100.11",
+                "prefix-length": 24
+              }
+            ],
+            "dhcp": false,
+            "enabled": true
+          },
+          "name": "enp1s0",
+          "type": "ethernet"
+        }
+      ],
+      "routes": {
+        "config": [
+          {
+            "next-hop-interface": "enp1s0",
+            "state": "absent"
+          },
+          {
+            "destination": "0.0.0.0/0",
+            "next-hop-address": "198.51.100.1"
+          }
+        ]
+      }
+    },
+    "documentPath": "/etc/bootwright/network.yml",
+    "markerPath": "/etc/bootwright/network-marker.json"
+  },
+  "placement": {
+    "connection": "local",
+    "machine": "controller"
+  },
+  "requires": {
+    "cloudInit": true,
+    "fips": false,
+    "registration": false,
+    "rootEncryption": false,
+    "rootWWN": false,
+    "tpm2": true,
+    "update": false
+  },
+  "servedRoot": "",
+  "target": {
+    "channel": "delivered-key",
+    "controller": {
+      "credentialsRef": "vc-account",
+      "endpoint": "https://vc.example.test:443",
+      "tlsVerify": true,
+      "virtualMedia": {
+        "enableVerification": false,
+        "removeCertificate": false,
+        "restoreVerification": false,
+        "trust": ""
+      }
+    },
+    "hostKeyRef": "metal-01-host-key",
+    "hostKeyType": "ed25519",
+    "machinePort": {
+      "endpoint": "https://vc.example.test:443",
+      "mediaVolume": "{\"datacenter\":\"/dc\",\"datastore\":\"/dc/datastore/store\",\"folder\":\"bootwright-vmedia\",\"name\":\"bw-rhel-01-f9314a334b075281\",\"owner\":\"f9314a334b075281cd72272619f027f62e7777383c6d52aa412be30776b19ac2\"}",
+      "passwordVariable": "controllerPassword",
+      "pinnedSerialVariable": "pinnedSerialBase64",
+      "pinnedUUIDVariable": "pinnedUUIDBase64",
+      "userVariable": "controllerUser",
+      "verify": true
+    },
+    "physical": false,
+    "portMACs": [
+      "00:50:56:37:b0:60"
+    ],
+    "substrate": "vsphere",
+    "tpm2": true
+  },
+  "user": "bootwright",
+  "version": "os-install-anaconda-v1"
+}

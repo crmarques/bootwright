@@ -5,8 +5,8 @@ asks of the installation. [Substrates](../../specs/substrates.md) and
 [container clusters](../../specs/openshift-clusters.md) own the required
 behavior; this page records native facts for
 [B99](../../specs/milestones/m1.md#b99) (the vSphere Machine arm),
-[B733](../../specs/milestones/m3.md#b733) (OpenShift on vSphere) and
-[B734](../../specs/milestones/m3.md#b734) (the lab-vsphere acceptance).
+[B733](../../specs/milestones/m9.md#b733) (OpenShift on vSphere) and
+[B734](../../specs/milestones/m9.md#b734) (the lab-vsphere acceptance).
 
 Provenance: `R7:C<n>` and "R7 claim" with a number are claim ids of the M3
 research, `RV` marks a claim the review re-verified, and "observed by the v1 implementation

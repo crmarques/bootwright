@@ -1,0 +1,43 @@
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: vcenter
+
+spec:
+  vsphere:
+    vcenters:
+      - server: vcenter.example.test
+        credentialsRef: vcenter-login
+        trustBundleRef: vcenter-ca
+
+    placements:
+      - name: lab
+        server: vcenter.example.test
+        datacenter: /Lab
+        computeCluster: /Lab/host/Compute
+        resourcePool: /Lab/host/Compute/Resources
+        datastore: /Lab/datastore/Guests
+        folder: /Lab/vm/Guests
+
+    machineProfiles:
+      - name: iso
+        placementRef: lab
+        cpu: 4
+        memoryMiB: 8192
+        diskGiB: 60
+        dataDisks:
+          - name: data
+            sizeGiB: 16
+
+      - name: clone
+        placementRef: lab
+        template: /Lab/vm/Templates/rhel-9-8
+        cpu: 4
+        memoryMiB: 8192
+        diskGiB: 60
+
+  segments:
+    - name: guests
+      untaggedNetworkRef: lab-guests
+      vsphere:
+        portgroup: /Lab/network/Guests

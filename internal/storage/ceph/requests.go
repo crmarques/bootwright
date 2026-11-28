@@ -500,6 +500,9 @@ func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string
 	for _, node := range spec.Get("topology", "nodes").Items() {
 		view, _ := c.Machine(node.Get("machineRef").Text())
 		m := view.Object
+		if arm := substrate.MachineArm(c, m); arm != "" && !substrate.SupportsClusterMachines(arm) {
+			return cephUnsupportedTopology.Fail(m.Identity()+" uses a substrate without Ceph host support", "select hosts on a qualified storage substrate or remove "+cluster.Identity()+" from the Environment")
+		}
 		if view.Provided {
 			if err := bindProvidedHost(r, c, m, node, tiebreaker, spec.Get("cephadm", "bootstrap", "nodeRef").Text(), spec.Get("cephadm", "addressRef").Text()); err != nil {
 				return err

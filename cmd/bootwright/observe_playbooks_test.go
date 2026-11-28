@@ -71,6 +71,7 @@ func observeAllowlist() map[observeTaskKey]observeAllowance {
 		"substrate_libvirt_machine":             "substrate_libvirt_machine_protocol",
 		"substrate_kubevirt_host":               "substrate_kubevirt_protocol",
 		"substrate_kubevirt_machine":            "substrate_kubevirt_protocol",
+		"substrate_vsphere_machine":             "substrate_vsphere_protocol",
 		"machine_hardware":                      "machine_hardware_protocol",
 	} {
 		add(role, "observe.yml", observeCollection+protocol, "publishes the handoff and evidence on the runner's own channel", read)
@@ -80,7 +81,7 @@ func observeAllowlist() map[observeTaskKey]observeAllowance {
 		"managedos_package_tree", "infrastructureservices_mirror_fill", "infrastructureservices_mirror_images",
 		"infrastructureservices_mirror_release", "storage_ceph_core", "storage_ceph_host", "storage_ceph_image",
 		"storage_ceph_smb", "storage_ceph_replication", "storage_ceph_consumer", "substrate_baremetal_machine", "substrate_libvirt_host", "substrate_libvirt_machine",
-		"substrate_kubevirt_host", "substrate_kubevirt_machine", "machine_hardware", "managedos_disk_discovery",
+		"substrate_kubevirt_host", "substrate_kubevirt_machine", "substrate_vsphere_machine", "machine_hardware", "managedos_disk_discovery",
 	} {
 		add(role, "observe.yml", "ansible.builtin.assert", "validates the frozen request in memory", read)
 	}
@@ -149,16 +150,23 @@ func observeAllowlist() map[observeTaskKey]observeAllowance {
 	for _, module := range []string{"ansible.builtin.set_fact", observeCollection + "redfish_system_read", observeCollection + "redfish_system_inspect"} {
 		add("substrate_machine", "redfish_state_read.yml", module, "reads controller state and retains answers in memory", read)
 	}
-	kubevirtRead := func(operation string) func(map[string]any, map[string]any) bool {
+	readsOperation := func(operation string) func(map[string]any, map[string]any) bool {
 		return func(params, _ map[string]any) bool { return params["operation"] == operation }
 	}
-	add("substrate_kubevirt_host", "observe.yml", observeCollection+"substrate_kubevirt_api", "repeats the provider proof, which only reads the host's API", kubevirtRead("proof"))
+	add("substrate_vsphere_machine", "observe.yml", observeCollection+"substrate_vsphere_api", "reads vCenter inventory, disk ownership and power", readsOperation("observe"))
+	for _, operation := range []string{"state_read", "seed_read"} {
+		add("substrate_vsphere_machine", operation+".yml", observeCollection+"substrate_vsphere_api", "reads VM power or the ownership of attached media and seed", readsOperation(operation))
+		add("substrate_vsphere_machine", operation+".yml", "ansible.builtin.set_fact", "retains the VM port response in memory", read)
+	}
+	add("substrate_vsphere_machine", "seed_read.yml", "ansible.builtin.assert", "refuses an unanswered VM seed read", read)
+	add("substrate_vsphere_machine", "identity_read.yml", "ansible.builtin.set_fact", "leaves guest identity to its pinned SSH connection", read)
+	add("substrate_kubevirt_host", "observe.yml", observeCollection+"substrate_kubevirt_api", "repeats the provider proof, which only reads the host's API", readsOperation("proof"))
 	add("substrate_kubevirt_machine", "observe.yml", observeCollection+"substrate_kubevirt_api", "reads the VirtualMachine and what it owns, or a root disk's reset mark, creating, deleting and patching nothing",
 		func(params, _ map[string]any) bool {
 			return params["operation"] == "observe" || params["operation"] == "root_read"
 		})
 	add("substrate_kubevirt_machine", "observe.yml", "ansible.builtin.meta", "ends a root disk's reading after its publication", read)
-	add("substrate_kubevirt_machine", "state_read.yml", observeCollection+"substrate_kubevirt_api", "reads the instance's power and the presented volume", kubevirtRead("state_read"))
+	add("substrate_kubevirt_machine", "state_read.yml", observeCollection+"substrate_kubevirt_api", "reads the instance's power and the presented volume", readsOperation("state_read"))
 	for _, module := range []string{"ansible.builtin.set_fact", "ansible.builtin.assert"} {
 		add("substrate_kubevirt_machine", "state_read.yml", module, "validates the port input and retains answers in memory", read)
 	}
@@ -235,6 +243,12 @@ func addObserveReads(add func(string, string, string, string, func(map[string]an
 	add("machine_ssh_identity", "main.yml", observeCollection+"managedos_guest_command", "runs /usr/bin/cat of the marker over the pinned guest session", read)
 	add("managedos_install_anaconda", "network_observe.yml", observeCollection+"managedos_network_compare", "compares the declared network with the running one in memory", read)
 	add("managedos_install_anaconda", "host_security.yml", "ansible.builtin.set_fact", "names the FIPS answers in memory", read)
+	for _, file := range []string{"clone_proof.yml", "clone_root.yml", "clone_read.yml", "tpm.yml"} {
+		add("managedos_install_anaconda", file, "ansible.builtin.set_fact", "retains a read-only guest or seed inspection in memory", read)
+	}
+	add("managedos_install_anaconda", "clone_read.yml", "ansible.builtin.assert", "rejects unreadable or foreign seed state", read)
+	add("substrate_machine", "seed_dispatch.yml", "ansible.builtin.assert", "requires a seed port before inspection", read)
+	add("substrate_machine", "seed_dispatch.yml", "ansible.builtin.set_fact", "returns the seed port reading in memory", read)
 	add("managedos_install_anaconda", "root_encryption.yml", "ansible.builtin.set_fact", "names the root-encryption answers in memory", read)
 	add("managedos_install_anaconda", "root_wwn.yml", "ansible.builtin.set_fact", "names the root disk WWN record in memory", read)
 	add("managedos_install_anaconda", "os_release.yml", "ansible.builtin.set_fact", "names the release answers in memory", read)
@@ -601,6 +615,8 @@ func (w *observeWalk) fixedReadRoles(key, role, name, entry string) {
 	switch {
 	case role == "substrate_machine" && name == "{{ substrate_machine_arms[bootwright_machine_arm] }}" && entry == "{{ substrate_machine_entry }}" && w.portEntry != "":
 		mapping, entry = "substrate_machine_arms", w.portEntry
+	case role == "substrate_machine" && name == "{{ substrate_machine_seed_arms[bootwright_machine_arm] }}" && entry == "{{ substrate_machine_entry }}" && w.portEntry == "seed_read":
+		mapping, entry = "substrate_machine_seed_arms", w.portEntry
 	default:
 		w.reportf("%s: unresolved dynamic role %q entry %q", key, name, entry)
 		return

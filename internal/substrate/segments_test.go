@@ -27,7 +27,7 @@ func requireNoIssueAt(t *testing.T, issues []api.Issue, field string) {
 }
 
 // A segment carries at most one network untagged and an allow-list of tagged
-// ones, each declaring a vlan; a KubeVirt or vSphere segment carries exactly
+// ones, each declaring a vlan; a KubeVirt segment carries exactly
 // one untagged network, and no tagged one until B1172 observes what the fabric
 // carries.
 func TestASegmentsCarriageNamesItsNetworks(t *testing.T) {
@@ -55,8 +55,10 @@ func TestASegmentsCarriageNamesItsNetworks(t *testing.T) {
 	}
 	requireArmIssue(t, segmentIssues(kubevirt(cudnSegment("guests", "guests", "untaggedNetworkRef", "plain", "taggedNetworkRefs", api.StringList("tagged"))), plain, tagged),
 		"$.spec.segments[0].taggedNetworkRefs[0]", "tagged carriage over a kubevirt network is not yet admitted (B1172)")
-	vsphere := obj(api.InfraProvider, "vc", m("vsphere", m(), "segments", list(m("name", "pg", "vsphere", m("portgroup", "pg")))))
-	requireArmIssue(t, segmentIssues(vsphere, plain), "$.spec.segments[0].untaggedNetworkRef", "a vsphere segment delivers exactly one network")
+	vsphere := obj(api.InfraProvider, "vc", m("vsphere", m(), "segments", list(m("name", "pg", "vsphere", m("portgroup", "/dc/network/pg"), "taggedNetworkRefs", api.StringList("tagged")))))
+	if issues := segmentIssues(vsphere, tagged); len(issues) != 0 {
+		t.Fatalf("vSphere trunk was refused: %+v", issues)
+	}
 }
 
 // A hosted KubeVirt segment that is a typed secondary network of its host takes

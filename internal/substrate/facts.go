@@ -9,25 +9,31 @@ import (
 )
 
 type facts struct {
-	deliveredHostKey bool
-	delivery         string
-	accessCredential bool
-	bridgedGuests    bool
-	tools            []string
-	credential       [2]secrets.Part
-	portPinned       bool
-	emulatedBMC      bool
-	hypervisorClient bool
-	templateField    string
+	requiredInstallKey bool
+	clusterMachines    bool
+	templateClone      bool
+	taggedCarriage     bool
+	precedesController bool
+	virtual            bool
+	deliveredHostKey   bool
+	delivery           string
+	accessCredential   bool
+	bridgedGuests      bool
+	tools              []string
+	credential         [2]secrets.Part
+	portPinned         bool
+	emulatedBMC        bool
+	hypervisorClient   bool
+	templateField      string
 }
 
 var account = [2]secrets.Part{secrets.UsernamePart, secrets.PasswordPart}
 
 var armFacts = map[Arm]facts{
-	ArmBaremetal: {deliveredHostKey: true, delivery: DeliveryFetch, accessCredential: true, credential: account},
-	ArmLibvirt:   {deliveredHostKey: true, delivery: DeliveryFetch, bridgedGuests: true, credential: account, emulatedBMC: true, hypervisorClient: true},
-	ArmVSphere:   {delivery: DeliveryFetch, tools: []string{"govc"}, credential: account, templateField: "template"},
-	ArmKubeVirt:  {delivery: DeliveryPush, accessCredential: true, tools: []string{"virtctl"}, credential: [2]secrets.Part{secrets.ValuePart}, portPinned: true, templateField: "templateSnapshotRef"},
+	ArmBaremetal: {requiredInstallKey: true, clusterMachines: true, taggedCarriage: true, deliveredHostKey: true, delivery: DeliveryFetch, accessCredential: true, credential: account},
+	ArmLibvirt:   {clusterMachines: true, taggedCarriage: true, precedesController: true, virtual: true, deliveredHostKey: true, delivery: DeliveryFetch, bridgedGuests: true, credential: account, emulatedBMC: true, hypervisorClient: true},
+	ArmVSphere:   {requiredInstallKey: true, templateField: "template", templateClone: true, taggedCarriage: true, virtual: true, delivery: DeliveryPush, accessCredential: true, deliveredHostKey: true, portPinned: true, credential: account},
+	ArmKubeVirt:  {templateField: "templateSnapshotRef", clusterMachines: true, virtual: true, delivery: DeliveryPush, accessCredential: true, tools: []string{"virtctl"}, credential: [2]secrets.Part{secrets.ValuePart}, portPinned: true},
 }
 
 // TemplateSourceField names an arm's authoring field for a native template source.
@@ -37,6 +43,10 @@ func UsesTemplateSnapshot(catalog api.Catalog, machine api.Object) bool {
 	_, profile, found := SelectedProfile(catalog, machine)
 	install, available := catalog.Find(api.MachineInstallProfile, api.MachineInstallProfileRef(machine))
 	return found && profile.Has("templateSnapshotRef") && available && install.Spec().Has("installer", "templateClone")
+}
+
+func RequiresInstallHostKey(provider api.Object) bool {
+	return armFacts[Variant(provider)].requiredInstallKey
 }
 
 func SupportsDeliveredHostKey(provider api.Object) bool {
@@ -187,3 +197,13 @@ func ClusterBounds(arms ...Arm) (fanout int, allowance, margin time.Duration) {
 	}
 	return fanout, allowance, margin
 }
+
+func SupportsTemplateClone(arm Arm) bool { return armFacts[arm].templateClone }
+
+func SupportsClusterMachines(arm Arm) bool { return armFacts[arm].clusterMachines }
+
+func MachinePrecedesController(arm Arm) bool { return armFacts[arm].precedesController }
+
+func TaggedCarriage(arm Arm) bool { return armFacts[arm].taggedCarriage }
+
+func VirtualArm(arm Arm) bool { return armFacts[arm].virtual }

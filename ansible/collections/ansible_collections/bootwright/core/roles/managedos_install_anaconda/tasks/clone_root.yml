@@ -1,0 +1,37 @@
+---
+- name: Measure the mounted root's partition and filesystem after cloud-init growth
+  ansible.builtin.include_tasks: guest.yml
+  vars:
+    managedos_install_anaconda_guest_command:
+      - /usr/bin/sudo
+      - -n
+      - /usr/bin/sh
+      - -c
+      - |-
+        set -eu
+        export LC_ALL=C
+        root=$(readlink -e -- "$(findmnt -nro SOURCE /)")
+        test "$(lsblk -ndo TYPE "$root")" = part
+        disk=$(lsblk -ndo PKNAME "$root")
+        test "$(blockdev --getsize64 "/dev/$disk")" = "$1"
+        sector=$(cat "/sys/class/block/${root##*/}/start")
+        partition=$(blockdev --getsize64 "$root")
+        tail=$(("$1" - sector * 512 - partition))
+        test "$tail" -ge 0 && test "$tail" -le 2097152
+        case "$(findmnt -nro FSTYPE /)" in
+          xfs) geometry=$(xfs_info / | awk '$1 == "data" && $2 == "=" {
+            for(i=3;i<=NF;i++) {split($i,a,"="); if(a[1]=="bsize") b=a[2]; if(a[1]=="blocks") n=a[2]}
+            if(b && n) print b, n}') ;;
+          ext4) geometry=$(tune2fs -l "$root" | awk '/^Block count:/ {n=$3} /^Block size:/ {b=$3} END {if (b && n) print b, n}') ;;
+          *) exit 1 ;;
+        esac
+        set -- $geometry
+        test "$#" = 2
+        slack=$((partition - $1 * $2))
+        test "$slack" -ge 0 && test "$slack" -lt 1048576
+      - bootwright-clone-root
+      - '{{ bootwright_os_install_request.cloudInit.rootDiskBytes | string }}'
+
+- name: Retain the observed partition and filesystem capacity proof
+  ansible.builtin.set_fact:
+    managedos_install_anaconda_root_grown: '{{ managedos_install_anaconda_guest.rc | default(1) == 0 }}'

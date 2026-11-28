@@ -1,0 +1,41 @@
+---
+- name: Clear the refusal an earlier entry point named
+  ansible.builtin.set_fact:
+    substrate_vsphere_machine_refusal: ''
+  no_log: true
+
+- name: Run pre_boot through vCenter
+  bootwright.core.substrate_vsphere_api:
+    operation: pre_boot
+    port: '{{ bootwright_machine_port }}'
+  register: substrate_vsphere_machine_port_result
+  failed_when: false
+  no_log: true
+  diff: false
+
+- name: Name a vTPM the machine does not present as the refusal
+  ansible.builtin.set_fact:
+    substrate_vsphere_machine_refusal: tpm-absent
+  when: substrate_vsphere_machine_port_result.refusal | default('') == 'tpm-absent'
+
+- name: Name another vCenter or VirtualMachine than the recorded one as the refusal
+  ansible.builtin.set_fact:
+    substrate_vsphere_machine_refusal: identity-mismatch
+  when: substrate_vsphere_machine_port_result.refusal | default('') == 'identity-mismatch'
+
+- name: Name a running machine as the refusal
+  ansible.builtin.set_fact:
+    substrate_vsphere_machine_refusal: machine-running
+  when: substrate_vsphere_machine_port_result.refusal | default('') == 'machine-running'
+
+- name: Refuse a machine the proof did not hold for
+  ansible.builtin.assert:
+    that:
+      - substrate_vsphere_machine_port_result.msg is not defined
+    fail_msg: >-
+      {{ (substrate_vsphere_machine_port_result.msg | default('') | string | bootwright.core.printable)[:512] }}
+    quiet: true
+
+- name: Clear the refusal now that the machine is proved
+  ansible.builtin.set_fact:
+    substrate_vsphere_machine_refusal: ''

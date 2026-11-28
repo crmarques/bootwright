@@ -12,8 +12,6 @@ func MachineNICs(machine api.Object) []string {
 	return names
 }
 
-func VirtualArm(arm Arm) bool { return arm == ArmLibvirt || arm == ArmKubeVirt }
-
 func MachineNICSegments(machine api.Object) api.Value {
 	return machine.Spec().Get("hardware", "nics")
 }

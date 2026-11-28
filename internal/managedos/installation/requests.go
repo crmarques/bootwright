@@ -127,7 +127,9 @@ type Target struct {
 	// Physical is operator-owned hardware: what it already held is what this
 	// installation erases, and its removal retains it.
 	Physical  bool          `json:"physical"`
+	PortMACs  []string      `json:"portMACs,omitempty"`
 	Substrate substrate.Arm `json:"substrate"`
+	TPM2      bool          `json:"tpm2,omitempty"`
 	URI       string        `json:"uri,omitempty"`
 }
 
@@ -167,10 +169,12 @@ type Sessions struct {
 }
 
 type Requires struct {
+	CloudInit      bool `json:"cloudInit,omitempty"`
 	FIPS           bool `json:"fips"`
 	Registration   bool `json:"registration"`
 	RootEncryption bool `json:"rootEncryption"`
 	RootWWN        bool `json:"rootWWN"`
+	TPM2           bool `json:"tpm2,omitempty"`
 	Update         bool `json:"update"`
 }
 
@@ -187,16 +191,14 @@ type Network struct {
 	MarkerPath        string         `json:"markerPath"`
 }
 
-// Request is the complete frozen intent for one Anaconda installation. It
-// carries the derived Kickstart, so the plan digest covers exactly the
-// installation this operation would perform, and no secret value: the fleet
-// key's public half and the install marker reach the adapter at execution.
+// Request freezes the public intent of an Anaconda installation or full clone seed.
 type Request struct {
 	Address   string `json:"address"`
-	BootMedia Media  `json:"bootMedia"`
+	BootMedia Media  `json:"bootMedia,omitzero"`
 	// Budgets are the waits the adapter performs, which the run's deadline
 	// is derived from.
 	Budgets        Budgets              `json:"budgets"`
+	CloudInit      *CloudInit           `json:"cloudInit,omitempty"`
 	DiscoveryProof *diskselection.Proof `json:"discoveryProof,omitempty"`
 	// DiskEncryption names the Secret whose value is the recovery passphrase
 	// of an encrypted root disk. The value reaches only the private subtree.
@@ -282,6 +284,7 @@ func (r Request) fips() bool { return r.Requires.FIPS }
 
 func (r Request) requirements() Requires {
 	return Requires{
+		CloudInit: r.CloudInit != nil, TPM2: r.Target.TPM2,
 		FIPS: slices.Contains(r.InstallerArguments, fipsArgument), Registration: r.Registration != nil,
 		RootEncryption: r.DiskEncryption != nil, RootWWN: r.serialRoot(), Update: r.Update != nil,
 	}
@@ -340,6 +343,12 @@ func DecodeRequest(data []byte) (Request, error) {
 	if err != nil {
 		return Request{}, err
 	}
+	if substrate.DeliveryOf(r.Target.Substrate) == substrate.DeliveryPush && (!r.Placement.Local() || len(r.Target.PortMACs) == 0) {
+		return Request{}, installRequestInvalid.Fail("pushed media requires a controller-local build and the realized Machine interface addresses", "")
+	}
+	if r.CloudInit != nil && (r.BootMedia != (Media{}) || r.Kickstart != "" || r.Image != nil || r.Private != nil || r.Tree != nil || r.TreeMedia != nil || r.Target.Channel != substrate.ChannelDeliveredKey || !r.Target.Controller.TLSVerify || !substrate.SupportsTemplateClone(r.Target.Substrate) || !substrate.PortPinned(r.Target.Substrate)) {
+		return Request{}, installRequestInvalid.Fail("the clone seed has inconsistent media, identity or trust", "")
+	}
 	if r.Requires != r.requirements() || r.Budgets.Sessions != r.sessions() {
 		return Request{}, installRequestInvalid.Fail("the frozen request's required proofs or session budgets are not those its own fields derive", "")
 	}
@@ -397,6 +406,9 @@ func (r Request) installerImage() Publication {
 // MediaNames lists the store entries this request uses, so the operation
 // freezes a shared reservation on each before its first effect.
 func (r Request) MediaNames() []string {
+	if r.CloudInit != nil {
+		return nil
+	}
 	names := []string{r.BootMedia.Name}
 	if r.TreeMedia != nil {
 		names = append(names, r.TreeMedia.Name)

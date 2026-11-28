@@ -136,13 +136,13 @@ func TestNativeLibvirtAndRemoteCephPreparationDoNotRequestUnrelatedDownloads(t *
 	}
 }
 
-func TestReferencedVSphereRequestsOnlyItsGenericClient(t *testing.T) {
+func TestVSphereUsesTheControllerPythonRuntime(t *testing.T) {
 	objects := append(selectionObjects(),
 		api.NewObject(api.InfraProvider, "virtualization", api.Value{}, api.MapValue().With("vsphere", api.MapValue())),
 		api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue().WithPath(api.StringValue("virtualization"), "hardware", "providerRef")),
 	)
 	tools, err := controller.SelectTools(api.NewCatalog(objects))
-	if err != nil || !reflect.DeepEqual(tools, []evidence.ToolRequest{defaultTool(t, "govc")}) {
+	if err != nil || len(tools) != 0 {
 		t.Fatal(tools, err)
 	}
 }
@@ -204,10 +204,10 @@ func TestEnvironmentDependencyVersionsOverrideOnlyRequiredVariableClients(t *tes
 		api.NewObject(api.Machine, "two", api.Value{}, api.MapValue().WithPath(api.StringValue("kubevirt"), "hardware", "providerRef")),
 	)
 	tools, err = controller.SelectTools(api.NewCatalog(objects))
-	if err != nil || len(tools) != 5 {
+	if err != nil || len(tools) != 4 {
 		t.Fatal(tools, err)
 	}
-	wanted := map[string]string{"helm": "v4.2.3", "govc": "v0.54.0", "virtctl": "v1.8.2", "openshift-clients": "4.21.15", "openshift-install": "4.21.15"}
+	wanted := map[string]string{"helm": "v4.2.3", "virtctl": "v1.8.2", "openshift-clients": "4.21.15", "openshift-install": "4.21.15"}
 	for _, tool := range tools {
 		if tool.Version != wanted[tool.Kind] {
 			t.Fatal("override changed a coupled target release or lost a client version", tool)

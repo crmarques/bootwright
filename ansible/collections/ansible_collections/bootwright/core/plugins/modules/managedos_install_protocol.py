@@ -122,6 +122,12 @@ options:
         converged.
     type: bool
     required: false
+  tpm2:
+    description: Whether the pinned guest reported a TPM 2.0 resource manager.
+    type: bool
+  cloudInit:
+    description: Whether the pinned clone completed cloud-init under its realized instance identity.
+    type: bool
   rootEncryption:
     description:
       - Whether the installed system proved its root filesystem on a crypt

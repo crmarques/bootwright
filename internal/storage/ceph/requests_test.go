@@ -16,6 +16,23 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
+func TestCephRefusesStandaloneMachineSubstratesBeforeBindingDisks(t *testing.T) {
+	catalog := pinnedCatalog(t, nil)
+	objects := catalog.Objects()
+	for index, object := range objects {
+		if object.Kind() == api.InfraProvider {
+			objects[index] = object.WithSpec(requestMap("vsphere", requestMap()))
+		}
+	}
+	catalog = api.NewCatalog(objects)
+	cluster, _ := catalog.Find(api.CephCluster, "example")
+	_, err := baseRequest(catalog, cluster, "synthetic")
+	issues := diagnostics.Of(err)
+	if len(issues) != 1 || !strings.Contains(issues[0].Message, "without Ceph host support") {
+		t.Fatalf("expected the standalone Machine substrate refusal, got %+v", issues)
+	}
+}
+
 func TestCoreConfigIsFrozenAcrossClusterChildrenAndChangedIntent(t *testing.T) {
 	catalog := poolRequestCatalog(3, 3)
 	cluster, _ := catalog.Find(api.CephCluster, "example")

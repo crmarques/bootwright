@@ -101,7 +101,7 @@ func InstalledHostRefusals(catalog api.Catalog, service, machine api.Object) []l
 				"the artifact mirror on a Machine Bootwright installs is filled by its own fill alone, and "+consumer+" publishes into "+server+" on "+host+" through an artifactServerEndpoint",
 				"select a server on the controller Machine or on an OS-ready Machine in that artifactServerEndpoint of "+consumer))
 		}
-		if provider, realized := machineref.Provider(machine, catalog); realized && (len(substrate.ProviderTools(provider)) != 0 || substrate.RealizesPhysicalNICs(provider)) {
+		if provider, realized := machineref.Provider(machine, catalog); realized && !substrate.MachinePrecedesController(substrate.Variant(provider)) {
 			refused = append(refused, lifecycle.RefusalOf(service,
 				"the artifact mirror is filled before the controller stage installs its clients, and "+host+", where "+server+" runs, is installed through "+provider.Identity()+", whose machine blocks this executable runs only after that stage",
 				"place "+server+" on an OS-ready Machine or on one a libvirt provider realizes"))

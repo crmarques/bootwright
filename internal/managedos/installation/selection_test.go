@@ -167,8 +167,8 @@ func TestUnsupportedNamesEveryProfileArmThisContractRefuses(t *testing.T) {
 		"template clone": {installProfile(field("installer", api.MapValue(field("templateClone", api.MapValue(
 			field("seed", api.MapValue(field("cloudInit", api.MapValue()))),
 		))))), [2]string{
-			"this executable installs an operating system only through the anaconda installer, which the install profile does not select",
-			"select spec.installer.anaconda on MachineInstallProfile/rhel-9-8",
+			"the template clone installer requires a Machine profile with a source template on a substrate that supports cloning",
+			"select spec.installer.anaconda on MachineInstallProfile/rhel-9-8, or select a machine profile with a source template",
 		}},
 	} {
 		t.Run(name, func(t *testing.T) {

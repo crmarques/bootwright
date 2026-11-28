@@ -148,6 +148,11 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remedia
 		if !found {
 			continue
 		}
+		arm := substrate.MachineArm(catalog, bound)
+		if arm != "" && !substrate.SupportsClusterMachines(arm) {
+			return "node " + node.Get("name").Text() + " (" + bound.Identity() + ") uses a substrate without cluster installation support",
+				"select a Machine on a substrate qualified for cluster installation, or remove " + cluster.Identity() + " from the Environment"
+		}
 		// A node Bootwright also installs an operating system on would have
 		// its one disk written by two installations.
 		if machine.Installed(bound) {
@@ -161,8 +166,8 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remedia
 		}
 		target, err := substrate.TargetFor(catalog, bound, cluster.Name(), controllerMachine)
 		if err != nil {
-			reason, remedy := nodeTargetRefusal(catalog, bound, err)
-			if len(diagnostics.Of(err)) > 0 && !strings.Contains(reason, "substrate this executable") {
+			reason, remedy := nodeTargetRefusal(err)
+			if len(diagnostics.Of(err)) > 0 {
 				reason = "node " + node.Get("name").Text() + " (" + bound.Identity() + "): " + reason
 			}
 			return reason, remedy
@@ -182,16 +187,8 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remedia
 	return "", ""
 }
 
-// nodeTargetRefusal says why a node's realized target does not derive. A node
-// on a provider whose substrate this executable does not realize is refused as
-// the cluster's own; every other reason is the substrate's own, with the
-// remedy naming the object to change. A reason the error does not carry still
-// refuses, because an empty reason would admit the cluster.
-func nodeTargetRefusal(catalog api.Catalog, bound api.Object, err error) (reason, remediation string) {
-	provider, found := catalog.Find(api.InfraProvider, api.MachineProviderRef(bound))
-	if found && !slices.Contains(substrate.Realized(), substrate.Variant(provider)) {
-		return "a declared node is on a substrate this executable does not realize", ""
-	}
+// Preserve an actionable target refusal when the substrate supplies one.
+func nodeTargetRefusal(err error) (reason, remediation string) {
 	if refused := diagnostics.Of(err); len(refused) != 0 && refused[0].Message != "" {
 		return refused[0].Message, refused[0].Remediation
 	}

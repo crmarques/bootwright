@@ -47,6 +47,7 @@ REPLAN = "plan the installation again with this release"
 # stopped seeing it, which would pass every rule below vacuously.
 GROUPS = {
     "substrate_machine/tasks/dispatch.yml": 1,
+    "substrate_machine/tasks/seed_dispatch.yml": 1,
 }
 
 # The substrate's one machine port dispatcher, which consumers include by an
@@ -744,7 +745,9 @@ def test_every_fixed_map_is_qualified_and_closed_before_installation_effects():
         "name": "bootwright.core.containercluster_install_agent", "tasks_from": "apply"}
     admit = next(task for task in load(ROLES / "containercluster_install_agent/tasks/apply.yml") if admits(task))
     assert iteration(admit) == ("{{ bootwright_cluster_install_request.nodes }}", "containercluster_install_agent_node")
-    arms = yaml.safe_load((ROLES / "substrate_machine/defaults/main.yml").read_text())["substrate_machine_arms"]
+    defaults = yaml.safe_load((ROLES / "substrate_machine/defaults/main.yml").read_text())
+    arms, seed_arms = defaults["substrate_machine_arms"], defaults["substrate_machine_seed_arms"]
+    assert seed_arms and all(arms.get(arm) == role for arm, role in seed_arms.items())
     assert arms and all(role == "bootwright.core.substrate_" + arm + "_machine" for arm, role in arms.items())
     mapped_includes = []
     for path in task_files():
@@ -753,11 +756,16 @@ def test_every_fixed_map_is_qualified_and_closed_before_installation_effects():
             if selected:
                 mapped_includes.append((label(path), selected))
     assert mapped_includes == [("substrate_machine/tasks/dispatch.yml",
-                                ("substrate_machine_arms", "bootwright_machine_arm", "{{ substrate_machine_entry }}"))]
+                                ("substrate_machine_arms", "bootwright_machine_arm", "{{ substrate_machine_entry }}")),
+                               ("substrate_machine/tasks/seed_dispatch.yml",
+                                ("substrate_machine_seed_arms", "bootwright_machine_arm", "{{ substrate_machine_entry }}"))]
     for arm in arms:
         specs = yaml.safe_load((ROLES / ("substrate_" + arm + "_machine") / "meta/argument_specs.yml").read_text())["argument_specs"]
         entries = yaml.safe_load((ROLES / "substrate_machine/meta/argument_specs.yml").read_text())["argument_specs"]
-        assert set(entries) - {"admit"} <= set(specs), arm
+        seed = {"seed_read", "seed_insert", "seed_eject"}
+        assert seed <= set(entries)
+        assert set(entries) - {"admit"} - seed <= set(specs), arm
+        assert seed & set(specs) == (seed if arm in seed_arms else set()), arm
 
 
 @pytest.mark.parametrize("where", sorted(DEFERRED))

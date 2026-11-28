@@ -158,7 +158,7 @@ every selected `OpenShiftCluster`, and both belong to the
 | Endpoint interface networks | a non-empty `spec.install.endpoints.<slot>.interfaceNetworks` | `no agent installer input consumes endpoint <slot>'s interfaceNetworks` | `remove spec.install.endpoints.<slot>.interfaceNetworks from <cluster>, or leave it empty` |
 | Several nodes on another platform | `spec.install.platform.vsphere` or `external` with more than one of `spec.nodes` | `this executable installs no multi-node cluster on the declared platform` | `correct <cluster>` |
 | A node with an install profile | `spec.os.install` on a node's Machine | `a declared node selects an install profile, so two installations would write its disk` | `declare spec.os.clusterInstalled on <machine> instead of spec.os.install, or drop it from <cluster>` |
-| A node on an unrealized substrate | a node's Machine whose provider declares a substrate this executable does not realize | `a declared node is on a substrate this executable does not realize` | `correct <cluster>` |
+| A node on a standalone-only substrate | a node binds a Machine on a substrate without a cluster implementation | `node <node> (<machine>) uses a substrate without cluster installation support` | `select a Machine on a substrate qualified for cluster installation, or remove <cluster> from the Environment` |
 | A node whose emulated BMC port does not allocate | a virtual node whose provider's `spec.libvirt.bmcEmulation.port` plus the node's position among that provider's Machines is past 65535 | `node <node> (<machine>): the Machine's emulated BMC port does not allocate` | `correct spec.libvirt.bmcEmulation.port on <provider>` |
 | A node's provider with no emulated BMC credential | a virtual node whose provider declares no `spec.libvirt.bmcEmulation.auth.credentialsRef` | `node <node> (<machine>): the provider declares no emulated BMC credential` | `set spec.libvirt.bmcEmulation.auth.credentialsRef on <provider>` |
 | A physical node with an HTTP BMC | a physical node's BMC uses HTTP | `a physical node's private boot image requires an HTTPS management controller` | `set spec.hardware.bmc.address on <machine> to an HTTPS ComputerSystem endpoint` |
@@ -167,14 +167,13 @@ every selected `OpenShiftCluster`, and both belong to the
 | A physical node's root named by a device path | any `hardware.rootDisk.hints.deviceName` on a physical node | `a bare-metal Machine an installer writes names its root WWN as spec.hardware.rootDisk.wwn, never by spec.hardware.rootDisk.hints.deviceName` | `<remedy>` |
 | A root device size the frozen input cannot carry | a node whose `minSizeGigabytes` exceeds 9007199254740991, the largest integer the frozen input carries exactly, at `spec.hardware.rootDisk.hints` on its Machine | `a node's minSizeGigabytes is larger than the frozen installer input carries exactly` | `declare spec.hardware.rootDisk.hints.minSizeGigabytes on <machine> as at most 9007199254740991` |
 
-A row lifts with the code of the item that delivers what it refuses, and the
-table and its test change in that commit:
+The following items own these refusals.
 
 - [B723](milestones/m3.md#b723) lifts the serving-certificate row.
 - [B69](milestones/m3.md#b69) lifts the disconnected-cluster row.
-- [B733](milestones/m3.md#b733) lifts the unrealized-substrate row for a node
+- [B733](milestones/m9.md#b733) lifts the unqualified cluster substrate row for a node
   on a vSphere provider and the multi-node `vsphere` platform row.
-- [B748](milestones/backlog.md#b748) lifts the OKD row.
+- [B748](milestones/m8.md#b748) lifts the OKD row.
 
 Each other row stays until an item names it.
 
@@ -302,9 +301,9 @@ KubeVirt segment, so the evidence names those VIPs unprobed.
 Not yet met: an installer VIP on a KubeVirt segment is not proved free
 before a fresh boot; tracked as [B927](milestones/backlog.md#b927).
 
-Not yet met: a node on a vSphere provider refuses as a node on an unrealized
-substrate, and a multi-node `vsphere` cluster refuses as several nodes on
-another platform; tracked as [B733](milestones/m3.md#b733).
+Not yet met: a node on a vSphere provider lacks cluster installation support,
+and a multi-node `vsphere` cluster refuses as several nodes on
+another platform; tracked as [B733](milestones/m9.md#b733).
 
 
 ## Linux root preflight
@@ -446,7 +445,7 @@ reaches no input, because the agent installer forwards only the VIPs, vCenters
 and failure domains of a `vsphere` platform.
 
 Not yet met: no input carries `platform.vsphere`; tracked as
-[B733](milestones/m3.md#b733).
+[B733](milestones/m9.md#b733).
 
 The frozen inputs carry no secret value. The pull secret, the cluster SSH
 public key and each additional trust bundle are named as declarations in the
@@ -575,7 +574,7 @@ cluster's own, and each release repository of the distribution that no
 authored `source` maps, itself or by a path prefix, gains an entry naming
 `<registry url>/<repository>` with `NeverContactSource`: for OpenShift
 `quay.io/openshift-release-dev/ocp-release` and `ocp-v4.0-art-dev`, and for
-OKD, once [B748](milestones/backlog.md#b748) admits it, `quay.io/okd/scos-release`
+OKD, once [B748](milestones/m8.md#b748) admits it, `quay.io/okd/scos-release`
 and `scos-content`. The image build on the controller and every node then read
 the release from the mirror. That Registry may be a managed one on the
 [mirror host](infrastructure-services.md#mirror-host): its endpoint

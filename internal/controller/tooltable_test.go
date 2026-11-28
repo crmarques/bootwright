@@ -58,7 +58,7 @@ func TestADeclaredArtifactMirrorServesEveryPublicOriginClientAndNoVendorOne(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]string{"helm": "https://mirror.example.test/tools/helm/" + defaultTool(t, "helm").Version, "govc": "https://mirror.example.test/tools/govc", "openshift-clients": "", "openshift-install": ""}
+	want := map[string]string{"helm": "https://mirror.example.test/tools/helm/" + defaultTool(t, "helm").Version, "openshift-clients": "", "openshift-install": ""}
 	for _, tool := range tools {
 		if mirror, listed := want[tool.Kind]; !listed || tool.Mirror != mirror {
 			t.Errorf("%s takes the mirror %q, want %q", tool.Kind, tool.Mirror, mirror)

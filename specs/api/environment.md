@@ -51,7 +51,7 @@ release numbers or contact publishers.
 | --- | --- | --- |
 | `libvirt` | Native libvirt client, including `virsh` | `latest`; the grammar admits a distribution package version or `[EPOCH:]VERSION-RELEASE`, which a plan refuses ([refusal table](#refusal-table)). |
 | `helm` | Helm | An exact publisher release tag, optionally prefixed by `v`, at or above the build's minimum. |
-| `govc` | vSphere client | An exact publisher release tag, optionally prefixed by `v`, at or above the build's minimum. |
+| `govc` | Optional tool-table pin; the vSphere Machine adapter uses the locked pyVmomi SDK | An exact publisher release tag, optionally prefixed by `v`, at or above the build's minimum. |
 | `virtctl` | Upstream KubeVirt client | An exact publisher release tag, optionally prefixed by `v`, at or above the build's minimum. |
 
 The private interpreter, `ansible-core` and the baseline native packages have

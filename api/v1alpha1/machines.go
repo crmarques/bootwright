@@ -117,7 +117,7 @@ func machineNetworkSchema() *Shape {
 func machineProfileSchema(variant string) *Shape {
 	fields := []Field{required("name", nonempty()), defaulted("cpu", integer("0", "1024"), IntegerValue("0")), defaulted("memoryMiB", integer("0", "16777216"), IntegerValue("0")), defaulted("diskGiB", integer("0", "65536"), IntegerValue("0"))}
 	if variant == "vsphere" {
-		fields = append(fields, field("template", nonempty()), field("failureDomainRef", nestedIn(Scope{Noun: "failure domain", Entries: []string{"vsphere", "failureDomains"}})))
+		fields = append(fields, field("template", nonempty()), field("placementRef", nestedIn(Scope{Noun: "placement", Entries: []string{"vsphere", "placements"}})))
 	}
 	if variant != "kubevirt" {
 		disk := record(required("name", name()), required("sizeGiB", integer("1", "65536")))
@@ -126,7 +126,7 @@ func machineProfileSchema(variant string) *Shape {
 		}
 		fields = append(fields, field("dataDisks", named(disk)))
 	}
-	if variant == "libvirt" {
+	if variant == "libvirt" || variant == "vsphere" {
 		fields = append(fields, field("tpm", record()))
 	} else if variant == "kubevirt" {
 		snapshot := atomic(external(record(required("namespace", name()), required("name", dns()), required("uid", name()))))
@@ -138,12 +138,12 @@ func machineProfileSchema(variant string) *Shape {
 func machineProviderSchema() *Shape {
 	baremetal := record(field("defaults", record(field("bmc", record(field("credentialsRef", secret("usernamePassword")), field("tls", record(field("trustBundleRef", secret("caBundle", "trustBundle")))), field("virtualMedia", machineVirtualMediaSchema()))))))
 	libvirt := record(required("machineRef", ref(Machine)), defaulted("uri", enumeration("qemu:///system"), StringValue("qemu:///system")), field("capacityReserve", record(required("cpu", integer("0", "9223372036854775807")), required("memoryMiB", integer("0", "8796093022207")), required("diskGiB", integer("0", "8589934591")))), required("bmcEmulation", record(required("bindAddress", ip()), required("certificateRef", secret("tlsCertificate")), defaulted("port", port(), IntegerValue("8000")), required("auth", record(required("credentialsRef", secret("usernamePassword")))))), defaulted("machineProfiles", machineProfileSchema("libvirt"), ListValue()))
-	vcenters := nonemptyArray(&Shape{Type: Sequence, Atomic: true, NameKey: "server", Element: record(required("server", lexical(LexicalHost)), field("port", integer("0", "65535")), required("datacenters", nonemptyArray(set(nonempty()))), required("credentialsRef", secret("usernamePassword")), defaulted("disableCertificateVerification", boolean(), BoolValue(false)))})
-	topology := record(required("datacenter", nonempty()), required("computeCluster", nonempty()), required("datastore", nonempty()), required("networks", nonemptyArray(set(nonempty()))), field("folder", nonempty()), field("resourcePool", nonempty()))
-	vsphere := record(required("vcenters", vcenters), required("failureDomains", nonemptyArray(named(record(required("name", nonempty()), required("region", nonempty()), required("zone", nonempty()), required("server", nonempty()), required("topology", topology))))), field("isoStaging", record(field("datastore", nonempty()), field("folder", nonempty()))), defaulted("machineProfiles", machineProfileSchema("vsphere"), ListValue()))
+	vcenters := nonemptyArray(&Shape{Type: Sequence, Atomic: true, NameKey: "server", Element: record(required("server", lexical(LexicalHost)), defaulted("port", port(), IntegerValue("443")), required("credentialsRef", secret("usernamePassword")), field("trustBundleRef", secret("caBundle", "trustBundle")))})
+	placements := nonemptyArray(named(record(required("name", name()), required("server", nonempty()), required("datacenter", nonempty()), required("computeCluster", nonempty()), required("datastore", nonempty()), required("folder", nonempty()), required("resourcePool", nonempty()))))
+	vsphere := record(required("vcenters", vcenters), required("placements", placements), field("isoStaging", record(field("datastore", nonempty()), field("folder", nonempty()))), defaulted("machineProfiles", machineProfileSchema("vsphere"), ListValue()))
 	kubevirt := choice(field("hostClusterRef", clusters(ContainerClusterCategory)), field("kubeconfigRef", secret("opaque")))
 	kubevirt.Fields = append(kubevirt.Fields, required("namespace", name()), field("storageClassRef", externalRef()), defaulted("machineProfiles", machineProfileSchema("kubevirt"), ListValue()))
-	segment := choice(field("baremetal", record()), field("libvirt", record(required("bridge", lexical(LexicalBridge)))), field("vsphere", record(required("portgroup", nonempty()), field("distributedSwitch", nonempty()))), field("kubevirt", record(required("networkRef", external(record(field("apiGroup", text()), field("kind", nonempty()), required("name", nonempty()), field("namespace", name())))))))
+	segment := choice(field("baremetal", record()), field("libvirt", record(required("bridge", lexical(LexicalBridge)))), field("vsphere", record(required("portgroup", nonempty()))), field("kubevirt", record(required("networkRef", external(record(field("apiGroup", text()), field("kind", nonempty()), required("name", nonempty()), field("namespace", name())))))))
 	segment.Fields = append([]Field{required("name", name()), field("untaggedNetworkRef", ref(Network)), field("taggedNetworkRefs", set(ref(Network))), defaulted("mtu", integer("576", "65536"), IntegerValue("1500"))}, segment.Fields...)
 	provider := choice(field("baremetal", baremetal), field("libvirt", libvirt), field("vsphere", vsphere), field("kubevirt", kubevirt))
 	provider.Fields = append(provider.Fields, field("segments", named(segment)))

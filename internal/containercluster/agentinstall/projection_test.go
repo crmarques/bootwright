@@ -385,14 +385,12 @@ func TestUnsupportedNamesEveryClusterWithANodeThisContractCannotBoot(t *testing.
 // A node's target error that carries no reason still refuses the cluster,
 // because an empty reason would admit it.
 func TestANodeTargetErrorWithoutAReasonStillRefuses(t *testing.T) {
-	catalog := singleNodeCatalog()
-	bound, _ := catalog.Find(api.Machine, "sno-01")
 	for name, err := range map[string]error{
 		"no diagnostic":   errors.New("no diagnostic"),
 		"an empty reason": diagnostics.NewFailure("api.value", "", ""),
 	} {
 		t.Run(name, func(t *testing.T) {
-			if reason, _ := nodeTargetRefusal(catalog, bound, err); reason != "a declared node's realized target does not derive" {
+			if reason, _ := nodeTargetRefusal(err); reason != "a declared node's realized target does not derive" {
 				t.Fatalf("reason = %q", reason)
 			}
 		})

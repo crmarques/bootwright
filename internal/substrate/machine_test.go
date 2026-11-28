@@ -89,7 +89,7 @@ func TestRootDevicePathIsDerivedOnVirtualProvidersAndDeclaredOnPhysicalOnes(t *t
 	}{
 		"libvirt":                   {m("providerRef", "lab", "profileRef", "small"), "/dev/vda"},
 		"kubevirt":                  {m("providerRef", "cluster", "profileRef", "small"), "/dev/vda"},
-		"vsphere declares none":     {m("providerRef", "vc", "profileRef", "small"), ""},
+		"vsphere":                   {m("providerRef", "vc", "profileRef", "small"), "/dev/sda"},
 		"a bare-metal wwn":          {m("providerRef", "floor", "rootDisk", m("wwn", rootWWN)), "/dev/disk/by-id/wwn-" + rootWWN},
 		"a bare-metal 128-bit wwn":  {m("providerRef", "floor", "rootDisk", m("wwn", "0x5000c500a1b2c3d45000c500a1b2c3d4")), "/dev/disk/by-id/wwn-0x5000c500a1b2c3d45000c500a1b2c3d4"},
 		"a bare-metal deviceName":   {m("providerRef", "floor", "rootDisk", m("hints", m("deviceName", "/dev/sda"))), "/dev/sda"},

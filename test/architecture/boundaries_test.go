@@ -126,7 +126,7 @@ func packageRoles() map[string]packageRole {
 		"machine/access", "machine/sessionpolicy", "machine/account", "machine/hardware", "machine/inventory", "machine/power", "managedos/media", "managedos/installation", "managedos/hostfirewall", "managedos/physicalerase", "managedos/diskdiscovery", "managedos/providedupdate", "managedos/providedhostname", "managedos/providedregistration", "managedos/providedtime",
 		"nativeartifacts/rendering", "reconciliation/lifecycle",
 		"secrets/custody", "secrets/encryption", "storage/preflight", "storage/rendering", "storage/ceph",
-		"substrate/baremetal", "substrate/kubevirt", "substrate/libvirt", "trust/enrollment", "workspace/catalogpurge", "workspace/contexts",
+		"substrate/baremetal", "substrate/vsphere", "substrate/kubevirt", "substrate/libvirt", "trust/enrollment", "workspace/catalogpurge", "workspace/contexts",
 	} {
 		roles["internal/"+capability] = applicationRole
 	}
@@ -159,7 +159,9 @@ func applicationDependencies() map[string][]string {
 		// The emulated BMC's image acquisition uses the host Machine's egress
 		// exactly as a managed service's does; the arm projects its Machines
 		// into the capacity budget's allocations.
-		"internal/substrate/libvirt":   append(capabilityDependencies(), "internal/infrastructureservices/managedservice", "internal/substrate/capacity"),
+		"internal/substrate/libvirt": append(capabilityDependencies(), "internal/infrastructureservices/managedservice", "internal/substrate/capacity"),
+		// Destroy records the retained VM home through the lifecycle attempt log.
+		"internal/substrate/vsphere":   {"internal/reconciliation/lifecycle", "internal/reconciliation/operationstore"},
 		"internal/substrate/baremetal": {"internal/reconciliation/lifecycle"},
 		"internal/substrate/kubevirt":  capabilityDependencies(),
 		// Storage derives its DVD package endpoint through ArtifactServer's

@@ -69,28 +69,29 @@ spec:
   vsphere:
     vcenters:
       - server: vcenter.example.test
-        datacenters:
-          - example-dc
         credentialsRef: acceptance-provider-credentials
 
-    failureDomains:
+    placements:
       - name: example-zone
         server: vcenter.example.test
-        region: example-region
-        zone: example-zone
-        topology:
-          datacenter: example-dc
-          computeCluster: example-compute
-          datastore: example-store
-          networks:
-            - example-network
+        datacenter: /example-dc
+        computeCluster: /example-dc/host/example-compute
+        datastore: /example-dc/datastore/example-store
+        resourcePool: /example-dc/host/example-compute/Resources
+        folder: /example-dc/vm/example-guests
 
     machineProfiles:
       - name: clone
         cpu: 4
         memoryMiB: 8192
         diskGiB: 80
-        template: Templates/example-rhel
+        template: /example-dc/vm/Templates/example-rhel
+
+  segments:
+    - name: guests
+
+      vsphere:
+        portgroup: /example-dc/network/guests
 
 ---
 apiVersion: bootwright.io/v1alpha1
@@ -123,9 +124,27 @@ spec:
     providerRef: acceptance-vsphere
     profileRef: clone
 
+    nics:
+      - name: ens192
+        segmentRef: guests
+
   os:
     install:
       profileRef: acceptance-clone
+      hostKeyRef: acceptance-clone-key
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: acceptance-clone-key
+
+spec:
+  type: sshKeyPair
+
+  source:
+    generated:
+      keyType: ed25519
 
 ---
 apiVersion: bootwright.io/v1alpha1

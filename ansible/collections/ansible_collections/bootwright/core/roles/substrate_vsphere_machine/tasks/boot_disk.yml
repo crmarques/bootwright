@@ -1,0 +1,14 @@
+---
+- name: Clear the refusal an earlier entry point named
+  ansible.builtin.set_fact:
+    substrate_vsphere_machine_refusal: ''
+  no_log: true
+
+- name: Run boot_disk through vCenter
+  bootwright.core.substrate_vsphere_api:
+    operation: boot_disk
+    port: '{{ bootwright_machine_port }}'
+  register: substrate_vsphere_machine_port_result
+  failed_when: false
+  no_log: true
+  diff: false

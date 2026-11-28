@@ -218,6 +218,24 @@ Frozen HTTP requests retain their original URL and Kickstart bytes. Sources:
 [URL source TLS configuration](https://github.com/rhinstaller/anaconda/blob/rhel-9/pyanaconda/modules/payloads/source/url/url.py),
 and [DNF tree and repository TLS propagation](https://github.com/rhinstaller/anaconda/blob/rhel-9/pyanaconda/payload/dnf/payload.py).
 
+## vSphere managed installations
+
+On a vSphere Machine, the ISO path uses the Anaconda image, Kickstart,
+private host key and package source. The substrate port stages media and
+provides management identity. With `templateClone.seed.cloudInit` the
+[VM full clone](substrates.md#vsphere-machine-realization) boots from disk.
+A prepared RHEL template must have a clean machine ID, regenerated host key
+policy, VMware guest tools and the cloud-init VMware datasource enabled.
+Inject a unique seed identity and the selected host key over the verified
+management channel. Prove cloud-init completed on the clone, SSH presents
+that key and the guest has the requested RHEL release. With
+`growRootFilesystem: true`, qualify and verify growth on a direct, last-partition
+XFS or ext4 root with growpart available. Other layouts can leave root sizing
+to the template with `growRootFilesystem: false`. After proof, record the guest
+receipt, remove private guestinfo and cloud-init seed caches, and retire
+cloud-init on this Machine to preserve first-boot identity across reboots.
+A clone consumes no installer media.
+
 ## Installation
 
 ### Selection
@@ -307,9 +325,6 @@ subscription source's registration material. The installer image whose
 Kickstart names their private URL travels with them, only through the
 [private path](#physical-private-publication); every other secret-bearing arm
 stays refused until it is separately specified.
-
-Not yet met: a profile selecting `templateClone` refuses before registration;
-tracked as [B99](milestones/m1.md#b99).
 
 The Environment's
 [rescue declaration](api/environment.md#lifecycle-rescue-declaration) is
@@ -2178,7 +2193,7 @@ them.
 | Satellite, release offered | The release is set, as on the hosted service, and the content view serves that minor; the evidence pin is `release`. |
 | Satellite, release not offered | The release is unset and the selected content view (explicit or inherited from the activation key) is the pin; the evidence pin is `contentView`. A newer minor in the view stops the update at `update-release-drift`. |
 | Configured repositories beside a Satellite | No release variable is written, so `$releasever` expands to the major; a minor is written literally in `baseURL`. |
-| `templateClone` qcow2 | Refused; steps 2 to 6 read no installer media ([template-clone installer arm](deferred/machine-arms.md#template-clone-installer-arm)). |
+| `templateClone` qcow2 | A vSphere template clone consumes no QCOW2 or installer media ([MachineInstallProfile](api/machines.md#machineinstallprofile)). |
 | Provided Machine | [Provided OS updates](#provided-os-updates) use the host’s existing OS and repositories. |
 
 ## Provided block waits
@@ -2873,7 +2888,7 @@ the length of that many bytes in base64url without padding.
 | A VLAN install interface on a managed libvirt network | on a `libvirt` provider, a `vlan` install interface whose NICs select a managed `Network` without `vlan` | `a managed libvirt network gives its host an untagged address on <bridge>, so the controller cannot reach the VLAN install address of <machine>` | `attach <machine> to an existing-bridge segment whose host carries VLAN <id>, or install over an untagged interface` |
 | A VLAN install interface on another VLAN than a leg's | on a `libvirt` provider, a `vlan` install interface whose NICs select a [tagged managed `Network`](api/networks.md#tagged-managed-networks) whose `vlan` is not its `vlan.id`; one whose `vlan.id` is the leg's is reached through the host's leg, and other VLANs the leg's segment carries stack beside it (`TestAVLANInstallOnALegSegmentIsReachedThroughTheLeg`) | `tagged managed <network> gives its host an address only on VLAN <vlan> of trunk <bridge>, so the controller cannot reach the VLAN <id> install address of <machine>` | `install <machine> over a VLAN <vlan> interface on that trunk, or attach it to a segment whose host carries VLAN <id>` |
 | Two owners of the installed name servers | a network with DNS server selections whose composed native document also authors `dns-resolver.config.server` | `the installed name servers of <machine> are its network's DNS server selections, and its native dns-resolver.config.server declares them a second time` | `remove dns-resolver.config.server from the network of <machine>, or remove its DNS server selections` |
-| Another installer | a profile's `spec.installer` without `anaconda`, such as `templateClone` | `this executable installs an operating system only through the anaconda installer, which the install profile does not select` | `select spec.installer.anaconda on <profile>` |
+| Another installer | a clone profile selected by a Machine without a clone-capable provider profile and template | `the template clone installer requires a Machine profile with a source template on a substrate that supports cloning` | `select spec.installer.anaconda on <profile>, or select a machine profile with a source template` |
 | An Ed25519 delivered host key under FIPS | a FIPS profile on a delivered-key Machine whose host-key Secret generates Ed25519, the default included | `a FIPS-mode installation refuses Ed25519 keys, and the delivered host key <secret> generates one` | `declare spec.source.generated.keyType as ecdsaP256, ecdsaP384, ecdsaP521 or rsa on <secret>` |
 | An Ed25519 fleet key under FIPS | a profile's `spec.customizations.security.fips.enabled: true` while the Environment's `spec.remoteMachinesAccessKey.keyRef` names a Secret whose `spec.source.generated.keyType` is `ed25519`, the default included | `a FIPS-mode installation refuses Ed25519 keys, and the fleet key <secret> generates one` | `declare spec.source.generated.keyType as ecdsaP256, ecdsaP384, ecdsaP521 or rsa on <secret>` |
 | A hostname artifact endpoint under disk encryption | a profile selecting `spec.customizations.security.diskEncryption` whose `spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint` resolves to a URL whose host is not an IP literal | `the installer fetches the recovery passphrase before it configures name resolution, so the artifact server endpoint of <profile> must be addressed by IP` | `select an artifact server endpoint whose address is an IP literal in spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint on <profile>` |

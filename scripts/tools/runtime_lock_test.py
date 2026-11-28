@@ -165,15 +165,16 @@ class Report(unittest.TestCase):
     def test_a_report_gives_each_file_its_identity_and_hash(self):
         report = {
             "install": [
+                entry("pyvmomi", "9.1.2.0", "pyvmomi-9.1.2.0-py3-none-any.whl", b"v"),
                 entry("urllib3", "2.8.0", "urllib3-2.8.0-py3-none-any.whl", b"u"),
                 entry("PyYAML", "6.0.3", "pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.whl", b"y"),
                 entry("ansible-core", "2.21.4", "ansible_core-2.21.4-py3-none-any.whl", b"a"),
             ]
         }
         files = runtime_lock.report_files(report, "3.12")
-        self.assertEqual([file["name"] for file in files], ["ansible-core", "pyyaml", "urllib3"])
-        self.assertEqual(files[1]["sha256"], hashlib.sha256(b"y").hexdigest())
-        self.assertEqual(files[1]["filename"], "pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.whl")
+        self.assertEqual([file["name"] for file in files], ["ansible-core", "pyvmomi", "pyyaml", "urllib3"])
+        self.assertEqual(files[2]["sha256"], hashlib.sha256(b"y").hexdigest())
+        self.assertEqual(files[2]["filename"], "pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.whl")
 
     def test_the_omitted_distributions_leave_the_lock(self):
         omitted = [
@@ -184,13 +185,14 @@ class Report(unittest.TestCase):
         ]
         report = {
             "install": [
+                entry("pyvmomi", "9.1.2.0", "pyvmomi-9.1.2.0-py3-none-any.whl", b"v"),
                 entry("urllib3", "2.8.0", "urllib3-2.8.0-py3-none-any.whl", b"u"),
                 *omitted,
                 entry("ansible-core", "2.21.4", "ansible_core-2.21.4-py3-none-any.whl", b"a"),
             ]
         }
         files = runtime_lock.report_files(report, "3.12")
-        self.assertEqual([file["name"] for file in files], ["ansible-core", "urllib3"])
+        self.assertEqual([file["name"] for file in files], ["ansible-core", "pyvmomi", "urllib3"])
         self.assertEqual(sorted(runtime_lock.normalize(e["metadata"]["name"]) for e in omitted), list(runtime_lock.OMITTED))
 
     def test_a_report_without_the_requested_packages_is_refused(self):
@@ -200,6 +202,7 @@ class Report(unittest.TestCase):
 
     def test_a_file_outside_pythonhosted_or_without_a_hash_is_refused(self):
         base = [
+            entry("pyvmomi", "9.1.2.0", "pyvmomi-9.1.2.0-py3-none-any.whl", b"v"),
             entry("urllib3", "2.8.0", "urllib3-2.8.0-py3-none-any.whl", b"u"),
             entry("ansible-core", "2.21.4", "ansible_core-2.21.4-py3-none-any.whl", b"a"),
         ]
@@ -275,6 +278,7 @@ class Commands(unittest.TestCase):
             abi: {
                 "install": [
                     self.mirror.add("ansible-core", "2.21.4", "ansible_core-2.21.4-py3-none-any.whl"),
+                    self.mirror.add("pyvmomi", "9.1.2.0", "pyvmomi-9.1.2.0-py3-none-any.whl"),
                     self.mirror.add("urllib3", "2.8.0", "urllib3-2.8.0-py3-none-any.whl"),
                     self.mirror.add("PyYAML", "6.0.3", f"pyyaml-6.0.3-cp3{abi[2:]}-cp3{abi[2:]}-manylinux_2_28_x86_64.whl"),
                 ]
@@ -328,7 +332,7 @@ class Commands(unittest.TestCase):
         self.assertEqual(table["format"], "bootwright.controller.runtime-licenses-v1")
         self.assertEqual(
             [(entry["name"], entry["version"]) for entry in table["distributions"]],
-            [("ansible-core", "2.21.4"), ("pip", "26.0.1"), ("pyyaml", "6.0.3"), ("urllib3", "2.8.0")],
+            [("ansible-core", "2.21.4"), ("pip", "26.0.1"), ("pyvmomi", "9.1.2.0"), ("pyyaml", "6.0.3"), ("urllib3", "2.8.0")],
         )
         self.assertTrue(all(entry["license"] == "MIT" and entry["source"] == "License-Expression" for entry in table["distributions"]))
         self.assertEqual(self.licenses.read_text(), json.dumps(table, indent=2) + "\n")
@@ -336,6 +340,7 @@ class Commands(unittest.TestCase):
     def test_a_wheel_that_declares_no_license_needs_a_reviewed_entry_and_keeps_it(self):
         self.report.write_text(json.dumps({abi: {"install": [
             self.mirror.add("ansible-core", "2.21.4", "ansible_core-2.21.4-py3-none-any.whl"),
+            self.mirror.add("pyvmomi", "9.1.2.0", "pyvmomi-9.1.2.0-py3-none-any.whl"),
             self.mirror.add("urllib3", "2.8.0", "urllib3-2.8.0-py3-none-any.whl"),
             self.mirror.add("Jinja2", "3.1.6", "jinja2-3.1.6-py3-none-any.whl", ("Classifier: License :: OSI Approved :: BSD License",)),
             self.mirror.add("PyYAML", "6.0.3", f"pyyaml-6.0.3-cp3{abi[2:]}-cp3{abi[2:]}-manylinux_2_28_x86_64.whl"),
@@ -379,7 +384,7 @@ class Commands(unittest.TestCase):
     def test_verify_passes_a_lock_and_names_a_changed_file(self):
         self.assertEqual(self.generate()[0], 0)
         status, out, _ = run("verify", "--lock", str(self.output), *self.mirror.args())
-        self.assertEqual((status, out.strip()), (0, "verified 5 files"))
+        self.assertEqual((status, out.strip()), (0, "verified 6 files"))
         (self.mirror.root / "files/packages/aa/bb/ansible_core-2.21.4-py3-none-any.whl").write_bytes(b"x")
         status, _, err = run("verify", "--lock", str(self.output), *self.mirror.args())
         self.assertEqual(status, 1)
@@ -396,7 +401,7 @@ class Commands(unittest.TestCase):
         status, _, err = run("verify", "--lock", str(self.output), *self.mirror.args())
         self.assertEqual(status, 1)
         self.assertIn("ansible_core-2.21.4-py3-none-any.whl: declares MIT in License-Expression, the license table has GPL-3.0-or-later", err)
-        self.assertIn("the license table has no entry for pyyaml 6.0.3", err)
+        self.assertIn("the license table has no entry for pyvmomi 9.1.2.0", err)
         self.assertIn("gone 1.0 is in the license table and not in the lock", err)
         self.licenses.write_text(good)
         self.assertEqual(run("verify", "--lock", str(self.output), *self.mirror.args())[0], 0)

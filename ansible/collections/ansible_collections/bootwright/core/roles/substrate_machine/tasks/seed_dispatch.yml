@@ -1,0 +1,17 @@
+---
+- name: Refuse seed operations on a Machine without a seed port
+  ansible.builtin.assert:
+    that: bootwright_machine_arm in substrate_machine_seed_arms
+    quiet: true
+
+- name: Enter the arm's private seed port
+  ansible.builtin.include_role:
+    name: '{{ substrate_machine_seed_arms[bootwright_machine_arm] }}'
+    tasks_from: '{{ substrate_machine_entry }}'
+
+- name: Publish the seed port answer
+  ansible.builtin.set_fact:
+    substrate_machine_port_result: "{{ lookup('ansible.builtin.vars', substrate_machine_prefix ~ '_port_result') }}"
+  vars:
+    substrate_machine_prefix: "{{ substrate_machine_seed_arms[bootwright_machine_arm].split('.')[-1] }}"
+  no_log: true

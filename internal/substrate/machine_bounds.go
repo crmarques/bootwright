@@ -64,6 +64,9 @@ const (
 
 // MachineBoundsFor refuses arms that have no qualified machine port.
 func MachineBoundsFor(arm Arm) (MachineBounds, bool) {
+	if arm == ArmVSphere {
+		return MachineBounds{ControllerKind: "api", StateRead: 2 * time.Minute, PowerRead: 2 * time.Minute, MediaInsert: 35 * time.Minute, MediaEject: 10 * time.Minute, Power: 10 * time.Minute, PreBoot: 2 * time.Minute, BootMedia: 10 * time.Minute, BootDisk: 10 * time.Minute, NodeMargin: 24 * time.Minute, BootAllowance: 60 * time.Minute, Fanout: 1}, true
+	}
 	if arm == ArmKubeVirt {
 		return MachineBounds{
 			ControllerKind: "api", StateRead: KubeVirtStateReadBound, PowerRead: KubeVirtPowerReadBound,

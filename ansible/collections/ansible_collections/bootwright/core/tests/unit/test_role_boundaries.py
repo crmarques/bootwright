@@ -1113,6 +1113,9 @@ def fixed_scratch_problems(where, text):
     found = []
     for match in SCRATCH_ROOTS.finditer(text):
         path = match.group(0)
+        if where == "managedos_install_anaconda/tasks/clone_seal.yml" and path in (
+                "/run/cloud-init/combined-cloud-config.json", "/run/cloud-init/instance-data-sensitive.json"):
+            continue  # cloud-init's native caches on the installed guest
         if not any(path == allowed or path.startswith(allowed + "/") for allowed in SCRATCH_ALLOWED):
             found.append("%s: names the fixed path %s; use the invocation scratch" % (where, path))
     return found

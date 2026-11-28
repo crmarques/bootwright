@@ -21,7 +21,7 @@ request-schema:
   deadlineSeconds int
   install struct installation.Request
   install.address string
-  install.bootMedia struct installation.Media
+  install.bootMedia struct installation.Media omitzero
   install.bootMedia.name string
   install.bootMedia.sha256 string
   install.bootMedia.size int64
@@ -50,6 +50,13 @@ request-schema:
   install.budgets.sessions.unregistration int
   install.budgets.sessions.update int
   install.budgets.sessions.updateCompletion int
+  install.cloudInit *struct installation.CloudInit omitempty
+  install.cloudInit.growRootFilesystem bool
+  install.cloudInit.keyType string
+  install.cloudInit.network opaque
+  install.cloudInit.release string
+  install.cloudInit.rootDiskBytes int64
+  install.cloudInit.userData opaque
   install.discoveryProof *struct diskselection.Proof omitempty
   install.discoveryProof.inventoried []string omitempty
   install.discoveryProof.reportDigest string
@@ -109,10 +116,12 @@ request-schema:
   install.registration.satellite.lifecycleEnvironment string omitempty
   install.registration.satellite.trustBundleRef string
   install.requires struct installation.Requires
+  install.requires.cloudInit bool omitempty
   install.requires.fips bool
   install.requires.registration bool
   install.requires.rootEncryption bool
   install.requires.rootWWN bool
+  install.requires.tpm2 bool omitempty
   install.requires.update bool
   install.servedRoot string
   install.target struct installation.Target
@@ -171,7 +180,9 @@ request-schema:
   install.target.machinePort.verification string omitempty
   install.target.machinePort.verify bool
   install.target.physical bool
+  install.target.portMACs []string omitempty
   install.target.substrate string
+  install.target.tpm2 bool omitempty
   install.target.uri string omitempty
   install.tlsCertificateRef string omitempty
   install.tree *struct installation.Publication omitempty

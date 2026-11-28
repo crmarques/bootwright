@@ -1,0 +1,560 @@
+argument_specs:
+  apply:
+    short_description: Create an owned vSphere VM from its frozen request.
+    options: &request
+      bootwright_substrate_vsphere_request:
+        type: dict
+        required: true
+        options:
+          version:
+            choices:
+              - machine-vsphere-v1
+            type: str
+            required: true
+          identity:
+            type: dict
+            required: true
+          name:
+            type: str
+            required: true
+          owner:
+            type: str
+            required: true
+          server:
+            type: str
+            required: true
+          credentialsRef:
+            type: str
+            required: true
+          trustBundleRef:
+            type: str
+          tlsVerify:
+            type: bool
+            required: true
+          datacenter:
+            type: str
+            required: true
+          computeCluster:
+            type: str
+            required: true
+          resourcePool:
+            type: str
+            required: true
+          datastore:
+            type: str
+            required: true
+          folder:
+            type: str
+            required: true
+          template:
+            type: str
+          cpu:
+            type: int
+            required: true
+          memoryMiB:
+            type: int
+            required: true
+          diskGiB:
+            type: int
+            required: true
+          dataDisks:
+            type: list
+            elements: dict
+            required: true
+          interfaces:
+            type: list
+            elements: dict
+            required: true
+          tpm:
+            type: bool
+            required: true
+          stagingDatastore:
+            type: str
+            required: true
+          stagingFolder:
+            type: str
+            required: true
+          placement:
+            type: dict
+            required: true
+          provider:
+            type: str
+            required: true
+      bootwright_substrate_vsphere_material:
+        type: dict
+        required: true
+        options:
+          knownHosts:
+            type: path
+          identity:
+            type: path
+          controllerUser:
+            type: path
+            required: true
+          controllerPassword:
+            type: path
+            required: true
+          controllerCA:
+            type: path
+          operation:
+            type: str
+            required: true
+          block:
+            type: str
+            required: true
+          registered:
+            type: str
+            required: true
+          pinned:
+            type: str
+            required: true
+      bootwright_substrate_vsphere_digest:
+        type: str
+        required: true
+
+  observe:
+    short_description: Read the VM and its recorded disk identities.
+    options: *request
+
+  destroy:
+    short_description: Remove the owned stopped VM and prove its disks absent.
+    options: *request
+
+  pre_boot:
+    short_description: Prove a VM this context realized is off before media is inserted.
+    options:
+      bootwright_run_scratch:
+        type: path
+      bootwright_machine_port:
+        type: dict
+        required: true
+        options:
+          media_volume:
+            type: str
+            required: false
+          endpoint:
+            type: str
+            required: true
+          user:
+            type: path
+            required: true
+          password:
+            type: str
+          ca:
+            type: str
+          verify:
+            type: bool
+            required: true
+          prove_macs:
+            type: list
+            elements: str
+          verification:
+            type: str
+          media_identity:
+            type: str
+          pinned_uuid_base64:
+            type: str
+          pinned_serial_base64:
+            type: str
+          expected:
+            type: list
+            elements: str
+          require_tpm:
+            type: bool
+          firmware:
+            type: dict
+          root_volume:
+            type: dict
+          root_disk:
+            type: dict
+
+  boot_media:
+    short_description: Start the VM from the media it presents.
+    options:
+      bootwright_run_scratch:
+        type: path
+      bootwright_machine_port:
+        type: dict
+        required: true
+        options:
+          media_volume:
+            type: str
+            required: false
+          endpoint:
+            type: str
+            required: true
+          user:
+            type: path
+            required: true
+          password:
+            type: str
+          ca:
+            type: str
+          verify:
+            type: bool
+            required: true
+          prove_macs:
+            type: list
+            elements: str
+          verification:
+            type: str
+          media_identity:
+            type: str
+          pinned_uuid_base64:
+            type: str
+          pinned_serial_base64:
+            type: str
+          installer_powers_off:
+            type: bool
+            required: true
+
+  boot_disk:
+    short_description: Point the VM at its installed disk.
+    options:
+      bootwright_run_scratch:
+        type: path
+      bootwright_machine_port:
+        type: dict
+        required: true
+        options:
+          media_volume:
+            type: str
+            required: false
+          endpoint:
+            type: str
+            required: true
+          user:
+            type: path
+            required: true
+          password:
+            type: str
+          ca:
+            type: str
+          verify:
+            type: bool
+            required: true
+          prove_macs:
+            type: list
+            elements: str
+          verification:
+            type: str
+          media_identity:
+            type: str
+          pinned_uuid_base64:
+            type: str
+          pinned_serial_base64:
+            type: str
+          power_on:
+            type: bool
+            required: true
+
+  identity_read:
+    short_description: Read the guest through its delivered SSH host key.
+    options:
+      bootwright_machine_identity:
+        type: dict
+
+  state_read:
+    short_description: Read the VM's power and presented media.
+    options:
+      bootwright_run_scratch:
+        type: path
+      bootwright_machine_port:
+        type: dict
+        required: true
+        options:
+          media_volume:
+            type: str
+            required: false
+          endpoint:
+            type: str
+            required: true
+          user:
+            type: path
+            required: true
+          password:
+            type: str
+          ca:
+            type: str
+          verify:
+            type: bool
+            required: true
+          prove_macs:
+            type: list
+            elements: str
+          verification:
+            type: str
+          pinned_uuid_base64:
+            type: str
+          pinned_serial_base64:
+            type: str
+          media_identity:
+            type: str
+          media:
+            type: bool
+          enable_verification:
+            type: bool
+          image_url_file:
+            type: path
+          retries:
+            type: int
+          delay:
+            type: int
+          inspect:
+            type: bool
+          expected_power:
+            type: str
+            choices:
+              - 'On'
+              - 'Off'
+
+  media_insert:
+    short_description: Upload an image into the stopped VM's media volume and present it.
+    options:
+      bootwright_run_scratch:
+        type: path
+      bootwright_machine_port:
+        type: dict
+        required: true
+        options:
+          media_volume:
+            type: str
+            required: false
+          endpoint:
+            type: str
+            required: true
+          user:
+            type: path
+            required: true
+          password:
+            type: str
+          ca:
+            type: str
+          verify:
+            type: bool
+            required: true
+          prove_macs:
+            type: list
+            elements: str
+          verification:
+            type: str
+          pinned_uuid_base64:
+            type: str
+          pinned_serial_base64:
+            type: str
+          media_identity:
+            type: str
+          enable_verification:
+            type: bool
+          image_url_file:
+            type: path
+          image_path:
+            type: path
+          private:
+            type: bool
+          trust:
+            type: str
+          certificate:
+            type: path
+
+  media_eject:
+    short_description: Take the media volume back and delete the recorded staged file.
+    options:
+      bootwright_run_scratch:
+        type: path
+      bootwright_machine_port:
+        type: dict
+        required: true
+        options:
+          media_volume:
+            type: str
+            required: false
+          endpoint:
+            type: str
+            required: true
+          user:
+            type: path
+            required: true
+          password:
+            type: str
+          ca:
+            type: str
+          verify:
+            type: bool
+            required: true
+          prove_macs:
+            type: list
+            elements: str
+          verification:
+            type: str
+          pinned_uuid_base64:
+            type: str
+          pinned_serial_base64:
+            type: str
+          media_identity:
+            type: str
+          restore_verification:
+            type: bool
+          remove_certificate:
+            type: bool
+          certificate:
+            type: path
+
+  power:
+    short_description: Bring the VM to a power state.
+    options:
+      bootwright_run_scratch:
+        type: path
+      bootwright_machine_port:
+        type: dict
+        required: true
+        options:
+          media_volume:
+            type: str
+            required: false
+          endpoint:
+            type: str
+            required: true
+          user:
+            type: path
+            required: true
+          password:
+            type: str
+          ca:
+            type: str
+          verify:
+            type: bool
+            required: true
+          prove_macs:
+            type: list
+            elements: str
+          verification:
+            type: str
+          pinned_uuid_base64:
+            type: str
+          pinned_serial_base64:
+            type: str
+          media_identity:
+            type: str
+          power:
+            type: str
+            required: true
+            choices:
+              - 'on'
+              - 'off'
+              - restart
+          force:
+            type: bool
+          attempts:
+            type: int
+
+  seed_insert:
+    short_description: Seed insert for a cloud-init template clone.
+    options:
+      bootwright_machine_port:
+        type: dict
+        required: true
+        options:
+          endpoint:
+            type: str
+          user:
+            type: str
+          password:
+            type: str
+          ca:
+            type: str
+          verify:
+            type: bool
+          prove_macs:
+            type: list
+            elements: str
+          verification:
+            type: str
+          media_identity:
+            type: str
+          pinned_uuid_base64:
+            type: str
+          pinned_serial_base64:
+            type: str
+          seed_identity:
+            type: str
+          metadata_path:
+            type: str
+          userdata_path:
+            type: str
+          media_volume:
+            type: str
+
+  seed_eject:
+    short_description: Seed eject for a cloud-init template clone.
+    options:
+      bootwright_machine_port:
+        type: dict
+        required: true
+        options:
+          endpoint:
+            type: str
+          user:
+            type: str
+          password:
+            type: str
+          ca:
+            type: str
+          verify:
+            type: bool
+          prove_macs:
+            type: list
+            elements: str
+          verification:
+            type: str
+          media_identity:
+            type: str
+          pinned_uuid_base64:
+            type: str
+          pinned_serial_base64:
+            type: str
+          seed_identity:
+            type: str
+          metadata_path:
+            type: str
+          userdata_path:
+            type: str
+          media_volume:
+            type: str
+
+  seed_read:
+    short_description: Seed read for a cloud-init template clone.
+    options:
+      bootwright_machine_port:
+        type: dict
+        required: true
+        options:
+          endpoint:
+            type: str
+          user:
+            type: str
+          password:
+            type: str
+          ca:
+            type: str
+          verify:
+            type: bool
+          prove_macs:
+            type: list
+            elements: str
+          verification:
+            type: str
+          media_identity:
+            type: str
+          pinned_uuid_base64:
+            type: str
+          pinned_serial_base64:
+            type: str
+          seed_identity:
+            type: str
+          metadata_path:
+            type: str
+          userdata_path:
+            type: str
+          media_volume:
+            type: str

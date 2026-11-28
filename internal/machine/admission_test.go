@@ -417,6 +417,22 @@ func TestBaremetalInstallationRequiresTheHostKeyItDelivers(t *testing.T) {
 	}
 }
 
+func TestVSphereInstallationRequiresADedicatedHostKey(t *testing.T) {
+	guest, _ := installedFixture()
+	provider := object(api.InfraProvider, "metal", m("vsphere", m()))
+	spec := guest.Spec()
+	unpinned := guest.WithSpec(spec.With("os", spec.Get("os").With("install", spec.Get("os", "install").Without("hostKeyRef"))))
+	for _, tc := range []struct {
+		guest   api.Object
+		missing bool
+	}{{guest, false}, {unpinned, true}} {
+		catalog := api.NewCatalog([]api.Object{tc.guest, provider})
+		if issues := validateHostKey(tc.guest, catalog); mentions(issues, "$.spec.os.install.hostKeyRef") != tc.missing {
+			t.Fatalf("missing host key %v: %+v", tc.missing, issues)
+		}
+	}
+}
+
 // The key belongs to the one lifecycle that delivers it. A machine its
 // substrate creates and proves another way declares none.
 func TestInstalledLibvirtAndBaremetalMayDeclareAHostKey(t *testing.T) {

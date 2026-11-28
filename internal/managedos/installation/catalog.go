@@ -155,7 +155,7 @@ func ContentDigest() string {
 		Implementation, requestVersion, kickstartVersion,
 		consumerPrefix, privatePrefix, servedRoot, MarkerPath, HostKeyPath,
 		NetworkDocumentPath, NetworkMarkerPath, strconv.Itoa(networkCheckpointSeconds), provedDiskBoot, substrate.RedfishMediaPolicy, substrate.PhysicalBootProof,
-		"anaconda-home-partition-policy", "subscription-package-source", "explicit-repository-proxy-policy",
+		"private-guestinfo-clone", "pinned-pushed-iso", "anaconda-home-partition-policy", "subscription-package-source", "explicit-repository-proxy-policy",
 		"power-cycled-guest-removal", "linux-discovered-root-installer-guard", installerUUIDToken,
 	)
 }

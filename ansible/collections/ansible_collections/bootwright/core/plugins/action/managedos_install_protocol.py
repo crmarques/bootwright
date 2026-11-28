@@ -74,9 +74,10 @@ REQUIRES = frozenset(("fips", "registration", "rootEncryption", "rootWWN", "upda
 
 
 def requires(arguments):
-    """The frozen requires block, exactly five booleans, or ValueError."""
+    """Read the frozen required and optional boolean proofs."""
     value = arguments.get("requires")
-    if not isinstance(value, dict) or set(value) != REQUIRES or not all(isinstance(value[key], bool) for key in REQUIRES):
+    if (not isinstance(value, dict) or not REQUIRES <= set(value) <= REQUIRES | {"cloudInit", "tpm2"}
+            or not all(isinstance(item, bool) for item in value.values())):
         raise ValueError("requires")
     return dict(value)
 
@@ -235,12 +236,18 @@ def presence(arguments, request_digest):
         "update": update(arguments.get("update"), required["update"]),
         "work": bool(observation.get("work")),
     }
+    if flag(arguments.get("tpm2")):
+        evidence["tpm2"] = True
+    if flag(arguments.get("cloudInit")):
+        evidence["cloudInit"] = True
     evidence["postcondition"] = bool(
         evidence["marker"] and evidence["hostKey"] and evidence["address"]
         and not evidence["media"] and evidence["power"] == "On"
         and ((not evidence["image"]) if private_delivery else evidence["image"])
         and not evidence["private"] and evidence["reachable"]
         and evidence["network"] and evidence["networkReboot"]
+        and (not required.get("cloudInit") or evidence.get("cloudInit"))
+        and (not required.get("tpm2") or evidence.get("tpm2"))
         and (evidence["fips"] or not required["fips"])
         and (evidence["rootEncryption"] or not required["rootEncryption"])
         and root_wwn(arguments, required) is not None

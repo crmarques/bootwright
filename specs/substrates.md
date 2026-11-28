@@ -21,9 +21,7 @@ per substrate arm, so a block resolves by kind and implementation together.
 
 ### Selection
 
-This contract realizes the libvirt, bare-metal and KubeVirt arms; the vSphere
-arm is specified under [vSphere machine realization](#vsphere-machine-realization)
-and is not realized. The arm an
+This contract realizes the libvirt, bare-metal, KubeVirt and vSphere Machine arms. The arm an
 `InfraProvider` declares is the selector: `libvirt` selects the implementation
 identities `substrate-host-libvirt-v1` and `machine-libvirt-v1`, `baremetal`
 selects `machine-baremetal-v1`, and `kubevirt` selects
@@ -36,11 +34,8 @@ of its own: `machine-baremetal-v1` claims it, realized only through its
 Machines. A KubeVirt provider's block only proves the host it is given and
 changes nothing on it. Provided Machines are never realized; one reached over
 SSH plans only the [server claim](#physical-machine-realization) of
-`machine-hardware-v1`. A vSphere
-provider, and every non-provided Machine on one, refuses before operation
-registration with one diagnostic per unsupported object, which names the object, why it is refused (a Machine's
-names its provider) and the remedy, as the [refusal table](#refusal-table)
-states.
+`machine-hardware-v1`. On a vSphere provider, the Machine block serves standalone
+`os.install` Machines. [M9](milestones/m9.md) owns cluster workload qualification.
 
 ### Implementations
 
@@ -69,6 +64,7 @@ to [`substrate.Target`](../internal/substrate/target.go).
 | `Substrate` | The Machine's substrate arm, which follows its provider ([hardware and substrate](api/machines.md#hardware-and-substrate)). |
 | `Port` | The arm whose machine port reaches it. |
 | `Physical` | Whether operator-owned hardware exists before and outlives this context. |
+| `TPM2` | Whether pre-boot verification must prove the TPM requested by the selected VM profile. |
 | `Controller` | The exact management endpoint, its credential and transport trust, including an arm's management API and the volume a pushed image is written to. |
 | `Identity` | The channel and handles that prove the Machine's contents. |
 | `Interfaces` | Presented interface names and reported hardware addresses, in declared order. |
@@ -76,15 +72,10 @@ to [`substrate.Target`](../internal/substrate/target.go).
 | `Firmware` | The selected firmware settings, when present. |
 | `PlacementMachine` | The Machine whose host reaches the management endpoint. |
 
-The KubeVirt and vSphere arms realize installer-provisioned Machines, those
-with `os.clusterInstalled`, as
-[KubeVirt machine realization](#kubevirt-machine-realization) and
-[vSphere machine realization](#vsphere-machine-realization) state. Their
-management-controller slot holds the arm's management API endpoint and
-credential instead of a BMC: for KubeVirt, `kubevirt:<namespace>/<vm>` and its
-kubeconfig. The other facts follow the record above.
-A Bootwright-installed Machine (`os.install`) on either arm refuses before
-registration as the [refusal table](#refusal-table) states.
+KubeVirt realizes installer-provisioned Machines for a cluster.
+[vSphere Machine realization](#vsphere-machine-realization) serves standalone
+managed RHEL Machines. Both use their native management API behind the
+substrate port.
 
 The libvirt provider host is the Machine `spec.libvirt.machineRef` names. It
 must be OS-ready and reachable through one of the
@@ -120,11 +111,9 @@ Its reason and remedy are the diagnostic's message and remediation, in which
 
 | Refusal | Path | Reason | Remedy |
 | --- | --- | --- | --- |
-| A provider on an unrealized substrate | an `InfraProvider` whose arm is `vsphere` | `this executable realizes no provider on the substrate it declares` | `remove <provider> and the Machines it hosts from the selected Environment, or declare them on a baremetal, kubevirt or libvirt provider` |
 | A KubeVirt provider on a host without OpenShift Virtualization | a KubeVirt provider's `spec.kubevirt.hostClusterRef` naming a cluster on which no add-on instance provides `kubevirt` | `a KubeVirt provider hosted by <cluster> needs an add-on instance on that cluster that provides kubevirt, which owns the provider's namespace and access` | `bind the kubevirt package to <cluster>, or name the host through spec.kubevirt.kubeconfigRef on <provider>` |
 | A KubeVirt provider on a host whose kubevirt add-on is authored | a KubeVirt provider's `spec.kubevirt.hostClusterRef` naming a cluster on which only an authored `ClusterAddon` that declares `provides: [kubevirt]` provides `kubevirt` | `a KubeVirt provider hosted by <cluster> needs the built-in kubevirt package on that cluster, which alone renders the provider's namespace, service account and roles, and <addon> that provides kubevirt does not` | `bind the kubevirt package to <cluster>, or name the host through spec.kubevirt.kubeconfigRef on <provider>` |
 | A hosted KubeVirt provider's segment on no host secondary network | a segment of a KubeVirt provider with `spec.kubevirt.hostClusterRef` whose `networkRef` names no `ClusterUserDefinedNetwork` among the host's `spec.networking.secondaryNetworks` | `a KubeVirt provider hosted by <cluster> attaches only to that cluster's secondary networks, whose selectors label the namespace its kubevirt instance owns, and segment <segment> names another network` | `name a ClusterUserDefinedNetwork among spec.networking.secondaryNetworks of <cluster> in segment <segment> of <provider>` |
-| A Machine on an unrealized substrate | a Machine with `os.install` or `os.clusterInstalled` whose `spec.hardware.providerRef` names such a provider | `its provider <provider> is on a substrate this executable does not realize` | `host <machine> on a baremetal, kubevirt or libvirt provider, declare its operating system provided, or remove it from the selected Environment` |
 | A template-backed Machine on KubeVirt | a Machine on a KubeVirt provider whose install profile selects `templateClone` | `this executable cannot yet provision a KubeVirt Machine from a template snapshot` | `use a build that realizes KubeVirt template cloning (B1166)` |
 | A Bootwright-installed Machine on KubeVirt | a Machine on a KubeVirt provider that selects the Anaconda install path | `a KubeVirt Machine is realized for an installer that supplies its operating system, and this one names an install profile` | `declare spec.os.clusterInstalled on <machine> instead of spec.os.install, or host it on a baremetal or libvirt provider` |
 | A KubeVirt profile without a size | a non-provided Machine on a KubeVirt provider whose profile's `cpu`, `memoryMiB` or `diskGiB` is `0` | `a KubeVirt machine is created with the CPU count, memory and root disk its profile declares, and its profile <profile> declares one as zero` | `set cpu, memoryMiB and diskGiB above zero on profile <profile> of <provider>` |
@@ -136,11 +125,11 @@ Its reason and remedy are the diagnostic's message and remediation, in which
 
 One row per realized arm and management-controller family, with the operator
 gates that qualify it. The [acceptance ledger](../docs/acceptance.md#ledger)
-owns the dated rows that accepted part of it. The vSphere arm is not realized
-and has no row.
+owns the dated rows that accepted part of it. The vSphere gate covers standalone Machines.
 
 | Arm | Management controller | Operator gates | Ledger rows |
 | --- | --- | --- | --- |
+| `vsphere` | vCenter | [B99](milestones/m1.md#b99) | [acceptance ledger](../docs/acceptance.md#ledger) |
 | `libvirt` | emulated Redfish service (sushy-tools) | [B74](milestones/m1.md#b74), [B75](milestones/m1.md#b75), [B76](milestones/m1.md#b76), [B326](milestones/m1.md#b326), [B346](milestones/m1.md#b346), [B703](milestones/m1.md#b703) | [the ledger](../docs/acceptance.md#ledger)'s rows whose example runs a libvirt provider |
 | `baremetal` | physical Redfish BMC | [B70](milestones/m1.md#b70), [B73](milestones/m1.md#b73), [B78](milestones/m1.md#b78), [B305](milestones/m1.md#b305), [B319](milestones/m1.md#b319) | `unrun` |
 | `kubevirt` | the host cluster's Kubernetes API (OpenShift Virtualization) | [B731](milestones/m3.md#b731), [B732](milestones/m3.md#b732), [B883](milestones/m4.md#b883), [B88](milestones/m3.md#b88) | `unrun` |
@@ -2053,55 +2042,52 @@ proof's access reviews do not check it.
 
 ## vSphere machine realization
 
-A vSphere provider's Machines are created through the vCenter its failure
-domain names, with the provider's provisioning credential, which never
-becomes a cluster's own. The machine block creates each Machine powered off,
-in the failure domain's folder, compute cluster, resource pool and datastore,
-with EFI firmware and Secure Boot off, its profile's CPU, memory and one root
-disk, presented as `/dev/sda`, and one adapter per `hardware.nics` entry on
-its segment's portgroup with a MAC in the manual range
-`00:50:56:00:00:00` through `00:50:56:3f:ff:ff`, derived from the context,
-Machine and NIC names when not authored. Before its first power-on it
-sets extraConfig `disk.EnableUUID` to `TRUE`, whatever platform a cluster
-installs on it, because the assisted service keeps a VMware host whose disks
-report no UUID from becoming known; it sets the boot order disk then CD-ROM,
-so the node boots its installed disk whether or not the installer's EFI boot
-entry took effect (the installer writes it only on EFI firmware; an inference,
-in [knowledge](../.agents/knowledge/vsphere-agent-node-boot.md)); and it adds no TPM.
-The block records the managed-object reference and an ownership marker, and
-every later call addresses that reference, never a name. The marker names the
-context and the Machine, and the block records the vCenter's `instanceUuid`
-and the virtual machine's `instanceUuid`; every power, media and removal call
-compares them with the live object immediately before it acts, under
-[mutation safety](state-reconciliation.md#mutation-safety). An object at the
-recorded reference whose marker or either `instanceUuid` differs is foreign
-and refuses, and a vCenter that does not answer, or answers without those
-fields, reads `unknown`, never absent.
+A [vSphere provider](api/machines.md#vsphere-arm) uses an existing vCenter,
+placement and network. The Machine implementation uses the built-in Ansible
+boundary and the controller's locked pyVmomi runtime. It resolves absolute
+inventory references on verified TLS and checks that every object belongs to
+the chosen datacenter, pool and compute cluster. Provisioning credentials are
+access credentials. It opens private material only in the adapter attempt.
 
-Pushed media: `media_insert` uploads the image to
-`[<staging datastore>] <staging folder>/<context>/<cluster>/<machine>-<media identity>.iso`
-and attaches it to the Machine's CD-ROM, connected, while the Machine is off;
-when the upload completes, the block records the staged file's datastore
-identity and path. `boot_media` powers the Machine off by force if it is on, then on, because a
-power-on request to a running machine changes nothing. `media_eject`
-disconnects the CD-ROM and deletes the staged file it recorded, and a refused
-delete fails rather than leaking the image. Eject and removal delete, and prove
-absent, only that recorded file: a staged path with no record is not deleted, a
-recorded file whose datastore identity differs is foreign and refuses, and a
-datastore read that does not answer reads `unknown`, never absent. `boot_disk` makes no request unless
-asked to power on. The block records the device key and backing file of the
-root disk it created. Removal requires the Machine off and the disk list read
-in full, else it refuses. It detaches, without deleting, every attached disk
-but the recorded root disk, destroys the Machine with that disk by
-managed-object reference, proves the Machine, the recorded root disk and its
-staged files absent, and consumes `data-loss`. Volumes a cluster's storage
-driver created are not the Machine's and are retained.
+The Machine is created powered off, or full-cloned powered off from the
+selected operator-owned template. A template has one snapshot-free, independent
+SCSI root VMDK. Verify that the powered-off source and clone have the same
+native backing content ID and distinct storage identities before customizing
+the target. Refuse an unavailable or changed revision. Before first power, verify EFI,
+`disk.EnableUUID=TRUE`, CPU, memory, ordinary root/data VMDKs and each NIC's
+selected portgroup and MAC. The first disk is `/dev/sda`. An omitted MAC derives
+from context, Machine and NIC in the manual range `00:50:56:00:00:00` through
+`00:50:56:3f:ff:ff`. For guest VLANs the provider verifies the backing
+portgroup's tag policy and MTU; Managed OS owns the guest NMState. TPM 2.0
+needs an existing key provider. A TPM-enabled clone gets a new device identity
+and persistent key state; it never inherits the template's TPM secrets.
 
-Not yet met: nothing realizes a vSphere Machine; tracked as
-[B99](milestones/m1.md#b99).
+The create or clone request writes an ownership marker binding context, Machine
+and original apply operation atomically with creation. Replay reconciles that
+marker and refuses on a name collision. Persist the vCenter instance UUID, VM
+managed-object reference and instance UUID, and the identity of every owned
+disk. Compare live evidence before power, media, seed and removal effects.
+A failed observation is unknown. Refuse a conflicting live identity, an
+ambiguous recovery or an unproved backing before issuing a destructive call.
 
-Not yet met: the ownership marker and the staging path carry no context
-incarnation; tracked as [B568](milestones/backlog.md#b568).
+The media port reserves a unique private staging location before uploading,
+checks ownership and read-back before attachment, and binds each release to
+the staged identity. Restrict writers to the provisioning account and trusted
+administrators in that subtree. Datastore file upload and deletion offer no
+conditional version. After eject, delete and prove absence of the owned file.
+Keep empty reservation directories because vCenter deletes directories recursively.
+If the final name is occupied and the move's proof was lost, stop for operator
+reconciliation with the vCenter task history and the recorded staging identity.
+The template path injects sensitive cloud-init material through guestinfo
+only on the owned VM. Both paths require a pinned Machine host key and a
+positive completion witness. Removal requires power off and a complete disk
+inventory. Preserve the source template and foreign backing, dispose only of
+recorded ordinary disks and media, and observe their absence. Remove each
+owned VMDK under the configuration revision used to inspect it, then unregister
+the VM. The original VM home can retain configuration, NVRAM, TPM state and
+logs. Record and report its location for the operator. Datastore permissions
+continue to protect those files after VM removal. Raw devices and cluster-created
+volumes require separate storage contracts.
 
 ## Identity and power operations
 

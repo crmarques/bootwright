@@ -37,21 +37,12 @@ type refusalCase struct {
 // either side fails here. A hosted Machine is refused beside its provider, so
 // each row is held to the refusals of its own object.
 func TestSubstrateRefusalTableMatchesUnsupported(t *testing.T) {
-	vsphere := api.NewObject(api.InfraProvider, "vc", api.Value{}, api.MapValue(field("vsphere", api.MapValue())))
-	hosted := api.NewObject(api.Machine, "node-01", api.Value{}, api.MapValue(
-		field("hardware", api.MapValue(text("providerRef", "vc"))),
-		field("os", api.MapValue(field("clusterInstalled", api.MapValue()))),
-	))
 	defaults := provider().Spec().Get("libvirt", "bmcEmulation").With("bindAddress", api.StringValue("0.0.0.0"))
 	wildcard := provider(field("libvirt", provider().Spec().Get("libvirt").With("bmcEmulation", defaults)))
 	clone := api.NewObject(api.MachineInstallProfile, "rhel-9-8", api.Value{}, api.MapValue(
 		field("installer", api.MapValue(field("templateClone", api.MapValue()))),
 	))
 	cases := map[string]refusalCase{
-		"A provider on an unrealized substrate": {catalogOf(controller(), vsphere), "InfraProvider/vc",
-			map[string]string{"<provider>": "InfraProvider/vc"}},
-		"A Machine on an unrealized substrate": {catalogOf(controller(), vsphere, hosted), "Machine/node-01",
-			map[string]string{"<provider>": "InfraProvider/vc", "<machine>": "Machine/node-01"}},
 		"An emulated BMC no endpoint can name": {catalogOf(controller(), wildcard), "InfraProvider/lab-libvirt",
 			map[string]string{"<provider>": "InfraProvider/lab-libvirt"}},
 		"A provider using more existing bridges than its use reservation holds": {catalogOf(controller(), provider(externalAttachments(manyBridges(substrate.MaxExternalBridges+1)...))),
@@ -73,17 +64,10 @@ func TestSubstrateRefusalTableMatchesUnsupported(t *testing.T) {
 	}
 	// Each row's Path names more conditions than the graph above exercises;
 	// every other one the row names refuses with the same row.
-	installed := api.NewObject(api.Machine, "node-01", api.Value{}, api.MapValue(
-		field("hardware", api.MapValue(text("providerRef", "vc"))),
-		field("os", api.MapValue(field("install", api.MapValue(text("profileRef", "rhel-9-8"))))),
-	))
 	bindAt := func(address string) api.Object {
 		return provider(field("libvirt", provider().Spec().Get("libvirt").With("bmcEmulation", provider().Spec().Get("libvirt", "bmcEmulation").With("bindAddress", api.StringValue(address)))))
 	}
 	alternatives := map[string]map[string]refusalCase{
-		"A Machine on an unrealized substrate": {
-			"os.install": {catalogOf(controller(), vsphere, installed), "Machine/node-01", map[string]string{"<provider>": "InfraProvider/vc", "<machine>": "Machine/node-01"}},
-		},
 		"An emulated BMC no endpoint can name": {
 			"multicast address": {catalogOf(controller(), bindAt("224.0.0.1")), "InfraProvider/lab-libvirt", map[string]string{"<provider>": "InfraProvider/lab-libvirt"}},
 			"host name":         {catalogOf(controller(), bindAt("bmc.example.test")), "InfraProvider/lab-libvirt", map[string]string{"<provider>": "InfraProvider/lab-libvirt"}},

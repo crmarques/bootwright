@@ -1,0 +1,29 @@
+apiVersion: bootwright.io/v1alpha1
+kind: MachineInstallProfile
+metadata:
+  name: rhel-iso-profile
+
+spec:
+  os:
+    family: rhel
+    version: "9.8"
+    architecture: x86_64
+
+  updates:
+    policy: none
+
+  installer:
+    anaconda:
+      imageRef: rhel-9-8-boot
+
+      redfishVirtualMedia:
+        artifactServerEndpoint:
+          serverRef: lab-artifacts
+          endpointRef: ip-https
+
+      packageSource:
+        hostedTree:
+          fromMedia: local-media:rhel-9.8-x86_64-dvd.iso
+          artifactServerEndpoint:
+            serverRef: lab-artifacts
+            endpointRef: ip-http

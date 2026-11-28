@@ -43,6 +43,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
 	"github.com/crmarques/bootwright/internal/substrate/kubevirt"
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
+	"github.com/crmarques/bootwright/internal/substrate/vsphere"
 )
 
 // The role each value a content digest hashes plays in it: a domain tag that
@@ -138,6 +139,7 @@ func contractRecipes() map[string]digestRecipe {
 			partVersion("machine-kubevirt-evidence-v1"), partPin("run-strategy-manual"), partPin("efi-no-secure-boot"), partPin("evict-live-migrate"), partPin("bridge-binding"),
 			partPin("root-template-blank"), partPin("owner-annotation-mark"), partPin("substrate-access-kubevirt-v1"), partPin("substrate-access-kubevirt-evidence-v1"),
 			partPin("spread-preferred-anti-affinity"), partPin("lend-bound-secret"), partPin("pinned-snapshot-root")),
+		vsphere.Implementation: digestOf(partDomain("bootwright.substrate.vsphere.machine-v1"), partImplementation(vsphere.Implementation), partRequest("machine-vsphere-v1"), partPin("verified-session+atomic-operation-owner+full-clone+efi+stable-disk-uuid+vmxnet3+vtpm+owned-vmdk-set")),
 		baremetal.Implementation: digestOf(partDomain("bootwright.substrate.baremetal.machine-v1"), partImplementation(baremetal.Implementation), partRequest("machine-baremetal-v1"),
 			partPin("identity+exact-addresses+power+system-claim+every-mac-claim+logical-volume")),
 		installation.TreeImplementation: digestOf(partImplementation(installation.TreeImplementation), partVersion(installation.TreeEvidenceVersion)),
@@ -162,7 +164,7 @@ func contractRecipes() map[string]digestRecipe {
 			partPin("e04c153c9c84d6a73bfb3f05e09e0e7b4f4104332ee1d318cc4b3021570dc1a5"), partPin("power-cycled-guest-removal"), partPin("nftables-systemd-ssh-ingress")),
 		installation.Implementation: digestOf(partDomain("bootwright.managedos.install-anaconda-v1"), partImplementation(installation.Implementation), partRequest("os-install-anaconda-v1"),
 			partVersion("kickstart-anaconda-v1"), partPin("os"), partPin("private"), partPin("public"), partPin(installation.MarkerPath), partPin(installation.HostKeyPath),
-			partPin(installation.NetworkDocumentPath), partPin(installation.NetworkMarkerPath), partPin(strconv.Itoa(300)), partPin("proved-installation-disk-boot,replay-safe-unread-registration,bond-permanent-lower-links"), partPin(substrate.RedfishMediaPolicy), partPin(substrate.PhysicalBootProof), partPin("anaconda-home-partition-policy"), partPin("subscription-package-source"), partPin("explicit-repository-proxy-policy"), partPin("power-cycled-guest-removal"),
+			partPin(installation.NetworkDocumentPath), partPin(installation.NetworkMarkerPath), partPin(strconv.Itoa(300)), partPin("proved-installation-disk-boot,replay-safe-unread-registration,bond-permanent-lower-links"), partPin(substrate.RedfishMediaPolicy), partPin(substrate.PhysicalBootProof), partPin("private-guestinfo-clone"), partPin("pinned-pushed-iso"), partPin("anaconda-home-partition-policy"), partPin("subscription-package-source"), partPin("explicit-repository-proxy-policy"), partPin("power-cycled-guest-removal"),
 			partPin("linux-discovered-root-installer-guard"), partPin("@@BOOTWRIGHT_INSTALLER_UUID@@")),
 		agentinstall.MediaImplementation: digestOf(partDomain("bootwright.containercluster.media-agent-v1"), partImplementation(agentinstall.MediaImplementation), partRequest("cluster-media-agent-v1"),
 			partPin("clusters"), partPin(agentinstall.ImageFile), partPin("/var/lib/bootwright-hosted"), partPin("clusters"), partPin("openshift-install"), partPin("rebuild-never-over-insert"), partPin("native-proxy-endpoint-and-bypass"), partPin("linux-preflight-native-wwn")),
@@ -216,6 +218,7 @@ func requestIdentities() map[string][]string {
 		libvirt.MachineImplementation: {"identity.context", "identity.object", "identity.block", "uri", "domain", "uuid", "directory", "poolName",
 			"poolPath", "disks[].name", "disks[].path", "interfaces[].macAddress", "controller.unit", "controller.port"},
 		libvirt.RootResetImplementation:       {"identity.context", "identity.object", "uri", "domain", "uuid", "directory", "disks[].name", "disks[].path", "disks[].sizeGiB", "disks[].target"},
+		vsphere.Implementation:                {"identity.context", "identity.object", "identity.block", "server", "owner", "folder", "name", "datastore", "interfaces[].macAddress"},
 		baremetal.Implementation:              {"identity.context", "identity.object", "identity.block", "provider", "controller.endpoint", "hardware[].macAddress"},
 		kubevirt.HostImplementation:           {"identity.context", "identity.object", "identity.block", "namespace", "kubeconfigRef", "hostCluster", "templateSnapshots"},
 		kubevirt.MachineImplementation:        {"identity.context", "identity.object", "identity.block", "provider", "namespace", "name", "rootVolume", "mediaVolume", "interfaces[].macAddress", "templateSnapshot"},

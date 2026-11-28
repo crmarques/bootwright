@@ -1,0 +1,16 @@
+---
+- name: Clear the private seed belonging to this installation
+  ansible.builtin.include_role:
+    name: bootwright.core.substrate_machine
+    tasks_from: seed_eject
+  vars:
+    bootwright_machine_arm: '{{ bootwright_os_install_request.target.substrate }}'
+    bootwright_machine_port: "{{ managedos_install_anaconda_port_access | combine({'seed_identity': bootwright_os_install_digest}) }}"
+
+- name: Prove the clone retains no seeded guest information
+  ansible.builtin.include_tasks: clone_read.yml
+
+- name: Require positive seed absence
+  ansible.builtin.assert:
+    that: managedos_install_anaconda_seed_state == 'none'
+    quiet: true

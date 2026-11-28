@@ -665,3 +665,25 @@ func TestAVirtualMACRefusalPointsAtTheFieldThatAuthorsIt(t *testing.T) {
 		Message:     "ethernet interface enp1s0 of Machine/guest authors a mac-address, but a libvirt provider derives each vNIC's MAC from the context, Machine and NIC names",
 		Remediation: "remove mac-address from interface enp1s0 in the network configuration of Machine/guest, and match the interface to its NIC with spec.network.interfaceMatches if their names differ"})
 }
+
+func TestVSphereMachineAdmissionGuardsStandalonePlacementAndNetworkIdentity(t *testing.T) {
+	provider := object(api.InfraProvider, "site", m("vsphere", m("machineProfiles", list(m("name", "small"))),
+		"segments", list(m("name", "guest", "vsphere", m("portgroup", "/Lab/network/Guest")))))
+	nics := list(m("name", "ens192", "segmentRef", "guest", "macAddress", "00:50:56:01:02:03"))
+	hardware := m("providerRef", "site", "profileRef", "small", "nics", nics)
+	vm := object(api.Machine, "node", m("hardware", hardware, "os", m("clusterInstalled", m())))
+	catalog := api.NewCatalog([]api.Object{provider, vm})
+	if issues := Validate(vm, catalog); !mentions(issues, "$.spec.os.clusterInstalled") {
+		t.Fatalf("cluster node was admitted: %v", issues)
+	}
+	vm = vm.WithSpec(vm.Spec().With("os", m("install", m("profileRef", "linux", "hostKeyRef", "node-key"))))
+	peer := object(api.Machine, "other", m("hardware", m("nics", list(m("name", "eth0", "macAddress", "00-50-56-01-02-03")))))
+	catalog = api.NewCatalog([]api.Object{provider, vm, peer})
+	if issues := Validate(vm, catalog); !mentions(issues, "$.spec.hardware.nics[0].macAddress") {
+		t.Fatalf("duplicate MAC outside the virtual provider was admitted: %v", issues)
+	}
+	provided := vm.WithSpec(vm.Spec().With("os", m("provided", m())))
+	if issues := Validate(provided, catalog); !mentions(issues, "$.spec.hardware.nics[0].segmentRef") {
+		t.Fatalf("OS-ready Machine could request virtual placement: %v", issues)
+	}
+}

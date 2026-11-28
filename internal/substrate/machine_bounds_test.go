@@ -12,7 +12,7 @@ func TestMachinePortsPublishBoundsForEveryRealizedArm(t *testing.T) {
 			t.Fatalf("%s: %+v", arm, bounds)
 		}
 	}
-	if _, ok := MachineBoundsFor(ArmVSphere); ok {
+	if _, ok := MachineBoundsFor(Arm("unknown")); ok {
 		t.Fatal("unqualified arm published bounds")
 	}
 	kubevirt, _ := MachineBoundsFor(ArmKubeVirt)

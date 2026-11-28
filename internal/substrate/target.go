@@ -30,7 +30,7 @@ func Arms() []Arm { return []Arm{ArmBaremetal, ArmLibvirt, ArmVSphere, ArmKubeVi
 
 // Realized lists the arms this executable can realize, in canonical order.
 // Every other arm refuses before an operation registers.
-func Realized() []Arm { return []Arm{ArmBaremetal, ArmKubeVirt, ArmLibvirt} }
+func Realized() []Arm { return []Arm{ArmBaremetal, ArmKubeVirt, ArmLibvirt, ArmVSphere} }
 
 // RealizesPhysicalNICs reports whether a provider's machines are operator-owned
 // hardware whose interfaces exist before Bootwright realizes anything. A
@@ -134,6 +134,7 @@ type Target struct {
 	// outlives this context: its installation erases what is already there and
 	// its removal retains it.
 	Physical   bool
+	TPM2       bool
 	Controller Controller
 	Identity   Identity
 	// Interfaces are the NICs this machine presents, in declared order, by the
@@ -152,13 +153,7 @@ type Target struct {
 	PlacementMachine api.Object
 }
 
-// TargetFor derives the realized target of one Machine. It reads no host,
-// endpoint or Secret material and performs no effect.
-//
-// A Machine on no provider is realized by nothing, and is a target at all only
-// because it authors its own management controller. It is physical for the
-// same reason a bare-metal Machine is: the hardware exists without Bootwright,
-// so reaching it needs no realization to have happened first.
+// TargetFor derives a Machine target from the selected graph without effects.
 func TargetFor(catalog api.Catalog, machine api.Object, contextName, controllerMachine string) (Target, error) {
 	reference := MachineProviderRef(machine)
 	if reference == "" {
@@ -170,18 +165,18 @@ func TargetFor(catalog api.Catalog, machine api.Object, contextName, controllerM
 			"declare "+reference+" or correct "+ProviderPath+" on "+machine.Identity())
 	}
 	arm := Variant(provider)
-	if !IsRealized(provider) {
-		return Target{}, prebootUnrealizedSubstrate.Fail("this executable does not realize the substrate of "+provider.Identity(),
-			"place "+machine.Identity()+" on a libvirt, bare-metal or KubeVirt provider")
-	}
 	target := Target{Provider: provider.Name(), Substrate: arm, Port: arm, Delivery: DeliveryOf(arm)}
 	switch arm {
+	case ArmLibvirt:
+		return virtualTarget(catalog, provider, machine, contextName, target)
 	case ArmBaremetal:
 		return physicalTarget(catalog, provider, machine, controllerMachine, target)
+	case ArmVSphere:
+		return vsphereTarget(catalog, provider, machine, contextName, controllerMachine, target)
 	case ArmKubeVirt:
 		return kubevirtTarget(catalog, provider, machine, contextName, controllerMachine, target)
 	}
-	return virtualTarget(catalog, provider, machine, contextName, target)
+	return Target{}, prebootUnrealizedSubstrate.Fail("this executable does not realize the substrate of "+provider.Identity(), "place "+machine.Identity()+" on a realized provider")
 }
 
 // authoredTarget is a Machine reached only through the controller it declares.

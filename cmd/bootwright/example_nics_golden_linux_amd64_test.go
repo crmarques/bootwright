@@ -17,6 +17,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate/kubevirt"
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
+	"github.com/crmarques/bootwright/internal/substrate/vsphere"
 )
 
 // exampleNICs is everything one example derives from its Machines' NICs: each
@@ -24,6 +25,7 @@ import (
 // interface pin and each agent host's interfaces and network configuration. A
 // derivation that refuses is pinned by its refusal.
 type exampleNICs struct {
+	VSphereMachines  map[string][]vsphere.Interface  `json:"vsphereMachines,omitempty"`
 	LibvirtMachines  map[string][]libvirt.Interface  `json:"libvirtMachines,omitempty"`
 	KubeVirtMachines map[string][]kubevirt.Interface `json:"kubevirtMachines,omitempty"`
 	KubeVirtHosts    map[string][]string             `json:"kubevirtHosts,omitempty"`
@@ -90,6 +92,14 @@ func deriveExampleNICs(t *testing.T, state *compilation.State, contextName strin
 				found.KubeVirtMachines = map[string][]kubevirt.Interface{}
 			}
 			found.KubeVirtMachines[machine.Identity.Object] = machine.Interfaces
+		}
+	}
+	if machines, err := vsphere.Requests(catalog, controller, contextName); !refused("vsphere", err) {
+		for _, machine := range machines {
+			if found.VSphereMachines == nil {
+				found.VSphereMachines = map[string][]vsphere.Interface{}
+			}
+			found.VSphereMachines[machine.Identity.Object] = machine.Interfaces
 		}
 	}
 	if hosts, err := kubevirt.HostRequests(catalog, controller, contextName); !refused("kubevirtHosts", err) {

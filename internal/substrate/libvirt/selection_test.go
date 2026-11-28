@@ -336,35 +336,12 @@ func TestSelectionRefusesWhatItCannotDerive(t *testing.T) {
 	}
 }
 
-// Every object this contract cannot realize is named before registration, so an
-// operation never applies part of a graph it only half supports.
-func TestUnsupportedNamesEveryObjectThisContractCannotRealize(t *testing.T) {
-	// Bare metal is realized by its own implementation, so the refusal covers
-	// only the arms no capability implements and every Machine hosted on one.
-	vsphere := api.NewObject(api.InfraProvider, "vc", api.Value{}, api.MapValue(field("vsphere", api.MapValue())))
-	hosted := api.NewObject(api.Machine, "node-01", api.Value{}, api.MapValue(
-		field("hardware", api.MapValue(text("providerRef", "vc"))),
-		field("os", api.MapValue(field("clusterInstalled", api.MapValue()))),
-	))
-	metal := api.NewObject(api.InfraProvider, "rack", api.Value{}, api.MapValue(field("baremetal", api.MapValue())))
-	unsupported := lifecycle.Identities(Refusals(catalogOf(controller(), provider(), networkConfig(), guest("rhel-01"), vsphere, hosted, metal)))
-	if !slices.Equal(unsupported, []string{"InfraProvider/vc", "Machine/node-01"}) {
-		t.Fatalf("unsupported = %v", unsupported)
-	}
-	// Each refusal says why and what to change, the Machine's naming the
-	// provider that makes it unrealizable.
-	var reasons []string
-	for _, refused := range Refusals(catalogOf(controller(), provider(), networkConfig(), guest("rhel-01"), vsphere, hosted, metal)) {
-		reasons = append(reasons, refused.Kind+"/"+refused.Name+": "+refused.Reason+"; "+refused.Remediation)
-	}
-	want := []string{
-		"InfraProvider/vc: this executable realizes no provider on the substrate it declares; " +
-			"remove InfraProvider/vc and the Machines it hosts from the selected Environment, or declare them on a baremetal, kubevirt or libvirt provider",
-		"Machine/node-01: its provider InfraProvider/vc is on a substrate this executable does not realize; " +
-			"host Machine/node-01 on a baremetal, kubevirt or libvirt provider, declare its operating system provided, or remove it from the selected Environment",
-	}
-	if !slices.Equal(reasons, want) {
-		t.Fatalf("refusals =\n%q\nwant\n%q", reasons, want)
+func TestLibvirtLeavesRealizedProvidersToTheirArms(t *testing.T) {
+	for _, arm := range []substrate.Arm{substrate.ArmBaremetal, substrate.ArmKubeVirt, substrate.ArmVSphere} {
+		p := api.NewObject(api.InfraProvider, "provider", api.Value{}, api.MapValue(field(string(arm), api.MapValue())))
+		if refused := Refusals(catalogOf(controller(), p)); len(refused) != 0 {
+			t.Fatalf("%s: %+v", arm, refused)
+		}
 	}
 }
 

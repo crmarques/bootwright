@@ -1,0 +1,53 @@
+---
+- name: Check the clone's declared operating system
+  ansible.builtin.include_tasks: os_release.yml
+
+- name: Refuse a seed handoff to a guest running another release
+  ansible.builtin.assert:
+    that:
+      - managedos_install_anaconda_os.id | default('') == 'rhel'
+      - managedos_install_anaconda_os.versionId | default('') == bootwright_os_install_request.cloudInit.release
+    quiet: true
+
+- name: Prove first boot on the realized instance through its delivered host key
+  ansible.builtin.include_tasks: guest.yml
+  vars:
+    managedos_install_anaconda_guest_command:
+      - /usr/bin/sudo
+      - -n
+      - /usr/bin/sh
+      - -c
+      - |-
+        set -eu
+        umask 077
+        test "$(uname -m)" = x86_64
+        machine_id=$(cat /etc/machine-id)
+        printf '%s\n' "$machine_id" | grep -Eq '^[0-9a-f]{32}$'
+        test "$machine_id" != 00000000000000000000000000000000
+        record=/etc/bootwright/cloud-init-instance
+        if test ! -f "$record"; then
+          test "$(cloud-init status --wait)" = 'status: done'
+          test "$(cloud-init query instance_id)" = "$1"
+          test -f /var/lib/cloud/instance/boot-finished
+          printf '%s %s %s\n' "$1" "$2" "$machine_id" > "$record.tmp"
+          mv -T "$record.tmp" "$record"
+        fi
+        test "$(cat "$record")" = "$1 $2 $machine_id"
+        instance=/var/lib/cloud/instances/$1
+        touch /etc/cloud/cloud-init.disabled
+        for name in user-data.txt user-data.txt.i cloud-config.txt obj.pkl combined-cloud-config.json instance-data-sensitive.json; do
+          rm -f -- "$instance/$name"
+        done
+        rm -f -- /run/cloud-init/combined-cloud-config.json /run/cloud-init/instance-data-sensitive.json
+        test -f /etc/cloud/cloud-init.disabled
+        for name in user-data.txt user-data.txt.i cloud-config.txt obj.pkl combined-cloud-config.json instance-data-sensitive.json; do
+          test ! -e "$instance/$name"
+        done
+      - bootwright-cloud-init
+      - '{{ managedos_install_anaconda_instance_id }}'
+      - '{{ bootwright_os_install_digest }}'
+
+- name: Require a completed cloud-init instance before withdrawing any seed
+  ansible.builtin.assert:
+    that: managedos_install_anaconda_guest.rc | default(1) == 0
+    quiet: true

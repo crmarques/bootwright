@@ -16,7 +16,7 @@ from __future__ import annotations
 import os
 import pathlib
 
-RUNTIME_CLOSURE = ("ansible-core", "jinja2", "markupsafe", "packaging", "pyyaml", "urllib3")
+RUNTIME_CLOSURE = ("ansible-core", "jinja2", "markupsafe", "packaging", "pyvmomi", "pyyaml", "urllib3")
 
 SITECUSTOMIZE = '''
 import importlib.abc

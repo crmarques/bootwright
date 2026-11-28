@@ -50,7 +50,7 @@ type lockDocument struct {
 
 const testAnsibleCore = "2.21.5"
 
-var lockedPackages = []string{"ansible-core", "jinja2", "markupsafe", "packaging", "pyyaml", "urllib3"}
+var lockedPackages = []string{"ansible-core", "jinja2", "markupsafe", "packaging", "pyvmomi", "pyyaml", "urllib3"}
 
 // wheelBytes stands in for a wheel; a file's bytes depend on its name alone,
 // so a pure wheel every ABI shares has one digest.

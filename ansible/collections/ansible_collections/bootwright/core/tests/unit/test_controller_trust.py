@@ -175,6 +175,8 @@ def test_every_bare_metal_include_passes_its_bundle():
         ("managedos_install_anaconda/tasks/await.yml", "boot_disk"),
         ("managedos_install_anaconda/tasks/boot.yml", "boot_media"),
         ("managedos_install_anaconda/tasks/boot.yml", "pre_boot"),
+        ("managedos_install_anaconda/tasks/clone_boot.yml", "boot_disk"),
+        ("managedos_install_anaconda/tasks/clone_boot.yml", "pre_boot"),
         ("managedos_install_anaconda/tasks/proved_boot.yml", "boot_disk"),
         ("managedos_install_anaconda/tasks/reboot.yml", "boot_disk"),
     ])
@@ -214,7 +216,7 @@ def test_the_managed_os_installation_sets_and_settles_the_frozen_trust(lookups, 
     driven = port_calls("managedos_install_anaconda")
     inserts = [arguments for _name, entry, arguments in driven if entry == "media_insert"]
     ejects = [(name, arguments) for name, entry, arguments in driven if entry == "media_eject"]
-    assert len(inserts) == 1 and sorted(name for name, _arguments in ejects) == ["apply.yml", "await.yml"]
+    assert len(inserts) == 1 and sorted(name for name, _arguments in ejects) == ["apply.yml", "await.yml", "destroy.yml"]
     served = tmp_path / "artifact-ca"
     served.write_text("SERVED CERTIFICATE\n")
     for trust, enable, restore, remove, material, certificate in (

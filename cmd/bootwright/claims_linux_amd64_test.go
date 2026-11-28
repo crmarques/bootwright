@@ -15,7 +15,6 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate"
-	"github.com/crmarques/bootwright/internal/substrate/baremetal"
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
 )
 
@@ -87,7 +86,7 @@ func TestEveryExampleObjectIsClaimedOncePerFamily(t *testing.T) {
 			for _, identity := range identities {
 				kind, objectName, _ := strings.Cut(identity, "/")
 				object, _ := catalog.Find(api.Kind(kind), objectName)
-				if _, bears := effectBearing(object); !bears || planned[binding][identity] || noBlockClaims[binding.Implementation+" "+kind] != "" {
+				if _, bears := effectBearing(object); !bears || planned[binding][identity] || noBlockClaims[binding.Implementation+" "+kind] != "" || noBlockClaims[binding.Family+" "+kind] != "" {
 					continue
 				}
 				t.Errorf("%s: %s claims %s but plans no block for it and names no no-block rule", name, binding.Implementation, identity)
@@ -125,10 +124,10 @@ func TestEveryExampleObjectIsClaimedOncePerFamily(t *testing.T) {
 	}
 }
 
-// noBlockClaims is each implementation and kind whose claimed objects plan no
+// noBlockClaims names each implementation or family and kind whose claimed objects plan no
 // block keyed by the object, and why; it only shrinks.
 var noBlockClaims = map[string]string{
-	baremetal.Implementation + " InfraProvider":      "a bare-metal provider is realized only through its Machines",
+	substrate.MachineFamily + " InfraProvider":       "a provider claimed by its Machine implementation is realized through the Machines it creates or claims",
 	instance.Implementation + " ClusterAddonBinding": "add-on blocks are keyed by package and cluster",
 	libvirt.HostImplementation + " Network":          "a managed Network is defined by the host block of the provider it names (D240 (13))",
 }

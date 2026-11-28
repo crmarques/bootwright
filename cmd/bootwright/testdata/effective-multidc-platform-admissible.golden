@@ -94,9 +94,13 @@ spec:
   hardware:
     providerRef: acceptance-vsphere
     profileRef: clone
+    nics:
+      - name: ens192
+        segmentRef: guests
   os:
     install:
       profileRef: acceptance-clone
+      hostKeyRef: acceptance-clone-key
       ntp:
         - serverRef: default-01
         - serverRef: default-02
@@ -2026,28 +2030,28 @@ spec:
   vsphere:
     vcenters:
       - server: vcenter.example.test
-        datacenters:
-          - example-dc
+        port: 443
         credentialsRef: acceptance-provider-credentials
-        disableCertificateVerification: false
-    failureDomains:
+    placements:
       - name: example-zone
-        region: example-region
-        zone: example-zone
         server: vcenter.example.test
-        topology:
-          datacenter: example-dc
-          computeCluster: example-compute
-          datastore: example-store
-          networks:
-            - example-network
+        datacenter: /example-dc
+        computeCluster: /example-dc/host/example-compute
+        datastore: /example-dc/datastore/example-store
+        folder: /example-dc/vm/example-guests
+        resourcePool: /example-dc/host/example-compute/Resources
     machineProfiles:
       - name: clone
         cpu: 4
         memoryMiB: 8192
         diskGiB: 80
-        template: Templates/example-rhel
-        failureDomainRef: example-zone
+        template: /example-dc/vm/Templates/example-rhel
+        placementRef: example-zone
+  segments:
+    - name: guests
+      mtu: 1500
+      vsphere:
+        portgroup: /example-dc/network/guests
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: InfraProvider
@@ -3305,6 +3309,16 @@ spec:
       ipAddresses:
         - 192.0.2.60
       validityDays: 3650
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: acceptance-clone-key
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      keyType: ed25519
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Secret

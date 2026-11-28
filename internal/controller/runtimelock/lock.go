@@ -66,8 +66,8 @@ type Lock struct {
 }
 
 // requiredPackages is what the controller imports of ansible-core's closure,
-// plus its one downloader; ansible-core declares omittedPackages unused.
-var requiredPackages = []string{"ansible-core", "jinja2", "markupsafe", "packaging", "pyyaml", "urllib3"}
+// plus its downloader and vSphere controller SDK; ansible-core declares omittedPackages unused.
+var requiredPackages = []string{"ansible-core", "jinja2", "markupsafe", "packaging", "pyvmomi", "pyyaml", "urllib3"}
 
 var omittedPackages = []string{"cffi", "cryptography", "pycparser", "resolvelib"}
 

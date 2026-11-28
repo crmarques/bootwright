@@ -60,6 +60,12 @@ func PreBootRefusals(arm Arm, contextName, continuation, machine, endpoint strin
 	switch arm {
 	case ArmLibvirt:
 		return map[string]error{RefusalMachineRunning: running}
+	case ArmVSphere:
+		return map[string]error{
+			RefusalMachineRunning:   running,
+			RefusalIdentityMismatch: refused(prebootIdentityMismatch, "vCenter could not prove the registered VM identity for "+identity, "restore the registered vCenter and VM, then run "+next),
+			RefusalTPMAbsent:        refused(prebootTPMAbsent, identity+" presents no vTPM 2.0", "enable a vTPM on the selected profile, then recreate the Machine"),
+		}
 	case ArmKubeVirt:
 		return map[string]error{
 			RefusalMachineRunning: running,

@@ -863,7 +863,16 @@ installation is proved in-tree only until [B73](../specs/milestones/m1.md#b73)'s
 real-hardware operator gate runs, and a physical cluster node installs, proved
 in-tree until [B730](../specs/milestones/m3.md#b730)'s real-hardware row runs
 (D2, D224). A multi-node vSphere cluster refuses on its own, under
-[B733](../specs/milestones/m3.md#b733).
+[B733](../specs/milestones/m9.md#b733).
+
+### VMware vSphere Machines
+
+Select an existing vCenter, placement and portgroups. The standalone example
+defines two RHEL Machines, one installed from ISO and one cloned from a
+powered-off template. Each Machine has its own pinned SSH host key. The
+example describes source preparation, datastore permissions and how to retrieve
+the configuration retained after removal.
+[Standalone vSphere Machines](../examples/machines/lab-vsphere-standalone/README.md).
 
 ### KubeVirt providers
 

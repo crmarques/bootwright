@@ -198,24 +198,43 @@ def test_seed_start_checks_its_recorded_uid_before_power_on(monkeypatch):
     assert seed.start(target, vm, OPERATION, BLOCK, mounted["secretUID"]) == {"power": "On"}
 
 
-def test_seed_stop_and_seedless_boot_require_the_proved_instance_and_withdrawn_secret(monkeypatch):
+def test_seed_stop_and_seedless_boot_require_the_proved_instance_and_withdrawn_secret(monkeypatch, tmp_path):
     api, target, vm = realized_clone()
-    mounted = seed.attach(target, vm, OPERATION, BLOCK, payload(), INTENT["mac"])
+    certificate, url = tmp_path / "certificate", tmp_path / "url"
+    for path, value in ((certificate, CERTIFICATE), (url, URL)):
+        path.write_text(value)
+        path.chmod(0o600)
+    args = {
+        "endpoint": "kubevirt:guests/" + vm, "apply_operation": OPERATION, "block": BLOCK,
+        "pinned_uuid_base64": base64.b64encode(target.pin["cluster"].encode()).decode(),
+        "pinned_serial_base64": base64.b64encode(target.pin["vm"].encode()).decode(),
+        "root_volume_uid": target.pin["rootVolume"], "root_claim_uid": target.pin["rootClaim"],
+        "bootstrap": INTENT, "fleet_public_key": key(1), "host_public_key": key(2),
+        "bootstrap_certificate": str(certificate), "bootstrap_url": str(url),
+    }
+    endpoint = client(api)
+    with pytest.raises(Refused):
+        action.bootstrap_seed("seed_attach", endpoint, dict(args, endpoint="https://vc.example.test:443"))
+    assert not api.requests
+    mounted = action.bootstrap_seed("seed_attach", endpoint, args)
+    args.update(seed_uid=mounted["secretUID"], first_instance_uid="seeded-1")
+    assert URL not in repr(api.objects[VM_PATH])
+    monkeypatch.setattr(arm, "change_power", lambda *unused: {"power": "On"})
+    assert action.bootstrap_seed("seed_start", endpoint, args) == {"power": "On"}
     api.objects[target.vmi(vm)] = {
         "metadata": {"uid": "seeded-1", "ownerReferences": [{"controller": True, "uid": target.pin["vm"]}]},
         "status": {"phase": "Running"},
     }
     api.requests.clear()
     with pytest.raises(Refused, match="does not match the first-boot proof"):
-        seed.stop(target, vm, OPERATION, BLOCK, mounted["secretUID"], "another-instance")
+        action.bootstrap_seed("seed_stop", endpoint, dict(args, first_instance_uid="another-instance"))
     with pytest.raises(Refused, match="still has seed material"):
-        seed.start_seedless(target, vm, OPERATION, BLOCK, "seeded-1")
+        action.bootstrap_seed("seedless_start", endpoint, args)
     assert all(entry[0] == "GET" for entry in api.requests)
-    assert seed.stop(target, vm, OPERATION, BLOCK, mounted["secretUID"], "seeded-1")["changed"]
-    assert not seed.stop(target, vm, OPERATION, BLOCK, mounted["secretUID"], "seeded-1")["changed"]
-    assert seed.withdraw(target, vm, OPERATION, BLOCK)["postcondition"]
-    monkeypatch.setattr(arm, "change_power", lambda *args: {"power": "On"})
-    assert seed.start_seedless(target, vm, OPERATION, BLOCK, "seeded-1") == {"power": "On"}
+    assert action.bootstrap_seed("seed_stop", endpoint, args)["changed"]
+    assert not action.bootstrap_seed("seed_stop", endpoint, args)["changed"]
+    assert action.bootstrap_seed("seed_withdraw", endpoint, args)["postcondition"]
+    assert action.bootstrap_seed("seedless_start", endpoint, args) == {"power": "On"}
 
 
 def test_seedless_vm_must_keep_the_first_boot_guest_identity(monkeypatch):

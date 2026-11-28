@@ -66,6 +66,18 @@
       ansible.builtin.include_tasks: os_release.yml
       when: managedos_install_anaconda_reachable.rc | default(1) == 0
 
+    - name: Observe the installed clone's first boot through its pinned connection
+      ansible.builtin.include_tasks: clone_proof.yml
+      when:
+        - bootwright_os_install_request.cloudInit is defined
+        - managedos_install_anaconda_reachable.rc | default(1) == 0
+
+    - name: Read the guest TPM version on the pinned connection
+      ansible.builtin.include_tasks: tpm.yml
+      when:
+        - managedos_install_anaconda_reachable.rc | default(1) == 0
+        - bootwright_os_install_request.target.tpm2 | default(false) | bool
+
     - name: Read the installed machine's network the same way an apply proves it
       ansible.builtin.include_tasks: network_observe.yml
       when: managedos_install_anaconda_reachable.rc | default(1) == 0
@@ -176,6 +188,10 @@
     quiet: true
   when: managedos_install_anaconda_observed_handoff.stat.exists | default(false) | bool
 
+- name: Read the protected clone seed through the pinned machine port
+  ansible.builtin.include_tasks: clone_read.yml
+  when: bootwright_os_install_request.cloudInit is defined
+
 - name: Read the power state and media its controller reports
   ansible.builtin.include_role:
     name: bootwright.core.substrate_machine
@@ -184,13 +200,24 @@
     bootwright_machine_arm: '{{ bootwright_os_install_request.target.substrate }}'
     bootwright_machine_port: >-
       {{ managedos_install_anaconda_port_access | combine({'media': true}) }}
-  when: not (managedos_install_anaconda_observes_removal | bool) or managedos_install_anaconda_unregisters | bool
+  when: managedos_install_anaconda_reads_controller | bool
+
+- name: Require a positive ownership reading for staged media
+  ansible.builtin.assert:
+    that:
+      - substrate_machine_port_result.media_state | default('unknown') in ['none', 'own']
+      - (substrate_machine_port_result.media_state == 'none') == (substrate_machine_port_result.media == '')
+    fail_msg: >-
+      {{ (substrate_machine_port_result.msg | default('the Machine did not prove ownership or absence of its staged media')
+          | string | bootwright.core.printable)[:512] }}
+    quiet: true
+  when: bootwright_os_install_request.target.machinePort.mediaVolume is defined
 
 - name: Retain the machine port answer
   ansible.builtin.set_fact:
     managedos_install_anaconda_controller: "{{ substrate_machine_port_result }}"
   no_log: true
-  when: not (managedos_install_anaconda_observes_removal | bool) or managedos_install_anaconda_unregisters | bool
+  when: managedos_install_anaconda_reads_controller | bool
 
 # Always the presence form, which carries the power the controller reported:
 # a powered-off machine holding no marker with nothing published is how an
@@ -201,7 +228,11 @@
     observed: true
     outcome: unchanged
     digest: '{{ bootwright_os_install_digest }}'
-    observation: '{{ managedos_install_anaconda_observed.observation }}'
+    observation: >-
+      {{ managedos_install_anaconda_observed.observation | combine({'private':
+         managedos_install_anaconda_observed.observation.private or managedos_install_anaconda_seed_state | default('none') == 'own'
+         or managedos_install_anaconda_controller.media_state | default('none') == 'own'})
+         if bootwright_os_install_request.target.machinePort.mediaVolume is defined else managedos_install_anaconda_observed.observation }}
     marker: '{{ managedos_install_anaconda_marker | default("") }}'
     hostKey: '{{ managedos_install_anaconda_host_key | default("") }}'
     reachable: '{{ managedos_install_anaconda_reachable.rc | default(1) == 0 }}'
@@ -210,7 +241,9 @@
     # so any token-shaped run is redacted rather than a known prefix.
     media: "{{ managedos_install_anaconda_controller.media | default('') | regex_replace('[0-9a-f]{64}', '<token>') }}"
     power: '{{ managedos_install_anaconda_controller.power | default("") }}'
-    privateDelivery: '{{ bootwright_os_install_request.private is defined }}'
+    privateDelivery: '{{ bootwright_os_install_request.private is defined or bootwright_os_install_request.cloudInit is defined }}'
+    cloudInit: '{{ managedos_install_anaconda_clone_proved | default(false) }}'
+    tpm2: '{{ managedos_install_anaconda_tpm2 | default(false) }}'
     network: '{{ managedos_install_anaconda_network_result.network | default(false) }}'
     networkReboot: '{{ managedos_install_anaconda_network_result.networkReboot | default(false) }}'
     networkDifferences: '{{ managedos_install_anaconda_network_result.networkDifferences | default([]) }}'

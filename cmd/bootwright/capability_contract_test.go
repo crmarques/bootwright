@@ -61,6 +61,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
 	"github.com/crmarques/bootwright/internal/substrate/kubevirt"
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
+	"github.com/crmarques/bootwright/internal/substrate/vsphere"
 )
 
 // contractRow is one binding buildCapabilities offers and the example that
@@ -205,6 +206,7 @@ func contractRows() []contractRow {
 		{kind: libvirt.MachineKind, implementation: libvirt.MachineImplementation, example: "lab-rhel", probes: true,
 			absence: map[string]any{"answered": true, "listener": false}, presence: contractMachinePresence,
 			readiness: "power", removalPartial: contractStoppedController, drift: map[string]any{"controller": contractDriftedImage}},
+		{kind: vsphere.Kind, implementation: vsphere.Implementation, example: "lab-vsphere-standalone", probes: true, completedFrom: "specs/substrates.md, vSphere machine realization: the operation identity and registered VM and disk receipts complete each machine request"},
 		{kind: baremetal.Kind, implementation: baremetal.Implementation, example: "lab-baremetal", presence: contractBareMetalPresence,
 			retains: true, indivisible: true,
 			noEffectUnreported:     "specs/substrates.md proves no effect only from a claim never published, which the controller's reservations hold, not the adapter's evidence",

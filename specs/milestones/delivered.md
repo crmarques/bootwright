@@ -13568,7 +13568,7 @@ its delivery host is unnamed ([B1300](backlog.md#b1300)); the
 `redhat-marketplace` index image's name rests on the OLMv1 catalog page of
 Red Hat's documentation and no live cluster confirmed that a release still
 creates it; an OKD cluster is not
-listed, because it is not yet realized ([B748](backlog.md#b748)); a registry that
+listed, because it is not yet realized ([B748](m8.md#b748)); a registry that
 is not one of the five named, a mirror included, names no companion hosts; a
 vendor image's registry is vendor but its delivery hosts, `quay.io`'s, are
 public, so a vendor-only network must allow them, which

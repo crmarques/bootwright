@@ -288,7 +288,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	}
 	issues = api.AppendIssues(issues, validateSegmentRefs(c, o, provider, found && len(armIssues) == 0)...)
 	issues = api.AppendIssues(issues, validateHardware(o, c, variant)...)
-	if !virtualProvider(variant) {
+	if !substrate.VirtualArm(variant) {
 		issues = api.AppendIssues(issues, validateDisks(o, variant == substrate.ArmBaremetal)...)
 		issues = api.AppendIssues(issues, validateVolumeRoot(o, variant)...)
 		issues = api.AppendIssues(issues, validateRootSize(o)...)
@@ -328,7 +328,7 @@ func validateProvision(o api.Object, variant substrate.Arm) []api.Issue {
 				}
 			}
 		}
-		if !virtualProvider(variant) {
+		if !substrate.VirtualArm(variant) {
 			for _, name := range substrate.MachineRootDeviceHints(o).Names() {
 				if path := substrate.RootDeviceHintPath(name); !slices.Contains([]string{"deviceName", "wwn", "sizeBytes", "volumeRef", "bootVolume", "discover"}, name) {
 					issues = api.AppendIssues(issues, api.Issue{Code: "api.deferred", Field: "$." + path,
@@ -343,10 +343,6 @@ func validateProvision(o api.Object, variant substrate.Arm) []api.Issue {
 	return issues
 }
 
-func virtualProvider(variant substrate.Arm) bool {
-	return substrate.VirtualArm(variant) || variant == substrate.ArmVSphere
-}
-
 func validateArm(o api.Object, found bool, variant substrate.Arm) []api.Issue {
 	s := o.Spec()
 	issues := []api.Issue{}
@@ -359,13 +355,13 @@ func validateArm(o api.Object, found bool, variant substrate.Arm) []api.Issue {
 			issues = append(issues, invariant(path, "a bare-metal provider realizes no machine profile; the hardware itself is the machine", "remove "+substrate.ProfilePath+" from "+o.Identity()))
 		}
 	}
-	if !found || !virtualProvider(variant) {
+	if !found || !substrate.VirtualArm(variant) {
 		return issues
 	}
 	for _, key := range []struct{ field, reason string }{
 		{"bmc", "the provider controls the machine it creates, so it declares no BMC"},
 		{"firmware", "the provider creates the machine's firmware, so it declares no firmware settings"},
-		{"rootDisk", "the provider creates the root disk, and every installer on it writes " + substrate.VirtualRootDev},
+		{"rootDisk", "the provider creates the root disk, and every installer on it writes " + substrate.VirtualRootDevice(variant)},
 		{"dataDisks", "the provider creates the machine's data disks from its machine profile"},
 	} {
 		if s.Has("hardware", key.field) {
@@ -391,6 +387,9 @@ func validateSubstrate(c api.Catalog, o, provider api.Object, variant substrate.
 	installs := api.MachineInstalled(o) || api.MachineClusterInstalled(o)
 	if variant != substrate.ArmBaremetal && installs && !s.Has("hardware", "profileRef") {
 		issues = api.AppendIssues(issues, invariant("$."+substrate.ProfilePath, "virtual installation requires a provider-local machine profile", "set "+substrate.ProfilePath+" to a machine profile of the selected provider"))
+	}
+	if api.MachineClusterInstalled(o) && !substrate.SupportsClusterMachines(variant) {
+		issues = append(issues, invariant("$.spec.os.clusterInstalled", "the provider supports standalone Machine installation only", "select spec.os.install with a standalone MachineInstallProfile"))
 	}
 	if substrate.VirtualArm(variant) && installs {
 		issues = api.AppendIssues(issues, validateVirtualNICs(c, o, provider, variant)...)
@@ -628,15 +627,19 @@ func defaultGateway(native api.Value, ipv4 bool, iface string) (netip.Addr, bool
 // so two Machines sharing one would each satisfy the other's completion proof.
 func validateHostKey(o api.Object, c api.Catalog) []api.Issue {
 	reference := o.Spec().Get("os", "install", "hostKeyRef")
+	provider, found := Provider(o, c)
 	clone := substrate.UsesTemplateSnapshot(c, o)
 	if !reference.Present() {
 		if clone {
 			return []api.Issue{invariant("$.spec.os.install.hostKeyRef", "a Machine cloned from a template snapshot needs its own SSH host key",
 				"set spec.os.install.hostKeyRef to a dedicated sshKeyPair Secret")}
 		}
+		if installed(o) && found && substrate.RequiresInstallHostKey(provider) {
+			return []api.Issue{invariant("$.spec.os.install.hostKeyRef", "this installation requires the SSH host key it delivers",
+				"set spec.os.install.hostKeyRef to a dedicated sshKeyPair Secret")}
+		}
 		return nil
 	}
-	provider, found := Provider(o, c)
 	if !installed(o) || found && !clone && !substrate.SupportsDeliveredHostKey(provider) {
 		return []api.Issue{invariant("$.spec.os.install.hostKeyRef",
 			"this Machine's installation does not deliver an SSH host key", "remove spec.os.install.hostKeyRef or select an installation method that delivers the key")}
@@ -701,10 +704,6 @@ func validateBaremetal(c api.Catalog, o api.Object) []api.Issue {
 	}
 	if !substrate.MachineBMC(o).Present() {
 		issues = api.AppendIssues(issues, invariant("$."+substrate.BMCPath, "bare-metal installation requires a BMC", "declare "+substrate.BMCPath+", or inherit it from the provider's spec.baremetal.defaults.bmc"))
-	}
-	// A physical installation delivers its declared host key.
-	if installed(o) && !s.Has("os", "install", "hostKeyRef") {
-		issues = api.AppendIssues(issues, invariant("$.spec.os.install.hostKeyRef", "bare-metal installation requires the SSH host key it delivers", "set spec.os.install.hostKeyRef to the sshKeyPair Secret whose pair the installation delivers as the host key"))
 	}
 	if reason, remedy := PhysicalRootDeviceNameRefusal(c, o); reason != "" {
 		return api.AppendIssues(issues, invariant("$."+substrate.RootDiskPath+".hints.deviceName", reason, remedy))

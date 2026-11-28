@@ -1,0 +1,83 @@
+implementation: machine-vsphere-v1
+content-digest: 76b9bbce5229bfe1a439d8a2a70ec427e42126f273bbb7fbab4d8aa78dc300ca
+request-version: machine-vsphere-v1
+automation-formats: none
+mark-formats: bootwright.bootISO, bootwright.operation, bootwright.owner
+proof-ids: bootwright.cloneRoot, bootwright.disks, bootwright.media, bootwright.removed, bootwright.seed, bootwright.templateRoot
+fixed-places: none
+effect-pins:
+  verified-session+atomic-operation-owner+full-clone+efi+stable-disk-uuid+vmxnet3+vtpm+owned-vmdk-set
+request-identity:
+  identity.context
+  identity.object
+  identity.block
+  server
+  owner
+  folder
+  name
+  datastore
+  interfaces[].macAddress
+request-schema:
+  computeCluster string
+  cpu int64
+  credentialsRef string
+  dataDisks []struct vsphere.DataDisk
+  dataDisks[].name string
+  dataDisks[].sizeGiB int64
+  datacenter string
+  datastore string
+  diskGiB int64
+  folder string
+  identity struct vsphere.Identity
+  identity.block string
+  identity.context string
+  identity.object string
+  interfaces []struct vsphere.Interface
+  interfaces[].macAddress string
+  interfaces[].mtu int64
+  interfaces[].name string
+  interfaces[].portgroup string
+  interfaces[].taggedVLANs []int omitempty
+  memoryMiB int64
+  name string
+  owner string
+  placement struct machine.Placement
+  placement.address string omitempty
+  placement.connection string
+  placement.knownHostsRef string omitempty
+  placement.machine string
+  placement.port int omitempty
+  placement.privateKeyRef string omitempty
+  placement.privilege string omitempty
+  placement.user string omitempty
+  provider string
+  resourcePool string
+  server string
+  stagingDatastore string
+  stagingFolder string
+  template string omitempty
+  tlsVerify bool
+  tpm bool
+  trustBundleRef string omitempty
+  version string
+evidence-schema:
+  absent bool
+  answered bool
+  disks []struct vsphere.Disk
+  disks[].backing string
+  disks[].datastore string
+  disks[].key int
+  disks[].name string
+  disks[].uuid string
+  foreign bool
+  instanceUUID string
+  moRef string
+  owned bool
+  owner string
+  postcondition bool
+  retiring bool omitempty
+  power string
+  request string
+  vcenterUUID string
+  vmHome string
+  stagingDatastoreRef string

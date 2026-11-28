@@ -216,7 +216,6 @@ Alias cell.
 | [B745](#b745) | new, 2026-10-20 (D172) | product | Substrate | A Redfish facade realizes KubeVirt Machines | The 2026-06-28 owner decision keeps `virtctl image-upload`; vSphere needs the port anyway; the facade needs host-wide feature gates |
 | [B746](#b746) | new, 2026-10-20 (D172) | enabling | Substrate | One staged image per cluster on push arms | Per-node pushes keep ownership per Machine; it needs evidence from M3e or M3f runs that per-node pushes are the bottleneck |
 | [B747](#b747) | new, 2026-10-20 (D172) | product | Container cluster and Substrate | A cluster whose nodes span KubeVirt or vSphere and another arm | No run qualifies it, and the media block would both publish and push; it needs B88 or B733 and a qualifying run |
-| [B748](#b748) | new, 2026-10-20 (D172) | product | Container cluster | OKD clusters through the agent installer | M3's coverage is OpenShift; OKD's release, client and image sources need their own definition, and its refusal row stays |
 | [B769](#b769) | new, 2026-10-20 (D173) | product | Add-ons | One add-on instance removed online from a cluster that stays | M4 retires instances with their cluster; [D153](#d153) refuses changing a completed apply's selection |
 | [B770](#b770) | new, 2026-10-20 (D173) | product | Add-ons | `preflight --stage add-ons` reports add-on prerequisites before an apply | No check is provable before the cluster exists; apply-time gates name their failures |
 | [B988](#b988) | new, 2026-10-30 (D210; audit 002 F11) | product | Add-ons, with API | A `ClusterAddonProfile` carries built-in packages as a named preset | No repeated consumer; Q26 (a) chose profiles without packages |
@@ -2282,7 +2281,7 @@ attached read-only by every node; a KubeVirt source DataVolume cloned per
 node). Parked on 2026-10-20 (D172) because per-node pushes keep ownership per
 Machine, and the v1 implementation's shared source brought a stale-generation
 race and an unbounded clone wait. **Revival needs:** evidence from the
-[B731](m3.md#b731) or [B734](m3.md#b734) runs that per-node pushes are the
+[B731](m3.md#b731) or [B734](m9.md#b734) runs that per-node pushes are the
 bottleneck. **Exit evidence:** measured push durations, a cluster-scoped owner
 block, a bounded clone escape.
 
@@ -2292,16 +2291,8 @@ A cluster mixing push-arm nodes with fetch-arm nodes, such as the vendor's
 control plane on KubeVirt with physical workers. The port dispatches per node
 already. Parked on 2026-10-20 (D172) because no run qualifies it and the media
 block would both publish and push. **Revival needs:** [B88](m3.md#b88) or
-[B733](m3.md#b733) and a qualifying run. **Exit evidence:** projection and
+[B733](m9.md#b733) and a qualifying run. **Exit evidence:** projection and
 capability tests of the mixed shape and a run.
-
-### B748
-
-An OKD cluster installed by the agent installer on the provider paths M3
-covers. Parked on 2026-10-20 (D172) when M3's coverage was defined for
-OpenShift only. **Revival needs:** OKD's release, installer, client and
-base-image sources and their trust, a distribution arm of the installer inputs,
-and an acceptance run; the refusal-table row lifts with that code.
 
 ### B769
 
@@ -5980,6 +5971,8 @@ from its value on the branch tip, the second of two slices holding one
 version rebases it, no reader of an older version is added, and a context an
 earlier build applied is destroyed with that build first. No implementation
 slice is activated and no host operation is authorized.
+
+Revised by [D290](#d290).
 
 ### D173
 
@@ -10120,3 +10113,15 @@ The source can belong to another team. The KubeVirt implementation includes
 an external source namespace on the same host cluster. B905 retains the
 Anaconda path chosen in D235. Real-system acceptance follows each provider's
 implementation.
+
+### D290
+
+**owner** (2026-11-28): “update plan for implementing support for machine only on
+vmware now. next milestone for oss support. and the following milestone you will
+save the plan for clusters just as specs/backlog items”. Authorizes
+[X132](m1.md#b99) for managed Machines using installer media or full template
+clones. The accepted design selects the locked Python SDK, verified TLS,
+realization-only placements, multiple adapters, persistent vTPM and guest
+VLAN trunks. M8 and M9 receive definitions only. This revises D172's placement
+of X133 and answers M3's Q1, Q22 (both credential modes) and Q23 (pyVmomi).
+The [Machine contract](../substrates.md#vsphere-machine-realization) owns effects.

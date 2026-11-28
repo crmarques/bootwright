@@ -191,11 +191,11 @@ secondary cannot-derive error. An authored platform always wins.
 by `server`: each `server` names a `vcenters[].server` of the nodes' provider,
 each `credentialsRef` a `usernamePassword` Secret that is effect material, since
 the installation places it in the cluster, and when present it names
-every vCenter the nodes' failure domains use. It is never inferred from the
-provider's provisioning `credentialsRef`; naming that same Secret is an
-explicit choice. A cluster that declares it requires `topology.folder` on every
-failure domain its nodes use and each such domain's `datacenter` among its
-vCenter's `datacenters`. `nodeNetworking` is accepted and reaches no
+every vCenter the nodes' placements use. It is never inferred from the
+provider's provisioning `credentialsRef`. For each used placement the cluster
+projection supplies the inventory folder, datacenter, network, and its
+cluster-specific region and zone. The renderer derives each vCenter's
+datacenters from those placements. `nodeNetworking` is accepted and reaches no
 agent-installer input.
 
 A multi-node KubeVirt cluster may author `baremetal`; every slot's source is
@@ -203,7 +203,7 @@ then `installer`, and every node's segments are `Localnet`
 ClusterUserDefinedNetworks or `bridge` NetworkAttachmentDefinitions.
 
 Not yet met: the vSphere arm admits no `vcenterCredentials`; tracked as
-[B733](../milestones/m3.md#b733).
+[B733](../milestones/m9.md#b733).
 
 ## Endpoints
 

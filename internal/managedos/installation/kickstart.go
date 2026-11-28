@@ -639,10 +639,12 @@ func localeLines(input Installation) []string {
 // repositoryFileLines write one configured repository as the installed
 // system's own .repo file. A disabled repository is written disabled, so it is
 // configured but not used.
-func repositoryFileLines(repository Repository) []string {
-	path := "'/etc/yum.repos.d/bootwright-" + repository.ID + ".repo'"
+func repositoryPath(repository Repository) string {
+	return "/etc/yum.repos.d/bootwright-" + repository.ID + ".repo"
+}
+
+func repositoryContents(repository Repository) []string {
 	lines := []string{
-		"cat > " + path + " <<'BOOTWRIGHT_REPOSITORY_EOF'",
 		"[" + repository.ID + "]",
 		"name=" + repository.Name,
 		"baseurl=" + repository.BaseURL,
@@ -652,7 +654,12 @@ func repositoryFileLines(repository Repository) []string {
 	if repository.GPGKeyURL != "" {
 		lines = append(lines, "gpgkey="+repository.GPGKeyURL)
 	}
-	lines = append(lines, "proxy="+repository.Proxy)
+	return append(lines, "proxy="+repository.Proxy)
+}
+
+func repositoryFileLines(repository Repository) []string {
+	path := "'" + repositoryPath(repository) + "'"
+	lines := append([]string{"cat > " + path + " <<'BOOTWRIGHT_REPOSITORY_EOF'"}, repositoryContents(repository)...)
 	return append(lines, "BOOTWRIGHT_REPOSITORY_EOF", "chmod 0644 "+path)
 }
 

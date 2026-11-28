@@ -1,0 +1,19 @@
+apiVersion: bootwright.io/v1alpha1
+kind: MachineInstallProfile
+metadata:
+  name: rhel-clone
+
+spec:
+  os:
+    family: rhel
+    version: "9.8"
+    architecture: x86_64
+
+  updates:
+    policy: none
+
+  installer:
+    templateClone:
+      seed:
+        cloudInit:
+          growRootFilesystem: true

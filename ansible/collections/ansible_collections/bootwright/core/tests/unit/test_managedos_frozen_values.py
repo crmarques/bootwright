@@ -57,7 +57,7 @@ def render(expression, **variables):
 
 
 def test_every_request_golden_is_read():
-    assert len(INSTALLS) == 19 and len(TREES) == 1
+    assert len(INSTALLS) == 20 and len(TREES) == 1
     assert any(request["requires"]["registration"] for request in INSTALLS.values())
     assert any(request["requires"]["update"] for request in INSTALLS.values())
     assert any(request["requires"]["fips"] for request in INSTALLS.values())
@@ -68,6 +68,10 @@ def test_every_request_golden_is_read():
 def test_the_frozen_requirements_are_what_the_role_derived(name):
     request = INSTALLS[name]
     derived = {key: render(expression, **{R: request}) for key, expression in FORMER_INSTALL.items()}
+    if "cloudInit" in request:
+        derived["cloudInit"] = True
+    if request["target"].get("tpm2"):
+        derived["tpm2"] = True
     assert request["requires"] == derived
 
 
@@ -91,7 +95,10 @@ def test_the_frozen_sessions_are_what_the_role_chose(name):
 @pytest.mark.parametrize("name", sorted(INSTALLS))
 def test_the_frozen_served_root_is_what_the_role_recovered(name):
     request = INSTALLS[name]
-    assert request["servedRoot"] == render(FORMER_SERVED_ROOT, **{R: request})
+    if "cloudInit" in request:
+        assert not request["servedRoot"] and "image" not in request and "private" not in request
+    else:
+        assert request["servedRoot"] == render(FORMER_SERVED_ROOT, **{R: request})
 
 
 @pytest.mark.parametrize("name", sorted(TREES))

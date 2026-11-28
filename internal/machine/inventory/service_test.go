@@ -15,10 +15,14 @@ import (
 type effectiveState struct {
 	context string
 	objects []api.Object
+	err     error
 }
 
 func (s *effectiveState) RenderEffective(_ context.Context, request compilation.EffectiveRequest) (*compilation.EffectiveResult, error) {
 	s.context = request.ContextName
+	if s.err != nil {
+		return nil, s.err
+	}
 	if s.objects != nil {
 		return &compilation.EffectiveResult{Effective: api.NewCatalog(s.objects)}, nil
 	}
@@ -59,11 +63,17 @@ func TestMachineInfoReportsOnlyConfiguredAccessSources(t *testing.T) {
 	}
 }
 
-type ownership struct{ reads *int }
+type ownership struct {
+	reads *int
+	err   error
+}
 
 func (o ownership) Ownership(context.Context, string) (map[string]machine.OwnershipState, error) {
 	if o.reads != nil {
 		*o.reads++
+	}
+	if o.err != nil {
+		return nil, o.err
 	}
 	return map[string]machine.OwnershipState{"Machine/guest": {Verb: "apply", State: "done"}}, nil
 }
@@ -87,6 +97,39 @@ func (c *controllers) Read(_ context.Context, contextName string, names []string
 
 func service(power PowerReader) Service {
 	return New(&effectiveState{}, ownership{}, power, func(context.Context) (string, error) { return "lab", nil })
+}
+
+func TestStandaloneVMRequiresLocalEvidenceBeforeReadingPower(t *testing.T) {
+	provider := object(api.InfraProvider, "virtual", m("vsphere", m()))
+	guest := object(api.Machine, "guest", m("hardware", m("providerRef", "virtual"), "os", m("install", m("profileRef", "rhel"))))
+	refusal := errors.New("local evidence unavailable")
+	for _, failure := range []string{"selection", "compilation", "ownership"} {
+		t.Run(failure, func(t *testing.T) {
+			state := &effectiveState{objects: []api.Object{provider, guest}}
+			reads := 0
+			owned := ownership{reads: &reads}
+			if failure == "compilation" {
+				state.err = refusal
+			}
+			if failure == "ownership" {
+				owned.err = refusal
+			}
+			power := &controllers{}
+			listing := New(state, owned, power, func(context.Context) (string, error) {
+				if failure == "selection" {
+					return "", refusal
+				}
+				return "lab", nil
+			})
+			got, err := listing.List(t.Context(), ListRequest{Names: []string{"guest"}, Power: true})
+			if got != nil || !errors.Is(err, refusal) || power.calls != 0 {
+				t.Fatalf("result = %+v, error = %v, power reads = %d", got, err, power.calls)
+			}
+			if (reads == 1) != (failure == "ownership") || (state.context == "lab") != (failure != "selection") {
+				t.Fatalf("compiled context = %q, ownership reads = %d", state.context, reads)
+			}
+		})
+	}
 }
 
 // The one host contact this command makes is opt-in, so an ordinary listing
